@@ -3,7 +3,7 @@ import type { User } from '@supabase/supabase-js';
 import { config } from '../config.js';
 import { createAnonClient } from '../lib/supabase.js';
 import { setSessionCookies, clearSessionCookies } from '../lib/session.js';
-import { unauthorized } from '../lib/errors.js';
+import { unauthorized, serviceUnavailable } from '../lib/errors.js';
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -16,13 +16,26 @@ declare global {
 }
 
 /**
+ * Distinguishes a *transient* failure (network blip / upstream 5xx) from a
+ * genuine *auth* failure (invalid or expired token). Transient failures must
+ * NOT invalidate a user's session — otherwise a brief Supabase outage would log
+ * everyone out and delete their still-valid cookies.
+ */
+function isTransient(error: { status?: number; name?: string }): boolean {
+  if (error.name === 'AuthRetryableFetchError') return true;
+  const status = error.status;
+  return status === undefined || status === 0 || status >= 500;
+}
+
+/**
  * Validates the caller's session.
  *
  * 1. Reads the access token from the httpOnly cookie and asks Supabase to
  *    verify it (`getUser` validates the JWT signature + expiry server-side).
  * 2. If the access token is missing/expired but a refresh token is present,
  *    it transparently refreshes the session and re-issues cookies.
- * 3. On success, attaches `req.user` and `req.accessToken`; otherwise 401.
+ * 3. On a transient upstream failure it returns 503 and leaves cookies intact.
+ * 4. On a genuine auth failure it clears cookies and returns 401.
  */
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -38,9 +51,14 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
         next();
         return;
       }
+      // Transient upstream error → don't touch the session, ask caller to retry.
+      if (error && isTransient(error)) {
+        next(serviceUnavailable());
+        return;
+      }
+      // Otherwise the access token is genuinely invalid/expired → try refresh.
     }
 
-    // Access token missing or invalid — try to refresh.
     if (refreshToken) {
       const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
       if (!error && data.session && data.user) {
@@ -50,8 +68,14 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
         next();
         return;
       }
+      // Transient error during refresh → keep the (still-valid) cookies.
+      if (error && isTransient(error)) {
+        next(serviceUnavailable());
+        return;
+      }
     }
 
+    // Genuine auth failure — no valid token could be established.
     clearSessionCookies(res);
     throw unauthorized();
   } catch (err) {

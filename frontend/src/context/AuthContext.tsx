@@ -1,4 +1,13 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { api, ApiError, type AuthUser } from '../lib/api';
 
 interface SignupResult {
@@ -20,17 +29,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // True once an explicit login/signup/logout has run. The mount-time restore
+  // below must never overwrite the result of an explicit action that races it.
+  const explicitAuthRef = useRef(false);
+
   // On mount, try to restore an existing session from the httpOnly cookie.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const { user } = await api.me();
-        if (!cancelled) setUser(user);
+        if (!cancelled && !explicitAuthRef.current) setUser(user);
       } catch (err) {
         // 401 simply means "not logged in" — anything else we also treat as
         // logged-out but leave the console note for debugging.
-        if (!cancelled) setUser(null);
+        if (!cancelled && !explicitAuthRef.current) setUser(null);
         if (err instanceof ApiError && err.status !== 401 && err.status !== 0) {
           // eslint-disable-next-line no-console
           console.warn('Session restore failed:', err.message);
@@ -46,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const { user } = await api.login(email, password);
+    explicitAuthRef.current = true;
     setUser(user);
   }, []);
 
@@ -53,12 +67,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await api.signup(email, password);
     // If the project auto-confirms, a session is set and the user is logged in.
     if (!res.needsEmailConfirmation && res.user) {
+      explicitAuthRef.current = true;
       setUser(res.user);
     }
     return { needsEmailConfirmation: Boolean(res.needsEmailConfirmation), message: res.message };
   }, []);
 
   const logout = useCallback(async () => {
+    explicitAuthRef.current = true;
     try {
       await api.logout();
     } finally {

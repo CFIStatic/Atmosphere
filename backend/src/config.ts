@@ -23,23 +23,29 @@ function required(name: string, fallback?: string): string {
 
 const isProduction = (process.env.NODE_ENV ?? 'development') === 'production';
 
+// Development-only convenience defaults. In production these are withheld so a
+// deploy that forgets to set env vars FAILS FAST at boot instead of silently
+// running against the shared demo project / a localhost CORS origin.
+const devOnly = (value: string): string | undefined => (isProduction ? undefined : value);
+
+const frontendOriginRaw = isProduction
+  ? required('FRONTEND_ORIGIN')
+  : (process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173');
+
 export const config = {
   isProduction,
   port: Number(process.env.PORT ?? 4000),
 
   // Comma-separated list of allowed browser origins for CORS.
-  frontendOrigins: (process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173')
+  frontendOrigins: frontendOriginRaw
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean),
 
   supabase: {
-    url: required('SUPABASE_URL', 'https://ccxatzfsvzetciiwsjlj.supabase.co'),
+    url: required('SUPABASE_URL', devOnly('https://ccxatzfsvzetciiwsjlj.supabase.co')),
     // Publishable / anon key — safe to expose. Used for all auth operations.
-    anonKey: required(
-      'SUPABASE_ANON_KEY',
-      'sb_publishable_4ppzqtXQPeVPuzP8Ant-pQ_MZIPMcGn',
-    ),
+    anonKey: required('SUPABASE_ANON_KEY', devOnly('sb_publishable_4ppzqtXQPeVPuzP8Ant-pQ_MZIPMcGn')),
     // Optional server-only secret for privileged/admin operations. Never exposed.
     serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? '',
   },

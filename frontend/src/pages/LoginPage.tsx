@@ -139,7 +139,9 @@ export function LoginPage() {
                     Password
                   </label>
                   {isLogin && (
-                    <span className="text-xs text-gray-500">Min. 8 characters</span>
+                    <span id="password-hint" className="text-xs text-gray-500">
+                      Min. 8 characters
+                    </span>
                   )}
                 </div>
                 <div className="relative">
@@ -150,6 +152,8 @@ export function LoginPage() {
                     autoComplete={isLogin ? 'current-password' : 'new-password'}
                     required
                     minLength={8}
+                    aria-describedby="password-hint"
+                    aria-invalid={!isLogin && password.length > 0 && !passwordValid}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
@@ -165,7 +169,7 @@ export function LoginPage() {
                   </button>
                 </div>
                 {!isLogin && password.length > 0 && !passwordValid && (
-                  <p className="mt-1.5 text-xs text-amber-300/90">
+                  <p id="password-hint" className="mt-1.5 text-xs text-amber-300/90">
                     Use at least 8 characters.
                   </p>
                 )}

@@ -1,6 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import type { User } from '@supabase/supabase-js';
+import { config } from '../config.js';
 import { createAnonClient } from '../lib/supabase.js';
 import { setSessionCookies, clearSessionCookies } from '../lib/session.js';
 import { credentialsSchema } from '../lib/validation.js';
@@ -51,8 +52,18 @@ authRouter.post('/signup', authLimiter, async (req: Request, res: Response, next
 
     const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) {
-      // Surface Supabase's message but normalise the status code.
-      throw new HttpError(error.status && error.status >= 400 ? error.status : 400, error.message, 'signup_failed');
+      // Log the real cause server-side, but return a generic message so we do
+      // not reveal whether the email is already registered (account enumeration).
+      // eslint-disable-next-line no-console
+      console.warn('[signup] supabase error:', error.status, error.message);
+      const status = error.status === 429 ? 429 : 400;
+      throw new HttpError(
+        status,
+        status === 429
+          ? 'Too many attempts. Please try again later.'
+          : 'Unable to create an account with those details. If you already have an account, try signing in.',
+        'signup_failed',
+      );
     }
 
     if (data.session) {
@@ -96,22 +107,23 @@ authRouter.post('/login', authLimiter, async (req: Request, res: Response, next:
 
 /**
  * POST /api/auth/logout
- * Revokes the refresh token server-side (best-effort) and clears cookies.
+ * Revokes this session's refresh token server-side (best-effort) and clears
+ * cookies. Gated on the refresh token alone so revocation still happens after
+ * the short-lived access-token cookie has expired.
  */
 authRouter.post('/logout', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const accessToken = req.cookies?.cx_access_token as string | undefined;
-    const refreshToken = req.cookies?.cx_refresh_token as string | undefined;
+    const refreshToken = req.cookies?.[config.cookies.refreshTokenName] as string | undefined;
 
-    if (accessToken && refreshToken) {
+    if (refreshToken) {
       const supabase = createAnonClient();
-      // Restore the session on this stateless client, then sign out to revoke it.
-      const { error: setErr } = await supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken,
-      });
-      if (!setErr) {
-        await supabase.auth.signOut().catch(() => undefined);
+      // Load the session from the refresh token (works even if the access-token
+      // cookie is gone). This also rotates/consumes the old refresh token.
+      const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
+      if (!error && data.session) {
+        // scope: 'local' revokes ONLY the current session, leaving the user's
+        // other devices signed in.
+        await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
       }
     }
 
@@ -130,7 +142,7 @@ authRouter.post('/logout', async (req: Request, res: Response, next: NextFunctio
  */
 authRouter.post('/refresh', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const refreshToken = req.cookies?.cx_refresh_token as string | undefined;
+    const refreshToken = req.cookies?.[config.cookies.refreshTokenName] as string | undefined;
     if (!refreshToken) throw badRequest('No refresh token', 'no_refresh_token');
 
     const supabase = createAnonClient();

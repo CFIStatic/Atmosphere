@@ -10,8 +10,13 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
 
   if (loading) {
     return (
-      <div className="grid min-h-screen place-items-center text-brand-300">
+      <div
+        role="status"
+        aria-live="polite"
+        className="grid min-h-screen place-items-center text-brand-300"
+      >
         <SpinnerIcon className="animate-spin" width={28} height={28} />
+        <span className="sr-only">Loading…</span>
       </div>
     );
   }

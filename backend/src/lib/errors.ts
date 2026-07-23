@@ -19,3 +19,5 @@ export const unauthorized = (msg = 'Not authenticated', code = 'unauthorized') =
   new HttpError(401, msg, code);
 export const tooMany = (msg = 'Too many requests', code = 'rate_limited') =>
   new HttpError(429, msg, code);
+export const serviceUnavailable = (msg = 'Auth service temporarily unavailable', code = 'auth_unavailable') =>
+  new HttpError(503, msg, code);
