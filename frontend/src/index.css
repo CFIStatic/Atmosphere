@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #0a0a12;
+  color: #e5e7eb;
+}
+
+/* Subtle brand aurora background used on the auth screen. */
+.cx-aurora {
+  background:
+    radial-gradient(60rem 60rem at 15% -10%, rgba(99, 102, 241, 0.18), transparent 60%),
+    radial-gradient(50rem 50rem at 110% 10%, rgba(67, 56, 202, 0.16), transparent 55%),
+    radial-gradient(40rem 40rem at 50% 120%, rgba(129, 140, 248, 0.12), transparent 60%);
+}
