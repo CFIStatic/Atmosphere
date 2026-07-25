@@ -48,7 +48,9 @@ export function OnboardingPage() {
   }, [mode, orgName, joinCode]);
 
   const canContinue =
-    (step === 0 && orgStepValid) || (step === 1 && role !== null) || (step === 2 && workType !== null);
+    (step === 0 && orgStepValid) ||
+    (step === 1 && role !== null) ||
+    (step === 2 && workType !== null);
 
   function next() {
     setError(null);
@@ -149,7 +151,10 @@ export function OnboardingPage() {
 
                 {mode === 'create' ? (
                   <div className="mt-5">
-                    <label htmlFor="orgName" className="mb-1.5 block text-sm font-medium text-gray-300">
+                    <label
+                      htmlFor="orgName"
+                      className="mb-1.5 block text-sm font-medium text-gray-300"
+                    >
                       Organization name
                     </label>
                     <input
@@ -166,7 +171,10 @@ export function OnboardingPage() {
                   </div>
                 ) : (
                   <div className="mt-5">
-                    <label htmlFor="joinCode" className="mb-1.5 block text-sm font-medium text-gray-300">
+                    <label
+                      htmlFor="joinCode"
+                      className="mb-1.5 block text-sm font-medium text-gray-300"
+                    >
                       Organization join code
                     </label>
                     <input
@@ -190,7 +198,9 @@ export function OnboardingPage() {
             {step === 1 && (
               <section>
                 <h1 className="text-xl font-bold text-white">What's your role?</h1>
-                <p className="mt-1.5 text-sm text-gray-400">Pick the account type that fits you best.</p>
+                <p className="mt-1.5 text-sm text-gray-400">
+                  Pick the account type that fits you best.
+                </p>
                 <div className="mt-5 space-y-2.5">
                   {ROLE_OPTIONS.map((opt) => (
                     <OptionCard

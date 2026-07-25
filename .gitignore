@@ -40,3 +40,6 @@ frontend/dist-ssr/
 # Never commit database backups — they contain auth credentials/PII
 recovery/
 *backup*.json
+
+# Playwright smoke-test screenshots
+frontend/.smoke/

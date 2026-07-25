@@ -193,8 +193,8 @@ export function ResetPasswordPage() {
                   </div>
 
                   <div className="rounded-lg border border-white/10 bg-ink-700/40 px-3.5 py-3 text-xs leading-relaxed text-gray-400">
-                    For your security, saving a new password signs you out everywhere else and
-                    turns off PIN sign-in on any device where you set one up.
+                    For your security, saving a new password signs you out everywhere else and turns
+                    off PIN sign-in on any device where you set one up.
                   </div>
 
                   <button

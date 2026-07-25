@@ -73,7 +73,7 @@ authRouter.post('/signup', authLimiter, async (req: Request, res: Response, next
     if (error) {
       // Log the real cause server-side, but return a generic message so we do
       // not reveal whether the email is already registered (account enumeration).
-      // eslint-disable-next-line no-console
+       
       console.warn('[signup] supabase error:', error.status, error.message);
       const status = error.status === 429 ? 429 : 400;
       throw new HttpError(
@@ -229,7 +229,7 @@ authRouter.post(
 
       if (error) {
         // Logged for operators, never surfaced to the caller.
-        // eslint-disable-next-line no-console
+         
         console.warn('[forgot-password] supabase error:', error.status, error.message);
       }
 

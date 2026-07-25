@@ -111,9 +111,7 @@ export function PinSetupCard() {
     <div className="rounded-xl border border-white/10 bg-ink-800/60 p-5 backdrop-blur">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-            Quick sign-in
-          </p>
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Quick sign-in</p>
           <p className="mt-1.5 text-lg font-semibold text-white">
             {stage === 'on' ? 'PIN is on for this device' : '4-digit PIN'}
           </p>
@@ -134,8 +132,8 @@ export function PinSetupCard() {
       {stage === 'off' && (
         <>
           <p className="mt-2 text-sm leading-relaxed text-gray-400">
-            Skip typing your password on this device. Your PIN only works here — it can't be used
-            to sign in from anywhere else.
+            Skip typing your password on this device. Your PIN only works here — it can't be used to
+            sign in from anywhere else.
           </p>
           {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
           <button

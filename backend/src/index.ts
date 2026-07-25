@@ -4,7 +4,7 @@ import { config } from './config.js';
 const app = createApp();
 
 const server = app.listen(config.port, () => {
-  // eslint-disable-next-line no-console
+   
   console.log(
     `[atmosphere-backend] listening on http://localhost:${config.port}\n` +
       `  → Supabase URL: ${config.supabase.url}\n` +
@@ -16,7 +16,7 @@ const server = app.listen(config.port, () => {
 // Graceful shutdown.
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
-    // eslint-disable-next-line no-console
+     
     console.log(`\n[atmosphere-backend] received ${signal}, shutting down…`);
     server.close(() => process.exit(0));
   });

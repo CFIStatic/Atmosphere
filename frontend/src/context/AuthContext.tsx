@@ -67,7 +67,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         if (!cancelled && !explicitAuthRef.current) setUser(null);
         if (err instanceof ApiError && err.status !== 401 && err.status !== 0) {
-          // eslint-disable-next-line no-console
           console.warn('Session restore failed:', err.message);
         }
       } finally {

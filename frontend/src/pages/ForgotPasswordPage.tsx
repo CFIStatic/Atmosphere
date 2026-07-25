@@ -27,9 +27,7 @@ export function ForgotPasswordPage() {
       // a list of who works at the company.
       setSent(true);
     } catch (err) {
-      setError(
-        err instanceof ApiError ? err.message : 'Something went wrong. Please try again.',
-      );
+      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -49,11 +47,12 @@ export function ForgotPasswordPage() {
                 <div className="grid h-12 w-12 place-items-center rounded-full bg-emerald-500/15 text-emerald-300">
                   <CheckIcon width={26} height={26} />
                 </div>
-                <h1 className="mt-5 text-2xl font-bold tracking-tight text-white">Check your email</h1>
+                <h1 className="mt-5 text-2xl font-bold tracking-tight text-white">
+                  Check your email
+                </h1>
                 <p className="mt-2 text-sm leading-relaxed text-gray-400">
-                  If an account exists for{' '}
-                  <span className="text-gray-200">{email.trim()}</span>, we've sent a link to reset
-                  your password. It expires in one hour.
+                  If an account exists for <span className="text-gray-200">{email.trim()}</span>,
+                  we've sent a link to reset your password. It expires in one hour.
                 </p>
                 <p className="mt-4 text-sm text-gray-500">
                   Nothing arrived? Check your spam folder, or{' '}
@@ -69,7 +68,9 @@ export function ForgotPasswordPage() {
               </>
             ) : (
               <>
-                <h1 className="text-2xl font-bold tracking-tight text-white">Reset your password</h1>
+                <h1 className="text-2xl font-bold tracking-tight text-white">
+                  Reset your password
+                </h1>
                 <p className="mt-1.5 text-sm text-gray-400">
                   Enter your email and we'll send you a link to set a new one.
                 </p>
@@ -85,7 +86,10 @@ export function ForgotPasswordPage() {
 
                 <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-4">
                   <div>
-                    <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-gray-300">
+                    <label
+                      htmlFor="email"
+                      className="mb-1.5 block text-sm font-medium text-gray-300"
+                    >
                       Email
                     </label>
                     <input
