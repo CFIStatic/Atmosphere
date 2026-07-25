@@ -36,3 +36,7 @@ coverage/
 frontend/dist/
 frontend/dist-ssr/
 *.local
+
+# Never commit database backups — they contain auth credentials/PII
+recovery/
+*backup*.json
