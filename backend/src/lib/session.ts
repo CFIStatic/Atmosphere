@@ -32,3 +32,20 @@ export function clearSessionCookies(res: Response): void {
   res.clearCookie(config.cookies.accessTokenName, { ...baseCookieOptions });
   res.clearCookie(config.cookies.refreshTokenName, { ...baseCookieOptions });
 }
+
+/**
+ * The device cookie is deliberately *not* cleared on logout: staying enrolled is
+ * the entire point of a PIN, so signing out should return the user to the PIN
+ * pad rather than the full password form. It is cleared only when the user
+ * disables their PIN, when the device is revoked, or after a password reset.
+ */
+export function setDeviceCookie(res: Response, value: string): void {
+  res.cookie(config.device.cookieName, value, {
+    ...baseCookieOptions,
+    maxAge: config.device.cookieMaxAgeMs,
+  });
+}
+
+export function clearDeviceCookie(res: Response): void {
+  res.clearCookie(config.device.cookieName, { ...baseCookieOptions });
+}

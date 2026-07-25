@@ -49,6 +49,18 @@ export interface OrgMember {
   status: string;
 }
 
+/**
+ * The credential carried by a password-recovery link. Supabase emits one of
+ * three shapes depending on the email template and flow type; the backend
+ * normalises whichever arrives into a session.
+ */
+export interface RecoveryCredential {
+  tokenHash?: string;
+  code?: string;
+  accessToken?: string;
+  refreshToken?: string;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -109,6 +121,39 @@ export const api = {
   logout: () => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
 
   me: () => request<{ user: AuthUser }>('/api/auth/me', { method: 'GET' }),
+
+  // ---- Password recovery ----
+  forgotPassword: (email: string) =>
+    request<{ ok: boolean; message: string }>('/api/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  resetPassword: (credential: RecoveryCredential, password: string) =>
+    request<{ user: AuthUser }>('/api/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ ...credential, password }),
+    }),
+
+  // ---- Device PIN ----
+  pinStatus: () =>
+    request<{ enrolled: boolean; lockedUntil?: string | null }>('/api/auth/pin/status', {
+      method: 'GET',
+    }),
+
+  pinEnroll: (pin: string) =>
+    request<{ ok: boolean }>('/api/auth/pin/enroll', {
+      method: 'POST',
+      body: JSON.stringify({ pin }),
+    }),
+
+  pinUnlock: (pin: string) =>
+    request<{ user: AuthUser }>('/api/auth/pin/unlock', {
+      method: 'POST',
+      body: JSON.stringify({ pin }),
+    }),
+
+  pinDisable: () => request<{ ok: boolean }>('/api/auth/pin/disable', { method: 'POST' }),
 
   // ---- Organization / onboarding ----
   getMembership: () => request<{ membership: Membership | null }>('/api/org/me', { method: 'GET' }),

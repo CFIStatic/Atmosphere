@@ -32,9 +32,17 @@ export default {
           '0%': { opacity: '0', transform: 'translateY(12px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
+        // Feedback for a rejected PIN — carries the same meaning as the error
+        // text for users who are scanning rather than reading.
+        shake: {
+          '0%, 100%': { transform: 'translateX(0)' },
+          '20%, 60%': { transform: 'translateX(-7px)' },
+          '40%, 80%': { transform: 'translateX(7px)' },
+        },
       },
       animation: {
         'fade-in-up': 'fade-in-up 0.5s ease-out both',
+        shake: 'shake 0.4s ease-in-out',
       },
     },
   },

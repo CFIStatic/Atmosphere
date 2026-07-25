@@ -32,15 +32,17 @@ const frontendOriginRaw = isProduction
   ? required('FRONTEND_ORIGIN')
   : (process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173');
 
+// Comma-separated list of allowed browser origins for CORS.
+const frontendOrigins = frontendOriginRaw
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 export const config = {
   isProduction,
   port: Number(process.env.PORT ?? 4000),
 
-  // Comma-separated list of allowed browser origins for CORS.
-  frontendOrigins: frontendOriginRaw
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean),
+  frontendOrigins,
 
   supabase: {
     url: required('SUPABASE_URL', devOnly('https://ccxatzfsvzetciiwsjlj.supabase.co')),
@@ -60,6 +62,26 @@ export const config = {
     sameSite: (process.env.COOKIE_SAMESITE as 'lax' | 'strict' | 'none') ?? 'lax',
     domain: process.env.COOKIE_DOMAIN || undefined,
   },
+
+  device: {
+    // Long-lived cookie holding "<deviceId>.<secret>" for PIN unlock. It only
+    // ever yields a session when combined with the correct PIN, so it can
+    // outlive the refresh-token cookie without widening the blast radius.
+    cookieName: 'atm_device',
+    cookieMaxAgeMs: 180 * 24 * 60 * 60 * 1000, // 180 days
+
+    // Server-only secret mixed into every PIN hash and token-sealing key. It
+    // must never reach the database — that separation is what keeps a 4-digit
+    // PIN safe against an offline sweep if the database is ever leaked.
+    // Rotating it invalidates every enrolled device, which is the desired
+    // behaviour for a compromised pepper.
+    pepper: required('DEVICE_PEPPER', devOnly('atmosphere-dev-pepper-do-not-use-in-production')),
+  },
+
+  // Where the password-reset email sends the user back to. Must also be listed
+  // in the Supabase dashboard under Authentication → URL Configuration.
+  passwordResetRedirectUrl:
+    process.env.PASSWORD_RESET_REDIRECT_URL ?? `${frontendOrigins[0]}/reset-password`,
 } as const;
 
 export type AppConfig = typeof config;

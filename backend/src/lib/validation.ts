@@ -5,19 +5,86 @@ import { z } from 'zod';
  * enforces its own minimum on the server as a second line of defence.
  */
 
+const emailField = z
+  .string({ required_error: 'Email is required' })
+  .trim()
+  .toLowerCase()
+  .email('Enter a valid email address');
+
+const passwordField = z
+  .string({ required_error: 'Password is required' })
+  .min(8, 'Password must be at least 8 characters')
+  .max(72, 'Password must be at most 72 characters'); // bcrypt hard limit
+
 export const credentialsSchema = z.object({
-  email: z
-    .string({ required_error: 'Email is required' })
-    .trim()
-    .toLowerCase()
-    .email('Enter a valid email address'),
-  password: z
-    .string({ required_error: 'Password is required' })
-    .min(8, 'Password must be at least 8 characters')
-    .max(72, 'Password must be at most 72 characters'), // bcrypt hard limit
+  email: emailField,
+  password: passwordField,
 });
 
 export type Credentials = z.infer<typeof credentialsSchema>;
+
+/** Body of the "email me a reset link" request. */
+export const forgotPasswordSchema = z.object({ email: emailField });
+
+/**
+ * Body of the reset form. Supabase delivers recovery links in one of two shapes
+ * depending on the email template and flow type, so accept either and let the
+ * route pick the matching exchange.
+ */
+export const resetPasswordSchema = z
+  .object({
+    // Emitted when the recovery email template uses `{{ .TokenHash }}` — the
+    // preferred shape here, since it never puts a session token in the URL.
+    tokenHash: z.string().trim().min(1).optional(),
+    // PKCE-style links.
+    code: z.string().trim().min(1).optional(),
+    // Supabase's default template lands with tokens in the URL fragment. Accept
+    // that pair too so password reset works before any template customisation.
+    accessToken: z.string().trim().min(1).optional(),
+    refreshToken: z.string().trim().min(1).optional(),
+    password: passwordField,
+  })
+  .refine((v) => Boolean(v.tokenHash || v.code || (v.accessToken && v.refreshToken)), {
+    message: 'This reset link is invalid or incomplete. Request a new one.',
+    path: ['tokenHash'],
+  });
+
+/**
+ * The most-guessed 4-digit PINs. With a device-bound PIN an attacker who steals
+ * an unlocked-but-locked device gets 5 attempts before lockout — which is
+ * harmless against a random PIN but close to a coin flip if the user picked
+ * 1234. Rejecting the popular set is what keeps that attempt budget meaningless.
+ */
+const COMMON_PINS = new Set([
+  '1234', '1111', '0000', '1212', '7777', '1004', '2000', '4444', '2222', '6969',
+  '9999', '3333', '5555', '6666', '1122', '1313', '8888', '4321', '2001', '1010',
+  '2580', '0852', '1230', '1984', '2011', '1112', '1379', '1999', '2020', '2468',
+]);
+
+function isSequential(pin: string): boolean {
+  let ascending = true;
+  let descending = true;
+  for (let i = 1; i < pin.length; i += 1) {
+    const delta = pin.charCodeAt(i) - pin.charCodeAt(i - 1);
+    if (delta !== 1) ascending = false;
+    if (delta !== -1) descending = false;
+  }
+  return ascending || descending;
+}
+
+export const pinSchema = z.object({
+  pin: z
+    .string({ required_error: 'PIN is required' })
+    .regex(/^\d{4}$/, 'Your PIN must be exactly 4 digits')
+    .refine((pin) => !COMMON_PINS.has(pin), 'That PIN is too easy to guess — pick another')
+    .refine((pin) => new Set(pin).size > 1, 'Your PIN cannot be the same digit four times')
+    .refine((pin) => !isSequential(pin), 'Your PIN cannot be four digits in a row'),
+});
+
+/** Unlock only needs the shape to be right — no strength rules on the way in. */
+export const pinUnlockSchema = z.object({
+  pin: z.string({ required_error: 'PIN is required' }).regex(/^\d{4}$/, 'Enter your 4-digit PIN'),
+});
 
 /** Account types a member can hold within an organization. */
 export const MEMBER_ROLES = [

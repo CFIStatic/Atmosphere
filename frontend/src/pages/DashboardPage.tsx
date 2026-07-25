@@ -7,6 +7,7 @@ import {
   type OrgMember,
 } from '../lib/api';
 import { Logo } from '../components/Logo';
+import { PinSetupCard } from '../components/PinSetupCard';
 import { SpinnerIcon, CheckIcon } from '../components/icons';
 
 export function DashboardPage() {
@@ -121,6 +122,11 @@ export function DashboardPage() {
                 Share this code so teammates can link their account.
               </p>
             </div>
+          </div>
+
+          {/* Device PIN */}
+          <div className="mt-4">
+            <PinSetupCard />
           </div>
 
           {/* Linked accounts */}

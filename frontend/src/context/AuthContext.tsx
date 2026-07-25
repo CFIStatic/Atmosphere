@@ -22,6 +22,9 @@ interface AuthContextValue {
   membershipLoading: boolean; // true while resolving membership for a known user
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string) => Promise<SignupResult>;
+  unlockWithPin: (pin: string) => Promise<void>;
+  /** Adopt a session the backend just established (e.g. after a password reset). */
+  adoptUser: (user: AuthUser) => Promise<void>;
   logout: () => Promise<void>;
   refreshMembership: () => Promise<void>;
 }
@@ -100,6 +103,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [loadMembership],
   );
 
+  const unlockWithPin = useCallback(
+    async (pin: string) => {
+      const { user } = await api.pinUnlock(pin);
+      explicitAuthRef.current = true;
+      setUser(user);
+      await loadMembership();
+    },
+    [loadMembership],
+  );
+
+  const adoptUser = useCallback(
+    async (nextUser: AuthUser) => {
+      explicitAuthRef.current = true;
+      setUser(nextUser);
+      await loadMembership();
+    },
+    [loadMembership],
+  );
+
   const logout = useCallback(async () => {
     explicitAuthRef.current = true;
     try {
@@ -118,10 +140,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       membershipLoading,
       login,
       signup,
+      unlockWithPin,
+      adoptUser,
       logout,
       refreshMembership: loadMembership,
     }),
-    [user, loading, membership, membershipLoading, login, signup, logout, loadMembership],
+    [
+      user,
+      loading,
+      membership,
+      membershipLoading,
+      login,
+      signup,
+      unlockWithPin,
+      adoptUser,
+      logout,
+      loadMembership,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
