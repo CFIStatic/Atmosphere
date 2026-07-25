@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
+import { orgRouter } from './routes/org.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 
@@ -39,6 +40,7 @@ export function createApp(): Express {
   // Routes.
   app.use('/api', healthRouter);
   app.use('/api/auth', authRouter);
+  app.use('/api/org', orgRouter);
 
   // 404 + error handling (must be last).
   app.use(notFound);

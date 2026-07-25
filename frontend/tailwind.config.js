@@ -4,7 +4,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Commandx brand palette.
+        // Atmosphere brand palette.
         brand: {
           50: '#eef2ff',
           100: '#e0e7ff',

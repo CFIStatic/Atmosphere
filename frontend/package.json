@@ -1,7 +1,7 @@
 {
-  "name": "commandx-frontend",
+  "name": "atmosphere-frontend",
   "version": "1.0.0",
-  "description": "Commandx frontend — login/signup UI",
+  "description": "Atmosphere frontend — login/signup + org onboarding UI",
   "private": true,
   "type": "module",
   "scripts": {

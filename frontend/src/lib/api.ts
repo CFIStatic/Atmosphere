@@ -1,5 +1,5 @@
 /**
- * Thin API client for the Commandx backend.
+ * Thin API client for the Atmosphere backend.
  *
  * In development, requests go to a relative `/api/...` path which Vite proxies
  * to the backend (same-origin, so cookies work seamlessly). In production set
@@ -15,6 +15,38 @@ export interface AuthUser {
   lastSignInAt: string | null;
   emailConfirmed: boolean;
   metadata: Record<string, unknown>;
+}
+
+export type MemberRole =
+  | 'project_manager'
+  | 'field_technician'
+  | 'accountant'
+  | 'office_manager'
+  | 'sales';
+
+export type WorkType = 'mitigation' | 'construction';
+
+export interface Org {
+  id: string;
+  name: string;
+  joinCode: string;
+  createdAt?: string;
+}
+
+export interface Membership {
+  role: MemberRole;
+  workType: WorkType;
+  status: string;
+  org: Org | null;
+}
+
+export interface OrgMember {
+  userId: string;
+  email: string | null;
+  fullName: string | null;
+  role: MemberRole;
+  workType: WorkType;
+  status: string;
 }
 
 export class ApiError extends Error {
@@ -43,7 +75,6 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new ApiError(0, 'Network error — is the backend running?', 'network_error');
   }
 
-  // 204 / empty body handling.
   const text = await res.text();
   const body = text ? (JSON.parse(text) as Record<string, unknown>) : {};
 
@@ -62,6 +93,7 @@ export interface AuthResponse {
 }
 
 export const api = {
+  // ---- Auth ----
   signup: (email: string, password: string) =>
     request<AuthResponse>('/api/auth/signup', {
       method: 'POST',
@@ -77,4 +109,35 @@ export const api = {
   logout: () => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
 
   me: () => request<{ user: AuthUser }>('/api/auth/me', { method: 'GET' }),
+
+  // ---- Organization / onboarding ----
+  getMembership: () => request<{ membership: Membership | null }>('/api/org/me', { method: 'GET' }),
+
+  createOrg: (name: string, role: MemberRole, workType: WorkType) =>
+    request<{ org: Org }>('/api/org', {
+      method: 'POST',
+      body: JSON.stringify({ name, role, workType }),
+    }),
+
+  joinOrg: (joinCode: string, role: MemberRole, workType: WorkType) =>
+    request<{ org: Org }>('/api/org/join', {
+      method: 'POST',
+      body: JSON.stringify({ joinCode, role, workType }),
+    }),
+
+  getMembers: () => request<{ members: OrgMember[] }>('/api/org/members', { method: 'GET' }),
+};
+
+/** Human-readable labels for roles and work types (shared UI copy). */
+export const ROLE_LABELS: Record<MemberRole, string> = {
+  project_manager: 'Project Manager',
+  field_technician: 'Field Technician',
+  accountant: 'Accountant',
+  office_manager: 'Office Manager',
+  sales: 'Sales',
+};
+
+export const WORK_TYPE_LABELS: Record<WorkType, string> = {
+  mitigation: 'Mitigation',
+  construction: 'Construction',
 };

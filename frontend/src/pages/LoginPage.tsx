@@ -74,8 +74,8 @@ export function LoginPage() {
 
   const title = isLogin ? 'Welcome back' : 'Create your account';
   const subtitle = isLogin
-    ? 'Sign in to your Commandx command center.'
-    : 'Start commanding your operations in minutes.';
+    ? 'Sign in to your Atmosphere workspace.'
+    : 'Create your Atmosphere account in minutes.';
 
   return (
     <div className="cx-aurora relative flex min-h-screen flex-col bg-ink-900">

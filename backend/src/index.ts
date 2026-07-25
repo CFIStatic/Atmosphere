@@ -6,7 +6,7 @@ const app = createApp();
 const server = app.listen(config.port, () => {
   // eslint-disable-next-line no-console
   console.log(
-    `[commandx-backend] listening on http://localhost:${config.port}\n` +
+    `[atmosphere-backend] listening on http://localhost:${config.port}\n` +
       `  → Supabase URL: ${config.supabase.url}\n` +
       `  → Allowed origins: ${config.frontendOrigins.join(', ')}\n` +
       `  → Mode: ${config.isProduction ? 'production' : 'development'}`,
@@ -17,7 +17,7 @@ const server = app.listen(config.port, () => {
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
     // eslint-disable-next-line no-console
-    console.log(`\n[commandx-backend] received ${signal}, shutting down…`);
+    console.log(`\n[atmosphere-backend] received ${signal}, shutting down…`);
     server.close(() => process.exit(0));
   });
 }

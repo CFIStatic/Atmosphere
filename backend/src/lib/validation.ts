@@ -18,3 +18,41 @@ export const credentialsSchema = z.object({
 });
 
 export type Credentials = z.infer<typeof credentialsSchema>;
+
+/** Account types a member can hold within an organization. */
+export const MEMBER_ROLES = [
+  'project_manager',
+  'field_technician',
+  'accountant',
+  'office_manager',
+  'sales',
+] as const;
+
+/** The kind of work a member does. */
+export const WORK_TYPES = ['mitigation', 'construction'] as const;
+
+const roleSchema = z.enum(MEMBER_ROLES, {
+  errorMap: () => ({ message: 'Select a valid account type' }),
+});
+const workTypeSchema = z.enum(WORK_TYPES, {
+  errorMap: () => ({ message: 'Select mitigation or construction' }),
+});
+
+export const createOrgSchema = z.object({
+  name: z.string({ required_error: 'Organization name is required' }).trim().min(2, 'Organization name is too short').max(80, 'Organization name is too long'),
+  role: roleSchema,
+  workType: workTypeSchema,
+});
+
+export const joinOrgSchema = z.object({
+  joinCode: z
+    .string({ required_error: 'Join code is required' })
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z0-9]{6,12}$/, 'Enter a valid join code'),
+  role: roleSchema,
+  workType: workTypeSchema,
+});
+
+export type CreateOrgInput = z.infer<typeof createOrgSchema>;
+export type JoinOrgInput = z.infer<typeof joinOrgSchema>;

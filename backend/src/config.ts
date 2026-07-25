@@ -1,12 +1,12 @@
 import 'dotenv/config';
 
 /**
- * Centralised, validated configuration for the Commandx backend.
+ * Centralised, validated configuration for the Atmosphere backend.
  *
  * The Supabase URL and the publishable ("anon") key are safe to ship — the anon
  * key is designed to be exposed to browsers and is protected by Row Level
  * Security on the database. They are provided as sensible defaults so the server
- * boots out-of-the-box against the Commandx project, but every value can be
+ * boots out-of-the-box against the Atmosphere project, but every value can be
  * overridden through environment variables (see .env.example).
  *
  * The SERVICE ROLE key is a server-only secret. It is optional here (the login
@@ -51,8 +51,8 @@ export const config = {
   },
 
   cookies: {
-    accessTokenName: 'cx_access_token',
-    refreshTokenName: 'cx_refresh_token',
+    accessTokenName: 'atm_access_token',
+    refreshTokenName: 'atm_refresh_token',
     // Access token lives ~1h (matches Supabase JWT); refresh token much longer.
     accessMaxAgeMs: 60 * 60 * 1000, // 1 hour
     refreshMaxAgeMs: 30 * 24 * 60 * 60 * 1000, // 30 days

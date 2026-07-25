@@ -1,7 +1,7 @@
 {
-  "name": "commandx-backend",
+  "name": "atmosphere-backend",
   "version": "1.0.0",
-  "description": "Commandx backend — BFF that mediates Supabase Auth for the login page",
+  "description": "Atmosphere backend — BFF that mediates Supabase Auth and org onboarding",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {

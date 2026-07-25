@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { api, ApiError, type AuthUser } from '../lib/api';
+import { api, ApiError, type AuthUser, type Membership } from '../lib/api';
 
 interface SignupResult {
   needsEmailConfirmation: boolean;
@@ -18,9 +18,12 @@ interface SignupResult {
 interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean; // true while restoring the session on first load
+  membership: Membership | null; // null = not yet onboarded into an org
+  membershipLoading: boolean; // true while resolving membership for a known user
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string) => Promise<SignupResult>;
   logout: () => Promise<void>;
+  refreshMembership: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -28,10 +31,25 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [membership, setMembership] = useState<Membership | null>(null);
+  const [membershipLoading, setMembershipLoading] = useState(false);
 
   // True once an explicit login/signup/logout has run. The mount-time restore
   // below must never overwrite the result of an explicit action that races it.
   const explicitAuthRef = useRef(false);
+
+  const loadMembership = useCallback(async () => {
+    setMembershipLoading(true);
+    try {
+      const { membership } = await api.getMembership();
+      setMembership(membership);
+    } catch {
+      // Treat any failure as "not onboarded"; the onboarding flow will re-check.
+      setMembership(null);
+    } finally {
+      setMembershipLoading(false);
+    }
+  }, []);
 
   // On mount, try to restore an existing session from the httpOnly cookie.
   useEffect(() => {
@@ -39,10 +57,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         const { user } = await api.me();
-        if (!cancelled && !explicitAuthRef.current) setUser(user);
+        if (!cancelled && !explicitAuthRef.current) {
+          setUser(user);
+          await loadMembership();
+        }
       } catch (err) {
-        // 401 simply means "not logged in" — anything else we also treat as
-        // logged-out but leave the console note for debugging.
         if (!cancelled && !explicitAuthRef.current) setUser(null);
         if (err instanceof ApiError && err.status !== 401 && err.status !== 0) {
           // eslint-disable-next-line no-console
@@ -55,23 +74,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadMembership]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const { user } = await api.login(email, password);
-    explicitAuthRef.current = true;
-    setUser(user);
-  }, []);
-
-  const signup = useCallback(async (email: string, password: string): Promise<SignupResult> => {
-    const res = await api.signup(email, password);
-    // If the project auto-confirms, a session is set and the user is logged in.
-    if (!res.needsEmailConfirmation && res.user) {
+  const login = useCallback(
+    async (email: string, password: string) => {
+      const { user } = await api.login(email, password);
       explicitAuthRef.current = true;
-      setUser(res.user);
-    }
-    return { needsEmailConfirmation: Boolean(res.needsEmailConfirmation), message: res.message };
-  }, []);
+      setUser(user);
+      await loadMembership();
+    },
+    [loadMembership],
+  );
+
+  const signup = useCallback(
+    async (email: string, password: string): Promise<SignupResult> => {
+      const res = await api.signup(email, password);
+      // If the project auto-confirms, a session is set and the user is logged in.
+      if (!res.needsEmailConfirmation && res.user) {
+        explicitAuthRef.current = true;
+        setUser(res.user);
+        await loadMembership();
+      }
+      return { needsEmailConfirmation: Boolean(res.needsEmailConfirmation), message: res.message };
+    },
+    [loadMembership],
+  );
 
   const logout = useCallback(async () => {
     explicitAuthRef.current = true;
@@ -79,12 +106,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await api.logout();
     } finally {
       setUser(null);
+      setMembership(null);
     }
   }, []);
 
   const value = useMemo(
-    () => ({ user, loading, login, signup, logout }),
-    [user, loading, login, signup, logout],
+    () => ({
+      user,
+      loading,
+      membership,
+      membershipLoading,
+      login,
+      signup,
+      logout,
+      refreshMembership: loadMembership,
+    }),
+    [user, loading, membership, membershipLoading, login, signup, logout, loadMembership],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

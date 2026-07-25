@@ -4,5 +4,5 @@ export const healthRouter = Router();
 
 /** Liveness probe — no auth, no dependencies. */
 healthRouter.get('/health', (_req: Request, res: Response) => {
-  res.json({ status: 'ok', service: 'commandx-backend', time: new Date().toISOString() });
+  res.json({ status: 'ok', service: 'atmosphere-backend', time: new Date().toISOString() });
 });
