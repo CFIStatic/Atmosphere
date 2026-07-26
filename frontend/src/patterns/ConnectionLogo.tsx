@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { cn } from '../design';
 import type { Connection } from '../domain/types';
 import { monogramFor, readableOn } from './logoMark';
+import { brandIconFor } from './brandIcons';
 
 /**
  * A connected system's visual identity.
@@ -35,6 +36,11 @@ export function ConnectionLogo({
   }[size];
 
   const showImage = connection.logoUrl && !imageFailed;
+  // Official mark where one genuinely exists; otherwise the monogram. The
+  // restoration-specific vendors have no entry in any icon set, so the fallback
+  // is the normal case here rather than an error path.
+  const icon = brandIconFor(connection.id);
+  const foreground = readableOn(connection.brandColor);
 
   return (
     <span
@@ -44,14 +50,7 @@ export function ConnectionLogo({
         showImage ? 'bg-raised' : undefined,
         className,
       )}
-      style={
-        showImage
-          ? undefined
-          : {
-              backgroundColor: connection.brandColor,
-              color: readableOn(connection.brandColor),
-            }
-      }
+      style={showImage ? undefined : { backgroundColor: connection.brandColor, color: foreground }}
       aria-hidden="true"
     >
       {showImage ? (
@@ -62,6 +61,10 @@ export function ConnectionLogo({
           onError={() => setImageFailed(true)}
           loading="lazy"
         />
+      ) : icon ? (
+        <svg viewBox="0 0 24 24" className="h-[58%] w-[58%]" fill={foreground} role="presentation">
+          <path d={icon.path} />
+        </svg>
       ) : (
         monogramFor(connection)
       )}

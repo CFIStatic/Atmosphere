@@ -1,7 +1,7 @@
 {
   "name": "atmosphere-frontend",
   "version": "1.0.0",
-  "description": "Atmosphere frontend \u2014 login/signup + org onboarding UI",
+  "description": "Atmosphere frontend — login/signup + org onboarding UI",
   "private": true,
   "type": "module",
   "scripts": {
@@ -56,6 +56,7 @@
     "playwright": "^1.62.0",
     "postcss": "^8.4.47",
     "prettier": "^3.9.6",
+    "simple-icons": "^16.27.1",
     "tailwindcss": "^3.4.13",
     "typescript": "^5.5.4",
     "typescript-eslint": "^8.65.0",
