@@ -57,9 +57,11 @@
 
   --canvas: 240 238 233; /* #F0EEE9 — brand light ground */
   --sunken: 232 230 224;
-  --surface: 250 249 246;
-  --raised: 255 255 255;
-  --raised-2: 244 242 237;
+  /* Cards go pure white so they lift off the bone ground; at 250,249,246 they
+     were within 2% luminance of the canvas and read as flat. */
+  --surface: 255 255 255;
+  --raised: 241 239 234;
+  --raised-2: 230 227 221;
 
   --fg: 26 26 26; /* #1A1A1A — brand wordmark on light */
   --fg-2: 61 61 61;
