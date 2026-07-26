@@ -137,13 +137,19 @@ create policy web_runs_rw on public.web_runs
 
 -- ---------------------------------------------------------------------------
 -- updated_at bookkeeping
+--
+-- search_path is pinned empty and now() is fully qualified: otherwise whatever
+-- schema list the calling session happens to have set decides which `now()`
+-- runs, and a shadowing function in an attacker-controlled schema could be
+-- reached from a trigger.
 -- ---------------------------------------------------------------------------
 create or replace function public.web_access_touch_updated_at()
 returns trigger
 language plpgsql
+set search_path = ''
 as $$
 begin
-  new.updated_at := now();
+  new.updated_at := pg_catalog.now();
   return new;
 end;
 $$;
