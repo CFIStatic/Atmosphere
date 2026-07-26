@@ -51,7 +51,7 @@ export function MobileNav({
           <button
             type="button"
             aria-label="Close navigation"
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            className="absolute inset-0 bg-scrim/70 backdrop-blur-sm"
             onClick={() => onOpenChange(false)}
           />
           <div className="absolute inset-y-0 left-0 w-[min(17rem,80vw)] animate-slide-in-right">
@@ -86,7 +86,7 @@ function BottomBar({ role, counts }: { role: Role; counts: Counts }) {
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-30 flex border-t border-white/10 bg-ink-950/95 backdrop-blur-xl sm:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line/10 bg-sunken/95 backdrop-blur-xl sm:hidden"
       // Keeps the bar clear of the iOS home indicator.
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
@@ -106,14 +106,14 @@ function BottomBar({ role, counts }: { role: Role; counts: Counts }) {
             className={({ isActive }) =>
               cn(
                 'relative flex flex-1 flex-col items-center gap-0.5 py-2 text-2xs font-medium transition',
-                isActive ? 'text-brand-300' : 'text-gray-500',
+                isActive ? 'text-brand-300' : 'text-fg-3',
               )
             }
           >
             <span className="relative">
               <Icon className="h-5 w-5" />
               {count > 0 && (
-                <span className="absolute -right-1.5 -top-1 min-w-[1rem] rounded-full bg-state-warn px-1 text-center text-[9px] font-bold leading-4 text-ink-900">
+                <span className="absolute -right-1.5 -top-1 min-w-[1rem] rounded-full bg-state-warn px-1 text-center text-[9px] font-bold leading-4 text-on-accent">
                   {count > 9 ? '9+' : count}
                 </span>
               )}

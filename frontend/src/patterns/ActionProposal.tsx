@@ -57,15 +57,15 @@ export function ActionProposal({
   return (
     <div
       className={cn(
-        'rounded-xl border bg-ink-800/60 backdrop-blur',
+        'rounded-xl border bg-surface/60 backdrop-blur',
         risk === 'high' && request.status === 'proposed'
           ? 'border-state-danger/30'
-          : 'border-white/10',
+          : 'border-line/10',
         className,
       )}
     >
       {/* ── Header ───────────────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between gap-3 border-b border-white/10 px-4 py-3">
+      <div className="flex items-start justify-between gap-3 border-b border-line/10 px-4 py-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge tone={approvalStatusTone[request.status]}>
@@ -80,14 +80,14 @@ export function ActionProposal({
               </Badge>
             )}
           </div>
-          <h3 className="mt-2 text-sm font-semibold leading-snug text-white">{request.title}</h3>
-          <p className="mt-1 text-xs leading-relaxed text-gray-400">{request.summary}</p>
+          <h3 className="mt-2 text-sm font-semibold leading-snug text-fg">{request.title}</h3>
+          <p className="mt-1 text-xs leading-relaxed text-fg-3">{request.summary}</p>
         </div>
 
         {request.valueAtStake !== null && (
           <div className="shrink-0 text-right">
-            <p className="text-2xs uppercase tracking-wide text-gray-600">At stake</p>
-            <p className="text-sm font-semibold text-white">{money(request.valueAtStake)}</p>
+            <p className="text-2xs uppercase tracking-wide text-fg-4">At stake</p>
+            <p className="text-sm font-semibold text-fg">{money(request.valueAtStake)}</p>
           </div>
         )}
       </div>
@@ -99,8 +99,8 @@ export function ActionProposal({
             <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5">
               {request.context.map((item) => (
                 <div key={item.label} className="min-w-0">
-                  <dt className="text-2xs text-gray-600">{item.label}</dt>
-                  <dd className="truncate text-xs text-gray-300">{item.value}</dd>
+                  <dt className="text-2xs text-fg-4">{item.label}</dt>
+                  <dd className="truncate text-xs text-fg-2">{item.value}</dd>
                 </div>
               ))}
             </dl>
@@ -113,11 +113,11 @@ export function ActionProposal({
             <ul className="space-y-1.5">
               {request.changes.map((change, i) => (
                 <li key={i} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs">
-                  <span className="text-gray-500">{change.entity}</span>
-                  <span className="text-gray-300">{change.field}</span>
+                  <span className="text-fg-3">{change.entity}</span>
+                  <span className="text-fg-2">{change.field}</span>
                   <span className="flex items-center gap-1.5 font-mono text-2xs">
-                    <span className="text-gray-500 line-through">{change.from ?? 'none'}</span>
-                    <ArrowRight className="h-3 w-3 text-gray-600" />
+                    <span className="text-fg-3 line-through">{change.from ?? 'none'}</span>
+                    <ArrowRight className="h-3 w-3 text-fg-4" />
                     <span className="text-state-info">{change.to}</span>
                   </span>
                 </li>
@@ -132,13 +132,13 @@ export function ActionProposal({
             <div className="flex flex-wrap gap-x-5 gap-y-2">
               {request.impact.map((item) => (
                 <div key={item.label}>
-                  <p className="text-2xs text-gray-600">{item.label}</p>
+                  <p className="text-2xs text-fg-4">{item.label}</p>
                   <p
                     className={cn(
                       'text-sm font-semibold',
                       impactTone(item.direction) === 'ok' && 'text-state-ok',
                       impactTone(item.direction) === 'danger' && 'text-state-danger',
-                      impactTone(item.direction) === 'idle' && 'text-gray-300',
+                      impactTone(item.direction) === 'idle' && 'text-fg-2',
                     )}
                   >
                     {item.value}
@@ -164,8 +164,8 @@ export function ActionProposal({
                     )}
                   />
                   <div className="min-w-0">
-                    <p className="text-xs font-medium text-gray-200">{flag.title}</p>
-                    <p className="mt-0.5 text-xs leading-relaxed text-gray-500">{flag.detail}</p>
+                    <p className="text-xs font-medium text-fg-2">{flag.title}</p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-fg-3">{flag.detail}</p>
                   </div>
                 </li>
               ))}
@@ -187,12 +187,12 @@ export function ActionProposal({
                   ) : step.status === 'failed' ? (
                     <X className="h-3.5 w-3.5 shrink-0 text-state-danger" />
                   ) : (
-                    <CircleDashed className="h-3.5 w-3.5 shrink-0 text-gray-600" />
+                    <CircleDashed className="h-3.5 w-3.5 shrink-0 text-fg-4" />
                   )}
                   <span
                     className={cn(
-                      step.status === 'done' ? 'text-gray-400' : 'text-gray-300',
-                      step.status === 'pending' && 'text-gray-600',
+                      step.status === 'done' ? 'text-fg-3' : 'text-fg-2',
+                      step.status === 'pending' && 'text-fg-4',
                     )}
                   >
                     {step.label}
@@ -210,8 +210,8 @@ export function ActionProposal({
               {request.evidence.map((item, i) => (
                 <li key={i} className="flex items-center gap-2 text-xs">
                   <FileCheck2 className="h-3.5 w-3.5 shrink-0 text-state-ok" />
-                  <span className="text-gray-300">{item.label}</span>
-                  <span className="font-mono text-2xs text-gray-600">{item.reference}</span>
+                  <span className="text-fg-2">{item.label}</span>
+                  <span className="font-mono text-2xs text-fg-4">{item.reference}</span>
                 </li>
               ))}
             </ul>
@@ -220,8 +220,8 @@ export function ActionProposal({
       </div>
 
       {/* ── 7. Approval controls ──────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-4 py-3">
-        <div className="flex items-center gap-2 text-2xs text-gray-600">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line/10 px-4 py-3">
+        <div className="flex items-center gap-2 text-2xs text-fg-4">
           <StatusDot tone={approvalStatusTone[request.status]} pulse={inFlight} />
           <span>Proposed {relativeTime(request.createdAt)}</span>
           {expiresIn && request.status === 'proposed' && (
@@ -266,7 +266,7 @@ export function ActionProposal({
         )}
 
         {request.status === 'proposed' && !gate.allowed && (
-          <p className="w-full text-2xs text-gray-600">
+          <p className="w-full text-2xs text-fg-4">
             Requires {labelForRole(request.requiredRole)} or above.
           </p>
         )}
@@ -278,9 +278,7 @@ export function ActionProposal({
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-gray-600">
-        {label}
-      </p>
+      <p className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-fg-4">{label}</p>
       {children}
     </div>
   );

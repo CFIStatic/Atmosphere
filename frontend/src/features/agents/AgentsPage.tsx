@@ -44,20 +44,20 @@ export function AgentsPage() {
                         tone={agentStatusTone[agent.status]}
                         pulse={agent.status === 'active'}
                       />
-                      <h3 className="truncate text-sm font-semibold text-white">{agent.name}</h3>
+                      <h3 className="truncate text-sm font-semibold text-fg">{agent.name}</h3>
                     </div>
-                    <p className="mt-0.5 text-2xs text-gray-600">
+                    <p className="mt-0.5 text-2xs text-fg-4">
                       {CAPABILITY_LABELS[agent.capability]}
                     </p>
                   </div>
                   <Badge tone={agentStatusTone[agent.status]}>{titleCase(agent.status)}</Badge>
                 </div>
 
-                <p className="text-xs leading-relaxed text-gray-500">{agent.description}</p>
+                <p className="text-xs leading-relaxed text-fg-3">{agent.description}</p>
 
                 <div>
                   <div className="mb-1 flex items-center justify-between text-2xs">
-                    <span className="text-gray-600">Success rate</span>
+                    <span className="text-fg-4">Success rate</span>
                     <span
                       className={
                         agent.successRate >= 90
@@ -78,9 +78,9 @@ export function AgentsPage() {
                   />
                 </div>
 
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-2xs text-gray-600">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-2xs text-fg-4">
                   <span>
-                    <span className="font-medium text-gray-400">{agent.runsToday}</span> runs today
+                    <span className="font-medium text-fg-3">{agent.runsToday}</span> runs today
                   </span>
                   {agent.actionsAwaitingApproval > 0 && (
                     <span className="text-state-warn">
@@ -90,7 +90,7 @@ export function AgentsPage() {
                   <span>last run {relativeTime(agent.lastRunAt)}</span>
                 </div>
 
-                <div className="flex flex-wrap gap-1 border-t border-white/5 pt-2.5">
+                <div className="flex flex-wrap gap-1 border-t border-line/5 pt-2.5">
                   {agent.connectedSystems.map((system) => (
                     <Badge key={system} tone="idle">
                       {system}

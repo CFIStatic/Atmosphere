@@ -54,16 +54,16 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
   return (
     <aside
       aria-label="Atmosphere assistant"
-      className="flex h-full w-full flex-col border-l border-white/10 bg-ink-950/70 backdrop-blur-xl"
+      className="flex h-full w-full flex-col border-l border-line/10 bg-sunken/70 backdrop-blur-xl"
     >
-      <header className="flex h-topbar shrink-0 items-center justify-between gap-2 border-b border-white/10 px-4">
+      <header className="flex h-topbar shrink-0 items-center justify-between gap-2 border-b border-line/10 px-4">
         <div className="flex min-w-0 items-center gap-2">
           <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-gradient-to-br from-brand-400 to-brand-700">
             <Sparkles className="h-3.5 w-3.5 text-white" />
           </span>
           <div className="min-w-0">
-            <p className="truncate text-xs font-semibold text-white">Atmosphere</p>
-            <p className="truncate text-2xs text-gray-500">{contextLabel}</p>
+            <p className="truncate text-xs font-semibold text-fg">Atmosphere</p>
+            <p className="truncate text-2xs text-fg-3">{contextLabel}</p>
           </div>
         </div>
         {onClose && (
@@ -71,7 +71,7 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
             type="button"
             onClick={onClose}
             aria-label="Close assistant"
-            className="rounded-md p-1 text-gray-500 transition hover:bg-white/5 hover:text-gray-200"
+            className="rounded-md p-1 text-fg-3 transition hover:bg-line/5 hover:text-fg-2"
           >
             <PanelRightClose className="h-4 w-4" />
           </button>
@@ -84,7 +84,7 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
             {messages.map((m) => (
               <div key={m.id}>
                 {m.author === 'user' ? (
-                  <div className="ml-6 rounded-xl rounded-br-sm bg-brand-600/20 px-3 py-2 text-sm text-gray-100">
+                  <div className="ml-6 rounded-xl rounded-br-sm bg-brand-600/20 px-3 py-2 text-sm text-fg">
                     {m.text}
                   </div>
                 ) : (
@@ -92,9 +92,9 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
                     <div className="flex items-start gap-2">
                       <Bot className="mt-0.5 h-4 w-4 shrink-0 text-brand-400" />
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm leading-relaxed text-gray-300">{m.text}</p>
+                        <p className="text-sm leading-relaxed text-fg-2">{m.text}</p>
                         {m.routing && (
-                          <p className="mt-1.5 text-2xs text-gray-600">
+                          <p className="mt-1.5 text-2xs text-fg-4">
                             Routed to {CAPABILITY_LABELS[m.routing.capability]} ·{' '}
                             {Math.round(m.routing.confidence * 100)}% confidence
                             {m.routing.matched.length > 0 && ` · matched “${m.routing.matched[0]}”`}
@@ -117,7 +117,7 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
               </div>
             ))}
             {thinking && (
-              <div className="flex items-center gap-2 text-xs text-gray-500">
+              <div className="flex items-center gap-2 text-xs text-fg-3">
                 <Bot className="h-4 w-4 animate-pulse-soft text-brand-400" />
                 Routing your request…
               </div>
@@ -139,15 +139,13 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
                       <button
                         type="button"
                         onClick={() => send(rec.command)}
-                        className="w-full rounded-lg border border-white/10 bg-ink-800/60 p-2.5 text-left transition hover:border-white/20 hover:bg-ink-700/60"
+                        className="w-full rounded-lg border border-line/10 bg-surface/60 p-2.5 text-left transition hover:border-line/20 hover:bg-raised/60"
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <p className="text-xs font-medium leading-snug text-gray-200">
-                            {rec.title}
-                          </p>
+                          <p className="text-xs font-medium leading-snug text-fg-2">{rec.title}</p>
                           <Badge tone={riskTone[rec.severity]}>{rec.severity}</Badge>
                         </div>
-                        <p className="mt-1 line-clamp-2 text-2xs leading-relaxed text-gray-500">
+                        <p className="mt-1 line-clamp-2 text-2xs leading-relaxed text-fg-3">
                           {rec.rationale}
                         </p>
                         {rec.estimatedValue !== null && (
@@ -199,7 +197,7 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
         )}
       </div>
 
-      <form onSubmit={submit} className="shrink-0 border-t border-white/10 p-3">
+      <form onSubmit={submit} className="shrink-0 border-t border-line/10 p-3">
         <div className="relative">
           <Textarea
             value={draft}
@@ -225,7 +223,7 @@ export function AssistantPanel({ role, onClose }: { role: Role; onClose?: () => 
             <ArrowUp className="h-4 w-4" />
           </Button>
         </div>
-        <p className="mt-1.5 text-2xs text-gray-600">
+        <p className="mt-1.5 text-2xs text-fg-4">
           Atmosphere proposes; you approve. Nothing changes without sign-off.
         </p>
       </form>
@@ -249,7 +247,7 @@ function Panel({
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           {icon}
-          <h3 className="text-2xs font-semibold uppercase tracking-wider text-gray-500">{title}</h3>
+          <h3 className="text-2xs font-semibold uppercase tracking-wider text-fg-3">{title}</h3>
         </div>
         {action}
       </div>

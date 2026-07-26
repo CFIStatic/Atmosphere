@@ -145,14 +145,14 @@ export function LoginPage() {
       : 'Create your Atmosphere account in minutes.';
 
   return (
-    <div className="cx-aurora relative flex min-h-screen flex-col bg-ink-900">
+    <div className="cx-aurora relative flex min-h-screen flex-col bg-canvas">
       <header className="px-6 py-6 sm:px-10">
         <Logo />
       </header>
 
       <main className="flex flex-1 items-center justify-center px-4 pb-16">
         <div className="w-full max-w-md animate-fade-in-up">
-          <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-8 shadow-2xl shadow-black/40 backdrop-blur-xl sm:p-10">
+          <div className="rounded-2xl border border-line/10 bg-surface/70 p-8 shadow-2xl shadow-scrim/40 backdrop-blur-xl sm:p-10">
             {!pinChecked ? (
               <div className="grid place-items-center py-16 text-brand-300">
                 <SpinnerIcon className="animate-spin" width={26} height={26} />
@@ -160,8 +160,8 @@ export function LoginPage() {
               </div>
             ) : (
               <>
-                <h1 className="text-2xl font-bold tracking-tight text-white">{title}</h1>
-                <p className="mt-1.5 text-sm text-gray-400">{subtitle}</p>
+                <h1 className="text-2xl font-bold tracking-tight text-fg">{title}</h1>
+                <p className="mt-1.5 text-sm text-fg-3">{subtitle}</p>
 
                 {notice && !showPin && (
                   <div
@@ -211,7 +211,7 @@ export function LoginPage() {
                         setPin('');
                         setPinError(null);
                       }}
-                      className="mt-2 w-full rounded-lg border border-white/10 bg-ink-700/60 px-4 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-ink-600"
+                      className="mt-2 w-full rounded-lg border border-line/10 bg-raised/60 px-4 py-2.5 text-sm font-medium text-fg-2 transition hover:bg-raised-2"
                     >
                       Use password instead
                     </button>
@@ -231,7 +231,7 @@ export function LoginPage() {
                       <div>
                         <label
                           htmlFor="email"
-                          className="mb-1.5 block text-sm font-medium text-gray-300"
+                          className="mb-1.5 block text-sm font-medium text-fg-2"
                         >
                           Email
                         </label>
@@ -245,16 +245,13 @@ export function LoginPage() {
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           placeholder="you@company.com"
-                          className="w-full rounded-lg border border-white/10 bg-ink-700/80 px-3.5 py-2.5 text-white placeholder-gray-500 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/40"
+                          className="w-full rounded-lg border border-line/10 bg-raised/80 px-3.5 py-2.5 text-fg placeholder-fg-4 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/40"
                         />
                       </div>
 
                       <div>
                         <div className="mb-1.5 flex items-center justify-between">
-                          <label
-                            htmlFor="password"
-                            className="block text-sm font-medium text-gray-300"
-                          >
+                          <label htmlFor="password" className="block text-sm font-medium text-fg-2">
                             Password
                           </label>
                           {isLogin ? (
@@ -265,7 +262,7 @@ export function LoginPage() {
                               Forgot password?
                             </Link>
                           ) : (
-                            <span id="password-hint" className="text-xs text-gray-500">
+                            <span id="password-hint" className="text-xs text-fg-3">
                               Min. 8 characters
                             </span>
                           )}
@@ -283,13 +280,13 @@ export function LoginPage() {
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             placeholder="••••••••"
-                            className="w-full rounded-lg border border-white/10 bg-ink-700/80 px-3.5 py-2.5 pr-11 text-white placeholder-gray-500 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/40"
+                            className="w-full rounded-lg border border-line/10 bg-raised/80 px-3.5 py-2.5 pr-11 text-fg placeholder-fg-4 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/40"
                           />
                           <button
                             type="button"
                             onClick={() => setShowPassword((s) => !s)}
                             aria-label={showPassword ? 'Hide password' : 'Show password'}
-                            className="absolute inset-y-0 right-0 grid w-11 place-items-center text-gray-400 transition hover:text-gray-200"
+                            className="absolute inset-y-0 right-0 grid w-11 place-items-center text-fg-3 transition hover:text-fg-2"
                           >
                             {showPassword ? <EyeOffIcon /> : <EyeIcon />}
                           </button>
@@ -304,7 +301,7 @@ export function LoginPage() {
                       <button
                         type="submit"
                         disabled={!canSubmit}
-                        className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 font-semibold text-white shadow-lg shadow-brand-900/40 transition hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 focus:ring-offset-ink-800 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 font-semibold text-white shadow-lg shadow-brand-900/40 transition hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 focus:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {submitting && <SpinnerIcon className="animate-spin" />}
                         {submitting
@@ -324,13 +321,13 @@ export function LoginPage() {
                           setShowPin(true);
                           setPinError(null);
                         }}
-                        className="mt-3 w-full rounded-lg border border-white/10 bg-ink-700/60 px-4 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-ink-600"
+                        className="mt-3 w-full rounded-lg border border-line/10 bg-raised/60 px-4 py-2.5 text-sm font-medium text-fg-2 transition hover:bg-raised-2"
                       >
                         Use your PIN instead
                       </button>
                     )}
 
-                    <p className="mt-6 text-center text-sm text-gray-400">
+                    <p className="mt-6 text-center text-sm text-fg-3">
                       {isLogin ? "Don't have an account?" : 'Already have an account?'}{' '}
                       <button
                         type="button"
@@ -346,7 +343,7 @@ export function LoginPage() {
             )}
           </div>
 
-          <p className="mt-6 text-center text-xs text-gray-600">
+          <p className="mt-6 text-center text-xs text-fg-4">
             Protected by Supabase Auth · Passwords are encrypted and never stored in plain text.
           </p>
         </div>

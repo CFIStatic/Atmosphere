@@ -29,8 +29,8 @@ export function EstimatesPage() {
       header: 'Job',
       cell: (e) => (
         <div className="min-w-0">
-          <span className="font-mono text-xs text-gray-500">{e.jobNumber}</span>
-          <p className="truncate font-medium text-white">{e.customerName}</p>
+          <span className="font-mono text-xs text-fg-3">{e.jobNumber}</span>
+          <p className="truncate font-medium text-fg">{e.customerName}</p>
         </div>
       ),
     },
@@ -45,20 +45,20 @@ export function EstimatesPage() {
       id: 'carrier',
       header: 'Carrier',
       hideOnMobile: true,
-      cell: (e) => <span className="text-gray-400">{e.carrier ?? '—'}</span>,
+      cell: (e) => <span className="text-fg-3">{e.carrier ?? '—'}</span>,
     },
     {
       id: 'items',
       header: 'Lines',
       hideOnMobile: true,
       className: 'text-right',
-      cell: (e) => <span className="text-gray-500">{e.lineItems || '—'}</span>,
+      cell: (e) => <span className="text-fg-3">{e.lineItems || '—'}</span>,
     },
     {
       id: 'total',
       header: 'Total',
       className: 'text-right',
-      cell: (e) => <span className="font-medium text-gray-200">{money(e.total)}</span>,
+      cell: (e) => <span className="font-medium text-fg-2">{money(e.total)}</span>,
     },
     {
       id: 'variance',
@@ -66,7 +66,7 @@ export function EstimatesPage() {
       className: 'text-right',
       cell: (e) =>
         e.varianceFromCarrier === null || e.varianceFromCarrier === 0 ? (
-          <span className="text-gray-600">—</span>
+          <span className="text-fg-4">—</span>
         ) : (
           <span className="font-medium text-state-danger">{money(e.varianceFromCarrier)}</span>
         ),
@@ -75,7 +75,7 @@ export function EstimatesPage() {
       id: 'submitted',
       header: 'Submitted',
       hideOnMobile: true,
-      cell: (e) => <span className="text-gray-500">{formatDate(e.submittedAt)}</span>,
+      cell: (e) => <span className="text-fg-3">{formatDate(e.submittedAt)}</span>,
     },
   ];
 
@@ -90,7 +90,7 @@ export function EstimatesPage() {
         }
       />
       <PageBody>
-        <div className="overflow-hidden rounded-xl border border-white/10 bg-ink-800/40">
+        <div className="overflow-hidden rounded-xl border border-line/10 bg-surface/40">
           <DataTable
             rows={estimates}
             columns={columns}

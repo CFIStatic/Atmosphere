@@ -1,24 +1,25 @@
-/** Atmosphere wordmark + glyph (a sphere ringed by its atmosphere). */
+/**
+ * Atmosphere lockup: the stacked-bar mark beside the wordmark.
+ *
+ * The wordmark is a single colour that follows the theme — white on the dark
+ * ground, black on the light one — never a two-tone split. The orange appears
+ * once, on the bottom bar of the mark, which is what makes it read as an accent
+ * rather than as decoration.
+ */
 export function Logo({ className = '' }: { className?: string }) {
   return (
     <div className={`flex items-center gap-2.5 ${className}`}>
-      <span className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-brand-400 to-brand-700 shadow-lg shadow-brand-900/40">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <circle cx="12" cy="12" r="5" fill="white" fillOpacity="0.95" />
-          <ellipse
-            cx="12"
-            cy="12"
-            rx="10"
-            ry="3.6"
-            stroke="white"
-            strokeWidth="1.5"
-            transform="rotate(-25 12 12)"
-          />
+      <span className="grid shrink-0 place-items-center" aria-hidden="true">
+        <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+          {/* Four greys stepping toward the foreground, then the accent. */}
+          <rect x="3" y="4" width="20" height="2.6" rx="0.6" className="fill-fg-4" />
+          <rect x="3" y="8.2" width="20" height="2.6" rx="0.6" className="fill-fg-3" />
+          <rect x="3" y="12.4" width="20" height="2.6" rx="0.6" className="fill-fg-2" />
+          <rect x="3" y="16.6" width="20" height="2.6" rx="0.6" className="fill-fg" />
+          <rect x="3" y="20.8" width="20" height="2.6" rx="0.6" className="fill-brand-500" />
         </svg>
       </span>
-      <span className="text-xl font-extrabold tracking-tight text-white">
-        Atmo<span className="text-brand-400">sphere</span>
-      </span>
+      <span className="text-xl font-extrabold tracking-tight text-fg">Atmosphere</span>
     </div>
   );
 }

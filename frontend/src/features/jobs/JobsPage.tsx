@@ -57,10 +57,10 @@ export function JobsPage() {
       cell: (job) => (
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-xs text-gray-500">{job.number}</span>
-            <span className="truncate font-medium text-white">{job.customerName}</span>
+            <span className="font-mono text-xs text-fg-3">{job.number}</span>
+            <span className="truncate font-medium text-fg">{job.customerName}</span>
           </div>
-          <p className="truncate text-2xs text-gray-600">{job.address}</p>
+          <p className="truncate text-2xs text-fg-4">{job.address}</p>
         </div>
       ),
     },
@@ -71,7 +71,7 @@ export function JobsPage() {
         <div className="space-y-1">
           <Badge tone={jobHealthTone[job.health]}>{jobHealthLabel[job.health]}</Badge>
           {job.flags.length > 0 && (
-            <p className="max-w-[16rem] truncate text-2xs text-gray-600">{job.flags[0]}</p>
+            <p className="max-w-[16rem] truncate text-2xs text-fg-4">{job.flags[0]}</p>
           )}
         </div>
       ),
@@ -85,20 +85,20 @@ export function JobsPage() {
       id: 'age',
       header: 'Age',
       hideOnMobile: true,
-      cell: (job) => <span className="text-gray-400">{job.ageDays}d</span>,
+      cell: (job) => <span className="text-fg-3">{job.ageDays}d</span>,
     },
     {
       id: 'carrier',
       header: 'Carrier',
       hideOnMobile: true,
-      cell: (job) => <span className="text-gray-400">{job.carrier ?? '—'}</span>,
+      cell: (job) => <span className="text-fg-3">{job.carrier ?? '—'}</span>,
     },
     {
       id: 'value',
       header: 'Approved',
       className: 'text-right',
       cell: (job) => (
-        <span className="font-medium text-gray-200">
+        <span className="font-medium text-fg-2">
           {money(job.approvedTotal || job.estimateTotal)}
         </span>
       ),
@@ -111,7 +111,7 @@ export function JobsPage() {
       cell: (job) => {
         const outstanding = job.invoicedTotal - job.paidTotal;
         return (
-          <span className={outstanding > 0 ? 'font-medium text-state-warn' : 'text-gray-600'}>
+          <span className={outstanding > 0 ? 'font-medium text-state-warn' : 'text-fg-4'}>
             {outstanding > 0 ? money(outstanding) : '—'}
           </span>
         );
@@ -146,7 +146,7 @@ export function JobsPage() {
       </PageHeader>
 
       <PageBody>
-        <div className="overflow-hidden rounded-xl border border-white/10 bg-ink-800/40">
+        <div className="overflow-hidden rounded-xl border border-line/10 bg-surface/40">
           <DataTable
             rows={rows}
             columns={columns}

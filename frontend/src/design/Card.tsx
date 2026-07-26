@@ -4,7 +4,7 @@ import { cn } from './cn';
 export function Card({ className, ...rest }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn('rounded-xl border border-white/10 bg-ink-800/60 backdrop-blur', className)}
+      className={cn('rounded-xl border border-line/10 bg-surface/60 backdrop-blur', className)}
       {...rest}
     />
   );
@@ -23,14 +23,14 @@ export function CardHeader({ title, description, action, className, ...rest }: C
   return (
     <div
       className={cn(
-        'flex items-start justify-between gap-4 border-b border-white/10 px-4 py-3',
+        'flex items-start justify-between gap-4 border-b border-line/10 px-4 py-3',
         className,
       )}
       {...rest}
     >
       <div className="min-w-0">
-        <h2 className="truncate text-sm font-semibold text-white">{title}</h2>
-        {description && <p className="mt-0.5 truncate text-xs text-gray-500">{description}</p>}
+        <h2 className="truncate text-sm font-semibold text-fg">{title}</h2>
+        {description && <p className="mt-0.5 truncate text-xs text-fg-3">{description}</p>}
       </div>
       {action && <div className="shrink-0">{action}</div>}
     </div>
@@ -42,5 +42,5 @@ export function CardBody({ className, ...rest }: HTMLAttributes<HTMLDivElement>)
 }
 
 export function CardFooter({ className, ...rest }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('border-t border-white/10 px-4 py-3', className)} {...rest} />;
+  return <div className={cn('border-t border-line/10 px-4 py-3', className)} {...rest} />;
 }

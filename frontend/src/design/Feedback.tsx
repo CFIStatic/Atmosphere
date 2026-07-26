@@ -25,7 +25,7 @@ const TONE_CHIP: Record<Tone, string> = {
   warn: 'bg-state-warn/10 text-state-warn border-state-warn/25',
   danger: 'bg-state-danger/10 text-state-danger border-state-danger/25',
   running: 'bg-state-running/10 text-state-running border-state-running/25',
-  idle: 'bg-white/5 text-state-idle border-white/10',
+  idle: 'bg-line/5 text-state-idle border-line/10',
   brand: 'bg-brand-500/10 text-brand-300 border-brand-400/25',
 };
 
@@ -117,7 +117,7 @@ export function Progress({
       aria-valuenow={pct}
       aria-valuemin={0}
       aria-valuemax={100}
-      className={cn('h-1.5 w-full overflow-hidden rounded-full bg-white/10', className)}
+      className={cn('h-1.5 w-full overflow-hidden rounded-full bg-line/10', className)}
     >
       <div
         className={cn('h-full rounded-full transition-[width] duration-500', TONE_DOT[tone])}
@@ -128,7 +128,7 @@ export function Progress({
 }
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn('animate-pulse-soft rounded-md bg-white/5', className)} />;
+  return <div className={cn('animate-pulse-soft rounded-md bg-line/5', className)} />;
 }
 
 export function EmptyState({
@@ -146,9 +146,9 @@ export function EmptyState({
 }) {
   return (
     <div className={cn('grid place-items-center px-6 py-12 text-center', className)}>
-      {icon && <div className="mb-3 text-gray-600">{icon}</div>}
-      <p className="text-sm font-medium text-gray-300">{title}</p>
-      {description && <p className="mt-1 max-w-sm text-xs text-gray-500">{description}</p>}
+      {icon && <div className="mb-3 text-fg-4">{icon}</div>}
+      <p className="text-sm font-medium text-fg-2">{title}</p>
+      {description && <p className="mt-1 max-w-sm text-xs text-fg-3">{description}</p>}
       {action && <div className="mt-4">{action}</div>}
     </div>
   );
@@ -159,7 +159,7 @@ export function Kbd({ children, className }: { children: ReactNode; className?: 
   return (
     <kbd
       className={cn(
-        'rounded border border-white/15 bg-white/5 px-1.5 py-0.5 font-sans text-2xs font-medium text-gray-400',
+        'rounded border border-line/15 bg-line/5 px-1.5 py-0.5 font-sans text-2xs font-medium text-fg-3',
         className,
       )}
     >

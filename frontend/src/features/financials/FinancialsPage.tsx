@@ -61,8 +61,8 @@ export function FinancialsPage() {
       header: 'Invoice',
       cell: (i) => (
         <div className="min-w-0">
-          <span className="font-mono text-xs text-gray-500">{i.jobNumber}</span>
-          <p className="truncate font-medium text-white">{i.customerName}</p>
+          <span className="font-mono text-xs text-fg-3">{i.jobNumber}</span>
+          <p className="truncate font-medium text-fg">{i.customerName}</p>
         </div>
       ),
     },
@@ -75,13 +75,13 @@ export function FinancialsPage() {
       id: 'issued',
       header: 'Issued',
       hideOnMobile: true,
-      cell: (i) => <span className="text-gray-500">{formatDate(i.issuedAt)}</span>,
+      cell: (i) => <span className="text-fg-3">{formatDate(i.issuedAt)}</span>,
     },
     {
       id: 'due',
       header: 'Due',
       hideOnMobile: true,
-      cell: (i) => <span className="text-gray-500">{formatDate(i.dueAt)}</span>,
+      cell: (i) => <span className="text-fg-3">{formatDate(i.dueAt)}</span>,
     },
     {
       id: 'age',
@@ -91,14 +91,14 @@ export function FinancialsPage() {
         i.daysOverdue > 0 ? (
           <span className="font-medium text-state-danger">{i.daysOverdue}d</span>
         ) : (
-          <span className="text-gray-600">—</span>
+          <span className="text-fg-4">—</span>
         ),
     },
     {
       id: 'amount',
       header: 'Amount',
       className: 'text-right',
-      cell: (i) => <span className="text-gray-300">{money(i.amount)}</span>,
+      cell: (i) => <span className="text-fg-2">{money(i.amount)}</span>,
     },
     {
       id: 'balance',
@@ -107,7 +107,7 @@ export function FinancialsPage() {
       cell: (i) => {
         const balance = i.amount - i.paidAmount;
         return (
-          <span className={balance > 0 ? 'font-medium text-state-warn' : 'text-gray-600'}>
+          <span className={balance > 0 ? 'font-medium text-state-warn' : 'text-fg-4'}>
             {balance > 0 ? money(balance) : '—'}
           </span>
         );
@@ -127,8 +127,8 @@ export function FinancialsPage() {
           {buckets.map((bucket) => (
             <Card key={bucket.label}>
               <CardBody className="p-3.5">
-                <p className="text-2xs uppercase tracking-wide text-gray-600">{bucket.label}</p>
-                <p className="mt-1 text-xl font-semibold text-white">{money(bucket.amount)}</p>
+                <p className="text-2xs uppercase tracking-wide text-fg-4">{bucket.label}</p>
+                <p className="mt-1 text-xl font-semibold text-fg">{money(bucket.amount)}</p>
                 <Progress
                   value={outstanding > 0 ? (bucket.amount / outstanding) * 100 : 0}
                   tone={bucket.tone}
@@ -142,20 +142,20 @@ export function FinancialsPage() {
         <div className="grid gap-3 sm:grid-cols-3">
           <Card>
             <CardBody className="p-3.5">
-              <p className="text-2xs uppercase tracking-wide text-gray-600">Collected to date</p>
+              <p className="text-2xs uppercase tracking-wide text-fg-4">Collected to date</p>
               <p className="mt-1 text-xl font-semibold text-state-ok">{money(collected)}</p>
             </CardBody>
           </Card>
           <Card>
             <CardBody className="p-3.5">
-              <p className="text-2xs uppercase tracking-wide text-gray-600">Work in progress</p>
-              <p className="mt-1 text-xl font-semibold text-white">{money(wip)}</p>
-              <p className="mt-0.5 text-2xs text-gray-600">Approved scope not yet billed</p>
+              <p className="text-2xs uppercase tracking-wide text-fg-4">Work in progress</p>
+              <p className="mt-1 text-xl font-semibold text-fg">{money(wip)}</p>
+              <p className="mt-0.5 text-2xs text-fg-4">Approved scope not yet billed</p>
             </CardBody>
           </Card>
           <Card>
             <CardBody className="p-3.5">
-              <p className="text-2xs uppercase tracking-wide text-gray-600">Overdue exposure</p>
+              <p className="text-2xs uppercase tracking-wide text-fg-4">Overdue exposure</p>
               <p className="mt-1 text-xl font-semibold text-state-danger">{money(overdue)}</p>
             </CardBody>
           </Card>

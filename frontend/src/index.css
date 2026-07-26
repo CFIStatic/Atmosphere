@@ -2,8 +2,89 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/*
+ * Atmosphere palette.
+ *
+ * Taken directly from the brand marks: a neutral charcoal ground, a warm
+ * off-white, a four-step grey ramp, and a single orange accent. Everything in
+ * the product resolves through these variables, so the two themes share one
+ * token set and no component decides its own colours.
+ *
+ * Channels are space-separated RGB triples so Tailwind's opacity modifiers
+ * (`border-line/10`) keep working.
+ */
+
+:root,
+:root[data-theme='dark'] {
   color-scheme: dark;
+
+  /* Surfaces — charcoal, ascending by elevation. */
+  --canvas: 26 26 26; /* #1A1A1A — brand dark ground */
+  --sunken: 20 20 20;
+  --surface: 33 33 33;
+  --raised: 43 43 43;
+  --raised-2: 54 54 54;
+
+  /* Text — warm white down to the faintest label. */
+  --fg: 245 244 241; /* #F5F4F1 — brand wordmark on dark */
+  --fg-2: 201 199 194;
+  --fg-3: 168 166 161;
+  --fg-4: 138 136 132;
+
+  /* Hairlines and hover fills tint with white on dark, black on light. */
+  --line: 255 255 255;
+
+  --scrim: 0 0 0;
+  --on-accent: 26 26 26; /* text sitting on an accent fill */
+
+  /* Accent — the orange bar from the mark. */
+  --brand-300: 248 156 110;
+  --brand-400: 245 127 67;
+
+  /* Status — tuned for legibility on charcoal. */
+  --ok: 74 222 128;
+  --info: 56 189 248;
+  --warn: 251 191 36;
+  --danger: 248 113 113;
+  --running: 167 139 250;
+  --idle: 168 168 163;
+
+  --shadow-strength: 0.45;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --canvas: 240 238 233; /* #F0EEE9 — brand light ground */
+  --sunken: 232 230 224;
+  --surface: 250 249 246;
+  --raised: 255 255 255;
+  --raised-2: 244 242 237;
+
+  --fg: 26 26 26; /* #1A1A1A — brand wordmark on light */
+  --fg-2: 61 61 61;
+  --fg-3: 85 83 78;
+  --fg-4: 99 97 91;
+
+  --line: 0 0 0;
+
+  --scrim: 26 26 26;
+  /* Constant across themes: this sits on the amber warn fill, which does not
+     change with the theme, so the text on it must not either. */
+  --on-accent: 26 26 26;
+
+  /* Darkened so accent text clears contrast on an off-white ground. */
+  --brand-300: 130 45 8;
+  --brand-400: 158 55 10;
+
+  --ok: 17 105 49;
+  --info: 3 105 161;
+  --warn: 124 61 6;
+  --danger: 185 28 28;
+  --running: 109 40 217;
+  --idle: 95 93 87;
+
+  --shadow-strength: 0.1;
 }
 
 html,
@@ -17,14 +98,18 @@ body {
   font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #0a0a12;
-  color: #e5e7eb;
+  background-color: rgb(var(--canvas));
+  color: rgb(var(--fg-2));
 }
 
-/* Subtle brand aurora background used on the auth screen. */
+/*
+ * Ambient wash behind the auth screens. Restrained on purpose — the brand is a
+ * flat ground, so this reads as a slight warmth in the corners rather than the
+ * coloured aurora it replaced.
+ */
 .cx-aurora {
   background:
-    radial-gradient(60rem 60rem at 15% -10%, rgba(99, 102, 241, 0.18), transparent 60%),
-    radial-gradient(50rem 50rem at 110% 10%, rgba(67, 56, 202, 0.16), transparent 55%),
-    radial-gradient(40rem 40rem at 50% 120%, rgba(129, 140, 248, 0.12), transparent 60%);
+    radial-gradient(60rem 60rem at 15% -10%, rgb(var(--brand-400) / 0.1), transparent 60%),
+    radial-gradient(50rem 50rem at 110% 10%, rgb(var(--fg) / 0.04), transparent 55%),
+    radial-gradient(40rem 40rem at 50% 120%, rgb(var(--brand-400) / 0.07), transparent 60%);
 }

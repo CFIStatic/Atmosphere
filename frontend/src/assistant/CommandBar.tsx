@@ -61,8 +61,8 @@ export function CommandBar({ role }: { role: Role }) {
         type="button"
         onClick={() => setOpen(true)}
         className={cn(
-          'flex h-9 w-full max-w-md items-center gap-2 rounded-lg border border-white/10 bg-ink-800/70 px-3',
-          'text-sm text-gray-500 transition hover:border-white/20 hover:bg-ink-700/70',
+          'flex h-9 w-full max-w-md items-center gap-2 rounded-lg border border-line/10 bg-surface/70 px-3',
+          'text-sm text-fg-3 transition hover:border-line/20 hover:bg-raised/70',
         )}
       >
         <Search className="h-4 w-4 shrink-0" />
@@ -75,15 +75,15 @@ export function CommandBar({ role }: { role: Role }) {
         onOpenChange={setOpen}
         label="Command bar"
         shouldFilter={!looksLikeRequest}
-        className="fixed left-1/2 top-[15vh] z-50 w-[min(38rem,calc(100vw-2rem))] -translate-x-1/2 overflow-hidden rounded-2xl border border-white/10 bg-ink-800 shadow-2xl shadow-black/70"
+        className="fixed left-1/2 top-[15vh] z-50 w-[min(38rem,calc(100vw-2rem))] -translate-x-1/2 overflow-hidden rounded-2xl border border-line/10 bg-surface shadow-2xl shadow-scrim/70"
       >
-        <div className="flex items-center gap-2.5 border-b border-white/10 px-4">
+        <div className="flex items-center gap-2.5 border-b border-line/10 px-4">
           <Sparkles className="h-4 w-4 shrink-0 text-brand-400" />
           <Command.Input
             value={query}
             onValueChange={setQuery}
             placeholder="Ask Atmosphere, or type a page name…"
-            className="h-12 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-gray-600"
+            className="h-12 flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-fg-4"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && looksLikeRequest) {
                 e.preventDefault();
@@ -98,17 +98,17 @@ export function CommandBar({ role }: { role: Role }) {
             <Command.Group heading={<GroupLabel>Ask Atmosphere</GroupLabel>}>
               <Command.Item value={trimmed} onSelect={() => ask(trimmed)} className={ITEM}>
                 <CornerDownLeft className="h-4 w-4 shrink-0 text-brand-400" />
-                <span className="flex-1 truncate text-gray-200">{trimmed}</span>
+                <span className="flex-1 truncate text-fg-2">{trimmed}</span>
                 <Badge tone="brand">{CAPABILITY_LABELS[routing.capability]}</Badge>
               </Command.Item>
-              <p className="px-3 pb-1 pt-2 text-2xs text-gray-600">
+              <p className="px-3 pb-1 pt-2 text-2xs text-fg-4">
                 Atmosphere routes this to {CAPABILITY_LABELS[routing.capability]}. You approve
                 anything it wants to change.
               </p>
             </Command.Group>
           ) : (
             <>
-              <Command.Empty className="px-3 py-6 text-center text-sm text-gray-500">
+              <Command.Empty className="px-3 py-6 text-center text-sm text-fg-3">
                 Keep typing to ask Atmosphere.
               </Command.Empty>
 
@@ -126,8 +126,8 @@ export function CommandBar({ role }: { role: Role }) {
                       }}
                       className={ITEM}
                     >
-                      <Icon className="h-4 w-4 shrink-0 text-gray-500" />
-                      <span className="text-gray-200">{item.label}</span>
+                      <Icon className="h-4 w-4 shrink-0 text-fg-3" />
+                      <span className="text-fg-2">{item.label}</span>
                     </Command.Item>
                   );
                 })}
@@ -137,7 +137,7 @@ export function CommandBar({ role }: { role: Role }) {
                 {SUGGESTIONS.map((s) => (
                   <Command.Item key={s} value={s} onSelect={() => ask(s)} className={ITEM}>
                     <Sparkles className="h-4 w-4 shrink-0 text-brand-400/70" />
-                    <span className="text-gray-300">{s}</span>
+                    <span className="text-fg-2">{s}</span>
                   </Command.Item>
                 ))}
               </Command.Group>
@@ -150,11 +150,11 @@ export function CommandBar({ role }: { role: Role }) {
 }
 
 const ITEM =
-  'flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-sm data-[selected=true]:bg-white/[0.06] aria-selected:bg-white/[0.06]';
+  'flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-sm data-[selected=true]:bg-line/[0.06] aria-selected:bg-line/[0.06]';
 
 function GroupLabel({ children }: { children: React.ReactNode }) {
   return (
-    <span className="px-3 text-2xs font-semibold uppercase tracking-wider text-gray-600">
+    <span className="px-3 text-2xs font-semibold uppercase tracking-wider text-fg-4">
       {children}
     </span>
   );

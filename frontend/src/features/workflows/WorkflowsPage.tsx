@@ -35,8 +35,8 @@ export function WorkflowsPage() {
                 <CardBody className="space-y-2.5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <h3 className="truncate text-sm font-semibold text-white">{workflow.name}</h3>
-                      <p className="mt-0.5 text-2xs text-gray-600">
+                      <h3 className="truncate text-sm font-semibold text-fg">{workflow.name}</h3>
+                      <p className="mt-0.5 text-2xs text-fg-4">
                         {CAPABILITY_LABELS[workflow.capability]}
                       </p>
                     </div>
@@ -54,7 +54,7 @@ export function WorkflowsPage() {
                     </Badge>
                   </div>
 
-                  <p className="text-xs leading-relaxed text-gray-500">{workflow.description}</p>
+                  <p className="text-xs leading-relaxed text-fg-3">{workflow.description}</p>
 
                   <div className="flex flex-wrap items-center gap-1.5">
                     <Badge tone="idle">{workflow.trigger}</Badge>
@@ -67,7 +67,7 @@ export function WorkflowsPage() {
                     )}
                   </div>
 
-                  <p className="border-t border-white/5 pt-2 text-2xs text-gray-600">
+                  <p className="border-t border-line/5 pt-2 text-2xs text-fg-4">
                     {workflow.runsThisWeek} runs this week · edited by {workflow.lastEditedBy}{' '}
                     {relativeTime(workflow.lastEditedAt)}
                   </p>

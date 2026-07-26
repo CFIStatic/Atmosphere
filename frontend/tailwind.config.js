@@ -1,45 +1,61 @@
 /** @type {import('tailwindcss').Config} */
+
+// Every colour resolves through a CSS variable defined in index.css, so the two
+// themes share one token set. Components never name a raw colour.
+const withAlpha = (variable) => `rgb(var(${variable}) / <alpha-value>)`;
+
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  darkMode: ['selector', '[data-theme="dark"]'],
   theme: {
     extend: {
       colors: {
-        // ── Brand ────────────────────────────────────────────────────────────
-        brand: {
-          50: '#eef2ff',
-          100: '#e0e7ff',
-          200: '#c7d2fe',
-          300: '#a5b4fc',
-          400: '#818cf8',
-          500: '#6366f1',
-          600: '#4f46e5',
-          700: '#4338ca',
-          800: '#3730a3',
-          900: '#312e81',
+        // ── Surfaces, ascending by elevation ─────────────────────────────────
+        canvas: withAlpha('--canvas'),
+        sunken: withAlpha('--sunken'),
+        surface: withAlpha('--surface'),
+        raised: withAlpha('--raised'),
+        'raised-2': withAlpha('--raised-2'),
+
+        // ── Text ─────────────────────────────────────────────────────────────
+        fg: {
+          DEFAULT: withAlpha('--fg'),
+          2: withAlpha('--fg-2'),
+          3: withAlpha('--fg-3'),
+          4: withAlpha('--fg-4'),
         },
 
-        // ── Surfaces ─────────────────────────────────────────────────────────
-        // 900 is the app canvas; each step up is one elevation level.
-        ink: {
-          950: '#06060c',
-          900: '#0a0a12',
-          800: '#12121d',
-          700: '#1b1b2b',
-          600: '#262639',
-          500: '#343349',
+        // Hairlines and hover fills. White on dark, black on light — always
+        // used with an explicit opacity, e.g. `border-line/10`.
+        line: withAlpha('--line'),
+
+        scrim: withAlpha('--scrim'),
+        'on-accent': withAlpha('--on-accent'),
+
+        // ── Accent: the orange bar from the mark ─────────────────────────────
+        // 300 and 400 are variable because accent *text* has to darken on the
+        // off-white ground to stay readable; the fills are constant.
+        brand: {
+          50: '#fdf3ee',
+          100: '#fbe1d3',
+          200: '#f8c3a7',
+          300: withAlpha('--brand-300'),
+          400: withAlpha('--brand-400'),
+          500: '#f26522',
+          600: '#dd5412',
+          700: '#b6420e',
+          800: '#8e340b',
+          900: '#5f2307',
         },
 
         // ── Semantic state ───────────────────────────────────────────────────
-        // Everything status-, risk-, or execution-related resolves through these
-        // names rather than raw colours, so restyling the product is a change to
-        // this block alone. Never use `text-emerald-400` in a component.
         state: {
-          ok: '#34d399', // healthy, completed, on-track
-          info: '#38bdf8', // informational, scheduled
-          warn: '#fbbf24', // needs attention, at-risk
-          danger: '#f87171', // blocked, failed, overdue
-          running: '#a78bfa', // agent actively executing
-          idle: '#94a3b8', // inactive, draft, none
+          ok: withAlpha('--ok'),
+          info: withAlpha('--info'),
+          warn: withAlpha('--warn'),
+          danger: withAlpha('--danger'),
+          running: withAlpha('--running'),
+          idle: withAlpha('--idle'),
         },
       },
 

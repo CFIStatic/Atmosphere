@@ -100,7 +100,7 @@ export function JobWorkspacePage() {
         actions={
           <Link
             to="/jobs"
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 px-3 text-xs font-medium text-gray-300 transition hover:bg-white/5"
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line/10 px-3 text-xs font-medium text-fg-2 transition hover:bg-line/5"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             Jobs
@@ -113,7 +113,7 @@ export function JobWorkspacePage() {
           <Badge tone="idle">Day {job.ageDays}</Badge>
           {job.carrier && <Badge tone="info">{job.carrier}</Badge>}
           {job.claimNumber && (
-            <span className="font-mono text-2xs text-gray-600">{job.claimNumber}</span>
+            <span className="font-mono text-2xs text-fg-4">{job.claimNumber}</span>
           )}
         </div>
         {job.flags.length > 0 && (
@@ -173,22 +173,22 @@ export function JobWorkspacePage() {
                     {timeline.map((event, i) => (
                       <li key={event.id} className="relative flex gap-3 pb-4 last:pb-0">
                         {i < timeline.length - 1 && (
-                          <span className="absolute left-[7px] top-5 h-full w-px bg-white/10" />
+                          <span className="absolute left-[7px] top-5 h-full w-px bg-line/10" />
                         )}
                         <span
                           className={cn(
-                            'relative mt-1 h-3.5 w-3.5 shrink-0 rounded-full border-2 border-ink-800',
+                            'relative mt-1 h-3.5 w-3.5 shrink-0 rounded-full border-2 border-surface',
                             TIMELINE_DOT[event.kind],
                           )}
                         />
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm text-gray-200">{event.title}</p>
+                          <p className="text-sm text-fg-2">{event.title}</p>
                           {event.detail && (
-                            <p className="mt-0.5 text-xs leading-relaxed text-gray-500">
+                            <p className="mt-0.5 text-xs leading-relaxed text-fg-3">
                               {event.detail}
                             </p>
                           )}
-                          <p className="mt-1 flex items-center gap-1.5 text-2xs text-gray-600">
+                          <p className="mt-1 flex items-center gap-1.5 text-2xs text-fg-4">
                             {event.agentId && <Bot className="h-3 w-3 text-brand-400/70" />}
                             {event.actorName} · {relativeTime(event.at)}
                           </p>
@@ -208,15 +208,15 @@ export function JobWorkspacePage() {
                 {tasks.length === 0 ? (
                   <EmptyState title="No tasks on this job" />
                 ) : (
-                  <ul className="divide-y divide-white/5">
+                  <ul className="divide-y divide-line/5">
                     {tasks.map((task) => (
                       <li
                         key={task.id}
                         className="flex items-center justify-between gap-3 px-4 py-3"
                       >
                         <div className="min-w-0">
-                          <p className="text-sm text-gray-200">{task.title}</p>
-                          <p className="mt-0.5 text-2xs text-gray-600">
+                          <p className="text-sm text-fg-2">{task.title}</p>
+                          <p className="mt-0.5 text-2xs text-fg-4">
                             {task.dueDate ? `Due ${formatDateTime(task.dueDate)}` : 'No due date'}
                             {task.createdByAgentId && ' · created by Atmosphere'}
                           </p>
@@ -239,13 +239,13 @@ export function JobWorkspacePage() {
                 {documents.length === 0 ? (
                   <EmptyState icon={<Paperclip className="h-7 w-7" />} title="No documents yet" />
                 ) : (
-                  <ul className="divide-y divide-white/5">
+                  <ul className="divide-y divide-line/5">
                     {documents.map((doc) => (
                       <li key={doc.id} className="flex items-center gap-3 px-4 py-3">
-                        <FileText className="h-4 w-4 shrink-0 text-gray-600" />
+                        <FileText className="h-4 w-4 shrink-0 text-fg-4" />
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm text-gray-200">{doc.name}</p>
-                          <p className="text-2xs text-gray-600">
+                          <p className="truncate text-sm text-fg-2">{doc.name}</p>
+                          <p className="text-2xs text-fg-4">
                             {doc.uploadedBy} · {formatDate(doc.uploadedAt)} ·{' '}
                             {doc.sizeKb > 1024
                               ? `${(doc.sizeKb / 1024).toFixed(1)} MB`
@@ -271,7 +271,7 @@ export function JobWorkspacePage() {
                     title="No messages yet"
                   />
                 ) : (
-                  <ul className="divide-y divide-white/5">
+                  <ul className="divide-y divide-line/5">
                     {communications.map((comm) => {
                       const Icon = comm.channel === 'call' ? Phone : Mail;
                       return (
@@ -279,21 +279,19 @@ export function JobWorkspacePage() {
                           <Icon
                             className={cn(
                               'mt-0.5 h-4 w-4 shrink-0',
-                              comm.direction === 'inbound' ? 'text-state-info' : 'text-gray-600',
+                              comm.direction === 'inbound' ? 'text-state-info' : 'text-fg-4',
                             )}
                           />
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-1.5">
-                              <p className="truncate text-sm font-medium text-gray-200">
+                              <p className="truncate text-sm font-medium text-fg-2">
                                 {comm.subject}
                               </p>
                               {comm.needsReply && <Badge tone="warn">Needs reply</Badge>}
                               {comm.byAgent && <Badge tone="brand">Sent by Atmosphere</Badge>}
                             </div>
-                            <p className="mt-0.5 line-clamp-1 text-xs text-gray-500">
-                              {comm.preview}
-                            </p>
-                            <p className="mt-1 text-2xs text-gray-600">
+                            <p className="mt-0.5 line-clamp-1 text-xs text-fg-3">{comm.preview}</p>
+                            <p className="mt-1 text-2xs text-fg-4">
                               {comm.participant} · {relativeTime(comm.at)}
                             </p>
                           </div>
@@ -319,7 +317,7 @@ export function JobWorkspacePage() {
                   tone={job.approvedTotal < job.estimateTotal ? 'danger' : undefined}
                 />
                 <Row label="Deductible" value={money(job.deductible)} />
-                <div className="my-2 border-t border-white/10" />
+                <div className="my-2 border-t border-line/10" />
                 <Row label="Invoiced to date" value={money(job.invoicedTotal)} />
                 <Row label="Collected" value={money(job.paidTotal)} />
                 <Row
@@ -327,7 +325,7 @@ export function JobWorkspacePage() {
                   value={money(outstanding)}
                   tone={outstanding > 0 ? 'warn' : undefined}
                 />
-                <div className="my-2 border-t border-white/10" />
+                <div className="my-2 border-t border-line/10" />
                 <Row label="Loss date" value={formatDate(job.lossDate)} />
                 <Row label="Target completion" value={formatDate(job.targetCompletion)} />
               </CardBody>
@@ -335,7 +333,7 @@ export function JobWorkspacePage() {
           </TabPanel>
         </Tabs>
 
-        <p className="flex items-center gap-1.5 text-2xs text-gray-600">
+        <p className="flex items-center gap-1.5 text-2xs text-fg-4">
           <MapPin className="h-3 w-3" />
           {job.address}
         </p>
@@ -346,8 +344,8 @@ export function JobWorkspacePage() {
 
 const TIMELINE_DOT: Record<TimelineKind, string> = {
   status_change: 'bg-state-info',
-  note: 'bg-gray-600',
-  document: 'bg-gray-500',
+  note: 'bg-fg-4',
+  document: 'bg-fg-3',
   communication: 'bg-state-info',
   agent_action: 'bg-brand-400',
   financial: 'bg-state-ok',
@@ -366,19 +364,19 @@ function Stat({
   tone?: 'warn' | 'danger';
 }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-ink-800/60 p-3">
-      <p className="text-2xs uppercase tracking-wide text-gray-600">{label}</p>
+    <div className="rounded-xl border border-line/10 bg-surface/60 p-3">
+      <p className="text-2xs uppercase tracking-wide text-fg-4">{label}</p>
       <p
         className={cn(
           'mt-1 text-lg font-semibold',
           tone === 'warn' && 'text-state-warn',
           tone === 'danger' && 'text-state-danger',
-          !tone && 'text-white',
+          !tone && 'text-fg',
         )}
       >
         {value}
       </p>
-      {hint && <p className="mt-0.5 text-2xs text-gray-600">{hint}</p>}
+      {hint && <p className="mt-0.5 text-2xs text-fg-4">{hint}</p>}
     </div>
   );
 }
@@ -386,13 +384,13 @@ function Stat({
 function Row({ label, value, tone }: { label: string; value: string; tone?: 'warn' | 'danger' }) {
   return (
     <div className="flex items-center justify-between gap-4 text-sm">
-      <span className="text-gray-500">{label}</span>
+      <span className="text-fg-3">{label}</span>
       <span
         className={cn(
           'font-medium',
           tone === 'warn' && 'text-state-warn',
           tone === 'danger' && 'text-state-danger',
-          !tone && 'text-gray-200',
+          !tone && 'text-fg-2',
         )}
       >
         {value}

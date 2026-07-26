@@ -8,7 +8,7 @@ import {
 import { cn } from './cn';
 
 const FIELD =
-  'w-full rounded-lg border border-white/10 bg-ink-700/80 px-3 py-2 text-sm text-white placeholder-gray-500 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/40 disabled:cursor-not-allowed disabled:opacity-50';
+  'w-full rounded-lg border border-line/10 bg-raised/80 px-3 py-2 text-sm text-fg placeholder-fg-4 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/40 disabled:cursor-not-allowed disabled:opacity-50';
 
 export function Label({
   htmlFor,
@@ -23,10 +23,10 @@ export function Label({
 }) {
   return (
     <div className={cn('mb-1.5 flex items-center justify-between gap-2', className)}>
-      <label htmlFor={htmlFor} className="block text-xs font-medium text-gray-300">
+      <label htmlFor={htmlFor} className="block text-xs font-medium text-fg-2">
         {children}
       </label>
-      {hint && <span className="text-2xs text-gray-500">{hint}</span>}
+      {hint && <span className="text-2xs text-fg-3">{hint}</span>}
     </div>
   );
 }
@@ -85,7 +85,7 @@ export function SegmentedControl<T extends string>({
     <div
       role="tablist"
       aria-label={ariaLabel}
-      className={cn('inline-flex rounded-lg border border-white/10 bg-ink-800/80 p-0.5', className)}
+      className={cn('inline-flex rounded-lg border border-line/10 bg-surface/80 p-0.5', className)}
     >
       {options.map((opt) => {
         const active = opt.value === value;
@@ -98,7 +98,7 @@ export function SegmentedControl<T extends string>({
             onClick={() => onChange(opt.value)}
             className={cn(
               'rounded-md px-2.5 py-1 text-xs font-medium transition',
-              active ? 'bg-ink-600 text-white' : 'text-gray-400 hover:text-gray-200',
+              active ? 'bg-raised-2 text-fg' : 'text-fg-3 hover:text-fg-2',
             )}
           >
             {opt.label}

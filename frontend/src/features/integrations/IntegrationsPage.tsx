@@ -38,8 +38,8 @@ export function IntegrationsPage() {
             </p>
             <ul className="mt-2 space-y-1">
               {problems.map((i) => (
-                <li key={i.id} className="text-2xs text-gray-400">
-                  <span className="font-medium text-gray-300">{i.name}</span>
+                <li key={i.id} className="text-2xs text-fg-3">
+                  <span className="font-medium text-fg-2">{i.name}</span>
                   {i.issue ? ` — ${i.issue}` : ''}
                 </li>
               ))}
@@ -61,10 +61,10 @@ export function IntegrationsPage() {
                         pulse={integration.status === 'connected'}
                       />
                       <div className="min-w-0">
-                        <h3 className="truncate text-sm font-semibold text-white">
+                        <h3 className="truncate text-sm font-semibold text-fg">
                           {integration.name}
                         </h3>
-                        <p className="text-2xs text-gray-600">{titleCase(integration.category)}</p>
+                        <p className="text-2xs text-fg-4">{titleCase(integration.category)}</p>
                       </div>
                     </div>
                     <Badge tone={integrationStatusTone[integration.status]}>
@@ -72,7 +72,7 @@ export function IntegrationsPage() {
                     </Badge>
                   </div>
 
-                  <p className="text-xs leading-relaxed text-gray-500">{integration.description}</p>
+                  <p className="text-xs leading-relaxed text-fg-3">{integration.description}</p>
 
                   {integration.issue && (
                     <p className="rounded-lg border border-state-warn/25 bg-state-warn/[0.07] px-2.5 py-1.5 text-2xs text-state-warn">
@@ -80,7 +80,7 @@ export function IntegrationsPage() {
                     </p>
                   )}
 
-                  <div className="flex items-center justify-between border-t border-white/5 pt-2.5 text-2xs text-gray-600">
+                  <div className="flex items-center justify-between border-t border-line/5 pt-2.5 text-2xs text-fg-4">
                     <span>
                       {integration.lastSyncAt
                         ? `Synced ${relativeTime(integration.lastSyncAt)}`

@@ -12,7 +12,7 @@ import { cn } from './cn';
  * reimplementing on a product people run their business on.
  */
 
-const OVERLAY = 'fixed inset-0 z-50 bg-black/70 backdrop-blur-sm data-[state=open]:animate-fade-in';
+const OVERLAY = 'fixed inset-0 z-50 bg-scrim/70 backdrop-blur-sm data-[state=open]:animate-fade-in';
 
 export function Dialog({
   open,
@@ -38,29 +38,29 @@ export function Dialog({
         <DialogPrimitive.Content
           className={cn(
             'fixed left-1/2 top-1/2 z-50 w-[min(40rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2',
-            'rounded-2xl border border-white/10 bg-ink-800 shadow-2xl shadow-black/60',
+            'rounded-2xl border border-line/10 bg-surface shadow-2xl shadow-scrim/60',
             'data-[state=open]:animate-fade-in-up',
             className,
           )}
         >
-          <div className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
+          <div className="flex items-start justify-between gap-4 border-b border-line/10 px-5 py-4">
             <div>
-              <DialogPrimitive.Title className="text-sm font-semibold text-white">
+              <DialogPrimitive.Title className="text-sm font-semibold text-fg">
                 {title}
               </DialogPrimitive.Title>
               {description && (
-                <DialogPrimitive.Description className="mt-1 text-xs text-gray-400">
+                <DialogPrimitive.Description className="mt-1 text-xs text-fg-3">
                   {description}
                 </DialogPrimitive.Description>
               )}
             </div>
-            <DialogPrimitive.Close className="rounded-md p-1 text-gray-500 transition hover:bg-white/5 hover:text-gray-200">
+            <DialogPrimitive.Close className="rounded-md p-1 text-fg-3 transition hover:bg-line/5 hover:text-fg-2">
               <X className="h-4 w-4" />
               <span className="sr-only">Close</span>
             </DialogPrimitive.Close>
           </div>
           <div className="max-h-[70vh] overflow-y-auto px-5 py-4">{children}</div>
-          {footer && <div className="border-t border-white/10 px-5 py-3">{footer}</div>}
+          {footer && <div className="border-t border-line/10 px-5 py-3">{footer}</div>}
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
@@ -95,30 +95,30 @@ export function Drawer({
         <DialogPrimitive.Overlay className={OVERLAY} />
         <DialogPrimitive.Content
           className={cn(
-            'fixed right-0 top-0 z-50 flex h-full flex-col border-l border-white/10 bg-ink-900 shadow-2xl shadow-black/60',
+            'fixed right-0 top-0 z-50 flex h-full flex-col border-l border-line/10 bg-canvas shadow-2xl shadow-scrim/60',
             'data-[state=open]:animate-slide-in-right',
             width,
           )}
         >
-          <div className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
+          <div className="flex items-start justify-between gap-4 border-b border-line/10 px-5 py-4">
             <div className="min-w-0">
-              <DialogPrimitive.Title className="truncate text-sm font-semibold text-white">
+              <DialogPrimitive.Title className="truncate text-sm font-semibold text-fg">
                 {title}
               </DialogPrimitive.Title>
               {description && (
-                <DialogPrimitive.Description className="mt-0.5 truncate text-xs text-gray-400">
+                <DialogPrimitive.Description className="mt-0.5 truncate text-xs text-fg-3">
                   {description}
                 </DialogPrimitive.Description>
               )}
             </div>
-            <DialogPrimitive.Close className="rounded-md p-1 text-gray-500 transition hover:bg-white/5 hover:text-gray-200">
+            <DialogPrimitive.Close className="rounded-md p-1 text-fg-3 transition hover:bg-line/5 hover:text-fg-2">
               <X className="h-4 w-4" />
               <span className="sr-only">Close</span>
             </DialogPrimitive.Close>
           </div>
           <div className="flex-1 overflow-y-auto">{children}</div>
           {footer && (
-            <div className="border-t border-white/10 bg-ink-800/60 px-5 py-3">{footer}</div>
+            <div className="border-t border-line/10 bg-surface/60 px-5 py-3">{footer}</div>
           )}
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
@@ -145,7 +145,7 @@ export function Popover({
           align={align}
           sideOffset={6}
           className={cn(
-            'z-50 min-w-[12rem] rounded-xl border border-white/10 bg-ink-800 p-1.5 shadow-2xl shadow-black/60',
+            'z-50 min-w-[12rem] rounded-xl border border-line/10 bg-surface p-1.5 shadow-2xl shadow-scrim/60',
             'data-[state=open]:animate-fade-in',
             className,
           )}
@@ -177,7 +177,7 @@ export function Tooltip({
         <TooltipPrimitive.Content
           side={side}
           sideOffset={6}
-          className="z-50 max-w-xs rounded-lg border border-white/10 bg-ink-700 px-2.5 py-1.5 text-xs text-gray-200 shadow-xl"
+          className="z-50 max-w-xs rounded-lg border border-line/10 bg-raised px-2.5 py-1.5 text-xs text-fg-2 shadow-xl"
         >
           {content}
         </TooltipPrimitive.Content>

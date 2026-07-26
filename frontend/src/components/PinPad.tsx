@@ -98,7 +98,7 @@ export function PinPad({
             className={`h-3.5 w-3.5 rounded-full border transition ${
               i < value.length
                 ? 'scale-110 border-brand-400 bg-brand-400'
-                : 'border-white/25 bg-transparent'
+                : 'border-line/25 bg-transparent'
             }`}
           />
         ))}
@@ -111,7 +111,7 @@ export function PinPad({
             type="button"
             disabled={disabled}
             onClick={() => push(k)}
-            className="h-16 rounded-xl border border-white/10 bg-ink-700/70 text-xl font-semibold text-white transition hover:bg-ink-600 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+            className="h-16 rounded-xl border border-line/10 bg-raised/70 text-xl font-semibold text-fg transition hover:bg-raised-2 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {k}
           </button>
@@ -123,7 +123,7 @@ export function PinPad({
           type="button"
           disabled={disabled}
           onClick={() => push('0')}
-          className="h-16 rounded-xl border border-white/10 bg-ink-700/70 text-xl font-semibold text-white transition hover:bg-ink-600 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+          className="h-16 rounded-xl border border-line/10 bg-raised/70 text-xl font-semibold text-fg transition hover:bg-raised-2 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
         >
           0
         </button>
@@ -133,7 +133,7 @@ export function PinPad({
           disabled={disabled || value.length === 0}
           onClick={pop}
           aria-label="Delete last digit"
-          className="grid h-16 place-items-center rounded-xl border border-white/10 bg-ink-700/40 text-gray-300 transition hover:bg-ink-600 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+          className="grid h-16 place-items-center rounded-xl border border-line/10 bg-raised/40 text-fg-2 transition hover:bg-raised-2 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
         >
           <BackspaceIcon />
         </button>

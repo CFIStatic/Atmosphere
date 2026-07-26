@@ -3,9 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0a0a12" />
+    <meta name="theme-color" content="#1a1a1a" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f0eee9" media="(prefers-color-scheme: light)" />
     <meta name="description" content="Atmosphere — sign in to your workspace." />
     <title>Atmosphere · Sign in</title>
+    <script>
+      // Resolve the theme before first paint. Without this the page renders on
+      // the default (dark) ground and then snaps to light, which reads as a bug.
+      (function () {
+        try {
+          var stored = localStorage.getItem('atmosphere.theme');
+          var theme =
+            stored === 'light' || stored === 'dark'
+              ? stored
+              : matchMedia('(prefers-color-scheme: light)').matches
+                ? 'light'
+                : 'dark';
+          document.documentElement.setAttribute('data-theme', theme);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

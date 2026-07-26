@@ -37,7 +37,7 @@ export function SettingsPage() {
               <Row
                 label="Invite code"
                 value={
-                  <code className="rounded bg-ink-700 px-2 py-0.5 font-mono text-xs tracking-widest text-brand-300">
+                  <code className="rounded bg-raised px-2 py-0.5 font-mono text-xs tracking-widest text-brand-300">
                     {membership.org.joinCode}
                   </code>
                 }
@@ -58,7 +58,7 @@ export function SettingsPage() {
           />
           <CardBody className="space-y-3">
             <div>
-              <p className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-gray-600">
+              <p className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-fg-4">
                 Visible sections
               </p>
               <div className="flex flex-wrap gap-1">
@@ -70,11 +70,11 @@ export function SettingsPage() {
               </div>
             </div>
             <div>
-              <p className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-gray-600">
+              <p className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-fg-4">
                 Permissions
               </p>
               {profile.capabilities.length === 0 ? (
-                <p className="text-xs text-gray-600">No elevated permissions.</p>
+                <p className="text-xs text-fg-4">No elevated permissions.</p>
               ) : (
                 <div className="flex flex-wrap gap-1">
                   {profile.capabilities.map((cap) => (
@@ -95,8 +95,8 @@ export function SettingsPage() {
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <span className="text-gray-500">{label}</span>
-      <span className="font-medium text-gray-200">{value}</span>
+      <span className="text-fg-3">{label}</span>
+      <span className="font-medium text-fg-2">{value}</span>
     </div>
   );
 }

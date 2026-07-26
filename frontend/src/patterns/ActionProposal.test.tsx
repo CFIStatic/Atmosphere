@@ -27,18 +27,23 @@ const BASE: ApprovalRequest = {
   requiredRole: 'project_manager',
   valueAtStake: 2850,
   context: [{ label: 'Current phase', value: 'Drying, day 9' }],
-  changes: [
-    { entity: 'Job WTR-1041', field: 'Equipment end date', from: 'Mar 14', to: 'Mar 17' },
-  ],
+  changes: [{ entity: 'Job WTR-1041', field: 'Equipment end date', from: 'Mar 14', to: 'Mar 17' }],
   impact: [{ label: 'Additional cost', value: '$2,850', direction: 'negative' }],
   risks: [
-    { severity: 'high', title: 'Carrier may deny extended drying', detail: 'Outside approved scope.' },
+    {
+      severity: 'high',
+      title: 'Carrier may deny extended drying',
+      detail: 'Outside approved scope.',
+    },
   ],
   steps: [{ label: 'Update equipment schedule', status: 'pending' }],
   evidence: [],
 };
 
-function renderProposal(request: Partial<ApprovalRequest> = {}, props: Record<string, unknown> = {}) {
+function renderProposal(
+  request: Partial<ApprovalRequest> = {},
+  props: Record<string, unknown> = {},
+) {
   const merged = { ...BASE, ...request };
   return render(
     <TooltipProvider>

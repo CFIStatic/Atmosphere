@@ -83,13 +83,10 @@ export function OnboardingPage() {
   }
 
   return (
-    <div className="cx-aurora flex min-h-screen flex-col bg-ink-900">
+    <div className="cx-aurora flex min-h-screen flex-col bg-canvas">
       <header className="flex items-center justify-between px-6 py-6 sm:px-10">
         <Logo />
-        <button
-          onClick={() => logout()}
-          className="text-sm text-gray-400 transition hover:text-gray-200"
-        >
+        <button onClick={() => logout()} className="text-sm text-fg-3 transition hover:text-fg-2">
           Sign out
         </button>
       </header>
@@ -106,22 +103,20 @@ export function OnboardingPage() {
                       ? 'border-brand-500 bg-brand-600 text-white'
                       : i === step
                         ? 'border-brand-400 text-brand-300'
-                        : 'border-white/15 text-gray-500'
+                        : 'border-line/15 text-fg-3'
                   }`}
                 >
                   {i < step ? <CheckIcon width={16} height={16} /> : i + 1}
                 </span>
-                <span
-                  className={`hidden text-xs sm:block ${i === step ? 'text-white' : 'text-gray-500'}`}
-                >
+                <span className={`hidden text-xs sm:block ${i === step ? 'text-fg' : 'text-fg-3'}`}>
                   {label}
                 </span>
-                {i < STEPS.length - 1 && <span className="h-px flex-1 bg-white/10" />}
+                {i < STEPS.length - 1 && <span className="h-px flex-1 bg-line/10" />}
               </li>
             ))}
           </ol>
 
-          <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-7 shadow-2xl shadow-black/40 backdrop-blur-xl sm:p-9">
+          <div className="rounded-2xl border border-line/10 bg-surface/70 p-7 shadow-2xl shadow-scrim/40 backdrop-blur-xl sm:p-9">
             {error && (
               <div
                 role="alert"
@@ -134,13 +129,13 @@ export function OnboardingPage() {
             {/* Step 1: Organization */}
             {step === 0 && (
               <section>
-                <h1 className="text-xl font-bold text-white">Join or create an organization</h1>
-                <p className="mt-1.5 text-sm text-gray-400">
+                <h1 className="text-xl font-bold text-fg">Join or create an organization</h1>
+                <p className="mt-1.5 text-sm text-fg-3">
                   Everyone in {user?.email ? 'your team' : 'an organization'} works together and can
                   see each other's linked accounts.
                 </p>
 
-                <div className="mt-5 grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-ink-700/50 p-1">
+                <div className="mt-5 grid grid-cols-2 gap-2 rounded-lg border border-line/10 bg-raised/50 p-1">
                   <ModeTab active={mode === 'create'} onClick={() => setMode('create')}>
                     Create new
                   </ModeTab>
@@ -151,10 +146,7 @@ export function OnboardingPage() {
 
                 {mode === 'create' ? (
                   <div className="mt-5">
-                    <label
-                      htmlFor="orgName"
-                      className="mb-1.5 block text-sm font-medium text-gray-300"
-                    >
+                    <label htmlFor="orgName" className="mb-1.5 block text-sm font-medium text-fg-2">
                       Organization name
                     </label>
                     <input
@@ -163,9 +155,9 @@ export function OnboardingPage() {
                       onChange={(e) => setOrgName(e.target.value)}
                       placeholder="Acme Restoration"
                       autoFocus
-                      className="w-full rounded-lg border border-white/10 bg-ink-700/80 px-3.5 py-2.5 text-white placeholder-gray-500 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/40"
+                      className="w-full rounded-lg border border-line/10 bg-raised/80 px-3.5 py-2.5 text-fg placeholder-fg-4 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/40"
                     />
-                    <p className="mt-2 text-xs text-gray-500">
+                    <p className="mt-2 text-xs text-fg-3">
                       You'll get a join code to invite the rest of your team.
                     </p>
                   </div>
@@ -173,7 +165,7 @@ export function OnboardingPage() {
                   <div className="mt-5">
                     <label
                       htmlFor="joinCode"
-                      className="mb-1.5 block text-sm font-medium text-gray-300"
+                      className="mb-1.5 block text-sm font-medium text-fg-2"
                     >
                       Organization join code
                     </label>
@@ -184,9 +176,9 @@ export function OnboardingPage() {
                       placeholder="e.g. 8F3A9C2B"
                       autoFocus
                       autoCapitalize="characters"
-                      className="w-full rounded-lg border border-white/10 bg-ink-700/80 px-3.5 py-2.5 font-mono tracking-widest text-white placeholder-gray-500 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/40"
+                      className="w-full rounded-lg border border-line/10 bg-raised/80 px-3.5 py-2.5 font-mono tracking-widest text-fg placeholder-fg-4 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/40"
                     />
-                    <p className="mt-2 text-xs text-gray-500">
+                    <p className="mt-2 text-xs text-fg-3">
                       Ask an admin in your organization for the code.
                     </p>
                   </div>
@@ -197,8 +189,8 @@ export function OnboardingPage() {
             {/* Step 2: Role */}
             {step === 1 && (
               <section>
-                <h1 className="text-xl font-bold text-white">What's your role?</h1>
-                <p className="mt-1.5 text-sm text-gray-400">
+                <h1 className="text-xl font-bold text-fg">What's your role?</h1>
+                <p className="mt-1.5 text-sm text-fg-3">
                   Pick the account type that fits you best.
                 </p>
                 <div className="mt-5 space-y-2.5">
@@ -218,10 +210,8 @@ export function OnboardingPage() {
             {/* Step 3: Work type */}
             {step === 2 && (
               <section>
-                <h1 className="text-xl font-bold text-white">Mitigation or construction?</h1>
-                <p className="mt-1.5 text-sm text-gray-400">
-                  Tell us what kind of work you focus on.
-                </p>
+                <h1 className="text-xl font-bold text-fg">Mitigation or construction?</h1>
+                <p className="mt-1.5 text-sm text-fg-3">Tell us what kind of work you focus on.</p>
                 <div className="mt-5 space-y-2.5">
                   {WORK_OPTIONS.map((opt) => (
                     <OptionCard
@@ -242,7 +232,7 @@ export function OnboardingPage() {
                 type="button"
                 onClick={back}
                 disabled={step === 0 || submitting}
-                className="rounded-lg px-3 py-2.5 text-sm font-medium text-gray-400 transition hover:text-gray-200 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-lg px-3 py-2.5 text-sm font-medium text-fg-3 transition hover:text-fg-2 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Back
               </button>
@@ -296,7 +286,7 @@ function ModeTab({
       onClick={onClick}
       aria-pressed={active}
       className={`rounded-md px-3 py-2 text-sm font-medium transition ${
-        active ? 'bg-brand-600 text-white shadow' : 'text-gray-400 hover:text-gray-200'
+        active ? 'bg-brand-600 text-white shadow' : 'text-fg-3 hover:text-fg-2'
       }`}
     >
       {children}
@@ -323,19 +313,19 @@ function OptionCard({
       className={`flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition ${
         selected
           ? 'border-brand-400 bg-brand-500/10 ring-1 ring-brand-500/40'
-          : 'border-white/10 bg-ink-700/40 hover:border-white/20 hover:bg-ink-700/70'
+          : 'border-line/10 bg-raised/40 hover:border-line/20 hover:bg-raised/70'
       }`}
     >
       <span
         className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border transition ${
-          selected ? 'border-brand-400 bg-brand-500 text-white' : 'border-white/25'
+          selected ? 'border-brand-400 bg-brand-500 text-white' : 'border-line/25'
         }`}
       >
         {selected && <CheckIcon width={14} height={14} />}
       </span>
       <span>
-        <span className="block font-semibold text-white">{title}</span>
-        <span className="mt-0.5 block text-sm text-gray-400">{blurb}</span>
+        <span className="block font-semibold text-fg">{title}</span>
+        <span className="mt-0.5 block text-sm text-fg-3">{blurb}</span>
       </span>
     </button>
   );

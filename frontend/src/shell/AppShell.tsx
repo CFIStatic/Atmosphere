@@ -50,7 +50,7 @@ export function AppShell() {
   // watching the pathname — same result, without a cascading render.
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-ink-900 text-gray-200">
+    <div className="flex h-screen w-full overflow-hidden bg-canvas text-fg-2">
       {/* ── Left navigation ───────────────────────────────────────────────── */}
       <div className="hidden shrink-0 lg:block">
         <LeftNav
@@ -70,12 +70,12 @@ export function AppShell() {
 
       {/* ── Workspace ─────────────────────────────────────────────────────── */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-topbar shrink-0 items-center gap-3 border-b border-white/10 bg-ink-900/80 px-3 backdrop-blur-xl sm:px-4">
+        <header className="flex h-topbar shrink-0 items-center gap-3 border-b border-line/10 bg-canvas/80 px-3 backdrop-blur-xl sm:px-4">
           <button
             type="button"
             onClick={() => setMobileNavOpen(true)}
             aria-label="Open navigation"
-            className="rounded-md p-1.5 text-gray-400 transition hover:bg-white/5 hover:text-white lg:hidden"
+            className="rounded-md p-1.5 text-fg-3 transition hover:bg-line/5 hover:text-fg lg:hidden"
           >
             <Menu className="h-5 w-5" />
           </button>
@@ -159,7 +159,7 @@ function MobileAssistantLauncher({ role }: { role: Role }) {
       >
         <Sparkles className="h-5 w-5 text-white" />
         {messages.length > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-ink-900 bg-state-warn" />
+          <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-canvas bg-state-warn" />
         )}
       </button>
 
@@ -173,7 +173,7 @@ function MobileAssistantLauncher({ role }: { role: Role }) {
           <button
             type="button"
             aria-label="Close assistant"
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            className="absolute inset-0 bg-scrim/70 backdrop-blur-sm"
             onClick={() => setOpen(false)}
           />
           <div className="absolute inset-y-0 right-0 w-[min(24rem,100vw)] animate-slide-in-right">

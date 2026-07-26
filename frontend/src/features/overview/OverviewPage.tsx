@@ -97,12 +97,12 @@ export function OverviewPage() {
                   description="Every active job is inside its target window."
                 />
               ) : (
-                <ul className="divide-y divide-white/5">
+                <ul className="divide-y divide-line/5">
                   {needsAttention.map((job) => (
                     <li key={job.id}>
                       <Link
                         to={`/jobs/${job.id}`}
-                        className="flex items-start gap-3 px-4 py-3 transition hover:bg-white/[0.03]"
+                        className="flex items-start gap-3 px-4 py-3 transition hover:bg-line/[0.03]"
                       >
                         <AlertTriangle
                           className={
@@ -115,8 +115,8 @@ export function OverviewPage() {
                         />
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="font-mono text-xs text-gray-400">{job.number}</span>
-                            <span className="truncate text-sm font-medium text-white">
+                            <span className="font-mono text-xs text-fg-3">{job.number}</span>
+                            <span className="truncate text-sm font-medium text-fg">
                               {job.customerName}
                             </span>
                             <Badge tone={jobHealthTone[job.health]}>
@@ -125,14 +125,14 @@ export function OverviewPage() {
                             <Badge tone="idle">{phaseLabel[job.phase]}</Badge>
                           </div>
                           {job.flags.length > 0 && (
-                            <p className="mt-1 text-xs text-gray-500">{job.flags.join(' · ')}</p>
+                            <p className="mt-1 text-xs text-fg-3">{job.flags.join(' · ')}</p>
                           )}
                         </div>
                         <div className="hidden shrink-0 text-right sm:block">
-                          <p className="text-xs font-medium text-gray-300">
+                          <p className="text-xs font-medium text-fg-2">
                             {money(job.approvedTotal || job.estimateTotal)}
                           </p>
-                          <p className="text-2xs text-gray-600">day {job.ageDays}</p>
+                          <p className="text-2xs text-fg-4">day {job.ageDays}</p>
                         </div>
                       </Link>
                     </li>
@@ -167,7 +167,7 @@ export function OverviewPage() {
             <CardHeader
               title="Recent agent runs across every capability"
               description="Scheduling, estimating, collections, project management, compliance"
-              action={<Bot className="h-4 w-4 text-gray-600" />}
+              action={<Bot className="h-4 w-4 text-fg-4" />}
             />
             <CardBody className="px-3 py-1">
               <AgentActivityFeed runs={runs.slice(7)} />

@@ -27,8 +27,8 @@ export function CustomersPage() {
       header: 'Customer',
       cell: (c) => (
         <div className="min-w-0">
-          <p className="truncate font-medium text-white">{c.name}</p>
-          <p className="truncate text-2xs text-gray-600">{c.city}</p>
+          <p className="truncate font-medium text-fg">{c.name}</p>
+          <p className="truncate text-2xs text-fg-4">{c.city}</p>
         </div>
       ),
     },
@@ -39,8 +39,8 @@ export function CustomersPage() {
       hideOnMobile: true,
       cell: (c) => (
         <div className="min-w-0 text-xs">
-          <p className="truncate text-gray-400">{c.email ?? 'No email'}</p>
-          <p className="text-gray-600">{c.phone ?? 'No phone'}</p>
+          <p className="truncate text-fg-3">{c.email ?? 'No email'}</p>
+          <p className="text-fg-4">{c.phone ?? 'No phone'}</p>
         </div>
       ),
     },
@@ -49,7 +49,7 @@ export function CustomersPage() {
       header: 'Active jobs',
       className: 'text-right',
       cell: (c) => (
-        <span className={c.activeJobs > 0 ? 'font-medium text-gray-200' : 'text-gray-600'}>
+        <span className={c.activeJobs > 0 ? 'font-medium text-fg-2' : 'text-fg-4'}>
           {c.activeJobs || '—'}
         </span>
       ),
@@ -58,7 +58,7 @@ export function CustomersPage() {
       id: 'ltv',
       header: 'Lifetime value',
       className: 'text-right',
-      cell: (c) => <span className="font-medium text-gray-200">{money(c.lifetimeValue)}</span>,
+      cell: (c) => <span className="font-medium text-fg-2">{money(c.lifetimeValue)}</span>,
     },
     {
       id: 'contacted',
@@ -71,7 +71,7 @@ export function CustomersPage() {
           c.lastContactAt &&
           now - new Date(c.lastContactAt).getTime() > STALE_MS;
         return (
-          <span className={staleContact ? 'font-medium text-state-warn' : 'text-gray-500'}>
+          <span className={staleContact ? 'font-medium text-state-warn' : 'text-fg-3'}>
             {c.lastContactAt ? relativeTime(c.lastContactAt) : 'Never'}
           </span>
         );
@@ -90,7 +90,7 @@ export function CustomersPage() {
         }
       />
       <PageBody>
-        <div className="overflow-hidden rounded-xl border border-white/10 bg-ink-800/40">
+        <div className="overflow-hidden rounded-xl border border-line/10 bg-surface/40">
           <DataTable
             rows={sorted}
             columns={columns}

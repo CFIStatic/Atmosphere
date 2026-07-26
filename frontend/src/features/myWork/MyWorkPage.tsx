@@ -114,7 +114,7 @@ export function MyWorkPage() {
       <PageBody className="space-y-5">
         {myApprovals.length > 0 && (
           <section className="space-y-3">
-            <h2 className="text-2xs font-semibold uppercase tracking-wider text-gray-500">
+            <h2 className="text-2xs font-semibold uppercase tracking-wider text-fg-3">
               Waiting on you
             </h2>
             {myApprovals.map((request) => (
@@ -149,7 +149,7 @@ export function MyWorkPage() {
                 }
               />
             ) : (
-              <ul className="divide-y divide-white/5">
+              <ul className="divide-y divide-line/5">
                 {visible.map((task) => {
                   const Icon = STATUS_ICON[task.status];
                   const isOverdue =
@@ -173,7 +173,7 @@ export function MyWorkPage() {
                             task.status === 'done' && 'text-state-ok',
                             task.status === 'in_progress' && 'text-state-info',
                             task.status === 'blocked' && 'text-state-danger',
-                            task.status === 'todo' && 'text-gray-600',
+                            task.status === 'todo' && 'text-fg-4',
                           )}
                         />
                       </button>
@@ -182,12 +182,12 @@ export function MyWorkPage() {
                         <p
                           className={cn(
                             'text-sm leading-snug',
-                            task.status === 'done' ? 'text-gray-500 line-through' : 'text-gray-100',
+                            task.status === 'done' ? 'text-fg-3 line-through' : 'text-fg',
                           )}
                         >
                           {task.title}
                         </p>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-gray-600">
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-fg-4">
                           <Link
                             to={`/jobs/${task.jobId}`}
                             className="font-mono font-medium text-brand-400 transition hover:text-brand-300"

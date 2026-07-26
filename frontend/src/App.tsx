@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { TooltipProvider } from './design';
 import { AssistantProvider } from './assistant/AssistantContext';
+import { ThemeProvider } from './shell/ThemeContext';
 import { ViewerProvider, useViewer } from './shell/ViewerContext';
 import { AppShell } from './shell/AppShell';
 import { homeFor } from './domain/permissions';
@@ -78,7 +79,7 @@ function FullScreenSpinner() {
     <div
       role="status"
       aria-live="polite"
-      className="grid min-h-screen place-items-center bg-ink-900 text-brand-300"
+      className="grid min-h-screen place-items-center bg-canvas text-brand-300"
     >
       <SpinnerIcon className="animate-spin" width={28} height={28} />
       <span className="sr-only">Loading…</span>
@@ -123,70 +124,72 @@ function FieldRedirectOnDesktop({ children }: { children: ReactNode }) {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AuthProvider>
-          <TooltipProvider>
-            <Routes>
-              {/* Public auth surfaces — unchanged. */}
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-              <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <ThemeProvider>
+        <BrowserRouter>
+          <AuthProvider>
+            <TooltipProvider>
+              <Routes>
+                {/* Public auth surfaces — unchanged. */}
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-              <Route
-                path="/onboarding"
-                element={
-                  <ProtectedRoute>
-                    <RequireNotOnboarded>
-                      <OnboardingPage />
-                    </RequireNotOnboarded>
-                  </ProtectedRoute>
-                }
-              />
-
-              {/* The operational command center. */}
-              <Route
-                element={
-                  <ProtectedRoute>
-                    <RequireOnboarded>
-                      <ViewerProvider>
-                        <AssistantProvider>
-                          <Suspense fallback={<FullScreenSpinner />}>
-                            <AppShell />
-                          </Suspense>
-                        </AssistantProvider>
-                      </ViewerProvider>
-                    </RequireOnboarded>
-                  </ProtectedRoute>
-                }
-              >
-                <Route path="/" element={<RoleHome />} />
-                <Route path="/overview" element={<OverviewPage />} />
-                <Route path="/my-work" element={<MyWorkPage />} />
-                <Route path="/approvals" element={<ApprovalsPage />} />
-                <Route path="/jobs" element={<JobsPage />} />
-                <Route path="/jobs/:jobId" element={<JobWorkspacePage />} />
-                <Route path="/schedule" element={<SchedulePage />} />
-                <Route path="/estimates" element={<EstimatesPage />} />
-                <Route path="/customers" element={<CustomersPage />} />
-                <Route path="/financials" element={<FinancialsPage />} />
-                <Route path="/agents" element={<AgentsPage />} />
-                <Route path="/workflows" element={<WorkflowsPage />} />
-                <Route path="/integrations" element={<IntegrationsPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
                 <Route
-                  path="/field"
+                  path="/onboarding"
                   element={
-                    <FieldRedirectOnDesktop>
-                      <FieldPage />
-                    </FieldRedirectOnDesktop>
+                    <ProtectedRoute>
+                      <RequireNotOnboarded>
+                        <OnboardingPage />
+                      </RequireNotOnboarded>
+                    </ProtectedRoute>
                   }
                 />
-                <Route path="*" element={<RoleHome />} />
-              </Route>
-            </Routes>
-          </TooltipProvider>
-        </AuthProvider>
-      </BrowserRouter>
+
+                {/* The operational command center. */}
+                <Route
+                  element={
+                    <ProtectedRoute>
+                      <RequireOnboarded>
+                        <ViewerProvider>
+                          <AssistantProvider>
+                            <Suspense fallback={<FullScreenSpinner />}>
+                              <AppShell />
+                            </Suspense>
+                          </AssistantProvider>
+                        </ViewerProvider>
+                      </RequireOnboarded>
+                    </ProtectedRoute>
+                  }
+                >
+                  <Route path="/" element={<RoleHome />} />
+                  <Route path="/overview" element={<OverviewPage />} />
+                  <Route path="/my-work" element={<MyWorkPage />} />
+                  <Route path="/approvals" element={<ApprovalsPage />} />
+                  <Route path="/jobs" element={<JobsPage />} />
+                  <Route path="/jobs/:jobId" element={<JobWorkspacePage />} />
+                  <Route path="/schedule" element={<SchedulePage />} />
+                  <Route path="/estimates" element={<EstimatesPage />} />
+                  <Route path="/customers" element={<CustomersPage />} />
+                  <Route path="/financials" element={<FinancialsPage />} />
+                  <Route path="/agents" element={<AgentsPage />} />
+                  <Route path="/workflows" element={<WorkflowsPage />} />
+                  <Route path="/integrations" element={<IntegrationsPage />} />
+                  <Route path="/settings" element={<SettingsPage />} />
+                  <Route
+                    path="/field"
+                    element={
+                      <FieldRedirectOnDesktop>
+                        <FieldPage />
+                      </FieldRedirectOnDesktop>
+                    }
+                  />
+                  <Route path="*" element={<RoleHome />} />
+                </Route>
+              </Routes>
+            </TooltipProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

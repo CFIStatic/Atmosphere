@@ -7,9 +7,9 @@ export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon';
 
 const VARIANTS: Record<ButtonVariant, string> = {
   primary: 'bg-brand-600 text-white hover:bg-brand-500 shadow-lg shadow-brand-900/30',
-  secondary: 'bg-ink-700 text-gray-100 hover:bg-ink-600 border border-white/10',
-  outline: 'border border-white/15 text-gray-200 hover:bg-white/5',
-  ghost: 'text-gray-300 hover:bg-white/5 hover:text-white',
+  secondary: 'bg-raised text-fg hover:bg-raised-2 border border-line/10',
+  outline: 'border border-line/15 text-fg-2 hover:bg-line/5',
+  ghost: 'text-fg-2 hover:bg-line/5 hover:text-fg',
   danger:
     'bg-state-danger/15 text-state-danger border border-state-danger/30 hover:bg-state-danger/25',
   approve: 'bg-state-ok/15 text-state-ok border border-state-ok/30 hover:bg-state-ok/25',

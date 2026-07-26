@@ -167,7 +167,7 @@ export function FieldPage() {
               'flex flex-col items-center justify-center gap-2 rounded-2xl border py-7 transition active:scale-[0.98]',
               recording
                 ? 'border-state-danger/40 bg-state-danger/10'
-                : 'border-white/10 bg-ink-800/60 hover:bg-ink-700/60',
+                : 'border-line/10 bg-surface/60 hover:bg-raised/60',
             )}
           >
             {recording ? (
@@ -176,24 +176,24 @@ export function FieldPage() {
                 <span className="font-mono text-sm text-state-danger">
                   {formatElapsed(elapsed)}
                 </span>
-                <span className="text-2xs text-gray-500">Tap to stop</span>
+                <span className="text-2xs text-fg-3">Tap to stop</span>
               </>
             ) : (
               <>
                 <Mic className="h-7 w-7 text-brand-400" />
-                <span className="text-sm font-medium text-gray-200">Voice note</span>
+                <span className="text-sm font-medium text-fg-2">Voice note</span>
               </>
             )}
           </button>
 
           <label
             className={cn(
-              'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-white/10',
-              'bg-ink-800/60 py-7 transition hover:bg-ink-700/60 active:scale-[0.98]',
+              'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-line/10',
+              'bg-surface/60 py-7 transition hover:bg-raised/60 active:scale-[0.98]',
             )}
           >
             <Camera className="h-7 w-7 text-brand-400" />
-            <span className="text-sm font-medium text-gray-200">Photos</span>
+            <span className="text-sm font-medium text-fg-2">Photos</span>
             <input
               type="file"
               accept="image/*"
@@ -225,7 +225,7 @@ export function FieldPage() {
                       type="button"
                       onClick={() => removePhoto(photo.id)}
                       aria-label={`Remove ${photo.name}`}
-                      className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-md bg-black/70 text-gray-300 transition hover:text-state-danger"
+                      className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-md bg-scrim/70 text-fg-2 transition hover:text-state-danger"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -243,11 +243,11 @@ export function FieldPage() {
               {notes.map((note) => (
                 <div
                   key={note.id}
-                  className="flex items-center gap-3 rounded-lg bg-ink-700/50 p-2.5"
+                  className="flex items-center gap-3 rounded-lg bg-raised/50 p-2.5"
                 >
                   <Mic className="h-4 w-4 shrink-0 text-brand-400" />
                   <audio controls src={note.url} className="h-8 flex-1" />
-                  <span className="shrink-0 text-2xs text-gray-600">{relativeTime(note.at)}</span>
+                  <span className="shrink-0 text-2xs text-fg-4">{relativeTime(note.at)}</span>
                 </div>
               ))}
             </CardBody>
@@ -263,7 +263,7 @@ export function FieldPage() {
                 key={command}
                 type="button"
                 onClick={() => send(command)}
-                className="flex items-center gap-2.5 rounded-lg border border-white/10 bg-ink-700/40 px-3 py-3 text-left text-sm text-gray-200 transition hover:bg-ink-600/60 active:scale-[0.99]"
+                className="flex items-center gap-2.5 rounded-lg border border-line/10 bg-raised/40 px-3 py-3 text-left text-sm text-fg-2 transition hover:bg-raised-2/60 active:scale-[0.99]"
               >
                 <Zap className="h-4 w-4 shrink-0 text-brand-400" />
                 {command}
@@ -279,18 +279,18 @@ export function FieldPage() {
             {todaysTasks.length === 0 ? (
               <EmptyState icon={<CheckCircle2 className="h-7 w-7" />} title="Nothing assigned" />
             ) : (
-              <ul className="divide-y divide-white/5">
+              <ul className="divide-y divide-line/5">
                 {todaysTasks.map((task) => (
                   <li key={task.id}>
                     <button
                       type="button"
                       onClick={() => setStatus.mutate({ id: task.id, status: 'done' })}
-                      className="flex w-full items-start gap-3 px-4 py-3.5 text-left transition active:bg-white/5"
+                      className="flex w-full items-start gap-3 px-4 py-3.5 text-left transition active:bg-line/5"
                     >
-                      <Circle className="mt-0.5 h-5 w-5 shrink-0 text-gray-600" />
+                      <Circle className="mt-0.5 h-5 w-5 shrink-0 text-fg-4" />
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm text-gray-100">{task.title}</p>
-                        <p className="mt-0.5 text-2xs text-gray-600">
+                        <p className="text-sm text-fg">{task.title}</p>
+                        <p className="mt-0.5 text-2xs text-fg-4">
                           {task.jobNumber}
                           {task.dueDate && ` · due ${relativeTime(task.dueDate)}`}
                         </p>

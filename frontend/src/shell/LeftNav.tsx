@@ -36,14 +36,14 @@ export function LeftNav({
     <nav
       aria-label="Main"
       className={cn(
-        'flex h-full flex-col border-r border-white/10 bg-ink-950/80 backdrop-blur-xl',
+        'flex h-full flex-col border-r border-line/10 bg-sunken/80 backdrop-blur-xl',
         isMobile ? 'w-full' : collapsed ? 'w-nav-collapsed' : 'w-nav',
         'transition-[width] duration-200',
       )}
     >
       <div
         className={cn(
-          'flex h-topbar shrink-0 items-center border-b border-white/10',
+          'flex h-topbar shrink-0 items-center border-b border-line/10',
           showLabels ? 'justify-between px-4' : 'justify-center px-2',
         )}
       >
@@ -53,7 +53,7 @@ export function LeftNav({
             type="button"
             onClick={onToggleCollapsed}
             aria-label="Collapse navigation"
-            className="rounded-md p-1 text-gray-500 transition hover:bg-white/5 hover:text-gray-200"
+            className="rounded-md p-1 text-fg-3 transition hover:bg-line/5 hover:text-fg-2"
           >
             <PanelLeftClose className="h-4 w-4" />
           </button>
@@ -65,7 +65,7 @@ export function LeftNav({
           type="button"
           onClick={onToggleCollapsed}
           aria-label="Expand navigation"
-          className="mx-auto mt-2 rounded-md p-1.5 text-gray-500 transition hover:bg-white/5 hover:text-gray-200"
+          className="mx-auto mt-2 rounded-md p-1.5 text-fg-3 transition hover:bg-line/5 hover:text-fg-2"
         >
           <PanelLeftOpen className="h-4 w-4" />
         </button>
@@ -75,7 +75,7 @@ export function LeftNav({
         {sections.map((section) => (
           <div key={section.id} className="mb-4 last:mb-0">
             {showLabels && (
-              <p className="px-2 pb-1.5 text-2xs font-semibold uppercase tracking-wider text-gray-600">
+              <p className="px-2 pb-1.5 text-2xs font-semibold uppercase tracking-wider text-fg-4">
                 {section.label}
               </p>
             )}
@@ -93,8 +93,8 @@ export function LeftNav({
                         'group flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm font-medium transition',
                         showLabels ? 'justify-start' : 'justify-center',
                         isActive
-                          ? 'bg-brand-600/15 text-white'
-                          : 'text-gray-400 hover:bg-white/5 hover:text-gray-100',
+                          ? 'bg-brand-600/15 text-fg'
+                          : 'text-fg-3 hover:bg-line/5 hover:text-fg',
                       )
                     }
                   >
@@ -103,7 +103,7 @@ export function LeftNav({
                         <Icon
                           className={cn(
                             'h-4 w-4 shrink-0',
-                            isActive ? 'text-brand-300' : 'text-gray-500 group-hover:text-gray-300',
+                            isActive ? 'text-brand-300' : 'text-fg-3 group-hover:text-fg-2',
                           )}
                         />
                         {showLabels && <span className="flex-1 truncate">{item.label}</span>}

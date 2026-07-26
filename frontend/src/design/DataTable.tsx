@@ -67,13 +67,13 @@ export function DataTable<T>({
     <div className={cn('overflow-x-auto', className)}>
       <table className="w-full border-collapse text-left">
         <thead>
-          <tr className="border-b border-white/10">
+          <tr className="border-b border-line/10">
             {columns.map((col) => (
               <th
                 key={col.id}
                 scope="col"
                 className={cn(
-                  'whitespace-nowrap px-3 py-2 text-2xs font-medium uppercase tracking-wide text-gray-500',
+                  'whitespace-nowrap px-3 py-2 text-2xs font-medium uppercase tracking-wide text-fg-3',
                   col.hideOnMobile && 'hidden md:table-cell',
                   col.className,
                 )}
@@ -102,9 +102,9 @@ export function DataTable<T>({
                     : undefined
                 }
                 className={cn(
-                  'border-b border-white/5 transition last:border-0',
+                  'border-b border-line/5 transition last:border-0',
                   onRowClick &&
-                    'cursor-pointer hover:bg-white/[0.03] focus-visible:bg-white/[0.05] focus-visible:outline-none',
+                    'cursor-pointer hover:bg-line/[0.03] focus-visible:bg-line/[0.05] focus-visible:outline-none',
                   tone && ROW_TONE[tone],
                 )}
               >
@@ -112,7 +112,7 @@ export function DataTable<T>({
                   <td
                     key={col.id}
                     className={cn(
-                      'px-3 py-2.5 align-middle text-sm text-gray-300',
+                      'px-3 py-2.5 align-middle text-sm text-fg-2',
                       col.hideOnMobile && 'hidden md:table-cell',
                       col.className,
                     )}

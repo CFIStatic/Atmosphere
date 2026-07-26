@@ -45,7 +45,7 @@ export function AgentActivityFeed({
   }
 
   return (
-    <ul className={cn('divide-y divide-white/5', className)}>
+    <ul className={cn('divide-y divide-line/5', className)}>
       {visible.map((run) => {
         const Icon = ICONS[run.outcome];
         const tone = runOutcomeTone[run.outcome];
@@ -59,9 +59,9 @@ export function AgentActivityFeed({
             </span>
 
             <div className="min-w-0 flex-1">
-              <p className="text-xs leading-relaxed text-gray-300">{run.summary}</p>
+              <p className="text-xs leading-relaxed text-fg-2">{run.summary}</p>
 
-              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-gray-600">
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-fg-4">
                 {compact && (
                   <>
                     <ToneText tone={tone} className="font-medium">
@@ -70,7 +70,7 @@ export function AgentActivityFeed({
                     <span>·</span>
                   </>
                 )}
-                <span className="font-medium text-gray-500">{run.agentName}</span>
+                <span className="font-medium text-fg-3">{run.agentName}</span>
                 <span>·</span>
                 <span>{relativeTime(run.at)}</span>
 

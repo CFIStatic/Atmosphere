@@ -12,7 +12,7 @@ const KIND_TONE = {
   mitigation: 'border-l-state-warn',
   monitoring: 'border-l-brand-400',
   reconstruction: 'border-l-state-ok',
-  meeting: 'border-l-gray-600',
+  meeting: 'border-l-fg-4',
 } as const;
 
 /**
@@ -52,13 +52,13 @@ export function SchedulePage() {
         ) : (
           Object.entries(byDay).map(([day, dayEvents]) => (
             <section key={day}>
-              <h2 className="mb-2 flex items-baseline gap-2 text-xs font-semibold text-gray-300">
+              <h2 className="mb-2 flex items-baseline gap-2 text-xs font-semibold text-fg-2">
                 {new Date(day).toLocaleDateString('en-US', {
                   weekday: 'long',
                   month: 'short',
                   day: 'numeric',
                 })}
-                <span className="text-2xs font-normal text-gray-600">
+                <span className="text-2xs font-normal text-fg-4">
                   {dayEvents.length} appointment{dayEvents.length === 1 ? '' : 's'}
                 </span>
               </h2>
@@ -76,16 +76,16 @@ export function SchedulePage() {
                     <CardBody className="flex flex-wrap items-start justify-between gap-3 p-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-xs text-gray-400">
+                          <span className="font-mono text-xs text-fg-3">
                             {formatTime(event.start)}–{formatTime(event.end)}
                           </span>
-                          <span className="truncate text-sm font-medium text-white">
+                          <span className="truncate text-sm font-medium text-fg">
                             {event.title}
                           </span>
                           <Badge tone="idle">{event.kind}</Badge>
                         </div>
 
-                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-gray-600">
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-fg-4">
                           {event.jobId && event.jobNumber && (
                             <Link
                               to={`/jobs/${event.jobId}`}
