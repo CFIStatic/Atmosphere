@@ -4,7 +4,7 @@ import type {
   AgentStatus,
   ApprovalStatus,
   EstimateStatus,
-  IntegrationStatus,
+  ConnectionStatus,
   InvoiceStatus,
   JobHealth,
   JobPhase,
@@ -146,18 +146,24 @@ export const invoiceStatusTone: Record<InvoiceStatus, Tone> = {
   disputed: 'danger',
 };
 
-export const integrationStatusTone: Record<IntegrationStatus, Tone> = {
+export const connectionStatusTone: Record<ConnectionStatus, Tone> = {
   connected: 'ok',
   degraded: 'warn',
-  disconnected: 'danger',
-  not_configured: 'idle',
+  // An expired token is not the same as an outage: it needs a person, so it
+  // reads as an error rather than a transient warning.
+  error: 'danger',
+  disconnected: 'idle',
+  not_connected: 'idle',
+  coming_soon: 'idle',
 };
 
-export const integrationStatusLabel: Record<IntegrationStatus, string> = {
+export const connectionStatusLabel: Record<ConnectionStatus, string> = {
   connected: 'Connected',
   degraded: 'Degraded',
+  error: 'Action needed',
   disconnected: 'Disconnected',
-  not_configured: 'Not configured',
+  not_connected: 'Not connected',
+  coming_soon: 'Coming soon',
 };
 
 /** Impact direction → tone. Neutral impacts stay grey so real signal stands out. */

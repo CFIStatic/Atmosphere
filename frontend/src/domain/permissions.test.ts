@@ -43,8 +43,8 @@ describe('field technician restrictions', () => {
 });
 
 describe('capability boundaries', () => {
-  it('restricts integration management to office managers', () => {
-    const allowed = ALL_ROLES.filter((r) => can(r, 'manage_integrations'));
+  it('restricts connection management to office managers', () => {
+    const allowed = ALL_ROLES.filter((r) => can(r, 'manage_connections'));
     expect(allowed).toEqual(['office_manager']);
   });
 

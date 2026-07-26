@@ -251,17 +251,89 @@ export interface Workflow {
   lastEditedAt: string;
 }
 
-export type IntegrationStatus = 'connected' | 'degraded' | 'disconnected' | 'not_configured';
+/**
+ * Connected systems.
+ *
+ * A restoration company does not run on one platform — the estimate lives in
+ * Xactimate, the assignment came from a carrier portal, the photos are in
+ * Encircle, the invoice is in QuickBooks, and the signed authorization is a PDF
+ * on a shared drive. Atmosphere is only as useful as the number of those it can
+ * reach, so connections are a first-class surface rather than a settings page.
+ */
 
-export interface Integration {
+export type ConnectionStatus =
+  | 'connected'
+  | 'degraded' // reachable but failing some operations
+  | 'error' // authenticated but broken (expired token, revoked scope)
+  | 'disconnected' // was connected, no longer
+  | 'not_connected' // available, never set up
+  | 'coming_soon'; // catalogued but not yet buildable
+
+export type ConnectionCategory =
+  | 'estimating'
+  | 'claims'
+  | 'job_management'
+  | 'documentation'
+  | 'accounting'
+  | 'communication'
+  | 'storage'
+  | 'scheduling'
+  | 'equipment'
+  | 'workforce';
+
+/**
+ * How a system is reached. This is not a detail — it determines what the user
+ * has to do, and how much can go wrong later. An OAuth token silently expires;
+ * a desktop agent stops when someone reboots the estimating workstation; a
+ * carrier portal needs a human at the other end to approve the request.
+ */
+export type AuthMethod =
+  'oauth' | 'api_key' | 'credentials' | 'desktop_agent' | 'file_share' | 'partner_request';
+
+export interface DataFlow {
+  direction: 'in' | 'out' | 'both';
+  label: string;
+}
+
+export interface Connection {
   id: string;
   name: string;
-  category: 'job_management' | 'estimating' | 'accounting' | 'communication' | 'storage';
-  status: IntegrationStatus;
-  description: string;
+  vendor: string;
+  category: ConnectionCategory;
+  status: ConnectionStatus;
+  authMethod: AuthMethod;
+  /** One line: what this system is, in a restorer's terms. */
+  summary: string;
+  /** What actually moves, and which way. */
+  dataFlows: DataFlow[];
+  /** Agent capabilities that stop working without this connection. */
+  powers: AgentCapability[];
   lastSyncAt: string | null;
   recordsSynced: number | null;
+  /** Present when status is degraded or error — the real failure text. */
   issue: string | null;
+  /** The account or endpoint this is bound to, once connected. */
+  accountLabel: string | null;
+  /** Surfaced first in the catalogue; the systems most shops already run. */
+  popular: boolean;
+
+  /**
+   * The vendor's brand colour, used for the monogram tile.
+   *
+   * Approximate rather than sampled from an official kit — close enough that
+   * each system is recognisable at a glance, and replaced entirely once a real
+   * mark is supplied via `logoUrl`.
+   */
+  brandColor: string;
+
+  /**
+   * Path to a real logo asset, served from /public. When present it replaces
+   * the monogram, so adding proper marks is a data change and not a code one.
+   */
+  logoUrl?: string;
+
+  /** Overrides the derived monogram where initials would read badly. */
+  mark?: string;
 }
 
 // ── Approvals: the trust contract ───────────────────────────────────────────

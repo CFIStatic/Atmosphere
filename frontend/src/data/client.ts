@@ -5,7 +5,7 @@ import type {
   Communication,
   Customer,
   Estimate,
-  Integration,
+  Connection,
   Invoice,
   Job,
   JobDocument,
@@ -42,6 +42,7 @@ function resolve<T>(value: T): Promise<T> {
 // makes the execution and evidence states demonstrable rather than static art.
 let approvals: ApprovalRequest[] = structuredClone(seed.APPROVALS);
 let tasks: Task[] = structuredClone(seed.TASKS);
+let connections: Connection[] = structuredClone(seed.CONNECTIONS);
 const agentRuns: AgentRun[] = structuredClone(seed.AGENT_RUNS);
 
 // ── Reads ───────────────────────────────────────────────────────────────────
@@ -136,8 +137,51 @@ export const dataClient = {
     list: (): Promise<Workflow[]> => resolve(seed.WORKFLOWS),
   },
 
-  integrations: {
-    list: (): Promise<Integration[]> => resolve(seed.INTEGRATIONS),
+  connections: {
+    list: (): Promise<Connection[]> => resolve(connections),
+    get: (id: string): Promise<Connection | null> =>
+      resolve(connections.find((c) => c.id === id) ?? null),
+
+    /**
+     * Real providers need an OAuth round-trip, an agent install, or a human at
+     * a carrier to approve the request. Until those exist this flips the record
+     * so the surrounding UI — dependent agents, sync state, the health banner —
+     * can be exercised against something that actually changes.
+     */
+    connect: async (id: string): Promise<Connection | null> => {
+      connections = connections.map((c) =>
+        c.id === id
+          ? {
+              ...c,
+              status: 'connected',
+              lastSyncAt: new Date().toISOString(),
+              recordsSynced: c.recordsSynced ?? 0,
+              issue: null,
+              accountLabel: c.accountLabel ?? 'Lone Star Restoration',
+            }
+          : c,
+      );
+      return resolve(connections.find((c) => c.id === id) ?? null);
+    },
+
+    disconnect: async (id: string): Promise<Connection | null> => {
+      connections = connections.map((c) =>
+        c.id === id
+          ? { ...c, status: 'disconnected', issue: null, lastSyncAt: null, accountLabel: null }
+          : c,
+      );
+      return resolve(connections.find((c) => c.id === id) ?? null);
+    },
+
+    /** Clears a degraded/error state the way a successful retry would. */
+    resync: async (id: string): Promise<Connection | null> => {
+      connections = connections.map((c) =>
+        c.id === id
+          ? { ...c, status: 'connected', issue: null, lastSyncAt: new Date().toISOString() }
+          : c,
+      );
+      return resolve(connections.find((c) => c.id === id) ?? null);
+    },
   },
 
   metrics: {

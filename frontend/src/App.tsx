@@ -52,8 +52,8 @@ const AgentsPage = lazy(() =>
 const WorkflowsPage = lazy(() =>
   import('./features/workflows/WorkflowsPage').then((m) => ({ default: m.WorkflowsPage })),
 );
-const IntegrationsPage = lazy(() =>
-  import('./features/integrations/IntegrationsPage').then((m) => ({ default: m.IntegrationsPage })),
+const ConnectionsPage = lazy(() =>
+  import('./features/connections/ConnectionsPage').then((m) => ({ default: m.ConnectionsPage })),
 );
 const SettingsPage = lazy(() =>
   import('./features/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })),
@@ -173,7 +173,7 @@ export default function App() {
                   <Route path="/financials" element={<FinancialsPage />} />
                   <Route path="/agents" element={<AgentsPage />} />
                   <Route path="/workflows" element={<WorkflowsPage />} />
-                  <Route path="/integrations" element={<IntegrationsPage />} />
+                  <Route path="/connections" element={<ConnectionsPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route
                     path="/field"

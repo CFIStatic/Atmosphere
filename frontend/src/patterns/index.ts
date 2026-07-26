@@ -7,6 +7,7 @@
  */
 export { ActionProposal } from './ActionProposal';
 export { AgentActivityFeed } from './AgentActivityFeed';
+export { ConnectionLogo } from './ConnectionLogo';
 export { KpiTile } from './KpiTile';
 export { PageHeader, PageBody } from './PageHeader';
 export * from './tone';

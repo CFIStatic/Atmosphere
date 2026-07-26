@@ -7,7 +7,7 @@ import {
   Gauge,
   Layers,
   ListTodo,
-  Plug,
+  Cable,
   Settings,
   Users,
   Wallet,
@@ -78,12 +78,14 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    id: 'connected',
+    label: 'Connected Systems',
+    items: [{ key: 'connections', label: 'Connections', to: '/connections', icon: Cable }],
+  },
+  {
     id: 'system',
     label: 'System',
-    items: [
-      { key: 'integrations', label: 'Integrations', to: '/integrations', icon: Plug },
-      { key: 'settings', label: 'Settings', to: '/settings', icon: Settings },
-    ],
+    items: [{ key: 'settings', label: 'Settings', to: '/settings', icon: Settings }],
   },
 ];
 

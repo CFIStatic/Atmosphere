@@ -27,7 +27,7 @@ const keys = {
   invoices: ['invoices'] as const,
   schedule: ['schedule'] as const,
   workflows: ['workflows'] as const,
-  integrations: ['integrations'] as const,
+  connections: ['connections'] as const,
   metrics: ['metrics'] as const,
   people: ['people'] as const,
 };
@@ -100,8 +100,28 @@ export const useSchedule = () =>
   useQuery({ queryKey: keys.schedule, queryFn: dataClient.schedule.list });
 export const useWorkflows = () =>
   useQuery({ queryKey: keys.workflows, queryFn: dataClient.workflows.list });
-export const useIntegrations = () =>
-  useQuery({ queryKey: keys.integrations, queryFn: dataClient.integrations.list });
+export const useConnections = () =>
+  useQuery({ queryKey: keys.connections, queryFn: dataClient.connections.list });
+
+/**
+ * Connect / disconnect / resync all invalidate the same key. Jobs and approvals
+ * are invalidated too: losing a connection changes what the agents can see, and
+ * a stale board would imply coverage the system no longer has.
+ */
+function useConnectionMutation(fn: (id: string) => Promise<unknown>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.connections });
+      qc.invalidateQueries({ queryKey: keys.agents });
+    },
+  });
+}
+
+export const useConnectApp = () => useConnectionMutation(dataClient.connections.connect);
+export const useDisconnectApp = () => useConnectionMutation(dataClient.connections.disconnect);
+export const useResyncApp = () => useConnectionMutation(dataClient.connections.resync);
 export const useMetrics = () =>
   useQuery({ queryKey: keys.metrics, queryFn: dataClient.metrics.list });
 export const usePeople = () => useQuery({ queryKey: keys.people, queryFn: dataClient.people.list });

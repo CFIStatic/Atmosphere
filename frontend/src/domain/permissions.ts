@@ -19,7 +19,7 @@ export type NavKey =
   | 'financials'
   | 'agents'
   | 'workflows'
-  | 'integrations'
+  | 'connections'
   | 'settings';
 
 export type Capability =
@@ -30,7 +30,7 @@ export type Capability =
   | 'view_all_jobs'
   | 'view_financials'
   | 'manage_workflows'
-  | 'manage_integrations'
+  | 'manage_connections'
   | 'manage_team';
 
 interface RoleProfile {
@@ -54,7 +54,7 @@ const EVERYTHING: NavKey[] = [
   'financials',
   'agents',
   'workflows',
-  'integrations',
+  'connections',
   'settings',
 ];
 
@@ -81,7 +81,7 @@ export const ROLE_PROFILES: Record<Role, RoleProfile> = {
   },
   project_manager: {
     home: '/overview',
-    nav: EVERYTHING.filter((k) => k !== 'integrations'),
+    nav: EVERYTHING.filter((k) => k !== 'connections'),
     capabilities: [
       'approve_schedule',
       'approve_scope',
@@ -102,7 +102,7 @@ export const ROLE_PROFILES: Record<Role, RoleProfile> = {
       'view_all_jobs',
       'view_financials',
       'manage_workflows',
-      'manage_integrations',
+      'manage_connections',
       'manage_team',
     ],
     fieldFirst: false,
