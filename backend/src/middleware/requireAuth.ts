@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import { createAnonClient } from '../lib/supabase.js';
 import { setSessionCookies, clearSessionCookies } from '../lib/session.js';
 import { unauthorized, serviceUnavailable } from '../lib/errors.js';
+import { isTransient } from '../lib/upstream.js';
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -13,18 +14,6 @@ declare global {
       accessToken?: string;
     }
   }
-}
-
-/**
- * Distinguishes a *transient* failure (network blip / upstream 5xx) from a
- * genuine *auth* failure (invalid or expired token). Transient failures must
- * NOT invalidate a user's session — otherwise a brief Supabase outage would log
- * everyone out and delete their still-valid cookies.
- */
-function isTransient(error: { status?: number; name?: string }): boolean {
-  if (error.name === 'AuthRetryableFetchError') return true;
-  const status = error.status;
-  return status === undefined || status === 0 || status >= 500;
 }
 
 /**
