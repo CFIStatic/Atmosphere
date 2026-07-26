@@ -10,6 +10,7 @@ import {
   Lock,
   MonitorCog,
   RefreshCw,
+  ExternalLink,
   Search,
   Server,
   ShieldCheck,
@@ -30,6 +31,7 @@ import { ConnectionLogo, PageBody, PageHeader } from '../../patterns';
 import { connectionStatusLabel, connectionStatusTone } from '../../patterns/tone';
 import { useConnectApp, useConnections, useDisconnectApp, useResyncApp } from '../../data/hooks';
 import { CAPABILITY_LABELS } from '../../domain/routing';
+import { PROTOCOL_LABELS, authSpecFor } from '../../domain/connectionAuth';
 import { can } from '../../domain/permissions';
 import {
   blindCapabilities,
@@ -370,6 +372,7 @@ function ConnectionDrawer({
   const live = isLive(connection);
   const AuthIcon = AUTH_ICONS[connection.authMethod];
   const comingSoon = connection.status === 'coming_soon';
+  const auth = authSpecFor(connection.id, connection.authMethod);
 
   return (
     <Drawer
@@ -490,15 +493,96 @@ function ConnectionDrawer({
           </Section>
         )}
 
-        <Section label="How it connects">
-          <div className="flex items-start gap-2 text-xs text-fg-2">
-            <AuthIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-fg-4" />
-            <div>
-              <p>{AUTH_LABELS[connection.authMethod]}</p>
-              <p className="mt-0.5 text-2xs leading-relaxed text-fg-4">
-                {AUTH_NOTES[connection.authMethod]}
-              </p>
+        <Section label="How Atmosphere signs in">
+          <div className="space-y-3">
+            <div className="flex items-start gap-2 text-xs text-fg-2">
+              <AuthIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-fg-4" />
+              <div className="min-w-0">
+                <p className="font-medium">{PROTOCOL_LABELS[auth.protocol]}</p>
+                {auth.authority && (
+                  <p className="mt-0.5 text-2xs leading-relaxed text-fg-4">{auth.authority}</p>
+                )}
+              </div>
             </div>
+
+            {auth.partnerGated && (
+              <p className="rounded-lg border border-state-info/25 bg-state-info/[0.07] px-2.5 py-2 text-2xs leading-relaxed text-fg-2">
+                <span className="font-medium text-state-info">Partner approval required.</span> This
+                vendor gates access behind a signed agreement — it cannot be self-served, and
+                approval runs on their timescale.
+              </p>
+            )}
+
+            <div>
+              <p className="mb-1.5 text-2xs font-medium text-fg-3">Setup</p>
+              <ol className="space-y-1.5">
+                {auth.setupSteps.map((step, i) => (
+                  <li key={i} className="flex gap-2 text-2xs leading-relaxed text-fg-2">
+                    <span className="mt-px grid h-4 w-4 shrink-0 place-items-center rounded-full bg-raised text-[9px] font-semibold text-fg-3">
+                      {i + 1}
+                    </span>
+                    {step}
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            {auth.scopes.length > 0 && (
+              <div>
+                <p className="mb-1.5 text-2xs font-medium text-fg-3">Permissions requested</p>
+                <div className="flex flex-wrap gap-1">
+                  {auth.scopes.map((scope) => (
+                    <code
+                      key={scope}
+                      className="rounded border border-line/10 bg-raised/60 px-1.5 py-0.5 font-mono text-[10px] text-fg-3"
+                    >
+                      {scope}
+                    </code>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {auth.prerequisites.length > 0 && (
+              <div>
+                <p className="mb-1.5 text-2xs font-medium text-fg-3">Before you start</p>
+                <ul className="space-y-1">
+                  {auth.prerequisites.map((p, i) => (
+                    <li key={i} className="flex gap-2 text-2xs leading-relaxed text-fg-3">
+                      <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-fg-4" />
+                      {p}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div>
+              <p className="mb-1.5 text-2xs font-medium text-fg-3">Credential handling</p>
+              <dl className="space-y-1.5">
+                <CredentialRow label="Stored" value={auth.credential.stored} />
+                <CredentialRow label="Kept alive" value={auth.credential.refresh} />
+                <CredentialRow label="How you revoke it" value={auth.credential.revocation} />
+              </dl>
+            </div>
+
+            {/* The field support will actually live in. */}
+            <div className="rounded-lg border border-line/10 bg-raised/40 px-2.5 py-2">
+              <p className="text-2xs font-medium text-fg-3">How this breaks in practice</p>
+              <p className="mt-1 text-2xs leading-relaxed text-fg-2">{auth.failureMode}</p>
+            </div>
+
+            {auth.docsUrl && (
+              <a
+                href={auth.docsUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex items-center gap-1 text-2xs font-medium text-brand-400 transition hover:text-brand-300"
+              >
+                Vendor documentation
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
           </div>
         </Section>
 
@@ -533,26 +617,20 @@ function ConnectionDrawer({
   );
 }
 
-const AUTH_NOTES: Record<AuthMethod, string> = {
-  oauth:
-    'You sign in at the vendor; Atmosphere never sees the password and access can be revoked there at any time.',
-  api_key:
-    'Generate a key in the vendor’s admin settings and paste it in. Scope it to the minimum the integration needs.',
-  credentials:
-    'The portal has no API, so Atmosphere signs in as a dedicated service user. Create one rather than reusing a person’s login.',
-  desktop_agent:
-    'Runs on the machine that hosts the software. It stops when that machine sleeps or reboots, which is the usual cause of a stale sync.',
-  file_share:
-    'Point Atmosphere at a UNC path or mount. Requires network reachability and read access for the service account.',
-  partner_request:
-    'The network has to approve the connection on their side. Expect a lead time measured in days, not minutes.',
-};
-
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
       <p className="mb-2 text-2xs font-semibold uppercase tracking-wider text-fg-4">{label}</p>
       {children}
+    </div>
+  );
+}
+
+function CredentialRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-2xs text-fg-4">{label}</dt>
+      <dd className="text-2xs leading-relaxed text-fg-2">{value}</dd>
     </div>
   );
 }
