@@ -61,6 +61,53 @@ export interface RecoveryCredential {
   refreshToken?: string;
 }
 
+/** A website the organization has connected for the AI to work in. */
+export interface WebConnection {
+  id: string;
+  label: string;
+  siteUrl: string;
+  loginUrl: string | null;
+  username: string;
+  status: 'unverified' | 'verified' | 'failed';
+  lastVerifiedAt: string | null;
+  lastError: string | null;
+  createdAt: string;
+}
+
+/** One action the AI took during a run — the audit trail for a task. */
+export interface WebRunStep {
+  index: number;
+  action: string;
+  detail: string;
+  url: string;
+  error?: string;
+}
+
+export type WebRunKind = 'pull' | 'push';
+export type WebRunStatus = 'queued' | 'running' | 'succeeded' | 'failed';
+
+export interface WebRun {
+  id: string;
+  connectionId: string;
+  kind: WebRunKind;
+  instruction: string;
+  status: WebRunStatus;
+  result: { summary: string; records: unknown[] } | null;
+  steps: WebRunStep[];
+  error: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+}
+
+export interface WebConnectionInput {
+  label: string;
+  siteUrl: string;
+  loginUrl?: string;
+  username: string;
+  password: string;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -171,6 +218,51 @@ export const api = {
     }),
 
   getMembers: () => request<{ members: OrgMember[] }>('/api/org/members', { method: 'GET' }),
+
+  // ---- Web Access ----
+  webAccessStatus: () =>
+    request<{ enabled: boolean; capacityAvailable: boolean; maxSteps: number }>(
+      '/api/web-access/status',
+      { method: 'GET' },
+    ),
+
+  getWebConnections: () =>
+    request<{ connections: WebConnection[] }>('/api/web-access/connections', { method: 'GET' }),
+
+  createWebConnection: (input: WebConnectionInput) =>
+    request<{ connection: WebConnection }>('/api/web-access/connections', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  updateWebConnection: (id: string, input: Partial<WebConnectionInput>) =>
+    request<{ connection: WebConnection }>(`/api/web-access/connections/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+
+  deleteWebConnection: (id: string) =>
+    request<{ ok: boolean }>(`/api/web-access/connections/${id}`, { method: 'DELETE' }),
+
+  verifyWebConnection: (id: string) =>
+    request<{ ok: boolean; reason?: string }>(`/api/web-access/connections/${id}/verify`, {
+      method: 'POST',
+    }),
+
+  startWebRun: (input: {
+    connectionId: string;
+    kind: WebRunKind;
+    instruction: string;
+    data?: unknown;
+  }) =>
+    request<{ run: WebRun }>('/api/web-access/runs', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  getWebRuns: () => request<{ runs: WebRun[] }>('/api/web-access/runs', { method: 'GET' }),
+
+  getWebRun: (id: string) => request<{ run: WebRun }>(`/api/web-access/runs/${id}`, { method: 'GET' }),
 };
 
 /** Human-readable labels for roles and work types (shared UI copy). */

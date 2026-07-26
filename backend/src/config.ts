@@ -82,6 +82,56 @@ export const config = {
   // in the Supabase dashboard under Authentication → URL Configuration.
   passwordResetRedirectUrl:
     process.env.PASSWORD_RESET_REDIRECT_URL ?? `${frontendOrigins[0]}/reset-password`,
+
+  webAccess: {
+    // Both secrets are optional. Without them the feature reports itself as
+    // unavailable and every other part of the app carries on unaffected —
+    // the same posture as the optional service-role key.
+    //
+    // The encryption key seals every stored site password (AES-256-GCM) before
+    // it reaches Postgres. Keeping it out of the database is what stops a
+    // database leak from yielding usable logins for other people's systems.
+    encryptionKey: process.env.WEB_ACCESS_KEY ?? devOnly('atmosphere-dev-web-access-key-do-not-use-in-production') ?? '',
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
+
+    model: process.env.WEB_ACCESS_MODEL ?? 'claude-opus-5',
+    // Browser work is agentic and tool-heavy, where higher effort pays for
+    // itself in fewer wasted round trips.
+    effort: (process.env.WEB_ACCESS_EFFORT ?? 'high') as 'low' | 'medium' | 'high' | 'xhigh' | 'max',
+
+    // A visible browser is useful when developing a new site integration.
+    headless: (process.env.WEB_ACCESS_HEADLESS ?? 'true') !== 'false',
+    // Set when Chromium lives somewhere Playwright will not find on its own.
+    browserExecutablePath: process.env.WEB_ACCESS_BROWSER_PATH || undefined,
+
+    // Hard stops. A stuck run must cost a bounded amount of money and time.
+    maxSteps: Number(process.env.WEB_ACCESS_MAX_STEPS ?? 30),
+    runTimeoutMs: Number(process.env.WEB_ACCESS_RUN_TIMEOUT_MS ?? 5 * 60 * 1000),
+    navigationTimeoutMs: Number(process.env.WEB_ACCESS_NAV_TIMEOUT_MS ?? 30 * 1000),
+    // Browsers are heavy; refuse work rather than exhaust the host.
+    maxConcurrentRuns: Number(process.env.WEB_ACCESS_MAX_CONCURRENT_RUNS ?? 2),
+
+    // Escape hatch for developing against a site running on your own machine.
+    // Ignored in production, where reaching a private address is the SSRF the
+    // guard exists to stop.
+    allowPrivateAddresses: !isProduction && process.env.WEB_ACCESS_ALLOW_PRIVATE === 'true',
+
+    // Hosts the AI may visit in addition to the connection's own site. Sites
+    // that hand off to an identity provider need it listed here.
+    extraAllowedHosts: (process.env.WEB_ACCESS_ALLOWED_HOSTS ?? '')
+      .split(',')
+      .map((host) => host.trim().toLowerCase())
+      .filter(Boolean),
+  },
 } as const;
+
+/**
+ * Web Access needs a key to seal credentials with and a model to drive the
+ * browser. Missing either one, the routes stay reachable but report the
+ * feature as unavailable instead of failing mid-run.
+ */
+export const webAccessEnabled = Boolean(
+  config.webAccess.encryptionKey && config.webAccess.anthropicApiKey,
+);
 
 export type AppConfig = typeof config;

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   api,
@@ -123,6 +124,26 @@ export function DashboardPage() {
               </p>
             </div>
           </div>
+
+          {/* Web Access */}
+          <Link
+            to="/web-access"
+            className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-ink-800/60 p-5 backdrop-blur transition hover:border-brand-500/40 hover:bg-ink-800"
+          >
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                Web Access
+              </p>
+              <p className="mt-1.5 text-lg font-semibold text-white">Work in your other systems</p>
+              <p className="mt-1 text-sm text-gray-400">
+                Sign in to carrier portals and vendor sites, pull data back out, and enter data —
+                without leaving Atmosphere.
+              </p>
+            </div>
+            <span className="shrink-0 rounded-lg bg-brand-600/20 px-3 py-1.5 text-sm font-medium text-brand-200">
+              Open
+            </span>
+          </Link>
 
           {/* Device PIN */}
           <div className="mt-4">

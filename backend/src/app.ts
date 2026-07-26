@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
+import { webAccessRouter } from './routes/webAccess.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 
@@ -34,6 +35,12 @@ export function createApp(): Express {
   );
 
   // Body + cookie parsing (with a small JSON size cap).
+  //
+  // Web Access is the one exception: a data-entry run carries the rows to be
+  // entered, which legitimately runs to more than a login form's worth of JSON.
+  // It is parsed first, with its own larger cap, so the tight limit still
+  // applies everywhere else.
+  app.use('/api/web-access', express.json({ limit: '256kb' }));
   app.use(express.json({ limit: '10kb' }));
   app.use(cookieParser());
 
@@ -41,6 +48,7 @@ export function createApp(): Express {
   app.use('/api', healthRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
+  app.use('/api/web-access', webAccessRouter);
 
   // 404 + error handling (must be last).
   app.use(notFound);

@@ -123,3 +123,61 @@ export const joinOrgSchema = z.object({
 
 export type CreateOrgInput = z.infer<typeof createOrgSchema>;
 export type JoinOrgInput = z.infer<typeof joinOrgSchema>;
+
+/**
+ * Web Access — connections to outside websites the AI signs into, and the
+ * tasks it is asked to perform there.
+ *
+ * The site address is only shape-checked here; whether it is actually reachable
+ * (and not pointed at a private network address) is settled in webUrlGuard,
+ * which has to resolve DNS and so cannot live in a synchronous schema.
+ */
+const siteUrlField = z
+  .string({ required_error: 'Site address is required' })
+  .trim()
+  .max(2000, 'That address is too long')
+  .url('Enter a full address, including https://');
+
+export const createWebConnectionSchema = z.object({
+  label: z
+    .string({ required_error: 'Give this connection a name' })
+    .trim()
+    .min(2, 'That name is too short')
+    .max(80, 'That name is too long'),
+  siteUrl: siteUrlField,
+  // Only needed when the sign-in form is not on the site's landing page.
+  loginUrl: siteUrlField.optional().or(z.literal('')).transform((v) => (v ? v : undefined)),
+  username: z
+    .string({ required_error: 'Username is required' })
+    .trim()
+    .min(1, 'Username is required')
+    .max(200, 'That username is too long'),
+  password: z
+    .string({ required_error: 'Password is required' })
+    .min(1, 'Password is required')
+    .max(500, 'That password is too long'),
+});
+
+/** Everything is optional: this is the edit form, including "just rotate the password". */
+export const updateWebConnectionSchema = createWebConnectionSchema.partial().refine(
+  (value) => Object.values(value).some((field) => field !== undefined),
+  { message: 'Nothing to update' },
+);
+
+export const createWebRunSchema = z.object({
+  connectionId: z.string({ required_error: 'Choose a connection' }).uuid('Choose a connection'),
+  kind: z.enum(['pull', 'push'], {
+    errorMap: () => ({ message: 'Choose whether to pull data or enter data' }),
+  }),
+  instruction: z
+    .string({ required_error: 'Describe the task' })
+    .trim()
+    .min(4, 'Describe the task in a little more detail')
+    .max(4000, 'That description is too long'),
+  // Rows to enter for a push. Free-form on purpose — every site wants a
+  // different shape, and the agent reads it as context rather than a contract.
+  data: z.unknown().optional(),
+});
+
+export type CreateWebConnectionInput = z.infer<typeof createWebConnectionSchema>;
+export type CreateWebRunInput = z.infer<typeof createWebRunSchema>;
