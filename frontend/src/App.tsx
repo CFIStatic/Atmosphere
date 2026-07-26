@@ -7,6 +7,7 @@ import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { TechnicianPage } from './pages/TechnicianPage';
 import { SpinnerIcon } from './components/icons';
 
 function FullScreenSpinner() {
@@ -14,7 +15,7 @@ function FullScreenSpinner() {
     <div
       role="status"
       aria-live="polite"
-      className="grid min-h-screen place-items-center bg-ink-900 text-brand-300"
+      className="grid min-h-screen place-items-center bg-paper-100 text-brand-600"
     >
       <SpinnerIcon className="animate-spin" width={28} height={28} />
       <span className="sr-only">Loading…</span>
@@ -67,6 +68,20 @@ export default function App() {
               <ProtectedRoute>
                 <RequireOnboarded>
                   <DashboardPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* The technician app. Open to every onboarded member — a project
+              manager reviewing a job needs the same capture tools a field
+              technician does. */}
+          <Route
+            path="/technician"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <TechnicianPage />
                 </RequireOnboarded>
               </ProtectedRoute>
             }

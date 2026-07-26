@@ -25,6 +25,9 @@ protected Postgres schema.
    server so no Supabase token is ever exposed to page JavaScript.
 5. **PIN sign-in** — an optional 4-digit PIN for fast repeat sign-in, bound to a single
    device (see below).
+6. **Technician app** (`/technician`) — the field tool: record audio and video, hold a
+   spoken conversation with an assistant, and have the camera name what it sees (see
+   below).
 
 ## Why this shape?
 
@@ -144,6 +147,9 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | POST   | `/api/org`           | cookie | `{ name, role, workType }`    | Create an org and join as first member       |
 | POST   | `/api/org/join`      | cookie | `{ joinCode, role, workType }`| Link to an existing org by join code         |
 | GET    | `/api/org/members`   | cookie | —                             | Linked accounts in the caller's org          |
+| GET    | `/api/technician/capabilities` | cookie | —                   | Whether the assistant and STT are configured |
+| POST   | `/api/technician/assist`       | cookie | `{ message, history, context }` | One turn of the voice conversation |
+| POST   | `/api/technician/transcribe`   | cookie | raw audio body        | Speech-to-text for a recorded clip            |
 
 `role` ∈ `project_manager | field_technician | accountant | office_manager | sales`.
 `workType` ∈ `mitigation | construction`.
@@ -194,6 +200,73 @@ which is what keeps that budget meaningless rather than a coin flip.
 Signing out deliberately does **not** clear the PIN — returning to the PIN pad instead of the
 password form is the whole point. Enrollment is per-device, capped at 5 devices per user.
 
+## Design language
+
+Warm and light: paper surfaces, ink text, and a single terracotta accent. Tokens live in
+`frontend/tailwind.config.js` — use them rather than raw Tailwind palettes so a change lands
+everywhere at once.
+
+| Token | Use |
+| ----- | --- |
+| `paper-100` | Page background. `paper-0` is a card, `paper-50` a recessed strip. |
+| `ink-900 … ink-400` | Text, darkest to most muted. Warm greys — pure neutral reads cold on paper. |
+| `line` / `line-strong` | Hairlines. |
+| `brand-500` | The accent. **Load-bearing**: it marks the one action on a screen that commits something. `brand-50`/`brand-100` tint a selected state; `brand-600`/`brand-700` are the readable text weights. |
+| `danger` / `caution` / `success` | Status, muted enough to sit on paper without shouting. |
+| `shadow-card` / `shadow-lift` | The only two elevations. |
+
+The technician app is laid out as a workspace: navigation left, work in the middle, assistant
+pinned right. Below `lg` the rails collapse into a bottom tab bar — which is the form most
+technicians will actually use.
+
+## Technician app
+
+`/technician` is where a field technician actually works. It is open to every onboarded
+member — a project manager reviewing a job needs the same tools — and has three tabs.
+
+**Assistant.** Press the mic, say your piece, press it again; the reply is spoken back
+through the phone speaker. There is always a text box too, because job sites are loud.
+
+Dictation takes whichever path the browser supports:
+
+| Browser | Path | Needs a server? |
+| ------- | ---- | --------------- |
+| Chrome, Edge | Web Speech API, with live captions | No |
+| Safari, Firefox | Records a clip, posts it to `/api/technician/transcribe` | Yes — `TRANSCRIPTION_URL` |
+| Anything else | Type it | No |
+
+Replies come from Claude when `ANTHROPIC_API_KEY` is set. They are deliberately capped at a
+couple of sentences: the text is spoken aloud, and nobody wants a paragraph read at them
+while holding a moisture meter. **Without a key the endpoint still answers**, using a small
+rule-based responder — everything else works untouched, so the app is usable on a fresh
+checkout.
+
+**Camera.** Live preview, record with audio, and an optional object detector. Detection is
+COCO-SSD running under TensorFlow.js **in the browser** — no frame is ever uploaded, and it
+works the same in a crawlspace with one bar as it does in the driveway. Detected labels are
+drawn on the frame and also passed to the assistant as context, so "what am I looking at?"
+is answerable.
+
+**Recordings.** Everything captured, with playback, download, and delete. Audio memos can be
+transcribed here when server transcription is configured.
+
+### Where the data goes
+
+Recordings are held in **IndexedDB on the device** and never uploaded — reload the tab, lose
+signal, background the app, and this morning's walkthrough is still there. Getting a clip off
+the phone is an explicit download. The only things that reach the server are the assistant's
+conversation text and, on browsers that need it, an audio clip for transcription. The server
+persists neither.
+
+### Requirements
+
+- **HTTPS or `localhost`.** `getUserMedia` refuses to run on an insecure origin, so the
+  capture tabs are inert if the app is served over plain HTTP on a LAN address.
+- The camera and microphone are requested only when a capture is started, and released as
+  soon as it ends or the tab is switched.
+- Detection downloads ~18 MB of model weights on first use, then serves them from cache. On
+  a network that blocks Google's CDN, self-host them and set `VITE_COCO_SSD_MODEL_URL`.
+
 ## Configuration
 
 See `backend/.env.example` and `frontend/.env.example`. Key points:
@@ -211,6 +284,14 @@ See `backend/.env.example` and `frontend/.env.example`. Key points:
 - `PASSWORD_RESET_REDIRECT_URL` — where recovery emails land. Defaults to
   `<FRONTEND_ORIGIN>/reset-password`. This URL must **also** be allowlisted in the Supabase
   dashboard under **Authentication → URL Configuration**, or the emailed link is rejected.
+- `ANTHROPIC_API_KEY` — **server-only secret**, optional. Powers the technician assistant's
+  replies. Unset, the assistant falls back to a rule-based responder and the rest of the
+  technician app is unaffected.
+- `TRANSCRIPTION_URL` / `TRANSCRIPTION_API_KEY` — optional, server-only. Any
+  OpenAI-compatible `/audio/transcriptions` endpoint. Only needed to give Safari and Firefox
+  users dictation; Chrome and Edge transcribe in-browser for free.
+- `VITE_COCO_SSD_MODEL_URL` — frontend. Self-hosted object-detection weights, for networks
+  that can't reach Google's CDN.
 - `FRONTEND_ORIGIN` — comma-separated allowed CORS origins.
 - `COOKIE_SAMESITE` — set to `none` (with HTTPS on both sides) if the frontend and backend
   are on different sites in production.

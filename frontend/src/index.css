@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 html,
@@ -17,14 +17,37 @@ body {
   font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #0a0a12;
-  color: #e5e7eb;
+  background-color: #f4f1eb;
+  color: #1c1917;
 }
 
-/* Subtle brand aurora background used on the auth screen. */
+/* Warm wash behind the auth screens — a hint of terracotta bleeding in from
+   the top corners, not a gradient anyone should consciously notice. */
 .cx-aurora {
   background:
-    radial-gradient(60rem 60rem at 15% -10%, rgba(99, 102, 241, 0.18), transparent 60%),
-    radial-gradient(50rem 50rem at 110% 10%, rgba(67, 56, 202, 0.16), transparent 55%),
-    radial-gradient(40rem 40rem at 50% 120%, rgba(129, 140, 248, 0.12), transparent 60%);
+    radial-gradient(55rem 40rem at 12% -15%, rgba(210, 80, 10, 0.07), transparent 62%),
+    radial-gradient(45rem 35rem at 105% -5%, rgba(210, 80, 10, 0.05), transparent 58%);
+}
+
+/* Scrollbars inside panels, so a scrolling transcript doesn't punch a grey
+   canyon through a warm page. */
+.cx-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #d8d2c5 transparent;
+}
+.cx-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.cx-scroll::-webkit-scrollbar-thumb {
+  background-color: #d8d2c5;
+  border-radius: 999px;
+}
+.cx-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Native media controls default to a dark chrome that fights the page. */
+audio {
+  color-scheme: light;
 }

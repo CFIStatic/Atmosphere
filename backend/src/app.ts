@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
+import { technicianRouter } from './routes/technician.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 
@@ -34,6 +35,13 @@ export function createApp(): Express {
   );
 
   // Body + cookie parsing (with a small JSON size cap).
+  //
+  // The technician app gets a larger cap because a voice turn carries the
+  // running conversation transcript — the server keeps no session state, so the
+  // client replays it every request. This parser runs first and body-parser
+  // marks the request as parsed, which makes the global 10kb parser below a
+  // no-op for those routes rather than a double-parse.
+  app.use('/api/technician', express.json({ limit: '256kb' }));
   app.use(express.json({ limit: '10kb' }));
   app.use(cookieParser());
 
@@ -41,6 +49,7 @@ export function createApp(): Express {
   app.use('/api', healthRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
+  app.use('/api/technician', technicianRouter);
 
   // 404 + error handling (must be last).
   app.use(notFound);
