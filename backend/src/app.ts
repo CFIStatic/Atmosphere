@@ -6,6 +6,8 @@ import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
 import { healthRouter } from './routes/health.js';
+import { estimatorRouter } from './routes/estimator.js';
+import { xactimateRouter } from './routes/xactimate.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 
 export function createApp(): Express {
@@ -34,6 +36,12 @@ export function createApp(): Express {
   );
 
   // Body + cookie parsing (with a small JSON size cap).
+  //
+  // The estimator is the exception: a DocuSketch scan of a whole house plus a
+  // MICA drying log is megabytes of JSON, so it gets its own, larger cap mounted
+  // ahead of the global one. Everything else stays at 10 kB, which is all any
+  // auth or onboarding request has any business being.
+  app.use('/api/estimator', express.json({ limit: '8mb' }));
   app.use(express.json({ limit: '10kb' }));
   app.use(cookieParser());
 
@@ -41,6 +49,8 @@ export function createApp(): Express {
   app.use('/api', healthRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
+  app.use('/api/estimator', estimatorRouter);
+  app.use('/api/xactimate', xactimateRouter);
 
   // 404 + error handling (must be last).
   app.use(notFound);

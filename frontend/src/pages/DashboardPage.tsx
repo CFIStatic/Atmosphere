@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   api,
@@ -123,6 +124,27 @@ export function DashboardPage() {
               </p>
             </div>
           </div>
+
+          {/* Mitigation estimator — only meaningful for mitigation crews. */}
+          {membership?.workType === 'mitigation' && (
+            <Link
+              to="/estimator"
+              className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-brand-500/30 bg-brand-600/10 p-5 transition hover:bg-brand-600/20"
+            >
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-brand-300">
+                  Mitigation
+                </p>
+                <p className="mt-1 text-lg font-semibold text-white">Build an estimate</p>
+                <p className="mt-1 text-sm text-gray-400">
+                  DocuSketch, MICA, photos and notes in — a priced, documented Xactimate scope out.
+                </p>
+              </div>
+              <span aria-hidden className="text-2xl text-brand-300">
+                →
+              </span>
+            </Link>
+          )}
 
           {/* Device PIN */}
           <div className="mt-4">

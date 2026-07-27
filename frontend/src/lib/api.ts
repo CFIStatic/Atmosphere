@@ -171,7 +171,258 @@ export const api = {
     }),
 
   getMembers: () => request<{ members: OrgMember[] }>('/api/org/members', { method: 'GET' }),
+
+  // ---- Mitigation estimator ----
+  buildEstimate: (input: BuildEstimateInput) =>
+    request<{ estimate: MitigationEstimate; priceListConnected: boolean }>(
+      '/api/estimator/build',
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+
+  saveEstimate: (input: BuildEstimateInput) =>
+    request<{ estimateId: string; jobId: string; estimate: MitigationEstimate }>(
+      '/api/estimator/estimates',
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+
+  getEstimatorJobs: () =>
+    request<{ jobs: EstimatorJob[] }>('/api/estimator/jobs', { method: 'GET' }),
+
+  getDemoSources: () =>
+    request<{ sources: BuildEstimateInput }>('/api/estimator/demo-sources', { method: 'GET' }),
+
+  getEstimatorSettings: () =>
+    request<{ settings: EstimatorSettings }>('/api/estimator/settings', { method: 'GET' }),
+
+  saveEstimatorSettings: (settings: EstimatorSettings) =>
+    request<{ settings: EstimatorSettings }>('/api/estimator/settings', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    }),
+
+  /** Export URL for an estimate. The browser downloads it directly (cookies ride along). */
+  estimateExportUrl: (estimateId: string, format: 'csv' | 'xml' | 'scope') =>
+    `${API_BASE}/api/estimator/estimates/${estimateId}/export?format=${format}`,
+
+  // ---- Xactimate connection ----
+  xactimateStatus: () => request<XactimateStatus>('/api/xactimate/status', { method: 'GET' }),
+
+  xactimateConnect: (input: XactimateConnectInput) =>
+    request<XactimateConnectResponse>('/api/xactimate/connect', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  xactimateDisconnect: () =>
+    request<{ ok: boolean }>('/api/xactimate/disconnect', { method: 'POST' }),
+
+  xactimatePriceLists: () =>
+    request<{ priceLists: PriceListSummary[]; selected: string | null }>(
+      '/api/xactimate/price-lists',
+      { method: 'GET' },
+    ),
+
+  xactimateSyncPriceList: (priceListId: string) =>
+    request<{ priceListId: string; name: string; entryCount: number }>(
+      '/api/xactimate/price-lists/sync',
+      { method: 'POST', body: JSON.stringify({ priceListId }) },
+    ),
+
+  xactimateActivity: () =>
+    request<{ activity: XactimateActivity[] }>('/api/xactimate/activity', { method: 'GET' }),
+
+  xactimatePush: (estimate: MitigationEstimate, confirmedFindings: boolean) =>
+    request<{ estimateId: string; url?: string; lineItemsWritten: number; warnings: string[] }>(
+      '/api/xactimate/push',
+      { method: 'POST', body: JSON.stringify({ estimate, confirmedFindings }) },
+    ),
 };
+
+/* ------------------------------------------------------------------ *
+ * Estimator types
+ *
+ * Mirrors backend/src/estimator/types.ts. Only the fields the UI actually
+ * renders are declared — the payload carries more (the full assessment, every
+ * scope item) and it round-trips untouched when an estimate is pushed.
+ * ------------------------------------------------------------------ */
+
+export interface BuildEstimateInput {
+  jobId?: string;
+  docusketch?: unknown;
+  mica?: unknown;
+  photos?: PhotoManifestEntry[];
+  notes?: string;
+  overrides?: Record<string, unknown>;
+  settings?: EstimatorSettings;
+}
+
+export interface PhotoManifestEntry {
+  filename?: string;
+  capturedAt?: string;
+  caption?: string;
+  roomName?: string;
+  uri?: string;
+}
+
+export interface EstimatorSettings {
+  targetMargin?: number;
+  overheadAndProfitRate?: number;
+  oAndPEligible?: boolean;
+  taxRate?: number;
+  costMultiplier?: number;
+  lineMarginFloor?: number;
+  hoursPerMonitoringVisit?: number;
+  techniciansOnSite?: number;
+  category3CutHeightIn?: number;
+  costOverrides?: Record<string, number>;
+}
+
+export interface EstimatorJob {
+  id: string;
+  name: string;
+  claimNumber: string | null;
+  status: string;
+  createdAt: string;
+}
+
+export interface EstimateLineItem {
+  id: string;
+  code: string;
+  category: string;
+  description: string;
+  roomName?: string;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  rcv: number;
+  totalCost: number;
+  justification: string;
+  standardRef?: string;
+  evidenceIds: string[];
+  evidenceGap?: string;
+  priceVerified: boolean;
+}
+
+export interface ProfitFinding {
+  id: string;
+  severity: 'info' | 'warning' | 'critical';
+  kind: string;
+  title: string;
+  detail: string;
+  revenueImpact: number;
+  marginImpact: number;
+  actionRequired?: string;
+  relatedCode?: string;
+}
+
+export interface ProfitabilitySummary {
+  subtotal: number;
+  overheadAndProfit: number;
+  tax: number;
+  total: number;
+  totalCost: number;
+  grossProfit: number;
+  grossMargin: number;
+  targetMargin: number;
+  marginGap: number;
+  findings: ProfitFinding[];
+  recoverableRevenue: number;
+}
+
+export interface AssessedRoomSummary {
+  id: string;
+  name: string;
+  level: string;
+  geometry: { floorSF: number; wallSF: number; ceilingSF: number; perimeterLF: number; heightFt: number };
+  affectedFloorFraction: number;
+  ceilingAffected: boolean;
+}
+
+export interface LossAssessmentSummary {
+  jobId: string;
+  propertyAddress?: string;
+  claimNumber?: string;
+  carrier?: string;
+  insuredName?: string;
+  dateOfLoss?: string;
+  cause: string;
+  sourceCategory: 1 | 2 | 3;
+  category: 1 | 2 | 3;
+  class: 1 | 2 | 3 | 4;
+  rooms: AssessedRoomSummary[];
+  dryingDays: number;
+  monitoringVisits: number;
+  microbialGrowthPresent: boolean;
+  sourcesUsed: string[];
+  evidence: Array<{ id: string; kind: string; description: string; tags: string[] }>;
+}
+
+export interface MitigationEstimate {
+  jobId: string;
+  generatedAt: string;
+  assessment: LossAssessmentSummary;
+  lineItems: EstimateLineItem[];
+  profitability: ProfitabilitySummary;
+  narrative: string;
+  openQuestions: string[];
+}
+
+/* ---- Xactimate ---- */
+
+export type ConsentScope =
+  | 'read_profile'
+  | 'read_price_list'
+  | 'read_estimates'
+  | 'write_estimate'
+  | 'submit_estimate';
+
+export interface XactimateStatus {
+  connected: boolean;
+  sessionActive: boolean;
+  driver: 'mock' | 'api' | 'web';
+  storageAvailable: boolean;
+  webAutomationEnabled: boolean;
+  username: string | null;
+  scopes: ConsentScope[];
+  storageMode: 'session' | 'stored';
+  grantedAt: string | null;
+  expiresAt: string | null;
+  priceListId: string | null;
+  availableScopes: Array<{ scope: ConsentScope; description: string; defaultGranted: boolean }>;
+}
+
+export interface XactimateConnectInput {
+  username: string;
+  password: string;
+  mfaCode?: string;
+  scopes: ConsentScope[];
+  storageMode: 'session' | 'stored';
+  consentDays: number;
+  acknowledgedTerms: true;
+}
+
+export type XactimateConnectResponse =
+  | { status: 'connected'; profile: { username: string; displayName?: string; companyName?: string }; scopes: ConsentScope[]; expiresAt: string }
+  | { status: 'mfa_required'; challengeId: string; message: string };
+
+export interface PriceListSummary {
+  id: string;
+  name: string;
+  effectiveDate?: string;
+}
+
+export interface XactimateActivity {
+  id: string;
+  scope: string;
+  action: string;
+  detail: string;
+  succeeded: boolean;
+  at: string;
+}
+
+/** Shared currency formatting so every surface agrees to the cent. */
+export const usd = (value: number): string =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
 /** Human-readable labels for roles and work types (shared UI copy). */
 export const ROLE_LABELS: Record<MemberRole, string> = {

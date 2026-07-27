@@ -25,6 +25,9 @@ protected Postgres schema.
    server so no Supabase token is ever exposed to page JavaScript.
 5. **PIN sign-in** — an optional 4-digit PIN for fast repeat sign-in, bound to a single
    device (see below).
+6. **Mitigation Estimator** — reads a DocuSketch scan, a MICA report, iPhone photos and field
+   notes, and builds a priced, documented Xactimate estimate from them, flagging work that was
+   performed but never billed (see below).
 
 ## Why this shape?
 
@@ -49,6 +52,11 @@ JWT:
 | `orgs`         | An organization; owns a unique `join_code`.                          |
 | `org_members`  | Links a user to an org with their `role` and `work_type`.            |
 | `device_credentials` | One row per PIN-enrolled device. Holds only hashes — no secret and no session token. |
+| `estimator_jobs` / `estimator_estimates` | Estimating jobs and immutable estimate snapshots. |
+| `estimator_settings` | Per-org margin, O&P, tax and cost-basis assumptions.           |
+| `xactimate_connections` | One row per user: consent grant + optional encrypted credential. |
+| `xactimate_audit`  | Append-only record of what was done in a user's Xactimate account.   |
+| `xactimate_price_lists` | Synced price lists, shared across the org.                     |
 
 Membership checks used by the policies live in a **private schema** (not exposed as RPCs) to
 avoid recursive-policy issues and to keep the API surface minimal. Onboarding writes go
@@ -78,20 +86,37 @@ Atmosphere/
 │   │   ├── middleware/
 │   │   │   ├── requireAuth.ts    Verify access token; transparent refresh
 │   │   │   └── errorHandler.ts   404 + central JSON error handler
-│   │   └── routes/
-│   │       ├── auth.ts           signup / login / logout / refresh / me
-│   │       ├── org.ts            onboarding: me / create / join / members
-│   │       └── health.ts         liveness probe
+│   │   ├── routes/
+│   │   │   ├── auth.ts           signup / login / logout / refresh / me
+│   │   │   ├── org.ts            onboarding: me / create / join / members
+│   │   │   ├── estimator.ts      build / save / export / settings / catalog
+│   │   │   ├── xactimate.ts      connect / disconnect / price lists / push
+│   │   │   └── health.ts         liveness probe
+│   │   └── estimator/            The Mitigation Estimator agent
+│   │       ├── agent.ts          The pipeline, end to end
+│   │       ├── types.ts          Canonical domain model
+│   │       ├── ingest/           DocuSketch / MICA / photos / notes → assessment
+│   │       ├── lib/              Geometry + IICRC S500 psychrometrics
+│   │       ├── rules/            Scope derivation, then scope → line items
+│   │       ├── catalog/          Seed line items + price-list reconciliation
+│   │       ├── pricing.ts        Subtotal, O&P, tax, margin
+│   │       ├── profitability.ts  Findings: unbilled work, evidence gaps, margin
+│   │       ├── xactimate/        Consent, credential vault, drivers (mock/api/web)
+│   │       ├── export/           CSV / XML / scope sheet, for manual import
+│   │       ├── fixtures/         A worked example
+│   │       └── demo.ts           npm run estimator:demo
 │   └── .env.example
-└── frontend/         React + Vite + TypeScript + Tailwind
-    ├── src/
-    │   ├── pages/LoginPage.tsx        Branded login + signup screen
-    │   ├── pages/OnboardingPage.tsx   3-step wizard: org → role → work type
-    │   ├── pages/DashboardPage.tsx    Org overview, invite code, linked accounts
-    │   ├── context/AuthContext.tsx    Session + membership state
-    │   ├── components/                Logo, icons, ProtectedRoute
-    │   └── lib/api.ts                 Typed fetch client (credentials: include)
-    └── .env.example
+├── frontend/         React + Vite + TypeScript + Tailwind
+│   ├── src/
+│   │   ├── pages/LoginPage.tsx        Branded login + signup screen
+│   │   ├── pages/OnboardingPage.tsx   3-step wizard: org → role → work type
+│   │   ├── pages/DashboardPage.tsx    Org overview, invite code, linked accounts
+│   │   ├── pages/EstimatorPage.tsx    Estimator workspace
+│   │   ├── context/AuthContext.tsx    Session + membership state
+│   │   ├── components/estimator/      Sources, results, Xactimate consent card
+│   │   └── lib/api.ts                 Typed fetch client (credentials: include)
+│   └── .env.example
+└── supabase/migrations/               Estimator schema + RLS (apply before use)
 ```
 
 ## Prerequisites
@@ -144,6 +169,23 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | POST   | `/api/org`           | cookie | `{ name, role, workType }`    | Create an org and join as first member       |
 | POST   | `/api/org/join`      | cookie | `{ joinCode, role, workType }`| Link to an existing org by join code         |
 | GET    | `/api/org/members`   | cookie | —                             | Linked accounts in the caller's org          |
+| POST   | `/api/estimator/build` | cookie | `{ docusketch?, mica?, photos?, notes? }` | Build an estimate; saves nothing |
+| POST   | `/api/estimator/estimates` | cookie | same as `build`         | Build and persist                            |
+| GET    | `/api/estimator/estimates/:id` | cookie | —                   | A saved estimate                             |
+| GET    | `/api/estimator/estimates/:id/export` | cookie | `?format=csv\|xml\|scope` | Download for manual import      |
+| GET    | `/api/estimator/jobs` | cookie | —                            | The org's estimating jobs                    |
+| GET/PUT| `/api/estimator/settings` | cookie | margin/O&P/tax/cost knobs | Org estimating assumptions               |
+| GET    | `/api/estimator/catalog` | cookie | —                         | Line-item catalog + which prices are verified |
+| GET    | `/api/estimator/demo-sources` | cookie | —                    | A worked example, for evaluation             |
+| GET    | `/api/xactimate/status` | cookie | —                          | Connection, scopes, expiry — never a credential |
+| POST   | `/api/xactimate/connect` | cookie | `{ username, password, scopes, storageMode, acknowledgedTerms }` | Sign in under an explicit grant |
+| POST   | `/api/xactimate/disconnect` | cookie | —                      | Revoke and destroy any stored credential     |
+| POST   | `/api/xactimate/resume` | cookie | —                          | Re-establish a session from a stored credential |
+| GET    | `/api/xactimate/price-lists` | cookie | —                     | Price lists the account can see              |
+| POST   | `/api/xactimate/price-lists/sync` | cookie | `{ priceListId }` | Pull a price list and make it the org's     |
+| POST   | `/api/xactimate/price-lists/upload` | cookie | `{ id, name, entries }` | Upload an exported price list — no login  |
+| POST   | `/api/xactimate/push` | cookie | `{ estimate, confirmedFindings }` | Write the estimate into the account   |
+| GET    | `/api/xactimate/activity` | cookie | —                        | What was done in the account, under the grant |
 
 `role` ∈ `project_manager | field_technician | accountant | office_manager | sales`.
 `workType` ∈ `mitigation | construction`.
@@ -194,6 +236,127 @@ which is what keeps that budget meaningless rather than a coin flip.
 Signing out deliberately does **not** clear the PIN — returning to the PIN pad instead of the
 password form is the whole point. Enrollment is per-device, capped at 5 devices per user.
 
+## Mitigation Estimator
+
+An agent that turns the record of a water-damage job into a priced, documented Xactimate
+scope. It reads a **DocuSketch** scan, a **MICA** report, **iPhone photos** and the
+technician's **field notes**; classifies the loss against **IICRC S500**; derives the scope;
+maps it to Xactimate line items; prices it against the org's real price list; and reviews the
+result for work that was performed but never billed.
+
+```
+DocuSketch ┐
+MICA       ├─▶ normalise ─▶ assess ─▶ scope ─▶ line items ─▶ price ─▶ profitability review
+photos     │   (fuse)      (S500)   (rules)   (catalog)    (list)    (findings)
+notes      ┘                                                              │
+                                                                          ▼
+                                          Xactimate  ◀── API │ browser │ file export
+```
+
+Try it without a database, a network, or an Xactimate account:
+
+```bash
+cd backend && npm run estimator:demo            # full run against a worked example
+cd backend && npm run estimator:demo -- --scope-sheet   # the adjuster-facing document
+```
+
+### How the sources are fused
+
+Four inputs describe one loss and they disagree. The rule is **measured beats recorded beats
+written**: DocuSketch measured the room, so its geometry wins; MICA recorded the drying, so
+its equipment log wins over prose; the notes fill what nothing else covered.
+
+Water **category** is the deliberate exception — it takes the *worst* value any source
+reports, not the highest-priority one. Under-calling contamination produces an estimate that
+omits required work and a job that gets re-opened; over-calling it is caught at review.
+Category also degrades with time (S500 §10.5.4): clean water that stood 48 hours is scoped as
+Category 2, and the estimate says so in writing.
+
+Every quantity traces back through a line item to a scope rule to the reading or photo that
+produced it. The pipeline is deterministic — the same sources always produce the same
+estimate — which is what lets you re-run one in front of an adjuster and defend a disputed
+number line by line.
+
+### What "making jobs profitable" means here
+
+Mitigation jobs lose money in a few well-understood ways, and almost none of them are "the
+prices were too low":
+
+- work performed and never written down — monitoring hours, content manipulation, PPE,
+  debris haul;
+- equipment logged out late, so billed days understate days on site;
+- the generic selector used where a specific, better-paying one applied (`WTRDHM` where an
+  LGR was running);
+- lines written without documentation, which get struck after the work is already sunk cost.
+
+Every finding the review produces is one of those. What it will **not** do is add quantity the
+measurements do not support, or bill work nobody performed. That is not scruple bolted on
+afterwards: an inflated estimate gets re-priced, the carrier relationship degrades, and the
+next ten jobs get scrutinised. Where the review can only see a *possibility*, it says what
+would have to be confirmed and leaves the line off.
+
+The counterweight is real — the review also flags lines that should come *off*, and refuses
+to push an estimate with critical findings outstanding.
+
+### Prices are not real until you sync
+
+Xactimate selectors and prices vary by version, by region, and by carrier program. The
+catalog in `catalog/lineItems.ts` is a **seed**, and every entry ships `verified: false`.
+Reconciliation matches it against the price list on your own account — by code first, then by
+description — and until that runs, every line is flagged and the UI says so. Three ways to get
+real prices in:
+
+| Route | Needs | Notes |
+| ----- | ----- | ----- |
+| **API** | A Verisk integration agreement | Best option. Supported, stable, never replays a password. |
+| **Browser** | Your Xactimate Online login | For orgs without API access. Replays a password and breaks when the UI moves. |
+| **File** | Nothing | Export the price list, upload it; download a CSV, import it by hand. Works everywhere. |
+
+### Connecting an Xactimate account
+
+Signing in as a user, in a system holding their carrier relationships and their customers'
+claim data, is not something a settings checkbox should authorise forever. So:
+
+- **Consent is explicit, scoped, and expiring.** Reading a price list is a different
+  permission from writing an estimate; `write_estimate` and `submit_estimate` are *not*
+  granted by default. Grants lapse after 30 days.
+- **Not storing the password is the default.** Session-only mode uses it for one operation
+  and zeroes the buffer — nothing reaches disk, so a database leak yields nothing. At-rest
+  storage is opt-in, for unattended runs that cannot prompt.
+- **The encryption key never touches the database.** `XACTIMATE_ENC_KEY` is env-only, the
+  same separation that keeps the PIN table inert on its own. Leave it unset and at-rest
+  storage is simply unavailable.
+- **Revocation is immediate and destroys the credential** in the same statement that marks
+  the grant revoked, with a database constraint behind it.
+- **Every action is logged** against the grant that allowed it, visible to the user. A
+  permission you cannot inspect the use of is not really a permission.
+- **Browser automation is off unless explicitly enabled.** Whether it is permitted for a
+  given account depends on that account's terms with Verisk — the account holder's call, not
+  this software's. It will not solve a CAPTCHA or work around a block; when Xactimate asks
+  for a second factor it stops and asks the user.
+
+Xactimate sign-in attempts are rate-limited harder than the app's own login (5 per 15
+minutes): a retry loop here walks a real company's account into a lockout mid-job.
+
+### Setting it up
+
+1. Apply the migration: `supabase/migrations/0001_mitigation_estimator.sql` (via
+   `supabase db push`, or paste it into the SQL editor). Until it is applied the estimator
+   routes return a 503 saying exactly that.
+2. Leave `XACTIMATE_DRIVER` unset to run the mock driver, which needs nothing else.
+3. For a real connection set `XACTIMATE_DRIVER=api` plus `XACTIMATE_API_BASE_URL` and
+   `XACTIMATE_API_KEY`, or `XACTIMATE_DRIVER=web` plus `XACTIMATE_WEB_AUTOMATION=true` and
+   `npm install playwright` in `backend/`.
+
+### A caveat worth stating plainly
+
+The IICRC calculations, the scope rules and the fusion logic are implemented from the
+standards and are unit-consistent. The **selectors and placeholder prices in the seed catalog
+are not authoritative** — they follow Xactimate's conventions but have not been reconciled
+against a real price list, which is exactly why nothing is billable until a sync marks it
+verified. Have an estimator review the first few jobs against your own price list before
+anything goes to a carrier.
+
 ## Configuration
 
 See `backend/.env.example` and `frontend/.env.example`. Key points:
@@ -211,6 +374,12 @@ See `backend/.env.example` and `frontend/.env.example`. Key points:
 - `PASSWORD_RESET_REDIRECT_URL` — where recovery emails land. Defaults to
   `<FRONTEND_ORIGIN>/reset-password`. This URL must **also** be allowlisted in the Supabase
   dashboard under **Authentication → URL Configuration**, or the emailed link is rejected.
+- `XACTIMATE_ENC_KEY` — **server-only secret**, optional. Encrypts stored Xactimate
+  credentials and, like `DEVICE_PEPPER`, is deliberately kept out of the database. Leave it
+  unset and at-rest storage is unavailable: users connect in session-only mode, their
+  password is never written down, and there is nothing for a database leak to yield. Only set
+  it if you need unattended runs that cannot prompt for a password.
+- `XACTIMATE_DRIVER` — `mock` (default), `api`, or `web`. See the estimator section above.
 - `FRONTEND_ORIGIN` — comma-separated allowed CORS origins.
 - `COOKIE_SAMESITE` — set to `none` (with HTTPS on both sides) if the frontend and backend
   are on different sites in production.
@@ -228,3 +397,7 @@ See `backend/.env.example` and `frontend/.env.example`. Key points:
 - **Configure custom SMTP** before launch. Supabase's built-in mailer is rate-limited to a
   handful of messages per hour, which is fine for testing and will not carry real password
   resets.
+- Apply `supabase/migrations/0001_mitigation_estimator.sql` before the estimator is used;
+  its routes return a clear 503 until you do.
+- Leave `XACTIMATE_DRIVER` on `mock` until an estimator has checked the seed catalog against
+  your own price list. A verified sync is what turns placeholder prices into real ones.

@@ -82,6 +82,59 @@ export const config = {
   // in the Supabase dashboard under Authentication → URL Configuration.
   passwordResetRedirectUrl:
     process.env.PASSWORD_RESET_REDIRECT_URL ?? `${frontendOrigins[0]}/reset-password`,
+
+  xactimate: {
+    // Which driver reaches Xactimate. 'mock' is the default deliberately: the
+    // whole estimator is exercisable — consent flow, price-list reconciliation,
+    // estimate writing — without anyone typing a real Xactimate password into a
+    // development machine. Switching this on is a deployment decision, never a
+    // per-request one, so a caller cannot talk the server into launching a
+    // browser by passing a parameter.
+    driver: parseDriver(process.env.XACTIMATE_DRIVER),
+
+    // Verisk partner API. Present only for orgs with an integration agreement;
+    // when it is available it is strictly better than browser automation,
+    // because it never replays a password.
+    apiBaseUrl: process.env.XACTIMATE_API_BASE_URL ?? '',
+    apiKey: process.env.XACTIMATE_API_KEY ?? '',
+
+    // Browser automation is off unless explicitly enabled. Whether automating a
+    // given Xactimate account is permitted depends on that account's terms with
+    // Verisk, which is the account holder's call — so it takes a deliberate act
+    // to turn on, not a default.
+    webAutomationEnabled: process.env.XACTIMATE_WEB_AUTOMATION === 'true',
+    headless: process.env.XACTIMATE_HEADLESS !== 'false',
+    // Xactimate Online's DOM is not a public interface. Keeping selectors in
+    // config makes a UI change a config edit instead of a redeploy.
+    webSelectors: parseJsonRecord(process.env.XACTIMATE_WEB_SELECTORS),
+
+    // Server-only key for the credential vault. Like DEVICE_PEPPER it must never
+    // reach the database — that separation is the whole protection, since a
+    // password that has to be replayed into a login form cannot be hashed.
+    // Unset means at-rest storage is unavailable and users may only connect in
+    // session-only mode, which is the safer configuration anyway.
+    encryptionKey: process.env.XACTIMATE_ENC_KEY ?? '',
+  },
 } as const;
+
+function parseDriver(value: string | undefined): 'mock' | 'api' | 'web' {
+  return value === 'api' || value === 'web' ? value : 'mock';
+}
+
+/** Parse an optional JSON object env var, ignoring anything malformed. */
+function parseJsonRecord(value: string | undefined): Record<string, string> {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed as Record<string, unknown>)
+        .filter(([, v]) => typeof v === 'string')
+        .map(([k, v]) => [k, v as string]),
+    );
+  } catch {
+    return {};
+  }
+}
 
 export type AppConfig = typeof config;
