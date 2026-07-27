@@ -7,6 +7,8 @@ import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
 import { billingRouter } from './routes/billing.js';
 import { usageRouter } from './routes/usage.js';
+import { webAccessRouter } from './routes/webAccess.js';
+import { verifierRouter } from './routes/verifier.js';
 import { aiRouter } from './routes/ai.js';
 import { modelGatewayRouter } from './routes/modelGateway.js';
 import { webhookRouter } from './routes/webhooks.js';
@@ -16,9 +18,20 @@ import { integrationsRouter } from './routes/integrations.js';
 import { computerRouter } from './routes/computer.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
+import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
+import { verificationHook, pumpVerificationQueue } from './lib/verifierRunner.js';
 
 export function createApp(): Express {
   const app = express();
+
+  // Wire the second agent to the first. Web Access does not import the verifier
+  // — it calls whatever hook has been registered — so this one line is the
+  // whole coupling between them, and removing it leaves runs behaving exactly
+  // as they did before the verifier existed.
+  setRunSucceededHook(verificationHook);
+  // Runs and checks share one browser budget, so a finished run is the moment
+  // a waiting check can start.
+  setSlotReleasedHook(pumpVerificationQueue);
 
   // Behind a proxy/load balancer (needed for correct secure-cookie + rate-limit IP).
   app.set('trust proxy', 1);
@@ -57,6 +70,10 @@ export function createApp(): Express {
   // The parser is CHOSEN here rather than stacked on those routes: the first
   // json() to run consumes the stream, so a route-level raise would never be
   // reached — the global cap would already have rejected the upload with 413.
+  //
+  // A Web Access data-entry run carries the rows to be entered, which is more
+  // than a login form's worth of JSON but comfortably inside the 256kb
+  // standard, so it needs no exception of its own.
   const csvImportPath = /^\/api\/integrations\/sources\/[^/]+\/import\/?$/;
   const modelPromptPath = /^\/api\/(ai|model)(\/|$)/;
   const standardJson = express.json({ limit: '256kb' });
@@ -89,6 +106,8 @@ export function createApp(): Express {
   app.use('/api/model', modelGatewayRouter);
   // Server-to-server: no session cookie, authenticated by Stripe's signature.
   app.use('/api/webhooks', webhookRouter);
+  app.use('/api/web-access', webAccessRouter);
+  app.use('/api/verifier', verifierRouter);
   app.use('/api/crm', crmRouter);
   app.use('/api/backups', backupRouter);
   app.use('/api/integrations', integrationsRouter);
