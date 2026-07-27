@@ -1,34 +1,35 @@
-import type { ReactNode } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
+import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Logo } from './Logo';
 import {
-  SpinnerIcon,
-  HomeIcon,
+  BoltIcon,
   BriefcaseIcon,
+  ChartIcon,
+  CreditCardIcon,
   HistoryIcon,
+  HomeIcon,
+  SpinnerIcon,
   UsersIcon,
 } from './icons';
-
-/**
- * The frame every signed-in page sits in: brand, primary navigation, sign out.
- *
- * Extracted when the app grew past a single screen — the dashboard used to own
- * this markup, and duplicating it per page would have let the pages drift.
- */
 
 const NAV = [
   { to: '/dashboard', label: 'Dashboard', Icon: HomeIcon },
   { to: '/jobs', label: 'Jobs', Icon: BriefcaseIcon },
   { to: '/memory', label: 'Memory', Icon: HistoryIcon },
   { to: '/team', label: 'Team', Icon: UsersIcon },
+  { to: '/computer-use', label: 'Computer', Icon: BoltIcon },
+  { to: '/usage', label: 'Usage', Icon: ChartIcon },
+  { to: '/billing', label: 'Billing', Icon: CreditCardIcon },
 ];
 
+/**
+ * Shared page frame: brand, primary navigation and sign-out. Keeps the header
+ * identical across screens so navigation does not shift as you move between them.
+ */
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, membership, logout } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
-  const navigate = useNavigate();
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -43,16 +44,29 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="cx-aurora min-h-screen bg-ink-900">
       <header className="border-b border-white/10">
         <div className="flex items-center justify-between gap-4 px-6 py-4 sm:px-10">
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-            aria-label="Atmosphere home"
-          >
-            <Logo />
-          </button>
+          <Logo />
+
+          <nav aria-label="Primary" className="hidden gap-1 lg:flex">
+            {NAV.map(({ to, label, Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  `flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition ${
+                    isActive
+                      ? 'bg-brand-600/20 text-brand-200'
+                      : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'
+                  }`
+                }
+              >
+                <Icon width={17} height={17} />
+                {label}
+              </NavLink>
+            ))}
+          </nav>
 
           <div className="flex items-center gap-3">
-            <span className="hidden text-sm text-gray-400 sm:inline" title={user?.email ?? ''}>
+            <span className="hidden text-sm text-gray-400 xl:inline" title={user?.email ?? ''}>
               {membership?.org?.name ?? user?.email}
             </span>
             <button
@@ -66,21 +80,22 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        <nav className="flex gap-1 overflow-x-auto px-4 sm:px-8" aria-label="Primary">
+        {/* The same navigation, kept reachable on narrow screens. */}
+        <nav
+          aria-label="Primary"
+          className="flex gap-1 overflow-x-auto border-t border-white/10 px-4 py-2 lg:hidden"
+        >
           {NAV.map(({ to, label, Icon }) => (
             <NavLink
               key={to}
               to={to}
               className={({ isActive }) =>
-                [
-                  'flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition',
-                  isActive
-                    ? 'border-brand-400 text-white'
-                    : 'border-transparent text-gray-400 hover:border-white/20 hover:text-gray-200',
-                ].join(' ')
+                `flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition ${
+                  isActive ? 'bg-brand-600/20 text-brand-200' : 'text-gray-400 hover:text-gray-200'
+                }`
               }
             >
-              <Icon width={17} height={17} />
+              <Icon width={16} height={16} />
               {label}
             </NavLink>
           ))}
