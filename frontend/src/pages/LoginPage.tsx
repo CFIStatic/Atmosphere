@@ -145,28 +145,28 @@ export function LoginPage() {
       : 'Create your Atmosphere account in minutes.';
 
   return (
-    <div className="cx-aurora relative flex min-h-screen flex-col bg-ink-900">
+    <div className="cx-aurora relative flex min-h-screen flex-col bg-paper-100">
       <header className="px-6 py-6 sm:px-10">
         <Logo />
       </header>
 
       <main className="flex flex-1 items-center justify-center px-4 pb-16">
         <div className="w-full max-w-md animate-fade-in-up">
-          <div className="rounded-2xl border border-white/10 bg-ink-800/70 p-8 shadow-2xl shadow-black/40 backdrop-blur-xl sm:p-10">
+          <div className="rounded-2xl border border-line bg-paper-0 shadow-lift p-8 shadow-2xl shadow-lift-xl sm:p-10">
             {!pinChecked ? (
-              <div className="grid place-items-center py-16 text-brand-300">
+              <div className="grid place-items-center py-16 text-brand-600">
                 <SpinnerIcon className="animate-spin" width={26} height={26} />
                 <span className="sr-only">Loading…</span>
               </div>
             ) : (
               <>
-                <h1 className="text-2xl font-bold tracking-tight text-white">{title}</h1>
-                <p className="mt-1.5 text-sm text-gray-400">{subtitle}</p>
+                <h1 className="text-2xl font-bold tracking-tight text-ink-900">{title}</h1>
+                <p className="mt-1.5 text-sm text-ink-600">{subtitle}</p>
 
                 {notice && !showPin && (
                   <div
                     role="status"
-                    className="mt-6 flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-3 text-sm text-emerald-200"
+                    className="mt-6 flex items-start gap-2 rounded-lg border border-success-200 bg-success-50 px-3.5 py-3 text-sm text-success-600"
                   >
                     <CheckIcon className="mt-0.5 shrink-0" width={18} height={18} />
                     <span>{notice}</span>
@@ -178,7 +178,7 @@ export function LoginPage() {
                     {pinError && (
                       <div
                         role="alert"
-                        className="mt-6 rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-3 text-center text-sm text-red-200"
+                        className="mt-6 rounded-lg border border-danger-200 bg-danger-50 px-3.5 py-3 text-center text-sm text-danger-700"
                       >
                         {pinError}
                       </div>
@@ -197,7 +197,7 @@ export function LoginPage() {
 
                     <div className="mt-6 flex min-h-[1.5rem] items-center justify-center">
                       {pinSubmitting && (
-                        <span className="flex items-center gap-2 text-sm text-brand-300">
+                        <span className="flex items-center gap-2 text-sm text-brand-600">
                           <SpinnerIcon className="animate-spin" width={16} height={16} />
                           Signing in…
                         </span>
@@ -211,7 +211,7 @@ export function LoginPage() {
                         setPin('');
                         setPinError(null);
                       }}
-                      className="mt-2 w-full rounded-lg border border-white/10 bg-ink-700/60 px-4 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-ink-600"
+                      className="mt-2 w-full rounded-lg border border-line bg-paper-0 px-4 py-2.5 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
                     >
                       Use password instead
                     </button>
@@ -221,7 +221,7 @@ export function LoginPage() {
                     {error && (
                       <div
                         role="alert"
-                        className="mt-6 rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-3 text-sm text-red-200"
+                        className="mt-6 rounded-lg border border-danger-200 bg-danger-50 px-3.5 py-3 text-sm text-danger-700"
                       >
                         {error}
                       </div>
@@ -231,7 +231,7 @@ export function LoginPage() {
                       <div>
                         <label
                           htmlFor="email"
-                          className="mb-1.5 block text-sm font-medium text-gray-300"
+                          className="mb-1.5 block text-sm font-medium text-ink-700"
                         >
                           Email
                         </label>
@@ -245,7 +245,7 @@ export function LoginPage() {
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           placeholder="you@company.com"
-                          className="w-full rounded-lg border border-white/10 bg-ink-700/80 px-3.5 py-2.5 text-white placeholder-gray-500 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/40"
+                          className="w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
                         />
                       </div>
 
@@ -253,19 +253,19 @@ export function LoginPage() {
                         <div className="mb-1.5 flex items-center justify-between">
                           <label
                             htmlFor="password"
-                            className="block text-sm font-medium text-gray-300"
+                            className="block text-sm font-medium text-ink-700"
                           >
                             Password
                           </label>
                           {isLogin ? (
                             <Link
                               to="/forgot-password"
-                              className="text-xs font-medium text-brand-400 transition hover:text-brand-300"
+                              className="text-xs font-medium text-brand-600 transition hover:text-brand-700"
                             >
                               Forgot password?
                             </Link>
                           ) : (
-                            <span id="password-hint" className="text-xs text-gray-500">
+                            <span id="password-hint" className="text-xs text-ink-500">
                               Min. 8 characters
                             </span>
                           )}
@@ -283,19 +283,19 @@ export function LoginPage() {
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             placeholder="••••••••"
-                            className="w-full rounded-lg border border-white/10 bg-ink-700/80 px-3.5 py-2.5 pr-11 text-white placeholder-gray-500 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/40"
+                            className="w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 pr-11 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
                           />
                           <button
                             type="button"
                             onClick={() => setShowPassword((s) => !s)}
                             aria-label={showPassword ? 'Hide password' : 'Show password'}
-                            className="absolute inset-y-0 right-0 grid w-11 place-items-center text-gray-400 transition hover:text-gray-200"
+                            className="absolute inset-y-0 right-0 grid w-11 place-items-center text-ink-600 transition hover:text-ink-900"
                           >
                             {showPassword ? <EyeOffIcon /> : <EyeIcon />}
                           </button>
                         </div>
                         {!isLogin && password.length > 0 && !passwordValid && (
-                          <p id="password-hint" className="mt-1.5 text-xs text-amber-300/90">
+                          <p id="password-hint" className="mt-1.5 text-xs text-caution-600">
                             Use at least 8 characters.
                           </p>
                         )}
@@ -304,7 +304,7 @@ export function LoginPage() {
                       <button
                         type="submit"
                         disabled={!canSubmit}
-                        className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 font-semibold text-white shadow-lg shadow-brand-900/40 transition hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 focus:ring-offset-ink-800 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 font-semibold text-ink-900 shadow-lg shadow-card transition hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:ring-offset-2 focus:ring-offset-ink-800 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {submitting && <SpinnerIcon className="animate-spin" />}
                         {submitting
@@ -324,18 +324,18 @@ export function LoginPage() {
                           setShowPin(true);
                           setPinError(null);
                         }}
-                        className="mt-3 w-full rounded-lg border border-white/10 bg-ink-700/60 px-4 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-ink-600"
+                        className="mt-3 w-full rounded-lg border border-line bg-paper-0 px-4 py-2.5 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
                       >
                         Use your PIN instead
                       </button>
                     )}
 
-                    <p className="mt-6 text-center text-sm text-gray-400">
+                    <p className="mt-6 text-center text-sm text-ink-600">
                       {isLogin ? "Don't have an account?" : 'Already have an account?'}{' '}
                       <button
                         type="button"
                         onClick={() => switchMode(isLogin ? 'signup' : 'login')}
-                        className="font-semibold text-brand-400 transition hover:text-brand-300"
+                        className="font-semibold text-brand-600 transition hover:text-brand-700"
                       >
                         {isLogin ? 'Create one' : 'Sign in'}
                       </button>
@@ -346,7 +346,7 @@ export function LoginPage() {
             )}
           </div>
 
-          <p className="mt-6 text-center text-xs text-gray-600">
+          <p className="mt-6 text-center text-xs text-ink-400">
             Protected by Supabase Auth · Passwords are encrypted and never stored in plain text.
           </p>
         </div>

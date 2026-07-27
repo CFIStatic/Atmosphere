@@ -124,6 +124,210 @@ export const joinOrgSchema = z.object({
 export type CreateOrgInput = z.infer<typeof createOrgSchema>;
 export type JoinOrgInput = z.infer<typeof joinOrgSchema>;
 
+/* ==========================================================================
+ * Agent Memory — jobs, tasks, crew assignments and work logs
+ *
+ * These mirror the CHECK constraints in the migration. Validating here as well
+ * is not redundant: it turns a Postgres constraint violation into a field-level
+ * message the form can render, while the database stays the actual authority.
+ * ========================================================================== */
+
+/** crm_job_status — the CRM owns the job lifecycle; this mirrors its enum. */
+export const JOB_STATUSES = [
+  'draft',
+  'scheduled',
+  'in_progress',
+  'on_hold',
+  'completed',
+  'invoiced',
+  'paid',
+  'cancelled',
+] as const;
+
+/** crm_jobs.priority is a smallint 1-5, 1 being the most urgent. */
+export const PRIORITIES = [1, 2, 3, 4, 5] as const;
+
+/** crm_loss_type. */
+export const LOSS_TYPES = ['water', 'fire', 'mold', 'storm', 'biohazard', 'contents', 'other'] as const;
+
+export const TASK_STATUSES = ['todo', 'in_progress', 'blocked', 'done', 'cancelled'] as const;
+export const TASK_PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
+export const WORK_LOG_KINDS = [
+  'work',
+  'note',
+  'call',
+  'site_visit',
+  'photo',
+  'material',
+  'issue',
+] as const;
+export const ASSIGNMENT_ROLES = ['lead', 'crew', 'estimator', 'supervisor', 'observer'] as const;
+
+const jobStatusSchema = z.enum(JOB_STATUSES, {
+  errorMap: () => ({ message: 'Select a valid job status' }),
+});
+const jobPrioritySchema = z
+  .number()
+  .int()
+  .min(1, 'Priority runs from 1 (most urgent) to 5')
+  .max(5, 'Priority runs from 1 (most urgent) to 5');
+const taskStatusSchema = z.enum(TASK_STATUSES, {
+  errorMap: () => ({ message: 'Select a valid task status' }),
+});
+const taskPrioritySchema = z.enum(TASK_PRIORITIES, {
+  errorMap: () => ({ message: 'Select a valid priority' }),
+});
+
+/** Optional free-text field: '' from an untouched form input means "not set". */
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max, `Must be at most ${max} characters`)
+    .optional()
+    .transform((v) => (v === '' ? undefined : v));
+
+const optionalDate = z
+  .string()
+  .datetime({ offset: true, message: 'Enter a valid date' })
+  .optional()
+  .nullable();
+
+/**
+ * Opening a job writes to `crm_jobs`. This is the field-facing subset — the
+ * fuller CRUD, with financials and the links to accounts, contacts and
+ * properties, stays with `/api/crm/jobs`. Customer and address are absent on
+ * purpose: they live on `crm_contacts` and `crm_properties`, not on the job.
+ */
+export const createJobSchema = z.object({
+  title: z
+    .string({ required_error: 'Job name is required' })
+    .trim()
+    .min(2, 'Job name is too short')
+    .max(200, 'Job name is too long'),
+  workType: workTypeSchema,
+  description: optionalText(4000),
+  lossType: z.enum(LOSS_TYPES).optional(),
+  priority: jobPrioritySchema.optional(),
+  status: jobStatusSchema.optional(),
+  claimNumber: optionalText(60),
+  policyNumber: optionalText(60),
+  ownerId: z.string().uuid('Select a valid team member').optional().nullable(),
+  scheduledStart: optionalDate,
+});
+
+/** Every field optional — a PATCH may carry just the one thing that changed. */
+export const updateJobSchema = createJobSchema
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to update' });
+
+export const createTaskSchema = z.object({
+  title: z
+    .string({ required_error: 'Task title is required' })
+    .trim()
+    .min(2, 'Task title is too short')
+    .max(200, 'Task title is too long'),
+  details: optionalText(4000),
+  status: taskStatusSchema.optional(),
+  priority: taskPrioritySchema.optional(),
+  assignedTo: z.string().uuid('Select a valid team member').optional().nullable(),
+  dueAt: optionalDate,
+  position: z.number().int().min(0).max(100_000).optional(),
+});
+
+export const updateTaskSchema = createTaskSchema
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to update' });
+
+export const createWorkLogSchema = z.object({
+  kind: z.enum(WORK_LOG_KINDS, { errorMap: () => ({ message: 'Select a valid entry type' }) }),
+  body: z
+    .string({ required_error: 'Describe the work' })
+    .trim()
+    .min(1, 'Describe the work')
+    .max(8000, 'That entry is too long'),
+  taskId: z.string().uuid().optional().nullable(),
+  minutes: z
+    .number()
+    .int('Minutes must be a whole number')
+    .min(0, 'Minutes cannot be negative')
+    .max(24 * 60, 'That is more than a day')
+    .optional()
+    .nullable(),
+  occurredAt: optionalDate,
+});
+
+export const updateWorkLogSchema = z.object({
+  body: z.string().trim().min(1, 'Describe the work').max(8000, 'That entry is too long').optional(),
+  kind: z.enum(WORK_LOG_KINDS).optional(),
+  minutes: z.number().int().min(0).max(24 * 60).optional().nullable(),
+});
+
+export const assignAgentSchema = z.object({
+  userId: z.string({ required_error: 'Choose a team member' }).uuid('Choose a valid team member'),
+  roleOnJob: z
+    .enum(ASSIGNMENT_ROLES, { errorMap: () => ({ message: 'Select a valid role' }) })
+    .optional(),
+});
+
+/**
+ * Query parameters for the memory feed. Everything arrives as a string from the
+ * URL, so numbers are coerced. `before` is the opaque cursor: the `seq` of the
+ * oldest row already shown.
+ */
+export const memoryQuerySchema = z.object({
+  jobId: z.string().uuid().optional(),
+  actorId: z.string().uuid().optional(),
+  entityType: z.enum(['job', 'task', 'assignment', 'work_log', 'session']).optional(),
+  eventType: z.string().trim().max(60).optional(),
+  since: z.string().datetime({ offset: true }).optional(),
+  until: z.string().datetime({ offset: true }).optional(),
+  search: z.string().trim().max(120).optional(),
+  before: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+
+export type CreateJobInput = z.infer<typeof createJobSchema>;
+export type CreateTaskInput = z.infer<typeof createTaskSchema>;
+export type CreateWorkLogInput = z.infer<typeof createWorkLogSchema>;
+export type MemoryQuery = z.infer<typeof memoryQuerySchema>;
+/* ---- Technician app ---- */
+
+/**
+ * One prior turn of the voice conversation. The client owns the transcript
+ * (nothing is persisted server-side) and replays it on each request, so the
+ * assistant stays stateless like the rest of the backend.
+ */
+const assistantTurnSchema = z.object({
+  role: z.enum(['user', 'assistant']),
+  content: z.string().trim().min(1).max(4000),
+});
+
+export type AssistantTurn = z.infer<typeof assistantTurnSchema>;
+
+/**
+ * What the assistant is told about the caller and their surroundings. Every
+ * field is optional — the client sends whatever it happens to know.
+ */
+const assistantContextSchema = z.object({
+  role: z.enum(MEMBER_ROLES).optional(),
+  workType: z.enum(WORK_TYPES).optional(),
+  orgName: z.string().trim().max(80).optional(),
+  /** Labels from the in-browser object detector, most confident first. */
+  detectedObjects: z.array(z.string().trim().min(1).max(40)).max(12).optional(),
+});
+
+export type AssistantContext = z.infer<typeof assistantContextSchema>;
+
+export const assistantSchema = z.object({
+  message: z
+    .string({ required_error: 'Say something first' })
+    .trim()
+    .min(1, 'Say something first')
+    .max(4000, 'That message is too long'),
+  history: z.array(assistantTurnSchema).max(40).default([]),
+  context: assistantContextSchema.optional(),
+});
 /* ---------------------------------------------------------------- billing -- */
 
 /** Subscription tiers. `enterprise` is quote-only and rejected by the database. */

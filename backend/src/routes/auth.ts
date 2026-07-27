@@ -26,6 +26,7 @@ import {
   parseDeviceCookie,
 } from '../lib/deviceCrypto.js';
 import { requireAuth } from '../middleware/requireAuth.js';
+import { recordEvent } from '../lib/memory.js';
 
 export const authRouter = Router();
 
@@ -118,6 +119,17 @@ authRouter.post('/login', authLimiter, async (req: Request, res: Response, next:
     }
 
     setSessionCookies(res, data.session);
+
+    // Signing in is a real event with no row behind it, so the trigger that
+    // records everything else cannot see it. Recorded here instead — and
+    // deliberately awaited before responding, so a sign-in never lands in the
+    // memory after the work that followed it.
+    await recordEvent(createUserClient(data.session.access_token), {
+      type: 'auth.signed_in',
+      summary: 'signed in with a password',
+      entityId: data.user.id,
+    });
+
     res.json({ user: publicUser(data.user) });
   } catch (err) {
     next(err);
@@ -140,6 +152,13 @@ authRouter.post('/logout', async (req: Request, res: Response, next: NextFunctio
       // cookie is gone). This also rotates/consumes the old refresh token.
       const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
       if (!error && data.session) {
+        // Recorded while the session is still valid — after signOut there is no
+        // identity left to attribute it to.
+        await recordEvent(createUserClient(data.session.access_token), {
+          type: 'auth.signed_out',
+          summary: 'signed out',
+          entityId: data.session.user.id,
+        });
         // scope: 'local' revokes ONLY the current session, leaving the user's
         // other devices signed in.
         await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
@@ -310,6 +329,13 @@ authRouter.post(
 
       clearDeviceCookie(res);
       setSessionCookies(res, session);
+
+      await recordEvent(createUserClient(session.access_token), {
+        type: 'auth.password_reset',
+        summary: 'reset their password, signing out other sessions and revoking every PIN',
+        entityId: updated.user.id,
+      });
+
       res.json({ user: publicUser(updated.user) });
     } catch (err) {
       next(err);
@@ -566,6 +592,13 @@ authRouter.post('/pin/unlock', pinLimiter, async (req: Request, res: Response, n
 
     const { session, user } = await mintSessionForUser(verify.user_id!);
     setSessionCookies(res, session);
+
+    await recordEvent(createUserClient(session.access_token), {
+      type: 'auth.pin_unlocked',
+      summary: 'signed in with a device PIN',
+      entityId: user.id,
+    });
+
     res.json({ user: publicUser(user) });
   } catch (err) {
     next(err);
@@ -587,6 +620,13 @@ authRouter.post(
         throw new HttpError(500, 'Could not turn off PIN sign-in. Please try again.', 'pin_disable_failed');
       }
       clearDeviceCookie(res);
+
+      await recordEvent(supabase, {
+        type: 'auth.pin_disabled',
+        summary: 'turned off PIN sign-in on every device',
+        entityId: req.user!.id,
+      });
+
       res.json({ ok: true });
     } catch (err) {
       next(err);

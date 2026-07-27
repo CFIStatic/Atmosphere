@@ -54,15 +54,36 @@ that goes and looks.
    task as it was originally written, corrects what is safe to correct, and asks you about
    anything it is unsure of.
 8. **Computer use** — connect an Anthropic API key, run the agent on any computer, and
+6. **Technician app** (`/technician`) — the field tool: record audio and video, hold a
+   spoken conversation with an assistant, and have the camera name what it sees (see
+   below).
+7. **Computer use** — connect an Anthropic API key, run the agent on any computer, and
    Claude can see its screen and operate it. The whole setup is one key and one command.
-9. **CRM backend** — customers, properties, leads, jobs, and their timeline, plus our own
+8. **CRM backend** — customers, properties, leads, jobs, and their timeline, plus our own
    backups and a verbatim copy of the data that currently lives only inside other
    companies' software. Backend infrastructure only, no UI yet — see
    **[docs/CRM.md](docs/CRM.md)**.
-10. **Executes work, and learns from it** — drafts scopes, builds estimates, extracts
+9. **Executes work, and learns from it** — drafts scopes, builds estimates, extracts
+10. **Web Access** — connect an outside website (a carrier portal, a supplier site) once,
+   then ask Atmosphere to sign in and **pull data out of it** or **enter data into it**. Every
+   step the AI takes is recorded, so a finished run reads back like a receipt.
+11. **Verifier** — a second agent that goes back and checks the first one actually did the work.
+   It re-opens the site in a browser that cannot change anything, confirms the work against the
+   task as it was originally written, corrects what is safe to correct, and asks you about
+   anything it is unsure of.
+12. **Computer use** — connect an Anthropic API key, run the agent on any computer, and
+   Claude can see its screen and operate it. The whole setup is one key and one command.
+13. **CRM backend** — customers, properties, leads, jobs, and their timeline, plus our own
+   backups and a verbatim copy of the data that currently lives only inside other
+   companies' software. Backend infrastructure only, no UI yet — see
+   **[docs/CRM.md](docs/CRM.md)**.
+14. **Agent Memory** — the operational layer over CRM jobs: the tasks under a job, the crew
+   on it, and the work people log against it — with a complete, append-only record of
+   everything that happens to any of it (see below).
+15. **Executes work, and learns from it** — drafts scopes, builds estimates, extracts
    document fields, writes customer updates. Every run is scored, and the routing policy
    improves from those scores. See [Learning layer](#learning-layer) below.
-9. **Construction Estimator** — an agent that signs in to DocuSketch, reads the scan and
+16. **Construction Estimator** — an agent that signs in to DocuSketch, reads the scan and
    the field photos, identifies the matching job in a CRM (Dash), reads the mitigation
    estimate, and builds the construction/rebuild estimate for Xactimate (see below).
 
@@ -96,6 +117,10 @@ JWT:
 | `xactimate_price_lists` | Synced price lists, shared across the org.                     |
 | `carrier_agreements` | Per-org carrier program terms — one set per carrier + program.   |
 | `carrier_deviations` | Documented, evidence-backed exceptions to a term, per job.       |
+| `job_tasks`    | A unit of work under a `crm_job`, optionally assigned to a member.   |
+| `job_assignments` | Which people were on which job, and when. Released, never deleted. |
+| `work_logs`    | A member's own account of work done, with time spent.                |
+| `memory_events` | The append-only record of everything that happens. See below.       |
 | `billing_plans` / `credit_packs` | Public catalog: subscription tiers and prepaid credit packs. |
 | `model_rate_card` | Public **sell** prices per model. Derived from the private cost table. |
 | `org_billing`  | One row per org: plan, seats, period, auto-reload, spend limit.       |
@@ -140,6 +165,9 @@ through two `SECURITY DEFINER` functions that validate `auth.uid()` internally:
 ```
 Atmosphere/
 ├── backend/          Express + TypeScript BFF
+│   ├── supabase/
+│   │   ├── migrations/   CRM core, external mirror, backup ledger, Agent Memory
+│   │   └── tests/        Runs the migrations against a throwaway Postgres
 │   ├── src/
 │   │   ├── config.ts             Validated config (Supabase, cookies, CORS, model providers)
 │   │   ├── app.ts                Express app assembly (helmet, cors, cookies, routes)
@@ -147,8 +175,7 @@ Atmosphere/
 │   │   ├── lib/
 │   │   │   ├── supabase.ts       Anon + per-request user-scoped client factories
 │   │   │   ├── session.ts        httpOnly session-cookie set/clear
-│   │   │   ├── validation.ts     zod schemas (credentials, org, billing, usage)
-│   │   │   ├── validation.ts     zod schemas (credentials, org create/join, web access)
+│   │   │   ├── validation.ts     zod schemas (credentials, org, jobs, billing, memory)
 │   │   │   ├── errors.ts         Typed HTTP errors
 │   │   │   ├── webVault.ts       AES-256-GCM sealing for stored site passwords
 │   │   │   ├── webUrlGuard.ts    Site-scope + private-address (SSRF) checks
@@ -161,14 +188,16 @@ Atmosphere/
 │   │   │   ├── verifierAgent.ts        Read-only observation loop → a verdict per item
 │   │   │   ├── verifierRepair.ts       What may be fixed unattended, and what may not
 │   │   │   └── verifierRunner.ts       Look → repair → re-check → or ask a human
-│   │   │   ├── validation.ts     zod schemas (credentials, org create/join)
+│   │   │   ├── assistant.ts      Technician voice assistant (Claude, + local fallback)
+│   │   │   ├── transcription.ts  Optional server-side speech-to-text
+│   │   │   └── labels.ts         Role / work-type names for prompts
 │   │   │   ├── crmValidation.ts  zod schemas + camelCase↔snake_case row mapping
+│   │   │   ├── memory.ts         Event recorder + serializers for the record
 │   │   │   ├── orgContext.ts     Resolves the caller's org; never trusts the body
 │   │   │   ├── money.ts          Nanodollar arithmetic — no floats for money
 │   │   │   ├── anthropic.ts      Authoritative token measurement (+ tests)
 │   │   │   ├── billing.ts        DB error → HTTP mapping, response shaping
 │   │   │   ├── stripe.ts         Stripe client, customers, webhook helpers
-│   │   │   ├── errors.ts         Typed HTTP errors
 │   │   │   ├── backup/           Archive format, storage drivers, runner, scheduler
 │   │   │   └── integrations/     Connectors + the append-only external mirror
 │   │   ├── ai/                   Learning layer — see docs/reinforcement-learning.md
@@ -234,7 +263,6 @@ Atmosphere/
 │   └── verifier.sql              Schema + RLS for the Verifier (run once, after the above)
 │   │   ├── estimator/            Construction Estimator agent
 │   │   │   ├── pipeline.ts       Stage orchestration; pauses for human review
-│   │   │   ├── credentials.ts    AES-256-GCM vault for vendor credentials
 │   │   │   ├── store.ts          Supabase persistence (runs + credentials)
 │   │   │   ├── types.ts          Vendor-neutral domain model
 │   │   │   ├── connectors/       DocuSketch / Dash / Xactimate + fixtures
@@ -245,18 +273,19 @@ Atmosphere/
 │   │   │   └── estimate/         Estimate assembly, import, and export
 │   │   ├── scripts/
 │   │   │   └── checkVerifier.ts  Verifier checks against a fixture portal + stubbed model
-│   │   ├── scripts/              Backup CLI, self-checks, learning cycle (cron)
 │   │   └── routes/
 │   │       ├── auth.ts           signup / login / logout / refresh / me
 │   │       ├── org.ts            onboarding: me / create / join / members
+│   │       ├── technician.ts     assistant turn / transcription / capabilities
 │   │       ├── billing.ts        catalog / plan / credits / settings / ledger
 │   │       ├── usage.ts          quote / record / events / daily rollup
 │   │       ├── ai.ts             Learning-layer task execution + feedback
 │   │       ├── modelGateway.ts   Metered model calls (authorize-then-capture)
 │   │       ├── crm.ts            CRM CRUD, lead conversion, timeline, audit
+│   │       ├── jobs.ts           tasks, crew and work logs over crm_jobs
+│   │       ├── memory.ts         the record: feed, rollups, export
 │   │       ├── backups.ts        Snapshot status / history / trigger / verify
 │   │       ├── integrations.ts   External sources, syncs, CSV import, mirror
-│   │       ├── ai.ts             task execution / feedback / policy visibility
 │   │       ├── computer.ts       computer use: keys, pairing, runs, SSE
 │   │       ├── estimator.ts      Estimator setup, runs, review, export
 │   │       └── health.ts         liveness probe
@@ -271,7 +300,6 @@ Atmosphere/
 ├── db/migrations/    SQL schema (RLS policies + SECURITY DEFINER write path)
 ├── docs/             Architecture notes
 ├── frontend/         React + Vite + TypeScript + Tailwind
-│   ├── src/
 │   │   ├── pages/LoginPage.tsx        Branded login + signup screen
 │   │   ├── pages/OnboardingPage.tsx   3-step wizard: org → role → work type
 │   │   ├── pages/DashboardPage.tsx    Org overview, invite code, linked accounts
@@ -279,12 +307,15 @@ Atmosphere/
 │   │   ├── pages/ComputerUsePage.tsx  Live screen, task composer, transcript
 │   │   ├── context/AuthContext.tsx    Session + membership state
 │   │   ├── components/estimator/      Sources, results, program terms, consent card
+│   │   ├── pages/TechnicianPage.tsx   Capture / recordings / assistant workspace
+│   │   ├── pages/ComputerUsePage.tsx  Live screen, task composer, transcript
+│   │   ├── context/AuthContext.tsx    Session + membership state
+│   │   ├── hooks/                     Media stream, recorder, speech, detection
+│   │   ├── components/technician/     Camera, recorder, assistant, recordings
 │   │   ├── pages/BillingPage.tsx      Plans, credit packs, spend controls, rate card
 │   │   ├── pages/UsagePage.tsx        Spend charts, per-model breakdown, request log
 │   │   ├── pages/WebAccessPage.tsx    Connected sites, run a task, run history
-│   │   ├── pages/ComputerUsePage.tsx  Live screen, task composer, transcript
 │   │   ├── pages/EstimatorPage.tsx    Connections, runs, job review, estimate
-│   │   ├── context/AuthContext.tsx    Session + membership state
 │   │   ├── components/VerificationPanel.tsx  A run's check, with the evidence behind it
 │   │   ├── components/EscalationQueue.tsx    Questions the verifier needs answered
 │   │   ├── components/                Logo, icons, ProtectedRoute
@@ -299,6 +330,14 @@ Atmosphere/
 │   │   └── drivers/              linux (xdotool) · darwin · win32 (PowerShell)
 │   └── README.md
 └── supabase/migrations/               Estimator schema + RLS (apply before use)
+└── agent/            The computer-use agent (runs on the machine being operated)
+    ├── src/
+    │   ├── index.ts              CLI: pair once, then stay connected
+    │   ├── computer.ts           Action executor + coordinate scaling
+    │   ├── image.ts              Screenshot downscale / crop (sharp)
+    │   ├── transport.ts          Outbound WebSocket with backoff
+    │   └── drivers/              linux (xdotool) · darwin · win32 (PowerShell)
+    └── README.md
 ```
 
 ## Prerequisites
@@ -373,6 +412,26 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | POST   | `/api/xactimate/price-lists/upload` | cookie | `{ id, name, entries }` | Upload an exported price list — no login  |
 | POST   | `/api/xactimate/push` | cookie | `{ estimate, confirmedFindings }` | Write the estimate into the account   |
 | GET    | `/api/xactimate/activity` | cookie | —                        | What was done in the account, under the grant |
+| GET    | `/api/jobs`          | cookie | —                             | Job list, rolled up with its memory           |
+| POST   | `/api/jobs`          | cookie | `{ title, workType, … }`      | Open a job (writes to `crm_jobs`)             |
+| GET    | `/api/jobs/:id`      | cookie | —                             | Job + tasks + crew + work logs + history      |
+| PATCH  | `/api/jobs/:id`      | cookie | partial job                   | Update a job; the diff is recorded            |
+| GET    | `/api/jobs/:id/memory` | cookie | —                           | That job's complete history, oldest first     |
+| POST   | `/api/jobs/:id/tasks` | cookie | `{ title, … }`               | Add a task                                    |
+| PATCH  | `/api/jobs/:id/tasks/:taskId` | cookie | partial task         | Update a task                                 |
+| POST   | `/api/jobs/:id/crew` | cookie | `{ userId, roleOnJob }`       | Put someone on the job                        |
+| POST   | `/api/jobs/:id/crew/:assignmentId/release` | cookie | —      | Take someone off (row is kept)                |
+| POST   | `/api/jobs/:id/logs` | cookie | `{ kind, body, minutes }`     | Log work done                                 |
+| PATCH  | `/api/jobs/:id/logs/:logId` | cookie | partial log            | Revise your own entry                         |
+| GET    | `/api/memory`        | cookie | —                             | The org's record, filtered and paged          |
+| GET    | `/api/memory/stats`  | cookie | —                             | Headline numbers                              |
+| GET    | `/api/memory/agents` | cookie | —                             | Every member with their work rolled up        |
+| GET    | `/api/memory/agents/:userId` | cookie | —                     | One member's full trail                       |
+| GET    | `/api/memory/entity/:type/:id` | cookie | —                   | Everything known about one thing              |
+| GET    | `/api/memory/export` | cookie | —                             | The whole record as NDJSON                    |
+| GET    | `/api/technician/capabilities` | cookie | —                   | Whether the assistant and STT are configured |
+| POST   | `/api/technician/assist`       | cookie | `{ message, history, context }` | One turn of the voice conversation |
+| POST   | `/api/technician/transcribe`   | cookie | raw audio body        | Speech-to-text for a recorded clip            |
 | GET    | `/api/billing/catalog` | —    | —                             | Plans, credit packs, model rate card         |
 | GET    | `/api/billing/overview`| cookie | —                           | Plan, balance, settings, month-to-date usage |
 | POST   | `/api/billing/plan`  | cookie | `{ planCode, billingInterval, seats }` | Change subscription tier            |
@@ -437,7 +496,10 @@ Agents also hold a WebSocket open at `/api/computer/agent-socket`, authenticated
 token from pairing rather than a session cookie.
 
 The CRM, backup, and integration endpoints (`/api/crm/*`, `/api/backups/*`,
-`/api/integrations/*`) are documented in **[docs/CRM.md](docs/CRM.md)**.
+`/api/integrations/*`) are documented in **[docs/CRM.md](docs/CRM.md)**. Job records
+themselves are CRM resources: `/api/crm/jobs` carries the full CRUD including financials
+and the links to accounts, contacts and properties, while `/api/jobs` above is the
+field-facing view of the same rows plus the operational layer over them.
 
 `role` ∈ `project_manager | field_technician | accountant | office_manager | sales`.
 `workType` ∈ `mitigation | construction`.
@@ -717,6 +779,150 @@ worse on a submitted estimate than an honest chapter reference. If you hold a co
 S500, pinning a requirement to its clause is a one-line change — set `section` and flip
 `confidence` to `'clause'` — and the estimate, the exports and the UI all start printing the
 number with no other edit.
+## Agent Memory
+
+A restoration job is reconstructed after the fact more often than anyone would like — for
+an insurance dispute, a warranty claim, a payroll question, or simply "who was on site on
+the 14th?". That only works if the record is complete, so the guiding rule here is that
+**the record is not something the application maintains — it is something the database
+does not allow you to avoid.**
+
+Three decisions follow from that:
+
+**1. Capture happens in the database, not the routes.** Every write to `crm_jobs`,
+`job_tasks`, `job_assignments` and `work_logs` fires an `AFTER` trigger that diffs the row
+and appends to `memory_events`. Not one route in `backend/src/routes/jobs.ts` writes an
+audit record. Application-level logging is only ever as complete as the code paths that
+remember to call it; a trigger fires for the BFF, for a SQL console, for a background job,
+and for whatever client gets written next year. A route added later is recorded with no
+chance of anyone forgetting.
+
+Each entry keeps a readable sentence (`moved job #1 from draft to in_progress`), the
+field-level `{from, to}` diff, and the full row snapshot. The actor's email and role are
+copied in **at write time** on purpose — resolving them by join would silently rewrite
+history every time somebody changed role or left.
+
+**2. Nothing is ever destroyed.** `memory_events` rejects `UPDATE`, `DELETE` and
+`TRUNCATE` by trigger, for every role — including the table owner and `service_role`, both
+of which bypass grants and RLS. The tables it watches are granted `SELECT`, `INSERT` and
+`UPDATE` only, so tasks are *cancelled* and crew are *released*. `memory_events` also
+carries no foreign keys: a record of what happened has to outlive the row it describes, and
+an FK would either block the delete or rewrite the event.
+
+It sits alongside `crm_audit_log` rather than replacing it. That table is the backup
+system's restore ledger — raw row images with `prev_data` so a change can be reversed.
+`memory_events` is the human record: narrative summaries, typed events, immutability.
+Different readers, different guarantees.
+
+**3. The few events with no row behind them are narrow by construction.** Signing in,
+signing out, unlocking with a PIN and exporting the record are real events that no table
+write would produce, so the backend appends them through `record_memory_event`. That
+function takes the actor from `auth.uid()` and the org from the caller's membership —
+neither can be passed in — and rejects any event type outside the `auth. / session. /
+view. / export. / note.` namespaces. Everything under `job.` or `task.` is reachable only
+by actually changing the row, so a client cannot fabricate an action or attribute one to
+somebody else.
+
+Reads are scoped by the same RLS rule as the rest of the app, so the record is visible to
+the organization it belongs to and to nobody else. The feed pages on `seq`, the memory's
+own monotonic counter, rather than on a timestamp or an offset — timestamps tie and
+offsets skip entries when rows arrive mid-scroll, and a record that claims to be complete
+cannot afford either.
+
+#### Applying the migration
+
+The schema lives in `backend/supabase/migrations/` alongside the CRM's. Agent Memory hangs
+off `crm_jobs`, so `20260726000001_crm_core.sql` must be applied first. With the Supabase
+CLI:
+
+```bash
+supabase db push
+```
+
+…or paste each file into the SQL editor in the Supabase dashboard, in filename order. They
+are idempotent — safe to re-run.
+
+#### Verifying it
+
+`backend/supabase/tests/` applies the real CRM migration and then Agent Memory to a
+throwaway local Postgres — only `auth.uid()` and the onboarding tables are stubbed — and
+exercises the behaviour: capture over `crm_jobs`, the completion stamps, the rollups,
+immutability against the table owner, and cross-organization isolation.
+
+```bash
+backend/supabase/tests/run.sh -h /tmp -p 5432 -U postgres
+```
+
+It is not run against a real project by design — it asserts that history cannot be
+deleted, so it needs a database it is allowed to throw away. Sections 8–11 and 13 print
+`ERROR` lines; those are the guarantees refusing the operation, and are the point of the test.
+
+## Design language
+
+Warm and light: paper surfaces, ink text, and a single terracotta accent. Tokens live in
+`frontend/tailwind.config.js` — use them rather than raw Tailwind palettes so a change lands
+everywhere at once.
+
+| Token | Use |
+| ----- | --- |
+| `paper-100` | Page background. `paper-0` is a card, `paper-50` a recessed strip. |
+| `ink-900 … ink-400` | Text, darkest to most muted. Warm greys — pure neutral reads cold on paper. |
+| `line` / `line-strong` | Hairlines. |
+| `brand-500` | The accent. **Load-bearing**: it marks the one action on a screen that commits something. `brand-50`/`brand-100` tint a selected state; `brand-600`/`brand-700` are the readable text weights. |
+| `danger` / `caution` / `success` | Status, muted enough to sit on paper without shouting. |
+| `shadow-card` / `shadow-lift` | The only two elevations. |
+
+The technician app is laid out as a workspace: navigation left, work in the middle, assistant
+pinned right. Below `lg` the rails collapse into a bottom tab bar — which is the form most
+technicians will actually use.
+
+## Technician app
+
+`/technician` is where a field technician actually works. It is open to every onboarded
+member — a project manager reviewing a job needs the same tools — and has three tabs.
+
+**Assistant.** Press the mic, say your piece, press it again; the reply is spoken back
+through the phone speaker. There is always a text box too, because job sites are loud.
+
+Dictation takes whichever path the browser supports:
+
+| Browser | Path | Needs a server? |
+| ------- | ---- | --------------- |
+| Chrome, Edge | Web Speech API, with live captions | No |
+| Safari, Firefox | Records a clip, posts it to `/api/technician/transcribe` | Yes — `TRANSCRIPTION_URL` |
+| Anything else | Type it | No |
+
+Replies come from Claude when `ANTHROPIC_API_KEY` is set. They are deliberately capped at a
+couple of sentences: the text is spoken aloud, and nobody wants a paragraph read at them
+while holding a moisture meter. **Without a key the endpoint still answers**, using a small
+rule-based responder — everything else works untouched, so the app is usable on a fresh
+checkout.
+
+**Camera.** Live preview, record with audio, and an optional object detector. Detection is
+COCO-SSD running under TensorFlow.js **in the browser** — no frame is ever uploaded, and it
+works the same in a crawlspace with one bar as it does in the driveway. Detected labels are
+drawn on the frame and also passed to the assistant as context, so "what am I looking at?"
+is answerable.
+
+**Recordings.** Everything captured, with playback, download, and delete. Audio memos can be
+transcribed here when server transcription is configured.
+
+### Where the data goes
+
+Recordings are held in **IndexedDB on the device** and never uploaded — reload the tab, lose
+signal, background the app, and this morning's walkthrough is still there. Getting a clip off
+the phone is an explicit download. The only things that reach the server are the assistant's
+conversation text and, on browsers that need it, an audio clip for transcription. The server
+persists neither.
+
+### Requirements
+
+- **HTTPS or `localhost`.** `getUserMedia` refuses to run on an insecure origin, so the
+  capture tabs are inert if the app is served over plain HTTP on a LAN address.
+- The camera and microphone are requested only when a capture is started, and released as
+  soon as it ends or the tab is switched.
+- Detection downloads ~18 MB of model weights on first use, then serves them from cache. On
+  a network that blocks Google's CDN, self-host them and set `VITE_COCO_SSD_MODEL_URL`.
 ## Pricing, credits and metering
 
 Atmosphere resells model capacity. Customers pay a **monthly plan** that includes
@@ -1370,6 +1576,14 @@ See `backend/.env.example` and `frontend/.env.example`. Key points:
   password is never written down, and there is nothing for a database leak to yield. Only set
   it if you need unattended runs that cannot prompt for a password.
 - `XACTIMATE_DRIVER` — `mock` (default), `api`, or `web`. See the estimator section above.
+- `ANTHROPIC_API_KEY` — **server-only secret**, optional. Powers the technician assistant's
+  replies. Unset, the assistant falls back to a rule-based responder and the rest of the
+  technician app is unaffected.
+- `TRANSCRIPTION_URL` / `TRANSCRIPTION_API_KEY` — optional, server-only. Any
+  OpenAI-compatible `/audio/transcriptions` endpoint. Only needed to give Safari and Firefox
+  users dictation; Chrome and Edge transcribe in-browser for free.
+- `VITE_COCO_SSD_MODEL_URL` — frontend. Self-hosted object-detection weights, for networks
+  that can't reach Google's CDN.
 - `WEB_ACCESS_KEY` — **server-only secret**, required for Web Access. Seals every stored
   site password before it reaches the database. Generate with `openssl rand -base64 48`.
   Rotating it invalidates every stored credential.

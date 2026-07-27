@@ -7,6 +7,11 @@ import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { JobsPage } from './pages/JobsPage';
+import { JobDetailPage } from './pages/JobDetailPage';
+import { MemoryPage } from './pages/MemoryPage';
+import { TeamMemoryPage } from './pages/TeamMemoryPage';
+import { TechnicianPage } from './pages/TechnicianPage';
 import { BillingPage } from './pages/BillingPage';
 import { UsagePage } from './pages/UsagePage';
 import { ProjectManagerPage } from './pages/ProjectManagerPage';
@@ -22,7 +27,7 @@ function FullScreenSpinner() {
     <div
       role="status"
       aria-live="polite"
-      className="grid min-h-screen place-items-center bg-ink-900 text-brand-300"
+      className="grid min-h-screen place-items-center bg-paper-100 text-brand-600"
     >
       <SpinnerIcon className="animate-spin" width={28} height={28} />
       <span className="sr-only">Loading…</span>
@@ -75,6 +80,38 @@ export default function App() {
               <ProtectedRoute>
                 <RequireOnboarded>
                   <DashboardPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Agent Memory. Same guard as the dashboard: all of it is scoped to
+              an organization, so onboarding has to come first. */}
+          {[
+            { path: '/jobs', element: <JobsPage /> },
+            { path: '/jobs/:id', element: <JobDetailPage /> },
+            { path: '/memory', element: <MemoryPage /> },
+            { path: '/team', element: <TeamMemoryPage /> },
+          ].map(({ path, element }) => (
+            <Route
+              key={path}
+              path={path}
+              element={
+                <ProtectedRoute>
+                  <RequireOnboarded>{element}</RequireOnboarded>
+                </ProtectedRoute>
+              }
+            />
+          ))}
+          {/* The technician app. Open to every onboarded member — a project
+              manager reviewing a job needs the same capture tools a field
+              technician does. */}
+          <Route
+            path="/technician"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <TechnicianPage />
                 </RequireOnboarded>
               </ProtectedRoute>
             }

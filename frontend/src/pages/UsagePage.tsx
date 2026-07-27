@@ -74,7 +74,7 @@ export function UsagePage() {
   if (loading) {
     return (
       <AppShell>
-        <div className="grid place-items-center py-24 text-brand-300">
+        <div className="grid place-items-center py-24 text-brand-600">
           <SpinnerIcon className="animate-spin" width={28} height={28} />
         </div>
       </AppShell>
@@ -86,19 +86,19 @@ export function UsagePage() {
       <div className="animate-fade-in-up">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-white">Usage</h1>
-            <p className="mt-2 text-gray-400">
+            <h1 className="text-3xl font-bold tracking-tight text-ink-900">Usage</h1>
+            <p className="mt-2 text-ink-600">
               Every request is metered from the model provider&apos;s own token counts.
             </p>
           </div>
 
-          <div className="flex rounded-lg border border-white/10 bg-ink-800/60 p-1 text-sm">
+          <div className="flex rounded-lg border border-line bg-paper-0 p-1 text-sm">
             {RANGES.map((r) => (
               <button
                 key={r.days}
                 onClick={() => setDays(r.days)}
                 className={`rounded-md px-3 py-1.5 font-medium transition ${
-                  days === r.days ? 'bg-brand-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                  days === r.days ? 'bg-brand-500 text-ink-900' : 'text-ink-600 hover:text-ink-900'
                 }`}
               >
                 {r.label}
@@ -110,7 +110,7 @@ export function UsagePage() {
         {error && (
           <div
             role="alert"
-            className="mt-6 flex items-start gap-2.5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+            className="mt-6 flex items-start gap-2.5 rounded-xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700"
           >
             <AlertIcon width={18} height={18} className="mt-0.5 shrink-0" />
             <span>{error}</span>
@@ -137,12 +137,12 @@ export function UsagePage() {
         </div>
 
         {/* ---- Daily spend: one series, so no legend — the heading names it. ---- */}
-        <section className="mt-10 rounded-xl border border-white/10 bg-ink-800/60 p-5">
-          <h2 className="text-lg font-semibold text-white">Daily spend</h2>
-          <p className="mt-1 text-sm text-gray-400">Last {days} days · hover a bar for detail</p>
+        <section className="mt-10 rounded-xl border border-line bg-paper-0 p-5">
+          <h2 className="text-lg font-semibold text-ink-900">Daily spend</h2>
+          <p className="mt-1 text-sm text-ink-600">Last {days} days · hover a bar for detail</p>
 
           {byDay.length === 0 ? (
-            <p className="py-12 text-center text-sm text-gray-500">
+            <p className="py-12 text-center text-sm text-ink-500">
               No usage recorded in this period yet.
             </p>
           ) : (
@@ -171,10 +171,10 @@ export function UsagePage() {
                     <div className="absolute inset-0" aria-hidden="true" />
                     <div
                       role="tooltip"
-                      className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-lg border border-white/10 bg-ink-900 px-2.5 py-1.5 text-xs shadow-xl group-hover:block"
+                      className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-lg border border-line bg-paper-100 px-2.5 py-1.5 text-xs shadow-xl group-hover:block"
                     >
-                      <p className="font-medium text-white">{formatUsd(d.priceNanos, { precise: true })}</p>
-                      <p className="text-gray-400">
+                      <p className="font-medium text-ink-900">{formatUsd(d.priceNanos, { precise: true })}</p>
+                      <p className="text-ink-600">
                         {formatDate(d.day)} · {d.events} req
                       </p>
                     </div>
@@ -185,7 +185,7 @@ export function UsagePage() {
           )}
 
           {byDay.length > 0 && (
-            <div className="mt-2 flex justify-between text-xs text-gray-500">
+            <div className="mt-2 flex justify-between text-xs text-ink-500">
               <span>{formatDate(byDay[0].day)}</span>
               <span>peak {formatUsdCompact(maxDay)}</span>
               <span>{formatDate(byDay[byDay.length - 1].day)}</span>
@@ -195,18 +195,18 @@ export function UsagePage() {
 
         {/* ---- Per model: each bar is directly labelled, so identity never
                 depends on colour alone. ---- */}
-        <section className="mt-8 rounded-xl border border-white/10 bg-ink-800/60 p-5">
-          <h2 className="text-lg font-semibold text-white">Spend by model</h2>
-          <p className="mt-1 text-sm text-gray-400">This billing period</p>
+        <section className="mt-8 rounded-xl border border-line bg-paper-0 p-5">
+          <h2 className="text-lg font-semibold text-ink-900">Spend by model</h2>
+          <p className="mt-1 text-sm text-ink-600">This billing period</p>
 
           {models.length === 0 ? (
-            <p className="py-10 text-center text-sm text-gray-500">Nothing metered yet.</p>
+            <p className="py-10 text-center text-sm text-ink-500">Nothing metered yet.</p>
           ) : (
             <ul className="mt-5 space-y-4">
               {models.map((m, i) => (
                 <li key={m.modelId}>
                   <div className="flex items-baseline justify-between gap-3 text-sm">
-                    <span className="flex items-center gap-2 font-medium text-gray-200">
+                    <span className="flex items-center gap-2 font-medium text-ink-800">
                       <span
                         aria-hidden="true"
                         className="h-2.5 w-2.5 shrink-0 rounded-sm"
@@ -214,11 +214,11 @@ export function UsagePage() {
                       />
                       {m.displayName}
                     </span>
-                    <span className="font-mono text-gray-300">
+                    <span className="font-mono text-ink-700">
                       {formatUsd(m.priceNanos, { precise: true })}
                     </span>
                   </div>
-                  <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-ink-700">
+                  <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-paper-0">
                     <div
                       className="h-full rounded-full"
                       style={{
@@ -227,7 +227,7 @@ export function UsagePage() {
                       }}
                     />
                   </div>
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className="mt-1 text-xs text-ink-500">
                     {m.events.toLocaleString('en-US')} requests ·{' '}
                     {formatTokens(m.inputTokens)} in · {formatTokens(m.outputTokens)} out
                   </p>
@@ -239,13 +239,13 @@ export function UsagePage() {
 
         {/* ---- The table view: the same data, readable without colour. ---- */}
         <section className="mt-8">
-          <h2 className="text-lg font-semibold text-white">Recent requests</h2>
-          <div className="mt-4 overflow-x-auto rounded-xl border border-white/10">
+          <h2 className="text-lg font-semibold text-ink-900">Recent requests</h2>
+          <div className="mt-4 overflow-x-auto rounded-xl border border-line">
             {events.length === 0 ? (
-              <p className="px-5 py-8 text-center text-sm text-gray-500">No requests yet.</p>
+              <p className="px-5 py-8 text-center text-sm text-ink-500">No requests yet.</p>
             ) : (
               <table className="w-full min-w-[38rem] text-sm">
-                <thead className="bg-ink-700/60 text-left text-xs uppercase tracking-wide text-gray-400">
+                <thead className="bg-paper-0 text-left text-xs uppercase tracking-wide text-ink-600">
                   <tr>
                     <th scope="col" className="px-4 py-3 font-medium">Model</th>
                     <th scope="col" className="px-4 py-3 font-medium">Feature</th>
@@ -256,18 +256,18 @@ export function UsagePage() {
                     <th scope="col" className="px-4 py-3 text-right font-medium">When</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/10">
+                <tbody className="divide-y divide-line">
                   {events.map((e) => (
-                    <tr key={e.id} className="bg-ink-800/40">
-                      <td className="px-4 py-2.5 font-medium text-white">{e.modelId}</td>
-                      <td className="px-4 py-2.5 text-gray-400">{e.feature ?? '—'}</td>
-                      <td className="px-4 py-2.5 text-right text-gray-300">{formatTokens(e.inputTokens)}</td>
-                      <td className="px-4 py-2.5 text-right text-gray-300">{formatTokens(e.outputTokens)}</td>
-                      <td className="px-4 py-2.5 text-right text-gray-500">{formatTokens(e.cacheTokens)}</td>
-                      <td className="px-4 py-2.5 text-right font-mono text-gray-200">
+                    <tr key={e.id} className="bg-paper-0">
+                      <td className="px-4 py-2.5 font-medium text-ink-900">{e.modelId}</td>
+                      <td className="px-4 py-2.5 text-ink-600">{e.feature ?? '—'}</td>
+                      <td className="px-4 py-2.5 text-right text-ink-700">{formatTokens(e.inputTokens)}</td>
+                      <td className="px-4 py-2.5 text-right text-ink-700">{formatTokens(e.outputTokens)}</td>
+                      <td className="px-4 py-2.5 text-right text-ink-500">{formatTokens(e.cacheTokens)}</td>
+                      <td className="px-4 py-2.5 text-right font-mono text-ink-800">
                         {formatUsd(e.priceNanos, { precise: true })}
                       </td>
-                      <td className="px-4 py-2.5 text-right text-gray-500">{formatDate(e.createdAt)}</td>
+                      <td className="px-4 py-2.5 text-right text-ink-500">{formatDate(e.createdAt)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -282,10 +282,10 @@ export function UsagePage() {
 
 function StatTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-ink-800/60 p-5">
-      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</p>
-      <p className="mt-1.5 text-2xl font-bold tracking-tight text-white">{value}</p>
-      {hint && <p className="mt-0.5 text-xs text-gray-500">{hint}</p>}
+    <div className="rounded-xl border border-line bg-paper-0 p-5">
+      <p className="text-xs font-medium uppercase tracking-wide text-ink-500">{label}</p>
+      <p className="mt-1.5 text-2xl font-bold tracking-tight text-ink-900">{value}</p>
+      {hint && <p className="mt-0.5 text-xs text-ink-500">{hint}</p>}
     </div>
   );
 }

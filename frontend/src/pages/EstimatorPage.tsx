@@ -113,36 +113,36 @@ function ConnectionCard({
   }
 
   return (
-    <section className="rounded-xl border border-white/10 bg-ink-800/60 p-5 backdrop-blur">
-      <h2 className="text-lg font-semibold text-white">Connections</h2>
-      <p className="mt-1 text-sm text-gray-400">
+    <section className="rounded-xl border border-line bg-paper-0 p-5">
+      <h2 className="text-lg font-semibold text-ink-900">Connections</h2>
+      <p className="mt-1 text-sm text-ink-600">
         The estimator signs in to these on your organization's behalf. Credentials are encrypted
         before they are stored and are never shown again — not even to you.
       </p>
 
       {status.sandbox && (
-        <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+        <p className="mt-3 rounded-lg border border-caution-200 bg-caution-50 px-3 py-2 text-sm text-caution-600">
           This server is running in sandbox mode. Runs use built-in sample data and no vendor
           account is touched.
         </p>
       )}
 
       {!status.credentialStorageAvailable && (
-        <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+        <p className="mt-3 rounded-lg border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-700">
           Credential storage is not configured on this server. Set{' '}
           <code className="font-mono">ESTIMATOR_CREDENTIAL_KEY</code> to connect a vendor account.
         </p>
       )}
 
-      <ul className="mt-4 divide-y divide-white/10 overflow-hidden rounded-lg border border-white/10">
+      <ul className="mt-4 divide-y divide-line overflow-hidden rounded-lg border border-line">
         {PROVIDERS.map((provider) => {
           const credential = stored.get(provider);
           return (
-            <li key={provider} className="bg-ink-800/40 px-4 py-3">
+            <li key={provider} className="bg-paper-0 px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-medium text-white">{PROVIDER_LABELS[provider]}</p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-sm font-medium text-ink-900">{PROVIDER_LABELS[provider]}</p>
+                  <p className="text-xs text-ink-500">
                     {credential
                       ? `Connected · secret ${credential.fingerprint}${
                           credential.label ? ` · ${credential.label}` : ''
@@ -155,7 +155,7 @@ function ConnectionCard({
                     <button
                       onClick={() => test(provider)}
                       disabled={busy}
-                      className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-300 transition hover:bg-ink-600 disabled:opacity-50"
+                      className="rounded-lg border border-line px-3 py-1.5 text-xs text-ink-700 transition hover:bg-paper-100 disabled:opacity-50"
                     >
                       Test
                     </button>
@@ -167,7 +167,7 @@ function ConnectionCard({
                           setOpen(open === provider ? null : provider);
                           setForm({});
                         }}
-                        className="rounded-lg border border-white/10 bg-ink-700/70 px-3 py-1.5 text-xs text-gray-200 transition hover:bg-ink-600"
+                        className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs text-ink-800 transition hover:bg-paper-100"
                       >
                         {credential ? 'Replace' : 'Connect'}
                       </button>
@@ -175,7 +175,7 @@ function ConnectionCard({
                         <button
                           onClick={() => disconnect(provider)}
                           disabled={busy}
-                          className="rounded-lg px-2 py-1.5 text-xs text-gray-500 transition hover:text-red-300 disabled:opacity-50"
+                          className="rounded-lg px-2 py-1.5 text-xs text-ink-500 transition hover:text-danger-700 disabled:opacity-50"
                         >
                           Remove
                         </button>
@@ -227,14 +227,14 @@ function ConnectionCard({
                     onChange={(label) => setForm((f) => ({ ...f, label }))}
                   />
                   <div className="sm:col-span-2">
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-ink-500">
                       Provide an API key, or a username and password — whichever your{' '}
                       {PROVIDER_LABELS[provider]} account uses.
                     </p>
                     <button
                       type="submit"
                       disabled={busy}
-                      className="mt-2 flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-500 disabled:opacity-60"
+                      className="mt-2 flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-ink-900 transition hover:bg-brand-500 disabled:opacity-60"
                     >
                       {busy && <SpinnerIcon className="animate-spin" width={16} height={16} />}
                       Save credentials
@@ -249,7 +249,7 @@ function ConnectionCard({
 
       {message && (
         <p
-          className={`mt-3 text-sm ${message.tone === 'ok' ? 'text-emerald-300' : 'text-red-300'}`}
+          className={`mt-3 text-sm ${message.tone === 'ok' ? 'text-success-600' : 'text-danger-700'}`}
           role="status"
         >
           {message.text}
@@ -257,7 +257,7 @@ function ConnectionCard({
       )}
 
       {!status.modelAvailable && (
-        <p className="mt-3 text-xs text-gray-500">
+        <p className="mt-3 text-xs text-ink-500">
           No model is configured on this server, so photos and job notes will not be read. Scope
           will be built from the scan measurements and the mitigation estimate.
         </p>
@@ -281,14 +281,14 @@ function CredentialField({
 }) {
   return (
     <label className="block text-xs">
-      <span className="text-gray-400">{label}</span>
+      <span className="text-ink-600">{label}</span>
       <input
         type={type}
         value={value}
         placeholder={placeholder}
         autoComplete="off"
         onChange={(event) => onChange(event.target.value)}
-        className="mt-1 w-full rounded-lg border border-white/10 bg-ink-900/70 px-3 py-2 text-sm text-white placeholder:text-gray-600 focus:border-brand-500 focus:outline-none"
+        className="mt-1 w-full rounded-lg border border-line bg-paper-50 px-3 py-2 text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none"
       />
     </label>
   );
@@ -341,29 +341,29 @@ function StartRunCard({ onStarted }: { onStarted: (run: EstimatorRun) => void })
   }
 
   return (
-    <section className="rounded-xl border border-white/10 bg-ink-800/60 p-5 backdrop-blur">
-      <h2 className="text-lg font-semibold text-white">Build an estimate</h2>
-      <p className="mt-1 text-sm text-gray-400">
+    <section className="rounded-xl border border-line bg-paper-0 p-5">
+      <h2 className="text-lg font-semibold text-ink-900">Build an estimate</h2>
+      <p className="mt-1 text-sm text-ink-600">
         Pick a DocuSketch scan. The estimator finds the matching job in Dash, reads the photos and
         the job notes, and builds a rebuild scope. It stops for your review before anything is
         written to Xactimate.
       </p>
 
       <label className="mt-4 block text-sm">
-        <span className="text-gray-400">Scan project</span>
+        <span className="text-ink-600">Scan project</span>
         {projects === null ? (
-          <div className="mt-2 flex items-center gap-2 text-sm text-gray-500">
+          <div className="mt-2 flex items-center gap-2 text-sm text-ink-500">
             <SpinnerIcon className="animate-spin" width={16} height={16} /> Loading projects…
           </div>
         ) : projects.length === 0 ? (
-          <p className="mt-2 text-sm text-gray-500">
+          <p className="mt-2 text-sm text-ink-500">
             No scan projects are available. Connect DocuSketch above.
           </p>
         ) : (
           <select
             value={selected}
             onChange={(event) => setSelected(event.target.value)}
-            className="mt-1 w-full rounded-lg border border-white/10 bg-ink-900/70 px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none"
+            className="mt-1 w-full rounded-lg border border-line bg-paper-50 px-3 py-2 text-sm text-ink-900 focus:border-brand-500 focus:outline-none"
           >
             {projects.map((project) => (
               <option key={project.id} value={project.id}>
@@ -377,8 +377,8 @@ function StartRunCard({ onStarted }: { onStarted: (run: EstimatorRun) => void })
       </label>
 
       <label className="mt-4 block text-sm">
-        <span className="text-gray-400">Mitigation estimate (optional)</span>
-        <p className="text-xs text-gray-500">
+        <span className="text-ink-600">Mitigation estimate (optional)</span>
+        <p className="text-xs text-ink-500">
           Paste the mitigation estimate — a CSV export, an XML interchange file, or text copied out
           of the PDF. Everything that was torn out gets scoped back in. If you leave this empty the
           estimator looks for one on the job in Dash.
@@ -389,16 +389,16 @@ function StartRunCard({ onStarted }: { onStarted: (run: EstimatorRun) => void })
           rows={4}
           spellCheck={false}
           placeholder={'Room,Code,Description,Quantity,Unit\nMaster Bedroom,DMO CRPT,"Remove carpet",224.00,SF'}
-          className="mt-2 w-full rounded-lg border border-white/10 bg-ink-900/70 px-3 py-2 font-mono text-xs text-white placeholder:text-gray-600 focus:border-brand-500 focus:outline-none"
+          className="mt-2 w-full rounded-lg border border-line bg-paper-50 px-3 py-2 font-mono text-xs text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none"
         />
       </label>
 
-      {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
+      {error && <p className="mt-3 text-sm text-danger-700">{error}</p>}
 
       <button
         onClick={() => void start()}
         disabled={busy || !selected}
-        className="mt-4 flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-500 disabled:opacity-60"
+        className="mt-4 flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-ink-900 transition hover:bg-brand-500 disabled:opacity-60"
       >
         {busy && <SpinnerIcon className="animate-spin" width={16} height={16} />}
         Start estimate
@@ -427,12 +427,12 @@ function StageRail({ run }: { run: EstimatorRun }) {
             key={stage}
             className={`rounded-full px-2.5 py-1 ${
               failed
-                ? 'bg-red-500/20 text-red-200'
+                ? 'bg-danger-50 text-danger-700'
                 : active
-                  ? 'bg-brand-600/30 text-brand-200'
+                  ? 'bg-brand-50 text-brand-700'
                   : done
-                    ? 'bg-emerald-500/15 text-emerald-300'
-                    : 'bg-ink-700/60 text-gray-500'
+                    ? 'bg-success-50 text-success-600'
+                    : 'bg-paper-0 text-ink-500'
             }`}
           >
             {ESTIMATOR_STAGE_LABELS[stage]}
@@ -466,12 +466,12 @@ function JobReview({
   }
 
   return (
-    <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
+    <div className="mt-4 rounded-lg border border-caution-200 bg-caution-50 p-4">
       <div className="flex items-start gap-2">
-        <AlertIcon className="mt-0.5 shrink-0 text-amber-300" width={18} height={18} />
+        <AlertIcon className="mt-0.5 shrink-0 text-caution-600" width={18} height={18} />
         <div>
-          <p className="text-sm font-medium text-amber-100">Which job is this scan?</p>
-          <p className="mt-1 text-sm text-amber-200/80">
+          <p className="text-sm font-medium text-caution-600">Which job is this scan?</p>
+          <p className="mt-1 text-sm text-caution-600">
             {run.matchReason ??
               'The estimator could not identify the job with enough confidence to continue on its own.'}
           </p>
@@ -479,7 +479,7 @@ function JobReview({
       </div>
 
       {run.matchCandidates.length === 0 ? (
-        <p className="mt-3 text-sm text-amber-200/80">
+        <p className="mt-3 text-sm text-caution-600">
           No candidate jobs came back from the CRM. Check the claim number on the scan.
         </p>
       ) : (
@@ -487,33 +487,33 @@ function JobReview({
           {run.matchCandidates.map((candidate) => (
             <li
               key={candidate.jobId}
-              className="rounded-lg border border-white/10 bg-ink-900/50 p-3"
+              className="rounded-lg border border-line bg-paper-50 p-3"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-white">
+                  <p className="text-sm font-medium text-ink-900">
                     {candidate.jobNumber ?? candidate.jobId}
                     {candidate.claimNumber && (
-                      <span className="ml-2 font-mono text-xs text-brand-300">
+                      <span className="ml-2 font-mono text-xs text-brand-600">
                         {candidate.claimNumber}
                       </span>
                     )}
                   </p>
-                  <p className="text-xs text-gray-400">
+                  <p className="text-xs text-ink-600">
                     {[candidate.insuredName, candidate.address, candidate.lossDate]
                       .filter(Boolean)
                       .join(' · ')}
                   </p>
                   <ul className="mt-1.5 space-y-0.5">
                     {candidate.signals.map((signal) => (
-                      <li key={signal.field} className="text-xs text-gray-500">
+                      <li key={signal.field} className="text-xs text-ink-500">
                         <span
                           className={
                             signal.score > 0.7
-                              ? 'text-emerald-400'
+                              ? 'text-success-600'
                               : signal.score > 0.3
                                 ? 'text-amber-400'
-                                : 'text-gray-600'
+                                : 'text-ink-400'
                           }
                         >
                           ●
@@ -524,13 +524,13 @@ function JobReview({
                   </ul>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-2">
-                  <span className="rounded-full bg-ink-700 px-2.5 py-1 text-xs text-gray-300">
+                  <span className="rounded-full bg-paper-0 px-2.5 py-1 text-xs text-ink-700">
                     {candidate.score}/100
                   </span>
                   <button
                     onClick={() => void choose(candidate)}
                     disabled={busy !== null}
-                    className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-brand-500 disabled:opacity-60"
+                    className="flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-medium text-ink-900 transition hover:bg-brand-500 disabled:opacity-60"
                   >
                     {busy === candidate.jobId && (
                       <SpinnerIcon className="animate-spin" width={14} height={14} />
@@ -544,7 +544,7 @@ function JobReview({
         </ul>
       )}
 
-      {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
+      {error && <p className="mt-3 text-sm text-danger-700">{error}</p>}
     </div>
   );
 }
@@ -563,14 +563,14 @@ function EstimateTable({ estimate }: { estimate: ConstructionEstimate }) {
   return (
     <div className="mt-4 space-y-4">
       {byRoom.map(([roomName, lines]) => (
-        <div key={roomName} className="overflow-hidden rounded-lg border border-white/10">
-          <div className="flex items-center justify-between bg-ink-700/50 px-4 py-2">
-            <h4 className="text-sm font-semibold text-white">{roomName}</h4>
-            <span className="text-xs text-gray-500">{lines.length} line items</span>
+        <div key={roomName} className="overflow-hidden rounded-lg border border-line">
+          <div className="flex items-center justify-between bg-paper-0 px-4 py-2">
+            <h4 className="text-sm font-semibold text-ink-900">{roomName}</h4>
+            <span className="text-xs text-ink-500">{lines.length} line items</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[36rem] text-left text-sm">
-              <thead className="bg-ink-800/60 text-xs uppercase tracking-wide text-gray-500">
+              <thead className="bg-paper-0 text-xs uppercase tracking-wide text-ink-500">
                 <tr>
                   <th className="px-4 py-2 font-medium">Code</th>
                   <th className="px-4 py-2 font-medium">Description</th>
@@ -578,30 +578,30 @@ function EstimateTable({ estimate }: { estimate: ConstructionEstimate }) {
                   <th className="px-4 py-2 font-medium">Unit</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5">
+              <tbody className="divide-y divide-line">
                 {lines.map((line, index) => (
-                  <tr key={`${line.code}-${index}`} className="bg-ink-800/30 align-top">
-                    <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-brand-300">
+                  <tr key={`${line.code}-${index}`} className="bg-paper-0 align-top">
+                    <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-brand-600">
                       {line.code}
                     </td>
                     <td className="px-4 py-2">
-                      <p className="text-gray-200">{line.description}</p>
-                      <p className="mt-0.5 text-xs text-gray-500">{line.rationale}</p>
+                      <p className="text-ink-800">{line.description}</p>
+                      <p className="mt-0.5 text-xs text-ink-500">{line.rationale}</p>
                       {line.needsReview && (
-                        <span className="mt-1 inline-block rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] text-amber-300">
+                        <span className="mt-1 inline-block rounded-full bg-caution-50 px-2 py-0.5 text-[11px] text-caution-600">
                           check this line
                         </span>
                       )}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-2 text-right font-mono text-gray-200">
+                    <td className="whitespace-nowrap px-4 py-2 text-right font-mono text-ink-800">
                       {line.quantityWithWaste.toFixed(2)}
                       {line.quantityWithWaste !== line.quantity && (
-                        <span className="block text-[11px] text-gray-500">
+                        <span className="block text-[11px] text-ink-500">
                           {line.quantity.toFixed(2)} + waste
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-2 text-gray-400">{line.unit}</td>
+                    <td className="px-4 py-2 text-ink-600">{line.unit}</td>
                   </tr>
                 ))}
               </tbody>
@@ -640,16 +640,16 @@ function RunPanel({
   const readyToApprove = run.status === 'awaiting_review' && estimate !== null;
 
   return (
-    <section className="rounded-xl border border-white/10 bg-ink-800/60 p-5 backdrop-blur">
+    <section className="rounded-xl border border-line bg-paper-0 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-white">
+          <h2 className="text-lg font-semibold text-ink-900">
             {estimate?.claimNumber ?? run.scanProjectId}
           </h2>
-          <p className="text-sm text-gray-400">
+          <p className="text-sm text-ink-600">
             {run.job?.insuredName ?? 'Identifying the job…'}
             {run.matchScore !== null && (
-              <span className="ml-2 text-xs text-gray-500">match {run.matchScore}/100</span>
+              <span className="ml-2 text-xs text-ink-500">match {run.matchScore}/100</span>
             )}
           </p>
         </div>
@@ -661,7 +661,7 @@ function RunPanel({
       </div>
 
       {run.error && (
-        <p className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+        <p className="mt-4 rounded-lg border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-700">
           {run.error}
         </p>
       )}
@@ -693,9 +693,9 @@ function RunPanel({
           </div>
 
           {estimate.warnings.length > 0 && (
-            <ul className="mt-4 space-y-1.5 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3">
+            <ul className="mt-4 space-y-1.5 rounded-lg border border-caution-200 bg-caution-50 p-3">
               {estimate.warnings.map((warning, index) => (
-                <li key={index} className="flex gap-2 text-sm text-amber-200/90">
+                <li key={index} className="flex gap-2 text-sm text-caution-600">
                   <AlertIcon className="mt-0.5 shrink-0" width={14} height={14} />
                   <span>{warning}</span>
                 </li>
@@ -708,19 +708,19 @@ function RunPanel({
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <a
               href={api.estimatorExportUrl(run.id, 'csv')}
-              className="flex items-center gap-2 rounded-lg border border-white/10 bg-ink-700/70 px-4 py-2 text-sm text-gray-200 transition hover:bg-ink-600"
+              className="flex items-center gap-2 rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm text-ink-800 transition hover:bg-paper-100"
             >
               <DownloadIcon width={16} height={16} /> CSV
             </a>
             <a
               href={api.estimatorExportUrl(run.id, 'xml')}
-              className="flex items-center gap-2 rounded-lg border border-white/10 bg-ink-700/70 px-4 py-2 text-sm text-gray-200 transition hover:bg-ink-600"
+              className="flex items-center gap-2 rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm text-ink-800 transition hover:bg-paper-100"
             >
               <DownloadIcon width={16} height={16} /> Xactimate XML
             </a>
 
             {run.status === 'complete' ? (
-              <span className="flex items-center gap-2 text-sm text-emerald-300">
+              <span className="flex items-center gap-2 text-sm text-success-600">
                 <CheckIcon width={16} height={16} />
                 Written to Xactimate as {run.exportRef}
               </span>
@@ -728,7 +728,7 @@ function RunPanel({
               <button
                 onClick={() => void approve()}
                 disabled={!readyToApprove || approving}
-                className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-500 disabled:opacity-60"
+                className="flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-ink-900 transition hover:bg-brand-500 disabled:opacity-60"
               >
                 {approving && <SpinnerIcon className="animate-spin" width={16} height={16} />}
                 Approve and send to Xactimate
@@ -736,31 +736,31 @@ function RunPanel({
             )}
           </div>
 
-          {approveError && <p className="mt-3 text-sm text-red-300">{approveError}</p>}
+          {approveError && <p className="mt-3 text-sm text-danger-700">{approveError}</p>}
         </>
       )}
 
       <button
         onClick={() => setShowLog((value) => !value)}
-        className="mt-5 text-xs text-gray-500 underline-offset-2 hover:text-gray-300 hover:underline"
+        className="mt-5 text-xs text-ink-500 underline-offset-2 hover:text-ink-700 hover:underline"
       >
         {showLog ? 'Hide' : 'Show'} run log ({run.events.length})
       </button>
 
       {showLog && (
-        <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto rounded-lg border border-white/10 bg-ink-900/60 p-3 font-mono text-xs">
+        <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto rounded-lg border border-line bg-paper-50 p-3 font-mono text-xs">
           {run.events.map((event, index) => (
             <li
               key={index}
               className={
                 event.level === 'error'
-                  ? 'text-red-300'
+                  ? 'text-danger-700'
                   : event.level === 'warn'
-                    ? 'text-amber-300'
-                    : 'text-gray-400'
+                    ? 'text-caution-600'
+                    : 'text-ink-600'
               }
             >
-              <span className="text-gray-600">{new Date(event.at).toLocaleTimeString()} </span>
+              <span className="text-ink-400">{new Date(event.at).toLocaleTimeString()} </span>
               {event.message}
             </li>
           ))}
@@ -772,11 +772,11 @@ function RunPanel({
 
 function StatusBadge({ run }: { run: EstimatorRun }) {
   const map: Record<EstimatorRun['status'], { text: string; className: string }> = {
-    running: { text: 'Running', className: 'bg-brand-600/25 text-brand-200' },
-    awaiting_review: { text: 'Needs your review', className: 'bg-amber-500/20 text-amber-200' },
-    complete: { text: 'Sent to Xactimate', className: 'bg-emerald-500/20 text-emerald-200' },
-    failed: { text: 'Failed', className: 'bg-red-500/20 text-red-200' },
-    cancelled: { text: 'Cancelled', className: 'bg-ink-700 text-gray-400' },
+    running: { text: 'Running', className: 'bg-brand-50 text-brand-700' },
+    awaiting_review: { text: 'Needs your review', className: 'bg-caution-50 text-caution-600' },
+    complete: { text: 'Sent to Xactimate', className: 'bg-success-50 text-success-600' },
+    failed: { text: 'Failed', className: 'bg-danger-50 text-danger-700' },
+    cancelled: { text: 'Cancelled', className: 'bg-paper-0 text-ink-600' },
   };
   const badge = map[run.status];
 
@@ -800,9 +800,9 @@ function Stat({
   tone?: 'ok' | 'warn';
 }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-ink-900/40 px-3 py-2">
-      <p className="text-xs uppercase tracking-wide text-gray-500">{label}</p>
-      <p className={`mt-0.5 text-sm font-semibold ${tone === 'warn' ? 'text-amber-300' : 'text-white'}`}>
+    <div className="rounded-lg border border-line bg-paper-50 px-3 py-2">
+      <p className="text-xs uppercase tracking-wide text-ink-500">{label}</p>
+      <p className={`mt-0.5 text-sm font-semibold ${tone === 'warn' ? 'text-caution-600' : 'text-ink-900'}`}>
         {value}
       </p>
     </div>
@@ -880,12 +880,12 @@ export function EstimatorPage() {
   }, [activeRun, upsertRun]);
 
   return (
-    <div className="cx-aurora min-h-screen bg-ink-900">
-      <header className="flex items-center justify-between border-b border-white/10 px-6 py-4 sm:px-10">
+    <div className="cx-aurora min-h-screen bg-paper-100">
+      <header className="flex items-center justify-between border-b border-line px-6 py-4 sm:px-10">
         <Logo />
         <Link
           to="/dashboard"
-          className="rounded-lg border border-white/10 bg-ink-700/70 px-4 py-2 text-sm font-medium text-gray-200 transition hover:bg-ink-600"
+          className="rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
         >
           Back to dashboard
         </Link>
@@ -893,18 +893,18 @@ export function EstimatorPage() {
 
       <main className="mx-auto max-w-5xl space-y-6 px-6 py-10 sm:px-10">
         <div className="animate-fade-in-up">
-          <p className="text-sm font-medium text-brand-400">Construction Estimator</p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight text-white">
+          <p className="text-sm font-medium text-brand-600">Construction Estimator</p>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight text-ink-900">
             From the scan to a rebuild estimate
           </h1>
-          <p className="mt-2 max-w-2xl text-gray-400">
+          <p className="mt-2 max-w-2xl text-ink-600">
             Reads the DocuSketch photos and measurements, finds the job in Dash, works out what the
             mitigation crew took out, and builds the construction estimate that puts it back.
           </p>
         </div>
 
         {statusError && (
-          <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+          <p className="rounded-lg border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-700">
             {statusError}
           </p>
         )}
@@ -916,22 +916,22 @@ export function EstimatorPage() {
         {activeRun && <RunPanel run={activeRun} onUpdated={upsertRun} />}
 
         {runs.length > 1 && (
-          <section className="rounded-xl border border-white/10 bg-ink-800/60 p-5 backdrop-blur">
-            <h2 className="text-lg font-semibold text-white">Recent runs</h2>
-            <ul className="mt-3 divide-y divide-white/10 overflow-hidden rounded-lg border border-white/10">
+          <section className="rounded-xl border border-line bg-paper-0 p-5">
+            <h2 className="text-lg font-semibold text-ink-900">Recent runs</h2>
+            <ul className="mt-3 divide-y divide-line overflow-hidden rounded-lg border border-line">
               {runs.map((run) => (
                 <li key={run.id}>
                   <button
                     onClick={() => setActiveRunId(run.id)}
                     className={`flex w-full flex-wrap items-center justify-between gap-3 px-4 py-3 text-left transition ${
-                      run.id === activeRunId ? 'bg-ink-700/60' : 'bg-ink-800/40 hover:bg-ink-700/40'
+                      run.id === activeRunId ? 'bg-paper-0' : 'bg-paper-0 hover:bg-paper-0'
                     }`}
                   >
                     <div>
-                      <p className="text-sm text-white">
+                      <p className="text-sm text-ink-900">
                         {run.estimate?.claimNumber ?? run.scanProjectId}
                       </p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-ink-500">
                         {new Date(run.createdAt).toLocaleString()} ·{' '}
                         {ESTIMATOR_STAGE_LABELS[run.stage]}
                       </p>
