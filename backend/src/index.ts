@@ -1,6 +1,7 @@
 import { createApp } from './app.js';
 import { config } from './config.js';
 import { startScheduler, stopScheduler } from './pm/scheduler.js';
+import { startBackupScheduler, stopBackupScheduler } from './lib/backup/scheduler.js';
 import { agentHub } from './computer/agentHub.js';
 
 const app = createApp();
@@ -19,6 +20,9 @@ const server = app.listen(config.port, () => {
   // a service-role key is configured — see backend/src/pm/scheduler.ts for why
   // it takes two decisions rather than one.
   startScheduler();
+
+  // Started after the listener so a backup can never delay readiness.
+  startBackupScheduler();
 });
 
 // Computer-use agents connect over WebSocket on the same port, so they inherit
@@ -34,6 +38,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     // eslint-disable-next-line no-console
     console.log(`\n[atmosphere-backend] received ${signal}, shutting down…`);
     stopScheduler();
+    stopBackupScheduler();
     agentHub.close();
     server.close(() => process.exit(0));
   });
