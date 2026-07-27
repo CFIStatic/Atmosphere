@@ -61,6 +61,116 @@ export interface RecoveryCredential {
   refreshToken?: string;
 }
 
+/* ---- Audit ledger ---------------------------------------------------- */
+
+export type AgentRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+export type AgentActorType = 'user' | 'system' | 'schedule' | 'agent';
+export type AgentStepStatus = 'ok' | 'error' | 'pending';
+export type AgentAccent = 'brand' | 'emerald' | 'amber' | 'sky' | 'rose';
+
+export type AgentStepType =
+  | 'status'
+  | 'thought'
+  | 'message'
+  | 'tool_call'
+  | 'tool_result'
+  | 'observation'
+  | 'navigation'
+  | 'decision'
+  | 'artifact'
+  | 'usage'
+  | 'error'
+  | 'event';
+
+/** An agent as the catalog describes it, independent of whether it has run. */
+export interface AgentDefinition {
+  key: string;
+  name: string;
+  blurb: string;
+  accent: AgentAccent;
+  /** 'ledger' — writes its own trace. 'bridge' — mirrored from its own table. */
+  intake: 'ledger' | 'bridge';
+  sourceTable?: string;
+}
+
+export interface AgentSummary extends AgentDefinition {
+  total: number;
+  succeeded: number;
+  failed: number;
+  active: number;
+  steps: number;
+  lastRunAt: string | null;
+  avgDurationMs: number | null;
+}
+
+export interface AuditRun {
+  id: string;
+  agentKey: string;
+  agent: AgentDefinition;
+  agentLabel: string | null;
+  actorType: AgentActorType;
+  actorUserId: string | null;
+  actorEmail: string | null;
+  actorLabel: string | null;
+  parentRunId: string | null;
+  title: string;
+  summary: string | null;
+  status: AgentRunStatus;
+  error: string | null;
+  stepCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  sourceTable: string | null;
+  sourceId: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationMs: number | null;
+  createdAt: string;
+  updatedAt: string | null;
+  /** Detail view only — omitted from the list to keep pages small. */
+  input?: unknown;
+  result?: unknown;
+}
+
+export interface AuditStep {
+  id: string;
+  seq: number;
+  type: AgentStepType;
+  action: string | null;
+  detail: string | null;
+  target: string | null;
+  payload: unknown;
+  status: AgentStepStatus;
+  error: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationMs: number | null;
+  createdAt: string;
+}
+
+export interface AuditStats {
+  totalRuns: number;
+  activeRuns: number;
+  failedRuns: number;
+  succeededRuns: number;
+  totalSteps: number;
+  inputTokens: number;
+  outputTokens: number;
+  runs24h: number;
+  agentsSeen: number;
+  lastRunAt: string | null;
+}
+
+export interface AuditRunFilters {
+  agent?: string;
+  status?: AgentRunStatus;
+  actorType?: AgentActorType;
+  q?: string;
+  from?: string;
+  limit?: number;
+  cursor?: string;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -171,6 +281,57 @@ export const api = {
     }),
 
   getMembers: () => request<{ members: OrgMember[] }>('/api/org/members', { method: 'GET' }),
+
+  // ---- Audit ----
+  auditAgents: () => request<{ agents: AgentSummary[] }>('/api/audit/agents', { method: 'GET' }),
+
+  auditStats: () => request<{ stats: AuditStats }>('/api/audit/stats', { method: 'GET' }),
+
+  auditRuns: (filters: AuditRunFilters = {}) => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters)) {
+      if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
+    }
+    const query = params.toString();
+    return request<{ runs: AuditRun[]; nextCursor: string | null }>(
+      `/api/audit/runs${query ? `?${query}` : ''}`,
+      { method: 'GET' },
+    );
+  },
+
+  /**
+   * One run and its trace. `afterSeq` fetches only steps past the ones already
+   * held, so tailing a running agent stays cheap however long it runs.
+   */
+  auditRun: (id: string, afterSeq = 0) =>
+    request<{ run: AuditRun; steps: AuditStep[]; moreSteps: boolean }>(
+      `/api/audit/runs/${id}${afterSeq > 0 ? `?afterSeq=${afterSeq}` : ''}`,
+      { method: 'GET' },
+    ),
+};
+
+/** Labels for the run states, kept next to the other shared UI copy. */
+export const RUN_STATUS_LABELS: Record<AgentRunStatus, string> = {
+  queued: 'Queued',
+  running: 'Running',
+  succeeded: 'Succeeded',
+  failed: 'Failed',
+  cancelled: 'Cancelled',
+};
+
+export const STEP_TYPE_LABELS: Record<AgentStepType, string> = {
+  status: 'Status',
+  thought: 'Reasoning',
+  message: 'Message',
+  tool_call: 'Action',
+  tool_result: 'Result',
+  observation: 'Observation',
+  navigation: 'Navigation',
+  decision: 'Decision',
+  artifact: 'Artifact',
+  usage: 'Usage',
+  error: 'Error',
+  event: 'Event',
 };
 
 /** Human-readable labels for roles and work types (shared UI copy). */

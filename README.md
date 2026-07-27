@@ -25,6 +25,8 @@ protected Postgres schema.
    server so no Supabase token is ever exposed to page JavaScript.
 5. **PIN sign-in** — an optional 4-digit PIN for fast repeat sign-in, bound to a single
    device (see below).
+6. **Audit** — every unit of work every agent performed for the organization, replayable
+   step by step (see below).
 
 ## Why this shape?
 
@@ -49,6 +51,8 @@ JWT:
 | `orgs`         | An organization; owns a unique `join_code`.                          |
 | `org_members`  | Links a user to an org with their `role` and `work_type`.            |
 | `device_credentials` | One row per PIN-enrolled device. Holds only hashes — no secret and no session token. |
+| `agent_runs`     | One row per unit of work an agent performed. Append-only outcome. |
+| `agent_run_steps`| The ordered trace of a run, one row per step. Immutable once written. |
 
 Membership checks used by the policies live in a **private schema** (not exposed as RPCs) to
 avoid recursive-policy issues and to keep the API surface minimal. Onboarding writes go
@@ -73,7 +77,9 @@ Atmosphere/
 │   │   ├── lib/
 │   │   │   ├── supabase.ts       Anon + per-request user-scoped client factories
 │   │   │   ├── session.ts        httpOnly session-cookie set/clear
-│   │   │   ├── validation.ts     zod schemas (credentials, org create/join)
+│   │   │   ├── validation.ts     zod schemas (credentials, org create/join, audit)
+│   │   │   ├── auditCatalog.ts   The registry of agents the Audit tab accounts for
+│   │   │   ├── auditLog.ts       Write side of the ledger + payload redaction
 │   │   │   └── errors.ts         Typed HTTP errors
 │   │   ├── middleware/
 │   │   │   ├── requireAuth.ts    Verify access token; transparent refresh
@@ -81,14 +87,20 @@ Atmosphere/
 │   │   └── routes/
 │   │       ├── auth.ts           signup / login / logout / refresh / me
 │   │       ├── org.ts            onboarding: me / create / join / members
+│   │       ├── audit.ts          agent runs, traces, and trace ingest
 │   │       └── health.ts         liveness probe
 │   └── .env.example
+├── db/
+│   └── audit_ledger.sql          Audit tables, RLS, integrity triggers, bridges
 └── frontend/         React + Vite + TypeScript + Tailwind
     ├── src/
     │   ├── pages/LoginPage.tsx        Branded login + signup screen
     │   ├── pages/OnboardingPage.tsx   3-step wizard: org → role → work type
     │   ├── pages/DashboardPage.tsx    Org overview, invite code, linked accounts
+    │   ├── pages/AuditPage.tsx        Every agent, every run, every step
     │   ├── context/AuthContext.tsx    Session + membership state
+    │   ├── components/AppLayout.tsx   Signed-in shell: left rail + page
+    │   ├── components/audit/          Run detail, step trace, shared presentation
     │   ├── components/                Logo, icons, ProtectedRoute
     │   └── lib/api.ts                 Typed fetch client (credentials: include)
     └── .env.example
@@ -144,6 +156,13 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | POST   | `/api/org`           | cookie | `{ name, role, workType }`    | Create an org and join as first member       |
 | POST   | `/api/org/join`      | cookie | `{ joinCode, role, workType }`| Link to an existing org by join code         |
 | GET    | `/api/org/members`   | cookie | —                             | Linked accounts in the caller's org          |
+| GET    | `/api/audit/agents`  | cookie | —                             | Every agent with its running totals          |
+| GET    | `/api/audit/stats`   | cookie | —                             | Org-wide run/step/token totals               |
+| GET    | `/api/audit/runs`    | cookie | —                             | Filtered run list, keyset-paged              |
+| GET    | `/api/audit/runs/:id`| cookie | —                             | One run and its ordered trace                |
+| POST   | `/api/audit/runs`    | cookie | `{ agentKey, title, … }`      | Open a run (agents outside this process)     |
+| POST   | `/api/audit/runs/:id/steps` | cookie | `{ steps: [...] }`     | Append to a run's trace                      |
+| PATCH  | `/api/audit/runs/:id`| cookie | `{ status, result, … }`       | Report progress or close a run               |
 
 `role` ∈ `project_manager | field_technician | accountant | office_manager | sales`.
 `workType` ∈ `mitigation | construction`.
@@ -193,6 +212,41 @@ which is what keeps that budget meaningless rather than a coin flip.
 
 Signing out deliberately does **not** clear the PIN — returning to the PIN pad instead of the
 password form is the whole point. Enrollment is per-device, capped at 5 devices per user.
+
+## Audit
+
+The **Audit** tab in the left rail is one place to see everything every agent has done for the
+organization: what it was asked to do, who asked, how it ended, and the ordered steps that got
+it there — as a timeline, or one step at a time.
+
+Install the schema once (`db/audit_ledger.sql`, idempotent), then see **[docs/AUDIT.md](docs/AUDIT.md)**
+for how to record a new agent's work.
+
+**Why a ledger of its own** rather than reading each agent's own tables? Agents differ in where
+they keep state and some keep none at all — Web Access writes `web_runs`, Computer Use holds
+runs in memory and evicts them after 40, the field assistant persists nothing. A trail that
+only covers the agents that happened to write to Postgres is not a trail. Auditors also ask
+across agents ("what touched this org last Tuesday"), which should be one indexed query.
+
+**Two ways in.** Agents running in this process call `lib/auditLog.ts` directly. Agents that
+already keep their own run table are mirrored by database trigger instead, so their work is
+captured without changing their code and the mirror cannot drift from the source. Bridges
+install only for tables that exist; after another agent's branch merges, run:
+
+```sql
+select public.audit_install_bridges();
+```
+
+**Append-only is enforced by the database, not by convention.** Steps have no UPDATE and no
+DELETE policy, so a user JWT cannot rewrite a trace. Runs have no DELETE policy, and a trigger
+freezes their identity columns and refuses to move a finished run to a different outcome. A
+ledger that the thing being audited can edit afterwards is decoration.
+
+**Traces are redacted before they are stored.** A real run passes through passwords typed into
+login forms and megabytes of screenshot PNG, neither of which belongs in a table every member
+of the org can read forever. `lib/auditLog.ts` redacts secret-shaped keys, replaces image bytes
+with a descriptor, and caps payload size — at the last point before Postgres, so it is not each
+agent's job to remember.
 
 ## Configuration
 

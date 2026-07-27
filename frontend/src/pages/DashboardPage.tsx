@@ -6,13 +6,11 @@ import {
   WORK_TYPE_LABELS,
   type OrgMember,
 } from '../lib/api';
-import { Logo } from '../components/Logo';
 import { PinSetupCard } from '../components/PinSetupCard';
 import { SpinnerIcon, CheckIcon } from '../components/icons';
 
 export function DashboardPage() {
-  const { user, membership, logout } = useAuth();
-  const [loggingOut, setLoggingOut] = useState(false);
+  const { user, membership } = useAuth();
   const [members, setMembers] = useState<OrgMember[] | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -33,15 +31,6 @@ export function DashboardPage() {
     };
   }, []);
 
-  async function handleLogout() {
-    setLoggingOut(true);
-    try {
-      await logout();
-    } finally {
-      setLoggingOut(false);
-    }
-  }
-
   async function copyCode() {
     if (!org?.joinCode) return;
     try {
@@ -54,19 +43,8 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="cx-aurora min-h-screen bg-ink-900">
-      <header className="flex items-center justify-between border-b border-white/10 px-6 py-4 sm:px-10">
-        <Logo />
-        <button
-          onClick={handleLogout}
-          disabled={loggingOut}
-          className="flex items-center gap-2 rounded-lg border border-white/10 bg-ink-700/70 px-4 py-2 text-sm font-medium text-gray-200 transition hover:bg-ink-600 disabled:opacity-60"
-        >
-          {loggingOut && <SpinnerIcon className="animate-spin" width={16} height={16} />}
-          {loggingOut ? 'Signing out…' : 'Sign out'}
-        </button>
-      </header>
-
+    <div className="cx-aurora min-h-screen">
+      {/* The wordmark and sign-out live in the left rail (AppLayout). */}
       <main className="mx-auto max-w-4xl px-6 py-10 sm:px-10">
         <div className="animate-fade-in-up">
           <p className="text-sm font-medium text-brand-400">{org?.name ?? 'Your organization'}</p>

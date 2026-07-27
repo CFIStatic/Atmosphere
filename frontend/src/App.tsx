@@ -7,6 +7,8 @@ import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { AuditPage } from './pages/AuditPage';
+import { AppLayout } from './components/AppLayout';
 import { SpinnerIcon } from './components/icons';
 
 function FullScreenSpinner() {
@@ -61,12 +63,29 @@ export default function App() {
             }
           />
 
+          {/* Signed-in app. Every page here shares the left rail, so a new
+              destination is a route plus an entry in AppLayout's NAV array. */}
           <Route
             path="/dashboard"
             element={
               <ProtectedRoute>
                 <RequireOnboarded>
-                  <DashboardPage />
+                  <AppLayout>
+                    <DashboardPage />
+                  </AppLayout>
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/audit"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <AppLayout>
+                    <AuditPage />
+                  </AppLayout>
                 </RequireOnboarded>
               </ProtectedRoute>
             }
