@@ -6,6 +6,7 @@ import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
 import { aiRouter } from './routes/ai.js';
+import { computerRouter } from './routes/computer.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 
@@ -47,6 +48,7 @@ export function createApp(): Express {
   // than raising the global cap, which would widen the DoS surface on every
   // unauthenticated endpoint.
   app.use('/api/ai', express.json({ limit: '2mb' }), aiRouter);
+  app.use('/api/computer', computerRouter);
 
   // 404 + error handling (must be last).
   app.use(notFound);
