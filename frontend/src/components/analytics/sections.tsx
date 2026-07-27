@@ -20,7 +20,7 @@ import {
   type PlanMixRow,
   type RetentionRow,
 } from '../../lib/analyticsApi';
-import { METRIC_COLOR, SERIES } from './palette';
+import { METRIC_COLOR } from './palette';
 import { ColumnChart, HBarChart, Legend, RetentionGrid, TimeSeriesChart } from './charts';
 import { ChartCard, DataTable, type Column } from './ui';
 
@@ -203,7 +203,7 @@ export function FeatureUsageSection({
         ) : (
           <HBarChart
             ariaLabel="Tools ranked by hours spent"
-            color={SERIES[0]}
+            color={METRIC_COLOR.usage}
             items={used.slice(0, 8).map((f) => ({
               key: f.featureKey,
               label: f.label,
@@ -233,7 +233,9 @@ export function FeatureUsageSection({
       >
         <HBarChart
           ariaLabel="Tools with the least time spent"
-          color={SERIES[1]}
+          // Same measure as the chart alongside, so the same colour: a hue
+          // change here would imply these are a different quantity.
+          color={METRIC_COLOR.usage}
           maxValue={peakHours}
           items={leastUsed.map((f) => ({
             key: f.featureKey,
@@ -283,7 +285,8 @@ export function PlanMixSection({ plans }: { plans: PlanMixRow[] }) {
       ) : (
         <HBarChart
           ariaLabel="Recurring revenue by plan"
-          color={SERIES[2]}
+          // This is MRR, split by plan — the same entity the MRR chart shows.
+          color={METRIC_COLOR.mrr}
           items={plans.map((p) => ({
             key: `${p.planCode}-${p.billingInterval}`,
             label: `${p.planName}`,

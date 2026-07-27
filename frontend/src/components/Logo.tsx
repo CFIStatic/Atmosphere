@@ -1,24 +1,55 @@
-/** Atmosphere wordmark + glyph (a sphere ringed by its atmosphere). */
-export function Logo({ className = '' }: { className?: string }) {
+/**
+ * Atmosphere lockup: the stacked-bar mark plus the wordmark.
+ *
+ * The bars climb from recessive grey to full contrast, with the brand orange
+ * carrying the bottom rung — the accent is the payoff of the ramp, so it is the
+ * one bar that never changes colour.
+ */
+
+const BAR_HEIGHT = 2.6;
+const BAR_GAP = 1.75;
+
+/** Top-to-bottom greys for the dark UI; the brand orange closes the stack. */
+const DARK_BARS = ['#4a4a4a', '#6e6e6e', '#9c9c9c', '#e4e4e4'];
+
+export function Logo({
+  className = '',
+  showWordmark = true,
+}: {
+  className?: string;
+  showWordmark?: boolean;
+}) {
   return (
-    <div className={`flex items-center gap-2.5 ${className}`}>
-      <span className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-brand-400 to-brand-700 shadow-lg shadow-brand-900/40">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <circle cx="12" cy="12" r="5" fill="white" fillOpacity="0.95" />
-          <ellipse
-            cx="12"
-            cy="12"
-            rx="10"
-            ry="3.6"
-            stroke="white"
-            strokeWidth="1.5"
-            transform="rotate(-25 12 12)"
+    <div className={`flex items-center gap-3 ${className}`}>
+      <svg
+        width="26"
+        height="26"
+        viewBox="0 0 20 20"
+        fill="none"
+        aria-hidden="true"
+        className="shrink-0"
+      >
+        {DARK_BARS.map((fill, index) => (
+          <rect
+            key={fill}
+            x="0"
+            y={index * (BAR_HEIGHT + BAR_GAP)}
+            width="20"
+            height={BAR_HEIGHT}
+            fill={fill}
           />
-        </svg>
-      </span>
-      <span className="text-xl font-extrabold tracking-tight text-white">
-        Atmo<span className="text-brand-400">sphere</span>
-      </span>
+        ))}
+        <rect
+          x="0"
+          y={DARK_BARS.length * (BAR_HEIGHT + BAR_GAP)}
+          width="20"
+          height={BAR_HEIGHT}
+          fill="#f26522"
+        />
+      </svg>
+      {showWordmark && (
+        <span className="text-xl font-bold tracking-tight text-[#f5f4f1]">Atmosphere</span>
+      )}
     </div>
   );
 }

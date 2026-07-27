@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { CHART } from './palette';
+import { CHART, SEQUENTIAL, SEQUENTIAL_DARK_TEXT_FROM } from './palette';
 
 /** Measure the container so marks land on whole pixels instead of being scaled. */
 function useMeasuredWidth<T extends HTMLElement>(): [React.RefObject<T>, number] {
@@ -476,12 +476,11 @@ export function RetentionGrid({
   const maxOffset = Math.max(0, ...cohorts.map((c) => c.cells.length - 1));
   const offsets = Array.from({ length: maxOffset + 1 }, (_, i) => i);
 
-  const shade = (value: number | null): string => {
-    if (value === null) return 'transparent';
-    // Six steps of one hue; the lightest still reads against the surface.
-    const index = Math.min(5, Math.max(0, Math.floor((value / 100) * 5)));
-    return ['#0d366b', '#184f95', '#256abf', '#2a78d6', '#3987e5', '#5598e7'][index];
-  };
+  /** Six steps of one hue; the darkest still reads as a filled cell. */
+  const stepFor = (value: number | null): number | null =>
+    value === null
+      ? null
+      : Math.min(SEQUENTIAL.length - 1, Math.max(0, Math.floor((value / 100) * (SEQUENTIAL.length - 1))));
 
   return (
     <div className="overflow-x-auto">
@@ -513,13 +512,22 @@ export function RetentionGrid({
               <td className="px-2 py-1 text-right tabular-nums text-gray-400">{cohort.size}</td>
               {offsets.map((offset) => {
                 const value = cohort.cells[offset] ?? null;
+                const step = stepFor(value);
                 return (
                   <td
                     key={offset}
                     className="rounded px-1 py-1 text-center tabular-nums"
                     style={{
-                      backgroundColor: shade(value),
-                      color: value === null ? CHART.muted : '#ffffff',
+                      backgroundColor: step === null ? 'transparent' : SEQUENTIAL[step],
+                      // The value is printed in every cell, so colour is never
+                      // the only channel — but it has to stay readable on the
+                      // pale end of the ramp.
+                      color:
+                        step === null
+                          ? CHART.muted
+                          : step >= SEQUENTIAL_DARK_TEXT_FROM
+                            ? CHART.onLight
+                            : CHART.ink,
                     }}
                   >
                     {value === null ? '·' : `${Math.round(value)}`}

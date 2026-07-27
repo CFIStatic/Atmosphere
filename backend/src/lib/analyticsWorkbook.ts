@@ -34,8 +34,10 @@ const COUNT = '#,##0';
 const DECIMAL = '#,##0.00';
 const PERCENT = '0.0"%"';
 
-const INK = 'FF12121D';
-const PAPER = 'FFF4F4F7';
+// Brand header band: the warm near-black canvas with the off-white wordmark ink.
+const INK = 'FF1A1A1A';
+const PAPER = 'FFF5F4F1';
+const BRAND_ORANGE = 'FFF26522';
 
 interface Column<T> {
   header: string;
@@ -56,6 +58,8 @@ function dressSheet(sheet: ExcelJS.Worksheet, columnCount: number, headerRow = 1
   header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: INK } };
   header.alignment = { vertical: 'middle', horizontal: 'left' };
   header.height = 22;
+  // The orange rule under the header echoes the logo's accent bar.
+  header.border = { bottom: { style: 'medium', color: { argb: BRAND_ORANGE } } };
 
   sheet.views = [{ state: 'frozen', ySplit: headerRow }];
   if (columnCount > 0) {

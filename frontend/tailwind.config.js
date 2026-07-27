@@ -4,24 +4,29 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Atmosphere brand palette.
+        // Atmosphere brand palette — the orange from the logo mark, stepped for
+        // UI use. 500 is the brand colour itself; 600 is the interactive step
+        // that carries white text at an accessible contrast.
         brand: {
-          50: '#eef2ff',
-          100: '#e0e7ff',
-          200: '#c7d2fe',
-          300: '#a5b4fc',
-          400: '#818cf8',
-          500: '#6366f1',
-          600: '#4f46e5',
-          700: '#4338ca',
-          800: '#3730a3',
-          900: '#312e81',
+          50: '#fef4ee',
+          100: '#fde4d4',
+          200: '#fbc6a7',
+          300: '#f8a377',
+          400: '#f5854b',
+          500: '#f26522', // brand orange
+          600: '#dc5312',
+          700: '#b5420e',
+          800: '#8c330b',
+          900: '#6b2708',
         },
+        // Warm neutrals matching the brand canvas. ink-800 is the card and chart
+        // surface, and is the exact surface the chart palette was validated
+        // against — changing it means re-running the validator.
         ink: {
-          900: '#0a0a12',
-          800: '#12121d',
-          700: '#1b1b2b',
-          600: '#262639',
+          900: '#121212',
+          800: '#1a1a1a',
+          700: '#242424',
+          600: '#303030',
         },
       },
       fontFamily: {
