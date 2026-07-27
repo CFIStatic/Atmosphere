@@ -11,7 +11,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "browser:install": "playwright install chromium",
     "check:verifier": "tsx src/scripts/checkVerifier.ts",
-    "test": "node --import tsx --test src/**/*.test.ts",
+    "test": "node --import tsx --test src/**/*.test.ts test/*.test.ts",
     "learn": "tsx src/scripts/learn.ts",
     "backup": "tsx src/scripts/backup.ts snapshot",
     "backup:list": "tsx src/scripts/backup.ts list",
@@ -34,6 +34,7 @@
     "express": "^4.19.2",
     "express-rate-limit": "^7.4.0",
     "helmet": "^7.1.0",
+    "stripe": "^22.3.2",
     "playwright": "^1.56.1",
     "ws": "^8.21.1",
     "zod": "^3.23.8"

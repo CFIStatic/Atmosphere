@@ -5,16 +5,19 @@ import {
   api,
   ROLE_LABELS,
   WORK_TYPE_LABELS,
+  type BillingOverview,
   type OrgMember,
 } from '../lib/api';
 import { AppShell } from '../components/AppShell';
 import { EscalationQueue } from '../components/EscalationQueue';
 import { displayName, initials } from '../lib/display';
+import { formatUsd, usedPct } from '../lib/money';
 import { SpinnerIcon, CheckIcon, SettingsIcon } from '../components/icons';
 
 export function DashboardPage() {
   const { user, profile, membership } = useAuth();
   const [members, setMembers] = useState<OrgMember[] | null>(null);
+  const [billing, setBilling] = useState<BillingOverview | null>(null);
   const [copied, setCopied] = useState(false);
 
   const org = membership?.org;
@@ -29,6 +32,17 @@ export function DashboardPage() {
       .catch(() => {
         if (!cancelled) setMembers([]);
       });
+
+    // A missing balance should not blank the dashboard — the card just hides.
+    api
+      .getBillingOverview()
+      .then((o) => {
+        if (!cancelled) setBilling(o);
+      })
+      .catch(() => {
+        if (!cancelled) setBilling(null);
+      });
+
     return () => {
       cancelled = true;
     };
@@ -48,7 +62,8 @@ export function DashboardPage() {
   return (
     <AppShell>
       <main className="cx-aurora min-h-screen px-6 py-10 sm:px-10">
-        <div className="mx-auto max-w-4xl animate-fade-in-up">
+        <div className="mx-auto max-w-4xl">
+          <div className="animate-fade-in-up">
           <p className="text-sm font-medium text-brand-400">{org?.name ?? 'Your organization'}</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-white">
             Welcome back, {displayName(profile?.fullName, user?.email)} 🎉
@@ -104,6 +119,40 @@ export function DashboardPage() {
             </div>
           </div>
 
+          {/* Credits — the balance that gates every metered request. */}
+          {billing && (
+            <Link
+              to="/billing"
+              className="mt-4 block rounded-xl border border-white/10 bg-ink-800/60 p-5 backdrop-blur transition hover:border-brand-500/40 hover:bg-ink-700/50"
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Credit balance
+                </p>
+                <p className="text-xs text-brand-400">Manage billing →</p>
+              </div>
+              <p className="mt-1.5 text-2xl font-bold tracking-tight text-white">
+                {formatUsd(billing.balance.totalNanos)}
+              </p>
+              <p className="mt-0.5 text-sm text-gray-400">
+                {billing.subscription.planName} plan ·{' '}
+                {formatUsd(billing.periodUsage.priceNanos)} used this period
+              </p>
+              {billing.subscription.includedCreditsNanos > 0 && (
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-ink-700">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-brand-500 to-brand-300"
+                    style={{
+                      width: `${usedPct(
+                        billing.periodUsage.priceNanos,
+                        billing.subscription.includedCreditsNanos,
+                      )}%`,
+                    }}
+                  />
+                </div>
+              )}
+            </Link>
+          )}
           {/* Anything the verifier could not settle on its own. Renders nothing
               when the queue is empty, so it only appears when it matters. */}
           <EscalationQueue />
@@ -186,6 +235,27 @@ export function DashboardPage() {
               </span>
             </span>
           </Link>
+          {/* Construction Estimator */}
+          <Link
+            to="/estimator"
+            className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-ink-800/60 p-5 backdrop-blur transition hover:border-brand-500/40 hover:bg-ink-700/60"
+          >
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-brand-400">
+                Construction Estimator
+              </p>
+              <p className="mt-1.5 text-lg font-semibold text-white">
+                Turn a scan into a rebuild estimate
+              </p>
+              <p className="mt-1 text-sm text-gray-400">
+                Reads DocuSketch photos and measurements, finds the job in Dash, and builds the
+                Xactimate scope — including the rebuild implied by a mitigation estimate.
+              </p>
+            </div>
+            <span aria-hidden="true" className="shrink-0 text-2xl text-brand-300">
+              →
+            </span>
+          </Link>
 
           {/* Linked accounts */}
           <div className="mt-8">
@@ -233,6 +303,7 @@ export function DashboardPage() {
               )}
             </div>
           </div>
+        </div>
         </div>
       </main>
     </AppShell>

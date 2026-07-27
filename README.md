@@ -57,7 +57,10 @@ that goes and looks.
 10. **Executes work, and learns from it** — drafts scopes, builds estimates, extracts
     document fields, writes customer updates. Every run is scored, and the routing policy
     improves from those scores. See [Learning layer](#learning-layer) below.
-11. **Settings** — reached from the account block in the bottom-left corner of the sidebar:
+11. **Construction Estimator** — an agent that signs in to DocuSketch, reads the scan and
+    the field photos, identifies the matching job in a CRM (Dash), reads the mitigation
+    estimate, and builds the construction/rebuild estimate for Xactimate (see below).
+12. **Settings** — reached from the account block in the bottom-left corner of the sidebar:
     display name, password, PIN sign-in, role, and per-device preferences (see below).
 
 ## Why this shape?
@@ -83,6 +86,14 @@ JWT:
 | `orgs`         | An organization; owns a unique `join_code`.                          |
 | `org_members`  | Links a user to an org with their `role` and `work_type`.            |
 | `device_credentials` | One row per PIN-enrolled device. Holds only hashes — no secret and no session token. |
+| `billing_plans` / `credit_packs` | Public catalog: subscription tiers and prepaid credit packs. |
+| `model_rate_card` | Public **sell** prices per model. Derived from the private cost table. |
+| `org_billing`  | One row per org: plan, seats, period, auto-reload, spend limit.       |
+| `credit_lots`  | The live balance. Consumed soonest-expiry-first.                      |
+| `credit_ledger`| Append-only audit trail of every credit movement.                     |
+| `credit_purchases` | Prepaid top-ups and their settlement state.                       |
+| `usage_events` / `usage_daily` | Every metered call, plus a trigger-maintained daily rollup. |
+| `payments`     | Payment history: charges, refunds, invoices and receipt links.        |
 | `web_connections` | A website the org has connected, with the username we sign in as.  |
 | `web_credentials` | The sealed site password, kept apart so a routine read can never carry it. |
 | `web_runs`     | One AI task against a connection: its instruction, step trace, and result. |
@@ -93,6 +104,8 @@ JWT:
 | `ai_runs`      | The episode log — every task execution, its cost and its outcome.    |
 | `ai_exemplars` | Accepted past outputs, mined into few-shot examples. Org-scoped.     |
 | `ai_golden_cases` | Regression suite that gates any change to the serving policy.     |
+| `estimator_credentials` | One row per org per vendor (DocuSketch / Dash / Xactimate). Holds only AES-256-GCM ciphertext. |
+| `estimator_runs` | One row per estimator run: the scan, the matched job, the observations, the estimate, and the event log. |
 
 The CRM adds its own org-scoped tables under the same RLS model (`crm_accounts`,
 `crm_contacts`, `crm_properties`, `crm_leads`, `crm_jobs`, `crm_activities`), a verbatim
@@ -124,6 +137,7 @@ Atmosphere/
 │   │   ├── lib/
 │   │   │   ├── supabase.ts       Anon + per-request user-scoped client factories
 │   │   │   ├── session.ts        httpOnly session-cookie set/clear
+│   │   │   ├── validation.ts     zod schemas (credentials, org, billing, usage)
 │   │   │   ├── validation.ts     zod schemas (credentials, org create/join, web access)
 │   │   │   ├── errors.ts         Typed HTTP errors
 │   │   │   ├── webVault.ts       AES-256-GCM sealing for stored site passwords
@@ -140,6 +154,10 @@ Atmosphere/
 │   │   │   ├── validation.ts     zod schemas (credentials, org create/join)
 │   │   │   ├── crmValidation.ts  zod schemas + camelCase↔snake_case row mapping
 │   │   │   ├── orgContext.ts     Resolves the caller's org; never trusts the body
+│   │   │   ├── money.ts          Nanodollar arithmetic — no floats for money
+│   │   │   ├── anthropic.ts      Authoritative token measurement (+ tests)
+│   │   │   ├── billing.ts        DB error → HTTP mapping, response shaping
+│   │   │   ├── stripe.ts         Stripe client, customers, webhook helpers
 │   │   │   ├── errors.ts         Typed HTTP errors
 │   │   │   ├── backup/           Archive format, storage drivers, runner, scheduler
 │   │   │   └── integrations/     Connectors + the append-only external mirror
@@ -152,6 +170,7 @@ Atmosphere/
 │   │   │   └── providers/        OpenAI · Anthropic · Google · xAI · open weights
 │   │   ├── middleware/
 │   │   │   ├── requireAuth.ts    Verify access token; transparent refresh
+│   │   │   ├── requireOrg.ts     Resolve caller's org from their own membership
 │   │   │   └── errorHandler.ts   404 + central JSON error handler
 │   │   ├── computer/
 │   │   │   ├── protocol.ts       Wire protocol shared with the agent
@@ -160,35 +179,43 @@ Atmosphere/
 │   │   │   ├── agentTokens.ts    Pairing codes + HMAC-signed agent tokens
 │   │   │   ├── agentHub.ts       WebSocket registry of connected computers
 │   │   │   └── runner.ts         The agent loop + live run transcripts
-│   │   ├── middleware/
-│   │   │   ├── requireAuth.ts    Verify access token; transparent refresh
-│   │   │   └── errorHandler.ts   404 + central JSON error handler
-│   │   ├── routes/
-│   │   │   ├── auth.ts           signup / login / logout / refresh / me
-│   │   │   ├── org.ts            onboarding: me / create / join / members
-│   │   │   ├── webAccess.ts      connections + runs
-│   │   │   ├── verifier.ts       checks + the escalation queue
-│   │   │   ├── computer.ts       computer use: keys, pairing, runs, SSE
-│   │   │   └── health.ts         liveness probe
-│   │   └── scripts/
-│   │       └── checkVerifier.ts  Verifier checks against a fixture portal + stubbed model
-│   └── .env.example
-├── db/
-│   ├── web_access.sql            Schema + RLS for Web Access (run once)
-│   └── verifier.sql              Schema + RLS for the Verifier (run once, after the above)
+│   │   ├── estimator/            Construction Estimator agent
+│   │   │   ├── pipeline.ts       Stage orchestration; pauses for human review
+│   │   │   ├── credentials.ts    AES-256-GCM vault for vendor credentials
+│   │   │   ├── store.ts          Supabase persistence (runs + credentials)
+│   │   │   ├── types.ts          Vendor-neutral domain model
+│   │   │   ├── connectors/       DocuSketch / Dash / Xactimate + fixtures
+│   │   │   ├── ai/               Photo reading and job-note reading
+│   │   │   ├── matching/         Scan ↔ CRM job matcher
+│   │   │   ├── scope/            Quantity maths, scope rules, rebuild rules
+│   │   │   ├── pricing/          Xactimate category/selector catalog
+│   │   │   └── estimate/         Estimate assembly, import, and export
+│   │   ├── scripts/
+│   │   │   └── checkVerifier.ts  Verifier checks against a fixture portal + stubbed model
 │   │   ├── scripts/              Backup CLI, self-checks, learning cycle (cron)
 │   │   └── routes/
 │   │       ├── auth.ts           signup / login / logout / refresh / me / password
 │   │       ├── org.ts            onboarding: me / create / join / members
 │   │       ├── profile.ts        the caller's own profile (display name)
+│   │       ├── billing.ts        catalog / plan / credits / settings / ledger
+│   │       ├── usage.ts          quote / record / events / daily rollup
+│   │       ├── ai.ts             Learning-layer task execution + feedback
+│   │       ├── modelGateway.ts   Metered model calls (authorize-then-capture)
 │   │       ├── crm.ts            CRM CRUD, lead conversion, timeline, audit
 │   │       ├── backups.ts        Snapshot status / history / trigger / verify
 │   │       ├── integrations.ts   External sources, syncs, CSV import, mirror
 │   │       ├── ai.ts             task execution / feedback / policy visibility
 │   │       ├── computer.ts       computer use: keys, pairing, runs, SSE
+│   │       ├── estimator.ts      Estimator setup, runs, review, export
 │   │       └── health.ts         liveness probe
-│   ├── supabase/migrations/      CRM, mirror, and backup schema (not yet applied)
+│   ├── supabase/migrations/      CRM, mirror, backup, and estimator schema
+│   ├── test/                     node:test suites for the estimator's logic
 │   └── .env.example
+├── db/
+│   ├── web_access.sql            Schema + RLS for Web Access (run once)
+│   └── verifier.sql              Schema + RLS for the Verifier (run once, after the above)
+├── supabase/
+│   └── migrations/               Billing schema, pricing engine, RLS policies
 ├── db/migrations/    SQL schema (RLS policies + SECURITY DEFINER write path)
 ├── docs/             Architecture notes
 ├── frontend/         React + Vite + TypeScript + Tailwind
@@ -196,8 +223,11 @@ Atmosphere/
 │   │   ├── pages/LoginPage.tsx        Branded login + signup screen
 │   │   ├── pages/OnboardingPage.tsx   3-step wizard: org → role → work type
 │   │   ├── pages/DashboardPage.tsx    Org overview, invite code, linked accounts
+│   │   ├── pages/BillingPage.tsx      Plans, credit packs, spend controls, rate card
+│   │   ├── pages/UsagePage.tsx        Spend charts, per-model breakdown, request log
 │   │   ├── pages/WebAccessPage.tsx    Connected sites, run a task, run history
 │   │   ├── pages/ComputerUsePage.tsx  Live screen, task composer, transcript
+│   │   ├── pages/EstimatorPage.tsx    Connections, runs, job review, estimate
 │   │   ├── pages/SettingsPage.tsx     Profile, security, organization, preferences
 │   │   ├── context/AuthContext.tsx    Session + membership + profile state
 │   │   ├── components/AppShell.tsx    Sidebar + bottom-left account block
@@ -271,6 +301,23 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | POST   | `/api/org`           | cookie | `{ name, role, workType }`    | Create an org and join as first member       |
 | POST   | `/api/org/join`      | cookie | `{ joinCode, role, workType }`| Link to an existing org by join code         |
 | GET    | `/api/org/members`   | cookie | —                             | Linked accounts in the caller's org          |
+| GET    | `/api/billing/catalog` | —    | —                             | Plans, credit packs, model rate card         |
+| GET    | `/api/billing/overview`| cookie | —                           | Plan, balance, settings, month-to-date usage |
+| POST   | `/api/billing/plan`  | cookie | `{ planCode, billingInterval, seats }` | Change subscription tier            |
+| PATCH  | `/api/billing/settings`| cookie | `{ autoReload…, monthlySpendLimitNanos }` | Auto-reload and spend cap    |
+| GET    | `/api/billing/ledger`| cookie | —                             | Credit history (append-only)                 |
+| POST   | `/api/billing/purchases` | cookie | `{ packCode }` or `{ amountCents }` | Start a credit purchase; returns `checkoutUrl` under Stripe |
+| POST   | `/api/billing/purchases/:id/confirm` | cookie | —         | Settle a purchase (dev provider only)        |
+| POST   | `/api/billing/checkout/subscription` | cookie | `{ planCode, billingInterval, seats }` | Stripe Checkout for a paid plan |
+| POST   | `/api/billing/portal` | cookie | —                    | Stripe billing portal (cards, invoices, cancel) |
+| GET    | `/api/billing/payments` | cookie | —                   | Payment history with receipt/invoice links   |
+| POST   | `/api/webhooks/stripe` | Stripe signature | raw event | Settles payments; the only path that mints credits |
+| POST   | `/api/model/count-tokens` | cookie | `{ model, messages, system }` | Exact pre-flight token count + input price |
+| POST   | `/api/model/messages`   | cookie | `{ model, messages, maxTokens, … }` | Run a model call and meter it          |
+| POST   | `/api/usage/quote`   | cookie | `{ modelId, …tokens }`        | Price a call without charging                |
+| POST   | `/api/usage/record`  | cookie | `{ modelId, requestId, …tokens }` | Meter caller-supplied counts (off by default) |
+| GET    | `/api/usage/events`  | cookie | —                             | Recent metered calls                         |
+| GET    | `/api/usage/daily`   | cookie | `?days=30`                    | Daily rollup for the usage chart             |
 | GET    | `/api/web-access/status` | cookie | —                         | Whether Web Access is configured here        |
 | GET    | `/api/web-access/connections` | cookie | —                    | The org's connected websites                 |
 | POST   | `/api/web-access/connections` | cookie | `{ label, siteUrl, loginUrl?, username, password }` | Connect a site |
@@ -303,6 +350,17 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | GET    | `/api/computer/runs/:id/events` | cookie | `?after=<seq>`      | SSE transcript, replayable from a sequence   |
 | POST   | `/api/computer/runs/:id/stop` | cookie | —                     | Hand control back to the operator            |
 
+| GET    | `/api/estimator/status` | cookie | —                          | What is connected, and what the server can do |
+| PUT    | `/api/estimator/credentials/:provider` | cookie | credential | Store/replace vendor credentials    |
+| DELETE | `/api/estimator/credentials/:provider` | cookie | —          | Disconnect a vendor                          |
+| POST   | `/api/estimator/credentials/:provider/test` | cookie | —     | Sign in without starting a run               |
+| GET    | `/api/estimator/projects` | cookie | —                        | DocuSketch scans available to estimate       |
+| POST   | `/api/estimator/runs` | cookie | `{ scanProjectId, mitigationText? }` | Start a run (202; work continues behind it) |
+| GET    | `/api/estimator/runs` | cookie | —                            | Runs in the caller's org                     |
+| GET    | `/api/estimator/runs/:id` | cookie | —                        | One run, with its estimate and event log     |
+| POST   | `/api/estimator/runs/:id/job` | cookie | `{ jobId }`          | Answer the matcher and resume the run        |
+| POST   | `/api/estimator/runs/:id/approve` | cookie | —                | Approve the estimate and write it to Xactimate |
+| GET    | `/api/estimator/runs/:id/export` | cookie | `?format=csv\|xml` | Download the estimate without sending it    |
 Agents also hold a WebSocket open at `/api/computer/agent-socket`, authenticated with the
 token from pairing rather than a session cookie.
 
@@ -388,6 +446,168 @@ Two properties are worth calling out:
   query and again by the RLS policy on `org_members`, so a member can only ever rewrite
   their own row. Renaming an organization is not offered: `orgs` has no UPDATE policy.
 
+## Pricing, credits and metering
+
+Atmosphere resells model capacity. Customers pay a **monthly plan** that includes
+a usage allowance, and can **prepay credits** on top of it — the same shape
+Anthropic and OpenAI use.
+
+### The money rules
+
+- **1 credit = $1 USD.** Internally every amount is an integer count of
+  **nanodollars** (1e-9 USD). Never floats — a ledger that doesn't reconcile to
+  the penny is worthless — and never cents, because one cached-read token on the
+  cheapest model costs 200 nanodollars and would round to zero, letting a
+  customer read cache for free.
+- **Sell price = 2 × cost.** The markup lives in one column
+  (`private.model_costs.markup`). Change it there and the customer-facing rate
+  card is regenerated; nothing else needs editing.
+- **Margin never reaches the browser.** What we pay sits in `private.model_costs`,
+  in a schema PostgREST does not expose. What we charge sits in
+  `public.model_rate_card`, projected through the markup by
+  `private.sync_rate_card()`. A customer can read the rate card and can never
+  read the cost basis.
+
+Rates carry the provider's own structure, so the ratio holds across every
+component: cache writes cost 1.25× the input rate (5-minute TTL) or 2× (1-hour),
+cached reads 0.1×, and batch requests are half price.
+
+| Model | We pay (in/out per MTok) | We charge |
+| ----- | ------------------------ | --------- |
+| Atmosphere Apex  | $10 / $50 | $20 / $100 |
+| Atmosphere Pro   | $5 / $25  | $10 / $50  |
+| Atmosphere Core  | $3 / $15  | $6 / $30   |
+| Atmosphere Lite  | $1 / $5   | $2 / $10   |
+
+### Plans
+
+`rate_multiplier` is what "5x" and "20x" mean — throughput relative to Pro.
+Included credits sit at 1.25× the plan price, so an allowance burned to the last
+credit still clears a **37.5% gross margin** at a 2× markup.
+
+| Plan | Price | Included credits | Throughput |
+| ---- | ----- | ---------------- | ---------- |
+| Free    | $0             | $3/mo          | 0.2× |
+| Pro     | $20 ($17 annual) | $25/mo       | 1×   |
+| Max 5x  | $100           | $125/mo        | 5×   |
+| Max 20x | $200           | $250/mo        | 20×  |
+| Team    | $30/seat ($25 annual) | $40/seat/mo | 5× |
+| Enterprise | custom      | custom         | —    |
+
+### How a request gets billed
+
+Token counts decide revenue, so they come from exactly one place: **the model
+provider's own `usage` object**. Not an estimate, not a character heuristic, not
+a third-party tokenizer, and never a number supplied by the client. `POST
+/api/model/messages` runs **authorize-then-capture**, the shape a card payment uses:
+
+1. **Count** the input exactly via the provider's tokenizer (`count_tokens`).
+2. **Authorize** the worst case — that input plus a full `maxTokens` of output —
+   and refuse with `402` if the balance can't cover it. This happens *before* the
+   upstream call, so we never buy tokens we can't bill for.
+3. **Call** the model.
+4. **Capture** the actual usage from the response, which is almost always less
+   than was authorized.
+
+The provider reports four *disjoint* token classes — `input_tokens` excludes
+cached tokens, which are counted separately as reads and writes — so summing them
+double-counts nothing, but dropping one silently under-bills. Cache writes are
+split by TTL because the tiers price differently; when the provider omits the
+breakdown the whole amount is attributed to the cheaper 5-minute tier.
+`extractUsage` is covered by tests (`npm test` in `backend/`) for exactly these
+cases, including a breakdown that fails to reconcile with its own aggregate.
+
+`POST /api/usage/record`, which takes caller-supplied counts, is **disabled in
+production** (`ALLOW_CLIENT_METERING`). A browser reporting its own token counts
+could under-report and spend our margin.
+
+### Credits, in order
+
+Charges draw down `credit_lots` **soonest-expiry-first**, which spends the plan
+allowance a customer would otherwise lose before the credits they paid cash for.
+Purchased credits never expire. Every movement is mirrored into `credit_ledger`,
+so the ledger always sums to the live lot balances.
+
+Three things protect the balance: a **spend limit** per period, an idempotent
+`requestId` so a retried request is never billed twice, and the fact that every
+balance-changing write goes through a `SECURITY DEFINER` function that validates
+`auth.uid()` internally. The billing tables carry `SELECT` policies only — there
+is no way to mint credits by POSTing to a table.
+
+Billing periods roll forward on read, granting each elapsed period's credits, so
+the system stays correct without a scheduler.
+
+## Payments (Stripe)
+
+Setting `STRIPE_SECRET_KEY` switches billing to Stripe automatically. Without it
+the app falls back to `PAYMENT_PROVIDER=dev`, which lets a billing manager settle
+their own purchase so the credit flow is exercisable locally — and which is
+**refused at boot in production**, where it would let anyone mint credits.
+
+### Money is minted by the webhook, never by the browser
+
+Checkout endpoints only *open* a session. Credits and subscription changes are
+applied when Stripe confirms the payment settled, authenticated with the
+service-role key. A client that navigates back to the success URL has proved
+nothing, so the success page grants nothing — it just says the payment was
+received and refreshes the balance once the webhook lands.
+
+| Flow | Endpoint | Settled by |
+| ---- | -------- | ---------- |
+| Buy credits | `POST /api/billing/purchases` → `checkoutUrl` | `checkout.session.completed` |
+| Start/change a plan | `POST /api/billing/checkout/subscription` | `customer.subscription.*` |
+| Cards, invoices, cancel | `POST /api/billing/portal` | Stripe's hosted portal |
+
+Every handler is **replay-safe**, because Stripe guarantees at-least-once
+delivery and retries on any non-2xx. The event id is claimed before anything is
+applied, `credit_purchases` is unique on `(provider, provider_ref)`, `payments`
+is unique on both the payment-intent and invoice ids, and
+`stripe_sync_subscription` re-grants credits only when the plan, seats or period
+actually moved — Stripe sends `subscription.updated` for plenty of changes that
+don't affect entitlement, and re-granting on each would hand out free credits. A
+handler that fails returns 500 so Stripe retries; returning 200 on a failed write
+would silently lose a payment.
+
+Cancelling ends the plan allowance but **leaves purchased credits alone** — those
+were paid for in cash.
+
+### Receipts and payment history
+
+Stripe emails a receipt for every charge (`receipt_email` is set on the payment
+intent) and emails subscription invoices when *Billing → Invoices → email
+finalized invoices* is enabled in the dashboard. The webhook also stores the
+`receipt_url`, `hosted_invoice_url` and `invoice_pdf` on each `payments` row, so
+**Billing → Payment history** in-product lists every charge, refund and invoice
+with a link to the receipt. A customer who deletes the email can always retrieve
+proof of payment themselves.
+
+Note the two histories are deliberately separate: **payment history** is what was
+*charged*, **credit history** is how credits were *granted and consumed*.
+
+### Setting it up
+
+1. Create a product + recurring Price for each paid plan (monthly and annual),
+   then record the price ids:
+   ```sql
+   update public.billing_plans
+      set stripe_price_id_monthly = 'price_...', stripe_price_id_annual = 'price_...'
+    where code = 'pro';
+   ```
+   A plan with no price id returns a clear `price_not_configured` error rather
+   than a broken checkout.
+2. Set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and
+   `SUPABASE_SERVICE_ROLE_KEY` (the webhook has no user session to act under).
+3. Point a webhook endpoint at `POST /api/webhooks/stripe` subscribed to
+   `checkout.session.completed`, `invoice.paid`, `invoice.payment_failed`,
+   `customer.subscription.created/updated/deleted` and `charge.refunded`.
+
+Locally: `stripe listen --forward-to localhost:4000/api/webhooks/stripe`.
+
+The webhook route is mounted with a **raw body parser before `express.json()`** —
+signature verification is over the exact bytes Stripe sent, and once a JSON
+parser has consumed the stream the signature can no longer be checked. Without
+`STRIPE_WEBHOOK_SECRET` the endpoint rejects every request rather than trusting
+an unverified payload.
 ### Web Access
 
 A member connects a site once — name, address, username, password — and everyone in the
@@ -760,6 +980,96 @@ live WebSocket already is — a connection cannot outlive the process holding it
 **multiple backend instances behind a load balancer** therefore needs sticky routing (so
 a browser reaches the instance holding its agent's socket) or a shared relay between
 instances. A single instance needs nothing.
+## Construction Estimator
+
+An agent that turns a 3D scan into a construction (rebuild) estimate. It signs in to
+**DocuSketch** and reads the scan's rooms, measurements, and field photos; identifies the
+matching job in a CRM (**Dash**) and reads its notes; reads the **mitigation estimate** when
+there is one; and assembles the line items for **Xactimate**.
+
+```
+DocuSketch ──▶ rooms, measurements, photos ─┐
+Dash (CRM) ──▶ the job, its notes           ├──▶ scope engine ──▶ estimate ──▶ Xactimate
+Mitigation ──▶ what was already torn out  ──┘        ▲                  ▲
+                                                     │                  │
+                                              you pick the job    you approve the send
+```
+
+### The pipeline
+
+`connecting → fetching_scan → matching_job → analyzing_photos → reading_mitigation →
+building_scope → pricing → awaiting_review` — and then it stops.
+
+Every stage persists what it produced, so a run that pauses for review resumes without
+re-downloading the scan or re-reading forty photos.
+
+**Two deliberate stops.** Writing an estimate into a customer's Xactimate account is
+outward-facing and awkward to undo, so no run ever does it on its own: a person approves the
+export. And if the matcher cannot separate two candidate jobs, the run parks with the
+candidates and their scoring rather than picking one — building an estimate against the wrong
+claim is the worst thing this agent could do.
+
+### Where the scope comes from
+
+Three sources, and the merge rules encode which to believe:
+
+- **The mitigation estimate wins on existence.** It is a written, already-approved record of
+  what was physically removed. Photos taken after mitigation show a gutted room — they cannot
+  tell you it had carpet, because the carpet is in a dumpster. Removals map to replacements
+  (`Remove carpet` → carpet + pad; a 2′ flood cut billed in LF becomes the SF that has to be
+  re-hung, taped, and painted), and dryout lines — air movers, dehumidifiers, antimicrobial,
+  monitoring, technician hours — are excluded by rule so they cannot be billed twice.
+- **The scan wins on quantity.** A photo cannot measure a room. Where both sources produce the
+  same line, the larger quantity is kept and both pieces of evidence stay attached.
+- **The job notes win on inclusion.** A room the PM wrote "homeowner declined" against is
+  dropped, whatever the photos show. Approved flood-cut heights and named materials come from
+  the notes too.
+
+Photos are read one per request so that every observation names the photo that produced it and
+carries a confidence. Low-confidence findings reach the estimate **flagged**, not dropped —
+and every line item carries the rationale and the evidence that justified it, which is what
+makes the estimate defensible to an adjuster.
+
+Quantities follow trade practice rather than raw geometry: openings above ~10 SF are deducted
+from wall area and smaller ones are not, baseboard runs the perimeter less doorways but not
+windows, a doorway shared between two scoped rooms is cased once, and paint is measured wall to
+wall even when only a 2′ band of drywall was replaced.
+
+### Line item codes
+
+`backend/src/estimator/pricing/catalog.ts` maps semantic keys (`drywall_half`) to Xactimate
+category/selector pairs (`DRY 1/2-`), units, trades, and waste allowances. **Selectors vary
+between Xactimate versions, regions, and carrier price lists** — validate the catalog against
+your own list before submitting. When they differ, the fix is that one table; the scope rules,
+the quantity maths, and the export are unaffected.
+
+### Credentials
+
+The agent holds real vendor logins, so:
+
+- Secrets are sealed with **AES-256-GCM** before they reach Postgres. The key lives only in
+  `ESTIMATOR_CREDENTIAL_KEY` and is deliberately absent from the database — the same separation
+  the PIN pepper relies on, and it means a database leak alone yields ciphertext.
+- Nothing travels back to the browser. The API returns which providers are connected and a
+  short fingerprint, never the secret — not even to the person who stored it.
+- Only a **project manager** or **office manager** can connect a vendor, enforced both in the
+  API and in the RLS policy.
+
+### Running it without vendor accounts
+
+`ESTIMATOR_CONNECTOR_MODE=sandbox` (the default outside production) serves built-in fixtures:
+a water loss with four rooms, two CRM jobs at nearly the same address so the matcher has to
+discriminate, a mitigation estimate mixing removals with dryout equipment, and a note putting
+one room out of scope. Nothing is written to any vendor.
+
+```bash
+cd backend && npm test    # 64 tests: quantity maths, rebuild rules, matching, import/export
+```
+
+### Database
+
+Apply `backend/supabase/migrations/20260727000001_construction_estimator.sql` (via `supabase db push`, or paste
+it into the SQL editor). It creates both tables with RLS enabled and is safe to re-run.
 
 ## Configuration
 
@@ -815,6 +1125,17 @@ See `backend/.env.example` and `frontend/.env.example`. Key points:
   it invalidates stored keys, which organizations simply re-enter.
 - `AGENT_TOKEN_SECRET` — **server-only secret**, required in production. Signs the tokens
   paired computers reconnect with. Rotating it unpairs every computer.
+- `ESTIMATOR_CREDENTIAL_KEY` — **server-only secret**, required to connect any vendor account.
+  Encrypts DocuSketch/Dash/Xactimate credentials at rest and never reaches the database.
+  Generate with `openssl rand -base64 32`. Rotating it invalidates every stored credential.
+- `ANTHROPIC_API_KEY` — enables reading damage off photos and directions out of job notes.
+  Optional: without it the estimator still builds scope from the measurements and the
+  mitigation estimate, and says so in the run log.
+- `ESTIMATOR_CONNECTOR_MODE` — `sandbox` (fixtures) or `live`. Defaults to `live` in
+  production so a deploy cannot accidentally serve sample data.
+- `DOCUSKETCH_BASE_URL` / `DASH_BASE_URL` / `XACTIMATE_BASE_URL` — vendor API roots. No
+  defaults: an unset host makes that connector report itself unconfigured rather than guess.
+  An organization can override any of them alongside its own credentials.
 - `FRONTEND_ORIGIN` — comma-separated allowed CORS origins.
 - `COOKIE_SAMESITE` — set to `none` (with HTTPS on both sides) if the frontend and backend
   are on different sites in production.
@@ -842,6 +1163,11 @@ See `backend/.env.example` and `frontend/.env.example`. Key points:
 - Set `AI_CREDENTIALS_KEY` and `AGENT_TOKEN_SECRET` before enabling computer use, and make
   sure your reverse proxy forwards **WebSocket upgrades** on `/api/computer/agent-socket`
   and does not buffer the SSE responses on `/api/computer/runs/*/events`.
+- Set `ESTIMATOR_CREDENTIAL_KEY` before anyone connects a vendor account, and back it up
+  somewhere separate from the database — losing it means every stored credential has to be
+  re-entered. Apply `backend/supabase/migrations/20260727000001_construction_estimator.sql` first.
+- Confirm `ESTIMATOR_CONNECTOR_MODE` is `live` (its production default) and that the vendor
+  base URLs point at your tenants before the first real run.
 - **Configure custom SMTP** before launch. Supabase's built-in mailer is rate-limited to a
   handful of messages per hour, which is fine for testing and will not carry real password
   resets.

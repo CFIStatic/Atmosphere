@@ -8,10 +8,13 @@ import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { BillingPage } from './pages/BillingPage';
+import { UsagePage } from './pages/UsagePage';
 import { ProjectManagerPage } from './pages/ProjectManagerPage';
 import { PmProjectPage } from './pages/PmProjectPage';
 import { WebAccessPage } from './pages/WebAccessPage';
 import { ComputerUsePage } from './pages/ComputerUsePage';
+import { EstimatorPage } from './pages/EstimatorPage';
 import { SpinnerIcon } from './components/icons';
 
 function FullScreenSpinner() {
@@ -116,11 +119,44 @@ export default function App() {
           />
 
           <Route
+            path="/billing"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <BillingPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/usage"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <UsagePage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
             path="/computer-use"
             element={
               <ProtectedRoute>
                 <RequireOnboarded>
                   <ComputerUsePage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/estimator"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <EstimatorPage />
                 </RequireOnboarded>
               </ProtectedRoute>
             }

@@ -428,6 +428,68 @@ export const api = {
 
   getMembers: () => request<{ members: OrgMember[] }>('/api/org/members', { method: 'GET' }),
 
+  // ---- Billing ----
+  getCatalog: () => request<Catalog>('/api/billing/catalog', { method: 'GET' }),
+
+  getBillingOverview: () => request<BillingOverview>('/api/billing/overview', { method: 'GET' }),
+
+  setPlan: (planCode: PlanCode, billingInterval: BillingInterval = 'monthly', seats = 1) =>
+    request<SetPlanResult>('/api/billing/plan', {
+      method: 'POST',
+      body: JSON.stringify({ planCode, billingInterval, seats }),
+    }),
+
+  updateBillingSettings: (patch: BillingSettingsPatch) =>
+    request<{ settings: BillingSettings }>('/api/billing/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+
+  getLedger: (limit = 50) =>
+    request<{ entries: LedgerEntry[] }>(`/api/billing/ledger?limit=${limit}`, { method: 'GET' }),
+
+  getPurchases: () => request<{ purchases: Purchase[] }>('/api/billing/purchases', { method: 'GET' }),
+
+  startPurchase: (input: { packCode?: string; amountCents?: number }) =>
+    request<{ purchase: Purchase; checkoutUrl: string | null; requiresConfirmation: boolean }>(
+      '/api/billing/purchases',
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+
+  /** Hosted Stripe Checkout for a paid plan. */
+  startSubscriptionCheckout: (
+    planCode: PlanCode,
+    billingInterval: BillingInterval = 'monthly',
+    seats = 1,
+  ) =>
+    request<{ checkoutUrl: string | null }>('/api/billing/checkout/subscription', {
+      method: 'POST',
+      body: JSON.stringify({ planCode, billingInterval, seats }),
+    }),
+
+  /** Stripe's hosted portal: cards, invoices and cancellation. */
+  openBillingPortal: () =>
+    request<{ portalUrl: string }>('/api/billing/portal', { method: 'POST' }),
+
+  getPayments: (limit = 50) =>
+    request<{ payments: Payment[] }>(`/api/billing/payments?limit=${limit}`, { method: 'GET' }),
+
+  confirmPurchase: (purchaseId: string) =>
+    request<{ purchaseId: string; status: string; creditedNanos: number; balance: CreditBalance }>(
+      `/api/billing/purchases/${purchaseId}/confirm`,
+      { method: 'POST' },
+    ),
+
+  // ---- Usage ----
+  quoteUsage: (input: UsageTokens) =>
+    request<UsageQuote>('/api/usage/quote', { method: 'POST', body: JSON.stringify(input) }),
+
+  recordUsage: (input: UsageTokens & { requestId: string; feature?: string }) =>
+    request<RecordUsageResult>('/api/usage/record', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
   // ---- Project Manager Agent ----
   pmOverview: () => request<PmOverview>('/api/pm/overview', { method: 'GET' }),
 
@@ -612,6 +674,54 @@ export const api = {
       `/api/verifier/escalations/${id}/resolve`,
       { method: 'POST', body: JSON.stringify({ optionId, note }) },
     ),
+
+  // ---- Construction Estimator ----
+  estimatorStatus: () => request<EstimatorStatus>('/api/estimator/status', { method: 'GET' }),
+
+  saveEstimatorCredential: (provider: EstimatorProvider, input: EstimatorCredentialInput) =>
+    request<{ credential: EstimatorCredential }>(`/api/estimator/credentials/${provider}`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }),
+
+  deleteEstimatorCredential: (provider: EstimatorProvider) =>
+    request<{ ok: boolean }>(`/api/estimator/credentials/${provider}`, { method: 'DELETE' }),
+
+  testEstimatorCredential: (provider: EstimatorProvider) =>
+    request<{ ok: boolean; connector: string }>(`/api/estimator/credentials/${provider}/test`, {
+      method: 'POST',
+    }),
+
+  listScanProjects: (search?: string) =>
+    request<{ projects: ScanProjectSummary[] }>(
+      `/api/estimator/projects${search ? `?search=${encodeURIComponent(search)}` : ''}`,
+      { method: 'GET' },
+    ),
+
+  startEstimatorRun: (scanProjectId: string, mitigationText?: string) =>
+    request<{ run: EstimatorRun }>('/api/estimator/runs', {
+      method: 'POST',
+      body: JSON.stringify({ scanProjectId, mitigationText: mitigationText || undefined }),
+    }),
+
+  listEstimatorRuns: () =>
+    request<{ runs: EstimatorRun[] }>('/api/estimator/runs', { method: 'GET' }),
+
+  getEstimatorRun: (runId: string) =>
+    request<{ run: EstimatorRun }>(`/api/estimator/runs/${runId}`, { method: 'GET' }),
+
+  selectEstimatorJob: (runId: string, jobId: string) =>
+    request<{ run: EstimatorRun }>(`/api/estimator/runs/${runId}/job`, {
+      method: 'POST',
+      body: JSON.stringify({ jobId }),
+    }),
+
+  approveEstimatorRun: (runId: string) =>
+    request<{ run: EstimatorRun }>(`/api/estimator/runs/${runId}/approve`, { method: 'POST' }),
+
+  /** Download URL — the browser fetches it directly so the file streams. */
+  estimatorExportUrl: (runId: string, format: 'csv' | 'xml') =>
+    `${API_BASE}/api/estimator/runs/${runId}/export?format=${format}`,
   // ---- Computer use ----
   computerStatus: () => request<ComputerStatus>('/api/computer/status', { method: 'GET' }),
 
@@ -648,6 +758,35 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
+  getUsageEvents: (limit = 50) =>
+    request<{ events: UsageEvent[] }>(`/api/usage/events?limit=${limit}`, { method: 'GET' }),
+
+  getUsageDaily: (days = 30) =>
+    request<{ days: UsageDay[] }>(`/api/usage/daily?days=${days}`, { method: 'GET' }),
+
+  // ---- Model calls (metered server-side) ----
+
+  /** Exact pre-flight token count from the provider's tokenizer. */
+  countTokens: (input: { model?: string; messages: ChatMessage[]; system?: string }) =>
+    request<{ model: string; inputTokens: number; inputPriceNanos: number }>(
+      '/api/model/count-tokens',
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+
+  /**
+   * Run a model call. Usage is metered from the provider's response, never from
+   * anything this client reports, so the returned charge is authoritative.
+   */
+  sendMessages: (input: {
+    model?: string;
+    messages: ChatMessage[];
+    system?: string;
+    maxTokens?: number;
+    thinking?: boolean;
+    effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    feature?: string;
+    requestId?: string;
+  }) => request<CompletionResult>('/api/model/messages', { method: 'POST', body: JSON.stringify(input) }),
   getRuns: () => request<{ runs: ComputerRun[] }>('/api/computer/runs', { method: 'GET' }),
 
   stopRun: (runId: string) =>
@@ -659,6 +798,273 @@ export const api = {
   runEventsUrl: (runId: string, after = 0) =>
     `${API_BASE}/api/computer/runs/${encodeURIComponent(runId)}/events?after=${after}`,
 };
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string | unknown[];
+}
+
+export interface MeasuredUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheWrite5mTokens: number;
+  cacheWrite1hTokens: number;
+  cacheReadTokens: number;
+  totalTokens: number;
+}
+
+export interface CompletionResult {
+  id: string;
+  model: string;
+  stopReason: string | null;
+  content: unknown[];
+  usage: MeasuredUsage;
+  billing: {
+    /** Worst-case amount reserved before the call ran. */
+    authorizedNanos: number;
+    /** What was actually charged, from the provider's usage totals. */
+    chargedNanos: number;
+    duplicate: boolean;
+    balance: CreditBalance;
+  };
+}
+
+/* ------------------------------------------------------------ billing types */
+
+export type PlanCode = 'free' | 'pro' | 'max_5x' | 'max_20x' | 'team' | 'enterprise';
+export type BillingInterval = 'monthly' | 'annual';
+
+export interface Plan {
+  code: PlanCode;
+  name: string;
+  tagline: string | null;
+  monthlyPriceCents: number;
+  annualPriceCents: number | null;
+  includedCreditsNanos: number;
+  perSeat: boolean;
+  minSeats: number;
+  rateMultiplier: number;
+  features: string[];
+  isContactSales: boolean;
+}
+
+export interface CreditPack {
+  code: string;
+  name: string;
+  priceCents: number;
+  creditsNanos: number;
+  bonusNanos: number;
+}
+
+/**
+ * Sell prices only. The cost basis and markup live in a private schema the
+ * browser can never read.
+ */
+export interface ModelRate {
+  modelId: string;
+  displayName: string;
+  family: string;
+  inputPerMTok: number;
+  outputPerMTok: number;
+  cacheWrite5mPerMTok: number;
+  cacheWrite1hPerMTok: number;
+  cacheReadPerMTok: number;
+  batchDiscountPct: number;
+  contextWindow: number | null;
+  maxOutputTokens: number | null;
+}
+
+export interface Catalog {
+  plans: Plan[];
+  packs: CreditPack[];
+  rateCard: ModelRate[];
+  /** `stripe` whenever a Stripe key is configured server-side. */
+  paymentProvider: 'stripe' | 'dev' | 'manual';
+}
+
+export interface CreditBalance {
+  totalNanos: number;
+  planNanos: number;
+  purchasedNanos: number;
+  promoNanos: number;
+  nextExpiry: string | null;
+}
+
+export interface BillingSettings {
+  autoReloadEnabled: boolean;
+  autoReloadThresholdNanos: number;
+  autoReloadAmountNanos: number;
+  /** `null` means no cap. */
+  monthlySpendLimitNanos: number | null;
+}
+
+export type BillingSettingsPatch = Partial<BillingSettings>;
+
+export interface BillingOverview {
+  subscription: {
+    planCode: PlanCode;
+    planName: string;
+    billingInterval: BillingInterval;
+    seats: number;
+    status: string;
+    periodStart: string;
+    periodEnd: string;
+    cancelAtPeriodEnd: boolean;
+    monthlyPriceCents: number;
+    includedCreditsNanos: number;
+    rateMultiplier: number;
+  };
+  settings: BillingSettings;
+  balance: CreditBalance;
+  periodUsage: {
+    events: number;
+    priceNanos: number;
+    inputTokens: number;
+    outputTokens: number;
+    cacheTokens: number;
+  };
+  usageByModel: {
+    modelId: string;
+    displayName: string;
+    events: number;
+    inputTokens: number;
+    outputTokens: number;
+    priceNanos: number;
+  }[];
+  /** False for roles that may view billing but not change it. */
+  canManage: boolean;
+}
+
+export interface SetPlanResult {
+  plan: string;
+  changed: boolean;
+  effectiveAt: string | null;
+  cancelAtPeriodEnd: boolean;
+  grantedNanos: number;
+  balance: CreditBalance;
+}
+
+export interface LedgerEntry {
+  id: string;
+  entryType: 'plan_grant' | 'purchase' | 'usage' | 'refund' | 'expiration' | 'adjustment';
+  bucket: 'plan' | 'purchased' | 'promotional' | null;
+  /** Signed: positive adds credits, negative consumes them. */
+  amountNanos: number;
+  description: string | null;
+  createdAt: string;
+}
+
+export interface Purchase {
+  id: string;
+  packCode: string | null;
+  creditsNanos: number;
+  bonusNanos: number;
+  amountCents: number;
+  status: 'pending' | 'completed' | 'failed' | 'refunded';
+  provider: string;
+  isAutoReload?: boolean;
+  createdAt?: string;
+  completedAt?: string | null;
+}
+
+/**
+ * One row of the in-product payment history. `receiptUrl` and `invoicePdfUrl`
+ * come from Stripe, so a customer can always retrieve proof of payment.
+ */
+export interface Payment {
+  id: string;
+  kind: 'subscription' | 'credits' | 'refund';
+  status: 'pending' | 'succeeded' | 'failed' | 'refunded';
+  amountCents: number;
+  currency: string;
+  description: string | null;
+  receiptUrl: string | null;
+  hostedInvoiceUrl: string | null;
+  invoicePdfUrl: string | null;
+  receiptEmail: string | null;
+  cardBrand: string | null;
+  cardLast4: string | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  failureReason: string | null;
+  createdAt: string;
+}
+
+export const PAYMENT_KIND_LABELS: Record<Payment['kind'], string> = {
+  subscription: 'Subscription',
+  credits: 'Usage credits',
+  refund: 'Refund',
+};
+
+/* -------------------------------------------------------------- usage types */
+
+export interface UsageTokens {
+  modelId: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheWrite5mTokens?: number;
+  cacheWrite1hTokens?: number;
+  cacheReadTokens?: number;
+  isBatch?: boolean;
+}
+
+export interface UsageBreakdown {
+  input: { tokens: number; priceNanos: number };
+  output: { tokens: number; priceNanos: number };
+  cacheWrite5m: { tokens: number; priceNanos: number };
+  cacheWrite1h: { tokens: number; priceNanos: number };
+  cacheRead: { tokens: number; priceNanos: number };
+}
+
+export interface UsageQuote {
+  modelId: string;
+  isBatch: boolean;
+  priceNanos: number;
+  breakdown: UsageBreakdown;
+}
+
+export interface RecordUsageResult {
+  eventId: string;
+  priceNanos: number;
+  /** True when this request id had already been billed. */
+  duplicate: boolean;
+  breakdown: UsageBreakdown;
+  balance: CreditBalance;
+}
+
+export interface UsageEvent {
+  id: string;
+  modelId: string;
+  feature: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  cacheTokens: number;
+  isBatch: boolean;
+  priceNanos: number;
+  createdAt: string;
+}
+
+export interface UsageDay {
+  day: string;
+  modelId: string;
+  events: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheTokens: number;
+  priceNanos: number;
+}
+
+export const PLAN_ORDER: PlanCode[] = ['free', 'pro', 'max_5x', 'max_20x', 'team', 'enterprise'];
+
+export const LEDGER_LABELS: Record<LedgerEntry['entryType'], string> = {
+  plan_grant: 'Plan credits',
+  purchase: 'Credit purchase',
+  usage: 'Usage',
+  refund: 'Refund',
+  expiration: 'Expired',
+  adjustment: 'Adjustment',
+};
+
 
 /* ------------------------------------------------------------------ *
  * Project Manager Agent types
@@ -1075,6 +1481,164 @@ export const QUALITY_LABELS: Record<CaptureQuality, string> = {
   economical: 'Economical — smallest screenshots, lowest cost',
   balanced: 'Balanced — about 1080p (recommended)',
   detailed: 'Detailed — highest resolution the model allows',
+};
+
+/* ------------------------------------------------------------------ */
+/* Construction Estimator types                                        */
+/* ------------------------------------------------------------------ */
+
+export type EstimatorProvider = 'docusketch' | 'dash' | 'xactimate';
+
+export interface EstimatorCredential {
+  provider: EstimatorProvider;
+  label: string | null;
+  fingerprint: string;
+  baseUrl: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+}
+
+export interface EstimatorCredentialInput {
+  label?: string;
+  username?: string;
+  password?: string;
+  apiKey?: string;
+  accountId?: string;
+  baseUrl?: string;
+}
+
+export interface EstimatorStatus {
+  /** True when the server is serving fixtures instead of talking to vendors. */
+  sandbox: boolean;
+  modelAvailable: boolean;
+  credentialStorageAvailable: boolean;
+  canManageCredentials: boolean;
+  maxPhotosPerRun: number;
+  credentials: EstimatorCredential[];
+}
+
+export interface ScanProjectSummary {
+  id: string;
+  name: string;
+  address?: string;
+  claimNumber?: string;
+  capturedAt?: string;
+}
+
+export type EstimatorRunStatus = 'running' | 'awaiting_review' | 'complete' | 'failed' | 'cancelled';
+
+export type EstimatorRunStage =
+  | 'queued'
+  | 'connecting'
+  | 'fetching_scan'
+  | 'matching_job'
+  | 'analyzing_photos'
+  | 'reading_mitigation'
+  | 'building_scope'
+  | 'pricing'
+  | 'awaiting_review'
+  | 'exporting'
+  | 'complete';
+
+export interface EstimatorRunEvent {
+  at: string;
+  stage: EstimatorRunStage;
+  level: 'info' | 'warn' | 'error';
+  message: string;
+}
+
+export interface MatchSignal {
+  field: string;
+  weight: number;
+  score: number;
+  detail: string;
+}
+
+export interface MatchCandidate {
+  jobId: string;
+  jobNumber?: string;
+  claimNumber?: string;
+  insuredName?: string;
+  address?: string;
+  lossDate?: string;
+  score: number;
+  signals: MatchSignal[];
+}
+
+export interface EstimateLineItem {
+  roomId: string;
+  roomName: string;
+  code: string;
+  category: string;
+  selector: string;
+  description: string;
+  unit: string;
+  quantity: number;
+  quantityWithWaste: number;
+  trade: string;
+  rationale: string;
+  confidence: number;
+  evidence: string[];
+  needsReview?: boolean;
+}
+
+export interface ConstructionEstimate {
+  jobId: string;
+  jobNumber?: string;
+  claimNumber?: string;
+  insuredName?: string;
+  address: { street?: string; city?: string; state?: string; postalCode?: string };
+  basis: 'scan' | 'mitigation' | 'both';
+  lineItems: EstimateLineItem[];
+  summary: {
+    lineItemCount: number;
+    roomCount: number;
+    quantityByUnit: Record<string, number>;
+    itemsNeedingReview: number;
+    emptyRooms: string[];
+  };
+  warnings: string[];
+  generatedAt: string;
+}
+
+export interface EstimatorRun {
+  id: string;
+  status: EstimatorRunStatus;
+  stage: EstimatorRunStage;
+  scanProjectId: string;
+  crmJobId: string | null;
+  matchScore: number | null;
+  matchNeedsReview: boolean;
+  matchCandidates: MatchCandidate[];
+  matchReason: string | null;
+  job: { jobNumber?: string; claimNumber?: string; insuredName?: string } | null;
+  estimate: ConstructionEstimate | null;
+  exportRef: string | null;
+  error: string | null;
+  events: EstimatorRunEvent[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Stage labels, in the order the pipeline runs them. */
+export const ESTIMATOR_STAGE_LABELS: Record<EstimatorRunStage, string> = {
+  queued: 'Queued',
+  connecting: 'Connecting',
+  fetching_scan: 'Reading the scan',
+  matching_job: 'Finding the job',
+  analyzing_photos: 'Reading the photos',
+  reading_mitigation: 'Reading the mitigation estimate',
+  building_scope: 'Building scope',
+  pricing: 'Assembling the estimate',
+  awaiting_review: 'Ready for review',
+  exporting: 'Writing to Xactimate',
+  complete: 'Complete',
+};
+
+export const PROVIDER_LABELS: Record<EstimatorProvider, string> = {
+  docusketch: 'DocuSketch',
+  dash: 'Dash (CRM)',
+  xactimate: 'Xactimate',
 };
 
 /** Human-readable labels for roles and work types (shared UI copy). */

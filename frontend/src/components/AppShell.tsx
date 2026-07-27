@@ -13,9 +13,11 @@ import { displayName, initials } from '../lib/display';
 import { usePreferences } from '../lib/preferences';
 import { Logo } from './Logo';
 import {
+  ChartIcon,
   ChevronRightIcon,
   ClipboardIcon,
   CloseIcon,
+  CreditCardIcon,
   GlobeIcon,
   HomeIcon,
   LogOutIcon,
@@ -36,6 +38,8 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/pm', label: 'Project Manager', icon: ClipboardIcon },
   { to: '/web-access', label: 'Web Access', icon: GlobeIcon },
   { to: '/computer-use', label: 'Computer Use', icon: MonitorIcon },
+  { to: '/usage', label: 'Usage', icon: ChartIcon },
+  { to: '/billing', label: 'Billing', icon: CreditCardIcon },
 ];
 
 /**
