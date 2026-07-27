@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
-import { config } from '../../config.js';
+import { config } from '../../../config.js';
 
 /**
  * The Xactimate credential vault.

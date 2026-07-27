@@ -1,4 +1,4 @@
-import { config } from '../../config.js';
+import { config } from '../../../config.js';
 import { MockXactimateDriver } from './mockDriver.js';
 import { XactimateApiDriver } from './apiDriver.js';
 import { XactimateWebDriver } from './webDriver.js';

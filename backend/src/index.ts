@@ -1,6 +1,6 @@
 import { createApp } from './app.js';
 import { config } from './config.js';
-import { connections } from './estimator/xactimate/index.js';
+import { connections } from './estimator/mitigation/xactimate/index.js';
 import { startScheduler, stopScheduler } from './pm/scheduler.js';
 import { startBackupScheduler, stopBackupScheduler } from './lib/backup/scheduler.js';
 import { agentHub } from './computer/agentHub.js';

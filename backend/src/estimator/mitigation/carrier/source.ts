@@ -1,4 +1,4 @@
-import { config } from '../../config.js';
+import { config } from '../../../config.js';
 import type { CarrierId, ProgramAgreement, ProgramId, SlaRule } from './types.js';
 
 /**

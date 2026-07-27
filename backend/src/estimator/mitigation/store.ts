@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { HttpError } from '../lib/errors.js';
+import { HttpError } from '../../lib/errors.js';
 import type { ConsentAuditEntry, ConsentGrant, ConsentScope, CredentialStorageMode } from './xactimate/consent.js';
 import type { SealedCredential } from './xactimate/credentials.js';
 import type { PriceList } from './catalog/priceList.js';

@@ -9,7 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "estimator:demo": "tsx src/estimator/demo.ts",
+    "mitigation:demo": "tsx src/estimator/mitigation/demo.ts",
     "browser:install": "playwright install chromium",
     "check:verifier": "tsx src/scripts/checkVerifier.ts",
     "test": "node --import tsx --test src/**/*.test.ts",

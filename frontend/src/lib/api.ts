@@ -648,48 +648,48 @@ export const api = {
   // ---- Mitigation estimator ----
   buildEstimate: (input: BuildEstimateInput) =>
     request<{ estimate: MitigationEstimate; priceListConnected: boolean }>(
-      '/api/estimator/build',
+      '/api/mitigation/build',
       { method: 'POST', body: JSON.stringify(input) },
     ),
 
   saveEstimate: (input: BuildEstimateInput) =>
     request<{ estimateId: string; jobId: string; estimate: MitigationEstimate }>(
-      '/api/estimator/estimates',
+      '/api/mitigation/estimates',
       { method: 'POST', body: JSON.stringify(input) },
     ),
 
   getEstimatorJobs: () =>
-    request<{ jobs: EstimatorJob[] }>('/api/estimator/jobs', { method: 'GET' }),
+    request<{ jobs: EstimatorJob[] }>('/api/mitigation/jobs', { method: 'GET' }),
 
   getDemoSources: () =>
-    request<{ sources: BuildEstimateInput }>('/api/estimator/demo-sources', { method: 'GET' }),
+    request<{ sources: BuildEstimateInput }>('/api/mitigation/demo-sources', { method: 'GET' }),
 
   getCarriers: () =>
     request<{ carriers: Array<{ id: string; name: string }>; programs: Array<{ id: string; name: string }> }>(
-      '/api/estimator/carriers',
+      '/api/mitigation/carriers',
       { method: 'GET' },
     ),
 
   getAgreements: () =>
-    request<{ agreements: ProgramAgreementSummary[]; source: string }>('/api/estimator/agreements', {
+    request<{ agreements: ProgramAgreementSummary[]; source: string }>('/api/mitigation/agreements', {
       method: 'GET',
     }),
 
   getDeviations: (jobId: string) =>
     request<{ deviations: SlaDeviation[] }>(
-      `/api/estimator/jobs/${encodeURIComponent(jobId)}/deviations`,
+      `/api/mitigation/jobs/${encodeURIComponent(jobId)}/deviations`,
       { method: 'GET' },
     ),
 
   acceptDeviation: (jobId: string, deviation: Omit<SlaDeviation, 'proposed'>) =>
     request<{ deviations: SlaDeviation[] }>(
-      `/api/estimator/jobs/${encodeURIComponent(jobId)}/deviations`,
+      `/api/mitigation/jobs/${encodeURIComponent(jobId)}/deviations`,
       { method: 'POST', body: JSON.stringify(deviation) },
     ),
 
   removeDeviation: (jobId: string, ruleId: string) =>
     request<{ ok: boolean }>(
-      `/api/estimator/jobs/${encodeURIComponent(jobId)}/deviations/${encodeURIComponent(ruleId)}`,
+      `/api/mitigation/jobs/${encodeURIComponent(jobId)}/deviations/${encodeURIComponent(ruleId)}`,
       { method: 'DELETE' },
     ),
 
@@ -698,20 +698,20 @@ export const api = {
       editions: { s500: string; s520: string };
       note: string;
       references: Array<StandardReference & { formatted: string }>;
-    }>('/api/estimator/standards', { method: 'GET' }),
+    }>('/api/mitigation/standards', { method: 'GET' }),
 
   getEstimatorSettings: () =>
-    request<{ settings: EstimatorSettings }>('/api/estimator/settings', { method: 'GET' }),
+    request<{ settings: EstimatorSettings }>('/api/mitigation/settings', { method: 'GET' }),
 
   saveEstimatorSettings: (settings: EstimatorSettings) =>
-    request<{ settings: EstimatorSettings }>('/api/estimator/settings', {
+    request<{ settings: EstimatorSettings }>('/api/mitigation/settings', {
       method: 'PUT',
       body: JSON.stringify(settings),
     }),
 
   /** Export URL for an estimate. The browser downloads it directly (cookies ride along). */
   estimateExportUrl: (estimateId: string, format: 'csv' | 'xml' | 'scope') =>
-    `${API_BASE}/api/estimator/estimates/${estimateId}/export?format=${format}`,
+    `${API_BASE}/api/mitigation/estimates/${estimateId}/export?format=${format}`,
 
   // ---- Xactimate connection ----
   xactimateStatus: () => request<XactimateStatus>('/api/xactimate/status', { method: 'GET' }),

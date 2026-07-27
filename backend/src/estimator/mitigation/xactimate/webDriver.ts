@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { config } from '../../config.js';
+import { config } from '../../../config.js';
 import {
   BaseXactimateDriver,
   DriverError,

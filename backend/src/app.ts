@@ -18,7 +18,7 @@ import { backupRouter } from './routes/backups.js';
 import { integrationsRouter } from './routes/integrations.js';
 import { computerRouter } from './routes/computer.js';
 import { healthRouter } from './routes/health.js';
-import { estimatorRouter } from './routes/estimator.js';
+import { mitigationRouter } from './routes/mitigation.js';
 import { xactimateRouter } from './routes/xactimate.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
@@ -69,31 +69,29 @@ export function createApp(): Express {
   // CRM writes are bigger than an auth payload but still small, so the cap
   // stays tight everywhere except the routes that legitimately carry more:
   // a whole spreadsheet on CSV import, a model prompt on /api/ai or /api/model,
-  // and a DocuSketch scan plus a MICA drying log on /api/estimator.
+  // and a DocuSketch scan plus a MICA drying log on /api/mitigation.
+  //
   // The parser is CHOSEN here rather than stacked on those routes: the first
   // json() to run consumes the stream, so a route-level raise would never be
   // reached — the global cap would already have rejected the upload with 413.
   // Every raised limit therefore has to be declared in this one place.
   //
-  // Every raised limit therefore has to be declared in this one place. A
-  // DocuSketch scan of a whole house plus a MICA drying log is megabytes of
-  // JSON; a CSV import is a whole spreadsheet; task execution carries job files.
   // A Web Access data-entry run carries the rows to be entered, which is more
   // than a login form's worth of JSON but comfortably inside the 256kb
   // standard, so it needs no exception of its own.
   const csvImportPath = /^\/api\/integrations\/sources\/[^/]+\/import\/?$/;
   const modelPromptPath = /^\/api\/(ai|model)(\/|$)/;
-  const estimatorPath = /^\/api\/estimator(\/|$)/;
+  const mitigationPath = /^\/api\/mitigation(\/|$)/;
   const standardJson = express.json({ limit: '256kb' });
   const csvImportJson = express.json({ limit: '12mb' });
   const modelPromptJson = express.json({ limit: '2mb' });
-  const estimatorJson = express.json({ limit: '8mb' });
+  const mitigationJson = express.json({ limit: '8mb' });
 
   app.use((req, res, next) => {
     const parse = csvImportPath.test(req.path)
       ? csvImportJson
-      : estimatorPath.test(req.path)
-        ? estimatorJson
+      : mitigationPath.test(req.path)
+        ? mitigationJson
         : modelPromptPath.test(req.path)
           ? modelPromptJson
           : standardJson;
@@ -106,7 +104,7 @@ export function createApp(): Express {
   app.use('/api', healthRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
-  app.use('/api/estimator', estimatorRouter);
+  app.use('/api/mitigation', mitigationRouter);
   app.use('/api/xactimate', xactimateRouter);
   app.use('/api/billing', billingRouter);
   app.use('/api/usage', usageRouter);

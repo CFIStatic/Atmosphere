@@ -19,13 +19,13 @@ import {
   sealCredential,
   type ConsentScope,
   type XactimateDriver,
-} from '../estimator/xactimate/index.js';
+} from '../estimator/mitigation/xactimate/index.js';
 import {
   priceListSyncSchema,
   priceListUploadSchema,
   pushEstimateSchema,
   xactimateConnectSchema,
-} from '../estimator/validation.js';
+} from '../estimator/mitigation/validation.js';
 import {
   getConnection,
   getPriceList,
@@ -35,8 +35,8 @@ import {
   revokeConnection,
   savePriceList,
   saveConnection,
-} from '../estimator/store.js';
-import type { MitigationEstimate } from '../estimator/types.js';
+} from '../estimator/mitigation/store.js';
+import type { MitigationEstimate } from '../estimator/mitigation/types.js';
 
 export const xactimateRouter = Router();
 

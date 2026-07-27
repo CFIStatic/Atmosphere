@@ -4,18 +4,18 @@ import { config } from '../config.js';
 import { createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { HttpError, badRequest } from '../lib/errors.js';
-import { buildEstimate, identifyFromSources } from '../estimator/agent.js';
-import { MockSlaSource, ManualSlaSource, PortalSlaSource, parseAgreement, resolveAgreement, type SlaSource } from '../estimator/carrier/source.js';
-import { CARRIERS, PROGRAMS } from '../estimator/carrier/identify.js';
-import { buildEstimatorConfig } from '../estimator/settings.js';
-import { CATALOG } from '../estimator/catalog/lineItems.js';
+import { buildEstimate, identifyFromSources } from '../estimator/mitigation/agent.js';
+import { MockSlaSource, ManualSlaSource, PortalSlaSource, parseAgreement, resolveAgreement, type SlaSource } from '../estimator/mitigation/carrier/source.js';
+import { CARRIERS, PROGRAMS } from '../estimator/mitigation/carrier/identify.js';
+import { buildEstimatorConfig } from '../estimator/mitigation/settings.js';
+import { CATALOG } from '../estimator/mitigation/catalog/lineItems.js';
 import {
   CITATIONS,
   formatCitation,
   S500_EDITION,
   S520_EDITION,
-} from '../estimator/standards/s500.js';
-import { toLineItemCsv, toScopeSheet, toSketchXml } from '../estimator/export/xactimateExport.js';
+} from '../estimator/mitigation/standards/s500.js';
+import { toLineItemCsv, toScopeSheet, toSketchXml } from '../estimator/mitigation/export/xactimateExport.js';
 import {
   agreementFetchSchema,
   agreementSchema,
@@ -23,7 +23,7 @@ import {
   deviationSchema,
   estimatorSettingsSchema,
   exportFormatSchema,
-} from '../estimator/validation.js';
+} from '../estimator/mitigation/validation.js';
 import {
   deleteAgreement,
   deleteDeviation,
@@ -40,11 +40,11 @@ import {
   saveEstimate,
   saveSettings,
   getConnection,
-} from '../estimator/store.js';
+} from '../estimator/mitigation/store.js';
 
-export const estimatorRouter = Router();
+export const mitigationRouter = Router();
 
-estimatorRouter.use(requireAuth);
+mitigationRouter.use(requireAuth);
 
 /**
  * Building an estimate parses several megabytes of vendor export and runs the
@@ -115,14 +115,14 @@ async function resolveJobAgreement(
 }
 
 /**
- * POST /api/estimator/build
+ * POST /api/mitigation/build
  *
  * Build an estimate from raw sources without saving anything. This is the
  * endpoint the UI calls while the user is still adding sources and adjusting
  * assumptions — an estimate is cheap to recompute and there is no reason to
  * litter the database with drafts.
  */
-estimatorRouter.post(
+mitigationRouter.post(
   '/build',
   buildLimiter,
   async (req: Request, res: Response, next: NextFunction) => {
@@ -164,12 +164,12 @@ estimatorRouter.post(
 );
 
 /**
- * POST /api/estimator/estimates
+ * POST /api/mitigation/estimates
  *
  * Build and persist. Separate from /build on purpose: saving is the deliberate
  * act, and it is the one that puts claim data in the database.
  */
-estimatorRouter.post(
+mitigationRouter.post(
   '/estimates',
   buildLimiter,
   async (req: Request, res: Response, next: NextFunction) => {
@@ -213,14 +213,14 @@ estimatorRouter.post(
 );
 
 /**
- * GET /api/estimator/standards
+ * GET /api/mitigation/standards
  *
  * The full IICRC citation registry — every requirement the estimator reasons
  * from, how firmly each is anchored, and where a familiar "the S500 requires…"
  * is really industry convention. Published because an estimator defending a
  * scope needs to know which of their citations is a clause and which is custom.
  */
-estimatorRouter.get('/standards', async (_req: Request, res: Response, next: NextFunction) => {
+mitigationRouter.get('/standards', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.json({
       editions: { s500: S500_EDITION, s520: S520_EDITION },
@@ -236,24 +236,24 @@ estimatorRouter.get('/standards', async (_req: Request, res: Response, next: Nex
 });
 
 /**
- * GET /api/estimator/demo-sources
+ * GET /api/mitigation/demo-sources
  *
  * The worked example, so the estimator can be evaluated before anyone uploads a
  * real claim. It is a Category 2 appliance loss that sat two days, with a wet
  * wall cavity and an equipment log left open — enough to exercise the paths that
  * matter without any customer data changing hands.
  */
-estimatorRouter.get('/demo-sources', async (_req: Request, res: Response, next: NextFunction) => {
+mitigationRouter.get('/demo-sources', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const { SAMPLE_JOB } = await import('../estimator/fixtures/sampleJob.js');
+    const { SAMPLE_JOB } = await import('../estimator/mitigation/fixtures/sampleJob.js');
     res.json({ sources: SAMPLE_JOB });
   } catch (err) {
     next(err);
   }
 });
 
-/** GET /api/estimator/jobs — the org's estimating jobs, newest first. */
-estimatorRouter.get('/jobs', async (req: Request, res: Response, next: NextFunction) => {
+/** GET /api/mitigation/jobs — the org's estimating jobs, newest first. */
+mitigationRouter.get('/jobs', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const supabase = createUserClient(req.accessToken!);
     const orgId = await resolveOrgId(supabase, req.user!.id);
@@ -263,8 +263,8 @@ estimatorRouter.get('/jobs', async (req: Request, res: Response, next: NextFunct
   }
 });
 
-/** GET /api/estimator/estimates/:id */
-estimatorRouter.get('/estimates/:id', async (req: Request, res: Response, next: NextFunction) => {
+/** GET /api/mitigation/estimates/:id */
+mitigationRouter.get('/estimates/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const supabase = createUserClient(req.accessToken!);
     const record = await getEstimate(supabase, req.params.id);
@@ -278,12 +278,12 @@ estimatorRouter.get('/estimates/:id', async (req: Request, res: Response, next: 
 });
 
 /**
- * GET /api/estimator/estimates/:id/export?format=csv|xml|scope
+ * GET /api/mitigation/estimates/:id/export?format=csv|xml|scope
  *
  * The route that needs no Xactimate login at all: download the file, import it
  * by hand. For most orgs this is the whole integration.
  */
-estimatorRouter.get(
+mitigationRouter.get(
   '/estimates/:id/export',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -316,8 +316,8 @@ estimatorRouter.get(
   },
 );
 
-/** GET /api/estimator/settings — the org's estimating assumptions. */
-estimatorRouter.get('/settings', async (req: Request, res: Response, next: NextFunction) => {
+/** GET /api/mitigation/settings — the org's estimating assumptions. */
+mitigationRouter.get('/settings', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const supabase = createUserClient(req.accessToken!);
     const orgId = await resolveOrgId(supabase, req.user!.id);
@@ -327,8 +327,8 @@ estimatorRouter.get('/settings', async (req: Request, res: Response, next: NextF
   }
 });
 
-/** PUT /api/estimator/settings */
-estimatorRouter.put('/settings', async (req: Request, res: Response, next: NextFunction) => {
+/** PUT /api/mitigation/settings */
+mitigationRouter.put('/settings', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = estimatorSettingsSchema.parse(req.body);
     if (!parsed) throw badRequest('Nothing to save.');
@@ -342,12 +342,12 @@ estimatorRouter.put('/settings', async (req: Request, res: Response, next: NextF
 });
 
 /**
- * GET /api/estimator/catalog
+ * GET /api/mitigation/catalog
  *
  * The line-item catalog the estimator can write, with each entry's verification
  * state. Exposed so the UI can be honest about which prices are real.
  */
-estimatorRouter.get('/catalog', async (req: Request, res: Response, next: NextFunction) => {
+mitigationRouter.get('/catalog', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const supabase = createUserClient(req.accessToken!);
     const userId = req.user!.id;
@@ -385,12 +385,12 @@ estimatorRouter.get('/catalog', async (req: Request, res: Response, next: NextFu
  * ------------------------------------------------------------------ */
 
 /**
- * GET /api/estimator/carriers
+ * GET /api/mitigation/carriers
  *
  * The carriers and assignment networks the identifier recognises, so the UI can
  * offer a correction rather than making someone guess the canonical id.
  */
-estimatorRouter.get('/carriers', async (_req: Request, res: Response, next: NextFunction) => {
+mitigationRouter.get('/carriers', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.json({
       carriers: CARRIERS.map(({ id, name }) => ({ id, name })),
@@ -401,8 +401,8 @@ estimatorRouter.get('/carriers', async (_req: Request, res: Response, next: Next
   }
 });
 
-/** GET /api/estimator/agreements — the org's loaded program terms. */
-estimatorRouter.get('/agreements', async (req: Request, res: Response, next: NextFunction) => {
+/** GET /api/mitigation/agreements — the org's loaded program terms. */
+mitigationRouter.get('/agreements', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const supabase = createUserClient(req.accessToken!);
     const orgId = await resolveOrgId(supabase, req.user!.id);
@@ -413,13 +413,13 @@ estimatorRouter.get('/agreements', async (req: Request, res: Response, next: Nex
 });
 
 /**
- * PUT /api/estimator/agreements
+ * PUT /api/mitigation/agreements
  *
  * Enter a program agreement's terms by hand. This is the source that always
  * works and the only one guaranteed to match what the franchise actually
  * signed — someone reads the contract and records what it requires.
  */
-estimatorRouter.put('/agreements', async (req: Request, res: Response, next: NextFunction) => {
+mitigationRouter.put('/agreements', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = agreementSchema.parse(req.body);
     const supabase = createUserClient(req.accessToken!);
@@ -440,7 +440,7 @@ estimatorRouter.put('/agreements', async (req: Request, res: Response, next: Nex
 });
 
 /**
- * POST /api/estimator/agreements/fetch
+ * POST /api/mitigation/agreements/fetch
  *
  * Pull terms from the configured franchisor contractor portal.
  *
@@ -449,7 +449,7 @@ estimatorRouter.put('/agreements', async (req: Request, res: Response, next: Nex
  * a portal response that silently became the org's binding terms would be a bad
  * way to discover an endpoint had changed shape.
  */
-estimatorRouter.post(
+mitigationRouter.post(
   '/agreements/fetch',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -481,8 +481,8 @@ estimatorRouter.post(
   },
 );
 
-/** DELETE /api/estimator/agreements/:carrierId/:programId */
-estimatorRouter.delete(
+/** DELETE /api/mitigation/agreements/:carrierId/:programId */
+mitigationRouter.delete(
   '/agreements/:carrierId/:programId',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -500,8 +500,8 @@ estimatorRouter.delete(
  * Deviations
  * ------------------------------------------------------------------ */
 
-/** GET /api/estimator/jobs/:jobId/deviations */
-estimatorRouter.get(
+/** GET /api/mitigation/jobs/:jobId/deviations */
+mitigationRouter.get(
   '/jobs/:jobId/deviations',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -515,7 +515,7 @@ estimatorRouter.get(
 );
 
 /**
- * POST /api/estimator/jobs/:jobId/deviations
+ * POST /api/mitigation/jobs/:jobId/deviations
  *
  * Accept a deviation from a program term.
  *
@@ -524,7 +524,7 @@ estimatorRouter.get(
  * the page and be worthless on review, which is the precise failure this whole
  * mechanism exists to prevent.
  */
-estimatorRouter.post(
+mitigationRouter.post(
   '/jobs/:jobId/deviations',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -548,8 +548,8 @@ estimatorRouter.post(
   },
 );
 
-/** DELETE /api/estimator/jobs/:jobId/deviations/:ruleId */
-estimatorRouter.delete(
+/** DELETE /api/mitigation/jobs/:jobId/deviations/:ruleId */
+mitigationRouter.delete(
   '/jobs/:jobId/deviations/:ruleId',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
