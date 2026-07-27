@@ -1,4 +1,4 @@
-import express, { Router, type NextFunction, type Request, type Response } from 'express';
+import { Router, type NextFunction, type Request, type Response } from 'express';
 import { createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { HttpError } from '../lib/errors.js';
@@ -33,13 +33,6 @@ export const estimatorRouter = Router();
  */
 
 estimatorRouter.use(requireAuth);
-
-/**
- * A mitigation estimate is pasted in as text and a whole-house dryout export
- * runs well past the app-wide 10 kB JSON cap, so this router parses its own
- * bodies with a larger ceiling.
- */
-estimatorRouter.use(express.json({ limit: '2mb' }));
 
 /** Resolve the caller's org once per request, with the role for permission checks. */
 async function context(req: Request) {

@@ -40,3 +40,13 @@ frontend/dist-ssr/
 # Never commit database backups — they contain auth credentials/PII
 recovery/
 *backup*.json
+
+# Backup archives. Encrypted at rest when a key is configured, but they still
+# hold every customer record we have — they never belong in version control.
+backups/
+backend/backups/
+*.atmbak
+
+# Encrypted Anthropic API keys written by the backend at runtime.
+# The contents are ciphertext, but there is no reason to version them.
+backend/.data/

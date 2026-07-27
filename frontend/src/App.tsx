@@ -7,6 +7,7 @@ import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { ComputerUsePage } from './pages/ComputerUsePage';
 import { EstimatorPage } from './pages/EstimatorPage';
 import { SpinnerIcon } from './components/icons';
 
@@ -68,6 +69,17 @@ export default function App() {
               <ProtectedRoute>
                 <RequireOnboarded>
                   <DashboardPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/computer-use"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <ComputerUsePage />
                 </RequireOnboarded>
               </ProtectedRoute>
             }

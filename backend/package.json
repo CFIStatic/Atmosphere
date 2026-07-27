@@ -9,7 +9,15 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test test/*.test.ts"
+    "test": "tsx --test test/*.test.ts",
+    "backup": "tsx src/scripts/backup.ts snapshot",
+    "backup:list": "tsx src/scripts/backup.ts list",
+    "backup:verify": "tsx src/scripts/backup.ts verify",
+    "backup:restore": "tsx src/scripts/backup.ts restore",
+    "backup:retention": "tsx src/scripts/backup.ts retention",
+    "check": "npm run typecheck && npm run check:backup && npm run check:csv",
+    "check:backup": "tsx src/scripts/checkBackupArchive.ts",
+    "check:csv": "tsx src/scripts/checkCsvImport.ts"
   },
   "engines": {
     "node": ">=18"
@@ -23,6 +31,7 @@
     "express": "^4.19.2",
     "express-rate-limit": "^7.4.0",
     "helmet": "^7.1.0",
+    "ws": "^8.21.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -30,6 +39,7 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^22.5.4",
+    "@types/ws": "^8.18.1",
     "tsx": "^4.19.1",
     "typescript": "^5.5.4"
   }

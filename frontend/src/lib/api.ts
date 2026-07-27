@@ -61,6 +61,71 @@ export interface RecoveryCredential {
   refreshToken?: string;
 }
 
+/* ------------------------------ Computer use ------------------------------ */
+
+export type CaptureQuality = 'economical' | 'balanced' | 'detailed';
+
+/** A computer with the agent running and connected. */
+export interface ComputerAgent {
+  id: string;
+  name: string;
+  platform: string;
+  version: string;
+  screen: { width: number; height: number };
+  /** Resolution the model sees; null until the computer is configured. */
+  capture: { width: number; height: number; scale: number } | null;
+  capabilities: string[];
+  connectedAt: string;
+  busy: boolean;
+}
+
+export interface CredentialStatus {
+  connected: boolean;
+  /** 'organization' — entered here; 'server' — set as ANTHROPIC_API_KEY. */
+  source: 'organization' | 'server' | null;
+  hint: string | null;
+  updatedAt: string | null;
+}
+
+export interface ComputerStatus {
+  enabled: boolean;
+  credential: CredentialStatus;
+  agents: ComputerAgent[];
+  models: { id: string; label: string }[];
+  defaults: { model: string; quality: CaptureQuality };
+  limits: { maxSteps: number; runTimeoutMs: number };
+}
+
+export type RunStatus = 'starting' | 'running' | 'completed' | 'failed' | 'stopped';
+
+export interface ComputerRun {
+  id: string;
+  agentId: string;
+  agentName: string;
+  instruction: string;
+  model: string;
+  status: RunStatus;
+  startedAt: string;
+  endedAt: string | null;
+  steps: number;
+  usage: { inputTokens: number; outputTokens: number };
+  error: string | null;
+}
+
+/** One entry in the live transcript streamed over SSE. */
+export type RunEvent = { seq: number; at: string } & (
+  | { type: 'status'; status: RunStatus; message?: string }
+  | { type: 'text'; text: string }
+  | { type: 'thinking'; text: string }
+  | { type: 'action'; action: string; summary: string; ok: boolean; error?: string }
+  | { type: 'screenshot'; image: string | null; width: number; height: number }
+  | { type: 'usage'; inputTokens: number; outputTokens: number }
+  | { type: 'error'; message: string }
+);
+
+/** The stream also carries periodic run summaries, which are not transcript entries. */
+export type RunStreamMessage = RunEvent | { type: 'summary'; run: ComputerRun };
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -175,8 +240,8 @@ export const api = {
   // ---- Construction Estimator ----
   estimatorStatus: () => request<EstimatorStatus>('/api/estimator/status', { method: 'GET' }),
 
-  saveEstimatorCredential: (provider: EstimatorProvider, input: CredentialInput) =>
-    request<{ credential: CredentialSummary }>(`/api/estimator/credentials/${provider}`, {
+  saveEstimatorCredential: (provider: EstimatorProvider, input: EstimatorCredentialInput) =>
+    request<{ credential: EstimatorCredential }>(`/api/estimator/credentials/${provider}`, {
       method: 'PUT',
       body: JSON.stringify(input),
     }),
@@ -219,6 +284,66 @@ export const api = {
   /** Download URL — the browser fetches it directly so the file streams. */
   estimatorExportUrl: (runId: string, format: 'csv' | 'xml') =>
     `${API_BASE}/api/estimator/runs/${runId}/export?format=${format}`,
+
+  // ---- Computer use ----
+  computerStatus: () => request<ComputerStatus>('/api/computer/status', { method: 'GET' }),
+
+  connectAnthropicKey: (apiKey: string) =>
+    request<{ credential: CredentialStatus }>('/api/computer/credentials', {
+      method: 'PUT',
+      body: JSON.stringify({ apiKey }),
+    }),
+
+  disconnectAnthropicKey: () =>
+    request<{ credential: CredentialStatus }>('/api/computer/credentials', { method: 'DELETE' }),
+
+  createPairingCode: () =>
+    request<{ code: string; expiresAt: string }>('/api/computer/agents/pair-code', {
+      method: 'POST',
+    }),
+
+  getAgents: () => request<{ agents: ComputerAgent[] }>('/api/computer/agents', { method: 'GET' }),
+
+  getAgentScreen: (agentId: string) =>
+    request<{ image: string; width: number; height: number }>(
+      `/api/computer/agents/${encodeURIComponent(agentId)}/screen`,
+      { method: 'GET' },
+    ),
+
+  startRun: (input: {
+    agentId: string;
+    instruction: string;
+    model?: string;
+    quality?: CaptureQuality;
+  }) =>
+    request<{ run: ComputerRun }>('/api/computer/runs', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  getRuns: () => request<{ runs: ComputerRun[] }>('/api/computer/runs', { method: 'GET' }),
+
+  stopRun: (runId: string) =>
+    request<{ run: ComputerRun }>(`/api/computer/runs/${encodeURIComponent(runId)}/stop`, {
+      method: 'POST',
+    }),
+
+  /** SSE URL for a run's transcript. `after` replays what the browser missed. */
+  runEventsUrl: (runId: string, after = 0) =>
+    `${API_BASE}/api/computer/runs/${encodeURIComponent(runId)}/events?after=${after}`,
+};
+
+/** Friendly labels for the platform string the agent reports. */
+export const PLATFORM_LABELS: Record<string, string> = {
+  darwin: 'macOS',
+  win32: 'Windows',
+  linux: 'Linux',
+};
+
+export const QUALITY_LABELS: Record<CaptureQuality, string> = {
+  economical: 'Economical — smallest screenshots, lowest cost',
+  balanced: 'Balanced — about 1080p (recommended)',
+  detailed: 'Detailed — highest resolution the model allows',
 };
 
 /* ------------------------------------------------------------------ */
@@ -227,7 +352,7 @@ export const api = {
 
 export type EstimatorProvider = 'docusketch' | 'dash' | 'xactimate';
 
-export interface CredentialSummary {
+export interface EstimatorCredential {
   provider: EstimatorProvider;
   label: string | null;
   fingerprint: string;
@@ -236,7 +361,7 @@ export interface CredentialSummary {
   updatedBy: string | null;
 }
 
-export interface CredentialInput {
+export interface EstimatorCredentialInput {
   label?: string;
   username?: string;
   password?: string;
@@ -252,7 +377,7 @@ export interface EstimatorStatus {
   credentialStorageAvailable: boolean;
   canManageCredentials: boolean;
   maxPhotosPerRun: number;
-  credentials: CredentialSummary[];
+  credentials: EstimatorCredential[];
 }
 
 export interface ScanProjectSummary {
@@ -263,9 +388,9 @@ export interface ScanProjectSummary {
   capturedAt?: string;
 }
 
-export type RunStatus = 'running' | 'awaiting_review' | 'complete' | 'failed' | 'cancelled';
+export type EstimatorRunStatus = 'running' | 'awaiting_review' | 'complete' | 'failed' | 'cancelled';
 
-export type RunStage =
+export type EstimatorRunStage =
   | 'queued'
   | 'connecting'
   | 'fetching_scan'
@@ -278,9 +403,9 @@ export type RunStage =
   | 'exporting'
   | 'complete';
 
-export interface RunEvent {
+export interface EstimatorRunEvent {
   at: string;
-  stage: RunStage;
+  stage: EstimatorRunStage;
   level: 'info' | 'warn' | 'error';
   message: string;
 }
@@ -341,8 +466,8 @@ export interface ConstructionEstimate {
 
 export interface EstimatorRun {
   id: string;
-  status: RunStatus;
-  stage: RunStage;
+  status: EstimatorRunStatus;
+  stage: EstimatorRunStage;
   scanProjectId: string;
   crmJobId: string | null;
   matchScore: number | null;
@@ -353,13 +478,13 @@ export interface EstimatorRun {
   estimate: ConstructionEstimate | null;
   exportRef: string | null;
   error: string | null;
-  events: RunEvent[];
+  events: EstimatorRunEvent[];
   createdAt: string;
   updatedAt: string;
 }
 
 /** Stage labels, in the order the pipeline runs them. */
-export const RUN_STAGE_LABELS: Record<RunStage, string> = {
+export const ESTIMATOR_STAGE_LABELS: Record<EstimatorRunStage, string> = {
   queued: 'Queued',
   connecting: 'Connecting',
   fetching_scan: 'Reading the scan',

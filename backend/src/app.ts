@@ -5,6 +5,10 @@ import cookieParser from 'cookie-parser';
 import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
+import { crmRouter } from './routes/crm.js';
+import { backupRouter } from './routes/backups.js';
+import { integrationsRouter } from './routes/integrations.js';
+import { computerRouter } from './routes/computer.js';
 import { estimatorRouter } from './routes/estimator.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
@@ -34,28 +38,40 @@ export function createApp(): Express {
     }),
   );
 
-  // Body + cookie parsing (with a small JSON size cap).
+  // Body + cookie parsing.
   //
-  // The estimator is the one exception: a pasted mitigation estimate is a
-  // whole-house Xactimate export, far past 10 kB. It is skipped here and parses
-  // its own bodies at a higher limit, so raising the cap for one feature does
-  // not widen the request surface everywhere else.
-  const jsonParser = express.json({ limit: '10kb' });
+  // CRM writes are bigger than an auth payload but still small, so the cap
+  // stays tight everywhere except the two routes that take bulk content: a
+  // spreadsheet import, and a pasted mitigation estimate (a whole-house
+  // Xactimate export). The parser is CHOSEN here rather than stacked on those
+  // routes: the first json() to run consumes the stream, so a route-level raise
+  // would never be reached — the global cap would already have rejected the
+  // upload with 413.
+  const csvImportPath = /^\/api\/integrations\/sources\/[^/]+\/import\/?$/;
+  const estimatorPath = /^\/api\/estimator\//;
+  const standardJson = express.json({ limit: '256kb' });
+  const csvImportJson = express.json({ limit: '12mb' });
+  const estimatorJson = express.json({ limit: '2mb' });
+
   app.use((req, res, next) => {
-    if (req.path.startsWith('/api/estimator')) {
-      next();
-      return;
-    }
-    jsonParser(req, res, next);
+    const parse = csvImportPath.test(req.path)
+      ? csvImportJson
+      : estimatorPath.test(req.path)
+        ? estimatorJson
+        : standardJson;
+    parse(req, res, next);
   });
+
   app.use(cookieParser());
 
   // Routes.
   app.use('/api', healthRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
-  // The estimator parses its own bodies — a pasted mitigation estimate is far
-  // larger than the 10 kB the rest of the API needs.
+  app.use('/api/crm', crmRouter);
+  app.use('/api/backups', backupRouter);
+  app.use('/api/integrations', integrationsRouter);
+  app.use('/api/computer', computerRouter);
   app.use('/api/estimator', estimatorRouter);
 
   // 404 + error handling (must be last).

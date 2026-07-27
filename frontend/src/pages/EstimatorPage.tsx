@@ -3,16 +3,16 @@ import { Link } from 'react-router-dom';
 import {
   ApiError,
   PROVIDER_LABELS,
-  RUN_STAGE_LABELS,
+  ESTIMATOR_STAGE_LABELS,
   api,
   type ConstructionEstimate,
-  type CredentialInput,
+  type EstimatorCredentialInput,
   type EstimateLineItem,
   type EstimatorProvider,
   type EstimatorRun,
   type EstimatorStatus,
   type MatchCandidate,
-  type RunStage,
+  type EstimatorRunStage,
   type ScanProjectSummary,
 } from '../lib/api';
 import { Logo } from '../components/Logo';
@@ -32,7 +32,7 @@ import { AlertIcon, CheckIcon, DownloadIcon, SpinnerIcon } from '../components/i
 const PROVIDERS: EstimatorProvider[] = ['docusketch', 'dash', 'xactimate'];
 
 /** Ordered for the progress rail; terminal stages are handled separately. */
-const STAGE_SEQUENCE: RunStage[] = [
+const STAGE_SEQUENCE: EstimatorRunStage[] = [
   'connecting',
   'fetching_scan',
   'matching_job',
@@ -61,7 +61,7 @@ function ConnectionCard({
   onChanged: () => void;
 }) {
   const [open, setOpen] = useState<EstimatorProvider | null>(null);
-  const [form, setForm] = useState<CredentialInput>({});
+  const [form, setForm] = useState<EstimatorCredentialInput>({});
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
 
@@ -435,7 +435,7 @@ function StageRail({ run }: { run: EstimatorRun }) {
                     : 'bg-ink-700/60 text-gray-500'
             }`}
           >
-            {RUN_STAGE_LABELS[stage]}
+            {ESTIMATOR_STAGE_LABELS[stage]}
           </li>
         );
       })}
@@ -933,7 +933,7 @@ export function EstimatorPage() {
                       </p>
                       <p className="text-xs text-gray-500">
                         {new Date(run.createdAt).toLocaleString()} ·{' '}
-                        {RUN_STAGE_LABELS[run.stage]}
+                        {ESTIMATOR_STAGE_LABELS[run.stage]}
                       </p>
                     </div>
                     <StatusBadge run={run} />
