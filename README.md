@@ -25,6 +25,9 @@ protected Postgres schema.
    server so no Supabase token is ever exposed to page JavaScript.
 5. **PIN sign-in** — an optional 4-digit PIN for fast repeat sign-in, bound to a single
    device (see below).
+6. **Agent Memory** — jobs, the tasks under them, the crew on them, and the work each
+   person logs — with a complete, append-only record of everything that happens to any of
+   it (see below).
 
 ## Why this shape?
 
@@ -49,6 +52,11 @@ JWT:
 | `orgs`         | An organization; owns a unique `join_code`.                          |
 | `org_members`  | Links a user to an org with their `role` and `work_type`.            |
 | `device_credentials` | One row per PIN-enrolled device. Holds only hashes — no secret and no session token. |
+| `jobs`         | A job of work. Carries a per-org running number (`JOB-0001`).        |
+| `job_tasks`    | A unit of work under a job, optionally assigned to a member.         |
+| `job_assignments` | Who was on which job, and when. Released, never deleted.          |
+| `work_logs`    | A member's own account of work done, with time spent.                |
+| `memory_events` | The append-only record of everything that happens. See below.       |
 
 Membership checks used by the policies live in a **private schema** (not exposed as RPCs) to
 avoid recursive-policy issues and to keep the API surface minimal. Onboarding writes go
@@ -65,6 +73,9 @@ through two `SECURITY DEFINER` functions that validate `auth.uid()` internally:
 
 ```
 Atmosphere/
+├── supabase/
+│   ├── migrations/   SQL schema — Agent Memory tables, triggers, RLS
+│   └── tests/        Runs the migration against a throwaway Postgres
 ├── backend/          Express + TypeScript BFF
 │   ├── src/
 │   │   ├── config.ts             Validated config (Supabase URL, keys, cookies, CORS)
@@ -73,7 +84,8 @@ Atmosphere/
 │   │   ├── lib/
 │   │   │   ├── supabase.ts       Anon + per-request user-scoped client factories
 │   │   │   ├── session.ts        httpOnly session-cookie set/clear
-│   │   │   ├── validation.ts     zod schemas (credentials, org create/join)
+│   │   │   ├── validation.ts     zod schemas (credentials, org, jobs, memory query)
+│   │   │   ├── memory.ts         Event recorder + serializers for the record
 │   │   │   └── errors.ts         Typed HTTP errors
 │   │   ├── middleware/
 │   │   │   ├── requireAuth.ts    Verify access token; transparent refresh
@@ -81,15 +93,21 @@ Atmosphere/
 │   │   └── routes/
 │   │       ├── auth.ts           signup / login / logout / refresh / me
 │   │       ├── org.ts            onboarding: me / create / join / members
+│   │       ├── jobs.ts           jobs, tasks, crew, work logs
+│   │       ├── memory.ts         the record: feed, rollups, export
 │   │       └── health.ts         liveness probe
 │   └── .env.example
 └── frontend/         React + Vite + TypeScript + Tailwind
     ├── src/
     │   ├── pages/LoginPage.tsx        Branded login + signup screen
     │   ├── pages/OnboardingPage.tsx   3-step wizard: org → role → work type
-    │   ├── pages/DashboardPage.tsx    Org overview, invite code, linked accounts
+    │   ├── pages/DashboardPage.tsx    Org overview, active jobs, latest activity
+    │   ├── pages/JobsPage.tsx         Job list + open a job
+    │   ├── pages/JobDetailPage.tsx    Tasks, crew, work log, per-job history
+    │   ├── pages/MemoryPage.tsx       The org-wide record, filtered and paged
+    │   ├── pages/TeamMemoryPage.tsx   Per-person rollups and trails
     │   ├── context/AuthContext.tsx    Session + membership state
-    │   ├── components/                Logo, icons, ProtectedRoute
+    │   ├── components/                AppShell, MemoryFeed, Logo, icons
     │   └── lib/api.ts                 Typed fetch client (credentials: include)
     └── .env.example
 ```
@@ -144,6 +162,23 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | POST   | `/api/org`           | cookie | `{ name, role, workType }`    | Create an org and join as first member       |
 | POST   | `/api/org/join`      | cookie | `{ joinCode, role, workType }`| Link to an existing org by join code         |
 | GET    | `/api/org/members`   | cookie | —                             | Linked accounts in the caller's org          |
+| GET    | `/api/jobs`          | cookie | —                             | Job list, rolled up with its memory           |
+| POST   | `/api/jobs`          | cookie | `{ name, workType, … }`       | Open a job (number assigned server-side)      |
+| GET    | `/api/jobs/:id`      | cookie | —                             | Job + tasks + crew + work logs + history      |
+| PATCH  | `/api/jobs/:id`      | cookie | partial job                   | Update a job; the diff is recorded            |
+| GET    | `/api/jobs/:id/memory` | cookie | —                           | That job's complete history, oldest first     |
+| POST   | `/api/jobs/:id/tasks` | cookie | `{ title, … }`               | Add a task                                    |
+| PATCH  | `/api/jobs/:id/tasks/:taskId` | cookie | partial task         | Update a task                                 |
+| POST   | `/api/jobs/:id/crew` | cookie | `{ userId, roleOnJob }`       | Put someone on the job                        |
+| POST   | `/api/jobs/:id/crew/:assignmentId/release` | cookie | —      | Take someone off (row is kept)                |
+| POST   | `/api/jobs/:id/logs` | cookie | `{ kind, body, minutes }`     | Log work done                                 |
+| PATCH  | `/api/jobs/:id/logs/:logId` | cookie | partial log            | Revise your own entry                         |
+| GET    | `/api/memory`        | cookie | —                             | The org's record, filtered and paged          |
+| GET    | `/api/memory/stats`  | cookie | —                             | Headline numbers                              |
+| GET    | `/api/memory/agents` | cookie | —                             | Every member with their work rolled up        |
+| GET    | `/api/memory/agents/:userId` | cookie | —                     | One member's full trail                       |
+| GET    | `/api/memory/entity/:type/:id` | cookie | —                   | Everything known about one thing              |
+| GET    | `/api/memory/export` | cookie | —                             | The whole record as NDJSON                    |
 
 `role` ∈ `project_manager | field_technician | accountant | office_manager | sales`.
 `workType` ∈ `mitigation | construction`.
@@ -193,6 +228,77 @@ which is what keeps that budget meaningless rather than a coin flip.
 
 Signing out deliberately does **not** clear the PIN — returning to the PIN pad instead of the
 password form is the whole point. Enrollment is per-device, capped at 5 devices per user.
+
+### Agent Memory
+
+A restoration job is reconstructed after the fact more often than anyone would like — for
+an insurance dispute, a warranty claim, a payroll question, or simply "who was on site on
+the 14th?". That only works if the record is complete, so the guiding rule here is that
+**the record is not something the application maintains — it is something the database
+does not allow you to avoid.**
+
+Three decisions follow from that:
+
+**1. Capture happens in the database, not the routes.** Every write to `jobs`,
+`job_tasks`, `job_assignments` and `work_logs` fires an `AFTER` trigger that diffs the row
+and appends to `memory_events`. Not one route in `backend/src/routes/jobs.ts` writes an
+audit record. Application-level logging is only ever as complete as the code paths that
+remember to call it; a trigger fires for the BFF, for a SQL console, for a background job,
+and for whatever client gets written next year. A route added later is recorded with no
+chance of anyone forgetting.
+
+Each entry keeps a readable sentence (`moved job JOB-0001 from lead to in_progress`), the
+field-level `{from, to}` diff, and the full row snapshot. The actor's email and role are
+copied in **at write time** on purpose — resolving them by join would silently rewrite
+history every time somebody changed role or left.
+
+**2. Nothing is ever destroyed.** `memory_events` rejects `UPDATE`, `DELETE` and
+`TRUNCATE` by trigger, for every role — including the table owner and `service_role`, both
+of which bypass grants and RLS. The other four tables are granted `SELECT`, `INSERT` and
+`UPDATE` only, so jobs are *cancelled*, tasks are *cancelled*, crew are *released*. That is
+also what keeps the record coherent: no cascade can orphan an event, because nothing it
+points at can be removed.
+
+**3. The few events with no row behind them are narrow by construction.** Signing in,
+signing out, unlocking with a PIN and exporting the record are real events that no table
+write would produce, so the backend appends them through `record_memory_event`. That
+function takes the actor from `auth.uid()` and the org from the caller's membership —
+neither can be passed in — and rejects any event type outside the `auth. / session. /
+view. / export. / note.` namespaces. Everything under `job.` or `task.` is reachable only
+by actually changing the row, so a client cannot fabricate an action or attribute one to
+somebody else.
+
+Reads are scoped by the same RLS rule as the rest of the app, so the record is visible to
+the organization it belongs to and to nobody else. The feed pages on `seq`, the memory's
+own monotonic counter, rather than on a timestamp or an offset — timestamps tie and
+offsets skip entries when rows arrive mid-scroll, and a record that claims to be complete
+cannot afford either.
+
+#### Applying the migration
+
+The schema lives in `supabase/migrations/`. Apply it with the Supabase CLI:
+
+```bash
+supabase db push
+```
+
+…or paste `supabase/migrations/20260727000000_agent_memory.sql` into the SQL editor in the
+Supabase dashboard. It is idempotent — safe to re-run.
+
+#### Verifying it
+
+`supabase/tests/` runs the migration against a throwaway local Postgres (with a small
+stand-in for `auth.uid()` and the existing org tables) and exercises the behaviour:
+capture, the automatic lifecycle stamps, the rollups, immutability against the table
+owner, and cross-organization isolation.
+
+```bash
+supabase/tests/run.sh -h /tmp -p 5432 -U postgres
+```
+
+It is not run against a real project by design — it asserts that history cannot be
+deleted, so it needs a database it is allowed to throw away. Sections 8–12 and 14 print `ERROR`
+lines; those are the guarantees refusing the operation, and are the point of the test.
 
 ## Configuration
 

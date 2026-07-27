@@ -7,6 +7,10 @@ import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { JobsPage } from './pages/JobsPage';
+import { JobDetailPage } from './pages/JobDetailPage';
+import { MemoryPage } from './pages/MemoryPage';
+import { TeamMemoryPage } from './pages/TeamMemoryPage';
 import { SpinnerIcon } from './components/icons';
 
 function FullScreenSpinner() {
@@ -71,6 +75,25 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+
+          {/* Agent Memory. Same guard as the dashboard: all of it is scoped to
+              an organization, so onboarding has to come first. */}
+          {[
+            { path: '/jobs', element: <JobsPage /> },
+            { path: '/jobs/:id', element: <JobDetailPage /> },
+            { path: '/memory', element: <MemoryPage /> },
+            { path: '/team', element: <TeamMemoryPage /> },
+          ].map(({ path, element }) => (
+            <Route
+              key={path}
+              path={path}
+              element={
+                <ProtectedRoute>
+                  <RequireOnboarded>{element}</RequireOnboarded>
+                </ProtectedRoute>
+              }
+            />
+          ))}
 
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
