@@ -1,4 +1,4 @@
-import express, { Router, type NextFunction, type Request, type Response } from 'express';
+import { Router, type NextFunction, type Request, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import { createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -41,12 +41,12 @@ import {
 export const pmRouter = Router();
 
 /**
- * A moisture log for a whole visit — every affected area plus controls — runs
- * past the 10kb global JSON cap, so this router parses its own bodies with a
- * larger limit. Scoped here rather than raised globally: the auth routes have
- * no business accepting 256kb.
+ * No body parser of its own. A moisture log for a whole visit — every affected
+ * area plus controls — needs well over a login form's worth of JSON, and the
+ * app-level parser already admits 256kb, which covers it. Mounting a second
+ * `express.json()` here would be dead code either way: the first parser to run
+ * consumes the stream, so a route-level limit is never the one enforced.
  */
-pmRouter.use(express.json({ limit: '256kb' }));
 pmRouter.use(requireAuth);
 
 /** The engine touches every open project, so it is metered against re-firing. */

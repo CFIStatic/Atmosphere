@@ -110,6 +110,79 @@ export const config = {
     ),
   },
 
+  webAccess: {
+    // Both secrets are optional. Without them the feature reports itself as
+    // unavailable and every other part of the app carries on unaffected —
+    // the same posture as the optional service-role key.
+    //
+    // The encryption key seals every stored site password (AES-256-GCM) before
+    // it reaches Postgres. Keeping it out of the database is what stops a
+    // database leak from yielding usable logins for other people's systems.
+    encryptionKey: process.env.WEB_ACCESS_KEY ?? devOnly('atmosphere-dev-web-access-key-do-not-use-in-production') ?? '',
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
+
+    model: process.env.WEB_ACCESS_MODEL ?? 'claude-opus-5',
+    // Browser work is agentic and tool-heavy, where higher effort pays for
+    // itself in fewer wasted round trips.
+    effort: (process.env.WEB_ACCESS_EFFORT ?? 'high') as 'low' | 'medium' | 'high' | 'xhigh' | 'max',
+
+    // A visible browser is useful when developing a new site integration.
+    headless: (process.env.WEB_ACCESS_HEADLESS ?? 'true') !== 'false',
+    // Set when Chromium lives somewhere Playwright will not find on its own.
+    browserExecutablePath: process.env.WEB_ACCESS_BROWSER_PATH || undefined,
+
+    // Hard stops. A stuck run must cost a bounded amount of money and time.
+    maxSteps: Number(process.env.WEB_ACCESS_MAX_STEPS ?? 30),
+    runTimeoutMs: Number(process.env.WEB_ACCESS_RUN_TIMEOUT_MS ?? 5 * 60 * 1000),
+    navigationTimeoutMs: Number(process.env.WEB_ACCESS_NAV_TIMEOUT_MS ?? 30 * 1000),
+    // Browsers are heavy; refuse work rather than exhaust the host.
+    maxConcurrentRuns: Number(process.env.WEB_ACCESS_MAX_CONCURRENT_RUNS ?? 2),
+
+    // Escape hatch for developing against a site running on your own machine.
+    // Ignored in production, where reaching a private address is the SSRF the
+    // guard exists to stop.
+    allowPrivateAddresses: !isProduction && process.env.WEB_ACCESS_ALLOW_PRIVATE === 'true',
+
+    // Hosts the AI may visit in addition to the connection's own site. Sites
+    // that hand off to an identity provider need it listed here.
+    extraAllowedHosts: (process.env.WEB_ACCESS_ALLOWED_HOSTS ?? '')
+      .split(',')
+      .map((host) => host.trim().toLowerCase())
+      .filter(Boolean),
+  },
+
+  verifier: {
+    // The second agent, which re-opens the site after a run reports success and
+    // checks the work is actually there. On by default: a check nobody
+    // remembers to ask for is a check that does not happen, and the failure it
+    // catches — a run that reported success without doing anything — is by
+    // definition one nobody knew to look for.
+    enabled: (process.env.VERIFIER_ENABLED ?? 'true') !== 'false',
+    // Turn this off to keep the feature available on demand without a browser
+    // opening after every run.
+    autoVerify: (process.env.VERIFIER_AUTO_VERIFY ?? 'true') !== 'false',
+    // Checking a data pull re-reads the site to confirm the reported rows are
+    // real. Cheaper to skip than a push check and less costly to get wrong,
+    // since a pull changes nothing at the far end.
+    verifyPulls: (process.env.VERIFIER_CHECK_PULLS ?? 'true') !== 'false',
+
+    model: process.env.VERIFIER_MODEL ?? 'claude-opus-5',
+    // Judging "is this actually here" from a page of someone else's markup is
+    // the hard half of this system. Underspending here produces confident
+    // wrong verdicts, which are worse than no verifier at all.
+    effort: (process.env.VERIFIER_EFFORT ?? 'high') as 'low' | 'medium' | 'high' | 'xhigh' | 'max',
+
+    // Looking costs less than doing, so the step budget is tighter than a run's.
+    maxSteps: Number(process.env.VERIFIER_MAX_STEPS ?? 24),
+    timeoutMs: Number(process.env.VERIFIER_TIMEOUT_MS ?? 8 * 60 * 1000),
+
+    // How many times the verifier may correct the same run before it stops and
+    // asks. One is the right default: if a fix did not take the first time, the
+    // verifier has misunderstood something, and repeating it just writes the
+    // same misunderstanding into the customer's system again.
+    maxRepairAttempts: Number(process.env.VERIFIER_MAX_REPAIR_ATTEMPTS ?? 1),
+  },
+
   /**
    * Model providers and the learning loop (see docs/reinforcement-learning.md).
    *
@@ -267,6 +340,21 @@ export const config = {
     maxTokens: Number(process.env.COMPUTER_USE_MAX_TOKENS ?? 16000),
   },
 } as const;
+
+/**
+ * Web Access needs a key to seal credentials with and a model to drive the
+ * browser. Missing either one, the routes stay reachable but report the
+ * feature as unavailable instead of failing mid-run.
+ */
+export const webAccessEnabled = Boolean(
+  config.webAccess.encryptionKey && config.webAccess.anthropicApiKey,
+);
+
+/**
+ * The verifier drives the same browser and the same model as Web Access, so it
+ * can never be available where Web Access is not.
+ */
+export const verifierEnabled = webAccessEnabled && config.verifier.enabled;
 
 // A production deploy that writes unencrypted customer archives to disk is a
 // breach waiting for someone to find the volume. Fail at boot instead — either
