@@ -572,7 +572,7 @@ begin
   values (
     new.org_id,
     'crm_sync',
-    (select s.name from public.crm_external_sources s where s.id = new.source_id),
+    (select s.label from public.crm_external_sources s where s.id = new.source_id),
     case when new.trigger_kind = 'manual' then 'user' else 'schedule' end,
     new.started_by,
     'Pull from external source',

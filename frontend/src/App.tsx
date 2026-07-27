@@ -8,6 +8,7 @@ import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { AuditPage } from './pages/AuditPage';
+import { WebAccessPage } from './pages/WebAccessPage';
 import { ComputerUsePage } from './pages/ComputerUsePage';
 import { AppLayout } from './components/AppLayout';
 import { SpinnerIcon } from './components/icons';
@@ -87,6 +88,19 @@ export default function App() {
                   <AppLayout>
                     <AuditPage />
                   </AppLayout>
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Web Access sits behind onboarding: connections belong to an
+              organization, so there is nothing to show before you have one. */}
+          <Route
+            path="/web-access"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <WebAccessPage />
                 </RequireOnboarded>
               </ProtectedRoute>
             }
