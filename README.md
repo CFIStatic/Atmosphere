@@ -1,14 +1,26 @@
 # Atmosphere
 
-Authentication and organization onboarding for **Atmosphere** — a React UI backed by an
-Express BFF (Backend-for-Frontend) that mediates **Supabase Auth** and a Row-Level-Security
-protected Postgres schema.
+Authentication, organization onboarding, and **computer use** for **Atmosphere** — a React
+UI backed by an Express BFF (Backend-for-Frontend) that mediates **Supabase Auth**, a
+Row-Level-Security protected Postgres schema, and Claude's computer-use tool.
 
 ```
 ┌────────────────────┐      /api/*        ┌────────────────────┐    Supabase JS (JWT)   ┌──────────────────┐
 │  Frontend (React)  │ ─────────────────▶ │  Backend (Express) │ ─────────────────────▶ │  Supabase        │
 │  Vite + Tailwind   │  httpOnly cookies  │  BFF / auth proxy  │   anon key + user JWT  │  Auth + Postgres │
-└────────────────────┘ ◀───────────────── └────────────────────┘ ◀───────────────────── └──────────────────┘
+└────────────────────┘ ◀───────────────── └─────────┬──────────┘ ◀───────────────────── └──────────────────┘
+                            SSE transcript          │  ▲
+                                                    │  │  Messages API (computer tool)
+                                                    ▼  │
+                                          ┌────────────────────┐
+                                          │   Anthropic API    │
+                                          └────────────────────┘
+                                                    ▲
+                        WebSocket (outbound-only)   │  screenshots ↓ / clicks + keys ↑
+                                          ┌─────────┴──────────┐
+                                          │  Atmosphere agent  │  ← runs on the computer
+                                          │  macOS/Win/Linux   │     being operated
+                                          └────────────────────┘
 ```
 
 ## What it does
@@ -25,6 +37,8 @@ protected Postgres schema.
    server so no Supabase token is ever exposed to page JavaScript.
 5. **PIN sign-in** — an optional 4-digit PIN for fast repeat sign-in, bound to a single
    device (see below).
+6. **Computer use** — connect an Anthropic API key, run the agent on any computer, and
+   Claude can see its screen and operate it. The whole setup is one key and one command.
 
 ## Why this shape?
 
@@ -90,27 +104,44 @@ Atmosphere/
 │   │   │   ├── requireAuth.ts    Verify access token; transparent refresh
 │   │   │   ├── requireOrg.ts     Resolve caller's org from their own membership
 │   │   │   └── errorHandler.ts   404 + central JSON error handler
+│   │   ├── computer/
+│   │   │   ├── protocol.ts       Wire protocol shared with the agent
+│   │   │   ├── models.ts         Per-model tool version, beta header, image limits
+│   │   │   ├── credentials.ts    Anthropic keys, encrypted at rest (AES-256-GCM)
+│   │   │   ├── agentTokens.ts    Pairing codes + HMAC-signed agent tokens
+│   │   │   ├── agentHub.ts       WebSocket registry of connected computers
+│   │   │   └── runner.ts         The agent loop + live run transcripts
 │   │   └── routes/
 │   │       ├── auth.ts           signup / login / logout / refresh / me
 │   │       ├── org.ts            onboarding: me / create / join / members
 │   │       ├── billing.ts        catalog / plan / credits / settings / ledger
 │   │       ├── usage.ts          quote / record / events / daily rollup
 │   │       ├── ai.ts             Metered model calls (authorize-then-capture)
+│   │       ├── computer.ts       computer use: keys, pairing, runs, SSE
 │   │       └── health.ts         liveness probe
 │   └── .env.example
 ├── supabase/
 │   └── migrations/               Billing schema, pricing engine, RLS policies
-└── frontend/         React + Vite + TypeScript + Tailwind
+├── frontend/         React + Vite + TypeScript + Tailwind
+│   ├── src/
+│   │   ├── pages/LoginPage.tsx        Branded login + signup screen
+│   │   ├── pages/OnboardingPage.tsx   3-step wizard: org → role → work type
+│   │   ├── pages/DashboardPage.tsx    Org overview, invite code, linked accounts
+│   │   ├── pages/BillingPage.tsx      Plans, credit packs, spend controls, rate card
+│   │   ├── pages/UsagePage.tsx        Spend charts, per-model breakdown, request log
+│   │   ├── pages/ComputerUsePage.tsx  Live screen, task composer, transcript
+│   │   ├── context/AuthContext.tsx    Session + membership state
+│   │   ├── components/                Logo, icons, ProtectedRoute
+│   │   └── lib/api.ts                 Typed fetch client (credentials: include)
+│   └── .env.example
+└── agent/            The computer-use agent (runs on the machine being operated)
     ├── src/
-    │   ├── pages/LoginPage.tsx        Branded login + signup screen
-    │   ├── pages/OnboardingPage.tsx   3-step wizard: org → role → work type
-    │   ├── pages/DashboardPage.tsx    Org overview, invite code, linked accounts
-    │   ├── pages/BillingPage.tsx      Plans, credit packs, spend controls, rate card
-    │   ├── pages/UsagePage.tsx        Spend charts, per-model breakdown, request log
-    │   ├── context/AuthContext.tsx    Session + membership state
-    │   ├── components/                Logo, icons, ProtectedRoute
-    │   └── lib/api.ts                 Typed fetch client (credentials: include)
-    └── .env.example
+    │   ├── index.ts              CLI: pair once, then stay connected
+    │   ├── computer.ts           Action executor + coordinate scaling
+    │   ├── image.ts              Screenshot downscale / crop (sharp)
+    │   ├── transport.ts          Outbound WebSocket with backoff
+    │   └── drivers/              linux (xdotool) · darwin · win32 (PowerShell)
+    └── README.md
 ```
 
 ## Prerequisites
@@ -180,6 +211,20 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | POST   | `/api/usage/record`  | cookie | `{ modelId, requestId, …tokens }` | Meter caller-supplied counts (off by default) |
 | GET    | `/api/usage/events`  | cookie | —                             | Recent metered calls                         |
 | GET    | `/api/usage/daily`   | cookie | `?days=30`                    | Daily rollup for the usage chart             |
+| GET    | `/api/computer/status` | cookie | —                           | Key status, online computers, model options  |
+| PUT    | `/api/computer/credentials` | cookie | `{ apiKey }`           | Connect the org's Anthropic key              |
+| DELETE | `/api/computer/credentials` | cookie | —                      | Disconnect it                                |
+| POST   | `/api/computer/agents/pair-code` | cookie | —                 | Mint a one-time code to enrol a computer     |
+| POST   | `/api/computer/agents/pair` | —      | `{ code, name, platform }` | Agent redeems a code for a durable token |
+| GET    | `/api/computer/agents` | cookie | —                           | Computers currently online                   |
+| GET    | `/api/computer/agents/:id/screen` | cookie | —                | One fresh frame (read-only)                  |
+| POST   | `/api/computer/runs` | cookie | `{ agentId, instruction, … }` | Give a computer a task                       |
+| GET    | `/api/computer/runs` | cookie | —                             | Recent runs                                  |
+| GET    | `/api/computer/runs/:id/events` | cookie | `?after=<seq>`      | SSE transcript, replayable from a sequence   |
+| POST   | `/api/computer/runs/:id/stop` | cookie | —                     | Hand control back to the operator            |
+
+Agents also hold a WebSocket open at `/api/computer/agent-socket`, authenticated with the
+token from pairing rather than a session cookie.
 
 `role` ∈ `project_manager | field_technician | accountant | office_manager | sales`.
 `workType` ∈ `mitigation | construction`.
@@ -392,6 +437,95 @@ signature verification is over the exact bytes Stripe sent, and once a JSON
 parser has consumed the stream the signature can no longer be checked. Without
 `STRIPE_WEBHOOK_SECRET` the endpoint rejects every request rather than trusting
 an unverified payload.
+## Computer use
+
+Claude sees a screenshot of a real machine, asks for a click or a keystroke, and the
+result comes back as the next screenshot. Atmosphere supplies the three pieces that turns
+into a product: somewhere to put the API key, something to run on the computer, and a
+console to watch it work.
+
+### Setting it up
+
+1. Open **Dashboard → Computer Use** and paste an Anthropic API key
+   ([console.anthropic.com](https://console.anthropic.com/settings/keys)). That is the
+   only configuration step — no database migration, no extra service.
+2. Click **Add a computer** and run the printed command on the machine you want operated:
+
+   ```bash
+   npx atmosphere-agent --server https://your-atmosphere --code ABCD-EFGH
+   ```
+
+3. The computer appears in the console with its screen live. Type a task and press
+   **Start task**.
+
+Prerequisites per platform (Node 18+, and on Linux `xdotool` plus a screenshot tool) are
+in [`agent/README.md`](agent/README.md). The agent checks them at startup and names
+anything missing.
+
+### How a task runs
+
+Each turn, the backend sends Claude the conversation so far plus the `computer` tool, and
+Claude replies with an action. The backend forwards that action to the agent over the
+WebSocket the agent already opened, waits for the result, and feeds it back as a
+`tool_result`. The browser watches the whole thing over SSE — text, reasoning summary,
+each action, and every screenshot.
+
+**Coordinates are the part that has to be exactly right.** Claude answers in the
+coordinate space of the image it was shown. If a screenshot exceeds the model's per-image
+limits the API downscales it server-side, and then the model's coordinates are in a scale
+nothing on our side computed — so every click misses. Atmosphere therefore downscales on
+the agent, keeps the factor, and multiplies coordinates back up before moving the mouse.
+The backend derives that factor from the selected model's real limits (2576 px on the long
+edge for Opus 5, Sonnet 5 and Opus 4.8; 1568 px for older models) and tells the agent what
+to capture at *before* declaring the tool, so the tool's `display_width_px` always matches
+what the model will actually see.
+
+Screenshots also dominate the token bill, so the **quality** setting picks a target
+(economical ≈ 1366 px, balanced ≈ 1080p, detailed = the model's maximum) and old tool
+results are cleared from the context automatically as the run goes on.
+
+### Guard rails
+
+Handing a model the mouse of a real machine deserves limits that do not depend on anyone
+paying attention:
+
+- **The operator holds the off switch.** Access exists only while the agent process is
+  running on that computer. Ctrl+C revokes it instantly.
+- **Every run is bounded** — 60 steps and 15 minutes by default, both configurable — and
+  **Stop** ends it immediately from the console.
+- **One run per computer.** A second task cannot claim a machine that is already busy;
+  two runs interleaving clicks would produce nonsense.
+- **The screen is always visible.** Watching the run is what makes it trustworthy rather
+  than alarming, and it is how you know when to stop it.
+- The system prompt tells Claude it is on a real machine: don't delete files, change system
+  settings, or send messages unless the task asked for it, and stop and ask rather than
+  guess at a credential or a payment.
+
+### Security
+
+- **API keys are encrypted at rest** with AES-256-GCM under `AI_CREDENTIALS_KEY`, and are
+  never returned to the browser — the UI only ever sees a masked hint like `sk-ant-api0…9f2a`.
+- **Pairing codes are single-use**, expire in 10 minutes, are drawn from an alphabet with
+  no ambiguous characters, and the redemption endpoint is rate-limited to 20 attempts per
+  15 minutes, which is what makes an 8-character code safe.
+- **Agent tokens are HMAC-signed** and scoped to one organization. Rotating
+  `AGENT_TOKEN_SECRET` unpairs every computer at once — the right blunt instrument for a
+  suspected leak. There is deliberately no per-agent revocation list; stopping the agent
+  is the immediate control, and `agentTokens.ts` is the seam to add a list behind if you
+  later need one.
+- **Agents dial out only.** Nothing listens on the operator's machine, so no inbound port
+  or public address is needed.
+- **Model-supplied text never reaches a shell.** Every platform driver invokes commands
+  with an argument array, and the Windows driver passes its payload as base64 — a page
+  containing `$(…)` or a stray quote cannot execute anything.
+
+### Deployment note
+
+The registry of connected computers lives in the backend process, because that is what a
+live WebSocket already is — a connection cannot outlive the process holding it. Running
+**multiple backend instances behind a load balancer** therefore needs sticky routing (so
+a browser reaches the instance holding its agent's socket) or a shared relay between
+instances. A single instance needs nothing.
 
 ## Configuration
 
@@ -410,6 +544,14 @@ See `backend/.env.example` and `frontend/.env.example`. Key points:
 - `PASSWORD_RESET_REDIRECT_URL` — where recovery emails land. Defaults to
   `<FRONTEND_ORIGIN>/reset-password`. This URL must **also** be allowlisted in the Supabase
   dashboard under **Authentication → URL Configuration**, or the emailed link is rejected.
+- `ANTHROPIC_API_KEY` — optional **server-only secret**. A server-wide default for computer
+  use, so a deployment can ship with it already working. A key connected in the UI takes
+  priority over it.
+- `AI_CREDENTIALS_KEY` — **server-only secret**, required in production. Encrypts each
+  organization's Anthropic key at rest. Generate with `openssl rand -base64 48`. Rotating
+  it invalidates stored keys, which organizations simply re-enter.
+- `AGENT_TOKEN_SECRET` — **server-only secret**, required in production. Signs the tokens
+  paired computers reconnect with. Rotating it unpairs every computer.
 - `FRONTEND_ORIGIN` — comma-separated allowed CORS origins.
 - `COOKIE_SAMESITE` — set to `none` (with HTTPS on both sides) if the frontend and backend
   are on different sites in production.
@@ -421,9 +563,13 @@ See `backend/.env.example` and `frontend/.env.example`. Key points:
 - Prefer serving the frontend and backend under the **same origin** (reverse-proxy the API
   at `/api`) so cookies stay `SameSite=Lax`. If you must split origins, set
   `COOKIE_SAMESITE=none` and configure `FRONTEND_ORIGIN`.
-- Build: `npm run build` in each package (`backend` → `dist/`, `frontend` → `dist/`).
+- Build: `npm run build` in each package (`backend` → `dist/`, `frontend` → `dist/`,
+  `agent` → `dist/`).
 - Set `DEVICE_PEPPER` to a generated secret, and add the reset-password URL to the Supabase
   redirect allowlist — password reset fails silently without it.
+- Set `AI_CREDENTIALS_KEY` and `AGENT_TOKEN_SECRET` before enabling computer use, and make
+  sure your reverse proxy forwards **WebSocket upgrades** on `/api/computer/agent-socket`
+  and does not buffer the SSE responses on `/api/computer/runs/*/events`.
 - **Configure custom SMTP** before launch. Supabase's built-in mailer is rate-limited to a
   handful of messages per hour, which is fine for testing and will not carry real password
   resets.

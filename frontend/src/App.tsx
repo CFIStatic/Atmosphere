@@ -9,6 +9,7 @@ import { OnboardingPage } from './pages/OnboardingPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { BillingPage } from './pages/BillingPage';
 import { UsagePage } from './pages/UsagePage';
+import { ComputerUsePage } from './pages/ComputerUsePage';
 import { SpinnerIcon } from './components/icons';
 
 function FullScreenSpinner() {
@@ -91,6 +92,17 @@ export default function App() {
               <ProtectedRoute>
                 <RequireOnboarded>
                   <UsagePage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/computer-use"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <ComputerUsePage />
                 </RequireOnboarded>
               </ProtectedRoute>
             }

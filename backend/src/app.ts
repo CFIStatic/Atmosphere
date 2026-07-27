@@ -9,6 +9,7 @@ import { billingRouter } from './routes/billing.js';
 import { usageRouter } from './routes/usage.js';
 import { aiRouter } from './routes/ai.js';
 import { webhookRouter } from './routes/webhooks.js';
+import { computerRouter } from './routes/computer.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 
@@ -60,6 +61,7 @@ export function createApp(): Express {
   app.use('/api/ai', aiRouter);
   // Server-to-server: no session cookie, authenticated by Stripe's signature.
   app.use('/api/webhooks', webhookRouter);
+  app.use('/api/computer', computerRouter);
 
   // 404 + error handling (must be last).
   app.use(notFound);

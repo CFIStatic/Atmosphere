@@ -2,10 +2,11 @@ import { useState, type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Logo } from './Logo';
-import { ChartIcon, CreditCardIcon, HomeIcon, SpinnerIcon } from './icons';
+import { BoltIcon, ChartIcon, CreditCardIcon, HomeIcon, SpinnerIcon } from './icons';
 
 const NAV = [
   { to: '/dashboard', label: 'Dashboard', Icon: HomeIcon },
+  { to: '/computer-use', label: 'Computer', Icon: BoltIcon },
   { to: '/usage', label: 'Usage', Icon: ChartIcon },
   { to: '/billing', label: 'Billing', Icon: CreditCardIcon },
 ];
