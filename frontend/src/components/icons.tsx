@@ -67,6 +67,23 @@ export function HomeIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function MonitorIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" width="20" height="20" aria-hidden="true" {...props}>
+      <rect
+        x="3"
+        y="4"
+        width="18"
+        height="12.5"
+        rx="1.6"
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+      <path d="M9 20h6M12 16.5V20" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function UserIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" width="20" height="20" aria-hidden="true" {...props}>

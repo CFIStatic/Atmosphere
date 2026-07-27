@@ -18,6 +18,7 @@ import {
   HomeIcon,
   LogOutIcon,
   MenuIcon,
+  MonitorIcon,
   SettingsIcon,
   SpinnerIcon,
 } from './icons';
@@ -28,7 +29,10 @@ interface NavItem {
   icon: ComponentType<SVGProps<SVGSVGElement>>;
 }
 
-const NAV_ITEMS: NavItem[] = [{ to: '/dashboard', label: 'Dashboard', icon: HomeIcon }];
+const NAV_ITEMS: NavItem[] = [
+  { to: '/dashboard', label: 'Dashboard', icon: HomeIcon },
+  { to: '/computer-use', label: 'Computer Use', icon: MonitorIcon },
+];
 
 /**
  * The signed-in chrome: a left rail on wide screens, a drawer on narrow ones.

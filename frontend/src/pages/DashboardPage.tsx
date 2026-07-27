@@ -103,8 +103,25 @@ export function DashboardPage() {
             </div>
           </div>
 
-          {/* Account settings live in one place now; point at them from here so
-              the dashboard stays a view of the organization. */}
+          {/* Computer use */}
+          <Link
+            to="/computer-use"
+            className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-brand-400/25 bg-brand-500/10 p-5 backdrop-blur transition hover:border-brand-400/50 hover:bg-brand-500/15"
+          >
+            <div>
+              <p className="text-lg font-semibold text-white">Computer Use</p>
+              <p className="mt-1 text-sm text-brand-100/70">
+                Let Claude see and operate a computer for you — connect an Anthropic API key and
+                run the agent on any machine.
+              </p>
+            </div>
+            <span aria-hidden className="shrink-0 text-2xl text-brand-300">
+              →
+            </span>
+          </Link>
+
+          {/* Account settings — including the device PIN — live in Settings now,
+              so the dashboard stays a view of the organization. */}
           <Link
             to="/settings"
             className="mt-4 flex items-center gap-3 rounded-xl border border-white/10 bg-ink-800/40 p-5 transition hover:border-white/20 hover:bg-ink-800/70"
