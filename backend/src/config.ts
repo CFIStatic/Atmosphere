@@ -110,6 +110,64 @@ export const config = {
     maxAudioUploadBytes: Number(process.env.MAX_AUDIO_UPLOAD_BYTES ?? 25 * 1024 * 1024),
   },
 
+  anthropic: {
+    // Upstream model provider key. Server-only: the browser never calls the
+    // provider directly, because token counts have to come back through us to
+    // be metered. Leave unset and /api/ai/* returns 503 while the rest of the
+    // app — including billing — keeps working.
+    apiKey: process.env.ANTHROPIC_API_KEY ?? '',
+    defaultModel: process.env.ANTHROPIC_DEFAULT_MODEL ?? 'claude-opus-5',
+  },
+
+  billing: {
+    // Whether a client may report its own token counts to /api/usage/record.
+    //
+    // Off in production by design. Token counts decide what a customer is
+    // charged, so they must come from the provider's response via /api/ai/*,
+    // not from the caller — a client that under-reports would be spending our
+    // margin. Enable only for trusted server-to-server metering of work done
+    // outside this process.
+    allowClientMetering:
+      process.env.ALLOW_CLIENT_METERING === 'true' ||
+      (process.env.ALLOW_CLIENT_METERING === undefined && !isProduction),
+
+    // Which payment processor settles credit purchases.
+    //
+    //   stripe — selected automatically whenever STRIPE_SECRET_KEY is present.
+    //            Credits are minted by the Stripe webhook, never by the browser.
+    //   dev    — a billing manager can settle their own purchase through the
+    //            API so the credit flow is exercisable without a processor.
+    //            Refused in production: it would let anyone mint credits.
+    //   manual — purchases stay `pending` until something holding the
+    //            service-role key completes them.
+    paymentProvider: ((): 'stripe' | 'dev' | 'manual' => {
+      if (process.env.STRIPE_SECRET_KEY) return 'stripe';
+
+      const configured = process.env.PAYMENT_PROVIDER;
+      if (configured === 'dev' || configured === 'manual') {
+        if (configured === 'dev' && isProduction) {
+          throw new Error(
+            'PAYMENT_PROVIDER=dev cannot be used in production: it would let any billing manager grant themselves credits.',
+          );
+        }
+        return configured;
+      }
+      return isProduction ? 'manual' : 'dev';
+    })(),
+  },
+
+  stripe: {
+    secretKey: process.env.STRIPE_SECRET_KEY ?? '',
+    // Signing secret for POST /api/webhooks/stripe. Without it we cannot tell a
+    // genuine Stripe callback from anyone who can reach the URL, so the webhook
+    // refuses every request rather than trusting an unverified payload.
+    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? '',
+    // Where Stripe returns the customer after checkout or the billing portal.
+    successUrl: process.env.STRIPE_SUCCESS_URL ?? `${frontendOrigins[0]}/billing?checkout=success`,
+    cancelUrl: process.env.STRIPE_CANCEL_URL ?? `${frontendOrigins[0]}/billing?checkout=cancelled`,
+    portalReturnUrl: process.env.STRIPE_PORTAL_RETURN_URL ?? `${frontendOrigins[0]}/billing`,
+  },
+
   pm: {
     // Server-only secret for the writing layer (morning briefs, drafted
     // customer and adjuster updates). Optional: without it the briefs are
@@ -365,6 +423,55 @@ export const config = {
     // is wedged and the model should be told so rather than left waiting.
     actionTimeoutMs: Number(process.env.COMPUTER_USE_ACTION_TIMEOUT_MS ?? 45 * 1000),
     maxTokens: Number(process.env.COMPUTER_USE_MAX_TOKENS ?? 16000),
+  },
+  estimator: {
+    // Server-only key that encrypts third-party credentials (DocuSketch, Dash,
+    // Xactimate) before they are written to Postgres. Deliberately NOT in the
+    // database: RLS decides who may read a row, this key decides whether the
+    // bytes in that row mean anything. A database leak alone yields ciphertext.
+    // Generate with:  openssl rand -base64 32
+    credentialKey: process.env.ESTIMATOR_CREDENTIAL_KEY ?? '',
+
+    // Reads damage off field photos and scope directions out of CRM job notes,
+    // sharing the key the other model-backed features use. Without it the
+    // estimator still runs — the vision stages are skipped and scope is built
+    // from DocuSketch measurements and the mitigation estimate alone.
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
+    model: process.env.ESTIMATOR_MODEL ?? 'claude-opus-5',
+    // `low` | `medium` | `high` | `xhigh` | `max`. Photo analysis is a
+    // perception task with a fixed output shape, so `medium` is the balance
+    // point; raise it if observations come back under-specified.
+    effort: (process.env.ESTIMATOR_EFFORT ?? 'medium') as
+      | 'low'
+      | 'medium'
+      | 'high'
+      | 'xhigh'
+      | 'max',
+
+    // Vendor API roots. Every integrator's tenant lives somewhere different
+    // (regional hosts, on-prem Dash, Xactimate vs XactAnalysis), so these are
+    // configuration rather than constants. Leave one unset and that connector
+    // reports itself unconfigured instead of guessing at a URL.
+    docusketchBaseUrl: process.env.DOCUSKETCH_BASE_URL ?? '',
+    dashBaseUrl: process.env.DASH_BASE_URL ?? '',
+    xactimateBaseUrl: process.env.XACTIMATE_BASE_URL ?? '',
+
+    // `live` talks to the vendors; `sandbox` serves deterministic fixtures so
+    // the whole pipeline can be exercised end-to-end without credentials.
+    connectorMode: (process.env.ESTIMATOR_CONNECTOR_MODE ??
+      (isProduction ? 'live' : 'sandbox')) as 'live' | 'sandbox',
+
+    // Cap on photos sent to the vision model per run. Each full-resolution
+    // photo can cost ~4.8k input tokens, so this is the main cost lever.
+    maxPhotosPerRun: Number(process.env.ESTIMATOR_MAX_PHOTOS ?? 40),
+    // Photos are analysed in small concurrent batches — large enough to keep
+    // latency down, small enough to stay inside per-minute token limits.
+    photoConcurrency: Number(process.env.ESTIMATOR_PHOTO_CONCURRENCY ?? 4),
+
+    // Outbound HTTP budget for a single vendor call, and how many times a
+    // transient failure is retried before the stage gives up.
+    requestTimeoutMs: Number(process.env.ESTIMATOR_REQUEST_TIMEOUT_MS ?? 30_000),
+    maxRetries: Number(process.env.ESTIMATOR_MAX_RETRIES ?? 3),
   },
 } as const;
 
