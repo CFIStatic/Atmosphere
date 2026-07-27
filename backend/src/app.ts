@@ -8,6 +8,7 @@ import { orgRouter } from './routes/org.js';
 import { crmRouter } from './routes/crm.js';
 import { backupRouter } from './routes/backups.js';
 import { integrationsRouter } from './routes/integrations.js';
+import { computerRouter } from './routes/computer.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 
@@ -61,6 +62,7 @@ export function createApp(): Express {
   app.use('/api/crm', crmRouter);
   app.use('/api/backups', backupRouter);
   app.use('/api/integrations', integrationsRouter);
+  app.use('/api/computer', computerRouter);
 
   // 404 + error handling (must be last).
   app.use(notFound);

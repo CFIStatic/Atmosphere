@@ -137,6 +137,49 @@ export const config = {
     maxRecordsPerRun: Number(process.env.INTEGRATION_MAX_RECORDS ?? 50_000),
     requestTimeoutMs: Number(process.env.INTEGRATION_TIMEOUT_MS ?? 30_000),
   },
+
+  computerUse: {
+    // Feature flag. Computer use hands an AI model the mouse and keyboard of a
+    // real machine, so a deployment that does not want it can switch the whole
+    // surface off rather than relying on nobody finding the page.
+    enabled: (process.env.COMPUTER_USE_ENABLED ?? 'true') !== 'false',
+
+    // Optional server-wide Anthropic key. When set, the product works with no
+    // setup at all; the per-organisation key entered in the UI takes priority.
+    fallbackApiKey: process.env.ANTHROPIC_API_KEY ?? '',
+
+    // Encrypts organisation Anthropic keys at rest. Server-only, and rotating
+    // it invalidates every stored key (organisations simply re-enter theirs).
+    credentialKey: required(
+      'AI_CREDENTIALS_KEY',
+      devOnly('atmosphere-dev-credentials-key-do-not-use-in-production'),
+    ),
+    // Where those encrypted keys live. Ciphertext only — never plaintext.
+    credentialStorePath: process.env.AI_CREDENTIALS_PATH ?? '.data/ai-credentials.json',
+
+    // Signs the long-lived tokens agents reconnect with. Rotating it unpairs
+    // every computer, which is the correct response to a leaked secret.
+    agentTokenSecret: required(
+      'AGENT_TOKEN_SECRET',
+      devOnly('atmosphere-dev-agent-token-secret-do-not-use-in-production'),
+    ),
+
+    defaultModel: process.env.COMPUTER_USE_MODEL ?? 'claude-opus-5',
+    defaultQuality: (process.env.COMPUTER_USE_QUALITY ?? 'balanced') as
+      | 'economical'
+      | 'balanced'
+      | 'detailed',
+
+    // Guard rails. A model driving a computer can loop indefinitely — clicking
+    // a dialog that keeps reappearing, retrying a login that will never work —
+    // so every run is bounded in both steps and wall-clock time.
+    maxIterations: Number(process.env.COMPUTER_USE_MAX_STEPS ?? 60),
+    runTimeoutMs: Number(process.env.COMPUTER_USE_RUN_TIMEOUT_MS ?? 15 * 60 * 1000),
+    // A single action should be near-instant; anything slower means the agent
+    // is wedged and the model should be told so rather than left waiting.
+    actionTimeoutMs: Number(process.env.COMPUTER_USE_ACTION_TIMEOUT_MS ?? 45 * 1000),
+    maxTokens: Number(process.env.COMPUTER_USE_MAX_TOKENS ?? 16000),
+  },
 } as const;
 
 // A production deploy that writes unencrypted customer archives to disk is a
