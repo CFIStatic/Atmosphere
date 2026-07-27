@@ -82,6 +82,53 @@ export const config = {
   // in the Supabase dashboard under Authentication → URL Configuration.
   passwordResetRedirectUrl:
     process.env.PASSWORD_RESET_REDIRECT_URL ?? `${frontendOrigins[0]}/reset-password`,
+
+  anthropic: {
+    // Upstream model provider key. Server-only: the browser never calls the
+    // provider directly, because token counts have to come back through us to
+    // be metered. Leave unset and /api/ai/* returns 503 while the rest of the
+    // app — including billing — keeps working.
+    apiKey: process.env.ANTHROPIC_API_KEY ?? '',
+    defaultModel: process.env.ANTHROPIC_DEFAULT_MODEL ?? 'claude-opus-5',
+  },
+
+  billing: {
+    // Whether a client may report its own token counts to /api/usage/record.
+    //
+    // Off in production by design. Token counts decide what a customer is
+    // charged, so they must come from the provider's response via /api/ai/*,
+    // not from the caller — a client that under-reports would be spending our
+    // margin. Enable only for trusted server-to-server metering of work done
+    // outside this process.
+    allowClientMetering:
+      process.env.ALLOW_CLIENT_METERING === 'true' ||
+      (process.env.ALLOW_CLIENT_METERING === undefined && !isProduction),
+
+    // Which payment processor settles credit purchases.
+    //
+    //   dev    — a billing manager can settle their own purchase through the
+    //            API so the credit flow is exercisable without a processor.
+    //            Refused in production: it would let anyone mint credits.
+    //   manual — purchases stay `pending` until something holding the
+    //            service-role key completes them (a processor webhook, or an
+    //            operator). This is the safe default once real money is involved.
+    //
+    // Wiring a real processor means creating its charge in
+    // POST /api/billing/purchases and calling `complete_credit_purchase` from
+    // its webhook with the service-role key.
+    paymentProvider: ((): 'dev' | 'manual' => {
+      const configured = process.env.PAYMENT_PROVIDER;
+      if (configured === 'dev' || configured === 'manual') {
+        if (configured === 'dev' && isProduction) {
+          throw new Error(
+            'PAYMENT_PROVIDER=dev cannot be used in production: it would let any billing manager grant themselves credits.',
+          );
+        }
+        return configured;
+      }
+      return isProduction ? 'manual' : 'dev';
+    })(),
+  },
 } as const;
 
 export type AppConfig = typeof config;

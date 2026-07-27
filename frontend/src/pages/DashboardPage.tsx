@@ -1,19 +1,22 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   api,
   ROLE_LABELS,
   WORK_TYPE_LABELS,
+  type BillingOverview,
   type OrgMember,
 } from '../lib/api';
-import { Logo } from '../components/Logo';
+import { AppShell } from '../components/AppShell';
 import { PinSetupCard } from '../components/PinSetupCard';
 import { SpinnerIcon, CheckIcon } from '../components/icons';
+import { formatUsd, usedPct } from '../lib/money';
 
 export function DashboardPage() {
-  const { user, membership, logout } = useAuth();
-  const [loggingOut, setLoggingOut] = useState(false);
+  const { user, membership } = useAuth();
   const [members, setMembers] = useState<OrgMember[] | null>(null);
+  const [billing, setBilling] = useState<BillingOverview | null>(null);
   const [copied, setCopied] = useState(false);
 
   const org = membership?.org;
@@ -28,19 +31,21 @@ export function DashboardPage() {
       .catch(() => {
         if (!cancelled) setMembers([]);
       });
+
+    // A missing balance should not blank the dashboard — the card just hides.
+    api
+      .getBillingOverview()
+      .then((o) => {
+        if (!cancelled) setBilling(o);
+      })
+      .catch(() => {
+        if (!cancelled) setBilling(null);
+      });
+
     return () => {
       cancelled = true;
     };
   }, []);
-
-  async function handleLogout() {
-    setLoggingOut(true);
-    try {
-      await logout();
-    } finally {
-      setLoggingOut(false);
-    }
-  }
 
   async function copyCode() {
     if (!org?.joinCode) return;
@@ -54,20 +59,8 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="cx-aurora min-h-screen bg-ink-900">
-      <header className="flex items-center justify-between border-b border-white/10 px-6 py-4 sm:px-10">
-        <Logo />
-        <button
-          onClick={handleLogout}
-          disabled={loggingOut}
-          className="flex items-center gap-2 rounded-lg border border-white/10 bg-ink-700/70 px-4 py-2 text-sm font-medium text-gray-200 transition hover:bg-ink-600 disabled:opacity-60"
-        >
-          {loggingOut && <SpinnerIcon className="animate-spin" width={16} height={16} />}
-          {loggingOut ? 'Signing out…' : 'Sign out'}
-        </button>
-      </header>
-
-      <main className="mx-auto max-w-4xl px-6 py-10 sm:px-10">
+    <AppShell>
+      <div className="mx-auto max-w-4xl">
         <div className="animate-fade-in-up">
           <p className="text-sm font-medium text-brand-400">{org?.name ?? 'Your organization'}</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-white">
@@ -124,6 +117,41 @@ export function DashboardPage() {
             </div>
           </div>
 
+          {/* Credits — the balance that gates every metered request. */}
+          {billing && (
+            <Link
+              to="/billing"
+              className="mt-4 block rounded-xl border border-white/10 bg-ink-800/60 p-5 backdrop-blur transition hover:border-brand-500/40 hover:bg-ink-700/50"
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Credit balance
+                </p>
+                <p className="text-xs text-brand-400">Manage billing →</p>
+              </div>
+              <p className="mt-1.5 text-2xl font-bold tracking-tight text-white">
+                {formatUsd(billing.balance.totalNanos)}
+              </p>
+              <p className="mt-0.5 text-sm text-gray-400">
+                {billing.subscription.planName} plan ·{' '}
+                {formatUsd(billing.periodUsage.priceNanos)} used this period
+              </p>
+              {billing.subscription.includedCreditsNanos > 0 && (
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-ink-700">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-brand-500 to-brand-300"
+                    style={{
+                      width: `${usedPct(
+                        billing.periodUsage.priceNanos,
+                        billing.subscription.includedCreditsNanos,
+                      )}%`,
+                    }}
+                  />
+                </div>
+              )}
+            </Link>
+          )}
+
           {/* Device PIN */}
           <div className="mt-4">
             <PinSetupCard />
@@ -176,7 +204,7 @@ export function DashboardPage() {
             </div>
           </div>
         </div>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }

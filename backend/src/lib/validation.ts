@@ -123,3 +123,77 @@ export const joinOrgSchema = z.object({
 
 export type CreateOrgInput = z.infer<typeof createOrgSchema>;
 export type JoinOrgInput = z.infer<typeof joinOrgSchema>;
+
+/* ---------------------------------------------------------------- billing -- */
+
+/** Subscription tiers. `enterprise` is quote-only and rejected by the database. */
+export const PLAN_CODES = ['free', 'pro', 'max_5x', 'max_20x', 'team', 'enterprise'] as const;
+
+export const setPlanSchema = z.object({
+  planCode: z.enum(PLAN_CODES, { errorMap: () => ({ message: 'Select a valid plan' }) }),
+  billingInterval: z.enum(['monthly', 'annual']).default('monthly'),
+  seats: z.number().int().min(1, 'At least one seat').max(10000, 'Too many seats').default(1),
+});
+
+/**
+ * Auto-reload and spend limits are money settings, so amounts are integer
+ * nanodollars. `null` on the spend limit means "no cap" and is distinct from
+ * omitting the field, which means "leave unchanged".
+ */
+const nanoAmount = z
+  .number()
+  .int('Amounts must be whole nanodollars')
+  .min(0, 'Amount cannot be negative')
+  .max(Number.MAX_SAFE_INTEGER);
+
+export const billingSettingsSchema = z
+  .object({
+    autoReloadEnabled: z.boolean().optional(),
+    autoReloadThresholdNanos: nanoAmount.optional(),
+    autoReloadAmountNanos: nanoAmount.min(5_000_000_000, 'Auto-reload must be at least $5').optional(),
+    monthlySpendLimitNanos: nanoAmount.nullable().optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to update' });
+
+/**
+ * A purchase is either a catalogue pack or a custom dollar amount, never both.
+ * The floor mirrors the database check so the caller gets a clean 400 rather
+ * than a raised exception.
+ */
+export const startPurchaseSchema = z
+  .object({
+    packCode: z.string().trim().min(1).max(64).optional(),
+    amountCents: z
+      .number()
+      .int()
+      .min(500, 'The minimum top-up is $5')
+      .max(10_000_000, 'The maximum single top-up is $100,000')
+      .optional(),
+  })
+  .refine((v) => Boolean(v.packCode) !== Boolean(v.amountCents), {
+    message: 'Choose either a credit pack or a custom amount',
+    path: ['packCode'],
+  });
+
+export const completePurchaseSchema = z.object({
+  purchaseId: z.string().uuid('Invalid purchase id'),
+});
+
+/** Token counts reported by a completed model call. */
+const tokenCount = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).default(0);
+
+export const recordUsageSchema = z.object({
+  modelId: z.string().trim().min(1, 'A model is required').max(128),
+  // Idempotency key. Replaying the same id returns the original charge instead
+  // of billing twice, so a retried request is always safe.
+  requestId: z.string().trim().min(1, 'A request id is required').max(200),
+  inputTokens: tokenCount,
+  outputTokens: tokenCount,
+  cacheWrite5mTokens: tokenCount,
+  cacheWrite1hTokens: tokenCount,
+  cacheReadTokens: tokenCount,
+  isBatch: z.boolean().default(false),
+  feature: z.string().trim().max(64).optional(),
+});
+
+export const quoteUsageSchema = recordUsageSchema.omit({ requestId: true, feature: true });

@@ -5,6 +5,9 @@ import cookieParser from 'cookie-parser';
 import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
+import { billingRouter } from './routes/billing.js';
+import { usageRouter } from './routes/usage.js';
+import { aiRouter } from './routes/ai.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 
@@ -33,6 +36,11 @@ export function createApp(): Express {
     }),
   );
 
+  // Model prompts are far larger than any other payload here, so /api/ai gets
+  // its own cap. Mounted first: body-parser skips a request whose body is
+  // already parsed, so the 10kb default below never truncates a prompt.
+  app.use('/api/ai', express.json({ limit: '2mb' }));
+
   // Body + cookie parsing (with a small JSON size cap).
   app.use(express.json({ limit: '10kb' }));
   app.use(cookieParser());
@@ -41,6 +49,9 @@ export function createApp(): Express {
   app.use('/api', healthRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
+  app.use('/api/billing', billingRouter);
+  app.use('/api/usage', usageRouter);
+  app.use('/api/ai', aiRouter);
 
   // 404 + error handling (must be last).
   app.use(notFound);
