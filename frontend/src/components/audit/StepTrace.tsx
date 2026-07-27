@@ -26,10 +26,10 @@ function StepGlyph({ step, muted = false }: { step: AuditStep; muted?: boolean }
   const Icon = STEP_ICONS[step.type] ?? STEP_ICONS.event;
   const tone =
     step.status === 'error'
-      ? 'border-rose-500/40 bg-rose-500/10 text-rose-300'
+      ? 'border-danger-200 bg-danger-50 text-danger-600'
       : step.status === 'pending'
-        ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
-        : 'border-white/10 bg-ink-700/70 text-gray-300';
+        ? 'border-caution-200 bg-caution-50 text-caution-600'
+        : 'border-line bg-paper-100 text-ink-700';
   return (
     <span
       className={`grid h-8 w-8 shrink-0 place-items-center rounded-full border ${tone} ${muted ? 'opacity-50' : ''}`}
@@ -42,15 +42,15 @@ function StepGlyph({ step, muted = false }: { step: AuditStep; muted?: boolean }
 function StepHeading({ step }: { step: AuditStep }) {
   return (
     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-      <span className="font-mono text-xs text-gray-500">#{step.seq}</span>
-      <span className="text-sm font-medium text-white">
+      <span className="font-mono text-xs text-ink-500">#{step.seq}</span>
+      <span className="text-sm font-medium text-ink-900">
         {step.action || STEP_TYPE_LABELS[step.type] || step.type}
       </span>
-      <span className="rounded border border-white/10 bg-ink-700/60 px-1.5 py-0.5 text-[11px] text-gray-400">
+      <span className="rounded border border-line bg-paper-100 px-1.5 py-0.5 text-[11px] text-ink-600">
         {STEP_TYPE_LABELS[step.type] ?? step.type}
       </span>
       {step.durationMs !== null && (
-        <span className="text-xs text-gray-500">{formatDuration(step.durationMs)}</span>
+        <span className="text-xs text-ink-500">{formatDuration(step.durationMs)}</span>
       )}
     </div>
   );
@@ -61,18 +61,18 @@ function StepBody({ step, expanded }: { step: AuditStep; expanded: boolean }) {
     <>
       {step.detail && (
         <p
-          className={`mt-1 whitespace-pre-wrap text-sm text-gray-300 ${expanded ? '' : 'line-clamp-3'}`}
+          className={`mt-1 whitespace-pre-wrap text-sm text-ink-700 ${expanded ? '' : 'line-clamp-3'}`}
         >
           {step.detail}
         </p>
       )}
       {step.target && (
-        <p className="mt-1 truncate font-mono text-xs text-gray-500" title={step.target}>
+        <p className="mt-1 truncate font-mono text-xs text-ink-500" title={step.target}>
           {step.target}
         </p>
       )}
       {step.error && (
-        <p className="mt-2 rounded-md border border-rose-500/30 bg-rose-500/10 px-2.5 py-1.5 text-xs text-rose-200">
+        <p className="mt-2 rounded-md border border-danger-200 bg-danger-50 px-2.5 py-1.5 text-xs text-danger-700">
           {step.error}
         </p>
       )}
@@ -147,7 +147,7 @@ export function StepTrace({ steps, live = false }: Props) {
 
   if (!steps.length) {
     return (
-      <p className="rounded-lg border border-dashed border-white/10 px-4 py-8 text-center text-sm text-gray-500">
+      <p className="rounded-lg border border-dashed border-line px-4 py-8 text-center text-sm text-ink-500">
         {live
           ? 'This run has not reported a step yet.'
           : 'This run finished without recording any steps.'}
@@ -158,16 +158,16 @@ export function StepTrace({ steps, live = false }: Props) {
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-white">
+        <h3 className="text-sm font-semibold text-ink-900">
           Trace
-          <span className="ml-2 font-normal text-gray-500">
+          <span className="ml-2 font-normal text-ink-500">
             {steps.length} step{steps.length === 1 ? '' : 's'}
           </span>
         </h3>
         <div
           role="tablist"
           aria-label="Trace view"
-          className="flex rounded-lg border border-white/10 bg-ink-800/60 p-0.5 text-xs"
+          className="flex rounded-lg border border-line bg-paper-0 p-0.5 text-xs"
         >
           {(['timeline', 'stepper'] as const).map((value) => (
             <button
@@ -176,7 +176,7 @@ export function StepTrace({ steps, live = false }: Props) {
               aria-selected={mode === value}
               onClick={() => setMode(value)}
               className={`rounded-md px-2.5 py-1 font-medium transition ${
-                mode === value ? 'bg-brand-600/30 text-white' : 'text-gray-400 hover:text-gray-200'
+                mode === value ? 'bg-brand-100 text-ink-900' : 'text-ink-600 hover:text-ink-800'
               }`}
             >
               {value === 'timeline' ? 'Timeline' : 'Step through'}
@@ -186,13 +186,13 @@ export function StepTrace({ steps, live = false }: Props) {
       </div>
 
       {mode === 'timeline' ? (
-        <ol className="relative space-y-3 border-l border-white/10 pl-5">
+        <ol className="relative space-y-3 border-l border-line pl-5">
           {steps.map((step) => (
             <li key={step.id} className="relative">
               <span className="absolute -left-[2.4rem] top-0">
                 <StepGlyph step={step} />
               </span>
-              <div className="rounded-lg border border-white/10 bg-ink-800/50 px-3.5 py-2.5">
+              <div className="rounded-lg border border-line bg-paper-0 px-3.5 py-2.5">
                 <StepHeading step={step} />
                 <StepBody step={step} expanded />
               </div>
@@ -204,7 +204,7 @@ export function StepTrace({ steps, live = false }: Props) {
           {/* Focused step */}
           <div
             ref={focusRef}
-            className="rounded-xl border border-brand-500/30 bg-ink-800/70 p-4 ring-1 ring-inset ring-brand-500/20"
+            className="rounded-xl border border-brand-300 bg-paper-0 p-4 ring-1 ring-inset ring-brand-200"
           >
             <div className="flex items-start gap-3">
               <StepGlyph step={current} />
@@ -220,19 +220,19 @@ export function StepTrace({ steps, live = false }: Props) {
             <button
               onClick={() => moveTo(cursor - 1)}
               disabled={cursor <= 0}
-              className="rounded-lg border border-white/10 bg-ink-700/70 px-3 py-1.5 text-sm text-gray-200 transition hover:bg-ink-600 disabled:opacity-40"
+              className="rounded-lg border border-line bg-paper-100 px-3 py-1.5 text-sm text-ink-800 transition hover:bg-paper-200 disabled:opacity-40"
             >
               <ChevronRightIcon width={16} height={16} className="rotate-180" />
               <span className="sr-only">Previous step</span>
             </button>
             <div className="flex-1">
-              <div className="h-1.5 overflow-hidden rounded-full bg-ink-700">
+              <div className="h-1.5 overflow-hidden rounded-full bg-paper-200">
                 <div
                   className="h-full rounded-full bg-brand-500 transition-all"
                   style={{ width: `${((cursor + 1) / steps.length) * 100}%` }}
                 />
               </div>
-              <p className="mt-1.5 text-center text-xs text-gray-500">
+              <p className="mt-1.5 text-center text-xs text-ink-500">
                 Step {cursor + 1} of {steps.length}
                 <span className="ml-2 hidden sm:inline">· arrow keys to move</span>
               </p>
@@ -240,7 +240,7 @@ export function StepTrace({ steps, live = false }: Props) {
             <button
               onClick={() => moveTo(cursor + 1)}
               disabled={cursor >= lastIndex}
-              className="rounded-lg border border-white/10 bg-ink-700/70 px-3 py-1.5 text-sm text-gray-200 transition hover:bg-ink-600 disabled:opacity-40"
+              className="rounded-lg border border-line bg-paper-100 px-3 py-1.5 text-sm text-ink-800 transition hover:bg-paper-200 disabled:opacity-40"
             >
               <ChevronRightIcon width={16} height={16} />
               <span className="sr-only">Next step</span>
@@ -255,14 +255,14 @@ export function StepTrace({ steps, live = false }: Props) {
                   onClick={() => moveTo(index)}
                   aria-current={index === cursor}
                   className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition ${
-                    index === cursor ? 'bg-brand-600/20 text-white' : 'text-gray-400 hover:bg-white/5'
+                    index === cursor ? 'bg-brand-50 text-ink-900' : 'text-ink-600 hover:bg-paper-100'
                   }`}
                 >
                   <StepGlyph step={step} muted={index !== cursor} />
                   <span className="min-w-0 flex-1 truncate text-sm">
-                    <span className="font-mono text-xs text-gray-500">#{step.seq}</span>{' '}
+                    <span className="font-mono text-xs text-ink-500">#{step.seq}</span>{' '}
                     {step.action || STEP_TYPE_LABELS[step.type]}
-                    {step.detail && <span className="text-gray-500"> — {step.detail}</span>}
+                    {step.detail && <span className="text-ink-500"> — {step.detail}</span>}
                   </span>
                 </button>
               </li>

@@ -34,10 +34,10 @@ function OptionButton({
 }) {
   const emphasis =
     option.action === 'repair'
-      ? 'border-brand-500/40 bg-brand-600/15 text-brand-100 hover:bg-brand-600/25'
+      ? 'border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100'
       : option.action === 'reject'
-        ? 'border-red-500/30 bg-red-500/10 text-red-200 hover:bg-red-500/20'
-        : 'border-white/10 bg-ink-700/60 text-gray-200 hover:bg-ink-600';
+        ? 'border-danger-200 bg-danger-50 text-danger-700 hover:bg-danger-50'
+        : 'border-line bg-paper-0 text-ink-800 hover:bg-paper-100';
 
   return (
     <button
@@ -87,20 +87,20 @@ function EscalationCard({
   }
 
   return (
-    <li className="rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-5 py-4">
+    <li className="rounded-xl border border-caution-200 bg-caution-50[0.06] px-5 py-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <p className="text-sm font-medium text-white">{escalation.question}</p>
-        <span className="shrink-0 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-medium text-amber-200">
+        <p className="text-sm font-medium text-ink-900">{escalation.question}</p>
+        <span className="shrink-0 rounded-full border border-caution-200 bg-caution-50 px-2.5 py-0.5 text-[11px] font-medium text-caution-600">
           {REASON_LABELS[escalation.reason]}
         </span>
       </div>
 
       {escalation.context.runInstruction && (
-        <p className="mt-1.5 text-xs text-gray-400">
-          <span className="text-gray-500">Task: </span>
+        <p className="mt-1.5 text-xs text-ink-600">
+          <span className="text-ink-500">Task: </span>
           {escalation.context.runInstruction}
           {escalation.context.siteLabel && (
-            <span className="text-gray-500"> · {escalation.context.siteLabel}</span>
+            <span className="text-ink-500"> · {escalation.context.siteLabel}</span>
           )}
         </p>
       )}
@@ -109,25 +109,25 @@ function EscalationCard({
         <div className="mt-3">
           <button
             onClick={() => setExpanded((v) => !v)}
-            className="text-[11px] font-medium text-amber-200/90 transition hover:text-amber-100"
+            className="text-[11px] font-medium text-caution-600 transition hover:text-caution-600"
           >
             {expanded ? 'Hide' : 'Show'} what it saw
           </button>
           {expanded && (
             <ul className="mt-2 space-y-2.5">
               {unsettled.map((item, index) => (
-                <li key={index} className="rounded-lg bg-ink-900/50 p-2.5">
-                  <p className="text-[11px] text-gray-300">{item.expectation}</p>
+                <li key={index} className="rounded-lg bg-paper-50 p-2.5">
+                  <p className="text-[11px] text-ink-700">{item.expectation}</p>
                   {item.reasoning && (
-                    <p className="mt-1 text-[11px] text-gray-500">{item.reasoning}</p>
+                    <p className="mt-1 text-[11px] text-ink-500">{item.reasoning}</p>
                   )}
                   {item.evidence && (
-                    <pre className="mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-ink-900/80 p-2 text-[10px] text-gray-400">
+                    <pre className="mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-paper-50 p-2 text-[10px] text-ink-600">
                       {item.evidence}
                     </pre>
                   )}
                   {item.url && (
-                    <p className="mt-1 truncate font-mono text-[10px] text-gray-600">{item.url}</p>
+                    <p className="mt-1 truncate font-mono text-[10px] text-ink-400">{item.url}</p>
                   )}
                 </li>
               ))}
@@ -141,17 +141,17 @@ function EscalationCard({
         onChange={(event) => setNote(event.target.value)}
         placeholder="Add a note (optional)"
         maxLength={2000}
-        className="mt-3 w-full rounded-lg border border-white/10 bg-ink-900/60 px-3 py-2 text-xs text-gray-200 placeholder-gray-600 outline-none transition focus:border-brand-500/50"
+        className="mt-3 w-full rounded-lg border border-line bg-paper-50 px-3 py-2 text-xs text-ink-800 placeholder-ink-400 outline-none transition focus:border-brand-400"
       />
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        {busy && <SpinnerIcon className="animate-spin text-brand-300" width={14} height={14} />}
+        {busy && <SpinnerIcon className="animate-spin text-brand-600" width={14} height={14} />}
         {escalation.options.map((option) => (
           <OptionButton key={option.id} option={option} busy={busy} onPick={pick} />
         ))}
       </div>
 
-      {error && <p className="mt-2 text-[11px] text-red-200">{error}</p>}
+      {error && <p className="mt-2 text-[11px] text-danger-700">{error}</p>}
     </li>
   );
 }
@@ -182,23 +182,23 @@ export function EscalationQueue() {
   }
 
   if (!escalations || escalations.length === 0) {
-    return notice ? <p className="mt-4 text-xs text-emerald-300">{notice}</p> : null;
+    return notice ? <p className="mt-4 text-xs text-success-600">{notice}</p> : null;
   }
 
   return (
     <section className="mt-8">
       <div className="flex items-center gap-2.5">
-        <h2 className="text-lg font-semibold text-white">The verifier needs you</h2>
-        <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-200">
+        <h2 className="text-lg font-semibold text-ink-900">The verifier needs you</h2>
+        <span className="rounded-full border border-caution-200 bg-caution-50 px-2.5 py-0.5 text-xs font-medium text-caution-600">
           {escalations.length}
         </span>
       </div>
-      <p className="mt-1 text-sm text-gray-400">
+      <p className="mt-1 text-sm text-ink-600">
         Checks that could not be settled automatically. Answering one either closes it or sends the
         assistant back to the site.
       </p>
 
-      {notice && <p className="mt-2 text-xs text-emerald-300">{notice}</p>}
+      {notice && <p className="mt-2 text-xs text-success-600">{notice}</p>}
 
       <ul className="mt-4 space-y-3">
         {escalations.map((escalation) => (

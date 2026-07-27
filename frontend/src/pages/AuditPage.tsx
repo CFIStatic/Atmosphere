@@ -7,6 +7,7 @@ import {
   type AuditRun,
   type AuditStats,
 } from '../lib/api';
+import { AppShell } from '../components/AppShell';
 import { RunDetail } from '../components/audit/RunDetail';
 import {
   ACCENT_STYLES,
@@ -52,12 +53,12 @@ function StatTile({
   tone?: 'default' | 'active' | 'bad';
 }) {
   const valueTone =
-    tone === 'active' ? 'text-brand-300' : tone === 'bad' ? 'text-rose-300' : 'text-white';
+    tone === 'active' ? 'text-brand-600' : tone === 'bad' ? 'text-danger-600' : 'text-ink-900';
   return (
-    <div className="rounded-xl border border-white/10 bg-ink-800/50 px-4 py-3">
-      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</p>
+    <div className="rounded-xl border border-line bg-paper-0 px-4 py-3">
+      <p className="text-xs font-medium uppercase tracking-wide text-ink-500">{label}</p>
       <p className={`mt-1 text-2xl font-semibold tabular-nums ${valueTone}`}>{value}</p>
-      {hint && <p className="mt-0.5 text-xs text-gray-500">{hint}</p>}
+      {hint && <p className="mt-0.5 text-xs text-ink-500">{hint}</p>}
     </div>
   );
 }
@@ -79,26 +80,26 @@ function AgentCard({
       title={agent.blurb}
       className={`rounded-xl border p-3.5 text-left transition ${
         selected
-          ? 'border-brand-500/50 bg-brand-600/10'
-          : 'border-white/10 bg-ink-800/40 hover:border-white/20 hover:bg-ink-800/70'
+          ? 'border-brand-400 bg-brand-50'
+          : 'border-line bg-paper-0 hover:border-line-strong hover:bg-paper-0'
       }`}
     >
       <div className="flex items-center justify-between gap-2">
         <span className={`truncate text-sm font-semibold ${accent.text}`}>{agent.name}</span>
         {agent.active > 0 && (
-          <span className="flex items-center gap-1 text-xs text-brand-300">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-400" />
+          <span className="flex items-center gap-1 text-xs text-brand-600">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500" />
             {agent.active}
           </span>
         )}
       </div>
-      <p className="mt-1.5 text-xl font-semibold tabular-nums text-white">
+      <p className="mt-1.5 text-xl font-semibold tabular-nums text-ink-900">
         {formatNumber(agent.total)}
-        <span className="ml-1.5 text-xs font-normal text-gray-500">
+        <span className="ml-1.5 text-xs font-normal text-ink-500">
           run{agent.total === 1 ? '' : 's'}
         </span>
       </p>
-      <p className="mt-1 truncate text-xs text-gray-500">
+      <p className="mt-1 truncate text-xs text-ink-500">
         {agent.total === 0
           ? agent.intake === 'bridge'
             ? 'No runs recorded yet'
@@ -125,26 +126,26 @@ function RunRow({
         onClick={onSelect}
         aria-current={selected}
         className={`flex w-full items-start gap-3 px-4 py-3 text-left transition ${
-          selected ? 'bg-brand-600/15' : 'hover:bg-white/5'
+          selected ? 'bg-brand-50' : 'hover:bg-paper-100'
         }`}
       >
         <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${accent.bg} ring-2 ${accent.ring}`} />
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">
             <span className={`truncate text-xs font-medium ${accent.text}`}>{run.agent.name}</span>
-            <span className="truncate text-xs text-gray-600">
+            <span className="truncate text-xs text-ink-400">
               {run.agentLabel ?? run.actorEmail ?? ''}
             </span>
           </span>
-          <span className="mt-0.5 block truncate text-sm text-gray-100">{run.title}</span>
-          <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500">
+          <span className="mt-0.5 block truncate text-sm text-ink-800">{run.title}</span>
+          <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-500">
             <StatusChip status={run.status} />
             <span>{run.stepCount} steps</span>
             {run.durationMs !== null && <span>· {formatDuration(run.durationMs)}</span>}
             <span>· {formatRelative(run.createdAt)}</span>
           </span>
         </span>
-        <ChevronRightIcon width={16} height={16} className="mt-1 shrink-0 text-gray-600" />
+        <ChevronRightIcon width={16} height={16} className="mt-1 shrink-0 text-ink-400" />
       </button>
     </li>
   );
@@ -282,22 +283,22 @@ export function AuditPage() {
   }
 
   return (
-    <div className="cx-aurora min-h-screen">
-      <div className="mx-auto max-w-[110rem] px-5 py-8 sm:px-8">
+    <AppShell>
+      <div className="mx-auto max-w-[110rem]">
         {/* Header */}
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-sm font-medium text-brand-400">Audit</p>
-            <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-white">
+            <p className="text-sm font-medium text-brand-600">Audit</p>
+            <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-ink-900">
               Everything your agents have done
             </h1>
-            <p className="mt-1 max-w-2xl text-sm text-gray-400">
+            <p className="mt-1 max-w-2xl text-sm text-ink-600">
               Every run every agent performed for this organization, and the ordered steps that
               produced it. Steps are append-only — once recorded, a trace cannot be edited.
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-ink-800/60 px-3 py-2 text-sm text-gray-300">
+            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-700">
               <input
                 type="checkbox"
                 checked={live}
@@ -309,7 +310,7 @@ export function AuditPage() {
             <button
               onClick={() => void refresh()}
               disabled={refreshing}
-              className="flex items-center gap-2 rounded-lg border border-white/10 bg-ink-800/60 px-3 py-2 text-sm text-gray-300 transition hover:bg-ink-700 disabled:opacity-60"
+              className="flex items-center gap-2 rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-700 transition hover:bg-paper-200 disabled:opacity-60"
             >
               <RefreshIcon
                 width={16}
@@ -351,18 +352,18 @@ export function AuditPage() {
         {/* Per-agent */}
         <div className="mt-6">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-white">Agents</h2>
+            <h2 className="text-sm font-semibold text-ink-900">Agents</h2>
             {agentFilter && (
               <button
                 onClick={() => setAgentFilter(null)}
-                className="text-xs text-brand-300 hover:text-brand-200"
+                className="text-xs text-brand-600 hover:text-brand-700"
               >
                 Show all agents
               </button>
             )}
           </div>
           {agents === null ? (
-            <div className="mt-3 grid place-items-center py-8 text-brand-300">
+            <div className="mt-3 grid place-items-center py-8 text-brand-600">
               <SpinnerIcon className="animate-spin" width={20} height={20} />
             </div>
           ) : (
@@ -387,21 +388,21 @@ export function AuditPage() {
             <SearchIcon
               width={16}
               height={16}
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-500"
             />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search what an agent was asked to do…"
               aria-label="Search runs"
-              className="w-full rounded-lg border border-white/10 bg-ink-800/60 py-2 pl-9 pr-3 text-sm text-gray-100 placeholder:text-gray-600 focus:border-brand-500/50 focus:outline-none"
+              className="w-full rounded-lg border border-line bg-paper-0 py-2 pl-9 pr-3 text-sm text-ink-800 placeholder:text-ink-400 focus:border-brand-400 focus:outline-none"
             />
           </div>
           <select
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value as AgentRunStatus | '')}
             aria-label="Filter by status"
-            className="rounded-lg border border-white/10 bg-ink-800/60 px-3 py-2 text-sm text-gray-200 focus:border-brand-500/50 focus:outline-none"
+            className="rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-800 focus:border-brand-400 focus:outline-none"
           >
             <option value="">Any status</option>
             {(Object.keys(RUN_STATUS_LABELS) as AgentRunStatus[]).map((status) => (
@@ -414,7 +415,7 @@ export function AuditPage() {
             value={range}
             onChange={(event) => setRange(event.target.value as RangeKey)}
             aria-label="Filter by time"
-            className="rounded-lg border border-white/10 bg-ink-800/60 px-3 py-2 text-sm text-gray-200 focus:border-brand-500/50 focus:outline-none"
+            className="rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-800 focus:border-brand-400 focus:outline-none"
           >
             {RANGES.map((entry) => (
               <option key={entry.key} value={entry.key}>
@@ -425,7 +426,7 @@ export function AuditPage() {
           {filtersActive && (
             <button
               onClick={clearFilters}
-              className="rounded-lg border border-white/10 px-3 py-2 text-sm text-gray-400 transition hover:bg-white/5 hover:text-gray-200"
+              className="rounded-lg border border-line px-3 py-2 text-sm text-ink-600 transition hover:bg-paper-100 hover:text-ink-800"
             >
               Clear
             </button>
@@ -439,23 +440,23 @@ export function AuditPage() {
               scroll the whole page sideways instead of being truncated. */}
           <section
             aria-label="Runs"
-            className={`min-w-0 overflow-hidden rounded-xl border border-white/10 bg-ink-800/30 ${
+            className={`min-w-0 overflow-hidden rounded-xl border border-line bg-paper-0 ${
               selectedId ? 'hidden xl:block' : ''
             }`}
           >
             {runs === null ? (
-              <div className="grid place-items-center py-16 text-brand-300">
+              <div className="grid place-items-center py-16 text-brand-600">
                 <SpinnerIcon className="animate-spin" width={22} height={22} />
                 <span className="sr-only">Loading runs…</span>
               </div>
             ) : listError ? (
-              <p className="px-5 py-10 text-center text-sm text-rose-300">{listError}</p>
+              <p className="px-5 py-10 text-center text-sm text-danger-600">{listError}</p>
             ) : runs.length === 0 ? (
               <div className="px-5 py-12 text-center">
-                <p className="text-sm text-gray-400">
+                <p className="text-sm text-ink-600">
                   {filtersActive ? 'No runs match these filters.' : 'No agent work recorded yet.'}
                 </p>
-                <p className="mt-1.5 text-xs text-gray-600">
+                <p className="mt-1.5 text-xs text-ink-400">
                   {filtersActive
                     ? 'Try widening the time range.'
                     : 'As soon as an agent runs, every step it takes lands here.'}
@@ -463,7 +464,7 @@ export function AuditPage() {
               </div>
             ) : (
               <>
-                <ul className="divide-y divide-white/5">
+                <ul className="divide-y divide-line">
                   {runs.map((run) => (
                     <RunRow
                       key={run.id}
@@ -477,7 +478,7 @@ export function AuditPage() {
                   <button
                     onClick={() => void loadNextPage()}
                     disabled={loadingMore}
-                    className="flex w-full items-center justify-center gap-2 border-t border-white/10 px-4 py-2.5 text-sm text-gray-400 transition hover:bg-white/5 disabled:opacity-60"
+                    className="flex w-full items-center justify-center gap-2 border-t border-line px-4 py-2.5 text-sm text-ink-600 transition hover:bg-paper-100 disabled:opacity-60"
                   >
                     {loadingMore && <SpinnerIcon className="animate-spin" width={15} height={15} />}
                     Load older runs
@@ -489,7 +490,7 @@ export function AuditPage() {
 
           <section
             aria-label="Run detail"
-            className={`min-w-0 rounded-xl border border-white/10 bg-ink-800/30 p-5 ${
+            className={`min-w-0 rounded-xl border border-line bg-paper-0 p-5 ${
               selectedId ? '' : 'hidden xl:block'
             }`}
           >
@@ -498,8 +499,8 @@ export function AuditPage() {
             ) : (
               <div className="grid h-full min-h-[18rem] place-items-center text-center">
                 <div>
-                  <p className="text-sm text-gray-400">Pick a run to see how it went.</p>
-                  <p className="mt-1 text-xs text-gray-600">
+                  <p className="text-sm text-ink-600">Pick a run to see how it went.</p>
+                  <p className="mt-1 text-xs text-ink-400">
                     Every step is shown in order — as a timeline, or one step at a time.
                   </p>
                 </div>
@@ -508,6 +509,6 @@ export function AuditPage() {
           </section>
         </div>
       </div>
-    </div>
+    </AppShell>
   );
 }

@@ -21,7 +21,7 @@ export interface AgentDefinition {
   name: string;
   blurb: string;
   /** Accent used by the Audit tab. One of the palette names the UI knows. */
-  accent: 'brand' | 'emerald' | 'amber' | 'sky' | 'rose';
+  accent: 'brand' | 'neutral' | 'success' | 'caution' | 'danger';
   intake: AgentIntake;
   /** The table a bridged agent is mirrored from, for the provenance line. */
   sourceTable?: string;
@@ -41,7 +41,7 @@ export const AGENT_CATALOG: AgentDefinition[] = [
     name: 'Web Access',
     blurb:
       'Signs in to external sites — carrier portals, supplier dashboards — to pull data out of them and enter data into them.',
-    accent: 'sky',
+    accent: 'neutral',
     intake: 'bridge',
     sourceTable: 'web_runs',
   },
@@ -49,7 +49,7 @@ export const AGENT_CATALOG: AgentDefinition[] = [
     key: 'crm_sync',
     name: 'CRM Sync',
     blurb: 'Mirrors records from external applications into the CRM and reconciles what changed.',
-    accent: 'emerald',
+    accent: 'success',
     intake: 'bridge',
     sourceTable: 'crm_sync_runs',
   },
@@ -57,7 +57,7 @@ export const AGENT_CATALOG: AgentDefinition[] = [
     key: 'backup',
     name: 'Backups',
     blurb: 'Snapshots the organization’s data on a schedule, then verifies the archive it wrote.',
-    accent: 'amber',
+    accent: 'caution',
     intake: 'bridge',
     sourceTable: 'backup_snapshots',
   },
@@ -66,7 +66,7 @@ export const AGENT_CATALOG: AgentDefinition[] = [
     name: 'Field Assistant',
     blurb:
       'Answers technicians on site, transcribes what they record, and labels what the camera sees.',
-    accent: 'rose',
+    accent: 'danger',
     intake: 'ledger',
   },
 ];

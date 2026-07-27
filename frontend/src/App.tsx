@@ -8,9 +8,14 @@ import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { AuditPage } from './pages/AuditPage';
+import { TechnicianPage } from './pages/TechnicianPage';
+import { BillingPage } from './pages/BillingPage';
+import { UsagePage } from './pages/UsagePage';
+import { ProjectManagerPage } from './pages/ProjectManagerPage';
+import { PmProjectPage } from './pages/PmProjectPage';
 import { WebAccessPage } from './pages/WebAccessPage';
 import { ComputerUsePage } from './pages/ComputerUsePage';
-import { AppLayout } from './components/AppLayout';
+import { EstimatorPage } from './pages/EstimatorPage';
 import { SpinnerIcon } from './components/icons';
 
 function FullScreenSpinner() {
@@ -18,7 +23,7 @@ function FullScreenSpinner() {
     <div
       role="status"
       aria-live="polite"
-      className="grid min-h-screen place-items-center bg-ink-900 text-brand-300"
+      className="grid min-h-screen place-items-center bg-paper-100 text-brand-600"
     >
       <SpinnerIcon className="animate-spin" width={28} height={28} />
       <span className="sr-only">Loading…</span>
@@ -65,16 +70,12 @@ export default function App() {
             }
           />
 
-          {/* Signed-in app. Every page here shares the left rail, so a new
-              destination is a route plus an entry in AppLayout's NAV array. */}
           <Route
             path="/dashboard"
             element={
               <ProtectedRoute>
                 <RequireOnboarded>
-                  <AppLayout>
-                    <DashboardPage />
-                  </AppLayout>
+                  <DashboardPage />
                 </RequireOnboarded>
               </ProtectedRoute>
             }
@@ -85,9 +86,46 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <RequireOnboarded>
-                  <AppLayout>
-                    <AuditPage />
-                  </AppLayout>
+                  <AuditPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* The technician app. Open to every onboarded member — a project
+              manager reviewing a job needs the same capture tools a field
+              technician does. */}
+          <Route
+            path="/technician"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <TechnicianPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* The Project Manager area. Guarded only by onboarding: the
+              database decides who may change a project, and a route guard that
+              hid the screens would just make a field technician's read-only
+              view unreachable. */}
+          <Route
+            path="/pm"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <ProjectManagerPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/pm/projects/:id"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <PmProjectPage />
                 </RequireOnboarded>
               </ProtectedRoute>
             }
@@ -107,11 +145,44 @@ export default function App() {
           />
 
           <Route
+            path="/billing"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <BillingPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/usage"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <UsagePage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
             path="/computer-use"
             element={
               <ProtectedRoute>
                 <RequireOnboarded>
                   <ComputerUsePage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/estimator"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <EstimatorPage />
                 </RequireOnboarded>
               </ProtectedRoute>
             }

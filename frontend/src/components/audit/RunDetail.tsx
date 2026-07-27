@@ -122,7 +122,7 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose?: () => v
 
   if (loading) {
     return (
-      <div className="grid place-items-center py-20 text-brand-300">
+      <div className="grid place-items-center py-20 text-brand-600">
         <SpinnerIcon className="animate-spin" width={24} height={24} />
         <span className="sr-only">Loading run…</span>
       </div>
@@ -132,7 +132,7 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose?: () => v
   if (error || !run) {
     return (
       <div className="px-4 py-16 text-center">
-        <p className="text-sm text-rose-300">{error ?? 'That run could not be loaded.'}</p>
+        <p className="text-sm text-danger-600">{error ?? 'That run could not be loaded.'}</p>
       </div>
     );
   }
@@ -155,21 +155,21 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose?: () => v
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span
-              className={`rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${accent.bg} ${accent.text} ${accent.ring}`}
+              className={`rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${accent.soft} ${accent.text} ${accent.ring}`}
             >
               {run.agent.name}
             </span>
-            {run.agentLabel && <span className="text-xs text-gray-500">{run.agentLabel}</span>}
+            {run.agentLabel && <span className="text-xs text-ink-500">{run.agentLabel}</span>}
             <StatusChip status={run.status} />
           </div>
-          <h2 className="mt-2 break-words text-lg font-semibold text-white">{run.title}</h2>
-          {run.summary && <p className="mt-1 text-sm text-gray-400">{run.summary}</p>}
+          <h2 className="mt-2 break-words text-lg font-semibold text-ink-900">{run.title}</h2>
+          {run.summary && <p className="mt-1 text-sm text-ink-600">{run.summary}</p>}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <button
             onClick={exportRun}
             title="Download this run as JSON"
-            className="rounded-lg border border-white/10 p-2 text-gray-400 transition hover:bg-white/5 hover:text-gray-100"
+            className="rounded-lg border border-line p-2 text-ink-600 transition hover:bg-paper-100 hover:text-ink-800"
           >
             <DownloadIcon width={16} height={16} />
             <span className="sr-only">Download this run</span>
@@ -177,7 +177,7 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose?: () => v
           {onClose && (
             <button
               onClick={onClose}
-              className="rounded-lg border border-white/10 p-2 text-gray-400 transition hover:bg-white/5 hover:text-gray-100 xl:hidden"
+              className="rounded-lg border border-line p-2 text-ink-600 transition hover:bg-paper-100 hover:text-ink-800 xl:hidden"
             >
               <CloseIcon width={16} height={16} />
               <span className="sr-only">Close run</span>
@@ -187,12 +187,12 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose?: () => v
       </div>
 
       {run.error && (
-        <p className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+        <p className="mt-3 rounded-lg border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-700">
           {run.error}
         </p>
       )}
 
-      <div className="mt-4 grid grid-cols-2 gap-4 rounded-xl border border-white/10 bg-ink-800/40 p-4 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="mt-4 grid grid-cols-2 gap-4 rounded-xl border border-line bg-paper-0 p-4 sm:grid-cols-3 lg:grid-cols-4">
         <Field label="Started by">{actor}</Field>
         <Field label="Started">{formatDateTime(run.startedAt ?? run.createdAt)}</Field>
         <Field label="Finished">{formatDateTime(run.finishedAt)}</Field>
@@ -207,7 +207,7 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose?: () => v
           {run.sourceTable ? `mirrored from ${run.sourceTable}` : 'reported by the agent'}
         </Field>
         <Field label="Run id">
-          <span className="font-mono text-xs text-gray-400">{run.id.slice(0, 8)}…</span>
+          <span className="font-mono text-xs text-ink-600">{run.id.slice(0, 8)}…</span>
         </Field>
       </div>
 
@@ -224,7 +224,7 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose?: () => v
           <button
             onClick={loadMore}
             disabled={loadingMore}
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-ink-800/60 px-4 py-2 text-sm text-gray-300 transition hover:bg-ink-700 disabled:opacity-60"
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm text-ink-700 transition hover:bg-paper-200 disabled:opacity-60"
           >
             {loadingMore && <SpinnerIcon className="animate-spin" width={15} height={15} />}
             Load more steps

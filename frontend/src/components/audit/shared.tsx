@@ -28,19 +28,33 @@ import {
  */
 
 export const STATUS_STYLES: Record<AgentRunStatus, { chip: string; dot: string }> = {
-  queued: { chip: 'border-white/10 bg-ink-700/60 text-gray-300', dot: 'bg-gray-400' },
-  running: { chip: 'border-brand-500/40 bg-brand-600/20 text-brand-200', dot: 'bg-brand-400' },
-  succeeded: { chip: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300', dot: 'bg-emerald-400' },
-  failed: { chip: 'border-rose-500/30 bg-rose-500/10 text-rose-300', dot: 'bg-rose-400' },
-  cancelled: { chip: 'border-amber-500/30 bg-amber-500/10 text-amber-300', dot: 'bg-amber-400' },
+  queued: { chip: 'border-line bg-paper-100 text-ink-600', dot: 'bg-ink-400' },
+  running: { chip: 'border-brand-200 bg-brand-50 text-brand-700', dot: 'bg-brand-500' },
+  succeeded: { chip: 'border-success-200 bg-success-50 text-success-600', dot: 'bg-success-600' },
+  failed: { chip: 'border-danger-200 bg-danger-50 text-danger-600', dot: 'bg-danger-600' },
+  cancelled: { chip: 'border-caution-200 bg-caution-50 text-caution-600', dot: 'bg-caution-600' },
 };
 
-export const ACCENT_STYLES: Record<AgentAccent, { text: string; ring: string; bg: string }> = {
-  brand: { text: 'text-brand-300', ring: 'ring-brand-500/40', bg: 'bg-brand-600/20' },
-  sky: { text: 'text-sky-300', ring: 'ring-sky-500/40', bg: 'bg-sky-500/15' },
-  emerald: { text: 'text-emerald-300', ring: 'ring-emerald-500/40', bg: 'bg-emerald-500/15' },
-  amber: { text: 'text-amber-300', ring: 'ring-amber-500/40', bg: 'bg-amber-500/15' },
-  rose: { text: 'text-rose-300', ring: 'ring-rose-500/40', bg: 'bg-rose-500/15' },
+/**
+ * One accent per agent, drawn only from the design system's own status colours.
+ * The palette has no decorative hues to spare, so an agent's accent doubles as
+ * a status colour elsewhere — which is fine here because it is only ever used
+ * to tell agents apart, never to say whether a run went well.
+ */
+/**
+ * `bg` is the solid dot that marks a run in the list; `soft` is the tinted
+ * background a label sits on. They are separate because the solid colour is
+ * chosen to be visible at 8px, which makes it far too dark to read text against.
+ */
+export const ACCENT_STYLES: Record<
+  AgentAccent,
+  { text: string; ring: string; bg: string; soft: string }
+> = {
+  brand: { text: 'text-brand-700', ring: 'ring-brand-200', bg: 'bg-brand-500', soft: 'bg-brand-50' },
+  neutral: { text: 'text-ink-700', ring: 'ring-line-strong', bg: 'bg-ink-400', soft: 'bg-paper-200' },
+  success: { text: 'text-success-600', ring: 'ring-success-200', bg: 'bg-success-600', soft: 'bg-success-50' },
+  caution: { text: 'text-caution-600', ring: 'ring-caution-200', bg: 'bg-caution-600', soft: 'bg-caution-50' },
+  danger: { text: 'text-danger-600', ring: 'ring-danger-200', bg: 'bg-danger-600', soft: 'bg-danger-50' },
 };
 
 export const STEP_ICONS: Record<AgentStepType, typeof DotIcon> = {
@@ -108,8 +122,8 @@ export function formatNumber(value: number): string {
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
-      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</p>
-      <div className="mt-1 truncate text-sm text-gray-200">{children}</div>
+      <p className="text-xs font-medium uppercase tracking-wide text-ink-500">{label}</p>
+      <div className="mt-1 truncate text-sm text-ink-800">{children}</div>
     </div>
   );
 }
@@ -142,11 +156,11 @@ export function JsonBlock({
   if (!text || text === '{}' || text === 'null') return null;
 
   return (
-    <div className="rounded-lg border border-white/10 bg-ink-900/60">
+    <div className="rounded-lg border border-line bg-paper-50">
       <button
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-gray-400 transition hover:text-gray-200"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-ink-600 transition hover:text-ink-800"
       >
         {open ? (
           <ChevronDownIcon width={14} height={14} />
@@ -154,10 +168,10 @@ export function JsonBlock({
           <ChevronRightIcon width={14} height={14} />
         )}
         {label}
-        <span className="ml-auto font-normal text-gray-600">{text.length.toLocaleString()} chars</span>
+        <span className="ml-auto font-normal text-ink-400">{text.length.toLocaleString()} chars</span>
       </button>
       {open && (
-        <pre className="max-h-80 overflow-auto border-t border-white/10 px-3 py-2 text-xs leading-relaxed text-gray-300">
+        <pre className="max-h-80 overflow-auto border-t border-line px-3 py-2 text-xs leading-relaxed text-ink-700">
           {text}
         </pre>
       )}
