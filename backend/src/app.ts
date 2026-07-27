@@ -17,6 +17,7 @@ import { crmRouter } from './routes/crm.js';
 import { backupRouter } from './routes/backups.js';
 import { integrationsRouter } from './routes/integrations.js';
 import { computerRouter } from './routes/computer.js';
+import { estimatorRouter } from './routes/estimator.js';
 import { healthRouter } from './routes/health.js';
 import { mitigationRouter } from './routes/mitigation.js';
 import { xactimateRouter } from './routes/xactimate.js';
@@ -67,9 +68,11 @@ export function createApp(): Express {
   // Body + cookie parsing.
   //
   // CRM writes are bigger than an auth payload but still small, so the cap
-  // stays tight everywhere except the routes that legitimately carry more:
-  // a whole spreadsheet on CSV import, a model prompt on /api/ai or /api/model,
-  // and a DocuSketch scan plus a MICA drying log on /api/mitigation.
+  // stays tight everywhere except the routes that legitimately carry more: a
+  // whole spreadsheet on CSV import, a model prompt on /api/ai or /api/model, a
+  // pasted mitigation estimate (a whole-house Xactimate export) on the
+  // construction estimator, and a DocuSketch scan plus a MICA drying log on
+  // /api/mitigation.
   //
   // The parser is CHOSEN here rather than stacked on those routes: the first
   // json() to run consumes the stream, so a route-level raise would never be
@@ -80,11 +83,13 @@ export function createApp(): Express {
   // than a login form's worth of JSON but comfortably inside the 256kb
   // standard, so it needs no exception of its own.
   const csvImportPath = /^\/api\/integrations\/sources\/[^/]+\/import\/?$/;
-  const modelPromptPath = /^\/api\/(ai|model)(\/|$)/;
+  const bulkTextPath = /^\/api\/(ai|model|estimator)(\/|$)/;
   const mitigationPath = /^\/api\/mitigation(\/|$)/;
   const standardJson = express.json({ limit: '256kb' });
   const csvImportJson = express.json({ limit: '12mb' });
-  const modelPromptJson = express.json({ limit: '2mb' });
+  const bulkTextJson = express.json({ limit: '2mb' });
+  // The mitigation estimator takes raw vendor exports rather than pasted text,
+  // so its ceiling is an order of magnitude above the others'.
   const mitigationJson = express.json({ limit: '8mb' });
 
   app.use((req, res, next) => {
@@ -92,8 +97,8 @@ export function createApp(): Express {
       ? csvImportJson
       : mitigationPath.test(req.path)
         ? mitigationJson
-        : modelPromptPath.test(req.path)
-          ? modelPromptJson
+        : bulkTextPath.test(req.path)
+          ? bulkTextJson
           : standardJson;
     parse(req, res, next);
   });
@@ -124,6 +129,7 @@ export function createApp(): Express {
   app.use('/api/backups', backupRouter);
   app.use('/api/integrations', integrationsRouter);
   app.use('/api/computer', computerRouter);
+  app.use('/api/estimator', estimatorRouter);
 
   // 404 + error handling (must be last).
   app.use(notFound);

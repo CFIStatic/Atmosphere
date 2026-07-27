@@ -281,3 +281,57 @@ export const resolveEscalationSchema = z.object({
 });
 
 export type ResolveEscalationInput = z.infer<typeof resolveEscalationSchema>;
+
+/* ------------------------------------------------------------------ */
+/* Construction Estimator                                              */
+/* ------------------------------------------------------------------ */
+
+/** The third-party systems the estimator signs in to. */
+export const ESTIMATOR_PROVIDERS = ['docusketch', 'dash', 'xactimate'] as const;
+
+export const providerParamSchema = z.enum(ESTIMATOR_PROVIDERS, {
+  errorMap: () => ({ message: 'Unknown provider' }),
+});
+
+/**
+ * A stored vendor credential. Either an API key or a username/password pair is
+ * required — the refinement is what stops an empty form from being saved as a
+ * "connected" provider that then fails halfway through a run.
+ */
+export const credentialSchema = z
+  .object({
+    label: z.string().trim().max(80).optional(),
+    username: z.string().trim().max(200).optional(),
+    password: z.string().max(500).optional(),
+    apiKey: z.string().trim().max(2000).optional(),
+    accountId: z.string().trim().max(200).optional(),
+    baseUrl: z
+      .string()
+      .trim()
+      .url('Enter a valid https:// URL')
+      .refine((url) => url.startsWith('https://'), 'The vendor URL must use https')
+      .optional(),
+  })
+  .refine((value) => Boolean(value.apiKey) || Boolean(value.username && value.password), {
+    message: 'Provide an API key, or a username and password.',
+    path: ['apiKey'],
+  });
+
+/**
+ * A mitigation estimate pasted in by the user. The ceiling is generous because
+ * a real Xactimate CSV export of a whole-house dryout runs to a few hundred
+ * lines, and truncating it would silently drop scope.
+ */
+const mitigationTextSchema = z.string().max(500_000).optional();
+
+export const startRunSchema = z.object({
+  scanProjectId: z.string().trim().min(1, 'Choose a scan project').max(200),
+  mitigationText: mitigationTextSchema,
+});
+
+export const selectJobSchema = z.object({
+  jobId: z.string().trim().min(1, 'Choose a job').max(200),
+});
+
+export type CredentialInput = z.infer<typeof credentialSchema>;
+export type StartRunInput = z.infer<typeof startRunSchema>;

@@ -12,7 +12,7 @@
     "mitigation:demo": "tsx src/estimator/mitigation/demo.ts",
     "browser:install": "playwright install chromium",
     "check:verifier": "tsx src/scripts/checkVerifier.ts",
-    "test": "node --import tsx --test src/**/*.test.ts",
+    "test": "node --import tsx --test src/**/*.test.ts test/*.test.ts",
     "learn": "tsx src/scripts/learn.ts",
     "backup": "tsx src/scripts/backup.ts snapshot",
     "backup:list": "tsx src/scripts/backup.ts list",

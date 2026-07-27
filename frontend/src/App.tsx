@@ -14,6 +14,7 @@ import { PmProjectPage } from './pages/PmProjectPage';
 import { WebAccessPage } from './pages/WebAccessPage';
 import { ComputerUsePage } from './pages/ComputerUsePage';
 import { EstimatorPage } from './pages/EstimatorPage';
+import { MitigationEstimatorPage } from './pages/MitigationEstimatorPage';
 import { SpinnerIcon } from './components/icons';
 
 function FullScreenSpinner() {
@@ -156,6 +157,17 @@ export default function App() {
               <ProtectedRoute>
                 <RequireOnboarded>
                   <ComputerUsePage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/mitigation"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <MitigationEstimatorPage />
                 </RequireOnboarded>
               </ProtectedRoute>
             }
