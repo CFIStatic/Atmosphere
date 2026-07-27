@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
+import { computerRouter } from './routes/computer.js';
 import { healthRouter } from './routes/health.js';
 import { estimatorRouter } from './routes/estimator.js';
 import { xactimateRouter } from './routes/xactimate.js';
@@ -51,6 +52,7 @@ export function createApp(): Express {
   app.use('/api/org', orgRouter);
   app.use('/api/estimator', estimatorRouter);
   app.use('/api/xactimate', xactimateRouter);
+  app.use('/api/computer', computerRouter);
 
   // 404 + error handling (must be last).
   app.use(notFound);

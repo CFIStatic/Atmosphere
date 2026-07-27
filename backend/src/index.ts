@@ -1,6 +1,7 @@
 import { createApp } from './app.js';
 import { config } from './config.js';
 import { connections } from './estimator/xactimate/index.js';
+import { agentHub } from './computer/agentHub.js';
 
 const app = createApp();
 
@@ -11,9 +12,17 @@ const server = app.listen(config.port, () => {
       `  → Supabase URL: ${config.supabase.url}\n` +
       `  → Allowed origins: ${config.frontendOrigins.join(', ')}\n` +
       `  → Xactimate driver: ${config.xactimate.driver}\n` +
+      `  → Computer use: ${config.computerUse.enabled ? `on (${config.computerUse.defaultModel})` : 'off'}\n` +
       `  → Mode: ${config.isProduction ? 'production' : 'development'}`,
   );
 });
+
+// Computer-use agents connect over WebSocket on the same port, so they inherit
+// the deployment's TLS and hostname instead of needing a second exposed
+// service. The hub only claims the upgrade for its own path.
+if (config.computerUse.enabled) {
+  agentHub.attach(server);
+}
 
 // Graceful shutdown.
 //
@@ -24,6 +33,11 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
     // eslint-disable-next-line no-console
     console.log(`\n[atmosphere-backend] received ${signal}, shutting down…`);
+    // Both subsystems own resources the process should not simply drop: the
+    // agent hub holds open WebSockets, and a Xactimate browser session owns a
+    // real Chromium process plus an in-memory credential. The hub closes
+    // synchronously; the Xactimate teardown is awaited before the port does.
+    agentHub.close();
     void connections
       .closeAll()
       .catch(() => undefined)
