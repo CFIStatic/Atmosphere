@@ -6,6 +6,7 @@ import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
 import { pmRouter } from './routes/pm.js';
+import { computerRouter } from './routes/computer.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 
@@ -45,6 +46,7 @@ export function createApp(): Express {
   // The PM router parses its own bodies with a larger limit — a full moisture
   // log for one visit does not fit in the 10kb global cap.
   app.use('/api/pm', pmRouter);
+  app.use('/api/computer', computerRouter);
 
   // 404 + error handling (must be last).
   app.use(notFound);

@@ -150,6 +150,23 @@ export function DashboardPage() {
             </div>
           </Link>
 
+          {/* Computer use */}
+          <Link
+            to="/computer-use"
+            className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-brand-400/25 bg-brand-500/10 p-5 backdrop-blur transition hover:border-brand-400/50 hover:bg-brand-500/15"
+          >
+            <div>
+              <p className="text-lg font-semibold text-white">Computer Use</p>
+              <p className="mt-1 text-sm text-brand-100/70">
+                Let Claude see and operate a computer for you — connect an Anthropic API key and
+                run the agent on any machine.
+              </p>
+            </div>
+            <span aria-hidden className="shrink-0 text-2xl text-brand-300">
+              →
+            </span>
+          </Link>
+
           {/* Device PIN */}
           <div className="mt-4">
             <PinSetupCard />
