@@ -5,9 +5,14 @@ import cookieParser from 'cookie-parser';
 import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
+import { billingRouter } from './routes/billing.js';
+import { usageRouter } from './routes/usage.js';
+import { pmRouter } from './routes/pm.js';
 import { webAccessRouter } from './routes/webAccess.js';
 import { verifierRouter } from './routes/verifier.js';
 import { aiRouter } from './routes/ai.js';
+import { modelGatewayRouter } from './routes/modelGateway.js';
+import { webhookRouter } from './routes/webhooks.js';
 import { crmRouter } from './routes/crm.js';
 import { backupRouter } from './routes/backups.js';
 import { integrationsRouter } from './routes/integrations.js';
@@ -53,13 +58,22 @@ export function createApp(): Express {
     }),
   );
 
+  // Stripe signs the exact bytes it sent, so this route must see the raw body.
+  // Mounted before any JSON parser — once a parser has consumed the stream the
+  // signature can no longer be verified. (The chooser below then skips it:
+  // body-parser leaves an already-parsed request alone.)
+  app.use('/api/webhooks/stripe', express.raw({ type: 'application/json', limit: '1mb' }));
+
   // Body + cookie parsing.
   //
-  // Most writes are small, so the cap stays tight everywhere except the few
-  // routes that legitimately carry bulk. The parser is CHOSEN here rather than
-  // stacked on those routes: the first json() to run consumes the stream, so a
-  // route-level raise would never be reached — the global cap would already have
-  // rejected the upload with 413.
+  // CRM writes are bigger than an auth payload but still small, so the cap
+  // stays tight everywhere except the routes that legitimately carry more:
+  // a whole spreadsheet on CSV import, a model prompt on /api/ai or /api/model,
+  // and a DocuSketch scan plus a MICA drying log on /api/estimator.
+  // The parser is CHOSEN here rather than stacked on those routes: the first
+  // json() to run consumes the stream, so a route-level raise would never be
+  // reached — the global cap would already have rejected the upload with 413.
+  // Every raised limit therefore has to be declared in this one place.
   //
   // Every raised limit therefore has to be declared in this one place. A
   // DocuSketch scan of a whole house plus a MICA drying log is megabytes of
@@ -68,21 +82,20 @@ export function createApp(): Express {
   // than a login form's worth of JSON but comfortably inside the 256kb
   // standard, so it needs no exception of its own.
   const csvImportPath = /^\/api\/integrations\/sources\/[^/]+\/import\/?$/;
+  const modelPromptPath = /^\/api\/(ai|model)(\/|$)/;
   const estimatorPath = /^\/api\/estimator(\/|$)/;
-  const aiPath = /^\/api\/ai(\/|$)/;
-
   const standardJson = express.json({ limit: '256kb' });
   const csvImportJson = express.json({ limit: '12mb' });
+  const modelPromptJson = express.json({ limit: '2mb' });
   const estimatorJson = express.json({ limit: '8mb' });
-  const aiJson = express.json({ limit: '2mb' });
 
   app.use((req, res, next) => {
     const parse = csvImportPath.test(req.path)
       ? csvImportJson
       : estimatorPath.test(req.path)
         ? estimatorJson
-        : aiPath.test(req.path)
-          ? aiJson
+        : modelPromptPath.test(req.path)
+          ? modelPromptJson
           : standardJson;
     parse(req, res, next);
   });
@@ -95,11 +108,20 @@ export function createApp(): Express {
   app.use('/api/org', orgRouter);
   app.use('/api/estimator', estimatorRouter);
   app.use('/api/xactimate', xactimateRouter);
+  app.use('/api/billing', billingRouter);
+  app.use('/api/usage', usageRouter);
+  // Two different subsystems, two namespaces: /api/ai is the learning layer's
+  // task execution, /api/model is the metered gateway that bills a raw model
+  // call. Co-mounting them would run requireAuth twice on every metered call.
+  // Neither takes a route-level json() — the chooser above already parsed the
+  // body, so one here would never run.
+  app.use('/api/ai', aiRouter);
+  app.use('/api/model', modelGatewayRouter);
+  // Server-to-server: no session cookie, authenticated by Stripe's signature.
+  app.use('/api/webhooks', webhookRouter);
+  app.use('/api/pm', pmRouter);
   app.use('/api/web-access', webAccessRouter);
   app.use('/api/verifier', verifierRouter);
-  // The 2 MB cap for task execution is set by the parser chooser above, not
-  // here: a second json() on this mount would never see the stream.
-  app.use('/api/ai', aiRouter);
   app.use('/api/crm', crmRouter);
   app.use('/api/backups', backupRouter);
   app.use('/api/integrations', integrationsRouter);

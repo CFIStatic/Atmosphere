@@ -1,6 +1,7 @@
 import { createApp } from './app.js';
 import { config } from './config.js';
 import { connections } from './estimator/xactimate/index.js';
+import { startScheduler, stopScheduler } from './pm/scheduler.js';
 import { startBackupScheduler, stopBackupScheduler } from './lib/backup/scheduler.js';
 import { agentHub } from './computer/agentHub.js';
 
@@ -16,6 +17,11 @@ const server = app.listen(config.port, () => {
       `  → Computer use: ${config.computerUse.enabled ? `on (${config.computerUse.defaultModel})` : 'off'}\n` +
       `  → Mode: ${config.isProduction ? 'production' : 'development'}`,
   );
+
+  // Opt-in background automation. No-ops unless PM_SCHEDULER_ENABLED is set and
+  // a service-role key is configured — see backend/src/pm/scheduler.ts for why
+  // it takes two decisions rather than one.
+  startScheduler();
 
   // Started after the listener so a backup can never delay readiness.
   startBackupScheduler();
@@ -37,6 +43,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     // scheduler and the agent hub stop synchronously; the Xactimate teardown is
     // asynchronous — a browser-driver session owns a real Chromium process and
     // an in-memory credential — so the port is closed only once it settles.
+    stopScheduler();
     stopBackupScheduler();
     agentHub.close();
     void connections

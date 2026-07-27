@@ -127,6 +127,91 @@ export const config = {
     portalApiKey: process.env.SLA_PORTAL_API_KEY ?? '',
   },
 
+  anthropic: {
+    // Upstream model provider key. Server-only: the browser never calls the
+    // provider directly, because token counts have to come back through us to
+    // be metered. Leave unset and /api/ai/* returns 503 while the rest of the
+    // app — including billing — keeps working.
+    apiKey: process.env.ANTHROPIC_API_KEY ?? '',
+    defaultModel: process.env.ANTHROPIC_DEFAULT_MODEL ?? 'claude-opus-5',
+  },
+
+  billing: {
+    // Whether a client may report its own token counts to /api/usage/record.
+    //
+    // Off in production by design. Token counts decide what a customer is
+    // charged, so they must come from the provider's response via /api/ai/*,
+    // not from the caller — a client that under-reports would be spending our
+    // margin. Enable only for trusted server-to-server metering of work done
+    // outside this process.
+    allowClientMetering:
+      process.env.ALLOW_CLIENT_METERING === 'true' ||
+      (process.env.ALLOW_CLIENT_METERING === undefined && !isProduction),
+
+    // Which payment processor settles credit purchases.
+    //
+    //   stripe — selected automatically whenever STRIPE_SECRET_KEY is present.
+    //            Credits are minted by the Stripe webhook, never by the browser.
+    //   dev    — a billing manager can settle their own purchase through the
+    //            API so the credit flow is exercisable without a processor.
+    //            Refused in production: it would let anyone mint credits.
+    //   manual — purchases stay `pending` until something holding the
+    //            service-role key completes them.
+    paymentProvider: ((): 'stripe' | 'dev' | 'manual' => {
+      if (process.env.STRIPE_SECRET_KEY) return 'stripe';
+
+      const configured = process.env.PAYMENT_PROVIDER;
+      if (configured === 'dev' || configured === 'manual') {
+        if (configured === 'dev' && isProduction) {
+          throw new Error(
+            'PAYMENT_PROVIDER=dev cannot be used in production: it would let any billing manager grant themselves credits.',
+          );
+        }
+        return configured;
+      }
+      return isProduction ? 'manual' : 'dev';
+    })(),
+  },
+
+  stripe: {
+    secretKey: process.env.STRIPE_SECRET_KEY ?? '',
+    // Signing secret for POST /api/webhooks/stripe. Without it we cannot tell a
+    // genuine Stripe callback from anyone who can reach the URL, so the webhook
+    // refuses every request rather than trusting an unverified payload.
+    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? '',
+    // Where Stripe returns the customer after checkout or the billing portal.
+    successUrl: process.env.STRIPE_SUCCESS_URL ?? `${frontendOrigins[0]}/billing?checkout=success`,
+    cancelUrl: process.env.STRIPE_CANCEL_URL ?? `${frontendOrigins[0]}/billing?checkout=cancelled`,
+    portalReturnUrl: process.env.STRIPE_PORTAL_RETURN_URL ?? `${frontendOrigins[0]}/billing`,
+  },
+
+  pm: {
+    // Server-only secret for the writing layer (morning briefs, drafted
+    // customer and adjuster updates). Optional: without it the briefs are
+    // assembled from the same facts using a deterministic template, and every
+    // other part of the Project Manager Agent — the rules, the alerts, the
+    // generated work — behaves identically. Never expose this to the browser.
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
+
+    // Which model writes. Prices are NOT set here — `public.model_rate_card` in
+    // the database is the source of truth for what a token costs, and metering
+    // goes through `record_usage`, so nothing in application code can disagree
+    // with the invoice.
+    model: process.env.PM_MODEL ?? 'claude-opus-5',
+
+    // The background automation pass. Off by default, and deliberately so: a
+    // timer has no user session, so it runs with the service-role key and
+    // bypasses RLS — the one place in this feature that does. On-demand runs
+    // (every page load, and the "run now" button) need no such privilege.
+    // See backend/src/pm/scheduler.ts.
+    schedulerEnabled:
+      (process.env.PM_SCHEDULER_ENABLED ?? 'false').toLowerCase() === 'true',
+    schedulerIntervalMinutes: Math.max(
+      5,
+      Number(process.env.PM_SCHEDULER_INTERVAL_MINUTES ?? 30),
+    ),
+  },
+
   webAccess: {
     // Both secrets are optional. Without them the feature reports itself as
     // unavailable and every other part of the app carries on unaffected —
