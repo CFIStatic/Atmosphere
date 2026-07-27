@@ -25,6 +25,8 @@ protected Postgres schema.
    server so no Supabase token is ever exposed to page JavaScript.
 5. **PIN sign-in** — an optional 4-digit PIN for fast repeat sign-in, bound to a single
    device (see below).
+6. **Settings** — reached from the account block in the bottom-left corner of the sidebar:
+   display name, password, PIN sign-in, role, and per-device preferences (see below).
 
 ## Why this shape?
 
@@ -79,8 +81,9 @@ Atmosphere/
 │   │   │   ├── requireAuth.ts    Verify access token; transparent refresh
 │   │   │   └── errorHandler.ts   404 + central JSON error handler
 │   │   └── routes/
-│   │       ├── auth.ts           signup / login / logout / refresh / me
+│   │       ├── auth.ts           signup / login / logout / refresh / me / password
 │   │       ├── org.ts            onboarding: me / create / join / members
+│   │       ├── profile.ts        the caller's own profile (display name)
 │   │       └── health.ts         liveness probe
 │   └── .env.example
 └── frontend/         React + Vite + TypeScript + Tailwind
@@ -88,8 +91,11 @@ Atmosphere/
     │   ├── pages/LoginPage.tsx        Branded login + signup screen
     │   ├── pages/OnboardingPage.tsx   3-step wizard: org → role → work type
     │   ├── pages/DashboardPage.tsx    Org overview, invite code, linked accounts
-    │   ├── context/AuthContext.tsx    Session + membership state
+    │   ├── pages/SettingsPage.tsx     Profile, security, organization, preferences
+    │   ├── context/AuthContext.tsx    Session + membership + profile state
+    │   ├── components/AppShell.tsx    Sidebar + bottom-left account block
     │   ├── components/                Logo, icons, ProtectedRoute
+    │   ├── lib/preferences.ts         Device-local preferences (localStorage)
     │   └── lib/api.ts                 Typed fetch client (credentials: include)
     └── .env.example
 ```
@@ -140,7 +146,11 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | POST   | `/api/auth/pin/enroll`      | cookie | `{ pin }`             | Set a 4-digit PIN for this device            |
 | POST   | `/api/auth/pin/unlock`      | device cookie | `{ pin }`      | Exchange a correct PIN for a session         |
 | POST   | `/api/auth/pin/disable`     | cookie | —                     | Remove every PIN enrollment for the user     |
+| POST   | `/api/auth/change-password` | cookie | `{ currentPassword, newPassword }` | Change the password of a signed-in user |
+| GET    | `/api/profile`       | cookie | —                             | Caller's profile (display name, email)       |
+| PATCH  | `/api/profile`       | cookie | `{ fullName }`                | Update the caller's display name             |
 | GET    | `/api/org/me`        | cookie | —                             | Caller's membership, or `null` if onboarding |
+| PATCH  | `/api/org/me`        | cookie | `{ role, workType }`          | Update the caller's own role / work type     |
 | POST   | `/api/org`           | cookie | `{ name, role, workType }`    | Create an org and join as first member       |
 | POST   | `/api/org/join`      | cookie | `{ joinCode, role, workType }`| Link to an existing org by join code         |
 | GET    | `/api/org/members`   | cookie | —                             | Linked accounts in the caller's org          |
@@ -193,6 +203,36 @@ which is what keeps that budget meaningless rather than a coin flip.
 
 Signing out deliberately does **not** clear the PIN — returning to the PIN pad instead of the
 password form is the whole point. Enrollment is per-device, capped at 5 devices per user.
+
+### Settings
+
+Every signed-in screen renders inside a shell with a left sidebar. The **account block sits
+in the bottom-left corner** — avatar, name, and role, with a gear straight into Settings and
+a menu holding the rest of the account actions. On narrow screens the same block is a tap on
+the avatar in the top bar. Settings is four sections, each addressable by URL
+(`/settings?section=security`):
+
+| Section          | What it does                                                                     |
+| ---------------- | -------------------------------------------------------------------------------- |
+| **Profile**      | Display name (`profiles.full_name`), plus read-only account facts.                |
+| **Security**     | Change password, turn device PIN on/off, sign out.                                |
+| **Organization** | Org name and invite code (read-only), and your own role / kind of work.           |
+| **Preferences**  | Sidebar collapse, reduced motion, confirm-before-sign-out.                        |
+
+Two properties are worth calling out:
+
+- **Changing a password requires the current one.** `requireAuth` only proves the browser
+  holds a session cookie; an unattended tab must not be enough to rewrite the credential and
+  lock the owner out. The re-authentication also mints the session that authorises the
+  update, and every *other* session is revoked afterwards. This device keeps its PIN — the
+  user proved they know the password here, so there is nothing to distrust about this
+  browser (unlike a reset, which assumes compromise and revokes everything).
+- **Preferences never leave the device.** They describe how this browser should behave, so
+  they live in `localStorage`, not the database — a phone in the field and an office desktop
+  should not have to share a layout. Anything belonging to the *account* (name, role,
+  password) goes through the API. Role edits are scoped to `user_id = auth.uid()` in the
+  query and again by the RLS policy on `org_members`, so a member can only ever rewrite
+  their own row. Renaming an organization is not offered: `orgs` has no UPDATE policy.
 
 ## Configuration
 

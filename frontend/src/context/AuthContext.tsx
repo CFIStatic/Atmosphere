@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { api, ApiError, type AuthUser, type Membership } from '../lib/api';
+import { api, ApiError, type AuthUser, type Membership, type Profile } from '../lib/api';
 
 interface SignupResult {
   needsEmailConfirmation: boolean;
@@ -20,6 +20,7 @@ interface AuthContextValue {
   loading: boolean; // true while restoring the session on first load
   membership: Membership | null; // null = not yet onboarded into an org
   membershipLoading: boolean; // true while resolving membership for a known user
+  profile: Profile | null; // display name etc.; null until loaded
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string) => Promise<SignupResult>;
   unlockWithPin: (pin: string) => Promise<void>;
@@ -27,6 +28,8 @@ interface AuthContextValue {
   adoptUser: (user: AuthUser) => Promise<void>;
   logout: () => Promise<void>;
   refreshMembership: () => Promise<void>;
+  /** Publish a profile the user just saved, so the shell re-renders at once. */
+  setProfile: (profile: Profile) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -36,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [membership, setMembership] = useState<Membership | null>(null);
   const [membershipLoading, setMembershipLoading] = useState(false);
+  const [profile, setProfile] = useState<Profile | null>(null);
 
   // True once an explicit login/signup/logout has run. The mount-time restore
   // below must never overwrite the result of an explicit action that races it.
@@ -51,6 +55,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setMembership(null);
     } finally {
       setMembershipLoading(false);
+    }
+
+    // The profile is decorative (a display name for the shell), so it is fetched
+    // after membership has already settled routing and never blocks on it.
+    try {
+      const { profile } = await api.getProfile();
+      setProfile(profile);
+    } catch {
+      setProfile(null);
     }
   }, []);
 
@@ -129,6 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setUser(null);
       setMembership(null);
+      setProfile(null);
     }
   }, []);
 
@@ -138,6 +152,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       membership,
       membershipLoading,
+      profile,
+      setProfile,
       login,
       signup,
       unlockWithPin,
@@ -150,6 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       membership,
       membershipLoading,
+      profile,
       login,
       signup,
       unlockWithPin,

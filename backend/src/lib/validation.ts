@@ -86,6 +86,32 @@ export const pinUnlockSchema = z.object({
   pin: z.string({ required_error: 'PIN is required' }).regex(/^\d{4}$/, 'Enter your 4-digit PIN'),
 });
 
+/**
+ * Body of a password change made from Settings by a signed-in user. The current
+ * password is required: a live session alone must not be enough to rewrite the
+ * credential, or an unattended browser becomes a full account takeover.
+ */
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string({ required_error: 'Enter your current password' }).min(1, 'Enter your current password'),
+    newPassword: passwordField,
+  })
+  .refine((v) => v.currentPassword !== v.newPassword, {
+    message: 'Your new password must be different from your current one',
+    path: ['newPassword'],
+  });
+
+/** Body of a profile update. Only the display name is user-editable. */
+export const updateProfileSchema = z.object({
+  fullName: z
+    .string()
+    .trim()
+    .max(80, 'Name must be at most 80 characters')
+    // An empty string clears the name and falls the UI back to the email.
+    .transform((value) => (value === '' ? null : value))
+    .nullable(),
+});
+
 /** Account types a member can hold within an organization. */
 export const MEMBER_ROLES = [
   'project_manager',
@@ -107,6 +133,12 @@ const workTypeSchema = z.enum(WORK_TYPES, {
 
 export const createOrgSchema = z.object({
   name: z.string({ required_error: 'Organization name is required' }).trim().min(2, 'Organization name is too short').max(80, 'Organization name is too long'),
+  role: roleSchema,
+  workType: workTypeSchema,
+});
+
+/** Body of a membership update — a member editing their own role / work type. */
+export const updateMembershipSchema = z.object({
   role: roleSchema,
   workType: workTypeSchema,
 });

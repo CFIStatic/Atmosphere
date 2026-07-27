@@ -40,6 +40,14 @@ export interface Membership {
   org: Org | null;
 }
 
+export interface Profile {
+  id: string | null;
+  email: string | null;
+  fullName: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
 export interface OrgMember {
   userId: string;
   email: string | null;
@@ -135,6 +143,21 @@ export const api = {
       body: JSON.stringify({ ...credential, password }),
     }),
 
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ user: AuthUser }>('/api/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+
+  // ---- Profile ----
+  getProfile: () => request<{ profile: Profile }>('/api/profile', { method: 'GET' }),
+
+  updateProfile: (fullName: string | null) =>
+    request<{ profile: Profile }>('/api/profile', {
+      method: 'PATCH',
+      body: JSON.stringify({ fullName }),
+    }),
+
   // ---- Device PIN ----
   pinStatus: () =>
     request<{ enrolled: boolean; lockedUntil?: string | null }>('/api/auth/pin/status', {
@@ -157,6 +180,12 @@ export const api = {
 
   // ---- Organization / onboarding ----
   getMembership: () => request<{ membership: Membership | null }>('/api/org/me', { method: 'GET' }),
+
+  updateMembership: (role: MemberRole, workType: WorkType) =>
+    request<{ membership: Membership }>('/api/org/me', {
+      method: 'PATCH',
+      body: JSON.stringify({ role, workType }),
+    }),
 
   createOrg: (name: string, role: MemberRole, workType: WorkType) =>
     request<{ org: Org }>('/api/org', {
