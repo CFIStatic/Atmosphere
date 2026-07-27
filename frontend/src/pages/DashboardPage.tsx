@@ -122,25 +122,25 @@ export function DashboardPage() {
           {billing && (
             <Link
               to="/billing"
-              className="mt-4 block rounded-xl border border-white/10 bg-ink-800/60 p-5 backdrop-blur transition hover:border-brand-500/40 hover:bg-ink-700/50"
+              className="mt-4 block rounded-xl border border-line bg-paper-0 shadow-card p-5 transition hover:border-brand-300 hover:bg-brand-50"
             >
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                <p className="text-xs font-medium uppercase tracking-wide text-ink-500">
                   Credit balance
                 </p>
-                <p className="text-xs text-brand-400">Manage billing →</p>
+                <p className="text-xs text-brand-600">Manage billing →</p>
               </div>
-              <p className="mt-1.5 text-2xl font-bold tracking-tight text-white">
+              <p className="mt-1.5 text-2xl font-bold tracking-tight text-ink-900">
                 {formatUsd(billing.balance.totalNanos)}
               </p>
-              <p className="mt-0.5 text-sm text-gray-400">
+              <p className="mt-0.5 text-sm text-ink-600">
                 {billing.subscription.planName} plan ·{' '}
                 {formatUsd(billing.periodUsage.priceNanos)} used this period
               </p>
               {billing.subscription.includedCreditsNanos > 0 && (
-                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-ink-700">
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-paper-300">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-brand-500 to-brand-300"
+                    className="h-full rounded-full bg-brand-500"
                     style={{
                       width: `${usedPct(
                         billing.periodUsage.priceNanos,
@@ -217,21 +217,21 @@ export function DashboardPage() {
           {/* Construction Estimator */}
           <Link
             to="/estimator"
-            className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-ink-800/60 p-5 backdrop-blur transition hover:border-brand-500/40 hover:bg-ink-700/60"
+            className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-line bg-paper-0 shadow-card p-5 transition hover:border-brand-300 hover:bg-brand-50"
           >
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-brand-400">
+              <p className="text-xs font-medium uppercase tracking-wide text-brand-600">
                 Construction Estimator
               </p>
-              <p className="mt-1.5 text-lg font-semibold text-white">
+              <p className="mt-1.5 text-lg font-semibold text-ink-900">
                 Turn a scan into a rebuild estimate
               </p>
-              <p className="mt-1 text-sm text-gray-400">
+              <p className="mt-1 text-sm text-ink-600">
                 Reads DocuSketch photos and measurements, finds the job in Dash, and builds the
                 Xactimate scope — including the rebuild implied by a mitigation estimate.
               </p>
             </div>
-            <span aria-hidden="true" className="shrink-0 text-2xl text-brand-300">
+            <span aria-hidden="true" className="shrink-0 text-2xl text-brand-600">
               →
             </span>
           </Link>
