@@ -106,17 +106,16 @@ export const config = {
 
     // Which payment processor settles credit purchases.
     //
+    //   stripe — selected automatically whenever STRIPE_SECRET_KEY is present.
+    //            Credits are minted by the Stripe webhook, never by the browser.
     //   dev    — a billing manager can settle their own purchase through the
     //            API so the credit flow is exercisable without a processor.
     //            Refused in production: it would let anyone mint credits.
     //   manual — purchases stay `pending` until something holding the
-    //            service-role key completes them (a processor webhook, or an
-    //            operator). This is the safe default once real money is involved.
-    //
-    // Wiring a real processor means creating its charge in
-    // POST /api/billing/purchases and calling `complete_credit_purchase` from
-    // its webhook with the service-role key.
-    paymentProvider: ((): 'dev' | 'manual' => {
+    //            service-role key completes them.
+    paymentProvider: ((): 'stripe' | 'dev' | 'manual' => {
+      if (process.env.STRIPE_SECRET_KEY) return 'stripe';
+
       const configured = process.env.PAYMENT_PROVIDER;
       if (configured === 'dev' || configured === 'manual') {
         if (configured === 'dev' && isProduction) {
@@ -128,6 +127,18 @@ export const config = {
       }
       return isProduction ? 'manual' : 'dev';
     })(),
+  },
+
+  stripe: {
+    secretKey: process.env.STRIPE_SECRET_KEY ?? '',
+    // Signing secret for POST /api/webhooks/stripe. Without it we cannot tell a
+    // genuine Stripe callback from anyone who can reach the URL, so the webhook
+    // refuses every request rather than trusting an unverified payload.
+    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? '',
+    // Where Stripe returns the customer after checkout or the billing portal.
+    successUrl: process.env.STRIPE_SUCCESS_URL ?? `${frontendOrigins[0]}/billing?checkout=success`,
+    cancelUrl: process.env.STRIPE_CANCEL_URL ?? `${frontendOrigins[0]}/billing?checkout=cancelled`,
+    portalReturnUrl: process.env.STRIPE_PORTAL_RETURN_URL ?? `${frontendOrigins[0]}/billing`,
   },
 } as const;
 

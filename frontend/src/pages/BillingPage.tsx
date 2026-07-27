@@ -5,6 +5,8 @@ import {
   api,
   ApiError,
   LEDGER_LABELS,
+  PAYMENT_KIND_LABELS,
+  type Payment,
   type BillingInterval,
   type BillingOverview,
   type Catalog,
@@ -17,6 +19,7 @@ export function BillingPage() {
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [overview, setOverview] = useState<BillingOverview | null>(null);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -26,10 +29,16 @@ export function BillingPage() {
 
   const load = useCallback(async () => {
     try {
-      const [c, o, l] = await Promise.all([api.getCatalog(), api.getBillingOverview(), api.getLedger(12)]);
+      const [c, o, l, p] = await Promise.all([
+        api.getCatalog(),
+        api.getBillingOverview(),
+        api.getLedger(12),
+        api.getPayments(25),
+      ]);
       setCatalog(c);
       setOverview(o);
       setLedger(l.entries);
+      setPayments(p.payments);
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not load billing.');
@@ -40,6 +49,25 @@ export function BillingPage() {
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  // Returning from Stripe Checkout. The credits themselves are granted by the
+  // webhook, which may land a moment after the redirect — so this reports the
+  // handoff, and the balance above refreshes when it arrives.
+  useEffect(() => {
+    const outcome = new URLSearchParams(window.location.search).get('checkout');
+    if (!outcome) return;
+
+    if (outcome === 'success') {
+      setNotice('Payment received. Your balance updates as soon as it settles.');
+      // Re-check shortly after: the webhook usually lands within seconds.
+      const timer = window.setTimeout(() => void load(), 2500);
+      window.history.replaceState({}, '', window.location.pathname);
+      return () => window.clearTimeout(timer);
+    }
+
+    setNotice('Checkout cancelled — nothing was charged.');
+    window.history.replaceState({}, '', window.location.pathname);
   }, [load]);
 
   /** Wraps a mutation with busy state, error surfacing and a reload. */
@@ -60,15 +88,30 @@ export function BillingPage() {
 
   const canManage = overview?.canManage ?? false;
 
+  /**
+   * Settle a started purchase. With Stripe we hand off to hosted checkout —
+   * credits are granted by the webhook when the payment actually clears, not
+   * when the browser comes back.
+   */
+  async function settle(
+    result: { purchase: { id: string }; checkoutUrl: string | null; requiresConfirmation: boolean },
+    label: string,
+  ): Promise<string | void> {
+    if (result.checkoutUrl) {
+      window.location.assign(result.checkoutUrl);
+      return;
+    }
+    if (result.requiresConfirmation) {
+      const done = await api.confirmPurchase(result.purchase.id);
+      return `Added ${formatUsd(done.creditedNanos)} in credits.`;
+    }
+    return `${label} started — credits arrive once payment settles.`;
+  }
+
   async function buyPack(code: string, label: string) {
-    await run(`pack:${code}`, async () => {
-      const { purchase, requiresConfirmation } = await api.startPurchase({ packCode: code });
-      if (requiresConfirmation) {
-        const done = await api.confirmPurchase(purchase.id);
-        return `Added ${formatUsd(done.creditedNanos)} in credits.`;
-      }
-      return `${label} purchase started — credits arrive once payment settles.`;
-    });
+    await run(`pack:${code}`, async () =>
+      settle(await api.startPurchase({ packCode: code }), label),
+    );
   }
 
   async function buyCustom() {
@@ -78,15 +121,40 @@ export function BillingPage() {
       return;
     }
     await run('custom', async () => {
-      const { purchase, requiresConfirmation } = await api.startPurchase({
-        amountCents: Math.round(dollars * 100),
-      });
+      const result = await api.startPurchase({ amountCents: Math.round(dollars * 100) });
       setCustomAmount('');
-      if (requiresConfirmation) {
-        const done = await api.confirmPurchase(purchase.id);
-        return `Added ${formatUsd(done.creditedNanos)} in credits.`;
+      return settle(result, 'Top-up');
+    });
+  }
+
+  /** Paid plans go through Stripe Checkout; without Stripe we switch directly. */
+  async function choosePlan(plan: Plan) {
+    await run(`plan:${plan.code}`, async () => {
+      if (catalog?.paymentProvider === 'stripe' && plan.monthlyPriceCents > 0) {
+        const { checkoutUrl } = await api.startSubscriptionCheckout(
+          plan.code,
+          interval,
+          plan.minSeats,
+        );
+        if (checkoutUrl) {
+          window.location.assign(checkoutUrl);
+          return;
+        }
       }
-      return 'Top-up started — credits arrive once payment settles.';
+
+      const result = await api.setPlan(plan.code, interval, plan.minSeats);
+      if (!result.changed) return 'You are already on that plan.';
+      if (result.cancelAtPeriodEnd) {
+        return `Your plan moves to Free on ${formatDate(result.effectiveAt)}.`;
+      }
+      return `Switched to ${plan.name}. ${formatUsd(result.grantedNanos)} in credits added.`;
+    });
+  }
+
+  async function openPortal() {
+    await run('portal', async () => {
+      const { portalUrl } = await api.openBillingPortal();
+      window.location.assign(portalUrl);
     });
   }
 
@@ -311,16 +379,7 @@ export function BillingPage() {
                 isCurrent={sub?.planCode === plan.code}
                 disabled={!canManage || busy !== null}
                 busy={busy === `plan:${plan.code}`}
-                onSelect={() =>
-                  run(`plan:${plan.code}`, async () => {
-                    const result = await api.setPlan(plan.code, interval, plan.minSeats);
-                    if (!result.changed) return 'You are already on that plan.';
-                    if (result.cancelAtPeriodEnd) {
-                      return `Your plan moves to Free on ${formatDate(result.effectiveAt)}.`;
-                    }
-                    return `Switched to ${plan.name}. ${formatUsd(result.grantedNanos)} in credits added.`;
-                  })
-                }
+                onSelect={() => choosePlan(plan)}
               />
             ))}
           </div>
@@ -380,9 +439,98 @@ export function BillingPage() {
           </div>
         </section>
 
+        {/* ---- Payment history ---- */}
+        <section className="mt-12">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Payment history</h2>
+              <p className="mt-1 text-sm text-gray-400">
+                Receipts are emailed automatically and kept here for your records.
+              </p>
+            </div>
+            {catalog?.paymentProvider === 'stripe' && canManage && (
+              <button
+                onClick={openPortal}
+                disabled={busy !== null}
+                className="flex items-center gap-2 rounded-lg border border-white/10 bg-ink-700/70 px-4 py-2 text-sm font-medium text-gray-200 transition hover:bg-ink-600 disabled:opacity-50"
+              >
+                {busy === 'portal' && <SpinnerIcon className="animate-spin" width={15} height={15} />}
+                Manage payment methods
+              </button>
+            )}
+          </div>
+
+          <div className="mt-4 overflow-x-auto rounded-xl border border-white/10">
+            {payments.length === 0 ? (
+              <p className="px-5 py-8 text-center text-sm text-gray-500">
+                No payments yet. Charges and receipts appear here once you buy credits or start a
+                paid plan.
+              </p>
+            ) : (
+              <table className="w-full min-w-[42rem] text-sm">
+                <thead className="bg-ink-700/60 text-left text-xs uppercase tracking-wide text-gray-400">
+                  <tr>
+                    <th scope="col" className="px-4 py-3 font-medium">Date</th>
+                    <th scope="col" className="px-4 py-3 font-medium">Description</th>
+                    <th scope="col" className="px-4 py-3 font-medium">Method</th>
+                    <th scope="col" className="px-4 py-3 font-medium">Status</th>
+                    <th scope="col" className="px-4 py-3 text-right font-medium">Amount</th>
+                    <th scope="col" className="px-4 py-3 text-right font-medium">Receipt</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10">
+                  {payments.map((p) => (
+                    <tr key={p.id} className="bg-ink-800/40">
+                      <td className="px-4 py-2.5 text-gray-400">{formatDate(p.createdAt)}</td>
+                      <td className="px-4 py-2.5">
+                        <p className="font-medium text-white">
+                          {p.description ?? PAYMENT_KIND_LABELS[p.kind]}
+                        </p>
+                        <p className="text-xs text-gray-500">{PAYMENT_KIND_LABELS[p.kind]}</p>
+                      </td>
+                      <td className="px-4 py-2.5 text-gray-400">
+                        {p.cardLast4 ? (
+                          <span className="capitalize">
+                            {p.cardBrand} ····{p.cardLast4}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <PaymentStatus status={p.status} reason={p.failureReason} />
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono text-gray-200">
+                        {formatCents(p.amountCents)}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        {p.receiptUrl || p.invoicePdfUrl || p.hostedInvoiceUrl ? (
+                          <a
+                            href={(p.receiptUrl ?? p.invoicePdfUrl ?? p.hostedInvoiceUrl)!}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-brand-400 transition hover:text-brand-300"
+                          >
+                            View
+                          </a>
+                        ) : (
+                          <span className="text-gray-600">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </section>
+
         {/* ---- Ledger ---- */}
         <section className="mt-12">
           <h2 className="text-lg font-semibold text-white">Credit history</h2>
+          <p className="mt-1 text-sm text-gray-400">
+            How credits were granted and consumed — separate from what you were charged.
+          </p>
           <div className="mt-4 overflow-hidden rounded-xl border border-white/10">
             {ledger.length === 0 ? (
               <p className="px-5 py-8 text-center text-sm text-gray-500">No credit activity yet.</p>
@@ -417,6 +565,26 @@ export function BillingPage() {
         </section>
       </div>
     </AppShell>
+  );
+}
+
+/** Status pill. A failed payment says why, so support isn't the only route. */
+function PaymentStatus({ status, reason }: { status: Payment['status']; reason: string | null }) {
+  const styles: Record<Payment['status'], string> = {
+    succeeded: 'bg-emerald-500/15 text-emerald-300',
+    pending: 'bg-amber-500/15 text-amber-200',
+    failed: 'bg-red-500/15 text-red-300',
+    refunded: 'bg-gray-500/20 text-gray-300',
+  };
+  return (
+    <span className="inline-flex flex-col items-start">
+      <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${styles[status]}`}>
+        {status}
+      </span>
+      {status === 'failed' && reason && (
+        <span className="mt-0.5 text-xs text-gray-500">{reason}</span>
+      )}
+    </span>
   );
 }
 

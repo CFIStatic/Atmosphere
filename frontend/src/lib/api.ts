@@ -195,10 +195,28 @@ export const api = {
   getPurchases: () => request<{ purchases: Purchase[] }>('/api/billing/purchases', { method: 'GET' }),
 
   startPurchase: (input: { packCode?: string; amountCents?: number }) =>
-    request<{ purchase: Purchase; requiresConfirmation: boolean }>('/api/billing/purchases', {
+    request<{ purchase: Purchase; checkoutUrl: string | null; requiresConfirmation: boolean }>(
+      '/api/billing/purchases',
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+
+  /** Hosted Stripe Checkout for a paid plan. */
+  startSubscriptionCheckout: (
+    planCode: PlanCode,
+    billingInterval: BillingInterval = 'monthly',
+    seats = 1,
+  ) =>
+    request<{ checkoutUrl: string | null }>('/api/billing/checkout/subscription', {
       method: 'POST',
-      body: JSON.stringify(input),
+      body: JSON.stringify({ planCode, billingInterval, seats }),
     }),
+
+  /** Stripe's hosted portal: cards, invoices and cancellation. */
+  openBillingPortal: () =>
+    request<{ portalUrl: string }>('/api/billing/portal', { method: 'POST' }),
+
+  getPayments: (limit = 50) =>
+    request<{ payments: Payment[] }>(`/api/billing/payments?limit=${limit}`, { method: 'GET' }),
 
   confirmPurchase: (purchaseId: string) =>
     request<{ purchaseId: string; status: string; creditedNanos: number; balance: CreditBalance }>(
@@ -326,7 +344,8 @@ export interface Catalog {
   plans: Plan[];
   packs: CreditPack[];
   rateCard: ModelRate[];
-  paymentProvider: 'dev' | 'manual';
+  /** `stripe` whenever a Stripe key is configured server-side. */
+  paymentProvider: 'stripe' | 'dev' | 'manual';
 }
 
 export interface CreditBalance {
@@ -413,6 +432,35 @@ export interface Purchase {
   createdAt?: string;
   completedAt?: string | null;
 }
+
+/**
+ * One row of the in-product payment history. `receiptUrl` and `invoicePdfUrl`
+ * come from Stripe, so a customer can always retrieve proof of payment.
+ */
+export interface Payment {
+  id: string;
+  kind: 'subscription' | 'credits' | 'refund';
+  status: 'pending' | 'succeeded' | 'failed' | 'refunded';
+  amountCents: number;
+  currency: string;
+  description: string | null;
+  receiptUrl: string | null;
+  hostedInvoiceUrl: string | null;
+  invoicePdfUrl: string | null;
+  receiptEmail: string | null;
+  cardBrand: string | null;
+  cardLast4: string | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  failureReason: string | null;
+  createdAt: string;
+}
+
+export const PAYMENT_KIND_LABELS: Record<Payment['kind'], string> = {
+  subscription: 'Subscription',
+  credits: 'Usage credits',
+  refund: 'Refund',
+};
 
 /* -------------------------------------------------------------- usage types */
 

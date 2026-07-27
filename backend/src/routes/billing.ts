@@ -5,6 +5,7 @@ import { requireOrg } from '../middleware/requireOrg.js';
 import { config } from '../config.js';
 import { HttpError, badRequest } from '../lib/errors.js';
 import { toNanos } from '../lib/money.js';
+import { ensureCustomer, stripeClient } from '../lib/stripe.js';
 import {
   billingError,
   serializeBalance,
@@ -239,6 +240,49 @@ billingRouter.post('/purchases', async (req: Request, res: Response, next: NextF
     if (error) throw billingError(error);
 
     const row = data as any;
+
+    // With Stripe configured, hand back a hosted checkout URL. The credits are
+    // granted by the webhook once the payment settles — landing back on the
+    // success URL proves nothing, so nothing is granted here.
+    let checkoutUrl: string | null = null;
+    if (config.billing.paymentProvider === 'stripe') {
+      const customerId = await ensureCustomer(supabase, req.orgId!, {
+        email: req.user!.email,
+        orgName: await orgName(supabase, req.orgId!),
+      });
+
+      const session = await stripeClient().checkout.sessions.create({
+        mode: 'payment',
+        customer: customerId,
+        success_url: config.stripe.successUrl,
+        cancel_url: config.stripe.cancelUrl,
+        client_reference_id: req.orgId,
+        // Read back on the webhook to attribute the payment and find the
+        // purchase it settles.
+        metadata: { org_id: req.orgId!, purchase_id: row.id },
+        payment_intent_data: {
+          metadata: { org_id: req.orgId!, purchase_id: row.id },
+          // Makes Stripe email a receipt for this charge.
+          receipt_email: req.user!.email ?? undefined,
+          description: 'Atmosphere usage credits',
+        },
+        line_items: [
+          {
+            quantity: 1,
+            price_data: {
+              currency: 'usd',
+              unit_amount: row.amount_cents,
+              product_data: {
+                name: 'Atmosphere usage credits',
+                description: `${formatCreditLabel(row)} of usage credits`,
+              },
+            },
+          },
+        ],
+      });
+      checkoutUrl = session.url;
+    }
+
     res.status(201).json({
       purchase: {
         id: row.id,
@@ -249,14 +293,155 @@ billingRouter.post('/purchases', async (req: Request, res: Response, next: NextF
         status: row.status,
         provider: row.provider,
       },
-      // A real processor would return its client secret here for the browser
-      // to confirm against; the dev provider needs no client-side step.
+      checkoutUrl,
+      // The dev provider settles in-app; Stripe settles by redirect + webhook.
       requiresConfirmation: config.billing.paymentProvider === 'dev',
     });
   } catch (err) {
     next(err);
   }
 });
+
+/**
+ * POST /api/billing/checkout/subscription
+ * Hosted Stripe Checkout for a paid plan. The subscription itself is applied by
+ * the `customer.subscription.*` webhook, not on return from checkout.
+ */
+billingRouter.post('/checkout/subscription', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (config.billing.paymentProvider !== 'stripe') {
+      throw badRequest('Stripe is not configured on this server.', 'stripe_unconfigured');
+    }
+
+    const { planCode, billingInterval, seats } = setPlanSchema.parse(req.body);
+    const supabase = createUserClient(req.accessToken!);
+
+    const { data: plan, error: planError } = await supabase
+      .from('billing_plans')
+      .select('code, name, min_seats, is_contact_sales, stripe_price_id_monthly, stripe_price_id_annual')
+      .eq('code', planCode)
+      .maybeSingle();
+    if (planError) throw new HttpError(500, planError.message, 'plan_lookup_failed');
+    if (!plan) throw badRequest('Unknown plan.', 'unknown_plan');
+    if (plan.is_contact_sales) throw badRequest('That plan is arranged with sales.', 'plan_requires_sales');
+
+    const priceId =
+      billingInterval === 'annual' ? plan.stripe_price_id_annual : plan.stripe_price_id_monthly;
+    if (!priceId) {
+      throw badRequest(
+        `No Stripe price is configured for the ${plan.name} plan (${billingInterval}).`,
+        'price_not_configured',
+      );
+    }
+
+    const customerId = await ensureCustomer(supabase, req.orgId!, {
+      email: req.user!.email,
+      orgName: await orgName(supabase, req.orgId!),
+    });
+
+    const session = await stripeClient().checkout.sessions.create({
+      mode: 'subscription',
+      customer: customerId,
+      success_url: config.stripe.successUrl,
+      cancel_url: config.stripe.cancelUrl,
+      client_reference_id: req.orgId,
+      metadata: { org_id: req.orgId! },
+      subscription_data: { metadata: { org_id: req.orgId! } },
+      line_items: [{ price: priceId, quantity: Math.max(seats, plan.min_seats ?? 1) }],
+    });
+
+    res.status(201).json({ checkoutUrl: session.url });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/billing/portal
+ * Stripe's hosted billing portal — card management, invoice history, and
+ * cancellation, without us handling card data or reimplementing any of it.
+ */
+billingRouter.post('/portal', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (config.billing.paymentProvider !== 'stripe') {
+      throw badRequest('Stripe is not configured on this server.', 'stripe_unconfigured');
+    }
+
+    const supabase = createUserClient(req.accessToken!);
+    const customerId = await ensureCustomer(supabase, req.orgId!, {
+      email: req.user!.email,
+      orgName: await orgName(supabase, req.orgId!),
+    });
+
+    const session = await stripeClient().billingPortal.sessions.create({
+      customer: customerId,
+      return_url: config.stripe.portalReturnUrl,
+    });
+
+    res.status(201).json({ portalUrl: session.url });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/billing/payments
+ * The in-product payment history: every charge, refund and subscription
+ * invoice, with links to the Stripe receipt and invoice PDF so a customer can
+ * retrieve proof of payment at any time.
+ */
+billingRouter.get('/payments', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const supabase = createUserClient(req.accessToken!);
+
+    const { data, error } = await supabase
+      .from('payments')
+      .select(
+        'id, kind, status, amount_cents, currency, description, receipt_url, hosted_invoice_url, invoice_pdf_url, receipt_email, card_brand, card_last4, period_start, period_end, failure_reason, created_at',
+      )
+      .eq('org_id', req.orgId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw new HttpError(500, error.message, 'payments_failed');
+
+    res.json({
+      payments: (data ?? []).map((p: any) => ({
+        id: p.id,
+        kind: p.kind,
+        status: p.status,
+        amountCents: p.amount_cents,
+        currency: p.currency,
+        description: p.description,
+        receiptUrl: p.receipt_url,
+        hostedInvoiceUrl: p.hosted_invoice_url,
+        invoicePdfUrl: p.invoice_pdf_url,
+        receiptEmail: p.receipt_email,
+        cardBrand: p.card_brand,
+        cardLast4: p.card_last4,
+        periodStart: p.period_start,
+        periodEnd: p.period_end,
+        failureReason: p.failure_reason,
+        createdAt: p.created_at,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Organization name, for the Stripe customer record. */
+async function orgName(supabase: ReturnType<typeof createUserClient>, orgId: string) {
+  const { data } = await supabase.from('orgs').select('name').eq('id', orgId).maybeSingle();
+  return (data?.name as string | undefined) ?? null;
+}
+
+/** "$100" / "$103 (incl. $3 bonus)" for the Stripe line item. */
+function formatCreditLabel(row: any): string {
+  const credits = toNanos(row.credits_nanos) / 1_000_000_000;
+  const bonus = toNanos(row.bonus_nanos) / 1_000_000_000;
+  return bonus > 0 ? `$${credits + bonus} (incl. $${bonus} bonus)` : `$${credits}`;
+}
 
 /**
  * POST /api/billing/purchases/:id/confirm

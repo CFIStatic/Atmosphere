@@ -56,6 +56,7 @@ JWT:
 | `credit_ledger`| Append-only audit trail of every credit movement.                     |
 | `credit_purchases` | Prepaid top-ups and their settlement state.                       |
 | `usage_events` / `usage_daily` | Every metered call, plus a trigger-maintained daily rollup. |
+| `payments`     | Payment history: charges, refunds, invoices and receipt links.        |
 
 Membership checks used by the policies live in a **private schema** (not exposed as RPCs) to
 avoid recursive-policy issues and to keep the API surface minimal. Onboarding writes go
@@ -167,8 +168,12 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | POST   | `/api/billing/plan`  | cookie | `{ planCode, billingInterval, seats }` | Change subscription tier            |
 | PATCH  | `/api/billing/settings`| cookie | `{ autoReload…, monthlySpendLimitNanos }` | Auto-reload and spend cap    |
 | GET    | `/api/billing/ledger`| cookie | —                             | Credit history (append-only)                 |
-| POST   | `/api/billing/purchases` | cookie | `{ packCode }` or `{ amountCents }` | Start a credit purchase          |
+| POST   | `/api/billing/purchases` | cookie | `{ packCode }` or `{ amountCents }` | Start a credit purchase; returns `checkoutUrl` under Stripe |
 | POST   | `/api/billing/purchases/:id/confirm` | cookie | —         | Settle a purchase (dev provider only)        |
+| POST   | `/api/billing/checkout/subscription` | cookie | `{ planCode, billingInterval, seats }` | Stripe Checkout for a paid plan |
+| POST   | `/api/billing/portal` | cookie | —                    | Stripe billing portal (cards, invoices, cancel) |
+| GET    | `/api/billing/payments` | cookie | —                   | Payment history with receipt/invoice links   |
+| POST   | `/api/webhooks/stripe` | Stripe signature | raw event | Settles payments; the only path that mints credits |
 | POST   | `/api/ai/count-tokens` | cookie | `{ model, messages, system }` | Exact pre-flight token count + input price |
 | POST   | `/api/ai/messages`   | cookie | `{ model, messages, maxTokens, … }` | Run a model call and meter it          |
 | POST   | `/api/usage/quote`   | cookie | `{ modelId, …tokens }`        | Price a call without charging                |
@@ -316,18 +321,77 @@ is no way to mint credits by POSTing to a table.
 Billing periods roll forward on read, granting each elapsed period's credits, so
 the system stays correct without a scheduler.
 
-### Wiring a payment processor
+## Payments (Stripe)
 
-Credit purchases are provider-agnostic. `PAYMENT_PROVIDER=dev` (the development
-default) lets a billing manager settle their own purchase so the flow is
-exercisable end-to-end; it is **refused at boot in production**, where it would
-let anyone mint credits.
+Setting `STRIPE_SECRET_KEY` switches billing to Stripe automatically. Without it
+the app falls back to `PAYMENT_PROVIDER=dev`, which lets a billing manager settle
+their own purchase so the credit flow is exercisable locally — and which is
+**refused at boot in production**, where it would let anyone mint credits.
 
-To go live: create the charge in `POST /api/billing/purchases`, return its client
-secret, and have the processor's webhook call `complete_credit_purchase` with the
-**service-role key**. That function only mints credits for a non-`dev` provider
-when the caller holds the service role, and `credit_purchases` has a unique index
-on `(provider, provider_ref)` so a redelivered webhook cannot double-credit.
+### Money is minted by the webhook, never by the browser
+
+Checkout endpoints only *open* a session. Credits and subscription changes are
+applied when Stripe confirms the payment settled, authenticated with the
+service-role key. A client that navigates back to the success URL has proved
+nothing, so the success page grants nothing — it just says the payment was
+received and refreshes the balance once the webhook lands.
+
+| Flow | Endpoint | Settled by |
+| ---- | -------- | ---------- |
+| Buy credits | `POST /api/billing/purchases` → `checkoutUrl` | `checkout.session.completed` |
+| Start/change a plan | `POST /api/billing/checkout/subscription` | `customer.subscription.*` |
+| Cards, invoices, cancel | `POST /api/billing/portal` | Stripe's hosted portal |
+
+Every handler is **replay-safe**, because Stripe guarantees at-least-once
+delivery and retries on any non-2xx. The event id is claimed before anything is
+applied, `credit_purchases` is unique on `(provider, provider_ref)`, `payments`
+is unique on both the payment-intent and invoice ids, and
+`stripe_sync_subscription` re-grants credits only when the plan, seats or period
+actually moved — Stripe sends `subscription.updated` for plenty of changes that
+don't affect entitlement, and re-granting on each would hand out free credits. A
+handler that fails returns 500 so Stripe retries; returning 200 on a failed write
+would silently lose a payment.
+
+Cancelling ends the plan allowance but **leaves purchased credits alone** — those
+were paid for in cash.
+
+### Receipts and payment history
+
+Stripe emails a receipt for every charge (`receipt_email` is set on the payment
+intent) and emails subscription invoices when *Billing → Invoices → email
+finalized invoices* is enabled in the dashboard. The webhook also stores the
+`receipt_url`, `hosted_invoice_url` and `invoice_pdf` on each `payments` row, so
+**Billing → Payment history** in-product lists every charge, refund and invoice
+with a link to the receipt. A customer who deletes the email can always retrieve
+proof of payment themselves.
+
+Note the two histories are deliberately separate: **payment history** is what was
+*charged*, **credit history** is how credits were *granted and consumed*.
+
+### Setting it up
+
+1. Create a product + recurring Price for each paid plan (monthly and annual),
+   then record the price ids:
+   ```sql
+   update public.billing_plans
+      set stripe_price_id_monthly = 'price_...', stripe_price_id_annual = 'price_...'
+    where code = 'pro';
+   ```
+   A plan with no price id returns a clear `price_not_configured` error rather
+   than a broken checkout.
+2. Set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and
+   `SUPABASE_SERVICE_ROLE_KEY` (the webhook has no user session to act under).
+3. Point a webhook endpoint at `POST /api/webhooks/stripe` subscribed to
+   `checkout.session.completed`, `invoice.paid`, `invoice.payment_failed`,
+   `customer.subscription.created/updated/deleted` and `charge.refunded`.
+
+Locally: `stripe listen --forward-to localhost:4000/api/webhooks/stripe`.
+
+The webhook route is mounted with a **raw body parser before `express.json()`** —
+signature verification is over the exact bytes Stripe sent, and once a JSON
+parser has consumed the stream the signature can no longer be checked. Without
+`STRIPE_WEBHOOK_SECRET` the endpoint rejects every request rather than trusting
+an unverified payload.
 
 ## Configuration
 
