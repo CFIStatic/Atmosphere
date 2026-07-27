@@ -9,6 +9,9 @@ import { billingRouter } from './routes/billing.js';
 import { usageRouter } from './routes/usage.js';
 import { aiRouter } from './routes/ai.js';
 import { webhookRouter } from './routes/webhooks.js';
+import { crmRouter } from './routes/crm.js';
+import { backupRouter } from './routes/backups.js';
+import { integrationsRouter } from './routes/integrations.js';
 import { computerRouter } from './routes/computer.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
@@ -39,17 +42,34 @@ export function createApp(): Express {
   );
 
   // Stripe signs the exact bytes it sent, so this route must see the raw body.
-  // Mounted before any JSON parser — once express.json() has consumed the
-  // stream, the signature can no longer be verified.
+  // Mounted before any JSON parser — once a parser has consumed the stream the
+  // signature can no longer be verified. (The chooser below then skips it:
+  // body-parser leaves an already-parsed request alone.)
   app.use('/api/webhooks/stripe', express.raw({ type: 'application/json', limit: '1mb' }));
 
-  // Model prompts are far larger than any other payload here, so /api/ai gets
-  // its own cap. Mounted first: body-parser skips a request whose body is
-  // already parsed, so the 10kb default below never truncates a prompt.
-  app.use('/api/ai', express.json({ limit: '2mb' }));
+  // Body + cookie parsing.
+  //
+  // CRM writes are bigger than an auth payload but still small, so the cap
+  // stays tight everywhere except the two routes that legitimately carry more:
+  // a whole spreadsheet on CSV import, and a model prompt on /api/ai.
+  // The parser is CHOSEN here rather than stacked on those routes: the first
+  // json() to run consumes the stream, so a route-level raise would never be
+  // reached — the global cap would already have rejected the upload with 413.
+  const csvImportPath = /^\/api\/integrations\/sources\/[^/]+\/import\/?$/;
+  const modelPromptPath = /^\/api\/ai(\/|$)/;
+  const standardJson = express.json({ limit: '256kb' });
+  const csvImportJson = express.json({ limit: '12mb' });
+  const modelPromptJson = express.json({ limit: '2mb' });
 
-  // Body + cookie parsing (with a small JSON size cap).
-  app.use(express.json({ limit: '10kb' }));
+  app.use((req, res, next) => {
+    const parse = csvImportPath.test(req.path)
+      ? csvImportJson
+      : modelPromptPath.test(req.path)
+        ? modelPromptJson
+        : standardJson;
+    parse(req, res, next);
+  });
+
   app.use(cookieParser());
 
   // Routes.
@@ -61,6 +81,9 @@ export function createApp(): Express {
   app.use('/api/ai', aiRouter);
   // Server-to-server: no session cookie, authenticated by Stripe's signature.
   app.use('/api/webhooks', webhookRouter);
+  app.use('/api/crm', crmRouter);
+  app.use('/api/backups', backupRouter);
+  app.use('/api/integrations', integrationsRouter);
   app.use('/api/computer', computerRouter);
 
   // 404 + error handling (must be last).

@@ -39,6 +39,10 @@ Row-Level-Security protected Postgres schema, and Claude's computer-use tool.
    device (see below).
 6. **Computer use** — connect an Anthropic API key, run the agent on any computer, and
    Claude can see its screen and operate it. The whole setup is one key and one command.
+7. **CRM backend** — customers, properties, leads, jobs, and their timeline, plus our own
+   backups and a verbatim copy of the data that currently lives only inside other
+   companies' software. Backend infrastructure only, no UI yet — see
+   **[docs/CRM.md](docs/CRM.md)**.
 
 ## Why this shape?
 
@@ -72,6 +76,13 @@ JWT:
 | `usage_events` / `usage_daily` | Every metered call, plus a trigger-maintained daily rollup. |
 | `payments`     | Payment history: charges, refunds, invoices and receipt links.        |
 
+The CRM adds its own org-scoped tables under the same RLS model (`crm_accounts`,
+`crm_contacts`, `crm_properties`, `crm_leads`, `crm_jobs`, `crm_activities`), a verbatim
+append-only mirror of external applications (`crm_external_*`), and the backup catalog and
+change ledger (`backup_*`, `crm_audit_log`). See **[docs/CRM.md](docs/CRM.md)** — those
+migrations ship in `backend/supabase/migrations/` and are **not yet applied** to the live
+project.
+
 Membership checks used by the policies live in a **private schema** (not exposed as RPCs) to
 avoid recursive-policy issues and to keep the API surface minimal. Onboarding writes go
 through two `SECURITY DEFINER` functions that validate `auth.uid()` internally:
@@ -96,10 +107,15 @@ Atmosphere/
 │   │   │   ├── supabase.ts       Anon + per-request user-scoped client factories
 │   │   │   ├── session.ts        httpOnly session-cookie set/clear
 │   │   │   ├── validation.ts     zod schemas (credentials, org, billing, usage)
+│   │   │   ├── crmValidation.ts  zod schemas + camelCase↔snake_case row mapping
+│   │   │   ├── orgContext.ts     Resolves the caller's org; never trusts the body
 │   │   │   ├── money.ts          Nanodollar arithmetic — no floats for money
 │   │   │   ├── anthropic.ts      Authoritative token measurement (+ tests)
 │   │   │   ├── billing.ts        DB error → HTTP mapping, response shaping
-│   │   │   └── errors.ts         Typed HTTP errors
+│   │   │   ├── stripe.ts         Stripe client, customers, webhook helpers
+│   │   │   ├── errors.ts         Typed HTTP errors
+│   │   │   ├── backup/           Archive format, storage drivers, runner, scheduler
+│   │   │   └── integrations/     Connectors + the append-only external mirror
 │   │   ├── middleware/
 │   │   │   ├── requireAuth.ts    Verify access token; transparent refresh
 │   │   │   ├── requireOrg.ts     Resolve caller's org from their own membership
@@ -111,14 +127,19 @@ Atmosphere/
 │   │   │   ├── agentTokens.ts    Pairing codes + HMAC-signed agent tokens
 │   │   │   ├── agentHub.ts       WebSocket registry of connected computers
 │   │   │   └── runner.ts         The agent loop + live run transcripts
+│   │   ├── scripts/              Backup CLI + dependency-free self-checks
 │   │   └── routes/
 │   │       ├── auth.ts           signup / login / logout / refresh / me
 │   │       ├── org.ts            onboarding: me / create / join / members
 │   │       ├── billing.ts        catalog / plan / credits / settings / ledger
 │   │       ├── usage.ts          quote / record / events / daily rollup
 │   │       ├── ai.ts             Metered model calls (authorize-then-capture)
+│   │       ├── crm.ts            CRM CRUD, lead conversion, timeline, audit
+│   │       ├── backups.ts        Snapshot status / history / trigger / verify
+│   │       ├── integrations.ts   External sources, syncs, CSV import, mirror
 │   │       ├── computer.ts       computer use: keys, pairing, runs, SSE
 │   │       └── health.ts         liveness probe
+│   ├── supabase/migrations/      CRM, mirror, and backup schema (not yet applied)
 │   └── .env.example
 ├── supabase/
 │   └── migrations/               Billing schema, pricing engine, RLS policies
@@ -225,6 +246,9 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 
 Agents also hold a WebSocket open at `/api/computer/agent-socket`, authenticated with the
 token from pairing rather than a session cookie.
+
+The CRM, backup, and integration endpoints (`/api/crm/*`, `/api/backups/*`,
+`/api/integrations/*`) are documented in **[docs/CRM.md](docs/CRM.md)**.
 
 `role` ∈ `project_manager | field_technician | accountant | office_manager | sales`.
 `workType` ∈ `mitigation | construction`.
@@ -573,3 +597,12 @@ See `backend/.env.example` and `frontend/.env.example`. Key points:
 - **Configure custom SMTP** before launch. Supabase's built-in mailer is rate-limited to a
   handful of messages per hour, which is fine for testing and will not carry real password
   resets.
+- **Set `BACKUP_ENCRYPTION_KEY`.** The server refuses to boot in production with backups
+  enabled and no key — an archive holds every customer record we have, and unlike the
+  database it gets copied to laptops and object stores. Generate with
+  `openssl rand -base64 32`, and keep old keys when rotating or their archives become
+  unreadable.
+- **Scheduled backups need `SUPABASE_SERVICE_ROLE_KEY`.** A snapshot must read every org,
+  which no user session can do. Without it, backups stay off and say so at boot.
+- **The backup scheduler is in-process.** Run several API instances and each takes its own
+  snapshot; move it to a dedicated worker or cron trigger before scaling out.
