@@ -8,6 +8,7 @@ import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { TechnicianPage } from './pages/TechnicianPage';
+import { ComputerUsePage } from './pages/ComputerUsePage';
 import { SpinnerIcon } from './components/icons';
 
 function FullScreenSpinner() {
@@ -82,6 +83,17 @@ export default function App() {
               <ProtectedRoute>
                 <RequireOnboarded>
                   <TechnicianPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/computer-use"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <ComputerUsePage />
                 </RequireOnboarded>
               </ProtectedRoute>
             }

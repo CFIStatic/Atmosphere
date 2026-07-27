@@ -9,7 +9,7 @@ import {
 } from '../lib/api';
 import { Logo } from '../components/Logo';
 import { PinSetupCard } from '../components/PinSetupCard';
-import { SpinnerIcon, CheckIcon, MicIcon } from '../components/icons';
+import { SpinnerIcon, CheckIcon, MicIcon, MonitorIcon } from '../components/icons';
 
 export function DashboardPage() {
   const { user, membership, logout } = useAuth();
@@ -125,26 +125,40 @@ export function DashboardPage() {
             </div>
           </div>
 
-          {/* Technician app */}
-          <Link
-            to="/technician"
-            className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-brand-200 bg-brand-50 p-5 transition hover:border-brand-300 hover:bg-brand-100"
-          >
-            <div className="flex items-center gap-3">
+          {/* The two things you can go and do from here. Same card shape so
+              neither reads as the more important one. */}
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <Link
+              to="/technician"
+              className="flex items-start gap-3 rounded-xl border border-line bg-paper-0 p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50"
+            >
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-500 text-white shadow-card">
                 <MicIcon width={20} height={20} />
               </span>
               <div>
-                <p className="text-sm font-semibold text-ink-900">Open the technician app</p>
+                <p className="text-sm font-semibold text-ink-900">Technician app</p>
                 <p className="mt-0.5 text-sm text-ink-600">
                   Record audio and video, talk through a job, and detect what the camera sees.
                 </p>
               </div>
-            </div>
-            <span aria-hidden="true" className="shrink-0 text-brand-600">
-              →
-            </span>
-          </Link>
+            </Link>
+
+            <Link
+              to="/computer-use"
+              className="flex items-start gap-3 rounded-xl border border-line bg-paper-0 p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50"
+            >
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-500 text-white shadow-card">
+                <MonitorIcon width={20} height={20} />
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-ink-900">Computer use</p>
+                <p className="mt-0.5 text-sm text-ink-600">
+                  Let Claude see and operate a computer — connect an Anthropic key and run the
+                  agent on any machine.
+                </p>
+              </div>
+            </Link>
+          </div>
 
           {/* Device PIN */}
           <div className="mt-4">

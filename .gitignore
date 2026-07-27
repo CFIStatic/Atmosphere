@@ -40,3 +40,7 @@ frontend/dist-ssr/
 # Never commit database backups — they contain auth credentials/PII
 recovery/
 *backup*.json
+
+# Encrypted Anthropic API keys written by the backend at runtime.
+# The contents are ciphertext, but there is no reason to version them.
+backend/.data/
