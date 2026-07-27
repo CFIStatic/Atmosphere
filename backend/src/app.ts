@@ -5,6 +5,8 @@ import cookieParser from 'cookie-parser';
 import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
+import { webAccessRouter } from './routes/webAccess.js';
+import { verifierRouter } from './routes/verifier.js';
 import { aiRouter } from './routes/ai.js';
 import { crmRouter } from './routes/crm.js';
 import { backupRouter } from './routes/backups.js';
@@ -13,9 +15,20 @@ import { computerRouter } from './routes/computer.js';
 import { estimatorRouter } from './routes/estimator.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
+import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
+import { verificationHook, pumpVerificationQueue } from './lib/verifierRunner.js';
 
 export function createApp(): Express {
   const app = express();
+
+  // Wire the second agent to the first. Web Access does not import the verifier
+  // — it calls whatever hook has been registered — so this one line is the
+  // whole coupling between them, and removing it leaves runs behaving exactly
+  // as they did before the verifier existed.
+  setRunSucceededHook(verificationHook);
+  // Runs and checks share one browser budget, so a finished run is the moment
+  // a waiting check can start.
+  setSlotReleasedHook(pumpVerificationQueue);
 
   // Behind a proxy/load balancer (needed for correct secure-cookie + rate-limit IP).
   app.set('trust proxy', 1);
@@ -48,6 +61,10 @@ export function createApp(): Express {
   // routes: the first json() to run consumes the stream, so a route-level raise
   // would never be reached — the global cap would already have rejected the
   // upload with 413.
+  //
+  // A Web Access data-entry run carries the rows to be entered, which is more
+  // than a login form's worth of JSON but comfortably inside the 256kb
+  // standard, so it needs no exception of its own.
   const csvImportPath = /^\/api\/integrations\/sources\/[^/]+\/import\/?$/;
   const estimatorPath = /^\/api\/estimator\//;
   const standardJson = express.json({ limit: '256kb' });
@@ -69,6 +86,8 @@ export function createApp(): Express {
   app.use('/api', healthRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
+  app.use('/api/web-access', webAccessRouter);
+  app.use('/api/verifier', verifierRouter);
   // Task execution carries whole job files and documents, so it needs a much
   // larger body limit than the auth routes. Mounted with its own parser rather
   // than raising the global cap, which would widen the DoS surface on every
