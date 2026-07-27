@@ -11,6 +11,7 @@ import {
 } from '../lib/api';
 import { Logo } from '../components/Logo';
 import { SpinnerIcon, CheckIcon } from '../components/icons';
+import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 type OrgMode = 'create' | 'join';
 
@@ -32,6 +33,9 @@ const STEPS = ['Organization', 'Your role', 'Type of work'];
 export function OnboardingPage() {
   const { user, refreshMembership, logout } = useAuth();
   const navigate = useNavigate();
+  // Onboarding time is only attributable once the user has an org, so the first
+  // heartbeats here land after the org is created — which is the honest answer.
+  useFeatureTimer('onboarding');
 
   const [step, setStep] = useState(0);
   const [mode, setMode] = useState<OrgMode>('create');

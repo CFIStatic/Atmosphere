@@ -25,6 +25,9 @@ protected Postgres schema.
    server so no Supabase token is ever exposed to page JavaScript.
 5. **PIN sign-in** — an optional 4-digit PIN for fast repeat sign-in, bound to a single
    device (see below).
+6. **Growth analytics** — two internal dashboards (one for the team, one for investors)
+   covering user growth, seats, MRR/ARR, average spend, growth rates and which parts of the
+   product are actually used, measured by time spent. Every figure downloads as Excel.
 
 ## Why this shape?
 
@@ -49,6 +52,11 @@ JWT:
 | `orgs`         | An organization; owns a unique `join_code`.                          |
 | `org_members`  | Links a user to an org with their `role` and `work_type`.            |
 | `device_credentials` | One row per PIN-enrolled device. Holds only hashes — no secret and no session token. |
+| `analytics_staff` | Allow-list for the growth dashboards, with an `investor` / `internal` scope. |
+| `feature_catalog` | Every instrumented tool. The denominator that makes "least used" answerable. |
+| `feature_usage_sessions` | Foreground time per user, per tool. Written only by `feature_heartbeat`. |
+| `feature_usage_daily` | Per-day rollup of the above, maintained by trigger. |
+| `org_billing_events` | Append-only subscription history, so past months' MRR is real rather than back-projected. |
 
 Membership checks used by the policies live in a **private schema** (not exposed as RPCs) to
 avoid recursive-policy issues and to keep the API surface minimal. Onboarding writes go
@@ -78,20 +86,29 @@ Atmosphere/
 │   │   ├── middleware/
 │   │   │   ├── requireAuth.ts    Verify access token; transparent refresh
 │   │   │   └── errorHandler.ts   404 + central JSON error handler
-│   │   └── routes/
-│   │       ├── auth.ts           signup / login / logout / refresh / me
-│   │       ├── org.ts            onboarding: me / create / join / members
-│   │       └── health.ts         liveness probe
+│   │   ├── routes/
+│   │   │   ├── auth.ts           signup / login / logout / refresh / me
+│   │   │   ├── org.ts            onboarding: me / create / join / members
+│   │   │   ├── analytics.ts      growth reports + Excel export
+│   │   │   ├── telemetry.ts      feature-timing ingest
+│   │   │   └── health.ts         liveness probe
+│   │   └── scripts/
+│   │       ├── grantAnalyticsAccess.ts  Grant/revoke dashboard access
+│   │       └── seedAnalyticsDemo.ts     Reversible demo data
 │   └── .env.example
-└── frontend/         React + Vite + TypeScript + Tailwind
-    ├── src/
-    │   ├── pages/LoginPage.tsx        Branded login + signup screen
-    │   ├── pages/OnboardingPage.tsx   3-step wizard: org → role → work type
-    │   ├── pages/DashboardPage.tsx    Org overview, invite code, linked accounts
-    │   ├── context/AuthContext.tsx    Session + membership state
-    │   ├── components/                Logo, icons, ProtectedRoute
-    │   └── lib/api.ts                 Typed fetch client (credentials: include)
-    └── .env.example
+├── frontend/         React + Vite + TypeScript + Tailwind
+│   ├── src/
+│   │   ├── pages/LoginPage.tsx        Branded login + signup screen
+│   │   ├── pages/OnboardingPage.tsx   3-step wizard: org → role → work type
+│   │   ├── pages/DashboardPage.tsx    Org overview, invite code, linked accounts
+│   │   ├── pages/analytics/           Internal + investor dashboards
+│   │   ├── components/analytics/      SVG chart kit, tiles, tables, palette
+│   │   ├── hooks/useFeatureTimer.ts   Foreground time-on-tool measurement
+│   │   ├── context/AuthContext.tsx    Session + membership state
+│   │   ├── components/                Logo, icons, ProtectedRoute
+│   │   └── lib/api.ts                 Typed fetch client (credentials: include)
+│   └── .env.example
+└── supabase/migrations/               Versioned SQL (analytics schema + reports)
 ```
 
 ## Prerequisites
@@ -144,6 +161,12 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | POST   | `/api/org`           | cookie | `{ name, role, workType }`    | Create an org and join as first member       |
 | POST   | `/api/org/join`      | cookie | `{ joinCode, role, workType }`| Link to an existing org by join code         |
 | GET    | `/api/org/members`   | cookie | —                             | Linked accounts in the caller's org          |
+| POST   | `/api/telemetry/feature` | cookie | `{ featureKey, sessionId, deltaMs }` | Record foreground time in a tool  |
+| GET    | `/api/analytics/access`  | cookie | —                         | Caller's analytics scope, or `null`          |
+| GET    | `/api/analytics/overview` | scope | `?from&to&months`          | Everything both dashboards render            |
+| GET    | `/api/analytics/summary` \| `/monthly` \| `/features` \| `/plan-mix` \| `/retention` | scope | `?from&to&months` | Individual reports |
+| GET    | `/api/analytics/accounts` | internal | `?from&to`               | Per-customer detail                          |
+| GET    | `/api/analytics/export`   | scope | `?dataset&from&to`         | `.xlsx` download of any of the above         |
 
 `role` ∈ `project_manager | field_technician | accountant | office_manager | sales`.
 `workType` ∈ `mitigation | construction`.
@@ -193,6 +216,82 @@ which is what keeps that budget meaningless rather than a coin flip.
 
 Signing out deliberately does **not** clear the PIN — returning to the PIN pad instead of the
 password form is the whole point. Enrollment is per-device, capped at 5 devices per user.
+
+## Growth analytics
+
+Two dashboards, same numbers, different surface:
+
+| Route | Who | What it adds |
+| ----- | --- | ------------ |
+| `/analytics` | Atmosphere team (`internal` scope) | Everything below, plus named accounts, unit economics (model cost and gross margin), seat utilisation and churn |
+| `/analytics/investor` | Investors (`investor` scope) and the team | ARR, MRR, growth rates, seats, plan mix, retention cohorts and feature engagement — **aggregate only** |
+
+Both cover user growth, seat counts, average monthly spend, MRR, ARR, ARR on annual
+contracts, month-over-month growth rates, and which tools are used most and least by **time
+spent**. Every table and chart is downloadable as `.xlsx`, with a definitions sheet in every
+file.
+
+### Granting access
+
+Nobody sees company-wide revenue by default. `analytics_staff` has no INSERT policy, so the
+only way in is a server-side script holding the service-role key:
+
+```bash
+cd backend
+npm run analytics:grant -- someone@atmosphere.app internal   # full dashboard
+npm run analytics:grant -- partner@fund.com      investor    # aggregate only
+npm run analytics:grant -- someone@atmosphere.app revoke
+```
+
+The separation is enforced in three places, not one: the UI hides what the scope may not
+see, the API refuses the route, and the `SECURITY DEFINER` reporting functions re-check
+`auth.uid()` before returning a row. An investor-scope session cannot obtain per-customer
+data by editing a URL — the payload behind that page never contains it.
+
+### How "time spent" is measured
+
+The browser sends a heartbeat every 30 seconds for the tool on screen, carrying the
+milliseconds since the last one. That number is never trusted:
+
+- only the **foreground** counts — a backgrounded tab stops accumulating immediately;
+- **idle time is not usage** — after five minutes without a pointer, key or scroll event the
+  timer pauses and resumes on the next interaction;
+- each delta is **clamped to five minutes** in the API and again in the database, so a laptop
+  that wakes from sleep contributes one interval rather than the whole gap.
+
+Tools with **no** recorded time still appear in the reports. That is deliberate: a feature
+that vanishes when nobody opens it cannot show up as least-used.
+
+### Where the money numbers come from
+
+- **MRR** — each active or past-due subscription at its plan price, times seats on per-seat
+  plans. Annual plans use `billing_plans.annual_price_cents`, which is the per-month rate
+  when billed annually (matching `billing_overview()`). Trials are excluded and reported
+  separately as pipeline.
+- **ARR** — MRR × 12. A run-rate, not trailing revenue; trailing 12-month cash is reported
+  alongside it so the two are never confused.
+- **Average monthly spend** — cash collected in the range, normalised to a 30-day month,
+  divided by paying accounts (or seats), so changing the date filter does not change what the
+  metric means.
+- **Historical months** — reconstructed from `org_billing_events`, an append-only log written
+  by trigger on every plan, seat or status change. Months before that log existed show the
+  state captured at its backfill.
+
+### Seeing it with data
+
+A new project has no customers, so the dashboards render zeros. To review them with a
+plausible 18-month history:
+
+```bash
+cd backend
+npm run analytics:seed            # demo customers, revenue and usage
+npm run analytics:seed -- --wipe  # remove every trace of it
+```
+
+Demo organizations are named `Demo · …` and their users live on the reserved
+`atmosphere.invalid` domain, which is how `--wipe` finds them. The script refuses to run if
+the project already holds organizations it did not create, so demo figures cannot quietly mix
+into real aggregates.
 
 ## Configuration
 

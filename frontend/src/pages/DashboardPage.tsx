@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useFeatureTimer } from '../hooks/useFeatureTimer';
+import { useAnalyticsAccess } from '../hooks/useAnalytics';
 import {
   api,
   ROLE_LABELS,
@@ -15,6 +18,9 @@ export function DashboardPage() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [members, setMembers] = useState<OrgMember[] | null>(null);
   const [copied, setCopied] = useState(false);
+  // Feeds the "time spent per tool" measurement behind the growth dashboards.
+  useFeatureTimer('dashboard');
+  const { access } = useAnalyticsAccess();
 
   const org = membership?.org;
 
@@ -57,6 +63,16 @@ export function DashboardPage() {
     <div className="cx-aurora min-h-screen bg-ink-900">
       <header className="flex items-center justify-between border-b border-white/10 px-6 py-4 sm:px-10">
         <Logo />
+        <div className="flex items-center gap-2">
+          {/* Only rendered for staff — the API is the boundary, this is the door. */}
+          {access?.scope && (
+            <Link
+              to={access.scope === 'internal' ? '/analytics' : '/analytics/investor'}
+              className="rounded-lg border border-white/10 px-4 py-2 text-sm font-medium text-gray-300 transition hover:bg-white/5"
+            >
+              Growth analytics
+            </Link>
+          )}
         <button
           onClick={handleLogout}
           disabled={loggingOut}
@@ -65,6 +81,7 @@ export function DashboardPage() {
           {loggingOut && <SpinnerIcon className="animate-spin" width={16} height={16} />}
           {loggingOut ? 'Signing out…' : 'Sign out'}
         </button>
+        </div>
       </header>
 
       <main className="mx-auto max-w-4xl px-6 py-10 sm:px-10">

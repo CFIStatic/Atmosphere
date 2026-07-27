@@ -5,6 +5,8 @@ import cookieParser from 'cookie-parser';
 import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
+import { analyticsRouter } from './routes/analytics.js';
+import { telemetryRouter } from './routes/telemetry.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 
@@ -41,6 +43,8 @@ export function createApp(): Express {
   app.use('/api', healthRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
+  app.use('/api/analytics', analyticsRouter);
+  app.use('/api/telemetry', telemetryRouter);
 
   // 404 + error handling (must be last).
   app.use(notFound);
