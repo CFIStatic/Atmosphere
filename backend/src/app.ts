@@ -6,6 +6,7 @@ import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
 import { profileRouter } from './routes/profile.js';
+import { pmRouter } from './routes/pm.js';
 import { webAccessRouter } from './routes/webAccess.js';
 import { verifierRouter } from './routes/verifier.js';
 import { aiRouter } from './routes/ai.js';
@@ -79,6 +80,7 @@ export function createApp(): Express {
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
   app.use('/api/profile', profileRouter);
+  app.use('/api/pm', pmRouter);
   app.use('/api/web-access', webAccessRouter);
   app.use('/api/verifier', verifierRouter);
   // Task execution carries whole job files and documents, so it needs a much

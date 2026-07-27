@@ -14,6 +14,7 @@ import { usePreferences } from '../lib/preferences';
 import { Logo } from './Logo';
 import {
   ChevronRightIcon,
+  ClipboardIcon,
   CloseIcon,
   GlobeIcon,
   HomeIcon,
@@ -32,6 +33,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard', icon: HomeIcon },
+  { to: '/pm', label: 'Project Manager', icon: ClipboardIcon },
   { to: '/web-access', label: 'Web Access', icon: GlobeIcon },
   { to: '/computer-use', label: 'Computer Use', icon: MonitorIcon },
 ];

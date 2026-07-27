@@ -67,6 +67,22 @@ export function HomeIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function ClipboardIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" width="20" height="20" aria-hidden="true" {...props}>
+      <path
+        d="M9 4.5H7a1.5 1.5 0 00-1.5 1.5v13A1.5 1.5 0 007 20.5h10a1.5 1.5 0 001.5-1.5V6A1.5 1.5 0 0017 4.5h-2"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <rect x="9" y="3" width="6" height="3.2" rx="1" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M8.8 11.5h6.4M8.8 15.3h4.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function GlobeIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" width="20" height="20" aria-hidden="true" {...props}>
