@@ -33,6 +33,57 @@ export function hasRunCapacity(): boolean {
   return activeRuns < config.webAccess.maxConcurrentRuns;
 }
 
+/**
+ * Claims one of the concurrent-browser slots, or reports that none are free.
+ *
+ * Verifications draw on the same budget as runs, because the constraint being
+ * protected is the host's memory and every Chromium costs the same whether it
+ * is entering data or checking it. Keeping one counter also means a burst of
+ * verifications cannot starve the runs they exist to serve.
+ */
+export function acquireRunSlot(): boolean {
+  if (activeRuns >= config.webAccess.maxConcurrentRuns) return false;
+  activeRuns += 1;
+  return true;
+}
+
+export function releaseRunSlot(): void {
+  activeRuns = Math.max(0, activeRuns - 1);
+  // A run finishing frees a browser, and the verifier's queue is waiting on
+  // exactly that. Without this notification, checks queued while runs were
+  // saturating the host would sit until some *other* check happened to finish
+  // — which, if none is running, is never.
+  onSlotReleased?.();
+}
+
+let onSlotReleased: (() => void) | null = null;
+
+export function setSlotReleasedHook(hook: (() => void) | null): void {
+  onSlotReleased = hook;
+}
+
+/**
+ * Called when a run finishes claiming it succeeded.
+ *
+ * A callback rather than a direct import because the verifier already depends
+ * on this module for sign-in, and having this module import the verifier back
+ * would be a cycle. The wiring happens once at startup, which also means a
+ * deployment can leave the verifier off entirely and runs behave exactly as
+ * they did before.
+ */
+export type RunSucceededHook = (event: {
+  accessToken: string;
+  runId: string;
+  connection: ConnectionRecord;
+  kind: 'pull' | 'push';
+}) => void;
+
+let onRunSucceeded: RunSucceededHook | null = null;
+
+export function setRunSucceededHook(hook: RunSucceededHook | null): void {
+  onRunSucceeded = hook;
+}
+
 export interface ConnectionRecord {
   id: string;
   org_id: string;
@@ -79,6 +130,51 @@ async function loadPassword(accessToken: string, connectionId: string): Promise<
       'The stored password could not be unsealed. Re-enter it on the connection.',
       'web_access_credential_unreadable',
     );
+  }
+}
+
+export type SignedInSession =
+  | { ok: true; session: WebBrowserSession }
+  | { ok: false; reason: string };
+
+/**
+ * Opens the connection's site and signs in, returning the live session.
+ *
+ * Shared with the verifier, which needs exactly this and must not grow its own
+ * copy: a second sign-in path is a second place for the password to be
+ * mishandled, and it would drift from this one. The verifier passes
+ * `readOnly`, which makes the returned session refuse to change anything.
+ *
+ * The caller owns the session and must close it.
+ */
+export async function openSignedInSession(
+  accessToken: string,
+  connection: ConnectionRecord,
+  options: { readOnly?: boolean } = {},
+): Promise<SignedInSession> {
+  const siteUrl = parseHttpUrl(connection.site_url);
+  if (!siteUrl) {
+    return { ok: false, reason: 'This connection has an invalid site address.' };
+  }
+
+  const password = await loadPassword(accessToken, connection.id);
+  let session: WebBrowserSession | null = null;
+
+  try {
+    session = await WebBrowserSession.open(siteUrl, { readOnly: options.readOnly });
+    const result = await session.signIn({
+      loginUrl: connection.login_url ?? undefined,
+      username: connection.username,
+      password,
+    });
+    if (!result.ok) {
+      await session.close();
+      return { ok: false, reason: result.reason };
+    }
+    return { ok: true, session };
+  } catch (err) {
+    await session?.close();
+    throw err;
   }
 }
 
@@ -173,6 +269,13 @@ async function executeRun(input: StartRunInput): Promise<void> {
       error: outcome.completed ? null : outcome.summary,
       finished_at: new Date().toISOString(),
     });
+
+    // "Succeeded" at this point means the model said so. Hand it to the
+    // verifier, which will go and look. A failure needs no second opinion —
+    // it already reported the truth.
+    if (outcome.completed) {
+      onRunSucceeded?.({ accessToken, runId, connection, kind });
+    }
   } catch (err) {
     const message = err instanceof HttpError ? err.message : 'The run failed unexpectedly.';
     if (!(err instanceof HttpError)) {
@@ -194,11 +297,24 @@ async function executeRun(input: StartRunInput): Promise<void> {
  * progress.
  */
 export function startRun(input: StartRunInput): void {
-  activeRuns += 1;
+  // The route checks capacity before inserting the run row, but awaits happen
+  // in between, so the last slot can be taken by another request — or by the
+  // verifier's queue — before we get here. Releasing a slot we never claimed
+  // would drift the counter below the number of live browsers and the cap
+  // would slowly stop meaning anything.
+  if (!acquireRunSlot()) {
+    void markRun(input.accessToken, input.runId, {
+      status: 'failed',
+      error: 'Too many browser sessions were running. Start this run again shortly.',
+      finished_at: new Date().toISOString(),
+    });
+    return;
+  }
+
   void executeRun(input)
     .catch((err) => console.error(`[web-access] run ${input.runId} crashed:`, err))
     .finally(() => {
-      activeRuns -= 1;
+      releaseRunSlot();
     });
 }
 

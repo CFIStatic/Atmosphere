@@ -6,11 +6,23 @@ import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
 import { webAccessRouter } from './routes/webAccess.js';
+import { verifierRouter } from './routes/verifier.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
+import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
+import { verificationHook, pumpVerificationQueue } from './lib/verifierRunner.js';
 
 export function createApp(): Express {
   const app = express();
+
+  // Wire the second agent to the first. Web Access does not import the verifier
+  // — it calls whatever hook has been registered — so this one line is the
+  // whole coupling between them, and removing it leaves runs behaving exactly
+  // as they did before the verifier existed.
+  setRunSucceededHook(verificationHook);
+  // Runs and checks share one browser budget, so a finished run is the moment
+  // a waiting check can start.
+  setSlotReleasedHook(pumpVerificationQueue);
 
   // Behind a proxy/load balancer (needed for correct secure-cookie + rate-limit IP).
   app.set('trust proxy', 1);
@@ -49,6 +61,7 @@ export function createApp(): Express {
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
   app.use('/api/web-access', webAccessRouter);
+  app.use('/api/verifier', verifierRouter);
 
   // 404 + error handling (must be last).
   app.use(notFound);

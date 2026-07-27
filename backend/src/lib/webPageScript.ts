@@ -47,6 +47,19 @@ export interface CollectOptions {
  * minted rather than by a selector it invented.
  */
 export function collectPageState(options: CollectOptions): PageSnapshot {
+  // esbuild — which `tsx` uses for `npm run dev` — rewrites the nested helpers
+  // below so they keep their `.name`, emitting calls to a `__name` helper it
+  // defines at module scope. This function is serialised and evaluated inside
+  // the browser page, where that module scope does not exist, so those calls
+  // resolve to nothing and the snapshot throws before it reads a single
+  // element. Defining the helper here makes the body genuinely self-contained,
+  // which is what this file already claims to be. `tsc` emits no such
+  // references, so under `npm run build` this is dead weight and nothing more.
+  const scope: any = typeof globalThis !== 'undefined' ? globalThis : window;
+  if (typeof scope.__name !== 'function') {
+    scope.__name = (target: any) => target;
+  }
+
   const { maxElements, maxTextChars } = options;
 
   const SELECTOR = [

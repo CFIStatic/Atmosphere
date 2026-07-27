@@ -9,6 +9,7 @@ import {
 } from '../lib/api';
 import { Logo } from '../components/Logo';
 import { PinSetupCard } from '../components/PinSetupCard';
+import { EscalationQueue } from '../components/EscalationQueue';
 import { SpinnerIcon, CheckIcon } from '../components/icons';
 
 export function DashboardPage() {
@@ -124,6 +125,10 @@ export function DashboardPage() {
               </p>
             </div>
           </div>
+
+          {/* Anything the verifier could not settle on its own. Renders nothing
+              when the queue is empty, so it only appears when it matters. */}
+          <EscalationQueue />
 
           {/* Web Access */}
           <Link

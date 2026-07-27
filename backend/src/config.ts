@@ -123,6 +123,38 @@ export const config = {
       .map((host) => host.trim().toLowerCase())
       .filter(Boolean),
   },
+
+  verifier: {
+    // The second agent, which re-opens the site after a run reports success and
+    // checks the work is actually there. On by default: a check nobody
+    // remembers to ask for is a check that does not happen, and the failure it
+    // catches — a run that reported success without doing anything — is by
+    // definition one nobody knew to look for.
+    enabled: (process.env.VERIFIER_ENABLED ?? 'true') !== 'false',
+    // Turn this off to keep the feature available on demand without a browser
+    // opening after every run.
+    autoVerify: (process.env.VERIFIER_AUTO_VERIFY ?? 'true') !== 'false',
+    // Checking a data pull re-reads the site to confirm the reported rows are
+    // real. Cheaper to skip than a push check and less costly to get wrong,
+    // since a pull changes nothing at the far end.
+    verifyPulls: (process.env.VERIFIER_CHECK_PULLS ?? 'true') !== 'false',
+
+    model: process.env.VERIFIER_MODEL ?? 'claude-opus-5',
+    // Judging "is this actually here" from a page of someone else's markup is
+    // the hard half of this system. Underspending here produces confident
+    // wrong verdicts, which are worse than no verifier at all.
+    effort: (process.env.VERIFIER_EFFORT ?? 'high') as 'low' | 'medium' | 'high' | 'xhigh' | 'max',
+
+    // Looking costs less than doing, so the step budget is tighter than a run's.
+    maxSteps: Number(process.env.VERIFIER_MAX_STEPS ?? 24),
+    timeoutMs: Number(process.env.VERIFIER_TIMEOUT_MS ?? 8 * 60 * 1000),
+
+    // How many times the verifier may correct the same run before it stops and
+    // asks. One is the right default: if a fix did not take the first time, the
+    // verifier has misunderstood something, and repeating it just writes the
+    // same misunderstanding into the customer's system again.
+    maxRepairAttempts: Number(process.env.VERIFIER_MAX_REPAIR_ATTEMPTS ?? 1),
+  },
 } as const;
 
 /**
@@ -133,5 +165,11 @@ export const config = {
 export const webAccessEnabled = Boolean(
   config.webAccess.encryptionKey && config.webAccess.anthropicApiKey,
 );
+
+/**
+ * The verifier drives the same browser and the same model as Web Access, so it
+ * can never be available where Web Access is not.
+ */
+export const verifierEnabled = webAccessEnabled && config.verifier.enabled;
 
 export type AppConfig = typeof config;

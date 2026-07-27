@@ -108,6 +108,121 @@ export interface WebConnectionInput {
   password: string;
 }
 
+/* ---------------------------------------------------------------------------
+ * Verifier — the second agent, which re-opens the site after a run reports
+ * success and checks the work is really there.
+ * ------------------------------------------------------------------------- */
+
+/** One checkable claim, derived from the task the user originally wrote. */
+export interface Expectation {
+  id: string;
+  kind: 'record_exists' | 'field_value' | 'record_absent' | 'state_change' | 'reported_data_matches';
+  description: string;
+  where: string;
+  identifiers: Record<string, string>;
+  expected: Record<string, string>;
+  critical: boolean;
+}
+
+export type Verdict = 'satisfied' | 'violated' | 'indeterminate';
+
+/** What the verifier actually saw for one expectation, and where. */
+export interface Finding {
+  expectationId: string;
+  verdict: Verdict;
+  evidence: string;
+  url: string;
+  reasoning: string;
+  repair?: {
+    repairClass: 'create_missing' | 'correct_value' | 'needs_human';
+    instruction: string;
+    rationale: string;
+  };
+}
+
+export interface VerifierStep {
+  index: number;
+  action: string;
+  detail: string;
+  url: string;
+  phase: 'observe' | 'repair';
+  error?: string;
+}
+
+export type VerificationStatus =
+  | 'queued'
+  | 'running'
+  | 'verified'
+  | 'repaired'
+  | 'escalated'
+  | 'rejected'
+  | 'failed'
+  | 'cancelled';
+
+export interface Verification {
+  id: string;
+  runId: string;
+  connectionId: string;
+  status: VerificationStatus;
+  verdict: Verdict | null;
+  expectations: Expectation[];
+  findings: Finding[];
+  steps: VerifierStep[];
+  repairAttempts: number;
+  summary: string | null;
+  error: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+}
+
+export type EscalationReason =
+  | 'indeterminate'
+  | 'unsafe_repair'
+  | 'repair_exhausted'
+  | 'repair_failed';
+
+/** One answer a person can give. `action` is what the verifier does with it. */
+export interface EscalationOption {
+  id: string;
+  label: string;
+  detail: string;
+  action: 'repair' | 'accept' | 'reject' | 'recheck';
+}
+
+export interface EscalationContext {
+  reason?: EscalationReason;
+  siteLabel?: string;
+  runInstruction?: string;
+  verdict?: Verdict;
+  verifierSummary?: string;
+  unsettled?: Array<{
+    expectation: string;
+    verdict: Verdict;
+    evidence: string;
+    url: string;
+    reasoning: string;
+    proposedFix: string | null;
+    fixSafety: string | null;
+  }>;
+}
+
+export interface Escalation {
+  id: string;
+  verificationId: string;
+  runId: string;
+  reason: EscalationReason;
+  question: string;
+  context: EscalationContext;
+  options: EscalationOption[];
+  status: 'open' | 'resolved' | 'dismissed';
+  chosenOption: string | null;
+  resolutionNote: string | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -263,6 +378,59 @@ export const api = {
   getWebRuns: () => request<{ runs: WebRun[] }>('/api/web-access/runs', { method: 'GET' }),
 
   getWebRun: (id: string) => request<{ run: WebRun }>(`/api/web-access/runs/${id}`, { method: 'GET' }),
+
+  // ---- Verifier ----
+  verifierStatus: () =>
+    request<{
+      enabled: boolean;
+      autoVerify: boolean;
+      verifyPulls: boolean;
+      maxRepairAttempts: number;
+      pending: number;
+      capacityAvailable: boolean;
+    }>('/api/verifier/status', { method: 'GET' }),
+
+  getVerifications: (runId?: string) =>
+    request<{ verifications: Verification[] }>(
+      `/api/verifier/verifications${runId ? `?runId=${encodeURIComponent(runId)}` : ''}`,
+      { method: 'GET' },
+    ),
+
+  getVerification: (id: string) =>
+    request<{ verification: Verification }>(`/api/verifier/verifications/${id}`, { method: 'GET' }),
+
+  verifyRun: (runId: string) =>
+    request<{ verificationId: string }>(`/api/verifier/runs/${runId}/verify`, { method: 'POST' }),
+
+  getEscalations: (includeResolved = false) =>
+    request<{ escalations: Escalation[] }>(
+      `/api/verifier/escalations${includeResolved ? '?status=all' : ''}`,
+      { method: 'GET' },
+    ),
+
+  resolveEscalation: (id: string, optionId: string, note?: string) =>
+    request<{ status: string; verificationId: string }>(
+      `/api/verifier/escalations/${id}/resolve`,
+      { method: 'POST', body: JSON.stringify({ optionId, note }) },
+    ),
+};
+
+/** How each verification state reads in the UI. */
+export const VERIFICATION_LABELS: Record<VerificationStatus, string> = {
+  queued: 'Check queued',
+  running: 'Checking…',
+  verified: 'Verified',
+  repaired: 'Fixed and verified',
+  escalated: 'Needs your answer',
+  rejected: 'Confirmed not done',
+  failed: "Couldn't be checked",
+  cancelled: 'Check cancelled',
+};
+
+export const VERDICT_LABELS: Record<Verdict, string> = {
+  satisfied: 'Found on the site',
+  violated: 'Missing or wrong',
+  indeterminate: 'Could not tell',
 };
 
 /** Human-readable labels for roles and work types (shared UI copy). */

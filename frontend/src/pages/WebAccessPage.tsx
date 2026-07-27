@@ -3,11 +3,13 @@ import { Link } from 'react-router-dom';
 import {
   api,
   ApiError,
+  type Verification,
   type WebConnection,
   type WebRun,
   type WebRunKind,
 } from '../lib/api';
 import { Logo } from '../components/Logo';
+import { VerificationPanel } from '../components/VerificationPanel';
 import { SpinnerIcon, CheckIcon } from '../components/icons';
 
 /**
@@ -350,6 +352,9 @@ export function WebAccessPage() {
   const [connections, setConnections] = useState<WebConnection[] | null>(null);
   const [runs, setRuns] = useState<WebRun[]>([]);
   const [enabled, setEnabled] = useState<boolean | null>(null);
+  // Latest check per run. Fetched for the whole page in one request rather than
+  // one per run, since the list is already bounded to the recent runs.
+  const [verifications, setVerifications] = useState<Map<string, Verification>>(new Map());
 
   const [connectionId, setConnectionId] = useState('');
   const [kind, setKind] = useState<WebRunKind>('pull');
@@ -361,6 +366,25 @@ export function WebAccessPage() {
   // Runs outlive the request that starts them, so the page polls whichever
   // runs are still in flight and stops as soon as none are.
   const pollTimer = useRef<number | null>(null);
+
+  /**
+   * Reloads the checks. The list comes back newest first, so keeping the first
+   * entry seen for each run leaves the map holding the most recent pass.
+   */
+  const refreshVerifications = useCallback(async () => {
+    try {
+      const { verifications } = await api.getVerifications();
+      setVerifications(() => {
+        const next = new Map<string, Verification>();
+        for (const verification of verifications) {
+          if (!next.has(verification.runId)) next.set(verification.runId, verification);
+        }
+        return next;
+      });
+    } catch {
+      // The verifier may be switched off on this server; the page still works.
+    }
+  }, []);
 
   useEffect(() => {
     api
@@ -380,29 +404,53 @@ export function WebAccessPage() {
       .getWebRuns()
       .then(({ runs }) => setRuns(runs))
       .catch(() => setRuns([]));
-  }, []);
+
+    void refreshVerifications();
+  }, [refreshVerifications]);
 
   const refreshActiveRuns = useCallback(async () => {
     const active = runs.filter((run) => run.status === 'queued' || run.status === 'running');
-    if (active.length === 0) return;
 
-    const updated = await Promise.all(
-      active.map((run) =>
-        api
-          .getWebRun(run.id)
-          .then(({ run }) => run)
-          .catch(() => null),
-      ),
-    );
+    if (active.length > 0) {
+      const updated = await Promise.all(
+        active.map((run) =>
+          api
+            .getWebRun(run.id)
+            .then(({ run }) => run)
+            .catch(() => null),
+        ),
+      );
 
-    setRuns((current) =>
-      current.map((run) => updated.find((fresh) => fresh?.id === run.id) ?? run),
-    );
-  }, [runs]);
+      setRuns((current) =>
+        current.map((run) => updated.find((fresh) => fresh?.id === run.id) ?? run),
+      );
+    }
+
+    await refreshVerifications();
+  }, [runs, refreshVerifications]);
 
   useEffect(() => {
-    const hasActive = runs.some((run) => run.status === 'queued' || run.status === 'running');
-    if (!hasActive) {
+    const hasActiveRun = runs.some((run) => run.status === 'queued' || run.status === 'running');
+    // A check is queued the moment a run reports success, so the page keeps
+    // polling past the run's own finish to watch the verifier catch up.
+    const hasActiveCheck = [...verifications.values()].some(
+      (verification) => verification.status === 'queued' || verification.status === 'running',
+    );
+    // The check is queued just after the run row is written, so for a moment a
+    // finished run has no check to poll for and the two conditions above are
+    // both false. Stopping there would leave a verified run showing as never
+    // checked until the page is reloaded. Keep watching briefly after a run
+    // lands, bounded so old runs on a server with the verifier switched off do
+    // not poll forever.
+    const settling = runs.some(
+      (run) =>
+        run.status === 'succeeded' &&
+        !verifications.has(run.id) &&
+        run.finishedAt !== null &&
+        Date.now() - new Date(run.finishedAt).getTime() < 60_000,
+    );
+
+    if (!hasActiveRun && !hasActiveCheck && !settling) {
       if (pollTimer.current) window.clearInterval(pollTimer.current);
       pollTimer.current = null;
       return;
@@ -412,7 +460,7 @@ export function WebAccessPage() {
       if (pollTimer.current) window.clearInterval(pollTimer.current);
       pollTimer.current = null;
     };
-  }, [runs, refreshActiveRuns]);
+  }, [runs, verifications, refreshActiveRuns]);
 
   async function startRun(event: FormEvent) {
     event.preventDefault();
@@ -675,6 +723,16 @@ export function WebAccessPage() {
                         </span>
                       </div>
                       {!inFlight && <RunDetail run={run} />}
+
+                      {/* A run that reported success is a claim, not a result.
+                          The check below is what turns it into one. */}
+                      {run.status === 'succeeded' && (
+                        <VerificationPanel
+                          runId={run.id}
+                          verification={verifications.get(run.id) ?? null}
+                          onStarted={() => void refreshVerifications()}
+                        />
+                      )}
                     </li>
                   );
                 })}

@@ -181,3 +181,30 @@ export const createWebRunSchema = z.object({
 
 export type CreateWebConnectionInput = z.infer<typeof createWebConnectionSchema>;
 export type CreateWebRunInput = z.infer<typeof createWebRunSchema>;
+
+/**
+ * Verifier — answering the question the second agent asks when it could not
+ * settle something on its own.
+ *
+ * The option id is checked against the choices actually stored on that
+ * escalation before anything acts on it, so this only has to establish the
+ * shape. The note is free text a person types alongside their choice; it is
+ * shown back to them and passed to a repair as context, never executed as an
+ * instruction on its own.
+ */
+export const resolveEscalationSchema = z.object({
+  optionId: z
+    .string({ required_error: 'Choose how to proceed' })
+    .trim()
+    .min(1, 'Choose how to proceed')
+    .max(64, 'That is not one of the offered answers'),
+  note: z
+    .string()
+    .trim()
+    .max(2000, 'That note is too long')
+    .optional()
+    .or(z.literal(''))
+    .transform((value) => (value ? value : undefined)),
+});
+
+export type ResolveEscalationInput = z.infer<typeof resolveEscalationSchema>;
