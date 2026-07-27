@@ -8,6 +8,7 @@ import { orgRouter } from './routes/org.js';
 import { billingRouter } from './routes/billing.js';
 import { usageRouter } from './routes/usage.js';
 import { aiRouter } from './routes/ai.js';
+import { modelGatewayRouter } from './routes/modelGateway.js';
 import { webhookRouter } from './routes/webhooks.js';
 import { crmRouter } from './routes/crm.js';
 import { backupRouter } from './routes/backups.js';
@@ -51,12 +52,13 @@ export function createApp(): Express {
   //
   // CRM writes are bigger than an auth payload but still small, so the cap
   // stays tight everywhere except the two routes that legitimately carry more:
-  // a whole spreadsheet on CSV import, and a model prompt on /api/ai.
+  // a whole spreadsheet on CSV import, and a model prompt on /api/ai or
+  // /api/model.
   // The parser is CHOSEN here rather than stacked on those routes: the first
   // json() to run consumes the stream, so a route-level raise would never be
   // reached — the global cap would already have rejected the upload with 413.
   const csvImportPath = /^\/api\/integrations\/sources\/[^/]+\/import\/?$/;
-  const modelPromptPath = /^\/api\/ai(\/|$)/;
+  const modelPromptPath = /^\/api\/(ai|model)(\/|$)/;
   const standardJson = express.json({ limit: '256kb' });
   const csvImportJson = express.json({ limit: '12mb' });
   const modelPromptJson = express.json({ limit: '2mb' });
@@ -78,7 +80,13 @@ export function createApp(): Express {
   app.use('/api/org', orgRouter);
   app.use('/api/billing', billingRouter);
   app.use('/api/usage', usageRouter);
+  // Two different subsystems, two namespaces: /api/ai is the learning layer's
+  // task execution, /api/model is the metered gateway that bills a raw model
+  // call. Co-mounting them would run requireAuth twice on every metered call.
+  // Neither takes a route-level json() — the chooser above already parsed the
+  // body, so one here would never run.
   app.use('/api/ai', aiRouter);
+  app.use('/api/model', modelGatewayRouter);
   // Server-to-server: no session cookie, authenticated by Stripe's signature.
   app.use('/api/webhooks', webhookRouter);
   app.use('/api/crm', crmRouter);

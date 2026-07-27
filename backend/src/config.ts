@@ -142,6 +142,65 @@ export const config = {
   },
 
   /**
+   * Model providers and the learning loop (see docs/reinforcement-learning.md).
+   *
+   * Every API key is a server-only secret and none are required: an unset key
+   * simply removes that vendor's arms from the routing pool. Base URLs are
+   * configurable so the same code can point at a gateway, a regional endpoint,
+   * or a local open-weights server.
+   */
+  ai: {
+    openai: {
+      apiKey: process.env.OPENAI_API_KEY ?? '',
+      baseUrl: process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1',
+    },
+    anthropic: {
+      apiKey: process.env.ANTHROPIC_API_KEY ?? '',
+      baseUrl: process.env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com',
+    },
+    google: {
+      apiKey: process.env.GOOGLE_API_KEY ?? '',
+      baseUrl: process.env.GOOGLE_BASE_URL ?? 'https://generativelanguage.googleapis.com',
+    },
+    xai: {
+      apiKey: process.env.XAI_API_KEY ?? '',
+      baseUrl: process.env.XAI_BASE_URL ?? 'https://api.x.ai/v1',
+    },
+    // Open-weights server. No key required for a local vLLM/Ollama instance.
+    oss: {
+      apiKey: process.env.OSS_API_KEY ?? '',
+      baseUrl: process.env.OSS_BASE_URL ?? '',
+      // Which open model the `oss` arms address. Left configurable because the
+      // point of this arm is that it can be swapped for a fine-tune of our own.
+      model: process.env.OSS_MODEL ?? 'llama-3.3-70b-instruct',
+    },
+
+    // Hard ceiling on a single model call, so one hung vendor cannot pin a
+    // request open. Failing over to another arm is cheaper than waiting.
+    requestTimeoutMs: Number(process.env.AI_REQUEST_TIMEOUT_MS ?? 60_000),
+
+    learning: {
+      /**
+       * Master switch. Off means: always serve the champion arm, still record
+       * episodes and rewards. That is the safe way to run in a new environment
+       * — you accumulate the data that makes exploration informed before you
+       * let exploration touch real users.
+       */
+      explorationEnabled: (process.env.AI_EXPLORATION_ENABLED ?? 'true') !== 'false',
+      /**
+       * Share of traffic reserved for arms that have not yet earned a verdict.
+       * Small on purpose: exploration is paid for in real work quality, and 10%
+       * is enough to resolve a clearly better arm within days at our volume.
+       */
+      candidateTrafficShare: Number(process.env.AI_CANDIDATE_TRAFFIC_SHARE ?? 0.1),
+      /** Observations before a context bucket is trusted over its parent. */
+      minTrialsPerArm: Number(process.env.AI_MIN_TRIALS_PER_ARM ?? 30),
+      /** Mined exemplars injected as few-shot examples per prompt. */
+      maxExemplars: Number(process.env.AI_MAX_EXEMPLARS ?? 3),
+    },
+  },
+
+  /**
    * Backups. The archive bytes deliberately live OUTSIDE the database being
    * backed up — a copy stored inside the thing it protects is not a copy.
    *

@@ -346,7 +346,7 @@ export const api = {
   /** Exact pre-flight token count from the provider's tokenizer. */
   countTokens: (input: { model?: string; messages: ChatMessage[]; system?: string }) =>
     request<{ model: string; inputTokens: number; inputPriceNanos: number }>(
-      '/api/ai/count-tokens',
+      '/api/model/count-tokens',
       { method: 'POST', body: JSON.stringify(input) },
     ),
 
@@ -363,7 +363,7 @@ export const api = {
     effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     feature?: string;
     requestId?: string;
-  }) => request<CompletionResult>('/api/ai/messages', { method: 'POST', body: JSON.stringify(input) }),
+  }) => request<CompletionResult>('/api/model/messages', { method: 'POST', body: JSON.stringify(input) }),
   getRuns: () => request<{ runs: ComputerRun[] }>('/api/computer/runs', { method: 'GET' }),
 
   stopRun: (runId: string) =>
