@@ -11,6 +11,7 @@ import { JobsPage } from './pages/JobsPage';
 import { JobDetailPage } from './pages/JobDetailPage';
 import { MemoryPage } from './pages/MemoryPage';
 import { TeamMemoryPage } from './pages/TeamMemoryPage';
+import { TechnicianPage } from './pages/TechnicianPage';
 import { BillingPage } from './pages/BillingPage';
 import { UsagePage } from './pages/UsagePage';
 import { ProjectManagerPage } from './pages/ProjectManagerPage';
@@ -25,7 +26,7 @@ function FullScreenSpinner() {
     <div
       role="status"
       aria-live="polite"
-      className="grid min-h-screen place-items-center bg-ink-900 text-brand-300"
+      className="grid min-h-screen place-items-center bg-paper-100 text-brand-600"
     >
       <SpinnerIcon className="animate-spin" width={28} height={28} />
       <span className="sr-only">Loading…</span>
@@ -101,6 +102,20 @@ export default function App() {
               }
             />
           ))}
+          {/* The technician app. Open to every onboarded member — a project
+              manager reviewing a job needs the same capture tools a field
+              technician does. */}
+          <Route
+            path="/technician"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <TechnicianPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
           {/* The Project Manager area. Guarded only by onboarding: the
               database decides who may change a project, and a route guard that
               hid the screens would just make a field technician's read-only

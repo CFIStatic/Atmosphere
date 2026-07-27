@@ -291,6 +291,43 @@ export type CreateJobInput = z.infer<typeof createJobSchema>;
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 export type CreateWorkLogInput = z.infer<typeof createWorkLogSchema>;
 export type MemoryQuery = z.infer<typeof memoryQuerySchema>;
+/* ---- Technician app ---- */
+
+/**
+ * One prior turn of the voice conversation. The client owns the transcript
+ * (nothing is persisted server-side) and replays it on each request, so the
+ * assistant stays stateless like the rest of the backend.
+ */
+const assistantTurnSchema = z.object({
+  role: z.enum(['user', 'assistant']),
+  content: z.string().trim().min(1).max(4000),
+});
+
+export type AssistantTurn = z.infer<typeof assistantTurnSchema>;
+
+/**
+ * What the assistant is told about the caller and their surroundings. Every
+ * field is optional — the client sends whatever it happens to know.
+ */
+const assistantContextSchema = z.object({
+  role: z.enum(MEMBER_ROLES).optional(),
+  workType: z.enum(WORK_TYPES).optional(),
+  orgName: z.string().trim().max(80).optional(),
+  /** Labels from the in-browser object detector, most confident first. */
+  detectedObjects: z.array(z.string().trim().min(1).max(40)).max(12).optional(),
+});
+
+export type AssistantContext = z.infer<typeof assistantContextSchema>;
+
+export const assistantSchema = z.object({
+  message: z
+    .string({ required_error: 'Say something first' })
+    .trim()
+    .min(1, 'Say something first')
+    .max(4000, 'That message is too long'),
+  history: z.array(assistantTurnSchema).max(40).default([]),
+  context: assistantContextSchema.optional(),
+});
 /* ---------------------------------------------------------------- billing -- */
 
 /** Subscription tiers. `enterprise` is quote-only and rejected by the database. */

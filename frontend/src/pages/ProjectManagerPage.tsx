@@ -133,30 +133,30 @@ export function ProjectManagerPage() {
 
   if (!data && !error) {
     return (
-      <div className="cx-aurora grid min-h-screen place-items-center bg-ink-900 text-brand-300">
+      <div className="cx-aurora grid min-h-screen place-items-center bg-paper-100 text-brand-600">
         <SpinnerIcon className="animate-spin" width={28} height={28} />
       </div>
     );
   }
 
   return (
-    <div className="cx-aurora min-h-screen bg-ink-900">
-      <header className="flex items-center justify-between border-b border-white/10 px-6 py-4 sm:px-10">
+    <div className="cx-aurora min-h-screen bg-paper-100">
+      <header className="flex items-center justify-between border-b border-line px-6 py-4 sm:px-10">
         <div className="flex items-center gap-4">
           <Logo />
-          <span className="hidden text-sm text-gray-500 sm:inline">Project Manager</span>
+          <span className="hidden text-sm text-ink-500 sm:inline">Project Manager</span>
         </div>
         <div className="flex items-center gap-2">
           <Link
             to="/dashboard"
-            className="rounded-lg border border-white/10 bg-ink-700/70 px-3 py-2 text-sm text-gray-300 transition hover:bg-ink-600"
+            className="rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-700 transition hover:bg-paper-100"
           >
             Dashboard
           </Link>
           <button
             onClick={() => void runEngine()}
             disabled={running}
-            className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-500 disabled:opacity-60"
+            className="flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-ink-900 transition hover:bg-brand-500 disabled:opacity-60"
           >
             {running && <SpinnerIcon className="animate-spin" width={16} height={16} />}
             {running ? 'Checking…' : 'Re-check everything'}
@@ -166,17 +166,17 @@ export function ProjectManagerPage() {
 
       <main className="mx-auto max-w-6xl px-6 py-8 sm:px-10">
         {error && (
-          <div className="mb-6 rounded-lg border border-white/10 bg-ink-800/80 px-4 py-3 text-sm text-gray-200">
+          <div className="mb-6 rounded-lg border border-line bg-paper-0 px-4 py-3 text-sm text-ink-800">
             {error}
           </div>
         )}
 
         <div className="animate-fade-in-up">
-          <p className="text-sm font-medium text-brand-400">{membership?.org?.name}</p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight text-white">
+          <p className="text-sm font-medium text-brand-600">{membership?.org?.name}</p>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight text-ink-900">
             {greeting()}, {shortName(user?.email)}
           </h1>
-          <p className="mt-2 max-w-2xl text-gray-400">
+          <p className="mt-2 max-w-2xl text-ink-600">
             {data && data.counts.critical > 0
               ? `${data.counts.critical} thing${data.counts.critical === 1 ? '' : 's'} need${data.counts.critical === 1 ? 's' : ''} you first.`
               : data && data.counts.warn > 0
@@ -185,7 +185,7 @@ export function ProjectManagerPage() {
           </p>
 
           {lastRun && (
-            <p className="mt-2 text-xs text-gray-500">
+            <p className="mt-2 text-xs text-ink-500">
               Checked {lastRun.projectsEvaluated} project(s) against {lastRun.rulesEvaluated} rules
               in {lastRun.durationMs}ms — {lastRun.alertsOpened} new, {lastRun.alertsCleared}{' '}
               cleared
@@ -226,7 +226,7 @@ export function ProjectManagerPage() {
               <button
                 onClick={() => void loadBrief(Boolean(brief))}
                 disabled={briefLoading}
-                className="rounded-lg border border-white/10 bg-ink-700/70 px-3 py-1.5 text-xs text-gray-300 transition hover:bg-ink-600 disabled:opacity-60"
+                className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs text-ink-700 transition hover:bg-paper-100 disabled:opacity-60"
               >
                 {briefLoading ? 'Writing…' : brief ? 'Rewrite' : 'Write it'}
               </button>
@@ -234,17 +234,17 @@ export function ProjectManagerPage() {
           >
             {brief ? (
               <div>
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-200">
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-800">
                   {brief.body}
                 </p>
-                <p className="mt-3 text-xs text-gray-500">
+                <p className="mt-3 text-xs text-ink-500">
                   {brief.modelId
                     ? `Written by ${brief.modelId} from the facts the engine gathered.`
                     : 'Assembled from the facts the engine gathered. No model is configured, so this is the plain version.'}
                 </p>
               </div>
             ) : (
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-ink-500">
                 A short read of where everything stands, built from the same checks that fill the
                 alert list.
               </p>
@@ -252,7 +252,7 @@ export function ProjectManagerPage() {
           </Card>
 
           {/* Tabs */}
-          <div className="mt-8 flex gap-1 border-b border-white/10">
+          <div className="mt-8 flex gap-1 border-b border-line">
             {(
               [
                 ['alerts', `Needs attention (${openAlerts.length})`],
@@ -265,8 +265,8 @@ export function ProjectManagerPage() {
                 onClick={() => setTab(key)}
                 className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition ${
                   tab === key
-                    ? 'border-brand-500 text-white'
-                    : 'border-transparent text-gray-400 hover:text-gray-200'
+                    ? 'border-brand-500 text-ink-900'
+                    : 'border-transparent text-ink-600 hover:text-ink-900'
                 }`}
               >
                 {label}
@@ -293,12 +293,12 @@ export function ProjectManagerPage() {
 
           {tab === 'projects' && (
             <div className="mt-5">
-              <label className="mb-3 flex items-center gap-2 text-sm text-gray-400">
+              <label className="mb-3 flex items-center gap-2 text-sm text-ink-600">
                 <input
                   type="checkbox"
                   checked={onlyMine}
                   onChange={(e) => setOnlyMine(e.target.checked)}
-                  className="h-4 w-4 rounded border-white/20 bg-ink-700"
+                  className="h-4 w-4 rounded border-line bg-paper-0"
                 />
                 Only projects assigned to me
               </label>
@@ -325,23 +325,23 @@ export function ProjectManagerPage() {
                   <Card key={c.userId}>
                     <div className="flex flex-wrap items-center justify-between gap-4">
                       <div>
-                        <p className="text-sm font-medium text-white">
+                        <p className="text-sm font-medium text-ink-900">
                           {c.fullName ?? c.email ?? c.userId.slice(0, 8)}
                         </p>
-                        <p className="mt-0.5 text-xs text-gray-500">
+                        <p className="mt-0.5 text-xs text-ink-500">
                           {c.projectNumbers.join(', ') || 'No projects'}
                         </p>
                       </div>
                       <div className="flex items-center gap-4">
                         <div className="text-right">
-                          <p className="text-xs text-gray-500">Projects</p>
-                          <p className="text-lg font-semibold tabular-nums text-white">
+                          <p className="text-xs text-ink-500">Projects</p>
+                          <p className="text-lg font-semibold tabular-nums text-ink-900">
                             {c.projectCount}
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-xs text-gray-500">Open tasks</p>
-                          <p className="text-lg font-semibold tabular-nums text-white">
+                          <p className="text-xs text-ink-500">Open tasks</p>
+                          <p className="text-lg font-semibold tabular-nums text-ink-900">
                             {c.openTaskCount}
                           </p>
                         </div>
@@ -379,7 +379,7 @@ function AlertRow({
   navigate: ReturnType<typeof useNavigate>;
 }) {
   return (
-    <article className="rounded-xl border border-white/10 bg-ink-800/60 p-4 backdrop-blur">
+    <article className="rounded-xl border border-line bg-paper-0 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-3">
@@ -387,38 +387,38 @@ function AlertRow({
             {alert.project && (
               <button
                 onClick={() => navigate(`/pm/projects/${alert.project!.id}`)}
-                className="text-xs text-brand-300 underline-offset-2 hover:underline"
+                className="text-xs text-brand-600 underline-offset-2 hover:underline"
               >
                 {alert.project.projectNumber}
               </button>
             )}
             {alert.occurrences > 1 && (
-              <span className="text-xs text-gray-500">seen {alert.occurrences}×</span>
+              <span className="text-xs text-ink-500">seen {alert.occurrences}×</span>
             )}
           </div>
-          <h3 className="mt-1.5 text-sm font-medium text-white">{alert.title}</h3>
-          {alert.detail && <p className="mt-1 text-sm text-gray-400">{alert.detail}</p>}
+          <h3 className="mt-1.5 text-sm font-medium text-ink-900">{alert.title}</h3>
+          {alert.detail && <p className="mt-1 text-sm text-ink-600">{alert.detail}</p>}
           {alert.suggestedAction && (
-            <p className="mt-2 text-sm text-brand-200">→ {alert.suggestedAction}</p>
+            <p className="mt-2 text-sm text-brand-700">→ {alert.suggestedAction}</p>
           )}
         </div>
         <div className="flex shrink-0 gap-1.5">
           <button
             onClick={() => onAct(alert, 'acknowledged')}
-            className="rounded-lg border border-white/10 bg-ink-700/70 px-2.5 py-1.5 text-xs text-gray-300 transition hover:bg-ink-600"
+            className="rounded-lg border border-line bg-paper-0 px-2.5 py-1.5 text-xs text-ink-700 transition hover:bg-paper-100"
             title="Keep it on the list, stop it shouting"
           >
             Seen
           </button>
           <button
             onClick={() => onAct(alert, 'snoozed', 24)}
-            className="rounded-lg border border-white/10 bg-ink-700/70 px-2.5 py-1.5 text-xs text-gray-300 transition hover:bg-ink-600"
+            className="rounded-lg border border-line bg-paper-0 px-2.5 py-1.5 text-xs text-ink-700 transition hover:bg-paper-100"
           >
             Tomorrow
           </button>
           <button
             onClick={() => onAct(alert, 'resolved')}
-            className="rounded-lg border border-white/10 bg-ink-700/70 px-2.5 py-1.5 text-xs text-gray-300 transition hover:bg-ink-600"
+            className="rounded-lg border border-line bg-paper-0 px-2.5 py-1.5 text-xs text-ink-700 transition hover:bg-paper-100"
             title="I have handled this"
           >
             Done
@@ -434,17 +434,17 @@ function ProjectRow({ summary }: { summary: PmProjectSummary }) {
   return (
     <Link
       to={`/pm/projects/${p.id}`}
-      className="block rounded-xl border border-white/10 bg-ink-800/60 p-4 backdrop-blur transition hover:border-white/20 hover:bg-ink-800/80"
+      className="block rounded-xl border border-line bg-paper-0 p-4 transition hover:border-line-strong hover:bg-paper-100"
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-xs text-brand-300">{p.projectNumber}</span>
+            <span className="font-mono text-xs text-brand-600">{p.projectNumber}</span>
             <Pill>{PM_PHASE_LABELS[p.phase]}</Pill>
             {p.status !== 'active' && <Pill>{p.status.replace('_', ' ')}</Pill>}
           </div>
-          <h3 className="mt-1.5 truncate text-sm font-medium text-white">{p.name}</h3>
-          <p className="mt-0.5 truncate text-xs text-gray-500">
+          <h3 className="mt-1.5 truncate text-sm font-medium text-ink-900">{p.name}</h3>
+          <p className="mt-0.5 truncate text-xs text-ink-500">
             {[p.customerName, p.addressLine1, p.city].filter(Boolean).join(' · ') || 'No address'}
           </p>
         </div>
@@ -452,15 +452,15 @@ function ProjectRow({ summary }: { summary: PmProjectSummary }) {
         <div className="flex flex-wrap items-center gap-4">
           {summary.drying && (
             <div className="text-right">
-              <p className="text-xs text-gray-500">Drying</p>
-              <p className="text-sm tabular-nums text-gray-200">
+              <p className="text-xs text-ink-500">Drying</p>
+              <p className="text-sm tabular-nums text-ink-800">
                 {summary.drying.areasAtGoal}/{summary.drying.openAreas} at goal
               </p>
             </div>
           )}
           <div className="text-right">
-            <p className="text-xs text-gray-500">Open tasks</p>
-            <p className="text-sm tabular-nums text-gray-200">
+            <p className="text-xs text-ink-500">Open tasks</p>
+            <p className="text-sm tabular-nums text-ink-800">
               {summary.openTasks}
               {summary.overdueTasks > 0 && (
                 <span className="pm-warning"> · {summary.overdueTasks} late</span>
@@ -472,7 +472,7 @@ function ProjectRow({ summary }: { summary: PmProjectSummary }) {
       </div>
 
       {summary.health.reasons.length > 0 && (
-        <p className="mt-3 text-xs text-gray-500">{summary.health.reasons[0]!.text}</p>
+        <p className="mt-3 text-xs text-ink-500">{summary.health.reasons[0]!.text}</p>
       )}
     </Link>
   );
