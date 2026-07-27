@@ -8,7 +8,7 @@ import {
   type PmProjectDetail,
   type PmTask,
 } from '../lib/api';
-import { AppShell } from '../components/AppShell';
+import { Logo } from '../components/Logo';
 import { SpinnerIcon, CheckIcon } from '../components/icons';
 import {
   Card,
@@ -95,8 +95,8 @@ export function PmProjectPage() {
 
   if (!data) {
     return (
-      <div className="cx-aurora grid min-h-screen place-items-center bg-ink-900 text-brand-300">
-        {error ? <p className="text-sm text-gray-400">{error}</p> : <SpinnerIcon className="animate-spin" width={28} height={28} />}
+      <div className="cx-aurora grid min-h-screen place-items-center bg-paper-100 text-brand-600">
+        {error ? <p className="text-sm text-ink-600">{error}</p> : <SpinnerIcon className="animate-spin" width={28} height={28} />}
       </div>
     );
   }
@@ -106,16 +106,18 @@ export function PmProjectPage() {
   const doneTasks = data.tasks.filter((t) => t.status === 'done');
 
   return (
-    <AppShell>
-      <div className="cx-aurora min-h-screen">
-      <header className="flex items-center justify-between border-b border-white/10 px-6 py-4 sm:px-10">
-        <Link to="/pm" className="text-sm text-gray-400 transition hover:text-gray-200">
-          ← Board
-        </Link>
+    <div className="cx-aurora min-h-screen bg-paper-100">
+      <header className="flex items-center justify-between border-b border-line px-6 py-4 sm:px-10">
+        <div className="flex items-center gap-4">
+          <Logo />
+          <Link to="/pm" className="text-sm text-ink-600 transition hover:text-ink-900">
+            ← Board
+          </Link>
+        </div>
         <button
           onClick={() => void recheck()}
           disabled={busy}
-          className="flex items-center gap-2 rounded-lg border border-white/10 bg-ink-700/70 px-3 py-2 text-sm text-gray-300 transition hover:bg-ink-600 disabled:opacity-60"
+          className="flex items-center gap-2 rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-700 transition hover:bg-paper-100 disabled:opacity-60"
         >
           {busy && <SpinnerIcon className="animate-spin" width={16} height={16} />}
           Re-check
@@ -124,7 +126,7 @@ export function PmProjectPage() {
 
       <main className="mx-auto max-w-5xl px-6 py-8 sm:px-10">
         {error && (
-          <div className="mb-6 rounded-lg border border-white/10 bg-ink-800/80 px-4 py-3 text-sm text-gray-200">
+          <div className="mb-6 rounded-lg border border-line bg-paper-0 px-4 py-3 text-sm text-ink-800">
             {error}
           </div>
         )}
@@ -134,19 +136,19 @@ export function PmProjectPage() {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-sm text-brand-300">{project.projectNumber}</span>
+                <span className="font-mono text-sm text-brand-600">{project.projectNumber}</span>
                 <Pill>{PM_PHASE_LABELS[project.phase]}</Pill>
                 <Pill>{project.workType === 'mitigation' ? 'Mitigation' : 'Construction'}</Pill>
                 {project.lossType && <Pill>{project.lossType}</Pill>}
               </div>
-              <h1 className="mt-2 text-2xl font-bold tracking-tight text-white">{project.name}</h1>
-              <p className="mt-1 text-sm text-gray-400">
+              <h1 className="mt-2 text-2xl font-bold tracking-tight text-ink-900">{project.name}</h1>
+              <p className="mt-1 text-sm text-ink-600">
                 {[project.customerName, project.addressLine1, project.city, project.region]
                   .filter(Boolean)
                   .join(' · ') || 'No customer details'}
               </p>
               {project.claimNumber && (
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-ink-500">
                   {project.carrier ? `${project.carrier} · ` : ''}Claim {project.claimNumber}
                   {project.adjusterName ? ` · ${project.adjusterName}` : ''}
                 </p>
@@ -160,7 +162,7 @@ export function PmProjectPage() {
             <Card className="mt-6" title="What is dragging on this job">
               <ul className="space-y-1.5">
                 {analysis.health.reasons.map((r) => (
-                  <li key={r.text} className="flex items-start gap-2 text-sm text-gray-300">
+                  <li key={r.text} className="flex items-start gap-2 text-sm text-ink-700">
                     <span aria-hidden="true" className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-gray-600" />
                     {r.text}
                   </li>
@@ -211,12 +213,12 @@ export function PmProjectPage() {
             <Card className="mt-6" title="Flagged on this job">
               <div className="space-y-3">
                 {data.alerts.map((a) => (
-                  <div key={a.id} className="border-l-2 border-white/10 pl-3">
+                  <div key={a.id} className="border-l-2 border-line pl-3">
                     <SeverityTag severity={a.severity} />
-                    <p className="mt-1 text-sm text-white">{a.title}</p>
-                    {a.detail && <p className="mt-0.5 text-sm text-gray-400">{a.detail}</p>}
+                    <p className="mt-1 text-sm text-ink-900">{a.title}</p>
+                    {a.detail && <p className="mt-0.5 text-sm text-ink-600">{a.detail}</p>}
                     {a.suggestedAction && (
-                      <p className="mt-1 text-sm text-brand-200">→ {a.suggestedAction}</p>
+                      <p className="mt-1 text-sm text-brand-700">→ {a.suggestedAction}</p>
                     )}
                   </div>
                 ))}
@@ -230,14 +232,14 @@ export function PmProjectPage() {
               className="mt-6"
               title="Drying"
               action={
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-ink-500">
                   Day {analysis.drying.daysDrying} · {analysis.drying.areasAtGoal}/
                   {analysis.drying.openAreas} at goal
                 </span>
               }
             >
               {analysis.drying.equipment.sufficient === false && (
-                <p className="mb-4 rounded-lg border border-white/10 bg-ink-700/50 px-3 py-2 text-sm text-gray-300">
+                <p className="mb-4 rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-700">
                   <span className="pm-warning font-medium">Under-equipped.</span>{' '}
                   {analysis.drying.equipment.shortfallNote}
                 </p>
@@ -251,12 +253,12 @@ export function PmProjectPage() {
               ) : (
                 <div className="grid gap-5 sm:grid-cols-2">
                   {analysis.drying.areas.map((area) => (
-                    <div key={area.areaId} className="rounded-lg border border-white/10 bg-ink-700/30 p-4">
+                    <div key={area.areaId} className="rounded-lg border border-line bg-paper-0 p-4">
                       <div className="flex items-baseline justify-between gap-2">
-                        <h3 className="text-sm font-medium text-white">{area.label}</h3>
-                        <span className="text-xs text-gray-500">{area.material}</span>
+                        <h3 className="text-sm font-medium text-ink-900">{area.label}</h3>
+                        <span className="text-xs text-ink-500">{area.material}</span>
                       </div>
-                      <p className="mt-0.5 text-xs text-gray-500">{stateLabel(area.state)}</p>
+                      <p className="mt-0.5 text-xs text-ink-500">{stateLabel(area.state)}</p>
 
                       <div className="mt-3">
                         <DryingSparkline
@@ -267,20 +269,20 @@ export function PmProjectPage() {
                       </div>
 
                       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                        <dt className="text-gray-500">Last reading</dt>
-                        <dd className="text-right tabular-nums text-gray-300">
+                        <dt className="text-ink-500">Last reading</dt>
+                        <dd className="text-right tabular-nums text-ink-700">
                           {area.hoursSinceReading === null ? '—' : `${area.hoursSinceReading}h ago`}
                         </dd>
-                        <dt className="text-gray-500">To go</dt>
-                        <dd className="text-right tabular-nums text-gray-300">
+                        <dt className="text-ink-500">To go</dt>
+                        <dd className="text-right tabular-nums text-ink-700">
                           {area.remainingPct === null
                             ? '—'
                             : area.remainingPct <= 0
                               ? 'At goal'
                               : `${area.remainingPct.toFixed(1)} pts`}
                         </dd>
-                        <dt className="text-gray-500">Projected</dt>
-                        <dd className="text-right tabular-nums text-gray-300">
+                        <dt className="text-ink-500">Projected</dt>
+                        <dd className="text-right tabular-nums text-ink-700">
                           {area.projectedDaysToGoal === null
                             ? 'Not drying'
                             : area.projectedDaysToGoal === 0
@@ -294,7 +296,7 @@ export function PmProjectPage() {
               )}
 
               {analysis.drying.ambient && (
-                <p className="mt-4 text-xs text-gray-500">
+                <p className="mt-4 text-xs text-ink-500">
                   Inside {analysis.drying.ambient.temperatureF}°F /{' '}
                   {analysis.drying.ambient.humidityPct}% RH · {analysis.drying.ambient.gpp} GPP ·
                   dew point {analysis.drying.ambient.dewPointF}°F
@@ -309,7 +311,7 @@ export function PmProjectPage() {
           <Card
             className="mt-6"
             title={`Work (${openTasks.length} open)`}
-            action={<span className="text-xs text-gray-500">{doneTasks.length} done</span>}
+            action={<span className="text-xs text-ink-500">{doneTasks.length} done</span>}
           >
             {openTasks.length === 0 ? (
               <EmptyState>Nothing outstanding.</EmptyState>
@@ -320,13 +322,13 @@ export function PmProjectPage() {
                     <button
                       onClick={() => void toggleTask(task)}
                       aria-label={`Mark “${task.title}” done`}
-                      className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded border border-white/20 bg-ink-700 transition hover:border-brand-400"
+                      className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded border border-line bg-paper-0 transition hover:border-brand-300"
                     />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm text-gray-200">{task.title}</p>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                      <p className="text-sm text-ink-800">{task.title}</p>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-ink-500">
                         {task.source !== 'manual' && (
-                          <span className="text-brand-400">
+                          <span className="text-brand-600">
                             {task.source === 'playbook' ? 'standard step' : 'flagged by the agent'}
                           </span>
                         )}
@@ -350,10 +352,10 @@ export function PmProjectPage() {
               analysis.compliance.invoiceReady ? (
                 <span className="pm-good inline-flex items-center gap-1.5 text-xs font-medium">
                   <CheckIcon width={14} height={14} />
-                  <span className="text-gray-300">Ready to invoice</span>
+                  <span className="text-ink-700">Ready to invoice</span>
                 </span>
               ) : (
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-ink-500">
                   {analysis.compliance.missingBlocking.length} blocking
                 </span>
               )
@@ -365,22 +367,22 @@ export function PmProjectPage() {
               tone={analysis.compliance.invoiceReady ? 'good' : analysis.compliance.blockingInvoiceNow ? 'critical' : 'brand'}
             />
 
-            <ul className="mt-4 divide-y divide-white/5">
+            <ul className="mt-4 divide-y divide-line">
               {data.documents.map((doc) => (
                 <li key={doc.id} className="flex items-center justify-between gap-3 py-2.5">
                   <div className="min-w-0">
-                    <p className="truncate text-sm text-gray-200">
+                    <p className="truncate text-sm text-ink-800">
                       {doc.label}
-                      {doc.isBlocking && <span className="ml-2 text-xs text-gray-500">required</span>}
+                      {doc.isBlocking && <span className="ml-2 text-xs text-ink-500">required</span>}
                     </p>
-                    {doc.note && <p className="truncate text-xs text-gray-500">{doc.note}</p>}
+                    {doc.note && <p className="truncate text-xs text-ink-500">{doc.note}</p>}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <DocumentState status={doc.status} />
                     {doc.status === 'missing' && (
                       <button
                         onClick={() => void setDocument(doc, 'provided')}
-                        className="rounded-lg border border-white/10 bg-ink-700/70 px-2.5 py-1 text-xs text-gray-300 transition hover:bg-ink-600"
+                        className="rounded-lg border border-line bg-paper-0 px-2.5 py-1 text-xs text-ink-700 transition hover:bg-paper-100"
                       >
                         Have it
                       </button>
@@ -394,26 +396,26 @@ export function PmProjectPage() {
           {/* Milestones */}
           {analysis.compliance.milestones.length > 0 && (
             <Card className="mt-6" title="Dates we owe someone">
-              <ul className="divide-y divide-white/5">
+              <ul className="divide-y divide-line">
                 {analysis.compliance.milestones.map((m) => (
                   <li key={m.milestone.id} className="flex items-center justify-between gap-3 py-2.5">
                     <div>
-                      <p className="text-sm text-gray-200">{m.milestone.label}</p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-sm text-ink-800">{m.milestone.label}</p>
+                      <p className="text-xs text-ink-500">
                         {new Date(m.milestone.dueAt).toLocaleDateString()} · {m.milestone.kind}
                       </p>
                     </div>
                     {m.state === 'done' ? (
                       <span className="pm-good inline-flex items-center gap-1.5 text-xs">
                         <CheckIcon width={14} height={14} />
-                        <span className="text-gray-400">Done</span>
+                        <span className="text-ink-600">Done</span>
                       </span>
                     ) : m.state === 'overdue' ? (
                       <SeverityTag severity="critical" />
                     ) : m.state === 'due_soon' ? (
                       <SeverityTag severity="warn" />
                     ) : (
-                      <span className="text-xs text-gray-500">Upcoming</span>
+                      <span className="text-xs text-ink-500">Upcoming</span>
                     )}
                   </li>
                 ))}
@@ -432,7 +434,7 @@ export function PmProjectPage() {
                     key={a}
                     onClick={() => void draft(a)}
                     disabled={busy}
-                    className="rounded-lg border border-white/10 bg-ink-700/70 px-2.5 py-1 text-xs text-gray-300 transition hover:bg-ink-600 disabled:opacity-60"
+                    className="rounded-lg border border-line bg-paper-0 px-2.5 py-1 text-xs text-ink-700 transition hover:bg-paper-100 disabled:opacity-60"
                   >
                     Draft for {a}
                   </button>
@@ -448,22 +450,22 @@ export function PmProjectPage() {
             ) : (
               <ul className="space-y-3">
                 {data.updates.map((u) => (
-                  <li key={u.id} className="rounded-lg border border-white/10 bg-ink-700/30 p-3">
+                  <li key={u.id} className="rounded-lg border border-line bg-paper-0 p-3">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                      <span className="text-xs font-medium uppercase tracking-wide text-ink-500">
                         {u.audience} · {u.status}
                       </span>
                       {u.status === 'draft' && (
                         <button
                           onClick={() => void api.pmUpdateDraft(u.id, 'approved').then(load)}
-                          className="rounded-lg border border-white/10 bg-ink-700/70 px-2.5 py-1 text-xs text-gray-300 transition hover:bg-ink-600"
+                          className="rounded-lg border border-line bg-paper-0 px-2.5 py-1 text-xs text-ink-700 transition hover:bg-paper-100"
                         >
                           Approve
                         </button>
                       )}
                     </div>
-                    {u.subject && <p className="mt-1.5 text-sm font-medium text-white">{u.subject}</p>}
-                    <p className="mt-1 whitespace-pre-wrap text-sm text-gray-300">{u.body}</p>
+                    {u.subject && <p className="mt-1.5 text-sm font-medium text-ink-900">{u.subject}</p>}
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-ink-700">{u.body}</p>
                   </li>
                 ))}
               </ul>
@@ -475,7 +477,7 @@ export function PmProjectPage() {
             <Card className="mt-6" title={`Reading log (${data.readings.length})`}>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                  <thead className="text-xs uppercase tracking-wide text-gray-500">
+                  <thead className="text-xs uppercase tracking-wide text-ink-500">
                     <tr>
                       <th className="pb-2 pr-4 font-medium">When</th>
                       <th className="pb-2 pr-4 font-medium">Area</th>
@@ -486,10 +488,10 @@ export function PmProjectPage() {
                       <th className="pb-2 text-right font-medium">GPP</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5">
+                  <tbody className="divide-y divide-line">
                     {data.readings.slice(0, 60).map((r) => (
-                      <tr key={r.id} className="text-gray-300">
-                        <td className="py-2 pr-4 whitespace-nowrap text-xs text-gray-500">
+                      <tr key={r.id} className="text-ink-700">
+                        <td className="py-2 pr-4 whitespace-nowrap text-xs text-ink-500">
                           {new Date(r.takenAt).toLocaleString()}
                         </td>
                         <td className="py-2 pr-4 text-xs">
@@ -515,8 +517,7 @@ export function PmProjectPage() {
           )}
         </div>
       </main>
-      </div>
-    </AppShell>
+    </div>
   );
 }
 
@@ -529,13 +530,13 @@ function DocumentState({ status }: { status: PmDocument['status'] }) {
     return (
       <span className="pm-good inline-flex items-center gap-1.5 text-xs">
         <CheckIcon width={14} height={14} />
-        <span className="text-gray-400">Have it</span>
+        <span className="text-ink-600">Have it</span>
       </span>
     );
   }
-  if (status === 'waived') return <span className="text-xs text-gray-500">Waived</span>;
+  if (status === 'waived') return <span className="text-xs text-ink-500">Waived</span>;
   if (status === 'rejected') return <SeverityTag severity="warn" />;
-  return <span className="text-xs text-gray-500">Missing</span>;
+  return <span className="text-xs text-ink-500">Missing</span>;
 }
 
 function stateLabel(state: string): string {

@@ -160,11 +160,11 @@ export function BillingPage() {
 
   if (loading) {
     return (
-      <AppShell><main className="cx-aurora min-h-screen mx-auto max-w-6xl px-6 py-10 sm:px-10">
-        <div className="grid place-items-center py-24 text-brand-300">
+      <AppShell>
+        <div className="grid place-items-center py-24 text-brand-600">
           <SpinnerIcon className="animate-spin" width={28} height={28} />
         </div>
-      </main></AppShell>
+      </AppShell>
     );
   }
 
@@ -173,10 +173,10 @@ export function BillingPage() {
   const usage = overview?.periodUsage;
 
   return (
-    <AppShell><main className="cx-aurora min-h-screen mx-auto max-w-6xl px-6 py-10 sm:px-10">
+    <AppShell>
       <div className="animate-fade-in-up">
-        <h1 className="text-3xl font-bold tracking-tight text-white">Plans &amp; billing</h1>
-        <p className="mt-2 max-w-2xl text-gray-400">
+        <h1 className="text-3xl font-bold tracking-tight text-ink-900">Plans &amp; billing</h1>
+        <p className="mt-2 max-w-2xl text-ink-600">
           Your plan includes usage credits each month. Buy extra credits any time — they never
           expire, and they&apos;re only used once your monthly allowance runs out.
         </p>
@@ -184,7 +184,7 @@ export function BillingPage() {
         {error && (
           <div
             role="alert"
-            className="mt-6 flex items-start gap-2.5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+            className="mt-6 flex items-start gap-2.5 rounded-xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700"
           >
             <AlertIcon width={18} height={18} className="mt-0.5 shrink-0" />
             <span>{error}</span>
@@ -193,14 +193,14 @@ export function BillingPage() {
         {notice && (
           <div
             role="status"
-            className="mt-6 flex items-start gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200"
+            className="mt-6 flex items-start gap-2.5 rounded-xl border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-600"
           >
             <CheckIcon width={18} height={18} className="mt-0.5 shrink-0" />
             <span>{notice}</span>
           </div>
         )}
         {!canManage && (
-          <p className="mt-6 rounded-xl border border-white/10 bg-ink-800/60 px-4 py-3 text-sm text-gray-400">
+          <p className="mt-6 rounded-xl border border-line bg-paper-0 px-4 py-3 text-sm text-ink-600">
             You can view billing, but only an accountant, office manager or project manager can
             change the plan or buy credits.
           </p>
@@ -208,41 +208,41 @@ export function BillingPage() {
 
         {/* ---- Balance + current plan ---- */}
         <div className="mt-8 grid gap-4 lg:grid-cols-3">
-          <div className="rounded-xl border border-white/10 bg-ink-800/60 p-5 backdrop-blur lg:col-span-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Credit balance</p>
-            <p className="mt-1 text-4xl font-bold tracking-tight text-white">
+          <div className="rounded-xl border border-line bg-paper-0 p-5 lg:col-span-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-ink-500">Credit balance</p>
+            <p className="mt-1 text-4xl font-bold tracking-tight text-ink-900">
               {formatUsd(balance?.totalNanos ?? 0)}
             </p>
 
             <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-lg bg-ink-700/50 px-3 py-2">
-                <dt className="text-xs text-gray-500">Plan credits</dt>
-                <dd className="mt-0.5 font-semibold text-gray-200">
+              <div className="rounded-lg bg-paper-0 px-3 py-2">
+                <dt className="text-xs text-ink-500">Plan credits</dt>
+                <dd className="mt-0.5 font-semibold text-ink-800">
                   {formatUsd(balance?.planNanos ?? 0)}
                 </dd>
-                <dd className="text-xs text-gray-500">
+                <dd className="text-xs text-ink-500">
                   {balance?.nextExpiry ? `Expires ${formatDate(balance.nextExpiry)}` : 'No expiry'}
                 </dd>
               </div>
-              <div className="rounded-lg bg-ink-700/50 px-3 py-2">
-                <dt className="text-xs text-gray-500">Purchased credits</dt>
-                <dd className="mt-0.5 font-semibold text-gray-200">
+              <div className="rounded-lg bg-paper-0 px-3 py-2">
+                <dt className="text-xs text-ink-500">Purchased credits</dt>
+                <dd className="mt-0.5 font-semibold text-ink-800">
                   {formatUsd(balance?.purchasedNanos ?? 0)}
                 </dd>
-                <dd className="text-xs text-gray-500">Never expire</dd>
+                <dd className="text-xs text-ink-500">Never expire</dd>
               </div>
             </dl>
 
             {sub && usage && sub.includedCreditsNanos > 0 && (
               <div className="mt-5">
                 <div className="flex items-baseline justify-between text-sm">
-                  <span className="text-gray-400">This period</span>
-                  <span className="font-medium text-gray-200">
+                  <span className="text-ink-600">This period</span>
+                  <span className="font-medium text-ink-800">
                     {formatUsd(usage.priceNanos)} of {formatUsd(sub.includedCreditsNanos)} allowance
                   </span>
                 </div>
                 <div
-                  className="mt-2 h-2 overflow-hidden rounded-full bg-ink-700"
+                  className="mt-2 h-2 overflow-hidden rounded-full bg-paper-0"
                   role="progressbar"
                   aria-valuenow={Math.round(usedPct(usage.priceNanos, sub.includedCreditsNanos))}
                   aria-valuemin={0}
@@ -254,26 +254,26 @@ export function BillingPage() {
                     style={{ width: `${usedPct(usage.priceNanos, sub.includedCreditsNanos)}%` }}
                   />
                 </div>
-                <p className="mt-2 text-xs text-gray-500">
+                <p className="mt-2 text-xs text-ink-500">
                   Resets {formatDate(sub.periodEnd)} · {usage.events.toLocaleString('en-US')} requests
                 </p>
               </div>
             )}
           </div>
 
-          <div className="rounded-xl border border-white/10 bg-ink-800/60 p-5 backdrop-blur">
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Current plan</p>
-            <p className="mt-1 text-2xl font-bold text-white">{sub?.planName}</p>
-            <p className="mt-1 text-sm text-gray-400">
+          <div className="rounded-xl border border-line bg-paper-0 p-5">
+            <p className="text-xs font-medium uppercase tracking-wide text-ink-500">Current plan</p>
+            <p className="mt-1 text-2xl font-bold text-ink-900">{sub?.planName}</p>
+            <p className="mt-1 text-sm text-ink-600">
               {sub?.monthlyPriceCents ? `${formatCents(sub.monthlyPriceCents)}/month` : 'No charge'}
               {sub?.seats && sub.seats > 1 ? ` · ${sub.seats} seats` : ''}
             </p>
             {sub?.cancelAtPeriodEnd && (
-              <p className="mt-3 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+              <p className="mt-3 rounded-lg bg-caution-50 px-3 py-2 text-xs text-caution-600">
                 Moves to Free on {formatDate(sub.periodEnd)}.
               </p>
             )}
-            <p className="mt-3 flex items-center gap-1.5 text-xs text-gray-500">
+            <p className="mt-3 flex items-center gap-1.5 text-xs text-ink-500">
               <BoltIcon width={14} height={14} />
               {sub?.rateMultiplier}× base throughput
             </p>
@@ -282,8 +282,8 @@ export function BillingPage() {
 
         {/* ---- Buy credits ---- */}
         <section className="mt-10">
-          <h2 className="text-lg font-semibold text-white">Buy usage credits</h2>
-          <p className="mt-1 text-sm text-gray-400">
+          <h2 className="text-lg font-semibold text-ink-900">Buy usage credits</h2>
+          <p className="mt-1 text-sm text-ink-600">
             1 credit = $1 of usage. Purchased credits never expire and are used after your monthly
             allowance.
           </p>
@@ -294,29 +294,29 @@ export function BillingPage() {
                 key={pack.code}
                 onClick={() => buyPack(pack.code, pack.name)}
                 disabled={!canManage || busy !== null}
-                className="group rounded-xl border border-white/10 bg-ink-800/60 p-4 text-left transition hover:border-brand-500/50 hover:bg-ink-700/60 disabled:cursor-not-allowed disabled:opacity-50"
+                className="group rounded-xl border border-line bg-paper-0 p-4 text-left transition hover:border-brand-200 hover:bg-paper-0 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <p className="text-lg font-semibold text-white">{formatCents(pack.priceCents)}</p>
-                <p className="mt-0.5 text-sm text-gray-400">
+                <p className="text-lg font-semibold text-ink-900">{formatCents(pack.priceCents)}</p>
+                <p className="mt-0.5 text-sm text-ink-600">
                   {formatUsd(pack.creditsNanos)} in credits
                 </p>
                 {pack.bonusNanos > 0 && (
-                  <p className="mt-1.5 inline-block rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-300">
+                  <p className="mt-1.5 inline-block rounded-full bg-success-50 px-2 py-0.5 text-xs font-medium text-success-600">
                     +{formatUsd(pack.bonusNanos)} bonus
                   </p>
                 )}
                 {busy === `pack:${pack.code}` && (
-                  <SpinnerIcon className="mt-2 animate-spin text-brand-300" width={16} height={16} />
+                  <SpinnerIcon className="mt-2 animate-spin text-brand-600" width={16} height={16} />
                 )}
               </button>
             ))}
 
-            <div className="rounded-xl border border-dashed border-white/15 bg-ink-800/40 p-4">
-              <label htmlFor="custom-amount" className="text-sm font-medium text-gray-300">
+            <div className="rounded-xl border border-dashed border-line bg-paper-0 p-4">
+              <label htmlFor="custom-amount" className="text-sm font-medium text-ink-700">
                 Custom amount
               </label>
               <div className="mt-2 flex items-center gap-2">
-                <span className="text-gray-500">$</span>
+                <span className="text-ink-500">$</span>
                 <input
                   id="custom-amount"
                   type="number"
@@ -326,13 +326,13 @@ export function BillingPage() {
                   onChange={(e) => setCustomAmount(e.target.value)}
                   disabled={!canManage || busy !== null}
                   placeholder="50"
-                  className="w-full rounded-lg border border-white/10 bg-ink-900/60 px-2.5 py-1.5 text-sm text-white outline-none transition focus:border-brand-500 disabled:opacity-50"
+                  className="w-full rounded-lg border border-line bg-paper-50 px-2.5 py-1.5 text-sm text-ink-900 outline-none transition focus:border-brand-500 disabled:opacity-50"
                 />
               </div>
               <button
                 onClick={buyCustom}
                 disabled={!canManage || busy !== null || !customAmount}
-                className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-brand-500 disabled:opacity-50"
+                className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand-500 px-3 py-1.5 text-sm font-medium text-ink-900 transition hover:bg-brand-500 disabled:opacity-50"
               >
                 {busy === 'custom' ? (
                   <SpinnerIcon className="animate-spin" width={15} height={15} />
@@ -345,7 +345,7 @@ export function BillingPage() {
           </div>
 
           {catalog?.paymentProvider === 'manual' && (
-            <p className="mt-3 text-xs text-gray-500">
+            <p className="mt-3 text-xs text-ink-500">
               Purchases stay pending until your payment provider confirms them.
             </p>
           )}
@@ -354,14 +354,14 @@ export function BillingPage() {
         {/* ---- Plans ---- */}
         <section className="mt-12">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold text-white">Plans</h2>
-            <div className="flex rounded-lg border border-white/10 bg-ink-800/60 p-1 text-sm">
+            <h2 className="text-lg font-semibold text-ink-900">Plans</h2>
+            <div className="flex rounded-lg border border-line bg-paper-0 p-1 text-sm">
               {(['monthly', 'annual'] as BillingInterval[]).map((i) => (
                 <button
                   key={i}
                   onClick={() => setInterval(i)}
                   className={`rounded-md px-3 py-1.5 font-medium capitalize transition ${
-                    interval === i ? 'bg-brand-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                    interval === i ? 'bg-brand-500 text-ink-900' : 'text-ink-600 hover:text-ink-900'
                   }`}
                 >
                   {i}
@@ -398,15 +398,15 @@ export function BillingPage() {
 
         {/* ---- Rate card ---- */}
         <section className="mt-12">
-          <h2 className="text-lg font-semibold text-white">Usage rates</h2>
-          <p className="mt-1 text-sm text-gray-400">
+          <h2 className="text-lg font-semibold text-ink-900">Usage rates</h2>
+          <p className="mt-1 text-sm text-ink-600">
             Price per million tokens. Cached reads are far cheaper than fresh input, and batch
             requests are discounted {catalog?.rateCard[0]?.batchDiscountPct ?? 50}%.
           </p>
 
-          <div className="mt-4 overflow-x-auto rounded-xl border border-white/10">
+          <div className="mt-4 overflow-x-auto rounded-xl border border-line">
             <table className="w-full min-w-[46rem] text-sm">
-              <thead className="bg-ink-700/60 text-left text-xs uppercase tracking-wide text-gray-400">
+              <thead className="bg-paper-0 text-left text-xs uppercase tracking-wide text-ink-600">
                 <tr>
                   <th scope="col" className="px-4 py-3 font-medium">Model</th>
                   <th scope="col" className="px-4 py-3 text-right font-medium">Input</th>
@@ -416,22 +416,22 @@ export function BillingPage() {
                   <th scope="col" className="px-4 py-3 text-right font-medium">Cache read</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/10">
+              <tbody className="divide-y divide-line">
                 {catalog?.rateCard.map((rate) => (
-                  <tr key={rate.modelId} className="bg-ink-800/40">
+                  <tr key={rate.modelId} className="bg-paper-0">
                     <td className="px-4 py-3">
-                      <p className="font-medium text-white">{rate.displayName}</p>
-                      <p className="text-xs text-gray-500">
+                      <p className="font-medium text-ink-900">{rate.displayName}</p>
+                      <p className="text-xs text-ink-500">
                         {rate.contextWindow
                           ? `${(rate.contextWindow / 1000).toLocaleString('en-US')}k context`
                           : ''}
                       </p>
                     </td>
-                    <td className="px-4 py-3 text-right text-gray-300">{formatRate(rate.inputPerMTok)}</td>
-                    <td className="px-4 py-3 text-right text-gray-300">{formatRate(rate.outputPerMTok)}</td>
-                    <td className="px-4 py-3 text-right text-gray-400">{formatRate(rate.cacheWrite5mPerMTok)}</td>
-                    <td className="px-4 py-3 text-right text-gray-400">{formatRate(rate.cacheWrite1hPerMTok)}</td>
-                    <td className="px-4 py-3 text-right text-emerald-300">{formatRate(rate.cacheReadPerMTok)}</td>
+                    <td className="px-4 py-3 text-right text-ink-700">{formatRate(rate.inputPerMTok)}</td>
+                    <td className="px-4 py-3 text-right text-ink-700">{formatRate(rate.outputPerMTok)}</td>
+                    <td className="px-4 py-3 text-right text-ink-600">{formatRate(rate.cacheWrite5mPerMTok)}</td>
+                    <td className="px-4 py-3 text-right text-ink-600">{formatRate(rate.cacheWrite1hPerMTok)}</td>
+                    <td className="px-4 py-3 text-right text-success-600">{formatRate(rate.cacheReadPerMTok)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -443,8 +443,8 @@ export function BillingPage() {
         <section className="mt-12">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-white">Payment history</h2>
-              <p className="mt-1 text-sm text-gray-400">
+              <h2 className="text-lg font-semibold text-ink-900">Payment history</h2>
+              <p className="mt-1 text-sm text-ink-600">
                 Receipts are emailed automatically and kept here for your records.
               </p>
             </div>
@@ -452,7 +452,7 @@ export function BillingPage() {
               <button
                 onClick={openPortal}
                 disabled={busy !== null}
-                className="flex items-center gap-2 rounded-lg border border-white/10 bg-ink-700/70 px-4 py-2 text-sm font-medium text-gray-200 transition hover:bg-ink-600 disabled:opacity-50"
+                className="flex items-center gap-2 rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100 disabled:opacity-50"
               >
                 {busy === 'portal' && <SpinnerIcon className="animate-spin" width={15} height={15} />}
                 Manage payment methods
@@ -460,15 +460,15 @@ export function BillingPage() {
             )}
           </div>
 
-          <div className="mt-4 overflow-x-auto rounded-xl border border-white/10">
+          <div className="mt-4 overflow-x-auto rounded-xl border border-line">
             {payments.length === 0 ? (
-              <p className="px-5 py-8 text-center text-sm text-gray-500">
+              <p className="px-5 py-8 text-center text-sm text-ink-500">
                 No payments yet. Charges and receipts appear here once you buy credits or start a
                 paid plan.
               </p>
             ) : (
               <table className="w-full min-w-[42rem] text-sm">
-                <thead className="bg-ink-700/60 text-left text-xs uppercase tracking-wide text-gray-400">
+                <thead className="bg-paper-0 text-left text-xs uppercase tracking-wide text-ink-600">
                   <tr>
                     <th scope="col" className="px-4 py-3 font-medium">Date</th>
                     <th scope="col" className="px-4 py-3 font-medium">Description</th>
@@ -478,17 +478,17 @@ export function BillingPage() {
                     <th scope="col" className="px-4 py-3 text-right font-medium">Receipt</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/10">
+                <tbody className="divide-y divide-line">
                   {payments.map((p) => (
-                    <tr key={p.id} className="bg-ink-800/40">
-                      <td className="px-4 py-2.5 text-gray-400">{formatDate(p.createdAt)}</td>
+                    <tr key={p.id} className="bg-paper-0">
+                      <td className="px-4 py-2.5 text-ink-600">{formatDate(p.createdAt)}</td>
                       <td className="px-4 py-2.5">
-                        <p className="font-medium text-white">
+                        <p className="font-medium text-ink-900">
                           {p.description ?? PAYMENT_KIND_LABELS[p.kind]}
                         </p>
-                        <p className="text-xs text-gray-500">{PAYMENT_KIND_LABELS[p.kind]}</p>
+                        <p className="text-xs text-ink-500">{PAYMENT_KIND_LABELS[p.kind]}</p>
                       </td>
-                      <td className="px-4 py-2.5 text-gray-400">
+                      <td className="px-4 py-2.5 text-ink-600">
                         {p.cardLast4 ? (
                           <span className="capitalize">
                             {p.cardBrand} ····{p.cardLast4}
@@ -500,7 +500,7 @@ export function BillingPage() {
                       <td className="px-4 py-2.5">
                         <PaymentStatus status={p.status} reason={p.failureReason} />
                       </td>
-                      <td className="px-4 py-2.5 text-right font-mono text-gray-200">
+                      <td className="px-4 py-2.5 text-right font-mono text-ink-800">
                         {formatCents(p.amountCents)}
                       </td>
                       <td className="px-4 py-2.5 text-right">
@@ -509,12 +509,12 @@ export function BillingPage() {
                             href={(p.receiptUrl ?? p.invoicePdfUrl ?? p.hostedInvoiceUrl)!}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-brand-400 transition hover:text-brand-300"
+                            className="text-brand-600 transition hover:text-brand-700"
                           >
                             View
                           </a>
                         ) : (
-                          <span className="text-gray-600">—</span>
+                          <span className="text-ink-400">—</span>
                         )}
                       </td>
                     </tr>
@@ -527,31 +527,31 @@ export function BillingPage() {
 
         {/* ---- Ledger ---- */}
         <section className="mt-12">
-          <h2 className="text-lg font-semibold text-white">Credit history</h2>
-          <p className="mt-1 text-sm text-gray-400">
+          <h2 className="text-lg font-semibold text-ink-900">Credit history</h2>
+          <p className="mt-1 text-sm text-ink-600">
             How credits were granted and consumed — separate from what you were charged.
           </p>
-          <div className="mt-4 overflow-hidden rounded-xl border border-white/10">
+          <div className="mt-4 overflow-hidden rounded-xl border border-line">
             {ledger.length === 0 ? (
-              <p className="px-5 py-8 text-center text-sm text-gray-500">No credit activity yet.</p>
+              <p className="px-5 py-8 text-center text-sm text-ink-500">No credit activity yet.</p>
             ) : (
-              <ul className="divide-y divide-white/10">
+              <ul className="divide-y divide-line">
                 {ledger.map((entry) => (
                   <li
                     key={entry.id}
-                    className="flex items-center justify-between gap-4 bg-ink-800/40 px-5 py-3"
+                    className="flex items-center justify-between gap-4 bg-paper-0 px-5 py-3"
                   >
                     <div>
-                      <p className="text-sm font-medium text-white">
+                      <p className="text-sm font-medium text-ink-900">
                         {LEDGER_LABELS[entry.entryType]}
                       </p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-ink-500">
                         {entry.description} · {formatDate(entry.createdAt)}
                       </p>
                     </div>
                     <span
                       className={`font-mono text-sm font-medium ${
-                        entry.amountNanos >= 0 ? 'text-emerald-300' : 'text-gray-400'
+                        entry.amountNanos >= 0 ? 'text-success-600' : 'text-ink-600'
                       }`}
                     >
                       {entry.amountNanos >= 0 ? '+' : '−'}
@@ -564,17 +564,17 @@ export function BillingPage() {
           </div>
         </section>
       </div>
-    </main></AppShell>
+    </AppShell>
   );
 }
 
 /** Status pill. A failed payment says why, so support isn't the only route. */
 function PaymentStatus({ status, reason }: { status: Payment['status']; reason: string | null }) {
   const styles: Record<Payment['status'], string> = {
-    succeeded: 'bg-emerald-500/15 text-emerald-300',
-    pending: 'bg-amber-500/15 text-amber-200',
-    failed: 'bg-red-500/15 text-red-300',
-    refunded: 'bg-gray-500/20 text-gray-300',
+    succeeded: 'bg-success-50 text-success-600',
+    pending: 'bg-caution-50 text-caution-600',
+    failed: 'bg-danger-50 text-danger-700',
+    refunded: 'bg-gray-500/20 text-ink-700',
   };
   return (
     <span className="inline-flex flex-col items-start">
@@ -582,7 +582,7 @@ function PaymentStatus({ status, reason }: { status: Payment['status']; reason: 
         {status}
       </span>
       {status === 'failed' && reason && (
-        <span className="mt-0.5 text-xs text-gray-500">{reason}</span>
+        <span className="mt-0.5 text-xs text-ink-500">{reason}</span>
       )}
     </span>
   );
@@ -612,40 +612,40 @@ function PlanCard({
     <div
       className={`flex flex-col rounded-xl border p-5 transition ${
         isCurrent
-          ? 'border-brand-500/60 bg-brand-600/10'
-          : 'border-white/10 bg-ink-800/60 hover:border-white/20'
+          ? 'border-brand-200 bg-brand-50'
+          : 'border-line bg-paper-0 hover:border-line-strong'
       }`}
     >
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-lg font-semibold text-white">{plan.name}</p>
-          <p className="mt-0.5 text-sm text-gray-400">{plan.tagline}</p>
+          <p className="text-lg font-semibold text-ink-900">{plan.name}</p>
+          <p className="mt-0.5 text-sm text-ink-600">{plan.tagline}</p>
         </div>
         {isCurrent && (
-          <span className="rounded-full bg-brand-500/20 px-2.5 py-1 text-xs font-medium text-brand-200">
+          <span className="rounded-full bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700">
             Current
           </span>
         )}
       </div>
 
-      <p className="mt-4 text-3xl font-bold tracking-tight text-white">
+      <p className="mt-4 text-3xl font-bold tracking-tight text-ink-900">
         {plan.isContactSales ? 'Custom' : formatCents(priceCents)}
         {!plan.isContactSales && priceCents > 0 && (
-          <span className="text-sm font-normal text-gray-500">
+          <span className="text-sm font-normal text-ink-500">
             /mo{plan.perSeat ? ' per seat' : ''}
           </span>
         )}
       </p>
       {interval === 'annual' && plan.annualPriceCents !== null && plan.annualPriceCents < plan.monthlyPriceCents && (
-        <p className="mt-1 text-xs text-emerald-300">
+        <p className="mt-1 text-xs text-success-600">
           Save {formatCents((plan.monthlyPriceCents - plan.annualPriceCents) * 12)} a year
         </p>
       )}
 
-      <ul className="mt-4 flex-1 space-y-2 text-sm text-gray-300">
+      <ul className="mt-4 flex-1 space-y-2 text-sm text-ink-700">
         {plan.features.map((feature) => (
           <li key={feature} className="flex items-start gap-2">
-            <CheckIcon width={16} height={16} className="mt-0.5 shrink-0 text-brand-400" />
+            <CheckIcon width={16} height={16} className="mt-0.5 shrink-0 text-brand-600" />
             <span>{feature}</span>
           </li>
         ))}
@@ -656,8 +656,8 @@ function PlanCard({
         disabled={disabled || isCurrent || plan.isContactSales}
         className={`mt-5 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
           isCurrent
-            ? 'border border-white/10 bg-ink-700/60 text-gray-400'
-            : 'bg-brand-600 text-white hover:bg-brand-500'
+            ? 'border border-line bg-paper-0 text-ink-600'
+            : 'bg-brand-500 text-ink-900 hover:bg-brand-500'
         }`}
       >
         {busy && <SpinnerIcon className="animate-spin" width={15} height={15} />}
@@ -697,27 +697,27 @@ function SpendControls({
 
   return (
     <section className="mt-12 grid gap-4 md:grid-cols-2">
-      <div className="rounded-xl border border-white/10 bg-ink-800/60 p-5">
-        <h3 className="font-semibold text-white">Auto-reload</h3>
-        <p className="mt-1 text-sm text-gray-400">
+      <div className="rounded-xl border border-line bg-paper-0 p-5">
+        <h3 className="font-semibold text-ink-900">Auto-reload</h3>
+        <p className="mt-1 text-sm text-ink-600">
           Top up automatically when the balance drops below{' '}
           {formatUsd(settings.autoReloadThresholdNanos)}.
         </p>
 
-        <label className="mt-4 flex items-center gap-3 text-sm text-gray-300">
+        <label className="mt-4 flex items-center gap-3 text-sm text-ink-700">
           <input
             type="checkbox"
             checked={settings.autoReloadEnabled}
             disabled={!canManage || busy !== null}
             onChange={(e) => onSave({ autoReloadEnabled: e.target.checked }, 'autoreload')}
-            className="h-4 w-4 rounded border-white/20 bg-ink-900 text-brand-500 focus:ring-brand-500"
+            className="h-4 w-4 rounded border-line bg-paper-100 text-brand-500 focus:ring-brand-500"
           />
           Enable auto-reload
         </label>
 
         <div className="mt-4 flex items-end gap-2">
           <div className="flex-1">
-            <label htmlFor="reload-amount" className="text-xs text-gray-500">
+            <label htmlFor="reload-amount" className="text-xs text-ink-500">
               Reload amount ($)
             </label>
             <input
@@ -727,7 +727,7 @@ function SpendControls({
               value={reloadAmount}
               onChange={(e) => setReloadAmount(e.target.value)}
               disabled={!canManage || busy !== null}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-ink-900/60 px-3 py-1.5 text-sm text-white outline-none focus:border-brand-500 disabled:opacity-50"
+              className="mt-1 w-full rounded-lg border border-line bg-paper-50 px-3 py-1.5 text-sm text-ink-900 outline-none focus:border-brand-500 disabled:opacity-50"
             />
           </div>
           <button
@@ -738,23 +738,23 @@ function SpendControls({
               )
             }
             disabled={!canManage || busy !== null || !reloadAmount}
-            className="rounded-lg border border-white/10 bg-ink-700/70 px-3 py-1.5 text-sm text-gray-200 transition hover:bg-ink-600 disabled:opacity-50"
+            className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-sm text-ink-800 transition hover:bg-paper-100 disabled:opacity-50"
           >
             Save
           </button>
         </div>
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-ink-800/60 p-5">
-        <h3 className="font-semibold text-white">Monthly spend limit</h3>
-        <p className="mt-1 text-sm text-gray-400">
+      <div className="rounded-xl border border-line bg-paper-0 p-5">
+        <h3 className="font-semibold text-ink-900">Monthly spend limit</h3>
+        <p className="mt-1 text-sm text-ink-600">
           Requests are refused once usage in a billing period reaches this cap. Leave blank for no
           limit.
         </p>
 
         <div className="mt-4 flex items-end gap-2">
           <div className="flex-1">
-            <label htmlFor="spend-limit" className="text-xs text-gray-500">
+            <label htmlFor="spend-limit" className="text-xs text-ink-500">
               Limit ($)
             </label>
             <input
@@ -765,7 +765,7 @@ function SpendControls({
               onChange={(e) => setLimit(e.target.value)}
               disabled={!canManage || busy !== null}
               placeholder="No limit"
-              className="mt-1 w-full rounded-lg border border-white/10 bg-ink-900/60 px-3 py-1.5 text-sm text-white outline-none focus:border-brand-500 disabled:opacity-50"
+              className="mt-1 w-full rounded-lg border border-line bg-paper-50 px-3 py-1.5 text-sm text-ink-900 outline-none focus:border-brand-500 disabled:opacity-50"
             />
           </div>
           <button
@@ -779,7 +779,7 @@ function SpendControls({
               )
             }
             disabled={!canManage || busy !== null}
-            className="rounded-lg border border-white/10 bg-ink-700/70 px-3 py-1.5 text-sm text-gray-200 transition hover:bg-ink-600 disabled:opacity-50"
+            className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-sm text-ink-800 transition hover:bg-paper-100 disabled:opacity-50"
           >
             Save
           </button>

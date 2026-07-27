@@ -83,6 +83,33 @@ export const config = {
   passwordResetRedirectUrl:
     process.env.PASSWORD_RESET_REDIRECT_URL ?? `${frontendOrigins[0]}/reset-password`,
 
+  technician: {
+    // The voice assistant. Without an Anthropic key the backend still answers —
+    // it falls back to a deterministic rule-based reply — so the technician app
+    // is usable out of the box and only gets smarter once a key is configured.
+    assistant: {
+      apiKey: process.env.ANTHROPIC_API_KEY ?? '',
+      model: process.env.ANTHROPIC_MODEL ?? 'claude-opus-5',
+      // Voice replies are spoken aloud, so they must stay short. This caps the
+      // response; the system prompt asks for brevity as well.
+      maxTokens: Number(process.env.ASSISTANT_MAX_TOKENS ?? 512),
+    },
+
+    // Speech-to-text. Optional: the browser's own SpeechRecognition handles
+    // dictation where available, and this is the fallback for everyone else
+    // (notably iOS Safari and Firefox). Any OpenAI-compatible /audio/transcriptions
+    // endpoint works — Whisper, Groq, a self-hosted whisper.cpp server.
+    transcription: {
+      url: process.env.TRANSCRIPTION_URL ?? '',
+      apiKey: process.env.TRANSCRIPTION_API_KEY ?? '',
+      model: process.env.TRANSCRIPTION_MODEL ?? 'whisper-1',
+    },
+
+    // Cap on an uploaded audio clip. Opus at the recorder's bitrate runs about
+    // 1 MB/minute, so this is roughly a 25-minute dictation.
+    maxAudioUploadBytes: Number(process.env.MAX_AUDIO_UPLOAD_BYTES ?? 25 * 1024 * 1024),
+  },
+
   anthropic: {
     // Upstream model provider key. Server-only: the browser never calls the
     // provider directly, because token counts have to come back through us to

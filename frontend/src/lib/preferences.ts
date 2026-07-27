@@ -11,15 +11,12 @@ import { useSyncExternalStore } from 'react';
 export interface Preferences {
   /** Suppress entrance animations and transitions. */
   reduceMotion: boolean;
-  /** Start the sidebar in its icon-only form on wide screens. */
-  collapsedSidebar: boolean;
   /** Ask for confirmation before signing out. */
   confirmSignOut: boolean;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
   reduceMotion: false,
-  collapsedSidebar: false,
   confirmSignOut: false,
 };
 

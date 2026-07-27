@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 html,
@@ -17,30 +17,29 @@ body {
   font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #0a0a12;
-  color: #e5e7eb;
+  background-color: #f4f1eb;
+  color: #1c1917;
 }
 
 /*
  * Status palette for the Project Manager screens.
  *
  * These are reserved: they mean good / needs-attention / wrong, and are never
- * reused as decorative or series colors. Validated against this app's dark
- * chart surface (ink-800, #12121d) — all three clear 3:1 contrast, and the
- * worst pair separation is ΔE 27.6 normal-vision / 11.3 under simulated
- * colour-vision deficiency.
+ * reused as decorative or series colors. The values match the `success`,
+ * `caution` and `danger` tokens in tailwind.config.js, so status reads the same
+ * whether it is drawn by a chart or by a component.
  *
  * A status colour never carries meaning on its own anywhere in the UI: every
  * place one appears it is paired with an icon and a word, because roughly one
  * man in twelve cannot rely on the hue.
  */
 :root {
-  --pm-good: #0ca30c;
-  --pm-warning: #fab219;
-  --pm-critical: #d03b3b;
-  /* Informational, not an alarm — deliberately drawn from the brand ramp so it
-     never reads as a severity. */
-  --pm-info: #a5b4fc;
+  --pm-good: #3f7d4c;
+  --pm-warning: #946a0b;
+  --pm-critical: #b4361d;
+  /* Informational, not an alarm. Deliberately outside the brand ramp so it
+     never reads as either a severity or the accent. */
+  --pm-info: #2e6e8e;
 }
 
 .pm-good {
@@ -56,12 +55,35 @@ body {
   color: var(--pm-info);
 }
 
-/* Subtle brand aurora background used on the auth screen. */
+/* Warm wash behind the auth screens — a hint of terracotta bleeding in from
+   the top corners, not a gradient anyone should consciously notice. */
 .cx-aurora {
   background:
-    radial-gradient(60rem 60rem at 15% -10%, rgba(99, 102, 241, 0.18), transparent 60%),
-    radial-gradient(50rem 50rem at 110% 10%, rgba(67, 56, 202, 0.16), transparent 55%),
-    radial-gradient(40rem 40rem at 50% 120%, rgba(129, 140, 248, 0.12), transparent 60%);
+    radial-gradient(55rem 40rem at 12% -15%, rgba(210, 80, 10, 0.07), transparent 62%),
+    radial-gradient(45rem 35rem at 105% -5%, rgba(210, 80, 10, 0.05), transparent 58%);
+}
+
+/* Scrollbars inside panels, so a scrolling transcript doesn't punch a grey
+   canyon through a warm page. */
+.cx-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #d8d2c5 transparent;
+}
+.cx-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.cx-scroll::-webkit-scrollbar-thumb {
+  background-color: #d8d2c5;
+  border-radius: 999px;
+}
+.cx-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Native media controls default to a dark chrome that fights the page. */
+audio {
+  color-scheme: light;
 }
 
 /* Set from Settings › Appearance, and honoured for anyone whose system already

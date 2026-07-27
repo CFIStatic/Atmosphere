@@ -69,6 +69,35 @@ export interface RecoveryCredential {
   refreshToken?: string;
 }
 
+/** What the deployment can actually do, so the UI can offer only what works. */
+export interface TechnicianCapabilities {
+  /** A language model is configured; otherwise replies come from a local fallback. */
+  assistant: boolean;
+  /** Server-side speech-to-text is configured (the fallback for Safari/Firefox). */
+  transcription: boolean;
+  maxAudioUploadBytes: number;
+}
+
+export interface AssistantTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+/** Everything the assistant is told about the caller and their surroundings. */
+export interface AssistantContext {
+  role?: MemberRole;
+  workType?: WorkType;
+  orgName?: string;
+  /** Current labels from the in-browser object detector. */
+  detectedObjects?: string[];
+}
+
+export interface AssistantReply {
+  reply: string;
+  /** null when the rule-based fallback answered rather than a model. */
+  model: string | null;
+}
+
 /** A website the organization has connected for the AI to work in. */
 export interface WebConnection {
   id: string;
@@ -428,6 +457,45 @@ export const api = {
 
   getMembers: () => request<{ members: OrgMember[] }>('/api/org/members', { method: 'GET' }),
 
+  // ---- Technician app ----
+  technicianCapabilities: () =>
+    request<TechnicianCapabilities>('/api/technician/capabilities', { method: 'GET' }),
+
+  assist: (message: string, history: AssistantTurn[], context?: AssistantContext) =>
+    request<AssistantReply>('/api/technician/assist', {
+      method: 'POST',
+      body: JSON.stringify({ message, history, context }),
+    }),
+
+  /**
+   * Server-side transcription for browsers with no usable SpeechRecognition.
+   * The clip goes up as the raw request body — `request()` is bypassed because
+   * it hard-codes a JSON content type.
+   */
+  transcribe: async (clip: Blob): Promise<{ text: string }> => {
+    let res: Response;
+    try {
+      res = await fetch(`${API_BASE}/api/technician/transcribe`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': clip.type || 'audio/webm' },
+        body: clip,
+      });
+    } catch {
+      throw new ApiError(0, 'Network error — is the backend running?', 'network_error');
+    }
+
+    const text = await res.text();
+    const body = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+    if (!res.ok) {
+      throw new ApiError(
+        res.status,
+        (body.error as string) ?? `Transcription failed (${res.status})`,
+        (body.code as string) ?? 'error',
+      );
+    }
+    return body as { text: string };
+  },
   // ---- Billing ----
   getCatalog: () => request<Catalog>('/api/billing/catalog', { method: 'GET' }),
 

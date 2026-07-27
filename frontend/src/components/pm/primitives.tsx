@@ -64,7 +64,7 @@ export function SeverityIcon({ severity, ...props }: { severity: Severity } & SV
 export function SeverityTag({ severity }: { severity: Severity }) {
   const meta = SEVERITY[severity];
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-300">
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-700">
       <SeverityIcon severity={severity} className={meta.className} />
       {meta.label}
     </span>
@@ -93,12 +93,12 @@ export function HealthPill({ health }: { health: PmHealth }) {
   const band = BAND[health.band];
   return (
     <span
-      className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-ink-700/60 px-2.5 py-1 text-xs"
+      className="inline-flex items-center gap-2 rounded-full border border-line bg-paper-0 px-2.5 py-1 text-xs"
       title={health.reasons.map((r) => r.text).join(' · ') || 'Nothing flagged'}
     >
       <span aria-hidden="true" className={`h-2 w-2 rounded-full ${band.className}`} style={{ backgroundColor: 'currentColor' }} />
-      <span className="font-medium text-gray-200">{band.label}</span>
-      <span className="tabular-nums text-gray-500">{health.score}</span>
+      <span className="font-medium text-ink-800">{band.label}</span>
+      <span className="tabular-nums text-ink-500">{health.score}</span>
     </span>
   );
 }
@@ -120,12 +120,12 @@ export function Card({
 }) {
   return (
     <section
-      className={`rounded-xl border border-white/10 bg-ink-800/60 p-5 backdrop-blur ${className}`}
+      className={`rounded-xl border border-line bg-paper-0 p-5 ${className}`}
     >
       {(title || action) && (
         <header className="mb-4 flex items-start justify-between gap-3">
           {typeof title === 'string' ? (
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-400">{title}</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-600">{title}</h2>
           ) : (
             title
           )}
@@ -162,19 +162,19 @@ export function StatTile({
         ? 'pm-warning'
         : tone === 'critical'
           ? 'pm-critical'
-          : 'text-gray-600';
+          : 'text-ink-400';
   return (
-    <div className="rounded-xl border border-white/10 bg-ink-800/60 p-4 backdrop-blur">
+    <div className="rounded-xl border border-line bg-paper-0 p-4">
       <div className="flex items-center gap-2">
         <span
           aria-hidden="true"
           className={`h-1.5 w-6 rounded-full ${toneClass}`}
           style={{ backgroundColor: 'currentColor' }}
         />
-        <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-ink-500">{label}</p>
       </div>
-      <p className="mt-2 text-2xl font-semibold tabular-nums text-white">{value}</p>
-      {hint && <p className="mt-1 text-xs text-gray-500">{hint}</p>}
+      <p className="mt-2 text-2xl font-semibold tabular-nums text-ink-900">{value}</p>
+      {hint && <p className="mt-1 text-xs text-ink-500">{hint}</p>}
     </div>
   );
 }
@@ -208,11 +208,11 @@ export function Meter({
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3">
-        <span className="text-sm text-gray-300">{label}</span>
-        <span className="text-sm font-semibold tabular-nums text-white">{clamped}%</span>
+        <span className="text-sm text-ink-700">{label}</span>
+        <span className="text-sm font-semibold tabular-nums text-ink-900">{clamped}%</span>
       </div>
       <div
-        className="mt-1.5 h-2 overflow-hidden rounded-full bg-ink-700"
+        className="mt-1.5 h-2 overflow-hidden rounded-full bg-paper-0"
         role="progressbar"
         aria-valuenow={clamped}
         aria-valuemin={0}
@@ -224,19 +224,19 @@ export function Meter({
           style={{ width: `${clamped}%`, backgroundColor: fill }}
         />
       </div>
-      {note && <p className="mt-1 text-xs text-gray-500">{note}</p>}
+      {note && <p className="mt-1 text-xs text-ink-500">{note}</p>}
     </div>
   );
 }
 
 export function EmptyState({ children }: { children: ReactNode }) {
-  return <p className="py-8 text-center text-sm text-gray-500">{children}</p>;
+  return <p className="py-8 text-center text-sm text-ink-500">{children}</p>;
 }
 
 export function Pill({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full border border-white/10 bg-ink-700/60 px-2.5 py-1 text-xs font-medium text-gray-300 ${className}`}
+      className={`inline-flex items-center rounded-full border border-line bg-paper-0 px-2.5 py-1 text-xs font-medium text-ink-700 ${className}`}
     >
       {children}
     </span>
@@ -276,7 +276,7 @@ export function DryingSparkline({
 }) {
   if (points.length < 2) {
     return (
-      <p className="text-xs text-gray-500">
+      <p className="text-xs text-ink-500">
         {points.length === 1 ? 'One reading so far — no trend yet.' : 'No readings yet.'}
       </p>
     );
@@ -334,9 +334,9 @@ export function DryingSparkline({
           strokeWidth="2"
         />
       </svg>
-      <figcaption className="mt-1 flex items-center justify-between text-xs text-gray-500">
+      <figcaption className="mt-1 flex items-center justify-between text-xs text-ink-500">
         <span>Dry standard {goalPct}%</span>
-        <span className="tabular-nums text-gray-300">Now {latest.moisturePct.toFixed(1)}%</span>
+        <span className="tabular-nums text-ink-700">Now {latest.moisturePct.toFixed(1)}%</span>
       </figcaption>
     </figure>
   );

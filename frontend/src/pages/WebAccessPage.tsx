@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import {
   api,
   ApiError,
@@ -7,7 +8,7 @@ import {
   type WebRun,
   type WebRunKind,
 } from '../lib/api';
-import { AppShell } from '../components/AppShell';
+import { Logo } from '../components/Logo';
 import { VerificationPanel } from '../components/VerificationPanel';
 import { SpinnerIcon, CheckIcon } from '../components/icons';
 
@@ -22,13 +23,13 @@ import { SpinnerIcon, CheckIcon } from '../components/icons';
  */
 
 const inputClass =
-  'w-full rounded-lg border border-white/10 bg-ink-700/80 px-3.5 py-2.5 text-white placeholder-gray-500 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/40';
-const labelClass = 'mb-1.5 block text-sm font-medium text-gray-300';
+  'w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200';
+const labelClass = 'mb-1.5 block text-sm font-medium text-ink-700';
 
 const STATUS_STYLES: Record<WebConnection['status'], string> = {
-  verified: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
-  failed: 'border-red-500/30 bg-red-500/10 text-red-200',
-  unverified: 'border-white/10 bg-ink-700/60 text-gray-300',
+  verified: 'border-success-200 bg-success-50 text-success-600',
+  failed: 'border-danger-200 bg-danger-50 text-danger-700',
+  unverified: 'border-line bg-paper-0 text-ink-700',
 };
 
 const STATUS_LABELS: Record<WebConnection['status'], string> = {
@@ -38,10 +39,10 @@ const STATUS_LABELS: Record<WebConnection['status'], string> = {
 };
 
 const RUN_STATUS_STYLES: Record<WebRun['status'], string> = {
-  queued: 'border-white/10 bg-ink-700/60 text-gray-300',
-  running: 'border-brand-500/30 bg-brand-500/10 text-brand-200',
-  succeeded: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
-  failed: 'border-red-500/30 bg-red-500/10 text-red-200',
+  queued: 'border-line bg-paper-0 text-ink-700',
+  running: 'border-brand-200 bg-brand-500/10 text-brand-700',
+  succeeded: 'border-success-200 bg-success-50 text-success-600',
+  failed: 'border-danger-200 bg-danger-50 text-danger-700',
 };
 
 function errorMessage(err: unknown, fallback: string): string {
@@ -94,7 +95,7 @@ function ConnectForm({ onConnected }: { onConnected: (connection: WebConnection)
     return (
       <button
         onClick={() => setOpen(true)}
-        className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-500"
+        className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-ink-900 transition hover:bg-brand-500"
       >
         Connect a site
       </button>
@@ -104,10 +105,10 @@ function ConnectForm({ onConnected }: { onConnected: (connection: WebConnection)
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-xl border border-white/10 bg-ink-800/60 p-5 backdrop-blur"
+      className="rounded-xl border border-line bg-paper-0 p-5"
     >
-      <h3 className="text-base font-semibold text-white">Connect a site</h3>
-      <p className="mt-1 text-sm text-gray-400">
+      <h3 className="text-base font-semibold text-ink-900">Connect a site</h3>
+      <p className="mt-1 text-sm text-ink-600">
         Everyone in your organization can run tasks against this site. The password is
         encrypted before it is stored and is never shown again.
       </p>
@@ -173,7 +174,7 @@ function ConnectForm({ onConnected }: { onConnected: (connection: WebConnection)
 
         <div className="sm:col-span-2">
           <label htmlFor="loginUrl" className={labelClass}>
-            Sign-in page <span className="text-gray-500">(optional)</span>
+            Sign-in page <span className="text-ink-500">(optional)</span>
           </label>
           <input
             id="loginUrl"
@@ -183,7 +184,7 @@ function ConnectForm({ onConnected }: { onConnected: (connection: WebConnection)
             placeholder="https://portal.example.com/login"
             className={inputClass}
           />
-          <p className="mt-1.5 text-xs text-gray-500">
+          <p className="mt-1.5 text-xs text-ink-500">
             Only needed when the sign-in form is not on the site's landing page.
           </p>
         </div>
@@ -192,7 +193,7 @@ function ConnectForm({ onConnected }: { onConnected: (connection: WebConnection)
       {error && (
         <div
           role="alert"
-          className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-3 text-sm text-red-200"
+          className="mt-4 rounded-lg border border-danger-200 bg-danger-50 px-3.5 py-3 text-sm text-danger-700"
         >
           {error}
         </div>
@@ -202,7 +203,7 @@ function ConnectForm({ onConnected }: { onConnected: (connection: WebConnection)
         <button
           type="submit"
           disabled={saving}
-          className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-500 disabled:opacity-60"
+          className="flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-ink-900 transition hover:bg-brand-500 disabled:opacity-60"
         >
           {saving && <SpinnerIcon className="animate-spin" width={16} height={16} />}
           {saving ? 'Saving…' : 'Save connection'}
@@ -213,7 +214,7 @@ function ConnectForm({ onConnected }: { onConnected: (connection: WebConnection)
             reset();
             setOpen(false);
           }}
-          className="rounded-lg border border-white/10 bg-ink-700/70 px-4 py-2 text-sm font-medium text-gray-200 transition hover:bg-ink-600"
+          className="rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
         >
           Cancel
         </button>
@@ -266,11 +267,11 @@ function ConnectionRow({
   }
 
   return (
-    <li className="bg-ink-800/40 px-5 py-4">
+    <li className="bg-paper-0 px-5 py-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-white">{connection.label}</p>
-          <p className="truncate text-xs text-gray-500">
+          <p className="text-sm font-medium text-ink-900">{connection.label}</p>
+          <p className="truncate text-xs text-ink-500">
             {connection.siteUrl} · {connection.username}
           </p>
         </div>
@@ -283,7 +284,7 @@ function ConnectionRow({
           <button
             onClick={verify}
             disabled={busy !== null}
-            className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-ink-700/70 px-3 py-1.5 text-xs font-medium text-gray-200 transition hover:bg-ink-600 disabled:opacity-60"
+            className="flex items-center gap-1.5 rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs font-medium text-ink-800 transition hover:bg-paper-100 disabled:opacity-60"
           >
             {busy === 'verify' && <SpinnerIcon className="animate-spin" width={12} height={12} />}
             Test sign-in
@@ -291,7 +292,7 @@ function ConnectionRow({
           <button
             onClick={remove}
             disabled={busy !== null}
-            className="rounded-lg border border-white/10 bg-ink-700/70 px-3 py-1.5 text-xs font-medium text-gray-400 transition hover:bg-red-500/10 hover:text-red-200 disabled:opacity-60"
+            className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs font-medium text-ink-600 transition hover:bg-danger-50 hover:text-danger-700 disabled:opacity-60"
           >
             Remove
           </button>
@@ -299,7 +300,7 @@ function ConnectionRow({
       </div>
 
       {(note ?? connection.lastError) && (
-        <p className="mt-2 text-xs text-gray-400">{note ?? connection.lastError}</p>
+        <p className="mt-2 text-xs text-ink-600">{note ?? connection.lastError}</p>
       )}
     </li>
   );
@@ -312,12 +313,12 @@ function RunDetail({ run }: { run: WebRun }) {
 
   return (
     <div className="mt-3 space-y-3">
-      {run.result?.summary && <p className="text-sm text-gray-300">{run.result.summary}</p>}
-      {run.error && !run.result?.summary && <p className="text-sm text-red-200">{run.error}</p>}
+      {run.result?.summary && <p className="text-sm text-ink-700">{run.result.summary}</p>}
+      {run.error && !run.result?.summary && <p className="text-sm text-danger-700">{run.error}</p>}
 
       {records.length > 0 && (
-        <div className="overflow-x-auto rounded-lg border border-white/10">
-          <pre className="max-h-72 overflow-auto bg-ink-900/60 p-3 text-xs text-gray-300">
+        <div className="overflow-x-auto rounded-lg border border-line">
+          <pre className="max-h-72 overflow-auto bg-paper-50 p-3 text-xs text-ink-700">
             {JSON.stringify(records, null, 2)}
           </pre>
         </div>
@@ -327,16 +328,16 @@ function RunDetail({ run }: { run: WebRun }) {
         <div>
           <button
             onClick={() => setShowSteps((v) => !v)}
-            className="text-xs font-medium text-brand-300 transition hover:text-brand-200"
+            className="text-xs font-medium text-brand-600 transition hover:text-brand-700"
           >
             {showSteps ? 'Hide' : 'Show'} the {run.steps.length} steps it took
           </button>
           {showSteps && (
-            <ol className="mt-2 space-y-1.5 border-l border-white/10 pl-4">
+            <ol className="mt-2 space-y-1.5 border-l border-line pl-4">
               {run.steps.map((step) => (
-                <li key={step.index} className="text-xs text-gray-400">
-                  <span className="font-mono text-gray-500">{step.action}</span> — {step.detail}
-                  {step.error && <span className="text-red-300"> ({step.error})</span>}
+                <li key={step.index} className="text-xs text-ink-600">
+                  <span className="font-mono text-ink-500">{step.action}</span> — {step.detail}
+                  {step.error && <span className="text-danger-700"> ({step.error})</span>}
                 </li>
               ))}
             </ol>
@@ -499,15 +500,24 @@ export function WebAccessPage() {
     connections?.find((connection) => connection.id === id)?.label ?? 'Removed connection';
 
   return (
-    <AppShell>
-      <div className="cx-aurora min-h-screen">
+    <div className="cx-aurora min-h-screen bg-paper-100">
+      <header className="flex items-center justify-between border-b border-line px-6 py-4 sm:px-10">
+        <Logo />
+        <Link
+          to="/dashboard"
+          className="rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
+        >
+          Back to dashboard
+        </Link>
+      </header>
+
       <main className="mx-auto max-w-4xl px-6 py-10 sm:px-10">
         <div className="animate-fade-in-up">
-          <p className="text-sm font-medium text-brand-400">Web Access</p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight text-white">
+          <p className="text-sm font-medium text-brand-600">Web Access</p>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight text-ink-900">
             Let Atmosphere work in your other systems
           </h1>
-          <p className="mt-2 max-w-2xl text-gray-400">
+          <p className="mt-2 max-w-2xl text-ink-600">
             Connect a carrier portal, supplier site, or vendor dashboard once. From then on you
             can ask Atmosphere to sign in, pull data back out, or enter data for you — and read
             back every step it took.
@@ -516,12 +526,12 @@ export function WebAccessPage() {
           {enabled === false && (
             <div
               role="alert"
-              className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3.5 py-3 text-sm text-amber-100"
+              className="mt-6 rounded-lg border border-caution-200 bg-caution-50 px-3.5 py-3 text-sm text-caution-600"
             >
               Web Access is not configured on this server yet. An administrator needs to set
-              <code className="mx-1 rounded bg-ink-700 px-1.5 py-0.5 font-mono text-xs">WEB_ACCESS_KEY</code>
+              <code className="mx-1 rounded bg-paper-0 px-1.5 py-0.5 font-mono text-xs">WEB_ACCESS_KEY</code>
               and
-              <code className="mx-1 rounded bg-ink-700 px-1.5 py-0.5 font-mono text-xs">ANTHROPIC_API_KEY</code>
+              <code className="mx-1 rounded bg-paper-0 px-1.5 py-0.5 font-mono text-xs">ANTHROPIC_API_KEY</code>
               before connections can be used.
             </div>
           )}
@@ -529,7 +539,7 @@ export function WebAccessPage() {
           {/* Connected sites */}
           <section className="mt-8">
             <div className="flex items-center justify-between gap-4">
-              <h2 className="text-lg font-semibold text-white">Connected sites</h2>
+              <h2 className="text-lg font-semibold text-ink-900">Connected sites</h2>
               {connections !== null && connections.length > 0 && (
                 <ConnectForm
                   onConnected={(connection) => {
@@ -540,14 +550,14 @@ export function WebAccessPage() {
               )}
             </div>
 
-            <div className="mt-4 overflow-hidden rounded-xl border border-white/10">
+            <div className="mt-4 overflow-hidden rounded-xl border border-line">
               {connections === null ? (
-                <div className="grid place-items-center py-10 text-brand-300">
+                <div className="grid place-items-center py-10 text-brand-600">
                   <SpinnerIcon className="animate-spin" width={22} height={22} />
                 </div>
               ) : connections.length === 0 ? (
                 <div className="px-5 py-8 text-center">
-                  <p className="text-sm text-gray-400">No sites connected yet.</p>
+                  <p className="text-sm text-ink-600">No sites connected yet.</p>
                   <div className="mt-4 flex justify-center">
                     <ConnectForm
                       onConnected={(connection) => {
@@ -558,7 +568,7 @@ export function WebAccessPage() {
                   </div>
                 </div>
               ) : (
-                <ul className="divide-y divide-white/10">
+                <ul className="divide-y divide-line">
                   {connections.map((connection) => (
                     <ConnectionRow
                       key={connection.id}
@@ -582,10 +592,10 @@ export function WebAccessPage() {
           {/* Ask for a task */}
           {connections !== null && connections.length > 0 && (
             <section className="mt-8">
-              <h2 className="text-lg font-semibold text-white">Run a task</h2>
+              <h2 className="text-lg font-semibold text-ink-900">Run a task</h2>
               <form
                 onSubmit={startRun}
-                className="mt-4 rounded-xl border border-white/10 bg-ink-800/60 p-5 backdrop-blur"
+                className="mt-4 rounded-xl border border-line bg-paper-0 p-5"
               >
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
@@ -644,7 +654,7 @@ export function WebAccessPage() {
                 {kind === 'push' && (
                   <div className="mt-4">
                     <label htmlFor="data" className={labelClass}>
-                      Data to enter <span className="text-gray-500">(optional, JSON)</span>
+                      Data to enter <span className="text-ink-500">(optional, JSON)</span>
                     </label>
                     <textarea
                       id="data"
@@ -660,7 +670,7 @@ export function WebAccessPage() {
                 {error && (
                   <div
                     role="alert"
-                    className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-3 text-sm text-red-200"
+                    className="mt-4 rounded-lg border border-danger-200 bg-danger-50 px-3.5 py-3 text-sm text-danger-700"
                   >
                     {error}
                   </div>
@@ -669,7 +679,7 @@ export function WebAccessPage() {
                 <button
                   type="submit"
                   disabled={starting || !connectionId || enabled === false}
-                  className="mt-5 flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-500 disabled:opacity-60"
+                  className="mt-5 flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-ink-900 transition hover:bg-brand-500 disabled:opacity-60"
                 >
                   {starting && <SpinnerIcon className="animate-spin" width={16} height={16} />}
                   {starting ? 'Starting…' : 'Start run'}
@@ -681,19 +691,19 @@ export function WebAccessPage() {
           {/* History */}
           {runs.length > 0 && (
             <section className="mt-8">
-              <h2 className="text-lg font-semibold text-white">Recent runs</h2>
+              <h2 className="text-lg font-semibold text-ink-900">Recent runs</h2>
               <ul className="mt-4 space-y-3">
                 {runs.map((run) => {
                   const inFlight = run.status === 'queued' || run.status === 'running';
                   return (
                     <li
                       key={run.id}
-                      className="rounded-xl border border-white/10 bg-ink-800/40 px-5 py-4"
+                      className="rounded-xl border border-line bg-paper-0 px-5 py-4"
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-white">{run.instruction}</p>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-sm font-medium text-ink-900">{run.instruction}</p>
+                          <p className="text-xs text-ink-500">
                             {connectionName(run.connectionId)} ·{' '}
                             {run.kind === 'pull' ? 'Pulling data' : 'Entering data'}
                           </p>
@@ -731,7 +741,6 @@ export function WebAccessPage() {
           )}
         </div>
       </main>
-      </div>
-    </AppShell>
+    </div>
   );
 }

@@ -6,6 +6,7 @@ import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
 import { profileRouter } from './routes/profile.js';
+import { technicianRouter } from './routes/technician.js';
 import { billingRouter } from './routes/billing.js';
 import { usageRouter } from './routes/usage.js';
 import { pmRouter } from './routes/pm.js';
@@ -100,6 +101,7 @@ export function createApp(): Express {
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
   app.use('/api/profile', profileRouter);
+  app.use('/api/technician', technicianRouter);
   app.use('/api/billing', billingRouter);
   app.use('/api/usage', usageRouter);
   // Two different subsystems, two namespaces: /api/ai is the learning layer's

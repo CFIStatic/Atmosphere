@@ -68,10 +68,10 @@ export function SettingsPage() {
 
   return (
     <AppShell>
-      <main className="mx-auto max-w-5xl px-5 py-8 sm:px-8 lg:py-12">
+      <div className="mx-auto max-w-5xl">
         <header>
-          <h1 className="text-3xl font-bold tracking-tight text-white">Settings</h1>
-          <p className="mt-1.5 text-sm text-gray-400">
+          <h1 className="text-3xl font-bold tracking-tight text-ink-900">Settings</h1>
+          <p className="mt-1.5 text-sm text-ink-600">
             Manage your account, how you sign in, and how Atmosphere behaves on this device.
           </p>
         </header>
@@ -90,8 +90,8 @@ export function SettingsPage() {
                       aria-current={isActive ? 'page' : undefined}
                       className={`flex w-full items-center gap-3 rounded-lg px-3.5 py-2.5 text-sm font-medium transition ${
                         isActive
-                          ? 'bg-brand-600/20 text-brand-200'
-                          : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'
+                          ? 'bg-brand-50 text-brand-700'
+                          : 'text-ink-600 hover:bg-paper-0 hover:text-ink-900'
                       }`}
                     >
                       <section.icon width={18} height={18} />
@@ -110,7 +110,7 @@ export function SettingsPage() {
             {active === 'preferences' && <PreferencesSection />}
           </div>
         </div>
-      </main>
+      </div>
     </AppShell>
   );
 }
@@ -132,19 +132,19 @@ function Card({
 }) {
   return (
     <section
-      className={`rounded-xl border p-5 backdrop-blur sm:p-6 ${
-        tone === 'danger' ? 'border-red-500/25 bg-red-500/[0.04]' : 'border-white/10 bg-ink-800/60'
+      className={`rounded-xl border p-5 sm:p-6 ${
+        tone === 'danger' ? 'border-danger-200 bg-danger-50' : 'border-line bg-paper-0 shadow-card'
       }`}
     >
-      <h2 className="text-base font-semibold text-white">{title}</h2>
-      {description && <p className="mt-1 text-sm text-gray-400">{description}</p>}
+      <h2 className="text-base font-semibold text-ink-900">{title}</h2>
+      {description && <p className="mt-1 text-sm text-ink-600">{description}</p>}
       <div className="mt-5">{children}</div>
     </section>
   );
 }
 
 const INPUT_CLASS =
-  'w-full rounded-lg border border-white/10 bg-ink-700/80 px-3.5 py-2.5 text-sm text-white placeholder-gray-500 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/40 disabled:opacity-60';
+  'w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 text-sm text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:opacity-60';
 
 function Field({
   label,
@@ -157,9 +157,9 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="text-sm font-medium text-gray-300">{label}</span>
+      <span className="text-sm font-medium text-ink-700">{label}</span>
       {children}
-      {hint && <span className="mt-1.5 block text-xs text-gray-500">{hint}</span>}
+      {hint && <span className="mt-1.5 block text-xs text-ink-500">{hint}</span>}
     </label>
   );
 }
@@ -173,7 +173,7 @@ function PrimaryButton({
     <button
       {...props}
       disabled={props.disabled || busy}
-      className="flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-900/30 transition hover:bg-brand-500 disabled:cursor-not-allowed disabled:opacity-50"
+      className="flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-card transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
     >
       {busy && <SpinnerIcon className="animate-spin" width={16} height={16} />}
       {children}
@@ -184,7 +184,7 @@ function PrimaryButton({
 function Saved({ show, label = 'Saved' }: { show: boolean; label?: string }) {
   if (!show) return null;
   return (
-    <span className="flex items-center gap-1.5 text-sm text-emerald-300">
+    <span className="flex items-center gap-1.5 text-sm text-success-600">
       <CheckIcon width={16} height={16} /> {label}
     </span>
   );
@@ -193,7 +193,7 @@ function Saved({ show, label = 'Saved' }: { show: boolean; label?: string }) {
 function ErrorText({ message }: { message: string | null }) {
   if (!message) return null;
   return (
-    <p role="alert" className="text-sm text-red-300">
+    <p role="alert" className="text-sm text-danger-600">
       {message}
     </p>
   );
@@ -213,8 +213,8 @@ function Toggle({
   return (
     <div className="flex items-start justify-between gap-4 py-3.5">
       <div className="min-w-0">
-        <p className="text-sm font-medium text-gray-200">{label}</p>
-        <p className="mt-0.5 text-sm text-gray-500">{description}</p>
+        <p className="text-sm font-medium text-ink-800">{label}</p>
+        <p className="mt-0.5 text-sm text-ink-500">{description}</p>
       </div>
       <button
         role="switch"
@@ -222,7 +222,7 @@ function Toggle({
         aria-label={label}
         onClick={() => onChange(!checked)}
         className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition ${
-          checked ? 'bg-brand-600' : 'bg-ink-600'
+          checked ? 'bg-brand-600' : 'bg-line-strong'
         }`}
       >
         <span
@@ -237,9 +237,9 @@ function Toggle({
 
 function ReadOnlyRow({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-white/5 py-2.5 last:border-0">
-      <span className="text-sm text-gray-500">{label}</span>
-      <span className="text-sm text-gray-200">{value}</span>
+    <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line py-2.5 last:border-0">
+      <span className="text-sm text-ink-500">{label}</span>
+      <span className="text-sm text-ink-800">{value}</span>
     </div>
   );
 }
@@ -293,14 +293,14 @@ function ProfileSection() {
         description="This is how teammates see you in the linked accounts list."
       >
         <div className="flex items-center gap-4">
-          <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-brand-600/30 text-lg font-semibold text-brand-100">
+          <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-brand-500 text-lg font-semibold text-white">
             {initials(name || profile?.fullName, user?.email)}
           </span>
           <div className="min-w-0">
-            <p className="truncate text-base font-semibold text-white">
+            <p className="truncate text-base font-semibold text-ink-900">
               {displayName(name || profile?.fullName, user?.email)}
             </p>
-            <p className="truncate text-sm text-gray-500">{user?.email}</p>
+            <p className="truncate text-sm text-ink-500">{user?.email}</p>
           </div>
         </div>
 
@@ -333,7 +333,7 @@ function ProfileSection() {
         />
         <ReadOnlyRow label="Member since" value={formatDate(user?.createdAt)} />
         <ReadOnlyRow label="Last sign-in" value={formatDate(user?.lastSignInAt)} />
-        <p className="mt-4 text-xs text-gray-500">
+        <p className="mt-4 text-xs text-ink-500">
           Your sign-in email can't be changed here — it identifies your account across the
           organization.
         </p>
@@ -413,7 +413,7 @@ function ChangePasswordCard() {
               type="button"
               onClick={() => setReveal((value) => !value)}
               aria-label={reveal ? 'Hide passwords' : 'Show passwords'}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 transition hover:text-gray-300"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-500 transition hover:text-ink-800"
             >
               {reveal ? <EyeOffIcon width={18} height={18} /> : <EyeIcon width={18} height={18} />}
             </button>
@@ -440,7 +440,7 @@ function ChangePasswordCard() {
           />
         </Field>
 
-        {mismatch && <p className="text-sm text-amber-300">Those passwords don't match yet.</p>}
+        {mismatch && <p className="text-sm text-caution-600">Those passwords don't match yet.</p>}
         <ErrorText message={error} />
 
         <div className="flex flex-wrap items-center gap-3">
@@ -480,7 +480,7 @@ function SignOutCard() {
       <button
         onClick={signOut}
         disabled={busy}
-        className="flex items-center gap-2 rounded-lg border border-red-500/25 bg-red-500/10 px-4 py-2.5 text-sm font-medium text-red-200 transition hover:bg-red-500/20 disabled:opacity-60"
+        className="flex items-center gap-2 rounded-lg border border-danger-200 bg-danger-50 px-4 py-2.5 text-sm font-medium text-danger-700 transition hover:bg-danger-200/50 disabled:opacity-60"
       >
         {busy ? (
           <SpinnerIcon className="animate-spin" width={16} height={16} />
@@ -561,13 +561,13 @@ function OrganizationSection() {
           label="Invite code"
           value={
             <span className="flex items-center gap-3">
-              <code className="rounded-md bg-ink-700 px-2.5 py-1 font-mono tracking-widest text-brand-300">
+              <code className="rounded-md border border-line bg-paper-100 px-2.5 py-1 font-mono tracking-widest text-brand-700">
                 {org?.joinCode ?? '—'}
               </code>
               {org?.joinCode && (
                 <button
                   onClick={copyCode}
-                  className="flex items-center gap-1 text-sm text-gray-400 transition hover:text-gray-200"
+                  className="flex items-center gap-1 text-sm text-ink-600 transition hover:text-ink-900"
                 >
                   {copied ? (
                     <>
@@ -581,7 +581,7 @@ function OrganizationSection() {
             </span>
           }
         />
-        <p className="mt-4 text-xs text-gray-500">
+        <p className="mt-4 text-xs text-ink-500">
           Share the invite code so teammates can link their account to {org?.name ?? 'your org'}.
           Renaming an organization isn't available yet.
         </p>
@@ -599,7 +599,7 @@ function OrganizationSection() {
               className={`mt-2 ${INPUT_CLASS}`}
             >
               {ROLE_ORDER.map((value) => (
-                <option key={value} value={value} className="bg-ink-700">
+                <option key={value} value={value} className="bg-paper-0">
                   {ROLE_LABELS[value]}
                 </option>
               ))}
@@ -613,7 +613,7 @@ function OrganizationSection() {
               className={`mt-2 ${INPUT_CLASS}`}
             >
               {WORK_ORDER.map((value) => (
-                <option key={value} value={value} className="bg-ink-700">
+                <option key={value} value={value} className="bg-paper-0">
                   {WORK_TYPE_LABELS[value]}
                 </option>
               ))}
@@ -639,11 +639,6 @@ function OrganizationSection() {
 
 const TOGGLES: { key: keyof Preferences; label: string; description: string }[] = [
   {
-    key: 'collapsedSidebar',
-    label: 'Collapse the sidebar',
-    description: 'Show icons only, for more room on the page.',
-  },
-  {
     key: 'reduceMotion',
     label: 'Reduce motion',
     description: 'Turn off entrance animations and transitions.',
@@ -663,7 +658,7 @@ function PreferencesSection() {
       title="This device"
       description="Saved in this browser only, so a phone in the field and an office desktop can differ."
     >
-      <div className="divide-y divide-white/5">
+      <div className="divide-y divide-line">
         {TOGGLES.map((toggle) => (
           <Toggle
             key={toggle.key}
