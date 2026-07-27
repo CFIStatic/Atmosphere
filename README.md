@@ -194,6 +194,61 @@ which is what keeps that budget meaningless rather than a coin flip.
 Signing out deliberately does **not** clear the PIN — returning to the PIN pad instead of the
 password form is the whole point. Enrollment is per-device, capped at 5 devices per user.
 
+## Project Manager Agent
+
+The production side of the app — what happens after a job is sold. A project
+manager runs fifteen to forty jobs at once, and the work that slips is never the
+work they are looking at: it is the moisture reading nobody took on Tuesday, the
+authorization form nobody chased, the dehumidifier still sitting on a job that
+dried out last week. None of that is hard to spot; it is hard to spot thirty
+times a day without getting bored.
+
+So the agent watches instead. Three layers:
+
+1. **The data** — projects, tasks, crew, equipment and its placements, drying
+   areas with a documented dry standard, an append-only moisture log,
+   documentation requirements, and dated commitments to carriers.
+2. **The engine** — nineteen rules run as pure functions over one snapshot of the
+   whole organization, producing alerts and generating the work they imply.
+3. **The writing** — a morning brief, and drafted customer or adjuster updates.
+
+**The model never decides what is true.** Every fact the writing layer sees was
+computed deterministically first; a drying stall is a property of a reading
+series, not of how a paragraph came out.
+
+What it catches, out of the box: missed and overdue readings, dry-outs that have
+stalled or started going backwards, jobs under-equipped against the S500 sizing
+for what is recorded as wet, equipment left on a job that already dried,
+overloaded crew, start dates arriving with nobody assigned, jobs that have gone
+quiet, missed carrier deadlines, and — the expensive one — a job that reached
+billing with paperwork outstanding, naming exactly what is missing.
+
+New projects arrive already carrying their documentation checklist, their carrier
+deadlines counted from the **loss date**, and their first phase of work.
+
+Alerts stay trustworthy because every finding carries a stable fingerprint, so a
+repeat updates one row rather than adding a copy; a finding that has gone away is
+resolved automatically and distinguishably from one a human handled; and
+acknowledgements, snoozes and dismissals survive the next pass. Generated tasks
+are unique per `(project, origin_key)`, so work you cancelled does not grow back.
+
+Everything runs **under the caller's own JWT** — the engine is not a privileged
+process, it sees exactly what the person who triggered it can see. Writes split
+between planning (project managers and office managers) and reporting (any
+member, because the person holding the meter is a technician). Child rows have
+their `org_id` overwritten from their project by trigger, so a caller cannot name
+a project in another org and have their own membership checked. The moisture log
+has no UPDATE policy and no UPDATE grant, and nothing in the schema can be
+deleted.
+
+The optional background pass is the one place the service-role key touches data,
+and it takes two explicit decisions to enable — see
+[`docs/project-manager-agent.md`](docs/project-manager-agent.md) for the full
+design, the rule list, the API surface, and what was deliberately left out.
+
+Schema: `supabase/migrations/20260727150000_project_manager_agent.sql`.
+Schema tests: `supabase/tests/run.sh`.
+
 ## Configuration
 
 See `backend/.env.example` and `frontend/.env.example`. Key points:

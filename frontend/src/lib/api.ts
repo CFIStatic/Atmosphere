@@ -171,6 +171,497 @@ export const api = {
     }),
 
   getMembers: () => request<{ members: OrgMember[] }>('/api/org/members', { method: 'GET' }),
+
+  // ---- Project Manager Agent ----
+  pmOverview: () => request<PmOverview>('/api/pm/overview', { method: 'GET' }),
+
+  pmProject: (id: string) => request<PmProjectDetail>(`/api/pm/projects/${id}`, { method: 'GET' }),
+
+  pmCreateProject: (input: Record<string, unknown>) =>
+    request<{ project: PmProject; seeded: PmSeedResult }>('/api/pm/projects', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  pmUpdateProject: (id: string, patch: Record<string, unknown>) =>
+    request<{ project: PmProject }>(`/api/pm/projects/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+
+  pmRun: (projectId?: string) =>
+    request<{ result: PmEngineResult }>('/api/pm/run', {
+      method: 'POST',
+      body: JSON.stringify(projectId ? { projectId } : {}),
+    }),
+
+  pmAlertAction: (id: string, status: string, snoozeHours?: number) =>
+    request<{ alert: PmAlert }>(`/api/pm/alerts/${id}`, {
+      method: 'POST',
+      body: JSON.stringify(snoozeHours ? { status, snoozeHours } : { status }),
+    }),
+
+  pmCreateTask: (projectId: string, input: Record<string, unknown>) =>
+    request<{ task: PmTask }>(`/api/pm/projects/${projectId}/tasks`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  pmUpdateTask: (id: string, patch: Record<string, unknown>) =>
+    request<{ task: PmTask }>(`/api/pm/tasks/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+
+  pmCreateArea: (projectId: string, input: Record<string, unknown>) =>
+    request<{ area: PmDryingArea }>(`/api/pm/projects/${projectId}/areas`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  pmCreateReadings: (projectId: string, readings: Record<string, unknown>[]) =>
+    request<{ readings: PmReading[] }>(`/api/pm/projects/${projectId}/readings`, {
+      method: 'POST',
+      body: JSON.stringify({ readings }),
+    }),
+
+  pmUpdateDocument: (id: string, patch: Record<string, unknown>) =>
+    request<{ document: PmDocument }>(`/api/pm/documents/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+
+  pmEquipment: () =>
+    request<{ equipment: PmEquipment[]; placements: PmPlacement[] }>('/api/pm/equipment', {
+      method: 'GET',
+    }),
+
+  pmPlaceEquipment: (projectId: string, input: Record<string, unknown>) =>
+    request<{ placement: PmPlacement }>(`/api/pm/projects/${projectId}/equipment`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  pmRemovePlacement: (id: string) =>
+    request<{ placement: PmPlacement }>(`/api/pm/placements/${id}/remove`, { method: 'POST' }),
+
+  pmAssignCrew: (projectId: string, input: Record<string, unknown>) =>
+    request<{ assignment: PmAssignment }>(`/api/pm/projects/${projectId}/crew`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  pmBrief: (refresh = false) =>
+    request<{ brief: PmBrief; writingEnabled: boolean }>(
+      `/api/pm/brief${refresh ? '?refresh=true' : ''}`,
+      { method: 'GET' },
+    ),
+
+  pmDraftUpdate: (projectId: string, audience: string, instruction?: string) =>
+    request<{ update: PmUpdate }>(`/api/pm/projects/${projectId}/updates`, {
+      method: 'POST',
+      body: JSON.stringify(instruction ? { audience, instruction } : { audience }),
+    }),
+
+  pmUpdateDraft: (id: string, status: string) =>
+    request<{ update: PmUpdate }>(`/api/pm/updates/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+
+  pmSettings: () => request<PmSettingsResponse>('/api/pm/settings', { method: 'GET' }),
+
+  pmUpdateSettings: (patch: Record<string, unknown>) =>
+    request<{ settings: PmSettings }>('/api/pm/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+};
+
+/* ------------------------------------------------------------------ *
+ * Project Manager Agent types
+ * ------------------------------------------------------------------ */
+
+export type PmPhase =
+  | 'intake'
+  | 'inspection'
+  | 'approval'
+  | 'scheduled'
+  | 'mitigation'
+  | 'drying'
+  | 'drying_complete'
+  | 'permitting'
+  | 'production'
+  | 'punch_list'
+  | 'final_review'
+  | 'invoicing'
+  | 'paid';
+
+export interface PmProject {
+  id: string;
+  orgId: string;
+  projectNumber: string;
+  name: string;
+  description: string | null;
+  workType: WorkType;
+  lossType: string | null;
+  status: 'active' | 'on_hold' | 'closed' | 'cancelled';
+  phase: PmPhase;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  pmUserId: string | null;
+  customerName: string | null;
+  customerPhone: string | null;
+  customerEmail: string | null;
+  addressLine1: string | null;
+  city: string | null;
+  region: string | null;
+  carrier: string | null;
+  claimNumber: string | null;
+  adjusterName: string | null;
+  scheduledStartAt: string | null;
+  targetCompletionAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PmHealth {
+  score: number;
+  band: 'good' | 'watch' | 'at_risk' | 'critical';
+  reasons: { weight: number; text: string }[];
+}
+
+export interface PmTask {
+  id: string;
+  projectId: string;
+  title: string;
+  details: string | null;
+  status: 'todo' | 'in_progress' | 'blocked' | 'done' | 'cancelled';
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  category: string;
+  assignedTo: string | null;
+  dueAt: string | null;
+  source: 'manual' | 'playbook' | 'agent';
+  originKey: string | null;
+  blockedReason: string | null;
+  completedAt: string | null;
+}
+
+export interface PmAlert {
+  id: string;
+  projectId: string | null;
+  ruleKey: string;
+  severity: 'info' | 'warn' | 'critical';
+  category: string;
+  title: string;
+  detail: string | null;
+  suggestedAction: string | null;
+  status: 'open' | 'acknowledged' | 'snoozed' | 'resolved' | 'dismissed';
+  occurrences: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  facts: Record<string, unknown>;
+  project?: { id: string; projectNumber: string; name: string } | null;
+}
+
+export interface PmDryingArea {
+  id: string;
+  projectId: string;
+  label: string;
+  material: string;
+  dryGoalPct: number;
+  waterClass: number | null;
+  affectedSqft: number | null;
+  affectedCuft: number | null;
+  driedAt: string | null;
+  signedOffAt: string | null;
+}
+
+export interface PmReading {
+  id: string;
+  areaId: string | null;
+  kind: string;
+  moisturePct: number | null;
+  temperatureF: number | null;
+  humidityPct: number | null;
+  gpp: number | null;
+  note: string | null;
+  takenAt: string;
+}
+
+export interface PmDocument {
+  id: string;
+  projectId: string;
+  requirementKey: string;
+  label: string;
+  kind: string;
+  status: 'missing' | 'provided' | 'waived' | 'rejected';
+  isBlocking: boolean;
+  requiredByPhase: string | null;
+  note: string | null;
+  externalRef: string | null;
+}
+
+export interface PmMilestone {
+  id: string;
+  label: string;
+  kind: string;
+  dueAt: string;
+  completedAt: string | null;
+  note: string | null;
+}
+
+export interface PmEquipment {
+  id: string;
+  assetTag: string;
+  kind: string;
+  makeModel: string | null;
+  capacityPintsDay: number | null;
+  capacityCfm: number | null;
+  status: 'available' | 'deployed' | 'maintenance' | 'retired';
+  dailyRateCents: number | null;
+}
+
+export interface PmPlacement {
+  id: string;
+  projectId: string;
+  equipmentId: string;
+  areaLabel: string | null;
+  placedAt: string;
+  removedAt: string | null;
+  equipment?: {
+    assetTag: string;
+    kind: string;
+    capacityPintsDay: number | null;
+    capacityCfm: number | null;
+  } | null;
+}
+
+export interface PmAssignment {
+  id: string;
+  projectId: string;
+  userId: string;
+  roleOnProject: string;
+  allocationPct: number;
+  releasedAt: string | null;
+}
+
+export interface PmUpdate {
+  id: string;
+  projectId: string;
+  audience: 'customer' | 'adjuster' | 'team';
+  channel: string;
+  status: 'draft' | 'approved' | 'sent' | 'discarded';
+  subject: string | null;
+  body: string;
+  origin: 'agent' | 'manual';
+  modelId: string | null;
+  sentAt: string | null;
+  createdAt: string;
+}
+
+export interface PmBrief {
+  id: string;
+  forDate: string;
+  kind: string;
+  headline: string | null;
+  body: string;
+  modelId: string | null;
+  facts: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface PmSettings {
+  orgId: string;
+  enabled: boolean;
+  timezone: string;
+  digestHour: number;
+  readingIntervalHours: number;
+  dryingStallDays: number;
+  dryingProgressMinPct: number;
+  equipmentIdleHours: number;
+  staleProjectDays: number;
+  milestoneLeadDays: number;
+  maxProjectsPerCrew: number;
+  disabledRules: string[];
+  autoCreateTasks: boolean;
+}
+
+export interface PmRule {
+  key: string;
+  label: string;
+  description: string;
+  category: string;
+  scope: string;
+}
+
+export interface PmSettingsResponse {
+  settings: PmSettings;
+  rules: PmRule[];
+  canManage: boolean;
+  writingEnabled: boolean;
+}
+
+export interface PmCrewLoad {
+  userId: string;
+  email: string | null;
+  fullName: string | null;
+  role: string;
+  projectCount: number;
+  allocationPct: number;
+  openTaskCount: number;
+  overdueTaskCount: number;
+  projectNumbers: string[];
+}
+
+export interface PmProjectSummary {
+  project: PmProject;
+  health: PmHealth;
+  openTasks: number;
+  overdueTasks: number;
+  crewCount: number;
+  daysSinceActivity: number;
+  drying: {
+    openAreas: number;
+    areasAtGoal: number;
+    areasOverdue: number;
+    areasStalled: number;
+    daysDrying: number;
+    allAreasAtGoal: boolean;
+  } | null;
+  documentation: { completionPct: number; invoiceReady: boolean; blocking: number };
+}
+
+export interface PmOverview {
+  settings: PmSettings;
+  role: MemberRole;
+  canManage: boolean;
+  writingEnabled: boolean;
+  counts: { projects: number; critical: number; warn: number; mine: number };
+  alerts: PmAlert[];
+  projects: PmProjectSummary[];
+  crew: PmCrewLoad[];
+  members: { userId: string; email: string | null; fullName: string | null; role: string }[];
+}
+
+export interface PmAreaAnalysis {
+  areaId: string;
+  label: string;
+  material: string;
+  dryGoalPct: number;
+  state: 'drying' | 'stalled' | 'wetter' | 'goal_met' | 'signed_off' | 'no_readings';
+  latestMoisturePct: number | null;
+  latestReadingAt: string | null;
+  hoursSinceReading: number | null;
+  readingOverdue: boolean;
+  remainingPct: number | null;
+  projectedDaysToGoal: number | null;
+  daysDrying: number;
+  trend: {
+    daily: { takenAt: string; moisturePct: number }[];
+    totalDropPct: number | null;
+    lastDropPct: number | null;
+    flatDays: number;
+  };
+}
+
+export interface PmProjectDetail {
+  project: PmProject;
+  tasks: PmTask[];
+  assignments: PmAssignment[];
+  areas: PmDryingArea[];
+  readings: PmReading[];
+  placements: PmPlacement[];
+  documents: PmDocument[];
+  milestones: PmMilestone[];
+  alerts: PmAlert[];
+  updates: PmUpdate[];
+  analysis: {
+    drying: {
+      isDrying: boolean;
+      areas: PmAreaAnalysis[];
+      openAreas: number;
+      areasAtGoal: number;
+      areasOverdue: number;
+      areasStalled: number;
+      daysDrying: number;
+      allAreasAtGoal: boolean;
+      equipmentStillOnDriedProject: boolean;
+      ambient: { temperatureF: number; humidityPct: number; gpp: number; dewPointF: number } | null;
+      outside: { temperatureF: number; humidityPct: number; gpp: number } | null;
+      equipment: {
+        airMoversOnSite: number;
+        airMoversRequired: number;
+        dehuPintsOnSite: number;
+        dehuPintsRequired: number;
+        sufficient: boolean | null;
+        shortfallNote: string | null;
+      };
+    };
+    schedule: {
+      overdueTasks: PmTask[];
+      dueTodayTasks: PmTask[];
+      blockedTasks: PmTask[];
+      hasNoNextStep: boolean;
+      daysSinceActivity: number;
+      overrunDays: number | null;
+      daysUntilTarget: number | null;
+    };
+    compliance: {
+      missingBlocking: PmDocument[];
+      overdueBlocking: PmDocument[];
+      completionPct: number;
+      invoiceReady: boolean;
+      blockingInvoiceNow: boolean;
+      milestones: {
+        milestone: PmMilestone;
+        state: 'done' | 'overdue' | 'due_soon' | 'upcoming';
+        daysOverdue: number;
+      }[];
+    };
+    health: PmHealth;
+  };
+  phases: PmPhase[];
+  playbook: { phase: string; label: string; intent: string } | null;
+  canManage: boolean;
+}
+
+export interface PmSeedResult {
+  documents: number;
+  milestones: number;
+  tasks: number;
+}
+
+export interface PmEngineResult {
+  ranAt: string;
+  durationMs: number;
+  projectsEvaluated: number;
+  rulesEvaluated: number;
+  findings: number;
+  alertsOpened: number;
+  alertsUpdated: number;
+  alertsCleared: number;
+  tasksCreated: number;
+  rulesSkipped: string[];
+  warnings: string[];
+}
+
+/** Human-readable phase labels, shared by the PM screens. */
+export const PM_PHASE_LABELS: Record<PmPhase, string> = {
+  intake: 'Intake',
+  inspection: 'Inspection',
+  approval: 'Approval',
+  scheduled: 'Scheduled',
+  mitigation: 'Mitigation',
+  drying: 'Drying',
+  drying_complete: 'Dry-out complete',
+  permitting: 'Permitting',
+  production: 'Production',
+  punch_list: 'Punch list',
+  final_review: 'Final review',
+  invoicing: 'Invoicing',
+  paid: 'Paid',
 };
 
 /** Human-readable labels for roles and work types (shared UI copy). */
