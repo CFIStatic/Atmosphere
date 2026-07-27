@@ -18,8 +18,9 @@ import type {
  *
  * 1. **Every item carries its justification and its evidence.** An item with
  *    neither is an item that gets struck on review, so the estimator never
- *    writes one. `standardRef` cites the S500/S520 section the decision rests on,
- *    because "the standard requires it" is the argument that actually wins.
+ *    writes one. `citations` names the IICRC requirements the decision rests on
+ *    by registry id, never by a section number typed in here — see
+ *    `standards/s500.ts` for why that indirection is not ceremony.
  *
  * 2. **Rules are conservative about adding work and aggressive about not
  *    dropping it.** The way mitigation jobs lose money is almost never a missing
@@ -103,7 +104,7 @@ export function deriveScope(
         quantity: wetFloorSF,
         unit: 'SF',
         justification: `${wetFloorSF} SF of the ${room.geometry.floorSF} SF floor in ${room.name} was affected. Bulk water removal precedes evaporative drying — every gallon extracted is a gallon the dehumidifiers do not have to pull.`,
-        standardRef: 'IICRC S500 §12.2.2',
+        citations: ['WATER_EXTRACTION_FIRST'],
         evidenceIds: evidenceIndex.match(room.id, ['extraction', 'before', 'photo']),
         tags: ['extraction', hasCarpet ? 'carpet' : 'hard_surface'],
       });
@@ -130,7 +131,10 @@ export function deriveScope(
         quantity,
         unit: 'SF',
         justification: justifyFlooring(material, assessment.category, room.name),
-        standardRef: assessment.category === 3 ? 'IICRC S500 §12.1.5' : 'IICRC S500 §12.2.6',
+        citations:
+          assessment.category === 3
+            ? ['POROUS_MATERIAL_REMOVAL_CAT3', 'SALVAGEABILITY_ASSESSMENT']
+            : ['SALVAGEABILITY_ASSESSMENT'],
         evidenceIds: evidenceIndex.match(room.id, [tagKey, 'before', 'photo']),
         tags: ['tear_out', tagKey],
       });
@@ -163,7 +167,7 @@ export function deriveScope(
             ? `The crew documented a cut at ${cutHeightIn}", which is what is billed here.`
             : `Cut set at ${cutHeightIn}" — ${options.cutClearanceIn}" above the wet line, rounded to a framing division${assessment.category === 3 ? `, and never below ${options.category3CutHeightIn}" on a Category 3 loss` : ''}.`
         } ${material.cavityWet ? 'The wall cavity was wet, so drying in place would have trapped moisture behind the finish.' : ''}`,
-        standardRef: 'IICRC S500 §12.2.9',
+        citations: ['FLOOD_CUT_HEIGHT', 'WALL_CAVITY_ACCESS'],
         evidenceIds: evidenceIndex.match(room.id, ['flood_cut', 'drywall', 'photo']),
         tags: ['tear_out', 'drywall', 'flood_cut'],
       });
@@ -179,7 +183,7 @@ export function deriveScope(
           quantity,
           unit: 'SF',
           justification: `The wall cavity in ${room.name} was wet behind the finish. Batt insulation retains moisture long after the surrounding framing dries and will support microbial growth if left in place.`,
-          standardRef: 'IICRC S500 §12.2.9',
+          citations: ['WALL_CAVITY_ACCESS', 'SALVAGEABILITY_ASSESSMENT'],
           evidenceIds: evidenceIndex.match(room.id, ['insulation', 'flood_cut', 'photo']),
           tags: ['tear_out', 'insulation'],
         });
@@ -195,7 +199,7 @@ export function deriveScope(
         quantity: room.geometry.perimeterLF,
         unit: 'LF',
         justification: `Baseboard in ${room.name} had to come off to make the flood cut and to open the wall base for airflow. Trim wicks water along its length well past the visible wet line.`,
-        standardRef: 'IICRC S500 §12.2.9',
+        citations: ['WALL_CAVITY_ACCESS'],
         evidenceIds: evidenceIndex.match(room.id, ['baseboard', 'flood_cut', 'photo']),
         tags: ['tear_out', 'baseboard'],
       });
@@ -212,7 +216,7 @@ export function deriveScope(
         quantity: room.geometry.ceilingSF,
         unit: 'SF',
         justification: `Water entered ${room.name} from above and saturated the ceiling assembly. Gypsum loses structural integrity once wet overhead and cannot be dried in place safely.`,
-        standardRef: 'IICRC S500 §12.2.9',
+        citations: ['SALVAGEABILITY_ASSESSMENT'],
         evidenceIds: evidenceIndex.match(room.id, ['ceiling', 'photo']),
         tags: ['tear_out', 'ceiling'],
       });
@@ -230,7 +234,7 @@ export function deriveScope(
         quantity: cabinetry.quantity,
         unit: 'LF',
         justification: `Water reached the cabinet run in ${room.name}. The toe-kick cavity is unvented and cannot dry without being opened; leaving it closed is how a "dry" job comes back with odour.`,
-        standardRef: 'IICRC S500 §12.2.9',
+        citations: ['WALL_CAVITY_ACCESS'],
         evidenceIds: evidenceIndex.match(room.id, ['cabinetry', 'photo']),
         tags: ['tear_out', 'cabinetry'],
       });
@@ -252,7 +256,7 @@ export function deriveScope(
         quantity: treatedSF,
         unit: 'SF',
         justification: `Category ${assessment.category} water contacted ${room.name}. An EPA-registered antimicrobial is applied to all affected surfaces after removal of non-salvageable materials and before drying, to control amplification during the drying period.`,
-        standardRef: 'IICRC S500 §12.2.4',
+        citations: ['ANTIMICROBIAL_APPLICATION', 'CLEANING_BEFORE_ANTIMICROBIAL'],
         evidenceIds: evidenceIndex.match(room.id, ['antimicrobial', 'category_3', 'category_2', 'photo']),
         tags: ['antimicrobial'],
       });
@@ -268,6 +272,7 @@ export function deriveScope(
         quantity: round((wetFloorSF / 100) * options.contentHoursPer100SF, 2),
         unit: 'HR',
         justification: `Contents in ${room.name} had to be moved to expose ${wetFloorSF} SF of affected floor for extraction, treatment and airflow, then reset. This is billable labour separate from the drying line items.`,
+        citations: ['CONTENTS_HANDLING'],
         evidenceIds: evidenceIndex.match(room.id, ['contents', 'before', 'photo']),
         tags: ['contents', 'labor'],
       });
@@ -283,7 +288,7 @@ export function deriveScope(
         quantity: round(room.geometry.floorSF + room.geometry.perimeterLF * 2),
         unit: 'SF',
         justification: `Demolition in ${room.name} released settled contamination and gypsum dust. HEPA vacuuming of floors and the exposed wall base is the post-demolition cleaning step required before the space is released.`,
-        standardRef: 'IICRC S520 §12.2',
+        citations: ['POST_DEMOLITION_CLEANING'],
         evidenceIds: evidenceIndex.match(room.id, ['hepa', 'after', 'photo']),
         tags: ['hepa', 'post_demolition'],
       });
@@ -309,7 +314,7 @@ export function deriveScope(
       quantity: barrierSF,
       unit: 'SF',
       justification: `${assessment.microbialGrowthPresent ? 'Microbial growth was documented' : `Category ${assessment.category} water was present`}, so demolition was performed inside a sealed containment to prevent cross-contamination of unaffected areas.`,
-      standardRef: 'IICRC S520 §12.1',
+      citations: ['CONTAINMENT'],
       evidenceIds: evidenceIndex.match(undefined, ['containment', 'photo']),
       tags: ['containment'],
     });
@@ -321,7 +326,7 @@ export function deriveScope(
       unit: 'EA',
       justification:
         'Containment is only effective under negative pressure. Setup, manometer verification and daily monitoring are billable separately from the air scrubber rental.',
-      standardRef: 'IICRC S520 §12.1.4',
+      citations: ['NEGATIVE_PRESSURE', 'CONTAINMENT'],
       evidenceIds: evidenceIndex.match(undefined, ['containment', 'air_scrubber', 'photo']),
       tags: ['containment', 'negative_pressure'],
     });
@@ -335,7 +340,7 @@ export function deriveScope(
       quantity: options.techniciansOnSite * Math.max(1, assessment.dryingDays),
       unit: 'DA',
       justification: `Category ${assessment.category}${assessment.microbialGrowthPresent ? ' with documented microbial growth' : ''} requires full PPE — suits, gloves, and respiratory protection — for every technician on site, replaced daily.`,
-      standardRef: 'IICRC S500 §8.3',
+      citations: ['WORKER_SAFETY_PPE'],
       evidenceIds: evidenceIndex.match(undefined, ['category_3', 'microbial', 'photo']),
       tags: ['ppe'],
     });
@@ -350,7 +355,7 @@ export function deriveScope(
       unit: 'SF',
       justification:
         'Category 3 water leaves organic residue that produces odour after the structure is dry. Counteractant is applied to affected surfaces at the end of the removal phase.',
-      standardRef: 'IICRC S500 §12.2.4',
+      citations: ['ANTIMICROBIAL_APPLICATION'],
       evidenceIds: evidenceIndex.match(undefined, ['category_3', 'photo']),
       tags: ['deodorization'],
     });
@@ -369,6 +374,11 @@ export function deriveScope(
       quantity: loads,
       unit: 'EA',
       justification: `Demolition produced roughly ${round(debrisCF / 27, 1)} cubic yards of debris — ${loads} load${loads === 1 ? '' : 's'} at ${options.cubicYardsPerLoad} usable CY each. Disposal of Category ${assessment.category} material is a hard cost that is separate from the tear-out line items.`,
+      // No citation: disposal is a cost of performing the removal, not an
+      // obligation the standard imposes. An empty list is the honest answer and
+      // is why `citations` is required-but-allowed-empty rather than optional —
+      // it forces the question to be answered at each rule.
+      citations: [],
       evidenceIds: evidenceIndex.match(undefined, ['after', 'photo']),
       tags: ['debris'],
     });
@@ -382,7 +392,8 @@ export function deriveScope(
       quantity: round(Math.max(120, totalWetFloorSF * 0.25)),
       unit: 'SF',
       justification:
-        'Wet and contaminated material is carried out through unaffected areas. Protecting that path is standard practice and is what prevents a second claim for the floor it was carried across.',
+        'Wet and contaminated material is carried out through unaffected areas. Protecting that path is what prevents a second claim for the floor it was carried across.',
+      citations: ['WORK_PATH_PROTECTION'],
       evidenceIds: evidenceIndex.match(undefined, ['containment', 'before', 'photo']),
       tags: ['protection'],
     });
@@ -441,7 +452,7 @@ function deriveEquipmentScope(
       quantity: round(unitDays),
       unit: 'DA',
       justification: `${units} ${EQUIPMENT_LABELS[kind] ?? kind}${units === 1 ? '' : 's'} were placed on a Class ${assessment.class} loss and logged for ${round(unitDays)} unit-days total. Equipment is billed per 24-hour period; any part of a period on site is a billed period.`,
-      standardRef: 'IICRC S500 §13.2',
+      citations: ['DEHUMIDIFICATION_SIZING', 'AIRFLOW_SIZING'],
       evidenceIds: evidenceIndex.match(undefined, [equipmentTag(kind), 'photo']),
       tags: ['equipment', kind],
     });
@@ -456,7 +467,7 @@ function deriveEquipmentScope(
       quantity: round(totalUnits * options.setupHoursPerUnit * 2, 2),
       unit: 'HR',
       justification: `${totalUnits} pieces of equipment were placed and later removed. Setup and take-down labour is billed hourly and is not included in the per-day equipment rate.`,
-      standardRef: 'IICRC S500 §13.2',
+      citations: ['AIRFLOW_SIZING'],
       evidenceIds: evidenceIndex.match(undefined, ['air_mover', 'dehumidifier', 'photo']),
       tags: ['labor', 'monitoring'],
     });
@@ -473,7 +484,7 @@ function deriveEquipmentScope(
       quantity: round(assessment.monitoringVisits * options.hoursPerMonitoringVisit, 2),
       unit: 'HR',
       justification: `${assessment.monitoringVisits} monitoring visits were performed at ${options.hoursPerMonitoringVisit} billable hours each. Each visit covers moisture readings against the dry standard, psychrometric logging, equipment repositioning and photo documentation — the record that supports the whole estimate.`,
-      standardRef: 'IICRC S500 §13.4',
+      citations: ['MONITORING_AND_DOCUMENTATION', 'PSYCHROMETRIC_DOCUMENTATION'],
       evidenceIds: evidenceIndex.match(undefined, ['monitoring', 'moisture_reading']),
       tags: ['labor', 'monitoring'],
     });

@@ -1,4 +1,5 @@
 import { clamp, deriveGeometry, round } from '../lib/geometry.js';
+import { formatCitation } from '../standards/s500.js';
 import { degradeCategory, determineClass, hoursBetween } from '../lib/psychrometrics.js';
 import { parseDocuSketch, isPorous, surfaceFor } from './docusketch.js';
 import { parseMica, categoryForCause } from './mica.js';
@@ -144,7 +145,7 @@ export function normalizeSources(sources: EstimatorSources): LossAssessment {
 
   if (timeDegraded > sourceCategory && !overrides.category) {
     warnings.push(
-      `Water sat for ${Math.round(hoursStanding)} hours, so the loss was scoped as Category ${timeDegraded} rather than the Category ${sourceCategory} at the source (IICRC S500 §10.5.4).`,
+      `Water sat for ${Math.round(hoursStanding)} hours, so the loss was scoped as Category ${timeDegraded} rather than the Category ${sourceCategory} at the source (${formatCitation('CATEGORY_DEGRADATION')}).`,
     );
   }
 
@@ -352,7 +353,7 @@ const WALL_ASSEMBLY: ReadonlySet<MaterialType> = new Set<MaterialType>([
 
 /**
  * Wet surface area as a fraction of the affected rooms' total floor + wall +
- * ceiling area — the input the S500 class determination is defined against.
+ * ceiling area — the input the class determination is computed against.
  *
  * Two things this must not do, both of which silently push a job up a class and
  * therefore up a dehumidification factor:

@@ -191,6 +191,13 @@ export const api = {
   getDemoSources: () =>
     request<{ sources: BuildEstimateInput }>('/api/estimator/demo-sources', { method: 'GET' }),
 
+  getStandards: () =>
+    request<{
+      editions: { s500: string; s520: string };
+      note: string;
+      references: Array<StandardReference & { formatted: string }>;
+    }>('/api/estimator/standards', { method: 'GET' }),
+
   getEstimatorSettings: () =>
     request<{ settings: EstimatorSettings }>('/api/estimator/settings', { method: 'GET' }),
 
@@ -297,10 +304,54 @@ export interface EstimateLineItem {
   rcv: number;
   totalCost: number;
   justification: string;
-  standardRef?: string;
+  /** Registry ids of the IICRC requirements behind this line. */
+  citations: string[];
   evidenceIds: string[];
   evidenceGap?: string;
   priceVerified: boolean;
+}
+
+/* ---- IICRC standards ---- */
+
+/**
+ * How firmly a citation is anchored. `convention` is the one that matters most
+ * to render honestly — it marks a practice the industry attributes to the
+ * standard that the standard itself leaves to judgement.
+ */
+export type CitationConfidence = 'clause' | 'chapter' | 'convention';
+
+export interface StandardReference {
+  id: string;
+  standard: 'S500' | 'S520';
+  edition: string;
+  chapter: string;
+  section?: string;
+  title: string;
+  requirement: string;
+  application: string;
+  confidence: CitationConfidence;
+  caveat?: string;
+}
+
+export type ComplianceStatus = 'met' | 'unmet' | 'undetermined' | 'not_applicable';
+
+export interface ComplianceCheck {
+  id: string;
+  citation: string;
+  title: string;
+  status: ComplianceStatus;
+  detail: string;
+  remedy?: string;
+  affectsEstimate?: boolean;
+}
+
+export interface ComplianceReport {
+  checks: ComplianceCheck[];
+  met: number;
+  unmet: number;
+  undetermined: number;
+  citations: string[];
+  summary: string;
 }
 
 export interface ProfitFinding {
@@ -363,6 +414,10 @@ export interface MitigationEstimate {
   assessment: LossAssessmentSummary;
   lineItems: EstimateLineItem[];
   profitability: ProfitabilitySummary;
+  /** The estimate read back against the IICRC standards. */
+  compliance: ComplianceReport;
+  /** Every standard cited anywhere in this estimate, resolved. */
+  references: StandardReference[];
   narrative: string;
   openQuestions: string[];
 }

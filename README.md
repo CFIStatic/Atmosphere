@@ -98,6 +98,7 @@ Atmosphere/
 │   │       ├── ingest/           DocuSketch / MICA / photos / notes → assessment
 │   │       ├── lib/              Geometry + IICRC S500 psychrometrics
 │   │       ├── rules/            Scope derivation, then scope → line items
+│   │       ├── standards/        IICRC citation registry + compliance review
 │   │       ├── catalog/          Seed line items + price-list reconciliation
 │   │       ├── pricing.ts        Subtotal, O&P, tax, margin
 │   │       ├── profitability.ts  Findings: unbilled work, evidence gaps, margin
@@ -176,6 +177,7 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | GET    | `/api/estimator/jobs` | cookie | —                            | The org's estimating jobs                    |
 | GET/PUT| `/api/estimator/settings` | cookie | margin/O&P/tax/cost knobs | Org estimating assumptions               |
 | GET    | `/api/estimator/catalog` | cookie | —                         | Line-item catalog + which prices are verified |
+| GET    | `/api/estimator/standards` | cookie | —                       | The IICRC citation registry + confidence of each |
 | GET    | `/api/estimator/demo-sources` | cookie | —                    | A worked example, for evaluation             |
 | GET    | `/api/xactimate/status` | cookie | —                          | Connection, scopes, expiry — never a credential |
 | POST   | `/api/xactimate/connect` | cookie | `{ username, password, scopes, storageMode, acknowledgedTerms }` | Sign in under an explicit grant |
@@ -259,6 +261,50 @@ Try it without a database, a network, or an Xactimate account:
 cd backend && npm run estimator:demo            # full run against a worked example
 cd backend && npm run estimator:demo -- --scope-sheet   # the adjuster-facing document
 ```
+
+### It cites the standard, and it is honest about how firmly
+
+Every scope decision, line item and compliance check names the IICRC requirement it rests on.
+Rules reference a **stable id** in `estimator/standards/s500.ts`; nothing anywhere else types
+a section number. That indirection is not ceremony — before it existed, one plausible-looking
+clause number had been attached to five unrelated requirements, which is exactly the kind of
+thing an adjuster notices once and then checks everywhere.
+
+Each citation carries **how firmly it is anchored**, and that changes what prints:
+
+| Confidence | Renders as | Means |
+| ---------- | ---------- | ----- |
+| `clause` | `ANSI/IICRC S500-2021 §12.2.4` | A numbered clause. |
+| `chapter` | `ANSI/IICRC S500-2021, Cleaning and antimicrobial agents` | Located to a chapter — deliberately **no number**, rather than inventing one to look precise. |
+| `convention` | `… — industry practice, not a requirement of S500` | Standard practice the standard itself leaves to the restorer's judgement. |
+
+That last row does real work. Several things restorers say "the S500 requires" are convention:
+the 48/72-hour category thresholds, the class percentage bands, the initial-water-load divisor
+table, air-mover coverage ranges, the 2-foot flood cut, and the idea that antimicrobial is
+mandatory on any Cat 2. The estimator still uses all of them — they are what the industry
+runs on — but it labels them, and lists them under "what this estimate does not claim". An
+estimator arguing a scope is better off knowing which of their citations is a clause and which
+is custom.
+
+**The standards are not reproduced.** ANSI/IICRC S500 and S520 are copyrighted publications
+sold by the IICRC. Every requirement in the registry is a paraphrase written for this
+codebase; what the estimate carries is a pointer, so a reader with their own copy can turn
+to it. `GET /api/estimator/standards` publishes the whole registry.
+
+### It checks the estimate back against the standard
+
+Separate from the profitability review, and asking a different question: the findings ask
+what is *unbilled*, the standards review asks what is *indefensible*. Eighteen checks, each
+citing its requirement and carrying a remedy — dry standard established from unaffected
+material, drying verified to that goal before demobilising, porous material removed on
+Category 3, wet cavities opened or dried, cleaning before chemistry, containment held under
+negative pressure, dehumidification sized to the class, and so on.
+
+`undetermined` is a real outcome. When the sources do not say, the check says it does not
+know — scoring a missing MICA report as "met" would make the whole report worthless.
+
+The two reviews overlap constantly, which is the point: an obligation a job skipped is
+usually one it also failed to bill for. Checks that are both are marked *also unbilled work*.
 
 ### How the sources are fused
 
@@ -348,14 +394,22 @@ minutes): a retry loop here walks a real company's account into a lockout mid-jo
    `XACTIMATE_API_KEY`, or `XACTIMATE_DRIVER=web` plus `XACTIMATE_WEB_AUTOMATION=true` and
    `npm install playwright` in `backend/`.
 
-### A caveat worth stating plainly
+### Two caveats worth stating plainly
 
-The IICRC calculations, the scope rules and the fusion logic are implemented from the
-standards and are unit-consistent. The **selectors and placeholder prices in the seed catalog
-are not authoritative** — they follow Xactimate's conventions but have not been reconciled
-against a real price list, which is exactly why nothing is billable until a sync marks it
-verified. Have an estimator review the first few jobs against your own price list before
-anything goes to a carrier.
+**Prices.** The IICRC calculations, the scope rules and the fusion logic are implemented from
+the standards and are unit-consistent. The **selectors and placeholder prices in the seed
+catalog are not authoritative** — they follow Xactimate's conventions but have not been
+reconciled against a real price list, which is exactly why nothing is billable until a sync
+marks it verified. Have an estimator review the first few jobs against your own price list
+before anything goes to a carrier.
+
+**Citations.** Every entry in the registry currently sits at `chapter` or `convention`
+confidence, never `clause`. That is deliberate rather than incomplete: precise clause numbers
+were not corroborable without the copyrighted text in hand, and a confident wrong §-number is
+worse on a submitted estimate than an honest chapter reference. If you hold a copy of the
+S500, pinning a requirement to its clause is a one-line change — set `section` and flip
+`confidence` to `'clause'` — and the estimate, the exports and the UI all start printing the
+number with no other edit.
 
 ## Configuration
 

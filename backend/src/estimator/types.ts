@@ -1,3 +1,6 @@
+import type { CitationId, StandardReference } from './standards/s500.js';
+import type { ComplianceReport } from './standards/compliance.js';
+
 /**
  * Canonical domain model for the Mitigation Estimator.
  *
@@ -305,8 +308,14 @@ export interface ScopeItem {
   unit: Unit;
   /** Plain-English justification, cited on the estimate for the adjuster. */
   justification: string;
-  /** S500 / S520 section this rests on, when one applies. */
-  standardRef?: string;
+  /**
+   * The IICRC requirements this decision rests on, as registry ids.
+   *
+   * Ids rather than strings, so no rule can invent a section number — see
+   * `standards/s500.ts`. Every scope item carries at least one: an item with
+   * nothing behind it is one the estimator should not have written.
+   */
+  citations: CitationId[];
   /** Evidence ids that substantiate this item. */
   evidenceIds: string[];
   /** Tags used to look up matching catalog entries. */
@@ -339,7 +348,8 @@ export interface EstimateLineItem {
   /** Where this line came from. */
   scopeItemIds: string[];
   justification: string;
-  standardRef?: string;
+  /** IICRC requirements behind this line, merged from its scope items. */
+  citations: CitationId[];
   evidenceIds: string[];
 
   /**
@@ -409,8 +419,22 @@ export interface MitigationEstimate {
   scope: ScopeItem[];
   lineItems: EstimateLineItem[];
   profitability: ProfitabilitySummary;
+  /**
+   * The estimate read back against the IICRC standards — what the job did, did
+   * not do, and cannot show it did. Distinct from the profitability review:
+   * that one asks what is unbilled, this one asks what is indefensible.
+   */
+  compliance: ComplianceReport;
+  /**
+   * Every standard cited anywhere in this estimate, resolved. This is the
+   * appendix a reader turns to with their own copy of the standard open.
+   */
+  references: StandardReference[];
   /** Human-readable narrative for the estimate header, written for the adjuster. */
   narrative: string;
   /** Anything the agent could not decide on its own. */
   openQuestions: string[];
 }
+
+export type { CitationId, StandardReference } from './standards/s500.js';
+export type { ComplianceCheck, ComplianceReport, ComplianceStatus } from './standards/compliance.js';

@@ -1,4 +1,5 @@
 import { round, toSquareYards } from '../lib/geometry.js';
+import { uniqueCitations } from '../standards/s500.js';
 import { CATALOG, type CatalogItem } from '../catalog/lineItems.js';
 import { resolvePrice, type CostBasis, type PriceList, DEFAULT_COST_BASIS } from '../catalog/priceList.js';
 import type { AssessedRoom, EstimateLineItem, ScopeItem, Unit } from '../types.js';
@@ -126,6 +127,9 @@ export function mapScopeToLineItems(scope: ScopeItem[], context: MappingContext)
       existing.totalCost = round(existing.quantity * existing.unitCost);
       existing.scopeItemIds.push(item.id);
       existing.evidenceIds = [...new Set([...existing.evidenceIds, ...item.evidenceIds])];
+      // Consolidated lines carry the union of their scope items' citations —
+      // a merged line rests on every requirement that produced it.
+      existing.citations = uniqueCitations([...existing.citations, ...item.citations]);
       if (!existing.justification.includes(item.justification)) {
         existing.justification = `${existing.justification} ${item.justification}`;
       }
@@ -148,7 +152,7 @@ export function mapScopeToLineItems(scope: ScopeItem[], context: MappingContext)
       totalCost: round(quantity * price.unitCost),
       scopeItemIds: [item.id],
       justification: item.justification,
-      standardRef: item.standardRef,
+      citations: item.citations,
       evidenceIds: item.evidenceIds,
       priceVerified: price.verified,
     });

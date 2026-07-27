@@ -14,6 +14,8 @@ import { reconcileCatalog } from './catalog/priceList.js';
 import { MockXactimateDriver } from './xactimate/mockDriver.js';
 import { createConsent } from './xactimate/consent.js';
 import { toScopeSheet } from './export/xactimateExport.js';
+import { formatCitation } from './standards/s500.js';
+import { formatCheck } from './standards/compliance.js';
 
 const usdFormatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const usd = (value: number) => usdFormatter.format(value);
@@ -112,12 +114,29 @@ async function main(): Promise<void> {
     console.log();
   }
 
+  console.log('STANDARDS REVIEW');
+  console.log('─'.repeat(78));
+  console.log(estimate.compliance.summary);
+  console.log();
+  for (const check of estimate.compliance.checks) {
+    if (check.status === 'not_applicable') continue;
+    console.log(formatCheck(check));
+  }
+  console.log();
+
   if (estimate.openQuestions.length > 0) {
     console.log('BEFORE SUBMITTING');
     console.log('─'.repeat(78));
     for (const question of estimate.openQuestions) console.log(`• ${question}`);
     console.log();
   }
+
+  console.log(`STANDARDS REFERENCED (${estimate.references.length})`);
+  console.log('─'.repeat(78));
+  for (const reference of estimate.references) {
+    console.log(`${reference.title.padEnd(48)} ${formatCitation(reference.id)}`);
+  }
+  console.log();
 
   console.log('Re-run with --scope-sheet to see the adjuster-facing document.');
 }

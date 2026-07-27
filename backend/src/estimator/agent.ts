@@ -7,6 +7,8 @@ import { DEFAULT_PRICING_OPTIONS, type PricingOptions } from './pricing.js';
 import { reviewProfitability } from './profitability.js';
 import { gppDifferential, sizeAirMovers, sizeDehumidification } from './lib/psychrometrics.js';
 import { cubicFeet, round } from './lib/geometry.js';
+import { reviewCompliance } from './standards/compliance.js';
+import { caveatsFor, formatCitation, referencesFor, type CitationId } from './standards/s500.js';
 import type { LossAssessment, MitigationEstimate, ScopeItem } from './types.js';
 
 /**
@@ -67,6 +69,21 @@ export function buildEstimate(
     lineMarginFloor: config.lineMarginFloor,
   });
 
+  // Read the finished estimate back against the standards. The profitability
+  // review asks what is unbilled; this asks what is indefensible — and the two
+  // overlap constantly, because the obligations a job skipped are usually
+  // obligations it also failed to bill for.
+  const compliance = reviewCompliance(assessment, scope, lineItems);
+
+  // Everything cited anywhere: the scope rules, the line items, and the
+  // compliance checks. This is the appendix a reader turns to with their own
+  // copy of the standard open.
+  const cited: CitationId[] = [
+    ...scope.flatMap((item) => item.citations),
+    ...lineItems.flatMap((line) => line.citations),
+    ...compliance.citations,
+  ];
+
   return {
     jobId: assessment.jobId,
     generatedAt: new Date().toISOString(),
@@ -74,8 +91,10 @@ export function buildEstimate(
     scope,
     lineItems,
     profitability,
+    compliance,
+    references: referencesFor(cited),
     narrative: writeNarrative(assessment, lineItems.length),
-    openQuestions: collectOpenQuestions(assessment, scope, unmapped, config),
+    openQuestions: collectOpenQuestions(assessment, scope, unmapped, config, compliance, cited),
   };
 }
 
@@ -103,7 +122,7 @@ function writeNarrative(assessment: LossAssessment, lineCount: number): string {
 
   if (assessment.category > assessment.sourceCategory) {
     parts.push(
-      `The water was Category ${assessment.sourceCategory} at the source but was scoped as Category ${assessment.category}: it stood long enough to degrade under IICRC S500 §10.5.4 before mitigation began.`,
+      `The water was Category ${assessment.sourceCategory} at the source but was scoped as Category ${assessment.category}: it stood long enough before mitigation began for its condition to deteriorate (${formatCitation('CATEGORY_DEGRADATION')}).`,
     );
   } else {
     parts.push(`Water was classified as Category ${assessment.category} at the source.`);
@@ -172,7 +191,7 @@ function describeDehuBasis(assessment: LossAssessment): string {
   if (affectedCF <= 0) return '';
 
   const sizing = sizeDehumidification(affectedCF, assessment.class);
-  return `Dehumidification was sized from ${affectedCF} affected cubic feet at the S500 Class ${assessment.class} LGR factor of ${sizing.factor}, requiring ${sizing.requiredPintsPerDay} AHAM pints per day — ${sizing.unitsRequired} unit${sizing.unitsRequired === 1 ? '' : 's'} minimum.`;
+  return `Dehumidification was sized from ${affectedCF} affected cubic feet at the Class ${assessment.class} LGR factor of ${sizing.factor}, requiring ${sizing.requiredPintsPerDay} AHAM pints per day — ${sizing.unitsRequired} unit${sizing.unitsRequired === 1 ? '' : 's'} minimum (${formatCitation('DEHUMIDIFICATION_SIZING')}).`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -192,8 +211,26 @@ function collectOpenQuestions(
   scope: ScopeItem[],
   unmapped: ScopeItem[],
   config: EstimatorConfig,
+  compliance: ReturnType<typeof reviewCompliance>,
+  cited: CitationId[],
 ): string[] {
   const questions: string[] = [];
+
+  // Unmet obligations lead, because they are the ones that cost the job twice —
+  // once when the work goes unbilled and again when the estimate is challenged.
+  for (const check of compliance.checks) {
+    if (check.status === 'met' || check.status === 'not_applicable') continue;
+    questions.push(
+      `${check.title} — ${check.detail}${check.remedy ? ` ${check.remedy}` : ''} (${formatCitation(check.citation)})`,
+    );
+  }
+
+  // Where a citation the estimate relies on is convention rather than a clause,
+  // say so here. An estimator arguing a scope with an adjuster is far better off
+  // knowing which of their citations is a requirement and which is custom.
+  for (const { title, caveat } of caveatsFor(cited)) {
+    questions.push(`On "${title}": ${caveat}`);
+  }
 
   if (!assessment.sourcesUsed.includes('docusketch')) {
     questions.push(
@@ -233,9 +270,20 @@ function collectOpenQuestions(
       (m) => m.surface === 'wall' && m.material !== 'baseboard' && m.material !== 'cabinetry',
     );
 
+    // The wet wall band is the perimeter times the height moisture reached, not
+    // the whole wall — a 14-inch wet line on a 9-foot wall is a sixth of it.
+    const wetBandFt = wetWallAssembly
+      ? Math.max(
+          ...room.materials
+            .filter((m) => m.surface === 'wall' && m.material !== 'baseboard' && m.material !== 'cabinetry')
+            .map((m) => (m.wetHeightIn ?? 24) / 12),
+        )
+      : 0;
+
     const required = sizeAirMovers({
       wetFloorSF,
       wetWallLF: wetWallAssembly ? room.geometry.perimeterLF : 0,
+      wetWallSF: round(room.geometry.perimeterLF * wetBandFt),
       wetCeilingSF: room.ceilingAffected ? room.geometry.ceilingSF : 0,
       offsets: room.geometry.offsets,
     });
@@ -246,7 +294,7 @@ function collectOpenQuestions(
 
     if (placed > 0 && placed < required) {
       questions.push(
-        `${room.name} shows ${placed} air movers placed where S500 coverage calls for ${required}. Either the log is incomplete — in which case there are unbilled equipment days — or the room dried under-equipped and that should be noted.`,
+        `${room.name} shows ${placed} air movers placed where the coverage figures call for ${required} (${formatCitation('AIRFLOW_SIZING')}). Either the log is incomplete — in which case there are unbilled equipment days — or the room dried under-equipped and that should be noted.`,
       );
     }
   }

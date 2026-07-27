@@ -1,3 +1,5 @@
+import { formatCitation, formatCitations } from '../standards/s500.js';
+import { formatCheck } from '../standards/compliance.js';
 import type { EstimateLineItem, MitigationEstimate } from '../types.js';
 
 /**
@@ -38,6 +40,7 @@ const LINE_ITEM_COLUMNS = [
   'Unit Price',
   'Total',
   'Note',
+  'Standard',
 ] as const;
 
 /**
@@ -61,6 +64,7 @@ export function toLineItemCsv(lineItems: EstimateLineItem[]): string {
         line.unitPrice.toFixed(2),
         line.rcv.toFixed(2),
         line.justification,
+        formatCitations(line.citations),
       ]),
     ),
   ];
@@ -152,7 +156,9 @@ export function toScopeSheet(estimate: MitigationEstimate): string {
       );
       out.push(`  ${line.description}`);
       out.push(wrap(`  Basis: ${line.justification}`, 72));
-      if (line.standardRef) out.push(`  Standard: ${line.standardRef}`);
+      if (line.citations.length > 0) {
+        out.push(wrap(`  Standard: ${formatCitations(line.citations)}`, 72));
+      }
       if (line.evidenceGap) out.push(`  ** ${line.evidenceGap} **`);
       out.push('');
     }
@@ -166,10 +172,52 @@ export function toScopeSheet(estimate: MitigationEstimate): string {
   out.push(`TOTAL               ${profitability.total.toFixed(2).padStart(12)}`);
   out.push('');
 
+  /* ---- Standards compliance ---- */
+
+  const { compliance } = estimate;
+  out.push('STANDARDS REVIEW');
+  out.push('-'.repeat(72));
+  out.push(wrap(compliance.summary, 72));
+  out.push('');
+  for (const check of compliance.checks) {
+    // Not-applicable checks are omitted from the printed sheet — a page of
+    // "[-] does not apply" buries the four lines the reader needs.
+    if (check.status === 'not_applicable') continue;
+    out.push(formatCheck(check));
+    out.push('');
+  }
+
   if (estimate.openQuestions.length > 0) {
     out.push('BEFORE SUBMITTING');
     out.push('-'.repeat(72));
     for (const question of estimate.openQuestions) out.push(wrap(`- ${question}`, 72));
+    out.push('');
+  }
+
+  /* ---- Reference appendix ---- */
+
+  if (estimate.references.length > 0) {
+    out.push('STANDARDS REFERENCED');
+    out.push('-'.repeat(72));
+    out.push(
+      wrap(
+        'Locations are given so a reader with their own copy of the standard can turn to them. The standards are copyrighted publications of the IICRC and are not reproduced here; each requirement below is paraphrased.',
+        72,
+      ),
+    );
+    out.push('');
+
+    for (const reference of estimate.references) {
+      out.push(`${reference.title}`);
+      out.push(`  ${formatCitation(reference.id)}`);
+      out.push(wrap(`  ${reference.requirement}`, 72));
+      if (reference.caveat) {
+        // The caveats are the honest part: they mark where the industry says
+        // "the standard requires" about something it leaves to judgement.
+        out.push(wrap(`  NOTE: ${reference.caveat}`, 72));
+      }
+      out.push('');
+    }
   }
 
   return out.join('\n');

@@ -6,6 +6,12 @@ import { HttpError, badRequest } from '../lib/errors.js';
 import { buildEstimate } from '../estimator/agent.js';
 import { buildEstimatorConfig } from '../estimator/settings.js';
 import { CATALOG } from '../estimator/catalog/lineItems.js';
+import {
+  CITATIONS,
+  formatCitation,
+  S500_EDITION,
+  S520_EDITION,
+} from '../estimator/standards/s500.js';
 import { toLineItemCsv, toScopeSheet, toSketchXml } from '../estimator/export/xactimateExport.js';
 import {
   buildEstimateSchema,
@@ -149,6 +155,29 @@ estimatorRouter.post(
     }
   },
 );
+
+/**
+ * GET /api/estimator/standards
+ *
+ * The full IICRC citation registry — every requirement the estimator reasons
+ * from, how firmly each is anchored, and where a familiar "the S500 requires…"
+ * is really industry convention. Published because an estimator defending a
+ * scope needs to know which of their citations is a clause and which is custom.
+ */
+estimatorRouter.get('/standards', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({
+      editions: { s500: S500_EDITION, s520: S520_EDITION },
+      note: 'The ANSI/IICRC S500 and S520 are copyrighted publications of the IICRC and are not reproduced here. Each requirement below is a paraphrase; the location is given so a reader with their own copy can turn to it.',
+      references: Object.values(CITATIONS).map((reference) => ({
+        ...reference,
+        formatted: formatCitation(reference.id),
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 /**
  * GET /api/estimator/demo-sources

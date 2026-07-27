@@ -94,7 +94,15 @@ export const SAMPLE_MICA = {
     { room: 'kitchen', material: 'subfloor', value: 28, dryStandard: 14, takenAt: '2026-06-16T14:08:00Z' },
     { room: 'dining', material: 'carpet', value: 61, dryStandard: 10, takenAt: '2026-06-16T14:20:00Z' },
     { room: 'hall', material: 'engineered wood', value: 24, dryStandard: 9, takenAt: '2026-06-16T14:31:00Z' },
-    { room: 'kitchen', material: 'drywall', value: 13, dryStandard: 12, takenAt: '2026-06-20T09:15:00Z', location: 'north wall, 12in AFF — final' },
+    // Closing readings. Three materials reached their goal; the subfloor did
+    // not — which is the compliance finding this fixture exists to demonstrate,
+    // and the single most common real one: the covering came off, the deck
+    // underneath never quite got there, and nobody took a final reading that
+    // said so.
+    { room: 'kitchen', material: 'drywall', value: 11, dryStandard: 12, takenAt: '2026-06-20T09:15:00Z', location: 'north wall, 12in AFF — final' },
+    { room: 'kitchen', material: 'subfloor', value: 17, dryStandard: 14, takenAt: '2026-06-20T09:18:00Z', location: 'under cabinet run — final' },
+    { room: 'dining', material: 'carpet', value: 9, dryStandard: 10, takenAt: '2026-06-20T09:25:00Z', location: 'final' },
+    { room: 'hall', material: 'engineered wood', value: 8, dryStandard: 9, takenAt: '2026-06-20T09:31:00Z', location: 'final' },
   ],
   psychrometrics: [
     { zone: 'affected', temperature: 79, rh: 62, takenAt: '2026-06-16T14:00:00Z' },

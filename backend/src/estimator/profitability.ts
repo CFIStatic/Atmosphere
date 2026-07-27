@@ -1,5 +1,6 @@
 import { round } from './lib/geometry.js';
 import { CATALOG, findByKey, type CatalogItem } from './catalog/lineItems.js';
+import { formatCitation } from './standards/s500.js';
 import { resolvePrice, DEFAULT_COST_BASIS, type CostBasis, type PriceList } from './catalog/priceList.js';
 import { lineMargin, priceEstimate, revenueGapToTarget, type PricingOptions, DEFAULT_PRICING_OPTIONS } from './pricing.js';
 import type {
@@ -187,7 +188,7 @@ const COMPANION_RULES: CompanionRule[] = [
         ),
       ),
     detail: (a) =>
-      `This is a Category ${a.category} loss. Antimicrobial application to affected surfaces is required by S500 §12.2.4 — it is both billable and expected by the carrier, and its absence invites questions about the rest of the scope.`,
+      `This is a Category ${a.category} loss with no antimicrobial application scoped. It is customary on contaminated losses, billable, and expected by carriers, so its absence invites questions about the rest of the scope (${formatCitation('ANTIMICROBIAL_APPLICATION')}).`,
   },
   {
     id: 'content_manipulation',

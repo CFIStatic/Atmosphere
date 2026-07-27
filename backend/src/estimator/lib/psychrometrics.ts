@@ -186,34 +186,68 @@ export function sizeDehumidification(
   };
 }
 
-/** Coverage assumptions for air movers, at the midpoint of the S500 ranges. */
+/**
+ * Air-mover coverage assumptions, at the midpoints of the published ranges.
+ *
+ * Two methods exist in the field for the wall/ceiling term, and they disagree:
+ *
+ *   `area` — one unit per 100–150 SF of wet wall and ceiling. This is the
+ *            formulation in current S500 guidance and it is the default here.
+ *   `linear` — one unit per 10–16 LF of wet wall. Older guidance, still what many
+ *            estimators quote from memory, and it produces materially higher
+ *            counts on a room with a long perimeter.
+ *
+ * Both are exposed rather than one being buried, because an org whose carrier
+ * program was written against the linear rule needs to keep estimating that way,
+ * and because a silent switch would have changed every equipment quantity on
+ * every historical job without explanation.
+ */
 export const AIR_MOVER_COVERAGE = {
-  /** One unit per this many SF of wet floor (S500 range: 50–70). */
+  /** One unit per this many SF of wet floor (published range: 50–70). */
   floorSFPerUnit: 60,
-  /** One unit per this many LF of wet wall (S500 range: 10–16). */
+  /** One unit per this many SF of wet wall and ceiling (published range: 100–150). */
+  wallCeilingSFPerUnit: 125,
+  /** Legacy: one unit per this many LF of wet wall (published range: 10–16). */
   wallLFPerUnit: 14,
-  /** One unit per this many SF of wet ceiling. */
-  ceilingSFPerUnit: 70,
 } as const;
+
+export type AirMoverMethod = 'area' | 'linear';
 
 export interface AirMoverInputs {
   wetFloorSF: number;
-  /** Linear feet of wall wet above ~2 ft, i.e. Class 2 and up. */
+  /** Linear feet of wet wall. Used by the `linear` method. */
   wetWallLF: number;
+  /** Square feet of wet wall. Used by the `area` method. */
+  wetWallSF?: number;
   wetCeilingSF: number;
   /** Inside corners and jogs — each traps air and needs its own unit. */
   offsets: number;
 }
 
 /**
- * Air-mover count for one room, per S500: one unit to establish airflow in the
- * room, then additional units by wet surface area, plus one per offset.
+ * Air-mover count for one room: one unit to establish airflow in the room, then
+ * additional units by wet surface, plus one per inset or offset.
+ *
+ * The result is a *coverage figure*, not a billing quantity. What gets billed is
+ * what the equipment log says was placed; this number exists to catch the case
+ * where the log shows fewer units than the room needed, which is either a gap in
+ * the log — unbilled days — or a room that dried under-equipped.
  */
-export function sizeAirMovers(inputs: AirMoverInputs): number {
+export function sizeAirMovers(inputs: AirMoverInputs, method: AirMoverMethod = 'area'): number {
   let units = 1; // baseline circulation for the room itself
   units += Math.ceil(inputs.wetFloorSF / AIR_MOVER_COVERAGE.floorSFPerUnit);
-  units += Math.ceil(inputs.wetWallLF / AIR_MOVER_COVERAGE.wallLFPerUnit);
-  units += Math.ceil(inputs.wetCeilingSF / AIR_MOVER_COVERAGE.ceilingSFPerUnit);
+
+  if (method === 'area') {
+    // Walls and ceilings share one allowance — they are one continuous upper
+    // surface as far as airflow is concerned, and adding them separately
+    // double-counts a room whose ceiling is wet because its walls are.
+    const upperSF = (inputs.wetWallSF ?? 0) + inputs.wetCeilingSF;
+    units += Math.ceil(upperSF / AIR_MOVER_COVERAGE.wallCeilingSFPerUnit);
+  } else {
+    units += Math.ceil(inputs.wetWallLF / AIR_MOVER_COVERAGE.wallLFPerUnit);
+    units += Math.ceil(inputs.wetCeilingSF / AIR_MOVER_COVERAGE.wallCeilingSFPerUnit);
+  }
+
   units += Math.max(0, inputs.offsets);
   return units;
 }

@@ -1,5 +1,11 @@
 import { useState } from 'react';
-import { usd, type MitigationEstimate, type ProfitFinding } from '../../lib/api';
+import {
+  usd,
+  type MitigationEstimate,
+  type ProfitFinding,
+  type StandardReference,
+} from '../../lib/api';
+import { CompliancePanel, formatLocation } from './CompliancePanel';
 
 /**
  * The finished estimate.
@@ -82,6 +88,9 @@ export function EstimateResult({
         </section>
       )}
 
+      {/* ---- Standards ---- */}
+      <CompliancePanel compliance={estimate.compliance} references={estimate.references} />
+
       {/* ---- Money ---- */}
       <section className="grid gap-4 sm:grid-cols-2">
         <div className="rounded-xl border border-white/10 bg-ink-800/60 p-5">
@@ -163,7 +172,7 @@ export function EstimateResult({
               </thead>
               <tbody className="divide-y divide-white/5">
                 {lineItems.map((line) => (
-                  <LineRow key={line.id} line={line} />
+                  <LineRow key={line.id} line={line} references={estimate.references} />
                 ))}
               </tbody>
             </table>
@@ -204,8 +213,17 @@ export function EstimateResult({
 
 /* ------------------------------------------------------------------ */
 
-function LineRow({ line }: { line: MitigationEstimate['lineItems'][number] }) {
+function LineRow({
+  line,
+  references,
+}: {
+  line: MitigationEstimate['lineItems'][number];
+  references: StandardReference[];
+}) {
   const [open, setOpen] = useState(false);
+  const cited = line.citations
+    .map((id) => references.find((reference) => reference.id === id))
+    .filter((reference): reference is StandardReference => Boolean(reference));
 
   return (
     <>
@@ -242,8 +260,25 @@ function LineRow({ line }: { line: MitigationEstimate['lineItems'][number] }) {
         <tr className="bg-ink-900/60">
           <td colSpan={6} className="px-3 py-3 text-xs leading-relaxed text-gray-400">
             <p className="text-gray-300">{line.justification}</p>
-            <p className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-gray-500">
-              {line.standardRef && <span>Standard: {line.standardRef}</span>}
+
+            {cited.length > 0 && (
+              <ul className="mt-2 space-y-1.5">
+                {cited.map((reference) => (
+                  <li key={reference.id} className="border-l-2 border-brand-500/30 pl-2.5">
+                    <p className="text-gray-300">
+                      {reference.title}
+                      {reference.confidence === 'convention' && (
+                        <span className="ml-1.5 text-amber-300">(industry practice)</span>
+                      )}
+                    </p>
+                    <p className="text-gray-500">{reference.requirement}</p>
+                    <p className="text-gray-600">{formatLocation(reference)}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-gray-500">
               <span>
                 Evidence: {line.evidenceIds.length > 0 ? `${line.evidenceIds.length} item(s)` : 'none attached'}
               </span>
