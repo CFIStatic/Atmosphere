@@ -141,6 +141,33 @@ export const config = {
     portalReturnUrl: process.env.STRIPE_PORTAL_RETURN_URL ?? `${frontendOrigins[0]}/billing`,
   },
 
+  pm: {
+    // Server-only secret for the writing layer (morning briefs, drafted
+    // customer and adjuster updates). Optional: without it the briefs are
+    // assembled from the same facts using a deterministic template, and every
+    // other part of the Project Manager Agent — the rules, the alerts, the
+    // generated work — behaves identically. Never expose this to the browser.
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
+
+    // Which model writes. Prices are NOT set here — `public.model_rate_card` in
+    // the database is the source of truth for what a token costs, and metering
+    // goes through `record_usage`, so nothing in application code can disagree
+    // with the invoice.
+    model: process.env.PM_MODEL ?? 'claude-opus-5',
+
+    // The background automation pass. Off by default, and deliberately so: a
+    // timer has no user session, so it runs with the service-role key and
+    // bypasses RLS — the one place in this feature that does. On-demand runs
+    // (every page load, and the "run now" button) need no such privilege.
+    // See backend/src/pm/scheduler.ts.
+    schedulerEnabled:
+      (process.env.PM_SCHEDULER_ENABLED ?? 'false').toLowerCase() === 'true',
+    schedulerIntervalMinutes: Math.max(
+      5,
+      Number(process.env.PM_SCHEDULER_INTERVAL_MINUTES ?? 30),
+    ),
+  },
+
   webAccess: {
     // Both secrets are optional. Without them the feature reports itself as
     // unavailable and every other part of the app carries on unaffected —

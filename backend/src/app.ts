@@ -7,6 +7,7 @@ import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
 import { billingRouter } from './routes/billing.js';
 import { usageRouter } from './routes/usage.js';
+import { pmRouter } from './routes/pm.js';
 import { webAccessRouter } from './routes/webAccess.js';
 import { verifierRouter } from './routes/verifier.js';
 import { aiRouter } from './routes/ai.js';
@@ -106,6 +107,7 @@ export function createApp(): Express {
   app.use('/api/model', modelGatewayRouter);
   // Server-to-server: no session cookie, authenticated by Stripe's signature.
   app.use('/api/webhooks', webhookRouter);
+  app.use('/api/pm', pmRouter);
   app.use('/api/web-access', webAccessRouter);
   app.use('/api/verifier', verifierRouter);
   app.use('/api/crm', crmRouter);

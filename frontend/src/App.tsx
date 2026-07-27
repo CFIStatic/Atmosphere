@@ -9,6 +9,8 @@ import { OnboardingPage } from './pages/OnboardingPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { BillingPage } from './pages/BillingPage';
 import { UsagePage } from './pages/UsagePage';
+import { ProjectManagerPage } from './pages/ProjectManagerPage';
+import { PmProjectPage } from './pages/PmProjectPage';
 import { WebAccessPage } from './pages/WebAccessPage';
 import { ComputerUsePage } from './pages/ComputerUsePage';
 import { SpinnerIcon } from './components/icons';
@@ -71,6 +73,31 @@ export default function App() {
               <ProtectedRoute>
                 <RequireOnboarded>
                   <DashboardPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* The Project Manager area. Guarded only by onboarding: the
+              database decides who may change a project, and a route guard that
+              hid the screens would just make a field technician's read-only
+              view unreachable. */}
+          <Route
+            path="/pm"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <ProjectManagerPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/pm/projects/:id"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <PmProjectPage />
                 </RequireOnboarded>
               </ProtectedRoute>
             }

@@ -156,6 +156,31 @@ export function DashboardPage() {
               when the queue is empty, so it only appears when it matters. */}
           <EscalationQueue />
 
+          {/* Project Manager Agent */}
+          <Link
+            to="/pm"
+            className="mt-4 block rounded-xl border border-white/10 bg-ink-800/60 p-5 backdrop-blur transition hover:border-brand-500/40 hover:bg-ink-800/80"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-brand-400">
+                  Project Manager
+                </p>
+                <p className="mt-1.5 text-lg font-semibold text-white">
+                  What needs you today
+                </p>
+                <p className="mt-1 max-w-lg text-sm text-gray-400">
+                  Every open job checked against the drying log, the schedule, the crew board and
+                  the paperwork — with the missed readings and the stalled dry-outs pulled to the
+                  top.
+                </p>
+              </div>
+              <span aria-hidden="true" className="mt-1 shrink-0 text-2xl text-gray-600">
+                →
+              </span>
+            </div>
+          </Link>
+
           {/* Web Access */}
           <Link
             to="/web-access"
