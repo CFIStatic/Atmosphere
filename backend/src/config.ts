@@ -82,6 +82,115 @@ export const config = {
   // in the Supabase dashboard under Authentication → URL Configuration.
   passwordResetRedirectUrl:
     process.env.PASSWORD_RESET_REDIRECT_URL ?? `${frontendOrigins[0]}/reset-password`,
+
+  /**
+   * Backups. The archive bytes deliberately live OUTSIDE the database being
+   * backed up — a copy stored inside the thing it protects is not a copy.
+   *
+   * The runner reads every org's rows, so it needs the service role key. Like
+   * PIN sign-in, the feature simply stays off when that key is absent rather
+   * than failing the boot: a deploy without it still serves the app.
+   */
+  backups: {
+    // Explicit opt-out for environments that back up at the infrastructure
+    // layer instead (managed PITR, volume snapshots).
+    enabled: (process.env.BACKUP_ENABLED ?? 'true') !== 'false',
+
+    // 'local' writes to BACKUP_DIR; 'supabase' uploads to a private Storage
+    // bucket. Local is the default because it needs no setup, but it only
+    // protects you if that volume outlives the database host.
+    driver: (process.env.BACKUP_DRIVER as 'local' | 'supabase') ?? 'local',
+    dir: process.env.BACKUP_DIR ?? './backups',
+    bucket: process.env.BACKUP_BUCKET ?? 'atmosphere-backups',
+
+    // How often the scheduler runs, and how long finished archives are kept.
+    intervalMinutes: Number(process.env.BACKUP_INTERVAL_MINUTES ?? 24 * 60),
+    retentionDays: Number(process.env.BACKUP_RETENTION_DAYS ?? 30),
+
+    // Run a snapshot shortly after boot. Off by default so a crash-loop cannot
+    // turn into a storm of half-written archives.
+    runOnBoot: process.env.BACKUP_RUN_ON_BOOT === 'true',
+
+    /**
+     * Base64 32-byte key for AES-256-GCM. Archives contain every customer
+     * record we hold, so at rest they are exactly as sensitive as the database
+     * — and unlike the database they get copied to laptops and object stores.
+     * Unset means archives are written in the clear, which is refused outright
+     * in production. Generate with:  openssl rand -base64 32
+     */
+    encryptionKey: process.env.BACKUP_ENCRYPTION_KEY ?? '',
+    // Label recorded alongside each archive so a rotated key can still be
+    // matched to the archives it opens. Never the key itself.
+    encryptionKeyId: process.env.BACKUP_ENCRYPTION_KEY_ID ?? 'primary',
+  },
+
+  /**
+   * Mirroring of external applications. Vendor credentials are never stored in
+   * the database — a source row names a secret, and the name is resolved here
+   * against `ATM_INTEGRATION_<REF>` in the server environment.
+   */
+  integrations: {
+    enabled: (process.env.INTEGRATIONS_ENABLED ?? 'true') !== 'false',
+    credentialEnvPrefix: 'ATM_INTEGRATION_',
+    // Ceiling on a single sync run, so a vendor paginating forever cannot fill
+    // the disk before anyone notices.
+    maxRecordsPerRun: Number(process.env.INTEGRATION_MAX_RECORDS ?? 50_000),
+    requestTimeoutMs: Number(process.env.INTEGRATION_TIMEOUT_MS ?? 30_000),
+  },
+
+  computerUse: {
+    // Feature flag. Computer use hands an AI model the mouse and keyboard of a
+    // real machine, so a deployment that does not want it can switch the whole
+    // surface off rather than relying on nobody finding the page.
+    enabled: (process.env.COMPUTER_USE_ENABLED ?? 'true') !== 'false',
+
+    // Optional server-wide Anthropic key. When set, the product works with no
+    // setup at all; the per-organisation key entered in the UI takes priority.
+    fallbackApiKey: process.env.ANTHROPIC_API_KEY ?? '',
+
+    // Encrypts organisation Anthropic keys at rest. Server-only, and rotating
+    // it invalidates every stored key (organisations simply re-enter theirs).
+    credentialKey: required(
+      'AI_CREDENTIALS_KEY',
+      devOnly('atmosphere-dev-credentials-key-do-not-use-in-production'),
+    ),
+    // Where those encrypted keys live. Ciphertext only — never plaintext.
+    credentialStorePath: process.env.AI_CREDENTIALS_PATH ?? '.data/ai-credentials.json',
+
+    // Signs the long-lived tokens agents reconnect with. Rotating it unpairs
+    // every computer, which is the correct response to a leaked secret.
+    agentTokenSecret: required(
+      'AGENT_TOKEN_SECRET',
+      devOnly('atmosphere-dev-agent-token-secret-do-not-use-in-production'),
+    ),
+
+    defaultModel: process.env.COMPUTER_USE_MODEL ?? 'claude-opus-5',
+    defaultQuality: (process.env.COMPUTER_USE_QUALITY ?? 'balanced') as
+      | 'economical'
+      | 'balanced'
+      | 'detailed',
+
+    // Guard rails. A model driving a computer can loop indefinitely — clicking
+    // a dialog that keeps reappearing, retrying a login that will never work —
+    // so every run is bounded in both steps and wall-clock time.
+    maxIterations: Number(process.env.COMPUTER_USE_MAX_STEPS ?? 60),
+    runTimeoutMs: Number(process.env.COMPUTER_USE_RUN_TIMEOUT_MS ?? 15 * 60 * 1000),
+    // A single action should be near-instant; anything slower means the agent
+    // is wedged and the model should be told so rather than left waiting.
+    actionTimeoutMs: Number(process.env.COMPUTER_USE_ACTION_TIMEOUT_MS ?? 45 * 1000),
+    maxTokens: Number(process.env.COMPUTER_USE_MAX_TOKENS ?? 16000),
+  },
 } as const;
+
+// A production deploy that writes unencrypted customer archives to disk is a
+// breach waiting for someone to find the volume. Fail at boot instead — either
+// supply a key or turn backups off deliberately.
+if (config.isProduction && config.backups.enabled && !config.backups.encryptionKey) {
+  throw new Error(
+    'BACKUP_ENCRYPTION_KEY is required in production. ' +
+      'Generate one with `openssl rand -base64 32`, or set BACKUP_ENABLED=false ' +
+      'if backups are handled at the infrastructure layer.',
+  );
+}
 
 export type AppConfig = typeof config;

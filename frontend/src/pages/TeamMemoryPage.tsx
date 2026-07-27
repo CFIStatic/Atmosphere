@@ -69,7 +69,7 @@ function AgentDetail({ userId, onBack }: { userId: string; onBack: () => void })
   useEffect(() => {
     let cancelled = false;
     api
-      .getAgent(userId)
+      .getMemoryAgent(userId)
       .then((res) => {
         if (cancelled) return;
         setAgent(res.agent);
@@ -90,7 +90,7 @@ function AgentDetail({ userId, onBack }: { userId: string; onBack: () => void })
     if (cursor === null) return;
     setLoadingMore(true);
     try {
-      const res = await api.getAgent(userId, cursor);
+      const res = await api.getMemoryAgent(userId, cursor);
       setEvents((prev) => [...(prev ?? []), ...res.events]);
       setCursor(res.nextCursor);
     } catch (err) {
@@ -173,7 +173,7 @@ export function TeamMemoryPage() {
 
   useEffect(() => {
     api
-      .getAgents()
+      .getMemoryAgents()
       .then(({ agents }) => setAgents(agents))
       .catch((err) => {
         setError(err instanceof ApiError ? err.message : 'Could not load the team.');

@@ -1,14 +1,26 @@
 # Atmosphere
 
-Authentication and organization onboarding for **Atmosphere** — a React UI backed by an
-Express BFF (Backend-for-Frontend) that mediates **Supabase Auth** and a Row-Level-Security
-protected Postgres schema.
+Authentication, organization onboarding, and **computer use** for **Atmosphere** — a React
+UI backed by an Express BFF (Backend-for-Frontend) that mediates **Supabase Auth**, a
+Row-Level-Security protected Postgres schema, and Claude's computer-use tool.
 
 ```
 ┌────────────────────┐      /api/*        ┌────────────────────┐    Supabase JS (JWT)   ┌──────────────────┐
 │  Frontend (React)  │ ─────────────────▶ │  Backend (Express) │ ─────────────────────▶ │  Supabase        │
 │  Vite + Tailwind   │  httpOnly cookies  │  BFF / auth proxy  │   anon key + user JWT  │  Auth + Postgres │
-└────────────────────┘ ◀───────────────── └────────────────────┘ ◀───────────────────── └──────────────────┘
+└────────────────────┘ ◀───────────────── └─────────┬──────────┘ ◀───────────────────── └──────────────────┘
+                            SSE transcript          │  ▲
+                                                    │  │  Messages API (computer tool)
+                                                    ▼  │
+                                          ┌────────────────────┐
+                                          │   Anthropic API    │
+                                          └────────────────────┘
+                                                    ▲
+                        WebSocket (outbound-only)   │  screenshots ↓ / clicks + keys ↑
+                                          ┌─────────┴──────────┐
+                                          │  Atmosphere agent  │  ← runs on the computer
+                                          │  macOS/Win/Linux   │     being operated
+                                          └────────────────────┘
 ```
 
 ## What it does
@@ -25,9 +37,15 @@ protected Postgres schema.
    server so no Supabase token is ever exposed to page JavaScript.
 5. **PIN sign-in** — an optional 4-digit PIN for fast repeat sign-in, bound to a single
    device (see below).
-6. **Agent Memory** — jobs, the tasks under them, the crew on them, and the work each
-   person logs — with a complete, append-only record of everything that happens to any of
-   it (see below).
+6. **Computer use** — connect an Anthropic API key, run the agent on any computer, and
+   Claude can see its screen and operate it. The whole setup is one key and one command.
+7. **CRM backend** — customers, properties, leads, jobs, and their timeline, plus our own
+   backups and a verbatim copy of the data that currently lives only inside other
+   companies' software. Backend infrastructure only, no UI yet — see
+   **[docs/CRM.md](docs/CRM.md)**.
+8. **Agent Memory** — the operational layer over CRM jobs: the tasks under a job, the crew
+   on it, and the work people log against it — with a complete, append-only record of
+   everything that happens to any of it (see below).
 
 ## Why this shape?
 
@@ -52,11 +70,17 @@ JWT:
 | `orgs`         | An organization; owns a unique `join_code`.                          |
 | `org_members`  | Links a user to an org with their `role` and `work_type`.            |
 | `device_credentials` | One row per PIN-enrolled device. Holds only hashes — no secret and no session token. |
-| `jobs`         | A job of work. Carries a per-org running number (`JOB-0001`).        |
-| `job_tasks`    | A unit of work under a job, optionally assigned to a member.         |
-| `job_assignments` | Who was on which job, and when. Released, never deleted.          |
+| `job_tasks`    | A unit of work under a `crm_job`, optionally assigned to a member.   |
+| `job_assignments` | Which people were on which job, and when. Released, never deleted. |
 | `work_logs`    | A member's own account of work done, with time spent.                |
 | `memory_events` | The append-only record of everything that happens. See below.       |
+
+The CRM adds its own org-scoped tables under the same RLS model (`crm_accounts`,
+`crm_contacts`, `crm_properties`, `crm_leads`, `crm_jobs`, `crm_activities`), a verbatim
+append-only mirror of external applications (`crm_external_*`), and the backup catalog and
+change ledger (`backup_*`, `crm_audit_log`). See **[docs/CRM.md](docs/CRM.md)** — those
+migrations ship in `backend/supabase/migrations/` and are **not yet applied** to the live
+project.
 
 Membership checks used by the policies live in a **private schema** (not exposed as RPCs) to
 avoid recursive-policy issues and to keep the API surface minimal. Onboarding writes go
@@ -73,10 +97,10 @@ through two `SECURITY DEFINER` functions that validate `auth.uid()` internally:
 
 ```
 Atmosphere/
-├── supabase/
-│   ├── migrations/   SQL schema — Agent Memory tables, triggers, RLS
-│   └── tests/        Runs the migration against a throwaway Postgres
 ├── backend/          Express + TypeScript BFF
+│   ├── supabase/
+│   │   ├── migrations/   CRM core, external mirror, backup ledger, Agent Memory
+│   │   └── tests/        Runs the migrations against a throwaway Postgres
 │   ├── src/
 │   │   ├── config.ts             Validated config (Supabase URL, keys, cookies, CORS)
 │   │   ├── app.ts                Express app assembly (helmet, cors, cookies, routes)
@@ -85,31 +109,53 @@ Atmosphere/
 │   │   │   ├── supabase.ts       Anon + per-request user-scoped client factories
 │   │   │   ├── session.ts        httpOnly session-cookie set/clear
 │   │   │   ├── validation.ts     zod schemas (credentials, org, jobs, memory query)
+│   │   │   ├── crmValidation.ts  zod schemas + camelCase↔snake_case row mapping
 │   │   │   ├── memory.ts         Event recorder + serializers for the record
-│   │   │   └── errors.ts         Typed HTTP errors
+│   │   │   ├── orgContext.ts     Resolves the caller's org; never trusts the body
+│   │   │   ├── errors.ts         Typed HTTP errors
+│   │   │   ├── backup/           Archive format, storage drivers, runner, scheduler
+│   │   │   └── integrations/     Connectors + the append-only external mirror
 │   │   ├── middleware/
 │   │   │   ├── requireAuth.ts    Verify access token; transparent refresh
 │   │   │   └── errorHandler.ts   404 + central JSON error handler
+│   │   ├── computer/
+│   │   │   ├── protocol.ts       Wire protocol shared with the agent
+│   │   │   ├── models.ts         Per-model tool version, beta header, image limits
+│   │   │   ├── credentials.ts    Anthropic keys, encrypted at rest (AES-256-GCM)
+│   │   │   ├── agentTokens.ts    Pairing codes + HMAC-signed agent tokens
+│   │   │   ├── agentHub.ts       WebSocket registry of connected computers
+│   │   │   └── runner.ts         The agent loop + live run transcripts
+│   │   ├── scripts/              Backup CLI + dependency-free self-checks
 │   │   └── routes/
 │   │       ├── auth.ts           signup / login / logout / refresh / me
 │   │       ├── org.ts            onboarding: me / create / join / members
-│   │       ├── jobs.ts           jobs, tasks, crew, work logs
+│   │       ├── crm.ts            CRM CRUD, lead conversion, timeline, audit
+│   │       ├── jobs.ts           tasks, crew and work logs over crm_jobs
 │   │       ├── memory.ts         the record: feed, rollups, export
+│   │       ├── backups.ts        Snapshot status / history / trigger / verify
+│   │       ├── integrations.ts   External sources, syncs, CSV import, mirror
+│   │       ├── computer.ts       computer use: keys, pairing, runs, SSE
 │   │       └── health.ts         liveness probe
+│   ├── supabase/migrations/      CRM, mirror, and backup schema (not yet applied)
 │   └── .env.example
-└── frontend/         React + Vite + TypeScript + Tailwind
+├── frontend/         React + Vite + TypeScript + Tailwind
+│   ├── src/
+│   │   ├── pages/LoginPage.tsx        Branded login + signup screen
+│   │   ├── pages/OnboardingPage.tsx   3-step wizard: org → role → work type
+│   │   ├── pages/DashboardPage.tsx    Org overview, invite code, linked accounts
+│   │   ├── pages/ComputerUsePage.tsx  Live screen, task composer, transcript
+│   │   ├── context/AuthContext.tsx    Session + membership state
+│   │   ├── components/                Logo, icons, ProtectedRoute
+│   │   └── lib/api.ts                 Typed fetch client (credentials: include)
+│   └── .env.example
+└── agent/            The computer-use agent (runs on the machine being operated)
     ├── src/
-    │   ├── pages/LoginPage.tsx        Branded login + signup screen
-    │   ├── pages/OnboardingPage.tsx   3-step wizard: org → role → work type
-    │   ├── pages/DashboardPage.tsx    Org overview, active jobs, latest activity
-    │   ├── pages/JobsPage.tsx         Job list + open a job
-    │   ├── pages/JobDetailPage.tsx    Tasks, crew, work log, per-job history
-    │   ├── pages/MemoryPage.tsx       The org-wide record, filtered and paged
-    │   ├── pages/TeamMemoryPage.tsx   Per-person rollups and trails
-    │   ├── context/AuthContext.tsx    Session + membership state
-    │   ├── components/                AppShell, MemoryFeed, Logo, icons
-    │   └── lib/api.ts                 Typed fetch client (credentials: include)
-    └── .env.example
+    │   ├── index.ts              CLI: pair once, then stay connected
+    │   ├── computer.ts           Action executor + coordinate scaling
+    │   ├── image.ts              Screenshot downscale / crop (sharp)
+    │   ├── transport.ts          Outbound WebSocket with backoff
+    │   └── drivers/              linux (xdotool) · darwin · win32 (PowerShell)
+    └── README.md
 ```
 
 ## Prerequisites
@@ -163,7 +209,7 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | POST   | `/api/org/join`      | cookie | `{ joinCode, role, workType }`| Link to an existing org by join code         |
 | GET    | `/api/org/members`   | cookie | —                             | Linked accounts in the caller's org          |
 | GET    | `/api/jobs`          | cookie | —                             | Job list, rolled up with its memory           |
-| POST   | `/api/jobs`          | cookie | `{ name, workType, … }`       | Open a job (number assigned server-side)      |
+| POST   | `/api/jobs`          | cookie | `{ title, workType, … }`      | Open a job (writes to `crm_jobs`)             |
 | GET    | `/api/jobs/:id`      | cookie | —                             | Job + tasks + crew + work logs + history      |
 | PATCH  | `/api/jobs/:id`      | cookie | partial job                   | Update a job; the diff is recorded            |
 | GET    | `/api/jobs/:id/memory` | cookie | —                           | That job's complete history, oldest first     |
@@ -179,6 +225,26 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | GET    | `/api/memory/agents/:userId` | cookie | —                     | One member's full trail                       |
 | GET    | `/api/memory/entity/:type/:id` | cookie | —                   | Everything known about one thing              |
 | GET    | `/api/memory/export` | cookie | —                             | The whole record as NDJSON                    |
+| GET    | `/api/computer/status` | cookie | —                           | Key status, online computers, model options  |
+| PUT    | `/api/computer/credentials` | cookie | `{ apiKey }`           | Connect the org's Anthropic key              |
+| DELETE | `/api/computer/credentials` | cookie | —                      | Disconnect it                                |
+| POST   | `/api/computer/agents/pair-code` | cookie | —                 | Mint a one-time code to enrol a computer     |
+| POST   | `/api/computer/agents/pair` | —      | `{ code, name, platform }` | Agent redeems a code for a durable token |
+| GET    | `/api/computer/agents` | cookie | —                           | Computers currently online                   |
+| GET    | `/api/computer/agents/:id/screen` | cookie | —                | One fresh frame (read-only)                  |
+| POST   | `/api/computer/runs` | cookie | `{ agentId, instruction, … }` | Give a computer a task                       |
+| GET    | `/api/computer/runs` | cookie | —                             | Recent runs                                  |
+| GET    | `/api/computer/runs/:id/events` | cookie | `?after=<seq>`      | SSE transcript, replayable from a sequence   |
+| POST   | `/api/computer/runs/:id/stop` | cookie | —                     | Hand control back to the operator            |
+
+Agents also hold a WebSocket open at `/api/computer/agent-socket`, authenticated with the
+token from pairing rather than a session cookie.
+
+The CRM, backup, and integration endpoints (`/api/crm/*`, `/api/backups/*`,
+`/api/integrations/*`) are documented in **[docs/CRM.md](docs/CRM.md)**. Job records
+themselves are CRM resources: `/api/crm/jobs` carries the full CRUD including financials
+and the links to accounts, contacts and properties, while `/api/jobs` above is the
+field-facing view of the same rows plus the operational layer over them.
 
 `role` ∈ `project_manager | field_technician | accountant | office_manager | sales`.
 `workType` ∈ `mitigation | construction`.
@@ -229,7 +295,7 @@ which is what keeps that budget meaningless rather than a coin flip.
 Signing out deliberately does **not** clear the PIN — returning to the PIN pad instead of the
 password form is the whole point. Enrollment is per-device, capped at 5 devices per user.
 
-### Agent Memory
+## Agent Memory
 
 A restoration job is reconstructed after the fact more often than anyone would like — for
 an insurance dispute, a warranty claim, a payroll question, or simply "who was on site on
@@ -239,7 +305,7 @@ does not allow you to avoid.**
 
 Three decisions follow from that:
 
-**1. Capture happens in the database, not the routes.** Every write to `jobs`,
+**1. Capture happens in the database, not the routes.** Every write to `crm_jobs`,
 `job_tasks`, `job_assignments` and `work_logs` fires an `AFTER` trigger that diffs the row
 and appends to `memory_events`. Not one route in `backend/src/routes/jobs.ts` writes an
 audit record. Application-level logging is only ever as complete as the code paths that
@@ -247,17 +313,22 @@ remember to call it; a trigger fires for the BFF, for a SQL console, for a backg
 and for whatever client gets written next year. A route added later is recorded with no
 chance of anyone forgetting.
 
-Each entry keeps a readable sentence (`moved job JOB-0001 from lead to in_progress`), the
+Each entry keeps a readable sentence (`moved job #1 from draft to in_progress`), the
 field-level `{from, to}` diff, and the full row snapshot. The actor's email and role are
 copied in **at write time** on purpose — resolving them by join would silently rewrite
 history every time somebody changed role or left.
 
 **2. Nothing is ever destroyed.** `memory_events` rejects `UPDATE`, `DELETE` and
 `TRUNCATE` by trigger, for every role — including the table owner and `service_role`, both
-of which bypass grants and RLS. The other four tables are granted `SELECT`, `INSERT` and
-`UPDATE` only, so jobs are *cancelled*, tasks are *cancelled*, crew are *released*. That is
-also what keeps the record coherent: no cascade can orphan an event, because nothing it
-points at can be removed.
+of which bypass grants and RLS. The tables it watches are granted `SELECT`, `INSERT` and
+`UPDATE` only, so tasks are *cancelled* and crew are *released*. `memory_events` also
+carries no foreign keys: a record of what happened has to outlive the row it describes, and
+an FK would either block the delete or rewrite the event.
+
+It sits alongside `crm_audit_log` rather than replacing it. That table is the backup
+system's restore ledger — raw row images with `prev_data` so a change can be reversed.
+`memory_events` is the human record: narrative summaries, typed events, immutability.
+Different readers, different guarantees.
 
 **3. The few events with no row behind them are narrow by construction.** Signing in,
 signing out, unlocking with a PIN and exporting the record are real events that no table
@@ -276,29 +347,121 @@ cannot afford either.
 
 #### Applying the migration
 
-The schema lives in `supabase/migrations/`. Apply it with the Supabase CLI:
+The schema lives in `backend/supabase/migrations/` alongside the CRM's. Agent Memory hangs
+off `crm_jobs`, so `20260726000001_crm_core.sql` must be applied first. With the Supabase
+CLI:
 
 ```bash
 supabase db push
 ```
 
-…or paste `supabase/migrations/20260727000000_agent_memory.sql` into the SQL editor in the
-Supabase dashboard. It is idempotent — safe to re-run.
+…or paste each file into the SQL editor in the Supabase dashboard, in filename order. They
+are idempotent — safe to re-run.
 
 #### Verifying it
 
-`supabase/tests/` runs the migration against a throwaway local Postgres (with a small
-stand-in for `auth.uid()` and the existing org tables) and exercises the behaviour:
-capture, the automatic lifecycle stamps, the rollups, immutability against the table
-owner, and cross-organization isolation.
+`backend/supabase/tests/` applies the real CRM migration and then Agent Memory to a
+throwaway local Postgres — only `auth.uid()` and the onboarding tables are stubbed — and
+exercises the behaviour: capture over `crm_jobs`, the completion stamps, the rollups,
+immutability against the table owner, and cross-organization isolation.
 
 ```bash
-supabase/tests/run.sh -h /tmp -p 5432 -U postgres
+backend/supabase/tests/run.sh -h /tmp -p 5432 -U postgres
 ```
 
 It is not run against a real project by design — it asserts that history cannot be
-deleted, so it needs a database it is allowed to throw away. Sections 8–12 and 14 print `ERROR`
-lines; those are the guarantees refusing the operation, and are the point of the test.
+deleted, so it needs a database it is allowed to throw away. Sections 8–11 and 13 print
+`ERROR` lines; those are the guarantees refusing the operation, and are the point of the test.
+
+## Computer use
+
+Claude sees a screenshot of a real machine, asks for a click or a keystroke, and the
+result comes back as the next screenshot. Atmosphere supplies the three pieces that turns
+into a product: somewhere to put the API key, something to run on the computer, and a
+console to watch it work.
+
+### Setting it up
+
+1. Open **Dashboard → Computer Use** and paste an Anthropic API key
+   ([console.anthropic.com](https://console.anthropic.com/settings/keys)). That is the
+   only configuration step — no database migration, no extra service.
+2. Click **Add a computer** and run the printed command on the machine you want operated:
+
+   ```bash
+   npx atmosphere-agent --server https://your-atmosphere --code ABCD-EFGH
+   ```
+
+3. The computer appears in the console with its screen live. Type a task and press
+   **Start task**.
+
+Prerequisites per platform (Node 18+, and on Linux `xdotool` plus a screenshot tool) are
+in [`agent/README.md`](agent/README.md). The agent checks them at startup and names
+anything missing.
+
+### How a task runs
+
+Each turn, the backend sends Claude the conversation so far plus the `computer` tool, and
+Claude replies with an action. The backend forwards that action to the agent over the
+WebSocket the agent already opened, waits for the result, and feeds it back as a
+`tool_result`. The browser watches the whole thing over SSE — text, reasoning summary,
+each action, and every screenshot.
+
+**Coordinates are the part that has to be exactly right.** Claude answers in the
+coordinate space of the image it was shown. If a screenshot exceeds the model's per-image
+limits the API downscales it server-side, and then the model's coordinates are in a scale
+nothing on our side computed — so every click misses. Atmosphere therefore downscales on
+the agent, keeps the factor, and multiplies coordinates back up before moving the mouse.
+The backend derives that factor from the selected model's real limits (2576 px on the long
+edge for Opus 5, Sonnet 5 and Opus 4.8; 1568 px for older models) and tells the agent what
+to capture at *before* declaring the tool, so the tool's `display_width_px` always matches
+what the model will actually see.
+
+Screenshots also dominate the token bill, so the **quality** setting picks a target
+(economical ≈ 1366 px, balanced ≈ 1080p, detailed = the model's maximum) and old tool
+results are cleared from the context automatically as the run goes on.
+
+### Guard rails
+
+Handing a model the mouse of a real machine deserves limits that do not depend on anyone
+paying attention:
+
+- **The operator holds the off switch.** Access exists only while the agent process is
+  running on that computer. Ctrl+C revokes it instantly.
+- **Every run is bounded** — 60 steps and 15 minutes by default, both configurable — and
+  **Stop** ends it immediately from the console.
+- **One run per computer.** A second task cannot claim a machine that is already busy;
+  two runs interleaving clicks would produce nonsense.
+- **The screen is always visible.** Watching the run is what makes it trustworthy rather
+  than alarming, and it is how you know when to stop it.
+- The system prompt tells Claude it is on a real machine: don't delete files, change system
+  settings, or send messages unless the task asked for it, and stop and ask rather than
+  guess at a credential or a payment.
+
+### Security
+
+- **API keys are encrypted at rest** with AES-256-GCM under `AI_CREDENTIALS_KEY`, and are
+  never returned to the browser — the UI only ever sees a masked hint like `sk-ant-api0…9f2a`.
+- **Pairing codes are single-use**, expire in 10 minutes, are drawn from an alphabet with
+  no ambiguous characters, and the redemption endpoint is rate-limited to 20 attempts per
+  15 minutes, which is what makes an 8-character code safe.
+- **Agent tokens are HMAC-signed** and scoped to one organization. Rotating
+  `AGENT_TOKEN_SECRET` unpairs every computer at once — the right blunt instrument for a
+  suspected leak. There is deliberately no per-agent revocation list; stopping the agent
+  is the immediate control, and `agentTokens.ts` is the seam to add a list behind if you
+  later need one.
+- **Agents dial out only.** Nothing listens on the operator's machine, so no inbound port
+  or public address is needed.
+- **Model-supplied text never reaches a shell.** Every platform driver invokes commands
+  with an argument array, and the Windows driver passes its payload as base64 — a page
+  containing `$(…)` or a stray quote cannot execute anything.
+
+### Deployment note
+
+The registry of connected computers lives in the backend process, because that is what a
+live WebSocket already is — a connection cannot outlive the process holding it. Running
+**multiple backend instances behind a load balancer** therefore needs sticky routing (so
+a browser reaches the instance holding its agent's socket) or a shared relay between
+instances. A single instance needs nothing.
 
 ## Configuration
 
@@ -317,6 +480,14 @@ See `backend/.env.example` and `frontend/.env.example`. Key points:
 - `PASSWORD_RESET_REDIRECT_URL` — where recovery emails land. Defaults to
   `<FRONTEND_ORIGIN>/reset-password`. This URL must **also** be allowlisted in the Supabase
   dashboard under **Authentication → URL Configuration**, or the emailed link is rejected.
+- `ANTHROPIC_API_KEY` — optional **server-only secret**. A server-wide default for computer
+  use, so a deployment can ship with it already working. A key connected in the UI takes
+  priority over it.
+- `AI_CREDENTIALS_KEY` — **server-only secret**, required in production. Encrypts each
+  organization's Anthropic key at rest. Generate with `openssl rand -base64 48`. Rotating
+  it invalidates stored keys, which organizations simply re-enter.
+- `AGENT_TOKEN_SECRET` — **server-only secret**, required in production. Signs the tokens
+  paired computers reconnect with. Rotating it unpairs every computer.
 - `FRONTEND_ORIGIN` — comma-separated allowed CORS origins.
 - `COOKIE_SAMESITE` — set to `none` (with HTTPS on both sides) if the frontend and backend
   are on different sites in production.
@@ -328,9 +499,22 @@ See `backend/.env.example` and `frontend/.env.example`. Key points:
 - Prefer serving the frontend and backend under the **same origin** (reverse-proxy the API
   at `/api`) so cookies stay `SameSite=Lax`. If you must split origins, set
   `COOKIE_SAMESITE=none` and configure `FRONTEND_ORIGIN`.
-- Build: `npm run build` in each package (`backend` → `dist/`, `frontend` → `dist/`).
+- Build: `npm run build` in each package (`backend` → `dist/`, `frontend` → `dist/`,
+  `agent` → `dist/`).
 - Set `DEVICE_PEPPER` to a generated secret, and add the reset-password URL to the Supabase
   redirect allowlist — password reset fails silently without it.
+- Set `AI_CREDENTIALS_KEY` and `AGENT_TOKEN_SECRET` before enabling computer use, and make
+  sure your reverse proxy forwards **WebSocket upgrades** on `/api/computer/agent-socket`
+  and does not buffer the SSE responses on `/api/computer/runs/*/events`.
 - **Configure custom SMTP** before launch. Supabase's built-in mailer is rate-limited to a
   handful of messages per hour, which is fine for testing and will not carry real password
   resets.
+- **Set `BACKUP_ENCRYPTION_KEY`.** The server refuses to boot in production with backups
+  enabled and no key — an archive holds every customer record we have, and unlike the
+  database it gets copied to laptops and object stores. Generate with
+  `openssl rand -base64 32`, and keep old keys when rotating or their archives become
+  unreadable.
+- **Scheduled backups need `SUPABASE_SERVICE_ROLE_KEY`.** A snapshot must read every org,
+  which no user session can do. Without it, backups stay off and say so at boot.
+- **The backup scheduler is in-process.** Run several API instances and each takes its own
+  snapshot; move it to a dedicated worker or cron trigger before scaling out.

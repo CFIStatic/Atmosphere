@@ -11,6 +11,7 @@ import { JobsPage } from './pages/JobsPage';
 import { JobDetailPage } from './pages/JobDetailPage';
 import { MemoryPage } from './pages/MemoryPage';
 import { TeamMemoryPage } from './pages/TeamMemoryPage';
+import { ComputerUsePage } from './pages/ComputerUsePage';
 import { SpinnerIcon } from './components/icons';
 
 function FullScreenSpinner() {
@@ -94,6 +95,16 @@ export default function App() {
               }
             />
           ))}
+          <Route
+            path="/computer-use"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <ComputerUsePage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
 
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

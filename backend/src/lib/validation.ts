@@ -132,20 +132,26 @@ export type JoinOrgInput = z.infer<typeof joinOrgSchema>;
  * message the form can render, while the database stays the actual authority.
  * ========================================================================== */
 
+/** crm_job_status — the CRM owns the job lifecycle; this mirrors its enum. */
 export const JOB_STATUSES = [
-  'lead',
+  'draft',
   'scheduled',
   'in_progress',
   'on_hold',
-  'complete',
+  'completed',
   'invoiced',
-  'closed',
+  'paid',
   'cancelled',
 ] as const;
 
-export const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
-export const LOSS_TYPES = ['water', 'fire', 'mold', 'storm', 'biohazard', 'other'] as const;
+/** crm_jobs.priority is a smallint 1-5, 1 being the most urgent. */
+export const PRIORITIES = [1, 2, 3, 4, 5] as const;
+
+/** crm_loss_type. */
+export const LOSS_TYPES = ['water', 'fire', 'mold', 'storm', 'biohazard', 'contents', 'other'] as const;
+
 export const TASK_STATUSES = ['todo', 'in_progress', 'blocked', 'done', 'cancelled'] as const;
+export const TASK_PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
 export const WORK_LOG_KINDS = [
   'work',
   'note',
@@ -160,11 +166,16 @@ export const ASSIGNMENT_ROLES = ['lead', 'crew', 'estimator', 'supervisor', 'obs
 const jobStatusSchema = z.enum(JOB_STATUSES, {
   errorMap: () => ({ message: 'Select a valid job status' }),
 });
-const prioritySchema = z.enum(PRIORITIES, {
-  errorMap: () => ({ message: 'Select a valid priority' }),
-});
+const jobPrioritySchema = z
+  .number()
+  .int()
+  .min(1, 'Priority runs from 1 (most urgent) to 5')
+  .max(5, 'Priority runs from 1 (most urgent) to 5');
 const taskStatusSchema = z.enum(TASK_STATUSES, {
   errorMap: () => ({ message: 'Select a valid task status' }),
+});
+const taskPrioritySchema = z.enum(TASK_PRIORITIES, {
+  errorMap: () => ({ message: 'Select a valid priority' }),
 });
 
 /** Optional free-text field: '' from an untouched form input means "not set". */
@@ -182,33 +193,27 @@ const optionalDate = z
   .optional()
   .nullable();
 
+/**
+ * Opening a job writes to `crm_jobs`. This is the field-facing subset — the
+ * fuller CRUD, with financials and the links to accounts, contacts and
+ * properties, stays with `/api/crm/jobs`. Customer and address are absent on
+ * purpose: they live on `crm_contacts` and `crm_properties`, not on the job.
+ */
 export const createJobSchema = z.object({
-  name: z
+  title: z
     .string({ required_error: 'Job name is required' })
     .trim()
     .min(2, 'Job name is too short')
-    .max(160, 'Job name is too long'),
+    .max(200, 'Job name is too long'),
   workType: workTypeSchema,
   description: optionalText(4000),
   lossType: z.enum(LOSS_TYPES).optional(),
-  priority: prioritySchema.optional(),
+  priority: jobPrioritySchema.optional(),
   status: jobStatusSchema.optional(),
-  customerName: optionalText(120),
-  customerPhone: optionalText(40),
-  customerEmail: z
-    .string()
-    .trim()
-    .toLowerCase()
-    .email('Enter a valid email address')
-    .optional()
-    .or(z.literal('').transform(() => undefined)),
-  addressLine1: optionalText(200),
-  city: optionalText(80),
-  state: optionalText(40),
-  postalCode: optionalText(20),
   claimNumber: optionalText(60),
-  leadId: z.string().uuid('Select a valid team member').optional().nullable(),
-  scheduledFor: optionalDate,
+  policyNumber: optionalText(60),
+  ownerId: z.string().uuid('Select a valid team member').optional().nullable(),
+  scheduledStart: optionalDate,
 });
 
 /** Every field optional — a PATCH may carry just the one thing that changed. */
@@ -224,7 +229,7 @@ export const createTaskSchema = z.object({
     .max(200, 'Task title is too long'),
   details: optionalText(4000),
   status: taskStatusSchema.optional(),
-  priority: prioritySchema.optional(),
+  priority: taskPrioritySchema.optional(),
   assignedTo: z.string().uuid('Select a valid team member').optional().nullable(),
   dueAt: optionalDate,
   position: z.number().int().min(0).max(100_000).optional(),

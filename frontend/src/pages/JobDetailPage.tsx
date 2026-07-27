@@ -7,7 +7,7 @@ import {
   JOB_STATUS_LABELS,
   JOB_STATUS_STYLES,
   LOSS_TYPE_LABELS,
-  PRIORITY_LABELS,
+  JOB_PRIORITY_LABELS,
   TASK_STATUS_LABELS,
   WORK_LOG_KIND_LABELS,
   WORK_TYPE_LABELS,
@@ -198,20 +198,14 @@ export function JobDetailPage() {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="font-mono text-sm tracking-wider text-brand-300">{job.jobNumber}</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">{job.name}</h1>
+          <p className="font-mono text-sm tracking-wider text-brand-300">Job #{job.jobNumber}</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">{job.title}</h1>
           <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-sm text-gray-400">
             <span>{WORK_TYPE_LABELS[job.workType]}</span>
             {job.lossType && <span>· {LOSS_TYPE_LABELS[job.lossType]}</span>}
-            <span>· {PRIORITY_LABELS[job.priority]} priority</span>
-            {job.customerName && <span>· {job.customerName}</span>}
-            {job.addressLine1 && (
-              <span>
-                · {job.addressLine1}
-                {job.city ? `, ${job.city}` : ''}
-              </span>
-            )}
+            <span>· {JOB_PRIORITY_LABELS[job.priority]} priority</span>
             {job.claimNumber && <span>· Claim {job.claimNumber}</span>}
+            {job.policyNumber && <span>· Policy {job.policyNumber}</span>}
           </p>
         </div>
 

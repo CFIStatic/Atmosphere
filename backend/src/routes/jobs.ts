@@ -1,5 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { createUserClient } from '../lib/supabase.js';
+import { requireOrgContext } from '../lib/orgContext.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import {
   createJobSchema,
@@ -74,7 +75,7 @@ function dbError(error: { message: string; code?: string }, fallback: string): H
 
 /** Reads a job by id, 404-ing rather than returning null so callers stay simple. */
 async function loadJob(supabase: any, jobId: string) {
-  const { data, error } = await supabase.from('jobs').select(JOB_SELECT).eq('id', jobId).maybeSingle();
+  const { data, error } = await supabase.from('crm_jobs').select(JOB_SELECT).eq('id', jobId).maybeSingle();
   if (error) throw dbError(error, 'Could not load that job.');
   if (!data) throw new HttpError(404, 'Job not found.', 'job_not_found');
   return data;
@@ -87,7 +88,7 @@ async function loadJob(supabase: any, jobId: string) {
 /**
  * GET /api/jobs
  * The job list, rolled up with its memory (task counts, crew, last event).
- * `?status=` and `?mine=1` narrow it; `?q=` searches number, name and customer.
+ * `?status=` and `?mine=1` narrow it; `?q=` searches title and claim number.
  */
 jobsRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -97,12 +98,12 @@ jobsRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
     const status = typeof req.query.status === 'string' ? req.query.status : undefined;
     if (status && status !== 'all') {
       if (status === 'open') {
-        query = query.not('status', 'in', '("closed","cancelled","invoiced")');
+        query = query.not('status', 'in', '("completed","invoiced","paid","cancelled")');
       } else {
         query = query.eq('status', status);
       }
     }
-    if (req.query.mine === '1') query = query.eq('lead_id', req.user!.id);
+    if (req.query.mine === '1') query = query.eq('owner_id', req.user!.id);
 
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     if (q) {
@@ -111,7 +112,7 @@ jobsRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
       // rewrite the query it is filtering.
       const safe = q.replace(/[%,()]/g, ' ');
       query = query.or(
-        `name.ilike.%${safe}%,job_number.ilike.%${safe}%,customer_name.ilike.%${safe}%`,
+        `title.ilike.%${safe}%,claim_number.ilike.%${safe}%`,
       );
     }
 
@@ -126,17 +127,19 @@ jobsRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
 /**
  * POST /api/jobs
- * Open a job. org_id and the per-org job number are assigned by the database,
- * so neither can be supplied by the client.
+ * Open a job. Writes to `crm_jobs` — this is the field-facing subset of the
+ * fuller CRUD at `/api/crm/jobs`, which also carries financials and the links
+ * to accounts, contacts and properties. The per-org job number is assigned by
+ * the CRM's own trigger, so it cannot be supplied by the client.
  */
 jobsRouter.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = createJobSchema.parse(req.body);
-    const supabase = createUserClient(req.accessToken!);
+    const { orgId, supabase } = await requireOrgContext(req);
 
     const { data, error } = await supabase
-      .from('jobs')
-      .insert(toColumns(input, JOB_COLUMNS))
+      .from('crm_jobs')
+      .insert({ ...toColumns(input, JOB_COLUMNS), org_id: orgId })
       .select(JOB_SELECT)
       .single();
     if (error) throw dbError(error, 'Could not open that job.');
@@ -189,7 +192,7 @@ jobsRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) =
 
     // One lookup for every person named anywhere in the response.
     const people = await loadPeople(supabase, [
-      job.lead_id,
+      job.owner_id,
       ...(tasks.data ?? []).map((t: any) => t.assigned_to),
       ...(crew.data ?? []).map((a: any) => a.user_id),
       ...(logs.data ?? []).map((w: any) => w.author_id),
@@ -218,7 +221,7 @@ jobsRouter.patch('/:id', async (req: Request, res: Response, next: NextFunction)
     const supabase = createUserClient(req.accessToken!);
 
     const { data, error } = await supabase
-      .from('jobs')
+      .from('crm_jobs')
       .update(toColumns(input, JOB_COLUMNS))
       .eq('id', req.params.id)
       .select(JOB_SELECT)

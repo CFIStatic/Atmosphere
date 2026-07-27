@@ -129,9 +129,9 @@ export function DashboardPage() {
                         className="flex items-center justify-between gap-4 px-5 py-3.5 transition hover:bg-ink-700/40"
                       >
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-white">{job.name}</p>
+                          <p className="truncate text-sm font-medium text-white">{job.title}</p>
                           <p className="mt-0.5 text-xs text-gray-500">
-                            <span className="font-mono text-brand-300/80">{job.jobNumber}</span> ·{' '}
+                            <span className="font-mono text-brand-300/80">#{job.jobNumber}</span> ·{' '}
                             {job.tasksDone}/{job.taskCount} tasks · {job.crewSize} on crew
                           </p>
                         </div>
@@ -175,6 +175,23 @@ export function DashboardPage() {
                 Share this code so teammates can link their account.
               </p>
             </div>
+
+            {/* Computer use */}
+            <Link
+              to="/computer-use"
+              className="flex items-center justify-between gap-4 rounded-xl border border-brand-400/25 bg-brand-500/10 p-5 backdrop-blur transition hover:border-brand-400/50 hover:bg-brand-500/15"
+            >
+              <div>
+                <p className="text-lg font-semibold text-white">Computer Use</p>
+                <p className="mt-1 text-sm text-brand-100/70">
+                  Let Claude see and operate a computer for you — connect an Anthropic API key and
+                  run the agent on any machine.
+                </p>
+              </div>
+              <span aria-hidden className="shrink-0 text-2xl text-brand-300">
+                →
+              </span>
+            </Link>
 
             <PinSetupCard />
 

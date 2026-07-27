@@ -65,18 +65,22 @@ export interface RecoveryCredential {
  * Agent Memory
  * ========================================================================== */
 
+/** crm_job_status — the CRM owns the job lifecycle. */
 export type JobStatus =
-  | 'lead'
+  | 'draft'
   | 'scheduled'
   | 'in_progress'
   | 'on_hold'
-  | 'complete'
+  | 'completed'
   | 'invoiced'
-  | 'closed'
+  | 'paid'
   | 'cancelled';
 
+/** crm_jobs.priority is a smallint 1-5, 1 being the most urgent. */
+export type JobPriority = 1 | 2 | 3 | 4 | 5;
+/** Tasks are ours, and keep a word-shaped priority. */
 export type Priority = 'low' | 'normal' | 'high' | 'urgent';
-export type LossType = 'water' | 'fire' | 'mold' | 'storm' | 'biohazard' | 'other';
+export type LossType = 'water' | 'fire' | 'mold' | 'storm' | 'biohazard' | 'contents' | 'other';
 export type TaskStatus = 'todo' | 'in_progress' | 'blocked' | 'done' | 'cancelled';
 export type WorkLogKind = 'work' | 'note' | 'call' | 'site_visit' | 'photo' | 'material' | 'issue';
 export type AssignmentRole = 'lead' | 'crew' | 'estimator' | 'supervisor' | 'observer';
@@ -89,27 +93,28 @@ export interface Person {
 
 export interface Job {
   id: string;
-  jobNumber: string;
-  seqNo: number;
-  name: string;
+  jobNumber: number;
+  title: string;
   description: string | null;
   workType: WorkType;
   lossType: LossType | null;
   status: JobStatus;
-  priority: Priority;
-  customerName: string | null;
-  customerPhone: string | null;
-  customerEmail: string | null;
-  addressLine1: string | null;
-  city: string | null;
-  state: string | null;
-  postalCode: string | null;
+  priority: JobPriority;
   claimNumber: string | null;
-  leadId: string | null;
-  scheduledFor: string | null;
-  startedAt: string | null;
-  completedAt: string | null;
-  createdBy: string;
+  policyNumber: string | null;
+  ownerId: string | null;
+  contactId: string | null;
+  accountId: string | null;
+  propertyId: string | null;
+  lossDate: string | null;
+  scheduledStart: string | null;
+  scheduledEnd: string | null;
+  actualStart: string | null;
+  actualEnd: string | null;
+  contractAmount: number | null;
+  invoicedAmount: number | null;
+  paidAmount: number | null;
+  createdBy: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -117,12 +122,13 @@ export interface Job {
 /** A job as it appears in the list — the row plus its memory rolled up. */
 export interface JobSummary {
   jobId: string;
-  jobNumber: string;
-  name: string;
+  jobNumber: number;
+  title: string;
   status: JobStatus;
-  priority: Priority;
+  priority: JobPriority;
   workType: WorkType;
-  leadId: string | null;
+  ownerId: string | null;
+  claimNumber: string | null;
   taskCount: number;
   tasksDone: number;
   crewSize: number;
@@ -191,7 +197,7 @@ export interface MemoryEvent {
   entityType: string;
   entityId: string | null;
   jobId: string | null;
-  job?: { id: string; jobNumber: string; name: string } | null;
+  job?: { id: string; jobNumber: number; title: string } | null;
   summary: string;
   changes: Record<string, { from: unknown; to: unknown }>;
   snapshot: Record<string, unknown> | null;
@@ -231,22 +237,16 @@ export interface JobDetail {
 }
 
 export interface CreateJobInput {
-  name: string;
+  title: string;
   workType: WorkType;
   description?: string;
   lossType?: LossType;
-  priority?: Priority;
+  priority?: JobPriority;
   status?: JobStatus;
-  customerName?: string;
-  customerPhone?: string;
-  customerEmail?: string;
-  addressLine1?: string;
-  city?: string;
-  state?: string;
-  postalCode?: string;
   claimNumber?: string;
-  leadId?: string | null;
-  scheduledFor?: string | null;
+  policyNumber?: string;
+  ownerId?: string | null;
+  scheduledStart?: string | null;
 }
 
 export interface CreateTaskInput {
@@ -278,6 +278,70 @@ export interface MemoryQuery {
   before?: number;
   limit?: number;
 }
+/* ------------------------------ Computer use ------------------------------ */
+
+export type CaptureQuality = 'economical' | 'balanced' | 'detailed';
+
+/** A computer with the agent running and connected. */
+export interface ComputerAgent {
+  id: string;
+  name: string;
+  platform: string;
+  version: string;
+  screen: { width: number; height: number };
+  /** Resolution the model sees; null until the computer is configured. */
+  capture: { width: number; height: number; scale: number } | null;
+  capabilities: string[];
+  connectedAt: string;
+  busy: boolean;
+}
+
+export interface CredentialStatus {
+  connected: boolean;
+  /** 'organization' — entered here; 'server' — set as ANTHROPIC_API_KEY. */
+  source: 'organization' | 'server' | null;
+  hint: string | null;
+  updatedAt: string | null;
+}
+
+export interface ComputerStatus {
+  enabled: boolean;
+  credential: CredentialStatus;
+  agents: ComputerAgent[];
+  models: { id: string; label: string }[];
+  defaults: { model: string; quality: CaptureQuality };
+  limits: { maxSteps: number; runTimeoutMs: number };
+}
+
+export type RunStatus = 'starting' | 'running' | 'completed' | 'failed' | 'stopped';
+
+export interface ComputerRun {
+  id: string;
+  agentId: string;
+  agentName: string;
+  instruction: string;
+  model: string;
+  status: RunStatus;
+  startedAt: string;
+  endedAt: string | null;
+  steps: number;
+  usage: { inputTokens: number; outputTokens: number };
+  error: string | null;
+}
+
+/** One entry in the live transcript streamed over SSE. */
+export type RunEvent = { seq: number; at: string } & (
+  | { type: 'status'; status: RunStatus; message?: string }
+  | { type: 'text'; text: string }
+  | { type: 'thinking'; text: string }
+  | { type: 'action'; action: string; summary: string; ok: boolean; error?: string }
+  | { type: 'screenshot'; image: string | null; width: number; height: number }
+  | { type: 'usage'; inputTokens: number; outputTokens: number }
+  | { type: 'error'; message: string }
+);
+
+/** The stream also carries periodic run summaries, which are not transcript entries. */
+export type RunStreamMessage = RunEvent | { type: 'summary'; run: ComputerRun };
 
 export class ApiError extends Error {
   readonly status: number;
@@ -418,6 +482,42 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
+  // ---- Computer use ----
+  computerStatus: () => request<ComputerStatus>('/api/computer/status', { method: 'GET' }),
+
+  connectAnthropicKey: (apiKey: string) =>
+    request<{ credential: CredentialStatus }>('/api/computer/credentials', {
+      method: 'PUT',
+      body: JSON.stringify({ apiKey }),
+    }),
+
+  disconnectAnthropicKey: () =>
+    request<{ credential: CredentialStatus }>('/api/computer/credentials', { method: 'DELETE' }),
+
+  createPairingCode: () =>
+    request<{ code: string; expiresAt: string }>('/api/computer/agents/pair-code', {
+      method: 'POST',
+    }),
+
+  getAgents: () => request<{ agents: ComputerAgent[] }>('/api/computer/agents', { method: 'GET' }),
+
+  getAgentScreen: (agentId: string) =>
+    request<{ image: string; width: number; height: number }>(
+      `/api/computer/agents/${encodeURIComponent(agentId)}/screen`,
+      { method: 'GET' },
+    ),
+
+  startRun: (input: {
+    agentId: string;
+    instruction: string;
+    model?: string;
+    quality?: CaptureQuality;
+  }) =>
+    request<{ run: ComputerRun }>('/api/computer/runs', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
   updateTask: (jobId: string, taskId: string, patch: Partial<CreateTaskInput>) =>
     request<{ task: JobTask }>(`/api/jobs/${jobId}/tasks/${taskId}`, {
       method: 'PATCH',
@@ -457,9 +557,10 @@ export const api = {
 
   getMemoryStats: () => request<MemoryStats>('/api/memory/stats', { method: 'GET' }),
 
-  getAgents: () => request<{ agents: AgentMemory[] }>('/api/memory/agents', { method: 'GET' }),
+  getMemoryAgents: () =>
+    request<{ agents: AgentMemory[] }>('/api/memory/agents', { method: 'GET' }),
 
-  getAgent: (userId: string, before?: number) =>
+  getMemoryAgent: (userId: string, before?: number) =>
     request<{
       agent: AgentMemory;
       openTasks: unknown[];
@@ -469,6 +570,29 @@ export const api = {
 
   /** The export streams NDJSON, so it is a plain link rather than a fetch. */
   memoryExportUrl: () => `${API_BASE}/api/memory/export`,
+  getRuns: () => request<{ runs: ComputerRun[] }>('/api/computer/runs', { method: 'GET' }),
+
+  stopRun: (runId: string) =>
+    request<{ run: ComputerRun }>(`/api/computer/runs/${encodeURIComponent(runId)}/stop`, {
+      method: 'POST',
+    }),
+
+  /** SSE URL for a run's transcript. `after` replays what the browser missed. */
+  runEventsUrl: (runId: string, after = 0) =>
+    `${API_BASE}/api/computer/runs/${encodeURIComponent(runId)}/events?after=${after}`,
+};
+
+/** Friendly labels for the platform string the agent reports. */
+export const PLATFORM_LABELS: Record<string, string> = {
+  darwin: 'macOS',
+  win32: 'Windows',
+  linux: 'Linux',
+};
+
+export const QUALITY_LABELS: Record<CaptureQuality, string> = {
+  economical: 'Economical — smallest screenshots, lowest cost',
+  balanced: 'Balanced — about 1080p (recommended)',
+  detailed: 'Detailed — highest resolution the model allows',
 };
 
 /** Human-readable labels for roles and work types (shared UI copy). */
@@ -486,14 +610,30 @@ export const WORK_TYPE_LABELS: Record<WorkType, string> = {
 };
 
 export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
-  lead: 'Lead',
+  draft: 'Draft',
   scheduled: 'Scheduled',
   in_progress: 'In progress',
   on_hold: 'On hold',
-  complete: 'Complete',
+  completed: 'Completed',
   invoiced: 'Invoiced',
-  closed: 'Closed',
+  paid: 'Paid',
   cancelled: 'Cancelled',
+};
+
+export const JOB_PRIORITY_LABELS: Record<JobPriority, string> = {
+  1: 'Urgent',
+  2: 'High',
+  3: 'Normal',
+  4: 'Low',
+  5: 'Lowest',
+};
+
+export const JOB_PRIORITY_STYLES: Record<JobPriority, string> = {
+  1: 'text-rose-300',
+  2: 'text-amber-300',
+  3: 'text-gray-300',
+  4: 'text-gray-400',
+  5: 'text-gray-500',
 };
 
 export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
@@ -517,6 +657,7 @@ export const LOSS_TYPE_LABELS: Record<LossType, string> = {
   mold: 'Mold',
   storm: 'Storm',
   biohazard: 'Biohazard',
+  contents: 'Contents',
   other: 'Other',
 };
 
@@ -540,13 +681,13 @@ export const ASSIGNMENT_ROLE_LABELS: Record<AssignmentRole, string> = {
 
 /** Tailwind classes per job status, so a board reads at a glance. */
 export const JOB_STATUS_STYLES: Record<JobStatus, string> = {
-  lead: 'border-sky-400/30 bg-sky-400/10 text-sky-200',
+  draft: 'border-sky-400/30 bg-sky-400/10 text-sky-200',
   scheduled: 'border-violet-400/30 bg-violet-400/10 text-violet-200',
   in_progress: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200',
   on_hold: 'border-amber-400/30 bg-amber-400/10 text-amber-200',
-  complete: 'border-teal-400/30 bg-teal-400/10 text-teal-200',
+  completed: 'border-teal-400/30 bg-teal-400/10 text-teal-200',
   invoiced: 'border-blue-400/30 bg-blue-400/10 text-blue-200',
-  closed: 'border-white/15 bg-white/5 text-gray-300',
+  paid: 'border-white/15 bg-white/5 text-gray-300',
   cancelled: 'border-rose-400/30 bg-rose-400/10 text-rose-200',
 };
 

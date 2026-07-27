@@ -109,31 +109,34 @@ function person(people: PeopleMap | undefined, id: string | null | undefined): P
   return people?.get(id) ?? { id, email: null, fullName: null };
 }
 
+/** A row from `crm_jobs`. The CRM owns the job record; this is the shape the
+ *  field-facing screens need, not the full CRM projection. */
 export function serializeJob(j: any) {
   if (!j) return null;
   return {
     id: j.id,
     jobNumber: j.job_number,
-    seqNo: j.seq_no,
-    name: j.name,
+    title: j.title,
     description: j.description ?? null,
     workType: j.work_type,
     lossType: j.loss_type ?? null,
     status: j.status,
     priority: j.priority,
-    customerName: j.customer_name ?? null,
-    customerPhone: j.customer_phone ?? null,
-    customerEmail: j.customer_email ?? null,
-    addressLine1: j.address_line1 ?? null,
-    city: j.city ?? null,
-    state: j.state ?? null,
-    postalCode: j.postal_code ?? null,
     claimNumber: j.claim_number ?? null,
-    leadId: j.lead_id ?? null,
-    scheduledFor: j.scheduled_for ?? null,
-    startedAt: j.started_at ?? null,
-    completedAt: j.completed_at ?? null,
-    createdBy: j.created_by,
+    policyNumber: j.policy_number ?? null,
+    ownerId: j.owner_id ?? null,
+    contactId: j.contact_id ?? null,
+    accountId: j.account_id ?? null,
+    propertyId: j.property_id ?? null,
+    lossDate: j.loss_date ?? null,
+    scheduledStart: j.scheduled_start ?? null,
+    scheduledEnd: j.scheduled_end ?? null,
+    actualStart: j.actual_start ?? null,
+    actualEnd: j.actual_end ?? null,
+    contractAmount: j.contract_amount ?? null,
+    invoicedAmount: j.invoiced_amount ?? null,
+    paidAmount: j.paid_amount ?? null,
+    createdBy: j.created_by ?? null,
     createdAt: j.created_at,
     updatedAt: j.updated_at,
   };
@@ -220,11 +223,12 @@ export function serializeJobMemory(j: any) {
   return {
     jobId: j.job_id,
     jobNumber: j.job_number,
-    name: j.name,
+    title: j.title,
     status: j.status,
     priority: j.priority,
     workType: j.work_type,
-    leadId: j.lead_id ?? null,
+    ownerId: j.owner_id ?? null,
+    claimNumber: j.claim_number ?? null,
     taskCount: Number(j.task_count ?? 0),
     tasksDone: Number(j.tasks_done ?? 0),
     crewSize: Number(j.crew_size ?? 0),
@@ -273,23 +277,18 @@ export function toColumns<T extends object>(
   return out;
 }
 
+/** Maps the field-facing job input onto `crm_jobs` columns. */
 export const JOB_COLUMNS = {
-  name: 'name',
+  title: 'title',
   description: 'description',
   workType: 'work_type',
   lossType: 'loss_type',
   status: 'status',
   priority: 'priority',
-  customerName: 'customer_name',
-  customerPhone: 'customer_phone',
-  customerEmail: 'customer_email',
-  addressLine1: 'address_line1',
-  city: 'city',
-  state: 'state',
-  postalCode: 'postal_code',
   claimNumber: 'claim_number',
-  leadId: 'lead_id',
-  scheduledFor: 'scheduled_for',
+  policyNumber: 'policy_number',
+  ownerId: 'owner_id',
+  scheduledStart: 'scheduled_start',
 } as const;
 
 export const TASK_COLUMNS = {

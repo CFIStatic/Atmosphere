@@ -5,16 +5,16 @@ import {
   ApiError,
   JOB_STATUS_LABELS,
   JOB_STATUS_STYLES,
-  PRIORITY_LABELS,
-  PRIORITY_STYLES,
+  JOB_PRIORITY_LABELS,
+  JOB_PRIORITY_STYLES,
   LOSS_TYPE_LABELS,
   WORK_TYPE_LABELS,
   formatMinutes,
   timeAgo,
   type CreateJobInput,
   type JobSummary,
+  type JobPriority,
   type LossType,
-  type Priority,
   type WorkType,
 } from '../lib/api';
 import { AppShell, PageHeader, PanelSpinner, EmptyState, ErrorNote } from '../components/AppShell';
@@ -25,7 +25,7 @@ const FILTERS: { value: string; label: string }[] = [
   { value: 'in_progress', label: 'In progress' },
   { value: 'scheduled', label: 'Scheduled' },
   { value: 'on_hold', label: 'On hold' },
-  { value: 'complete', label: 'Complete' },
+  { value: 'completed', label: 'Completed' },
   { value: 'all', label: 'All' },
 ];
 
@@ -34,7 +34,7 @@ const inputClass =
 const labelClass = 'block text-xs font-medium uppercase tracking-wide text-gray-500';
 
 function NewJobForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: () => void }) {
-  const [form, setForm] = useState<CreateJobInput>({ name: '', workType: 'mitigation' });
+  const [form, setForm] = useState<CreateJobInput>({ title: '', workType: 'mitigation' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,8 +79,8 @@ function NewJobForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: 
             id="job-name"
             required
             autoFocus
-            value={form.name}
-            onChange={(e) => set('name', e.target.value)}
+            value={form.title}
+            onChange={(e) => set('title', e.target.value)}
             placeholder="Burst pipe — 14 Alder St"
             className={`mt-1 ${inputClass}`}
           />
@@ -129,54 +129,16 @@ function NewJobForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: 
           </label>
           <select
             id="job-priority"
-            value={form.priority ?? 'normal'}
-            onChange={(e) => set('priority', e.target.value as Priority)}
+            value={form.priority ?? 3}
+            onChange={(e) => set('priority', Number(e.target.value) as JobPriority)}
             className={`mt-1 ${inputClass}`}
           >
-            {(Object.keys(PRIORITY_LABELS) as Priority[]).map((v) => (
+            {([1, 2, 3, 4, 5] as JobPriority[]).map((v) => (
               <option key={v} value={v}>
-                {PRIORITY_LABELS[v]}
+                {JOB_PRIORITY_LABELS[v]}
               </option>
             ))}
           </select>
-        </div>
-
-        <div>
-          <label className={labelClass} htmlFor="job-customer">
-            Customer
-          </label>
-          <input
-            id="job-customer"
-            value={form.customerName ?? ''}
-            onChange={(e) => set('customerName', e.target.value)}
-            placeholder="H. Whitfield"
-            className={`mt-1 ${inputClass}`}
-          />
-        </div>
-
-        <div>
-          <label className={labelClass} htmlFor="job-address">
-            Address
-          </label>
-          <input
-            id="job-address"
-            value={form.addressLine1 ?? ''}
-            onChange={(e) => set('addressLine1', e.target.value)}
-            placeholder="14 Alder St"
-            className={`mt-1 ${inputClass}`}
-          />
-        </div>
-
-        <div>
-          <label className={labelClass} htmlFor="job-city">
-            City
-          </label>
-          <input
-            id="job-city"
-            value={form.city ?? ''}
-            onChange={(e) => set('city', e.target.value)}
-            className={`mt-1 ${inputClass}`}
-          />
         </div>
 
         <div className="sm:col-span-2">
@@ -201,7 +163,7 @@ function NewJobForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: 
       <div className="mt-5 flex gap-3">
         <button
           type="submit"
-          disabled={saving || form.name.trim().length < 2}
+          disabled={saving || form.title.trim().length < 2}
           className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-500 disabled:opacity-50"
         >
           {saving && <SpinnerIcon className="animate-spin" width={16} height={16} />}
@@ -229,8 +191,8 @@ function JobCard({ job }: { job: JobSummary }) {
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-mono text-xs tracking-wider text-brand-300">{job.jobNumber}</p>
-          <h3 className="mt-0.5 truncate text-base font-semibold text-white">{job.name}</h3>
+          <p className="font-mono text-xs tracking-wider text-brand-300">#{job.jobNumber}</p>
+          <h3 className="mt-0.5 truncate text-base font-semibold text-white">{job.title}</h3>
         </div>
         <span
           className={`rounded-full border px-2.5 py-1 text-xs font-medium ${JOB_STATUS_STYLES[job.status]}`}
@@ -241,7 +203,7 @@ function JobCard({ job }: { job: JobSummary }) {
 
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-gray-500">
         <span>{WORK_TYPE_LABELS[job.workType]}</span>
-        <span className={PRIORITY_STYLES[job.priority]}>{PRIORITY_LABELS[job.priority]}</span>
+        <span className={JOB_PRIORITY_STYLES[job.priority]}>{JOB_PRIORITY_LABELS[job.priority]}</span>
         <span>
           {job.tasksDone}/{job.taskCount} tasks
         </span>
