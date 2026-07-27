@@ -1,8 +1,10 @@
 # Atmosphere
 
-Authentication, organization onboarding, and **computer use** for **Atmosphere** — a React
-UI backed by an Express BFF (Backend-for-Frontend) that mediates **Supabase Auth**, a
-Row-Level-Security protected Postgres schema, and Claude's computer-use tool.
+A platform for restoration and construction organizations — a React UI backed by an Express
+BFF (Backend-for-Frontend) that mediates **Supabase Auth** and a Row-Level-Security
+protected Postgres schema, plus **computer use** (Claude sees and operates real machines)
+and a **reinforcement learning layer** that makes the platform measurably better at
+executing work over time.
 
 ```
 ┌────────────────────┐      /api/*        ┌────────────────────┐    Supabase JS (JWT)   ┌──────────────────┐
@@ -43,6 +45,9 @@ Row-Level-Security protected Postgres schema, and Claude's computer-use tool.
    backups and a verbatim copy of the data that currently lives only inside other
    companies' software. Backend infrastructure only, no UI yet — see
    **[docs/CRM.md](docs/CRM.md)**.
+8. **Executes work, and learns from it** — drafts scopes, builds estimates, extracts
+   document fields, writes customer updates. Every run is scored, and the routing policy
+   improves from those scores. See [Learning layer](#learning-layer) below.
 
 ## Why this shape?
 
@@ -67,6 +72,11 @@ JWT:
 | `orgs`         | An organization; owns a unique `join_code`.                          |
 | `org_members`  | Links a user to an org with their `role` and `work_type`.            |
 | `device_credentials` | One row per PIN-enrolled device. Holds only hashes — no secret and no session token. |
+| `ai_arms`      | The action space: model × prompt variant per task type.              |
+| `ai_arm_stats` | Learned posteriors per (arm × context). Aggregates only, no content.  |
+| `ai_runs`      | The episode log — every task execution, its cost and its outcome.    |
+| `ai_exemplars` | Accepted past outputs, mined into few-shot examples. Org-scoped.     |
+| `ai_golden_cases` | Regression suite that gates any change to the serving policy.     |
 
 The CRM adds its own org-scoped tables under the same RLS model (`crm_accounts`,
 `crm_contacts`, `crm_properties`, `crm_leads`, `crm_jobs`, `crm_activities`), a verbatim
@@ -92,7 +102,7 @@ through two `SECURITY DEFINER` functions that validate `auth.uid()` internally:
 Atmosphere/
 ├── backend/          Express + TypeScript BFF
 │   ├── src/
-│   │   ├── config.ts             Validated config (Supabase URL, keys, cookies, CORS)
+│   │   ├── config.ts             Validated config (Supabase, cookies, CORS, model providers)
 │   │   ├── app.ts                Express app assembly (helmet, cors, cookies, routes)
 │   │   ├── index.ts              Server bootstrap + graceful shutdown
 │   │   ├── lib/
@@ -104,6 +114,13 @@ Atmosphere/
 │   │   │   ├── errors.ts         Typed HTTP errors
 │   │   │   ├── backup/           Archive format, storage drivers, runner, scheduler
 │   │   │   └── integrations/     Connectors + the append-only external mirror
+│   │   ├── ai/                   Learning layer — see docs/reinforcement-learning.md
+│   │   │   ├── policy.ts         Thompson sampling + hierarchical context backoff
+│   │   │   ├── reward.ts         The definition of "executed correctly"
+│   │   │   ├── verifiers.ts      Deterministic checks + the serving gate
+│   │   │   ├── executor.ts       route → execute → verify → record, with failover
+│   │   │   ├── learn.ts          Promotion gate, exemplar mining, training export
+│   │   │   └── providers/        OpenAI · Anthropic · Google · xAI · open weights
 │   │   ├── middleware/
 │   │   │   ├── requireAuth.ts    Verify access token; transparent refresh
 │   │   │   └── errorHandler.ts   404 + central JSON error handler
@@ -114,17 +131,20 @@ Atmosphere/
 │   │   │   ├── agentTokens.ts    Pairing codes + HMAC-signed agent tokens
 │   │   │   ├── agentHub.ts       WebSocket registry of connected computers
 │   │   │   └── runner.ts         The agent loop + live run transcripts
-│   │   ├── scripts/              Backup CLI + dependency-free self-checks
+│   │   ├── scripts/              Backup CLI, self-checks, learning cycle (cron)
 │   │   └── routes/
 │   │       ├── auth.ts           signup / login / logout / refresh / me
 │   │       ├── org.ts            onboarding: me / create / join / members
 │   │       ├── crm.ts            CRM CRUD, lead conversion, timeline, audit
 │   │       ├── backups.ts        Snapshot status / history / trigger / verify
 │   │       ├── integrations.ts   External sources, syncs, CSV import, mirror
+│   │       ├── ai.ts             task execution / feedback / policy visibility
 │   │       ├── computer.ts       computer use: keys, pairing, runs, SSE
 │   │       └── health.ts         liveness probe
 │   ├── supabase/migrations/      CRM, mirror, and backup schema (not yet applied)
 │   └── .env.example
+├── db/migrations/    SQL schema (RLS policies + SECURITY DEFINER write path)
+├── docs/             Architecture notes
 ├── frontend/         React + Vite + TypeScript + Tailwind
 │   ├── src/
 │   │   ├── pages/LoginPage.tsx        Branded login + signup screen
@@ -195,6 +215,11 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | POST   | `/api/org`           | cookie | `{ name, role, workType }`    | Create an org and join as first member       |
 | POST   | `/api/org/join`      | cookie | `{ joinCode, role, workType }`| Link to an existing org by join code         |
 | GET    | `/api/org/members`   | cookie | —                             | Linked accounts in the caller's org          |
+| GET    | `/api/ai/tasks`      | cookie | —                             | Task catalog and how each one is judged      |
+| POST   | `/api/ai/tasks/:type/run` | cookie | `{ input, workType? }`   | Execute a task; returns `runId`              |
+| POST   | `/api/ai/runs/:id/feedback` | cookie | `{ disposition? , editedOutput? }` | Close the learning loop         |
+| GET    | `/api/ai/policy`     | cookie | —                             | Every arm, its posterior, cost and status    |
+| GET    | `/api/ai/runs`       | cookie | —                             | Recent episodes for the caller's org         |
 | GET    | `/api/computer/status` | cookie | —                           | Key status, online computers, model options  |
 | PUT    | `/api/computer/credentials` | cookie | `{ apiKey }`           | Connect the org's Anthropic key              |
 | DELETE | `/api/computer/credentials` | cookie | —                      | Disconnect it                                |
@@ -309,13 +334,73 @@ a project in another org and have their own membership checked. The moisture log
 has no UPDATE policy and no UPDATE grant, and nothing in the schema can be
 deleted.
 
-The optional background pass is the one place the service-role key touches data,
-and it takes two explicit decisions to enable — see
+The optional background pass is the only part of this feature that touches data
+with the service-role key, and it takes two explicit decisions to enable — see
 [`docs/project-manager-agent.md`](docs/project-manager-agent.md) for the full
 design, the rule list, the API surface, and what was deliberately left out.
 
 Schema: `supabase/migrations/20260727150000_project_manager_agent.sql`.
 Schema tests: `supabase/tests/run.sh`.
+
+## Learning layer
+
+Full architecture: **[docs/reinforcement-learning.md](docs/reinforcement-learning.md)**.
+
+Most AI features are static — pick a model, write a prompt, ship it, and it performs
+identically forever. This one closes the loop instead: every task the platform executes
+produces evidence, and that evidence changes how the next one is executed.
+
+It is a **contextual bandit** over *executor configurations*, not model training. The
+action space is `provider × model × prompt variant`; the reward is a scalar in `[0,1]` from
+deterministic verifiers, human accept/edit signals, cost and latency. We learn which setup
+does each kind of work best — so the platform improves the moment a better model ships
+anywhere in the industry, with no retraining and no migration.
+
+**Multi-provider — OpenAI, Anthropic, Google, xAI (Grok) and open weights — is the
+mechanism, not vendor hedging.** With one model there is no routing decision to learn and
+the ceiling is fixed at whatever that vendor is good at this quarter. With five, model
+specialisation becomes discoverable per task type, cheap arms can win the work that does
+not need a frontier model, and a price rise or deprecation is just an arm's posterior
+moving rather than a migration project. Every API key is optional: an unset key removes
+that vendor's arms and nothing else changes.
+
+Quality is **monotone by construction**:
+
+- Deterministic checks gate every output — money that does not add up, a quoted span that
+  is not in the source document, or a promise the job record cannot support never reaches
+  a customer, no matter which arm produced it.
+- ~90% of traffic stays on the proven champion; challengers are capped at a small,
+  configurable exploration budget.
+- Promotion requires the challenger's *lower confidence bound* to beat the champion's
+  *mean*, plus a clean run of a fixed regression suite. An arm cannot be promoted on a
+  lucky streak.
+- If an experiment fails verification the run is still recorded — that is real evidence —
+  and the champion produces what the user actually receives. Exploration costs us money;
+  it does not cost the user a wrong answer.
+- Vendor outages and timeouts fail over **without** recording a reward, so a bad afternoon
+  at one provider never teaches the policy to abandon a good model.
+
+Learning happens at two tiers with two privacy postures. **Global** tables hold aggregates
+only — no customer content — so every org's work improves the routing every other org
+benefits from. **Org** tables hold real job content and are RLS-scoped, exactly like the
+rest of this schema. Accepted outputs are mined into per-org few-shot exemplars, which is
+how the platform learns *one company's* house style without training any weights.
+
+Because every run is a labelled comparison scored by the same verifier and the same people,
+the episode log is also a preference dataset — generated as a by-product of doing the work.
+Export it to fine-tune an open-weights model, which then re-enters the pool as an ordinary
+candidate arm and has to win on the same evidence as everyone else.
+
+```bash
+cd backend
+npm test                                    # verify the decision logic
+npm run learn                               # offline cycle: promotions + exemplar mining
+npm run learn -- --export draft_scope       # preference pairs as JSONL, for fine-tuning
+```
+
+Apply the schema with `psql "$DATABASE_URL" -f db/migrations/0002_reinforcement_learning.sql`.
+Start with `AI_EXPLORATION_ENABLED=false` — runs are still recorded and scored, so you
+accumulate the evidence that makes exploration informed before it touches real users.
 
 ## Computer use
 
@@ -430,9 +515,15 @@ See `backend/.env.example` and `frontend/.env.example`. Key points:
 - `PASSWORD_RESET_REDIRECT_URL` — where recovery emails land. Defaults to
   `<FRONTEND_ORIGIN>/reset-password`. This URL must **also** be allowlisted in the Supabase
   dashboard under **Authentication → URL Configuration**, or the emailed link is rejected.
-- `ANTHROPIC_API_KEY` — optional **server-only secret**. A server-wide default for computer
-  use, so a deployment can ship with it already working. A key connected in the UI takes
-  priority over it.
+- `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY` / `XAI_API_KEY` / `OSS_BASE_URL`
+  — **server-only secrets**, all optional. Each unset key removes that vendor's arms from
+  the learning layer's routing pool; the loop still runs on whatever remains. With one key
+  it learns over prompt variants, with several it also learns which vendor suits which kind
+  of work. `ANTHROPIC_API_KEY` does double duty: it is also the server-wide default for
+  **computer use**, so a deployment can ship with that already working. A key connected in
+  the UI takes priority over it there.
+- `AI_EXPLORATION_ENABLED` / `AI_CANDIDATE_TRAFFIC_SHARE` — the exploration budget. Runs
+  are recorded and scored either way; this only controls whether challengers get traffic.
 - `AI_CREDENTIALS_KEY` — **server-only secret**, required in production. Encrypts each
   organization's Anthropic key at rest. Generate with `openssl rand -base64 48`. Rotating
   it invalidates stored keys, which organizations simply re-enter.
