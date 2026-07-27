@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
+import { estimatorRouter } from './routes/estimator.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 
@@ -34,13 +35,28 @@ export function createApp(): Express {
   );
 
   // Body + cookie parsing (with a small JSON size cap).
-  app.use(express.json({ limit: '10kb' }));
+  //
+  // The estimator is the one exception: a pasted mitigation estimate is a
+  // whole-house Xactimate export, far past 10 kB. It is skipped here and parses
+  // its own bodies at a higher limit, so raising the cap for one feature does
+  // not widen the request surface everywhere else.
+  const jsonParser = express.json({ limit: '10kb' });
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api/estimator')) {
+      next();
+      return;
+    }
+    jsonParser(req, res, next);
+  });
   app.use(cookieParser());
 
   // Routes.
   app.use('/api', healthRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
+  // The estimator parses its own bodies — a pasted mitigation estimate is far
+  // larger than the 10 kB the rest of the API needs.
+  app.use('/api/estimator', estimatorRouter);
 
   // 404 + error handling (must be last).
   app.use(notFound);

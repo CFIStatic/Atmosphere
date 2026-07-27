@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   api,
@@ -123,6 +124,28 @@ export function DashboardPage() {
               </p>
             </div>
           </div>
+
+          {/* Construction Estimator */}
+          <Link
+            to="/estimator"
+            className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-ink-800/60 p-5 backdrop-blur transition hover:border-brand-500/40 hover:bg-ink-700/60"
+          >
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-brand-400">
+                Construction Estimator
+              </p>
+              <p className="mt-1.5 text-lg font-semibold text-white">
+                Turn a scan into a rebuild estimate
+              </p>
+              <p className="mt-1 text-sm text-gray-400">
+                Reads DocuSketch photos and measurements, finds the job in Dash, and builds the
+                Xactimate scope — including the rebuild implied by a mitigation estimate.
+              </p>
+            </div>
+            <span aria-hidden="true" className="shrink-0 text-2xl text-brand-300">
+              →
+            </span>
+          </Link>
 
           {/* Device PIN */}
           <div className="mt-4">

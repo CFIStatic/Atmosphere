@@ -82,6 +82,55 @@ export const config = {
   // in the Supabase dashboard under Authentication → URL Configuration.
   passwordResetRedirectUrl:
     process.env.PASSWORD_RESET_REDIRECT_URL ?? `${frontendOrigins[0]}/reset-password`,
+
+  estimator: {
+    // Server-only key that encrypts third-party credentials (DocuSketch, Dash,
+    // Xactimate) before they are written to Postgres. Deliberately NOT in the
+    // database: RLS decides who may read a row, this key decides whether the
+    // bytes in that row mean anything. A database leak alone yields ciphertext.
+    // Generate with:  openssl rand -base64 32
+    credentialKey: process.env.ESTIMATOR_CREDENTIAL_KEY ?? '',
+
+    // Anthropic API key for photo analysis and note reading. Without it the
+    // estimator still runs — vision stages are skipped and the scope is built
+    // from DocuSketch measurements and the mitigation estimate alone.
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
+    model: process.env.ESTIMATOR_MODEL ?? 'claude-opus-5',
+    // `low` | `medium` | `high` | `xhigh` | `max`. Photo analysis is a
+    // perception task with a fixed output shape, so `medium` is the balance
+    // point; raise it if observations come back under-specified.
+    effort: (process.env.ESTIMATOR_EFFORT ?? 'medium') as
+      | 'low'
+      | 'medium'
+      | 'high'
+      | 'xhigh'
+      | 'max',
+
+    // Vendor API roots. Every integrator's tenant lives somewhere different
+    // (regional hosts, on-prem Dash, Xactimate vs XactAnalysis), so these are
+    // configuration rather than constants. Leave one unset and that connector
+    // reports itself unconfigured instead of guessing at a URL.
+    docusketchBaseUrl: process.env.DOCUSKETCH_BASE_URL ?? '',
+    dashBaseUrl: process.env.DASH_BASE_URL ?? '',
+    xactimateBaseUrl: process.env.XACTIMATE_BASE_URL ?? '',
+
+    // `live` talks to the vendors; `sandbox` serves deterministic fixtures so
+    // the whole pipeline can be exercised end-to-end without credentials.
+    connectorMode: (process.env.ESTIMATOR_CONNECTOR_MODE ??
+      (isProduction ? 'live' : 'sandbox')) as 'live' | 'sandbox',
+
+    // Cap on photos sent to the vision model per run. Each full-resolution
+    // photo can cost ~4.8k input tokens, so this is the main cost lever.
+    maxPhotosPerRun: Number(process.env.ESTIMATOR_MAX_PHOTOS ?? 40),
+    // Photos are analysed in small concurrent batches — large enough to keep
+    // latency down, small enough to stay inside per-minute token limits.
+    photoConcurrency: Number(process.env.ESTIMATOR_PHOTO_CONCURRENCY ?? 4),
+
+    // Outbound HTTP budget for a single vendor call, and how many times a
+    // transient failure is retried before the stage gives up.
+    requestTimeoutMs: Number(process.env.ESTIMATOR_REQUEST_TIMEOUT_MS ?? 30_000),
+    maxRetries: Number(process.env.ESTIMATOR_MAX_RETRIES ?? 3),
+  },
 } as const;
 
 export type AppConfig = typeof config;

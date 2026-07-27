@@ -171,6 +171,212 @@ export const api = {
     }),
 
   getMembers: () => request<{ members: OrgMember[] }>('/api/org/members', { method: 'GET' }),
+
+  // ---- Construction Estimator ----
+  estimatorStatus: () => request<EstimatorStatus>('/api/estimator/status', { method: 'GET' }),
+
+  saveEstimatorCredential: (provider: EstimatorProvider, input: CredentialInput) =>
+    request<{ credential: CredentialSummary }>(`/api/estimator/credentials/${provider}`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }),
+
+  deleteEstimatorCredential: (provider: EstimatorProvider) =>
+    request<{ ok: boolean }>(`/api/estimator/credentials/${provider}`, { method: 'DELETE' }),
+
+  testEstimatorCredential: (provider: EstimatorProvider) =>
+    request<{ ok: boolean; connector: string }>(`/api/estimator/credentials/${provider}/test`, {
+      method: 'POST',
+    }),
+
+  listScanProjects: (search?: string) =>
+    request<{ projects: ScanProjectSummary[] }>(
+      `/api/estimator/projects${search ? `?search=${encodeURIComponent(search)}` : ''}`,
+      { method: 'GET' },
+    ),
+
+  startEstimatorRun: (scanProjectId: string, mitigationText?: string) =>
+    request<{ run: EstimatorRun }>('/api/estimator/runs', {
+      method: 'POST',
+      body: JSON.stringify({ scanProjectId, mitigationText: mitigationText || undefined }),
+    }),
+
+  listEstimatorRuns: () =>
+    request<{ runs: EstimatorRun[] }>('/api/estimator/runs', { method: 'GET' }),
+
+  getEstimatorRun: (runId: string) =>
+    request<{ run: EstimatorRun }>(`/api/estimator/runs/${runId}`, { method: 'GET' }),
+
+  selectEstimatorJob: (runId: string, jobId: string) =>
+    request<{ run: EstimatorRun }>(`/api/estimator/runs/${runId}/job`, {
+      method: 'POST',
+      body: JSON.stringify({ jobId }),
+    }),
+
+  approveEstimatorRun: (runId: string) =>
+    request<{ run: EstimatorRun }>(`/api/estimator/runs/${runId}/approve`, { method: 'POST' }),
+
+  /** Download URL — the browser fetches it directly so the file streams. */
+  estimatorExportUrl: (runId: string, format: 'csv' | 'xml') =>
+    `${API_BASE}/api/estimator/runs/${runId}/export?format=${format}`,
+};
+
+/* ------------------------------------------------------------------ */
+/* Construction Estimator types                                        */
+/* ------------------------------------------------------------------ */
+
+export type EstimatorProvider = 'docusketch' | 'dash' | 'xactimate';
+
+export interface CredentialSummary {
+  provider: EstimatorProvider;
+  label: string | null;
+  fingerprint: string;
+  baseUrl: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+}
+
+export interface CredentialInput {
+  label?: string;
+  username?: string;
+  password?: string;
+  apiKey?: string;
+  accountId?: string;
+  baseUrl?: string;
+}
+
+export interface EstimatorStatus {
+  /** True when the server is serving fixtures instead of talking to vendors. */
+  sandbox: boolean;
+  modelAvailable: boolean;
+  credentialStorageAvailable: boolean;
+  canManageCredentials: boolean;
+  maxPhotosPerRun: number;
+  credentials: CredentialSummary[];
+}
+
+export interface ScanProjectSummary {
+  id: string;
+  name: string;
+  address?: string;
+  claimNumber?: string;
+  capturedAt?: string;
+}
+
+export type RunStatus = 'running' | 'awaiting_review' | 'complete' | 'failed' | 'cancelled';
+
+export type RunStage =
+  | 'queued'
+  | 'connecting'
+  | 'fetching_scan'
+  | 'matching_job'
+  | 'analyzing_photos'
+  | 'reading_mitigation'
+  | 'building_scope'
+  | 'pricing'
+  | 'awaiting_review'
+  | 'exporting'
+  | 'complete';
+
+export interface RunEvent {
+  at: string;
+  stage: RunStage;
+  level: 'info' | 'warn' | 'error';
+  message: string;
+}
+
+export interface MatchSignal {
+  field: string;
+  weight: number;
+  score: number;
+  detail: string;
+}
+
+export interface MatchCandidate {
+  jobId: string;
+  jobNumber?: string;
+  claimNumber?: string;
+  insuredName?: string;
+  address?: string;
+  lossDate?: string;
+  score: number;
+  signals: MatchSignal[];
+}
+
+export interface EstimateLineItem {
+  roomId: string;
+  roomName: string;
+  code: string;
+  category: string;
+  selector: string;
+  description: string;
+  unit: string;
+  quantity: number;
+  quantityWithWaste: number;
+  trade: string;
+  rationale: string;
+  confidence: number;
+  evidence: string[];
+  needsReview?: boolean;
+}
+
+export interface ConstructionEstimate {
+  jobId: string;
+  jobNumber?: string;
+  claimNumber?: string;
+  insuredName?: string;
+  address: { street?: string; city?: string; state?: string; postalCode?: string };
+  basis: 'scan' | 'mitigation' | 'both';
+  lineItems: EstimateLineItem[];
+  summary: {
+    lineItemCount: number;
+    roomCount: number;
+    quantityByUnit: Record<string, number>;
+    itemsNeedingReview: number;
+    emptyRooms: string[];
+  };
+  warnings: string[];
+  generatedAt: string;
+}
+
+export interface EstimatorRun {
+  id: string;
+  status: RunStatus;
+  stage: RunStage;
+  scanProjectId: string;
+  crmJobId: string | null;
+  matchScore: number | null;
+  matchNeedsReview: boolean;
+  matchCandidates: MatchCandidate[];
+  matchReason: string | null;
+  job: { jobNumber?: string; claimNumber?: string; insuredName?: string } | null;
+  estimate: ConstructionEstimate | null;
+  exportRef: string | null;
+  error: string | null;
+  events: RunEvent[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Stage labels, in the order the pipeline runs them. */
+export const RUN_STAGE_LABELS: Record<RunStage, string> = {
+  queued: 'Queued',
+  connecting: 'Connecting',
+  fetching_scan: 'Reading the scan',
+  matching_job: 'Finding the job',
+  analyzing_photos: 'Reading the photos',
+  reading_mitigation: 'Reading the mitigation estimate',
+  building_scope: 'Building scope',
+  pricing: 'Assembling the estimate',
+  awaiting_review: 'Ready for review',
+  exporting: 'Writing to Xactimate',
+  complete: 'Complete',
+};
+
+export const PROVIDER_LABELS: Record<EstimatorProvider, string> = {
+  docusketch: 'DocuSketch',
+  dash: 'Dash (CRM)',
+  xactimate: 'Xactimate',
 };
 
 /** Human-readable labels for roles and work types (shared UI copy). */
