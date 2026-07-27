@@ -42,6 +42,19 @@ replay step by step.
    server so no Supabase token is ever exposed to page JavaScript.
 5. **PIN sign-in** — an optional 4-digit PIN for fast repeat sign-in, bound to a single
    device (see below).
+6. **Mitigation Estimator** — reads a DocuSketch scan, a MICA report, iPhone photos and field
+   notes, and builds a priced, documented Xactimate estimate from them: classified against
+   IICRC S500, written to the carrier's program terms, and reviewed for work that was
+   performed but never billed (see below).
+7. **Computer use** — connect an Anthropic API key, run the agent on any computer, and
+6. **Web Access** — connect an outside website (a carrier portal, a supplier site) once,
+   then ask Atmosphere to sign in and **pull data out of it** or **enter data into it**. Every
+   step the AI takes is recorded, so a finished run reads back like a receipt.
+7. **Verifier** — a second agent that goes back and checks the first one actually did the work.
+   It re-opens the site in a browser that cannot change anything, confirms the work against the
+   task as it was originally written, corrects what is safe to correct, and asks you about
+   anything it is unsure of.
+8. **Computer use** — connect an Anthropic API key, run the agent on any computer, and
 6. **Technician app** (`/technician`) — the field tool: record audio and video, hold a
    spoken conversation with an assistant, and have the camera name what it sees (see
    below).
@@ -52,23 +65,27 @@ replay step by step.
    companies' software. Backend infrastructure only, no UI yet — see
    **[docs/CRM.md](docs/CRM.md)**.
 9. **Executes work, and learns from it** — drafts scopes, builds estimates, extracts
-6. **Web Access** — connect an outside website (a carrier portal, a supplier site) once,
+10. **Web Access** — connect an outside website (a carrier portal, a supplier site) once,
    then ask Atmosphere to sign in and **pull data out of it** or **enter data into it**. Every
    step the AI takes is recorded, so a finished run reads back like a receipt.
-7. **Verifier** — a second agent that goes back and checks the first one actually did the work.
+11. **Verifier** — a second agent that goes back and checks the first one actually did the work.
    It re-opens the site in a browser that cannot change anything, confirms the work against the
    task as it was originally written, corrects what is safe to correct, and asks you about
    anything it is unsure of.
-8. **Computer use** — connect an Anthropic API key, run the agent on any computer, and
+12. **Computer use** — connect an Anthropic API key, run the agent on any computer, and
    Claude can see its screen and operate it. The whole setup is one key and one command.
-9. **CRM backend** — customers, properties, leads, jobs, and their timeline, plus our own
+13. **CRM backend** — customers, properties, leads, jobs, and their timeline, plus our own
    backups and a verbatim copy of the data that currently lives only inside other
    companies' software. Backend infrastructure only, no UI yet — see
    **[docs/CRM.md](docs/CRM.md)**.
-10. **Executes work, and learns from it** — drafts scopes, builds estimates, extracts
+14. **Agent Memory** — the operational layer over CRM jobs: the tasks under a job, the crew
+   on it, and the work people log against it — with a complete, append-only record of
+   everything that happens to any of it (see below).
+15. **Executes work, and learns from it** — drafts scopes, builds estimates, extracts
    document fields, writes customer updates. Every run is scored, and the routing policy
    improves from those scores. See [Learning layer](#learning-layer) below.
 11. **Construction Estimator** — an agent that signs in to DocuSketch, reads the scan and
+16. **Construction Estimator** — an agent that signs in to DocuSketch, reads the scan and
    the field photos, identifies the matching job in a CRM (Dash), reads the mitigation
    estimate, and builds the construction/rebuild estimate for Xactimate (see below).
 12. **Audit** — every unit of work every agent performed for the organization, replayable
@@ -97,6 +114,17 @@ JWT:
 | `orgs`         | An organization; owns a unique `join_code`.                          |
 | `org_members`  | Links a user to an org with their `role` and `work_type`.            |
 | `device_credentials` | One row per PIN-enrolled device. Holds only hashes — no secret and no session token. |
+| `estimator_jobs` / `estimator_estimates` | Estimating jobs and immutable estimate snapshots. |
+| `estimator_settings` | Per-org margin, O&P, tax and cost-basis assumptions.           |
+| `xactimate_connections` | One row per user: consent grant + optional encrypted credential. |
+| `xactimate_audit`  | Append-only record of what was done in a user's Xactimate account.   |
+| `xactimate_price_lists` | Synced price lists, shared across the org.                     |
+| `carrier_agreements` | Per-org carrier program terms — one set per carrier + program.   |
+| `carrier_deviations` | Documented, evidence-backed exceptions to a term, per job.       |
+| `job_tasks`    | A unit of work under a `crm_job`, optionally assigned to a member.   |
+| `job_assignments` | Which people were on which job, and when. Released, never deleted. |
+| `work_logs`    | A member's own account of work done, with time spent.                |
+| `memory_events` | The append-only record of everything that happens. See below.       |
 | `billing_plans` / `credit_packs` | Public catalog: subscription tiers and prepaid credit packs. |
 | `model_rate_card` | Public **sell** prices per model. Derived from the private cost table. |
 | `org_billing`  | One row per org: plan, seats, period, auto-reload, spend limit.       |
@@ -143,6 +171,9 @@ through two `SECURITY DEFINER` functions that validate `auth.uid()` internally:
 ```
 Atmosphere/
 ├── backend/          Express + TypeScript BFF
+│   ├── supabase/
+│   │   ├── migrations/   CRM core, external mirror, backup ledger, Agent Memory
+│   │   └── tests/        Runs the migrations against a throwaway Postgres
 │   ├── src/
 │   │   ├── config.ts             Validated config (Supabase, cookies, CORS, model providers)
 │   │   ├── app.ts                Express app assembly (helmet, cors, cookies, routes)
@@ -153,6 +184,7 @@ Atmosphere/
 │   │   │   ├── validation.ts     zod schemas (credentials, org create/join, web access, audit)
 │   │   │   ├── validation.ts     zod schemas (credentials, org, billing, usage)
 │   │   │   ├── validation.ts     zod schemas (credentials, org create/join, web access)
+│   │   │   ├── validation.ts     zod schemas (credentials, org, jobs, billing, memory)
 │   │   │   ├── errors.ts         Typed HTTP errors
 │   │   │   ├── webVault.ts       AES-256-GCM sealing for stored site passwords
 │   │   │   ├── webUrlGuard.ts    Site-scope + private-address (SSRF) checks
@@ -165,12 +197,11 @@ Atmosphere/
 │   │   │   ├── verifierAgent.ts        Read-only observation loop → a verdict per item
 │   │   │   ├── verifierRepair.ts       What may be fixed unattended, and what may not
 │   │   │   └── verifierRunner.ts       Look → repair → re-check → or ask a human
-│   │   │   ├── validation.ts     zod schemas (credentials, org create/join)
-│   │   │   ├── errors.ts         Typed HTTP errors
 │   │   │   ├── assistant.ts      Technician voice assistant (Claude, + local fallback)
 │   │   │   ├── transcription.ts  Optional server-side speech-to-text
 │   │   │   └── labels.ts         Role / work-type names for prompts
 │   │   │   ├── crmValidation.ts  zod schemas + camelCase↔snake_case row mapping
+│   │   │   ├── memory.ts         Event recorder + serializers for the record
 │   │   │   ├── orgContext.ts     Resolves the caller's org; never trusts the body
 │   │   │   ├── auditCatalog.ts   The registry of agents the Audit tab accounts for
 │   │   │   ├── auditLog.ts       Write side of the ledger + payload redaction
@@ -178,7 +209,6 @@ Atmosphere/
 │   │   │   ├── anthropic.ts      Authoritative token measurement (+ tests)
 │   │   │   ├── billing.ts        DB error → HTTP mapping, response shaping
 │   │   │   ├── stripe.ts         Stripe client, customers, webhook helpers
-│   │   │   ├── errors.ts         Typed HTTP errors
 │   │   │   ├── backup/           Archive format, storage drivers, runner, scheduler
 │   │   │   └── integrations/     Connectors + the append-only external mirror
 │   │   ├── ai/                   Learning layer — see docs/reinforcement-learning.md
@@ -192,6 +222,17 @@ Atmosphere/
 │   │   │   ├── requireAuth.ts    Verify access token; transparent refresh
 │   │   │   ├── requireOrg.ts     Resolve caller's org from their own membership
 │   │   │   └── errorHandler.ts   404 + central JSON error handler
+│   │   ├── routes/
+│   │   │   ├── auth.ts           signup / login / logout / refresh / me
+│   │   │   ├── org.ts            onboarding: me / create / join / members
+│   │   │   ├── estimator.ts      build / save / export / settings / catalog
+│   │   │   ├── xactimate.ts      connect / disconnect / price lists / push
+│   │   │   ├── crm.ts            CRM CRUD, lead conversion, timeline, audit
+│   │   │   ├── backups.ts        Snapshot status / history / trigger / verify
+│   │   │   ├── integrations.ts   External sources, syncs, CSV import, mirror
+│   │   │   ├── ai.ts             task execution / feedback / policy visibility
+│   │   │   ├── computer.ts       computer use: keys, pairing, runs, SSE
+│   │   │   └── health.ts         liveness probe
 │   │   ├── computer/
 │   │   │   ├── protocol.ts       Wire protocol shared with the agent
 │   │   │   ├── models.ts         Per-model tool version, beta header, image limits
@@ -199,9 +240,40 @@ Atmosphere/
 │   │   │   ├── agentTokens.ts    Pairing codes + HMAC-signed agent tokens
 │   │   │   ├── agentHub.ts       WebSocket registry of connected computers
 │   │   │   └── runner.ts         The agent loop + live run transcripts
+│   │   ├── estimator/            The Mitigation Estimator agent
+│   │   │   ├── agent.ts          The pipeline, end to end
+│   │   │   ├── types.ts          Canonical domain model
+│   │   │   ├── ingest/           DocuSketch / MICA / photos / notes → assessment
+│   │   │   ├── lib/              Geometry + IICRC S500 psychrometrics
+│   │   │   ├── rules/            Scope derivation, then scope → line items
+│   │   │   ├── standards/        IICRC citation registry + compliance review
+│   │   │   ├── carrier/          Carrier identification, program terms, deviations
+│   │   │   ├── catalog/          Seed line items + price-list reconciliation
+│   │   │   ├── pricing.ts        Subtotal, O&P, tax, margin
+│   │   │   ├── profitability.ts  Findings: unbilled work, evidence gaps, margin
+│   │   │   ├── xactimate/        Consent, credential vault, drivers (mock/api/web)
+│   │   │   ├── export/           CSV / XML / scope sheet, for manual import
+│   │   │   ├── fixtures/         A worked example
+│   │   │   └── demo.ts           npm run estimator:demo
+│   │   └── scripts/              Backup CLI, self-checks, learning cycle (cron)
+│   │   ├── middleware/
+│   │   │   ├── requireAuth.ts    Verify access token; transparent refresh
+│   │   │   └── errorHandler.ts   404 + central JSON error handler
+│   │   ├── routes/
+│   │   │   ├── auth.ts           signup / login / logout / refresh / me
+│   │   │   ├── org.ts            onboarding: me / create / join / members
+│   │   │   ├── webAccess.ts      connections + runs
+│   │   │   ├── verifier.ts       checks + the escalation queue
+│   │   │   ├── computer.ts       computer use: keys, pairing, runs, SSE
+│   │   │   └── health.ts         liveness probe
+│   │   └── scripts/
+│   │       └── checkVerifier.ts  Verifier checks against a fixture portal + stubbed model
+│   └── .env.example
+├── db/
+│   ├── web_access.sql            Schema + RLS for Web Access (run once)
+│   └── verifier.sql              Schema + RLS for the Verifier (run once, after the above)
 │   │   ├── estimator/            Construction Estimator agent
 │   │   │   ├── pipeline.ts       Stage orchestration; pauses for human review
-│   │   │   ├── credentials.ts    AES-256-GCM vault for vendor credentials
 │   │   │   ├── store.ts          Supabase persistence (runs + credentials)
 │   │   │   ├── types.ts          Vendor-neutral domain model
 │   │   │   ├── connectors/       DocuSketch / Dash / Xactimate + fixtures
@@ -212,7 +284,6 @@ Atmosphere/
 │   │   │   └── estimate/         Estimate assembly, import, and export
 │   │   ├── scripts/
 │   │   │   └── checkVerifier.ts  Verifier checks against a fixture portal + stubbed model
-│   │   ├── scripts/              Backup CLI, self-checks, learning cycle (cron)
 │   │   └── routes/
 │   │       ├── auth.ts           signup / login / logout / refresh / me
 │   │       ├── org.ts            onboarding: me / create / join / members
@@ -223,9 +294,10 @@ Atmosphere/
 │   │       ├── ai.ts             Learning-layer task execution + feedback
 │   │       ├── modelGateway.ts   Metered model calls (authorize-then-capture)
 │   │       ├── crm.ts            CRM CRUD, lead conversion, timeline, audit
+│   │       ├── jobs.ts           tasks, crew and work logs over crm_jobs
+│   │       ├── memory.ts         the record: feed, rollups, export
 │   │       ├── backups.ts        Snapshot status / history / trigger / verify
 │   │       ├── integrations.ts   External sources, syncs, CSV import, mirror
-│   │       ├── ai.ts             task execution / feedback / policy visibility
 │   │       ├── computer.ts       computer use: keys, pairing, runs, SSE
 │   │       ├── estimator.ts      Estimator setup, runs, review, export
 │   │       └── health.ts         liveness probe
@@ -244,10 +316,13 @@ Atmosphere/
 ├── db/migrations/    SQL schema (RLS policies + SECURITY DEFINER write path)
 ├── docs/             Architecture notes
 ├── frontend/         React + Vite + TypeScript + Tailwind
-│   ├── src/
 │   │   ├── pages/LoginPage.tsx        Branded login + signup screen
 │   │   ├── pages/OnboardingPage.tsx   3-step wizard: org → role → work type
 │   │   ├── pages/DashboardPage.tsx    Org overview, invite code, linked accounts
+│   │   ├── pages/EstimatorPage.tsx    Estimator workspace
+│   │   ├── pages/ComputerUsePage.tsx  Live screen, task composer, transcript
+│   │   ├── context/AuthContext.tsx    Session + membership state
+│   │   ├── components/estimator/      Sources, results, program terms, consent card
 │   │   ├── pages/TechnicianPage.tsx   Capture / recordings / assistant workspace
 │   │   ├── pages/ComputerUsePage.tsx  Live screen, task composer, transcript
 │   │   ├── context/AuthContext.tsx    Session + membership state
@@ -261,11 +336,21 @@ Atmosphere/
 │   │   ├── pages/EstimatorPage.tsx    Connections, runs, job review, estimate
 │   │   ├── context/AuthContext.tsx    Session + membership state
 │   │   ├── components/audit/          Run detail, step trace, shared presentation
+│   │   ├── pages/EstimatorPage.tsx    Connections, runs, job review, estimate
 │   │   ├── components/VerificationPanel.tsx  A run's check, with the evidence behind it
 │   │   ├── components/EscalationQueue.tsx    Questions the verifier needs answered
 │   │   ├── components/                Logo, icons, ProtectedRoute
 │   │   └── lib/api.ts                 Typed fetch client (credentials: include)
 │   └── .env.example
+├── agent/            The computer-use agent (runs on the machine being operated)
+│   ├── src/
+│   │   ├── index.ts              CLI: pair once, then stay connected
+│   │   ├── computer.ts           Action executor + coordinate scaling
+│   │   ├── image.ts              Screenshot downscale / crop (sharp)
+│   │   ├── transport.ts          Outbound WebSocket with backoff
+│   │   └── drivers/              linux (xdotool) · darwin · win32 (PowerShell)
+│   └── README.md
+└── supabase/migrations/               Estimator schema + RLS (apply before use)
 └── agent/            The computer-use agent (runs on the machine being operated)
     ├── src/
     │   ├── index.ts              CLI: pair once, then stay connected
@@ -326,6 +411,45 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | POST   | `/api/org`           | cookie | `{ name, role, workType }`    | Create an org and join as first member       |
 | POST   | `/api/org/join`      | cookie | `{ joinCode, role, workType }`| Link to an existing org by join code         |
 | GET    | `/api/org/members`   | cookie | —                             | Linked accounts in the caller's org          |
+| POST   | `/api/estimator/build` | cookie | `{ docusketch?, mica?, photos?, notes? }` | Build an estimate; saves nothing |
+| POST   | `/api/estimator/estimates` | cookie | same as `build`         | Build and persist                            |
+| GET    | `/api/estimator/estimates/:id` | cookie | —                   | A saved estimate                             |
+| GET    | `/api/estimator/estimates/:id/export` | cookie | `?format=csv\|xml\|scope` | Download for manual import      |
+| GET    | `/api/estimator/jobs` | cookie | —                            | The org's estimating jobs                    |
+| GET/PUT| `/api/estimator/settings` | cookie | margin/O&P/tax/cost knobs | Org estimating assumptions               |
+| GET    | `/api/estimator/catalog` | cookie | —                         | Line-item catalog + which prices are verified |
+| GET    | `/api/estimator/standards` | cookie | —                       | The IICRC citation registry + confidence of each |
+| GET    | `/api/estimator/carriers` | cookie | —                        | Carriers and assignment networks recognised   |
+| GET/PUT| `/api/estimator/agreements` | cookie | agreement terms        | The org's carrier program agreements          |
+| POST   | `/api/estimator/agreements/fetch` | cookie | `{ carrierId, programId? }` | Pull terms from the contractor portal |
+| GET/POST | `/api/estimator/jobs/:jobId/deviations` | cookie | `{ ruleId, reason, evidenceIds }` | Documented deviations from program terms |
+| GET    | `/api/estimator/demo-sources` | cookie | —                    | A worked example, for evaluation             |
+| GET    | `/api/xactimate/status` | cookie | —                          | Connection, scopes, expiry — never a credential |
+| POST   | `/api/xactimate/connect` | cookie | `{ username, password, scopes, storageMode, acknowledgedTerms }` | Sign in under an explicit grant |
+| POST   | `/api/xactimate/disconnect` | cookie | —                      | Revoke and destroy any stored credential     |
+| POST   | `/api/xactimate/resume` | cookie | —                          | Re-establish a session from a stored credential |
+| GET    | `/api/xactimate/price-lists` | cookie | —                     | Price lists the account can see              |
+| POST   | `/api/xactimate/price-lists/sync` | cookie | `{ priceListId }` | Pull a price list and make it the org's     |
+| POST   | `/api/xactimate/price-lists/upload` | cookie | `{ id, name, entries }` | Upload an exported price list — no login  |
+| POST   | `/api/xactimate/push` | cookie | `{ estimate, confirmedFindings }` | Write the estimate into the account   |
+| GET    | `/api/xactimate/activity` | cookie | —                        | What was done in the account, under the grant |
+| GET    | `/api/jobs`          | cookie | —                             | Job list, rolled up with its memory           |
+| POST   | `/api/jobs`          | cookie | `{ title, workType, … }`      | Open a job (writes to `crm_jobs`)             |
+| GET    | `/api/jobs/:id`      | cookie | —                             | Job + tasks + crew + work logs + history      |
+| PATCH  | `/api/jobs/:id`      | cookie | partial job                   | Update a job; the diff is recorded            |
+| GET    | `/api/jobs/:id/memory` | cookie | —                           | That job's complete history, oldest first     |
+| POST   | `/api/jobs/:id/tasks` | cookie | `{ title, … }`               | Add a task                                    |
+| PATCH  | `/api/jobs/:id/tasks/:taskId` | cookie | partial task         | Update a task                                 |
+| POST   | `/api/jobs/:id/crew` | cookie | `{ userId, roleOnJob }`       | Put someone on the job                        |
+| POST   | `/api/jobs/:id/crew/:assignmentId/release` | cookie | —      | Take someone off (row is kept)                |
+| POST   | `/api/jobs/:id/logs` | cookie | `{ kind, body, minutes }`     | Log work done                                 |
+| PATCH  | `/api/jobs/:id/logs/:logId` | cookie | partial log            | Revise your own entry                         |
+| GET    | `/api/memory`        | cookie | —                             | The org's record, filtered and paged          |
+| GET    | `/api/memory/stats`  | cookie | —                             | Headline numbers                              |
+| GET    | `/api/memory/agents` | cookie | —                             | Every member with their work rolled up        |
+| GET    | `/api/memory/agents/:userId` | cookie | —                     | One member's full trail                       |
+| GET    | `/api/memory/entity/:type/:id` | cookie | —                   | Everything known about one thing              |
+| GET    | `/api/memory/export` | cookie | —                             | The whole record as NDJSON                    |
 | GET    | `/api/technician/capabilities` | cookie | —                   | Whether the assistant and STT are configured |
 | POST   | `/api/technician/assist`       | cookie | `{ message, history, context }` | One turn of the voice conversation |
 | POST   | `/api/technician/transcribe`   | cookie | raw audio body        | Speech-to-text for a recorded clip            |
@@ -400,7 +524,10 @@ Agents also hold a WebSocket open at `/api/computer/agent-socket`, authenticated
 token from pairing rather than a session cookie.
 
 The CRM, backup, and integration endpoints (`/api/crm/*`, `/api/backups/*`,
-`/api/integrations/*`) are documented in **[docs/CRM.md](docs/CRM.md)**.
+`/api/integrations/*`) are documented in **[docs/CRM.md](docs/CRM.md)**. Job records
+themselves are CRM resources: `/api/crm/jobs` carries the full CRUD including financials
+and the links to accounts, contacts and properties, while `/api/jobs` above is the
+field-facing view of the same rows plus the operational layer over them.
 
 `role` ∈ `project_manager | field_technician | accountant | office_manager | sales`.
 `workType` ∈ `mitigation | construction`.
@@ -450,6 +577,313 @@ which is what keeps that budget meaningless rather than a coin flip.
 
 Signing out deliberately does **not** clear the PIN — returning to the PIN pad instead of the
 password form is the whole point. Enrollment is per-device, capped at 5 devices per user.
+
+## Mitigation Estimator
+
+An agent that turns the record of a water-damage job into a priced, documented Xactimate
+scope. It reads a **DocuSketch** scan, a **MICA** report, **iPhone photos** and the
+technician's **field notes**; classifies the loss against **IICRC S500**; derives the scope;
+maps it to Xactimate line items; prices it against the org's real price list; and reviews the
+result for work that was performed but never billed.
+
+```
+DocuSketch ┐
+MICA       ├─▶ normalise ─▶ assess ─▶ scope ─▶ line items ─▶ price ─▶ profitability review
+photos     │   (fuse)      (S500)   (rules)   (catalog)    (list)    (findings)
+notes      ┘                                                              │
+                                                                          ▼
+                                          Xactimate  ◀── API │ browser │ file export
+```
+
+Try it without a database, a network, or an Xactimate account:
+
+```bash
+cd backend && npm run estimator:demo            # full run against a worked example
+cd backend && npm run estimator:demo -- --scope-sheet   # the adjuster-facing document
+```
+
+### It knows which carrier it is writing for, and estimates to their terms
+
+A franchise on a national account is not free to write whatever scope the
+documentation supports. The program agreement — negotiated between the franchisor and
+the carrier, binding on every franchise in the network — sets the price list, whether
+overhead and profit is payable, what needs pre-approval, how many equipment days go
+unquestioned, what documentation must accompany the invoice, and how fast each milestone
+must happen. Estimating outside those terms produces chargebacks, delayed payment and
+eventually removal from the program, and the franchise wears all three.
+
+So the agreement is a **hard constraint**, and the profitability engine optimises inside
+it rather than around it.
+
+**Identifying the carrier.** Read from the MICA carrier field first, then from notes and
+photo captions, then from claim-number shape. The result carries *how* it knows —
+`stated`, `inferred` or `unknown` — because a wrong carrier applies the wrong price list
+and the wrong terms to the whole job. An inferred identification is offered for
+correction rather than presented as settled, and when several carriers appear in the
+sources it says so instead of picking. The **program** (Contractor Connection, Alacrity,
+Sedgwick, a direct national account) is identified separately, because that is what
+actually carries the terms — the same carrier can pay differently depending on which
+network assigned the job.
+
+**Applying them.** Pricing terms — the mandated price list, O&P eligibility, a negotiated
+concession — are applied *before* the estimate is priced, so no intermediate the reviewer
+reads is ever non-compliant. Scope terms — quantity caps, prohibited codes, approval
+thresholds, documentation, timelines — are checked after. Nothing is silently trimmed to
+fit a cap: quietly reducing equipment days would hide the exact fact the franchise needs
+to raise with the carrier.
+
+**Breaking them, in writing.** Real jobs exceed program limits legitimately — a structure
+that has not reached its drying goal on the day the equipment allowance expires is the
+obvious case. A term may be exceeded only through a deviation carrying a written reason
+**and evidence already in the job**. A reason with no evidence is an assertion, not
+documentation, and is rejected — by the API, and by a database constraint behind it.
+
+The agent goes looking for those grounds itself. When the allowance is exceeded it
+searches the moisture log for readings still above their goal after the cap expired, and
+assembles the argument with the evidence ids attached. It never accepts its own proposal:
+agreeing to exceed a carrier's terms is a commercial decision with a relationship behind
+it, so a human makes it. Accepted deviations print on the estimate that goes to the
+carrier.
+
+An unexcused breach of a binding term **blocks the push to Xactimate** outright. That one
+is not a confirmation the user can click past — the carrier will not pay a line the
+agreement prohibits.
+
+**Where the terms come from.** Hand-entered is the default and the only source guaranteed
+to match what the franchise signed. A portal adapter speaks a documented JSON contract
+that a franchisor endpoint (or a small internal shim in front of one) can serve. There is
+deliberately **no browser scraper** for a contractor portal: a scraper written against
+markup nobody has seen would not fail loudly when the page changed — it would return
+plausible terms, and an estimate built on a plausible-but-wrong equipment cap is worse
+than one built on no cap at all, because it is trusted. The failure would surface weeks
+later as a chargeback.
+
+### It cites the standard, and it is honest about how firmly
+
+Every scope decision, line item and compliance check names the IICRC requirement it rests on.
+Rules reference a **stable id** in `estimator/standards/s500.ts`; nothing anywhere else types
+a section number. That indirection is not ceremony — before it existed, one plausible-looking
+clause number had been attached to five unrelated requirements, which is exactly the kind of
+thing an adjuster notices once and then checks everywhere.
+
+Each citation carries **how firmly it is anchored**, and that changes what prints:
+
+| Confidence | Renders as | Means |
+| ---------- | ---------- | ----- |
+| `clause` | `ANSI/IICRC S500-2021 §12.2.4` | A numbered clause. |
+| `chapter` | `ANSI/IICRC S500-2021, Cleaning and antimicrobial agents` | Located to a chapter — deliberately **no number**, rather than inventing one to look precise. |
+| `convention` | `… — industry practice, not a requirement of S500` | Standard practice the standard itself leaves to the restorer's judgement. |
+
+That last row does real work. Several things restorers say "the S500 requires" are convention:
+the 48/72-hour category thresholds, the class percentage bands, the initial-water-load divisor
+table, air-mover coverage ranges, the 2-foot flood cut, and the idea that antimicrobial is
+mandatory on any Cat 2. The estimator still uses all of them — they are what the industry
+runs on — but it labels them, and lists them under "what this estimate does not claim". An
+estimator arguing a scope is better off knowing which of their citations is a clause and which
+is custom.
+
+**The standards are not reproduced.** ANSI/IICRC S500 and S520 are copyrighted publications
+sold by the IICRC. Every requirement in the registry is a paraphrase written for this
+codebase; what the estimate carries is a pointer, so a reader with their own copy can turn
+to it. `GET /api/estimator/standards` publishes the whole registry.
+
+### It checks the estimate back against the standard
+
+Separate from the profitability review, and asking a different question: the findings ask
+what is *unbilled*, the standards review asks what is *indefensible*. Eighteen checks, each
+citing its requirement and carrying a remedy — dry standard established from unaffected
+material, drying verified to that goal before demobilising, porous material removed on
+Category 3, wet cavities opened or dried, cleaning before chemistry, containment held under
+negative pressure, dehumidification sized to the class, and so on.
+
+`undetermined` is a real outcome. When the sources do not say, the check says it does not
+know — scoring a missing MICA report as "met" would make the whole report worthless.
+
+The two reviews overlap constantly, which is the point: an obligation a job skipped is
+usually one it also failed to bill for. Checks that are both are marked *also unbilled work*.
+
+### How the sources are fused
+
+Four inputs describe one loss and they disagree. The rule is **measured beats recorded beats
+written**: DocuSketch measured the room, so its geometry wins; MICA recorded the drying, so
+its equipment log wins over prose; the notes fill what nothing else covered.
+
+Water **category** is the deliberate exception — it takes the *worst* value any source
+reports, not the highest-priority one. Under-calling contamination produces an estimate that
+omits required work and a job that gets re-opened; over-calling it is caught at review.
+Category also degrades with time (S500 §10.5.4): clean water that stood 48 hours is scoped as
+Category 2, and the estimate says so in writing.
+
+Every quantity traces back through a line item to a scope rule to the reading or photo that
+produced it. The pipeline is deterministic — the same sources always produce the same
+estimate — which is what lets you re-run one in front of an adjuster and defend a disputed
+number line by line.
+
+### What "making jobs profitable" means here
+
+Mitigation jobs lose money in a few well-understood ways, and almost none of them are "the
+prices were too low":
+
+- work performed and never written down — monitoring hours, content manipulation, PPE,
+  debris haul;
+- equipment logged out late, so billed days understate days on site;
+- the generic selector used where a specific, better-paying one applied (`WTRDHM` where an
+  LGR was running);
+- lines written without documentation, which get struck after the work is already sunk cost.
+
+Every finding the review produces is one of those. What it will **not** do is add quantity the
+measurements do not support, or bill work nobody performed. That is not scruple bolted on
+afterwards: an inflated estimate gets re-priced, the carrier relationship degrades, and the
+next ten jobs get scrutinised. Where the review can only see a *possibility*, it says what
+would have to be confirmed and leaves the line off.
+
+The counterweight is real — the review also flags lines that should come *off*, and refuses
+to push an estimate with critical findings outstanding.
+
+### Prices are not real until you sync
+
+Xactimate selectors and prices vary by version, by region, and by carrier program. The
+catalog in `catalog/lineItems.ts` is a **seed**, and every entry ships `verified: false`.
+Reconciliation matches it against the price list on your own account — by code first, then by
+description — and until that runs, every line is flagged and the UI says so. Three ways to get
+real prices in:
+
+| Route | Needs | Notes |
+| ----- | ----- | ----- |
+| **API** | A Verisk integration agreement | Best option. Supported, stable, never replays a password. |
+| **Browser** | Your Xactimate Online login | For orgs without API access. Replays a password and breaks when the UI moves. |
+| **File** | Nothing | Export the price list, upload it; download a CSV, import it by hand. Works everywhere. |
+
+### Connecting an Xactimate account
+
+Signing in as a user, in a system holding their carrier relationships and their customers'
+claim data, is not something a settings checkbox should authorise forever. So:
+
+- **Consent is explicit, scoped, and expiring.** Reading a price list is a different
+  permission from writing an estimate; `write_estimate` and `submit_estimate` are *not*
+  granted by default. Grants lapse after 30 days.
+- **Not storing the password is the default.** Session-only mode uses it for one operation
+  and zeroes the buffer — nothing reaches disk, so a database leak yields nothing. At-rest
+  storage is opt-in, for unattended runs that cannot prompt.
+- **The encryption key never touches the database.** `XACTIMATE_ENC_KEY` is env-only, the
+  same separation that keeps the PIN table inert on its own. Leave it unset and at-rest
+  storage is simply unavailable.
+- **Revocation is immediate and destroys the credential** in the same statement that marks
+  the grant revoked, with a database constraint behind it.
+- **Every action is logged** against the grant that allowed it, visible to the user. A
+  permission you cannot inspect the use of is not really a permission.
+- **Browser automation is off unless explicitly enabled.** Whether it is permitted for a
+  given account depends on that account's terms with Verisk — the account holder's call, not
+  this software's. It will not solve a CAPTCHA or work around a block; when Xactimate asks
+  for a second factor it stops and asks the user.
+
+Xactimate sign-in attempts are rate-limited harder than the app's own login (5 per 15
+minutes): a retry loop here walks a real company's account into a lockout mid-job.
+
+### Setting it up
+
+1. Apply the migrations in `supabase/migrations/` (via `supabase db push`, or paste them
+   into the SQL editor) — `0001_mitigation_estimator.sql` then
+   `0002_carrier_agreements.sql`. Until they are applied the estimator routes return a 503
+   saying exactly that.
+2. Leave `XACTIMATE_DRIVER` unset to run the mock driver, which needs nothing else.
+3. For a real connection set `XACTIMATE_DRIVER=api` plus `XACTIMATE_API_BASE_URL` and
+   `XACTIMATE_API_KEY`, or `XACTIMATE_DRIVER=web` plus `XACTIMATE_WEB_AUTOMATION=true` and
+   `npm install playwright` in `backend/`.
+
+### Two caveats worth stating plainly
+
+**Prices.** The IICRC calculations, the scope rules and the fusion logic are implemented from
+the standards and are unit-consistent. The **selectors and placeholder prices in the seed
+catalog are not authoritative** — they follow Xactimate's conventions but have not been
+reconciled against a real price list, which is exactly why nothing is billable until a sync
+marks it verified. Have an estimator review the first few jobs against your own price list
+before anything goes to a carrier.
+
+**Citations.** Every entry in the registry currently sits at `chapter` or `convention`
+confidence, never `clause`. That is deliberate rather than incomplete: precise clause numbers
+were not corroborable without the copyrighted text in hand, and a confident wrong §-number is
+worse on a submitted estimate than an honest chapter reference. If you hold a copy of the
+S500, pinning a requirement to its clause is a one-line change — set `section` and flip
+`confidence` to `'clause'` — and the estimate, the exports and the UI all start printing the
+number with no other edit.
+## Agent Memory
+
+A restoration job is reconstructed after the fact more often than anyone would like — for
+an insurance dispute, a warranty claim, a payroll question, or simply "who was on site on
+the 14th?". That only works if the record is complete, so the guiding rule here is that
+**the record is not something the application maintains — it is something the database
+does not allow you to avoid.**
+
+Three decisions follow from that:
+
+**1. Capture happens in the database, not the routes.** Every write to `crm_jobs`,
+`job_tasks`, `job_assignments` and `work_logs` fires an `AFTER` trigger that diffs the row
+and appends to `memory_events`. Not one route in `backend/src/routes/jobs.ts` writes an
+audit record. Application-level logging is only ever as complete as the code paths that
+remember to call it; a trigger fires for the BFF, for a SQL console, for a background job,
+and for whatever client gets written next year. A route added later is recorded with no
+chance of anyone forgetting.
+
+Each entry keeps a readable sentence (`moved job #1 from draft to in_progress`), the
+field-level `{from, to}` diff, and the full row snapshot. The actor's email and role are
+copied in **at write time** on purpose — resolving them by join would silently rewrite
+history every time somebody changed role or left.
+
+**2. Nothing is ever destroyed.** `memory_events` rejects `UPDATE`, `DELETE` and
+`TRUNCATE` by trigger, for every role — including the table owner and `service_role`, both
+of which bypass grants and RLS. The tables it watches are granted `SELECT`, `INSERT` and
+`UPDATE` only, so tasks are *cancelled* and crew are *released*. `memory_events` also
+carries no foreign keys: a record of what happened has to outlive the row it describes, and
+an FK would either block the delete or rewrite the event.
+
+It sits alongside `crm_audit_log` rather than replacing it. That table is the backup
+system's restore ledger — raw row images with `prev_data` so a change can be reversed.
+`memory_events` is the human record: narrative summaries, typed events, immutability.
+Different readers, different guarantees.
+
+**3. The few events with no row behind them are narrow by construction.** Signing in,
+signing out, unlocking with a PIN and exporting the record are real events that no table
+write would produce, so the backend appends them through `record_memory_event`. That
+function takes the actor from `auth.uid()` and the org from the caller's membership —
+neither can be passed in — and rejects any event type outside the `auth. / session. /
+view. / export. / note.` namespaces. Everything under `job.` or `task.` is reachable only
+by actually changing the row, so a client cannot fabricate an action or attribute one to
+somebody else.
+
+Reads are scoped by the same RLS rule as the rest of the app, so the record is visible to
+the organization it belongs to and to nobody else. The feed pages on `seq`, the memory's
+own monotonic counter, rather than on a timestamp or an offset — timestamps tie and
+offsets skip entries when rows arrive mid-scroll, and a record that claims to be complete
+cannot afford either.
+
+#### Applying the migration
+
+The schema lives in `backend/supabase/migrations/` alongside the CRM's. Agent Memory hangs
+off `crm_jobs`, so `20260726000001_crm_core.sql` must be applied first. With the Supabase
+CLI:
+
+```bash
+supabase db push
+```
+
+…or paste each file into the SQL editor in the Supabase dashboard, in filename order. They
+are idempotent — safe to re-run.
+
+#### Verifying it
+
+`backend/supabase/tests/` applies the real CRM migration and then Agent Memory to a
+throwaway local Postgres — only `auth.uid()` and the onboarding tables are stubbed — and
+exercises the behaviour: capture over `crm_jobs`, the completion stamps, the rollups,
+immutability against the table owner, and cross-organization isolation.
+
+```bash
+backend/supabase/tests/run.sh -h /tmp -p 5432 -U postgres
+```
+
+It is not run against a real project by design — it asserts that history cannot be
+deleted, so it needs a database it is allowed to throw away. Sections 8–11 and 13 print
+`ERROR` lines; those are the guarantees refusing the operation, and are the point of the test.
 
 ## Design language
 
@@ -1199,6 +1633,12 @@ See `backend/.env.example` and `frontend/.env.example`. Key points:
 - `PASSWORD_RESET_REDIRECT_URL` — where recovery emails land. Defaults to
   `<FRONTEND_ORIGIN>/reset-password`. This URL must **also** be allowlisted in the Supabase
   dashboard under **Authentication → URL Configuration**, or the emailed link is rejected.
+- `XACTIMATE_ENC_KEY` — **server-only secret**, optional. Encrypts stored Xactimate
+  credentials and, like `DEVICE_PEPPER`, is deliberately kept out of the database. Leave it
+  unset and at-rest storage is unavailable: users connect in session-only mode, their
+  password is never written down, and there is nothing for a database leak to yield. Only set
+  it if you need unattended runs that cannot prompt for a password.
+- `XACTIMATE_DRIVER` — `mock` (default), `api`, or `web`. See the estimator section above.
 - `ANTHROPIC_API_KEY` — **server-only secret**, optional. Powers the technician assistant's
   replies. Unset, the assistant falls back to a rule-based responder and the rest of the
   technician app is unaffected.
@@ -1284,6 +1724,13 @@ See `backend/.env.example` and `frontend/.env.example`. Key points:
 - **Configure custom SMTP** before launch. Supabase's built-in mailer is rate-limited to a
   handful of messages per hour, which is fine for testing and will not carry real password
   resets.
+- Apply both migrations in `supabase/migrations/` before the estimator is used; its routes
+  return a clear 503 until you do.
+- Load each carrier program agreement your franchise works under before estimating on it.
+  Working a program job blind to its terms is the usual route to a chargeback, and the
+  estimate says so when no agreement is loaded.
+- Leave `XACTIMATE_DRIVER` on `mock` until an estimator has checked the seed catalog against
+  your own price list. A verified sync is what turns placeholder prices into real ones.
 - **Set `BACKUP_ENCRYPTION_KEY`.** The server refuses to boot in production with backups
   enabled and no key — an archive holds every customer record we have, and unlike the
   database it gets copied to laptops and object stores. Generate with

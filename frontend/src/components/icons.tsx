@@ -313,6 +313,19 @@ function Glyph({ children, ...props }: SVGProps<SVGSVGElement>) {
   );
 }
 
+
+/* --- Agent Memory --- */
+
+export function BriefcaseIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" width="20" height="20" aria-hidden="true" {...props}>
+      <rect x="2.75" y="7.25" width="18.5" height="12" rx="2.25" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M2.75 12h18.5" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
 /** The Audit tab itself: a document with an ordered trace on it. */
 export function AuditIcon(props: SVGProps<SVGSVGElement>) {
   return (
@@ -451,5 +464,36 @@ export function DotIcon(props: SVGProps<SVGSVGElement>) {
     <Glyph {...props}>
       <circle cx="12" cy="12" r="3.5" fill="currentColor" />
     </Glyph>
+  );
+}
+
+export function HistoryIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" width="20" height="20" aria-hidden="true" {...props}>
+      <path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M3 4v4.5h4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12 7.5V12l3 1.75" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function UsersIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" width="20" height="20" aria-hidden="true" {...props}>
+      <circle cx="9" cy="8" r="3.25" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M2.75 19a6.25 6.25 0 0 1 12.5 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M16 5.2a3.25 3.25 0 0 1 0 5.6M17.5 13.5a5.6 5.6 0 0 1 3.75 5.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+
+
+
+export function ChevronLeftIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" width="20" height="20" aria-hidden="true" {...props}>
+      <path d="M14.5 5.5 8 12l6.5 6.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
