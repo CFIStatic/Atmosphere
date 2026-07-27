@@ -8,7 +8,17 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test src/**/*.test.ts",
+    "learn": "tsx src/scripts/learn.ts",
+    "backup": "tsx src/scripts/backup.ts snapshot",
+    "backup:list": "tsx src/scripts/backup.ts list",
+    "backup:verify": "tsx src/scripts/backup.ts verify",
+    "backup:restore": "tsx src/scripts/backup.ts restore",
+    "backup:retention": "tsx src/scripts/backup.ts retention",
+    "check": "npm run typecheck && npm test && npm run check:backup && npm run check:csv",
+    "check:backup": "tsx src/scripts/checkBackupArchive.ts",
+    "check:csv": "tsx src/scripts/checkCsvImport.ts"
   },
   "engines": {
     "node": ">=18"
