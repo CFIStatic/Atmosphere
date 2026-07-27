@@ -5,6 +5,10 @@ import cookieParser from 'cookie-parser';
 import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
+import { aiRouter } from './routes/ai.js';
+import { crmRouter } from './routes/crm.js';
+import { backupRouter } from './routes/backups.js';
+import { integrationsRouter } from './routes/integrations.js';
 import { computerRouter } from './routes/computer.js';
 import { healthRouter } from './routes/health.js';
 import { estimatorRouter } from './routes/estimator.js';
@@ -36,14 +40,37 @@ export function createApp(): Express {
     }),
   );
 
-  // Body + cookie parsing (with a small JSON size cap).
+  // Body + cookie parsing.
   //
-  // The estimator is the exception: a DocuSketch scan of a whole house plus a
-  // MICA drying log is megabytes of JSON, so it gets its own, larger cap mounted
-  // ahead of the global one. Everything else stays at 10 kB, which is all any
-  // auth or onboarding request has any business being.
-  app.use('/api/estimator', express.json({ limit: '8mb' }));
-  app.use(express.json({ limit: '10kb' }));
+  // Most writes are small, so the cap stays tight everywhere except the few
+  // routes that legitimately carry bulk. The parser is CHOSEN here rather than
+  // stacked on those routes: the first json() to run consumes the stream, so a
+  // route-level raise would never be reached — the global cap would already have
+  // rejected the upload with 413.
+  //
+  // Every raised limit therefore has to be declared in this one place. A
+  // DocuSketch scan of a whole house plus a MICA drying log is megabytes of
+  // JSON; a CSV import is a whole spreadsheet; task execution carries job files.
+  const csvImportPath = /^\/api\/integrations\/sources\/[^/]+\/import\/?$/;
+  const estimatorPath = /^\/api\/estimator(\/|$)/;
+  const aiPath = /^\/api\/ai(\/|$)/;
+
+  const standardJson = express.json({ limit: '256kb' });
+  const csvImportJson = express.json({ limit: '12mb' });
+  const estimatorJson = express.json({ limit: '8mb' });
+  const aiJson = express.json({ limit: '2mb' });
+
+  app.use((req, res, next) => {
+    const parse = csvImportPath.test(req.path)
+      ? csvImportJson
+      : estimatorPath.test(req.path)
+        ? estimatorJson
+        : aiPath.test(req.path)
+          ? aiJson
+          : standardJson;
+    parse(req, res, next);
+  });
+
   app.use(cookieParser());
 
   // Routes.
@@ -52,6 +79,12 @@ export function createApp(): Express {
   app.use('/api/org', orgRouter);
   app.use('/api/estimator', estimatorRouter);
   app.use('/api/xactimate', xactimateRouter);
+  // The 2 MB cap for task execution is set by the parser chooser above, not
+  // here: a second json() on this mount would never see the stream.
+  app.use('/api/ai', aiRouter);
+  app.use('/api/crm', crmRouter);
+  app.use('/api/backups', backupRouter);
+  app.use('/api/integrations', integrationsRouter);
   app.use('/api/computer', computerRouter);
 
   // 404 + error handling (must be last).

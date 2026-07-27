@@ -1,8 +1,10 @@
 # Atmosphere
 
-Authentication, organization onboarding, and **computer use** for **Atmosphere** — a React
-UI backed by an Express BFF (Backend-for-Frontend) that mediates **Supabase Auth**, a
-Row-Level-Security protected Postgres schema, and Claude's computer-use tool.
+A platform for restoration and construction organizations — a React UI backed by an Express
+BFF (Backend-for-Frontend) that mediates **Supabase Auth** and a Row-Level-Security
+protected Postgres schema, plus **computer use** (Claude sees and operates real machines)
+and a **reinforcement learning layer** that makes the platform measurably better at
+executing work over time.
 
 ```
 ┌────────────────────┐      /api/*        ┌────────────────────┐    Supabase JS (JWT)   ┌──────────────────┐
@@ -43,6 +45,13 @@ Row-Level-Security protected Postgres schema, and Claude's computer-use tool.
    performed but never billed (see below).
 7. **Computer use** — connect an Anthropic API key, run the agent on any computer, and
    Claude can see its screen and operate it. The whole setup is one key and one command.
+7. **CRM backend** — customers, properties, leads, jobs, and their timeline, plus our own
+   backups and a verbatim copy of the data that currently lives only inside other
+   companies' software. Backend infrastructure only, no UI yet — see
+   **[docs/CRM.md](docs/CRM.md)**.
+8. **Executes work, and learns from it** — drafts scopes, builds estimates, extracts
+   document fields, writes customer updates. Every run is scored, and the routing policy
+   improves from those scores. See [Learning layer](#learning-layer) below.
 
 ## Why this shape?
 
@@ -74,6 +83,18 @@ JWT:
 | `xactimate_price_lists` | Synced price lists, shared across the org.                     |
 | `carrier_agreements` | Per-org carrier program terms — one set per carrier + program.   |
 | `carrier_deviations` | Documented, evidence-backed exceptions to a term, per job.       |
+| `ai_arms`      | The action space: model × prompt variant per task type.              |
+| `ai_arm_stats` | Learned posteriors per (arm × context). Aggregates only, no content.  |
+| `ai_runs`      | The episode log — every task execution, its cost and its outcome.    |
+| `ai_exemplars` | Accepted past outputs, mined into few-shot examples. Org-scoped.     |
+| `ai_golden_cases` | Regression suite that gates any change to the serving policy.     |
+
+The CRM adds its own org-scoped tables under the same RLS model (`crm_accounts`,
+`crm_contacts`, `crm_properties`, `crm_leads`, `crm_jobs`, `crm_activities`), a verbatim
+append-only mirror of external applications (`crm_external_*`), and the backup catalog and
+change ledger (`backup_*`, `crm_audit_log`). See **[docs/CRM.md](docs/CRM.md)** — those
+migrations ship in `backend/supabase/migrations/` and are **not yet applied** to the live
+project.
 
 Membership checks used by the policies live in a **private schema** (not exposed as RPCs) to
 avoid recursive-policy issues and to keep the API surface minimal. Onboarding writes go
@@ -92,14 +113,25 @@ through two `SECURITY DEFINER` functions that validate `auth.uid()` internally:
 Atmosphere/
 ├── backend/          Express + TypeScript BFF
 │   ├── src/
-│   │   ├── config.ts             Validated config (Supabase URL, keys, cookies, CORS)
+│   │   ├── config.ts             Validated config (Supabase, cookies, CORS, model providers)
 │   │   ├── app.ts                Express app assembly (helmet, cors, cookies, routes)
 │   │   ├── index.ts              Server bootstrap + graceful shutdown
 │   │   ├── lib/
 │   │   │   ├── supabase.ts       Anon + per-request user-scoped client factories
 │   │   │   ├── session.ts        httpOnly session-cookie set/clear
 │   │   │   ├── validation.ts     zod schemas (credentials, org create/join)
-│   │   │   └── errors.ts         Typed HTTP errors
+│   │   │   ├── crmValidation.ts  zod schemas + camelCase↔snake_case row mapping
+│   │   │   ├── orgContext.ts     Resolves the caller's org; never trusts the body
+│   │   │   ├── errors.ts         Typed HTTP errors
+│   │   │   ├── backup/           Archive format, storage drivers, runner, scheduler
+│   │   │   └── integrations/     Connectors + the append-only external mirror
+│   │   ├── ai/                   Learning layer — see docs/reinforcement-learning.md
+│   │   │   ├── policy.ts         Thompson sampling + hierarchical context backoff
+│   │   │   ├── reward.ts         The definition of "executed correctly"
+│   │   │   ├── verifiers.ts      Deterministic checks + the serving gate
+│   │   │   ├── executor.ts       route → execute → verify → record, with failover
+│   │   │   ├── learn.ts          Promotion gate, exemplar mining, training export
+│   │   │   └── providers/        OpenAI · Anthropic · Google · xAI · open weights
 │   │   ├── middleware/
 │   │   │   ├── requireAuth.ts    Verify access token; transparent refresh
 │   │   │   └── errorHandler.ts   404 + central JSON error handler
@@ -108,6 +140,10 @@ Atmosphere/
 │   │   │   ├── org.ts            onboarding: me / create / join / members
 │   │   │   ├── estimator.ts      build / save / export / settings / catalog
 │   │   │   ├── xactimate.ts      connect / disconnect / price lists / push
+│   │   │   ├── crm.ts            CRM CRUD, lead conversion, timeline, audit
+│   │   │   ├── backups.ts        Snapshot status / history / trigger / verify
+│   │   │   ├── integrations.ts   External sources, syncs, CSV import, mirror
+│   │   │   ├── ai.ts             task execution / feedback / policy visibility
 │   │   │   ├── computer.ts       computer use: keys, pairing, runs, SSE
 │   │   │   └── health.ts         liveness probe
 │   │   ├── computer/
@@ -117,22 +153,26 @@ Atmosphere/
 │   │   │   ├── agentTokens.ts    Pairing codes + HMAC-signed agent tokens
 │   │   │   ├── agentHub.ts       WebSocket registry of connected computers
 │   │   │   └── runner.ts         The agent loop + live run transcripts
-│   │   └── estimator/            The Mitigation Estimator agent
-│   │       ├── agent.ts          The pipeline, end to end
-│   │       ├── types.ts          Canonical domain model
-│   │       ├── ingest/           DocuSketch / MICA / photos / notes → assessment
-│   │       ├── lib/              Geometry + IICRC S500 psychrometrics
-│   │       ├── rules/            Scope derivation, then scope → line items
-│   │       ├── standards/        IICRC citation registry + compliance review
-│   │       ├── carrier/          Carrier identification, program terms, deviations
-│   │       ├── catalog/          Seed line items + price-list reconciliation
-│   │       ├── pricing.ts        Subtotal, O&P, tax, margin
-│   │       ├── profitability.ts  Findings: unbilled work, evidence gaps, margin
-│   │       ├── xactimate/        Consent, credential vault, drivers (mock/api/web)
-│   │       ├── export/           CSV / XML / scope sheet, for manual import
-│   │       ├── fixtures/         A worked example
-│   │       └── demo.ts           npm run estimator:demo
+│   │   ├── estimator/            The Mitigation Estimator agent
+│   │   │   ├── agent.ts          The pipeline, end to end
+│   │   │   ├── types.ts          Canonical domain model
+│   │   │   ├── ingest/           DocuSketch / MICA / photos / notes → assessment
+│   │   │   ├── lib/              Geometry + IICRC S500 psychrometrics
+│   │   │   ├── rules/            Scope derivation, then scope → line items
+│   │   │   ├── standards/        IICRC citation registry + compliance review
+│   │   │   ├── carrier/          Carrier identification, program terms, deviations
+│   │   │   ├── catalog/          Seed line items + price-list reconciliation
+│   │   │   ├── pricing.ts        Subtotal, O&P, tax, margin
+│   │   │   ├── profitability.ts  Findings: unbilled work, evidence gaps, margin
+│   │   │   ├── xactimate/        Consent, credential vault, drivers (mock/api/web)
+│   │   │   ├── export/           CSV / XML / scope sheet, for manual import
+│   │   │   ├── fixtures/         A worked example
+│   │   │   └── demo.ts           npm run estimator:demo
+│   │   └── scripts/              Backup CLI, self-checks, learning cycle (cron)
+│   ├── supabase/migrations/      CRM, mirror, and backup schema (not yet applied)
 │   └── .env.example
+├── db/migrations/    SQL schema (RLS policies + SECURITY DEFINER write path)
+├── docs/             Architecture notes
 ├── frontend/         React + Vite + TypeScript + Tailwind
 │   ├── src/
 │   │   ├── pages/LoginPage.tsx        Branded login + signup screen
@@ -227,6 +267,11 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | POST   | `/api/xactimate/price-lists/upload` | cookie | `{ id, name, entries }` | Upload an exported price list — no login  |
 | POST   | `/api/xactimate/push` | cookie | `{ estimate, confirmedFindings }` | Write the estimate into the account   |
 | GET    | `/api/xactimate/activity` | cookie | —                        | What was done in the account, under the grant |
+| GET    | `/api/ai/tasks`      | cookie | —                             | Task catalog and how each one is judged      |
+| POST   | `/api/ai/tasks/:type/run` | cookie | `{ input, workType? }`   | Execute a task; returns `runId`              |
+| POST   | `/api/ai/runs/:id/feedback` | cookie | `{ disposition? , editedOutput? }` | Close the learning loop         |
+| GET    | `/api/ai/policy`     | cookie | —                             | Every arm, its posterior, cost and status    |
+| GET    | `/api/ai/runs`       | cookie | —                             | Recent episodes for the caller's org         |
 | GET    | `/api/computer/status` | cookie | —                           | Key status, online computers, model options  |
 | PUT    | `/api/computer/credentials` | cookie | `{ apiKey }`           | Connect the org's Anthropic key              |
 | DELETE | `/api/computer/credentials` | cookie | —                      | Disconnect it                                |
@@ -241,6 +286,9 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 
 Agents also hold a WebSocket open at `/api/computer/agent-socket`, authenticated with the
 token from pairing rather than a session cookie.
+
+The CRM, backup, and integration endpoints (`/api/crm/*`, `/api/backups/*`,
+`/api/integrations/*`) are documented in **[docs/CRM.md](docs/CRM.md)**.
 
 `role` ∈ `project_manager | field_technician | accountant | office_manager | sales`.
 `workType` ∈ `mitigation | construction`.
@@ -520,6 +568,66 @@ worse on a submitted estimate than an honest chapter reference. If you hold a co
 S500, pinning a requirement to its clause is a one-line change — set `section` and flip
 `confidence` to `'clause'` — and the estimate, the exports and the UI all start printing the
 number with no other edit.
+## Learning layer
+
+Full architecture: **[docs/reinforcement-learning.md](docs/reinforcement-learning.md)**.
+
+Most AI features are static — pick a model, write a prompt, ship it, and it performs
+identically forever. This one closes the loop instead: every task the platform executes
+produces evidence, and that evidence changes how the next one is executed.
+
+It is a **contextual bandit** over *executor configurations*, not model training. The
+action space is `provider × model × prompt variant`; the reward is a scalar in `[0,1]` from
+deterministic verifiers, human accept/edit signals, cost and latency. We learn which setup
+does each kind of work best — so the platform improves the moment a better model ships
+anywhere in the industry, with no retraining and no migration.
+
+**Multi-provider — OpenAI, Anthropic, Google, xAI (Grok) and open weights — is the
+mechanism, not vendor hedging.** With one model there is no routing decision to learn and
+the ceiling is fixed at whatever that vendor is good at this quarter. With five, model
+specialisation becomes discoverable per task type, cheap arms can win the work that does
+not need a frontier model, and a price rise or deprecation is just an arm's posterior
+moving rather than a migration project. Every API key is optional: an unset key removes
+that vendor's arms and nothing else changes.
+
+Quality is **monotone by construction**:
+
+- Deterministic checks gate every output — money that does not add up, a quoted span that
+  is not in the source document, or a promise the job record cannot support never reaches
+  a customer, no matter which arm produced it.
+- ~90% of traffic stays on the proven champion; challengers are capped at a small,
+  configurable exploration budget.
+- Promotion requires the challenger's *lower confidence bound* to beat the champion's
+  *mean*, plus a clean run of a fixed regression suite. An arm cannot be promoted on a
+  lucky streak.
+- If an experiment fails verification the run is still recorded — that is real evidence —
+  and the champion produces what the user actually receives. Exploration costs us money;
+  it does not cost the user a wrong answer.
+- Vendor outages and timeouts fail over **without** recording a reward, so a bad afternoon
+  at one provider never teaches the policy to abandon a good model.
+
+Learning happens at two tiers with two privacy postures. **Global** tables hold aggregates
+only — no customer content — so every org's work improves the routing every other org
+benefits from. **Org** tables hold real job content and are RLS-scoped, exactly like the
+rest of this schema. Accepted outputs are mined into per-org few-shot exemplars, which is
+how the platform learns *one company's* house style without training any weights.
+
+Because every run is a labelled comparison scored by the same verifier and the same people,
+the episode log is also a preference dataset — generated as a by-product of doing the work.
+Export it to fine-tune an open-weights model, which then re-enters the pool as an ordinary
+candidate arm and has to win on the same evidence as everyone else.
+
+```bash
+cd backend
+npm test                                    # verify the decision logic
+npm run learn                               # offline cycle: promotions + exemplar mining
+npm run learn -- --export draft_scope       # preference pairs as JSONL, for fine-tuning
+```
+
+Apply the schema with `psql "$DATABASE_URL" -f db/migrations/0002_reinforcement_learning.sql`.
+Start with `AI_EXPLORATION_ENABLED=false` — runs are still recorded and scored, so you
+accumulate the evidence that makes exploration informed before it touches real users.
+
 ## Computer use
 
 Claude sees a screenshot of a real machine, asks for a click or a keystroke, and the
@@ -636,6 +744,15 @@ See `backend/.env.example` and `frontend/.env.example`. Key points:
 - `ANTHROPIC_API_KEY` — optional **server-only secret**. A server-wide default for computer
   use, so a deployment can ship with it already working. A key connected in the UI takes
   priority over it.
+- `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY` / `XAI_API_KEY` / `OSS_BASE_URL`
+  — **server-only secrets**, all optional. Each unset key removes that vendor's arms from
+  the learning layer's routing pool; the loop still runs on whatever remains. With one key
+  it learns over prompt variants, with several it also learns which vendor suits which kind
+  of work. `ANTHROPIC_API_KEY` does double duty: it is also the server-wide default for
+  **computer use**, so a deployment can ship with that already working. A key connected in
+  the UI takes priority over it there.
+- `AI_EXPLORATION_ENABLED` / `AI_CANDIDATE_TRAFFIC_SHARE` — the exploration budget. Runs
+  are recorded and scored either way; this only controls whether challengers get traffic.
 - `AI_CREDENTIALS_KEY` — **server-only secret**, required in production. Encrypts each
   organization's Anthropic key at rest. Generate with `openssl rand -base64 48`. Rotating
   it invalidates stored keys, which organizations simply re-enter.
@@ -669,3 +786,12 @@ See `backend/.env.example` and `frontend/.env.example`. Key points:
   estimate says so when no agreement is loaded.
 - Leave `XACTIMATE_DRIVER` on `mock` until an estimator has checked the seed catalog against
   your own price list. A verified sync is what turns placeholder prices into real ones.
+- **Set `BACKUP_ENCRYPTION_KEY`.** The server refuses to boot in production with backups
+  enabled and no key — an archive holds every customer record we have, and unlike the
+  database it gets copied to laptops and object stores. Generate with
+  `openssl rand -base64 32`, and keep old keys when rotating or their archives become
+  unreadable.
+- **Scheduled backups need `SUPABASE_SERVICE_ROLE_KEY`.** A snapshot must read every org,
+  which no user session can do. Without it, backups stay off and say so at boot.
+- **The backup scheduler is in-process.** Run several API instances and each takes its own
+  snapshot; move it to a dedicated worker or cron trigger before scaling out.

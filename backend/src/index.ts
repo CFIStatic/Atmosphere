@@ -1,6 +1,7 @@
 import { createApp } from './app.js';
 import { config } from './config.js';
 import { connections } from './estimator/xactimate/index.js';
+import { startBackupScheduler, stopBackupScheduler } from './lib/backup/scheduler.js';
 import { agentHub } from './computer/agentHub.js';
 
 const app = createApp();
@@ -15,6 +16,9 @@ const server = app.listen(config.port, () => {
       `  → Computer use: ${config.computerUse.enabled ? `on (${config.computerUse.defaultModel})` : 'off'}\n` +
       `  → Mode: ${config.isProduction ? 'production' : 'development'}`,
   );
+
+  // Started after the listener so a backup can never delay readiness.
+  startBackupScheduler();
 });
 
 // Computer-use agents connect over WebSocket on the same port, so they inherit
@@ -25,18 +29,15 @@ if (config.computerUse.enabled) {
 }
 
 // Graceful shutdown.
-//
-// Xactimate sessions are closed first and deliberately: a browser-driver session
-// owns a real Chromium process, and an in-memory credential should not outlive
-// the request it was for. Both are torn down before the process exits.
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
     // eslint-disable-next-line no-console
     console.log(`\n[atmosphere-backend] received ${signal}, shutting down…`);
-    // Both subsystems own resources the process should not simply drop: the
-    // agent hub holds open WebSockets, and a Xactimate browser session owns a
-    // real Chromium process plus an in-memory credential. The hub closes
-    // synchronously; the Xactimate teardown is awaited before the port does.
+    // Three subsystems hold resources the process should not simply drop. The
+    // scheduler and the agent hub stop synchronously; the Xactimate teardown is
+    // asynchronous — a browser-driver session owns a real Chromium process and
+    // an in-memory credential — so the port is closed only once it settles.
+    stopBackupScheduler();
     agentHub.close();
     void connections
       .closeAll()
