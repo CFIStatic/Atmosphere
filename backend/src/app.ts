@@ -6,6 +6,9 @@ import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
 import { profileRouter } from './routes/profile.js';
+import { auditRouter } from './routes/audit.js';
+import { jobsRouter } from './routes/jobs.js';
+import { memoryRouter } from './routes/memory.js';
 import { technicianRouter } from './routes/technician.js';
 import { billingRouter } from './routes/billing.js';
 import { usageRouter } from './routes/usage.js';
@@ -21,6 +24,8 @@ import { integrationsRouter } from './routes/integrations.js';
 import { computerRouter } from './routes/computer.js';
 import { estimatorRouter } from './routes/estimator.js';
 import { healthRouter } from './routes/health.js';
+import { mitigationRouter } from './routes/mitigation.js';
+import { xactimateRouter } from './routes/xactimate.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
 import { verificationHook, pumpVerificationQueue } from './lib/verifierRunner.js';
@@ -69,28 +74,37 @@ export function createApp(): Express {
   //
   // CRM writes are bigger than an auth payload but still small, so the cap
   // stays tight everywhere except the routes that legitimately carry more: a
-  // whole spreadsheet on CSV import, a model prompt on /api/ai or /api/model,
-  // and a pasted mitigation estimate (a whole-house Xactimate export) on the
-  // estimator.
+  // whole spreadsheet on CSV import, a model prompt on /api/ai or /api/model, a
+  // pasted mitigation estimate (a whole-house Xactimate export) on the
+  // construction estimator, and a DocuSketch scan plus a MICA drying log on
+  // /api/mitigation.
+  //
   // The parser is CHOSEN here rather than stacked on those routes: the first
   // json() to run consumes the stream, so a route-level raise would never be
   // reached — the global cap would already have rejected the upload with 413.
+  // Every raised limit therefore has to be declared in this one place.
   //
   // A Web Access data-entry run carries the rows to be entered, which is more
   // than a login form's worth of JSON but comfortably inside the 256kb
   // standard, so it needs no exception of its own.
   const csvImportPath = /^\/api\/integrations\/sources\/[^/]+\/import\/?$/;
   const bulkTextPath = /^\/api\/(ai|model|estimator)(\/|$)/;
+  const mitigationPath = /^\/api\/mitigation(\/|$)/;
   const standardJson = express.json({ limit: '256kb' });
   const csvImportJson = express.json({ limit: '12mb' });
   const bulkTextJson = express.json({ limit: '2mb' });
+  // The mitigation estimator takes raw vendor exports rather than pasted text,
+  // so its ceiling is an order of magnitude above the others'.
+  const mitigationJson = express.json({ limit: '8mb' });
 
   app.use((req, res, next) => {
     const parse = csvImportPath.test(req.path)
       ? csvImportJson
-      : bulkTextPath.test(req.path)
-        ? bulkTextJson
-        : standardJson;
+      : mitigationPath.test(req.path)
+        ? mitigationJson
+        : bulkTextPath.test(req.path)
+          ? bulkTextJson
+          : standardJson;
     parse(req, res, next);
   });
 
@@ -101,6 +115,11 @@ export function createApp(): Express {
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
   app.use('/api/profile', profileRouter);
+  app.use('/api/audit', auditRouter);
+  app.use('/api/mitigation', mitigationRouter);
+  app.use('/api/xactimate', xactimateRouter);
+  app.use('/api/jobs', jobsRouter);
+  app.use('/api/memory', memoryRouter);
   app.use('/api/technician', technicianRouter);
   app.use('/api/billing', billingRouter);
   app.use('/api/usage', usageRouter);

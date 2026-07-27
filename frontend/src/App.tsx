@@ -8,6 +8,11 @@ import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { AuditPage } from './pages/AuditPage';
+import { JobsPage } from './pages/JobsPage';
+import { JobDetailPage } from './pages/JobDetailPage';
+import { MemoryPage } from './pages/MemoryPage';
+import { TeamMemoryPage } from './pages/TeamMemoryPage';
 import { TechnicianPage } from './pages/TechnicianPage';
 import { BillingPage } from './pages/BillingPage';
 import { UsagePage } from './pages/UsagePage';
@@ -16,6 +21,7 @@ import { PmProjectPage } from './pages/PmProjectPage';
 import { WebAccessPage } from './pages/WebAccessPage';
 import { ComputerUsePage } from './pages/ComputerUsePage';
 import { EstimatorPage } from './pages/EstimatorPage';
+import { MitigationEstimatorPage } from './pages/MitigationEstimatorPage';
 import { SpinnerIcon } from './components/icons';
 
 function FullScreenSpinner() {
@@ -81,6 +87,35 @@ export default function App() {
             }
           />
 
+          <Route
+            path="/audit"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <AuditPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Agent Memory. Same guard as the dashboard: all of it is scoped to
+              an organization, so onboarding has to come first. */}
+          {[
+            { path: '/jobs', element: <JobsPage /> },
+            { path: '/jobs/:id', element: <JobDetailPage /> },
+            { path: '/memory', element: <MemoryPage /> },
+            { path: '/team', element: <TeamMemoryPage /> },
+          ].map(({ path, element }) => (
+            <Route
+              key={path}
+              path={path}
+              element={
+                <ProtectedRoute>
+                  <RequireOnboarded>{element}</RequireOnboarded>
+                </ProtectedRoute>
+              }
+            />
+          ))}
           {/* The technician app. Open to every onboarded member — a project
               manager reviewing a job needs the same capture tools a field
               technician does. */}
@@ -156,6 +191,17 @@ export default function App() {
           />
 
           <Route
+            path="/estimator"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <EstimatorPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
             path="/computer-use"
             element={
               <ProtectedRoute>
@@ -167,11 +213,11 @@ export default function App() {
           />
 
           <Route
-            path="/estimator"
+            path="/mitigation"
             element={
               <ProtectedRoute>
                 <RequireOnboarded>
-                  <EstimatorPage />
+                  <MitigationEstimatorPage />
                 </RequireOnboarded>
               </ProtectedRoute>
             }

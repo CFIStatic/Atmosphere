@@ -156,6 +156,288 @@ export const joinOrgSchema = z.object({
 export type CreateOrgInput = z.infer<typeof createOrgSchema>;
 export type JoinOrgInput = z.infer<typeof joinOrgSchema>;
 
+/* -------------------------------------------------------------------------
+ * Audit ledger
+ *
+ * These mirror the check constraints in db/audit_ledger.sql. Validating here
+ * as well is not redundant: a rejected insert reaches the caller as an opaque
+ * Postgres error, and an agent posting its own trace deserves to be told which
+ * field it got wrong.
+ * ---------------------------------------------------------------------- */
+
+export const AGENT_RUN_STATUSES = ['queued', 'running', 'succeeded', 'failed', 'cancelled'] as const;
+export const AGENT_ACTOR_TYPES = ['user', 'system', 'schedule', 'agent'] as const;
+export const AGENT_STEP_STATUSES = ['ok', 'error', 'pending'] as const;
+
+/**
+ * 'event' is the catch-all, and it is what an unrecognised type is coerced to
+ * rather than rejected — losing a step is the one outcome an audit trail
+ * cannot afford, so an agent ahead of this list still gets recorded.
+ */
+export const AGENT_STEP_TYPES = [
+  'status',
+  'thought',
+  'message',
+  'tool_call',
+  'tool_result',
+  'observation',
+  'navigation',
+  'decision',
+  'artifact',
+  'usage',
+  'error',
+  'event',
+] as const;
+
+const agentKeyField = z
+  .string({ required_error: 'agentKey is required' })
+  .trim()
+  .regex(/^[a-z][a-z0-9_]{1,48}$/, 'agentKey must be lower_snake_case');
+
+/** Unknown step types degrade to 'event' instead of failing the write. */
+const stepTypeField = z
+  .string()
+  .optional()
+  .transform((value) =>
+    value && (AGENT_STEP_TYPES as readonly string[]).includes(value) ? value : 'event',
+  );
+
+export const auditStepSchema = z.object({
+  type: stepTypeField,
+  action: z.string().trim().max(120).optional().nullable(),
+  detail: z.string().max(8000).optional().nullable(),
+  target: z.string().max(2000).optional().nullable(),
+  payload: z.unknown().optional(),
+  status: z.enum(AGENT_STEP_STATUSES).optional(),
+  error: z.string().max(4000).optional().nullable(),
+  seq: z.number().int().positive().optional(),
+  startedAt: z.string().datetime({ offset: true }).optional().nullable(),
+  finishedAt: z.string().datetime({ offset: true }).optional().nullable(),
+  durationMs: z.number().int().nonnegative().optional().nullable(),
+});
+
+export const auditStepsSchema = z.object({
+  steps: z.array(auditStepSchema).min(1, 'Send at least one step').max(200, 'Send at most 200 steps at a time'),
+});
+
+/**
+ * What an agent may declare when opening a run.
+ *
+ * `orgId` is deliberately absent: it comes from the caller's membership, so a
+ * caller cannot file work against an organization they do not belong to even
+ * before RLS gets a say. `sourceTable`/`sourceId` are absent for the same kind
+ * of reason — provenance is stamped by the database bridges, and letting a
+ * client claim it would let it collide with a mirrored row.
+ */
+export const auditRunCreateSchema = z.object({
+  agentKey: agentKeyField,
+  title: z.string({ required_error: 'title is required' }).trim().min(1, 'title is required').max(500),
+  agentLabel: z.string().trim().max(120).optional().nullable(),
+  actorType: z.enum(AGENT_ACTOR_TYPES).optional(),
+  actorLabel: z.string().trim().max(120).optional().nullable(),
+  parentRunId: z.string().uuid('parentRunId must be a run id').optional().nullable(),
+  status: z.enum(AGENT_RUN_STATUSES).optional(),
+  input: z.unknown().optional(),
+  startedAt: z.string().datetime({ offset: true }).optional().nullable(),
+  /** Opening a run and recording its first steps in one call. */
+  steps: z.array(auditStepSchema).max(200).optional(),
+});
+
+export const auditRunPatchSchema = z
+  .object({
+    status: z.enum(AGENT_RUN_STATUSES).optional(),
+    summary: z.string().max(4000).optional().nullable(),
+    result: z.unknown().optional(),
+    error: z.string().max(4000).optional().nullable(),
+    inputTokens: z.number().int().nonnegative().optional(),
+    outputTokens: z.number().int().nonnegative().optional(),
+    finishedAt: z.string().datetime({ offset: true }).optional().nullable(),
+  })
+  .refine((value) => Object.keys(value).length > 0, { message: 'Nothing to update' });
+
+/** Filters behind the Audit tab's run list. All optional; all narrowing. */
+export const auditRunQuerySchema = z.object({
+  agent: agentKeyField.optional(),
+  status: z.enum(AGENT_RUN_STATUSES).optional(),
+  actorType: z.enum(AGENT_ACTOR_TYPES).optional(),
+  actorUserId: z.string().uuid().optional(),
+  q: z.string().trim().max(200).optional(),
+  from: z.string().datetime({ offset: true }).optional(),
+  to: z.string().datetime({ offset: true }).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  /** Keyset cursor, "<iso timestamp>|<run id>", from the previous page. */
+  cursor: z.string().max(120).optional(),
+});
+
+export type AuditRunQuery = z.infer<typeof auditRunQuerySchema>;
+export type AuditStepInput = z.infer<typeof auditStepSchema>;
+/* ==========================================================================
+ * Agent Memory — jobs, tasks, crew assignments and work logs
+ *
+ * These mirror the CHECK constraints in the migration. Validating here as well
+ * is not redundant: it turns a Postgres constraint violation into a field-level
+ * message the form can render, while the database stays the actual authority.
+ * ========================================================================== */
+
+/** crm_job_status — the CRM owns the job lifecycle; this mirrors its enum. */
+export const JOB_STATUSES = [
+  'draft',
+  'scheduled',
+  'in_progress',
+  'on_hold',
+  'completed',
+  'invoiced',
+  'paid',
+  'cancelled',
+] as const;
+
+/** crm_jobs.priority is a smallint 1-5, 1 being the most urgent. */
+export const PRIORITIES = [1, 2, 3, 4, 5] as const;
+
+/** crm_loss_type. */
+export const LOSS_TYPES = ['water', 'fire', 'mold', 'storm', 'biohazard', 'contents', 'other'] as const;
+
+export const TASK_STATUSES = ['todo', 'in_progress', 'blocked', 'done', 'cancelled'] as const;
+export const TASK_PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
+export const WORK_LOG_KINDS = [
+  'work',
+  'note',
+  'call',
+  'site_visit',
+  'photo',
+  'material',
+  'issue',
+] as const;
+export const ASSIGNMENT_ROLES = ['lead', 'crew', 'estimator', 'supervisor', 'observer'] as const;
+
+const jobStatusSchema = z.enum(JOB_STATUSES, {
+  errorMap: () => ({ message: 'Select a valid job status' }),
+});
+const jobPrioritySchema = z
+  .number()
+  .int()
+  .min(1, 'Priority runs from 1 (most urgent) to 5')
+  .max(5, 'Priority runs from 1 (most urgent) to 5');
+const taskStatusSchema = z.enum(TASK_STATUSES, {
+  errorMap: () => ({ message: 'Select a valid task status' }),
+});
+const taskPrioritySchema = z.enum(TASK_PRIORITIES, {
+  errorMap: () => ({ message: 'Select a valid priority' }),
+});
+
+/** Optional free-text field: '' from an untouched form input means "not set". */
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max, `Must be at most ${max} characters`)
+    .optional()
+    .transform((v) => (v === '' ? undefined : v));
+
+const optionalDate = z
+  .string()
+  .datetime({ offset: true, message: 'Enter a valid date' })
+  .optional()
+  .nullable();
+
+/**
+ * Opening a job writes to `crm_jobs`. This is the field-facing subset — the
+ * fuller CRUD, with financials and the links to accounts, contacts and
+ * properties, stays with `/api/crm/jobs`. Customer and address are absent on
+ * purpose: they live on `crm_contacts` and `crm_properties`, not on the job.
+ */
+export const createJobSchema = z.object({
+  title: z
+    .string({ required_error: 'Job name is required' })
+    .trim()
+    .min(2, 'Job name is too short')
+    .max(200, 'Job name is too long'),
+  workType: workTypeSchema,
+  description: optionalText(4000),
+  lossType: z.enum(LOSS_TYPES).optional(),
+  priority: jobPrioritySchema.optional(),
+  status: jobStatusSchema.optional(),
+  claimNumber: optionalText(60),
+  policyNumber: optionalText(60),
+  ownerId: z.string().uuid('Select a valid team member').optional().nullable(),
+  scheduledStart: optionalDate,
+});
+
+/** Every field optional — a PATCH may carry just the one thing that changed. */
+export const updateJobSchema = createJobSchema
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to update' });
+
+export const createTaskSchema = z.object({
+  title: z
+    .string({ required_error: 'Task title is required' })
+    .trim()
+    .min(2, 'Task title is too short')
+    .max(200, 'Task title is too long'),
+  details: optionalText(4000),
+  status: taskStatusSchema.optional(),
+  priority: taskPrioritySchema.optional(),
+  assignedTo: z.string().uuid('Select a valid team member').optional().nullable(),
+  dueAt: optionalDate,
+  position: z.number().int().min(0).max(100_000).optional(),
+});
+
+export const updateTaskSchema = createTaskSchema
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to update' });
+
+export const createWorkLogSchema = z.object({
+  kind: z.enum(WORK_LOG_KINDS, { errorMap: () => ({ message: 'Select a valid entry type' }) }),
+  body: z
+    .string({ required_error: 'Describe the work' })
+    .trim()
+    .min(1, 'Describe the work')
+    .max(8000, 'That entry is too long'),
+  taskId: z.string().uuid().optional().nullable(),
+  minutes: z
+    .number()
+    .int('Minutes must be a whole number')
+    .min(0, 'Minutes cannot be negative')
+    .max(24 * 60, 'That is more than a day')
+    .optional()
+    .nullable(),
+  occurredAt: optionalDate,
+});
+
+export const updateWorkLogSchema = z.object({
+  body: z.string().trim().min(1, 'Describe the work').max(8000, 'That entry is too long').optional(),
+  kind: z.enum(WORK_LOG_KINDS).optional(),
+  minutes: z.number().int().min(0).max(24 * 60).optional().nullable(),
+});
+
+export const assignAgentSchema = z.object({
+  userId: z.string({ required_error: 'Choose a team member' }).uuid('Choose a valid team member'),
+  roleOnJob: z
+    .enum(ASSIGNMENT_ROLES, { errorMap: () => ({ message: 'Select a valid role' }) })
+    .optional(),
+});
+
+/**
+ * Query parameters for the memory feed. Everything arrives as a string from the
+ * URL, so numbers are coerced. `before` is the opaque cursor: the `seq` of the
+ * oldest row already shown.
+ */
+export const memoryQuerySchema = z.object({
+  jobId: z.string().uuid().optional(),
+  actorId: z.string().uuid().optional(),
+  entityType: z.enum(['job', 'task', 'assignment', 'work_log', 'session']).optional(),
+  eventType: z.string().trim().max(60).optional(),
+  since: z.string().datetime({ offset: true }).optional(),
+  until: z.string().datetime({ offset: true }).optional(),
+  search: z.string().trim().max(120).optional(),
+  before: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+
+export type CreateJobInput = z.infer<typeof createJobSchema>;
+export type CreateTaskInput = z.infer<typeof createTaskSchema>;
+export type CreateWorkLogInput = z.infer<typeof createWorkLogSchema>;
+export type MemoryQuery = z.infer<typeof memoryQuerySchema>;
 /* ---- Technician app ---- */
 
 /**

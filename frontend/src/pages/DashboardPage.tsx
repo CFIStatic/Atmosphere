@@ -5,10 +5,18 @@ import {
   api,
   ROLE_LABELS,
   WORK_TYPE_LABELS,
+  JOB_STATUS_LABELS,
+  JOB_STATUS_STYLES,
+  formatMinutes,
+  timeAgo,
   type BillingOverview,
+  type JobSummary,
+  type MemoryEvent,
+  type MemoryStats,
   type OrgMember,
 } from '../lib/api';
-import { AppShell } from '../components/AppShell';
+import { AppShell, PanelSpinner } from '../components/AppShell';
+import { MemoryFeed } from '../components/MemoryFeed';
 import { PinSetupCard } from '../components/PinSetupCard';
 import { EscalationQueue } from '../components/EscalationQueue';
 import { SpinnerIcon, CheckIcon, MicIcon, MonitorIcon, GlobeIcon } from '../components/icons';
@@ -18,6 +26,9 @@ export function DashboardPage() {
   const { user, membership } = useAuth();
   const [members, setMembers] = useState<OrgMember[] | null>(null);
   const [billing, setBilling] = useState<BillingOverview | null>(null);
+  const [jobs, setJobs] = useState<JobSummary[] | null>(null);
+  const [events, setEvents] = useState<MemoryEvent[] | null>(null);
+  const [stats, setStats] = useState<MemoryStats | null>(null);
   const [copied, setCopied] = useState(false);
 
   const org = membership?.org;
@@ -42,6 +53,33 @@ export function DashboardPage() {
       .catch(() => {
         if (!cancelled) setBilling(null);
       });
+
+    // The record and the open jobs. Each fails to an empty state on its own —
+    // the dashboard should still render if one endpoint is unhappy.
+    api
+      .getJobs({ status: 'open' })
+      .then(({ jobs }) => {
+        if (!cancelled) setJobs(jobs);
+      })
+      .catch(() => {
+        if (!cancelled) setJobs([]);
+      });
+
+    api
+      .getMemory({ limit: 8 })
+      .then(({ events }) => {
+        if (!cancelled) setEvents(events);
+      })
+      .catch(() => {
+        if (!cancelled) setEvents([]);
+      });
+
+    api
+      .getMemoryStats()
+      .then((s) => {
+        if (!cancelled) setStats(s);
+      })
+      .catch(() => undefined);
 
     return () => {
       cancelled = true;
@@ -79,6 +117,79 @@ export function DashboardPage() {
             )}
             .
           </p>
+
+          {/* Headline numbers from the record */}
+          <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[
+              { label: 'Open jobs', value: jobs === null ? '—' : String(jobs.length) },
+              { label: 'Team', value: members === null ? '—' : String(members.length) },
+              { label: 'Work logged', value: stats ? formatMinutes(stats.minutesLogged) : '—' },
+              { label: 'Recorded', value: stats ? stats.totalEvents.toLocaleString() : '—' },
+            ].map((stat) => (
+              <div
+                key={stat.label}
+                className="rounded-xl border border-white/10 bg-ink-800/60 px-4 py-3.5 backdrop-blur"
+              >
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                  {stat.label}
+                </p>
+                <p className="mt-1 text-2xl font-semibold text-white">{stat.value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Active jobs */}
+          <section className="mt-8">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold text-white">Active jobs</h2>
+              <Link
+                to="/jobs"
+                className="text-sm font-medium text-brand-300 transition hover:text-brand-200"
+              >
+                All jobs →
+              </Link>
+            </div>
+
+            <div className="mt-4">
+              {jobs === null ? (
+                <PanelSpinner label="Loading jobs" />
+              ) : jobs.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-white/10 px-6 py-10 text-center">
+                  <p className="text-sm text-gray-400">No open jobs yet.</p>
+                  <Link
+                    to="/jobs"
+                    className="mt-3 inline-block rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-500"
+                  >
+                    Open the first one
+                  </Link>
+                </div>
+              ) : (
+                <ul className="divide-y divide-white/10 overflow-hidden rounded-xl border border-white/10">
+                  {jobs.slice(0, 6).map((job) => (
+                    <li key={job.jobId} className="bg-ink-800/40">
+                      <Link
+                        to={`/jobs/${job.jobId}`}
+                        className="flex items-center justify-between gap-4 px-5 py-3.5 transition hover:bg-ink-700/40"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-white">{job.title}</p>
+                          <p className="mt-0.5 text-xs text-gray-500">
+                            <span className="font-mono text-brand-300/80">#{job.jobNumber}</span> ·{' '}
+                            {job.tasksDone}/{job.taskCount} tasks · {job.crewSize} on crew
+                          </p>
+                        </div>
+                        <span
+                          className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium ${JOB_STATUS_STYLES[job.status]}`}
+                        >
+                          {JOB_STATUS_LABELS[job.status]}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
 
           {/* Org + invite */}
           <div className="mt-8 grid gap-4 sm:grid-cols-2">
@@ -122,25 +233,25 @@ export function DashboardPage() {
           {billing && (
             <Link
               to="/billing"
-              className="mt-4 block rounded-xl border border-white/10 bg-ink-800/60 p-5 backdrop-blur transition hover:border-brand-500/40 hover:bg-ink-700/50"
+              className="mt-4 block rounded-xl border border-line bg-paper-0 shadow-card p-5 transition hover:border-brand-300 hover:bg-brand-50"
             >
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                <p className="text-xs font-medium uppercase tracking-wide text-ink-500">
                   Credit balance
                 </p>
-                <p className="text-xs text-brand-400">Manage billing →</p>
+                <p className="text-xs text-brand-600">Manage billing →</p>
               </div>
-              <p className="mt-1.5 text-2xl font-bold tracking-tight text-white">
+              <p className="mt-1.5 text-2xl font-bold tracking-tight text-ink-900">
                 {formatUsd(billing.balance.totalNanos)}
               </p>
-              <p className="mt-0.5 text-sm text-gray-400">
+              <p className="mt-0.5 text-sm text-ink-600">
                 {billing.subscription.planName} plan ·{' '}
                 {formatUsd(billing.periodUsage.priceNanos)} used this period
               </p>
               {billing.subscription.includedCreditsNanos > 0 && (
-                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-ink-700">
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-paper-300">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-brand-500 to-brand-300"
+                    className="h-full rounded-full bg-brand-500"
                     style={{
                       width: `${usedPct(
                         billing.periodUsage.priceNanos,
@@ -155,6 +266,27 @@ export function DashboardPage() {
           {/* Anything the verifier could not settle on its own. Renders nothing
               when the queue is empty, so it only appears when it matters. */}
           <EscalationQueue />
+
+          {/* Mitigation estimator — only meaningful for mitigation crews. */}
+          {membership?.workType === 'mitigation' && (
+            <Link
+              to="/mitigation"
+              className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-brand-500/30 bg-brand-600/10 p-5 transition hover:bg-brand-600/20"
+            >
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-brand-300">
+                  Mitigation
+                </p>
+                <p className="mt-1 text-lg font-semibold text-white">Build an estimate</p>
+                <p className="mt-1 text-sm text-gray-400">
+                  DocuSketch, MICA, photos and notes in — a priced, documented Xactimate scope out.
+                </p>
+              </div>
+              <span aria-hidden className="text-2xl text-brand-300">
+                →
+              </span>
+            </Link>
+          )}
 
           {/* The daily driver gets a card of its own — it is a summary you read,
               not a destination you pick. */}
@@ -217,21 +349,21 @@ export function DashboardPage() {
           {/* Construction Estimator */}
           <Link
             to="/estimator"
-            className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-ink-800/60 p-5 backdrop-blur transition hover:border-brand-500/40 hover:bg-ink-700/60"
+            className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-line bg-paper-0 shadow-card p-5 transition hover:border-brand-300 hover:bg-brand-50"
           >
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-brand-400">
+              <p className="text-xs font-medium uppercase tracking-wide text-brand-600">
                 Construction Estimator
               </p>
-              <p className="mt-1.5 text-lg font-semibold text-white">
+              <p className="mt-1.5 text-lg font-semibold text-ink-900">
                 Turn a scan into a rebuild estimate
               </p>
-              <p className="mt-1 text-sm text-gray-400">
+              <p className="mt-1 text-sm text-ink-600">
                 Reads DocuSketch photos and measurements, finds the job in Dash, and builds the
                 Xactimate scope — including the rebuild implied by a mitigation estimate.
               </p>
             </div>
-            <span aria-hidden="true" className="shrink-0 text-2xl text-brand-300">
+            <span aria-hidden="true" className="shrink-0 text-2xl text-brand-600">
               →
             </span>
           </Link>
@@ -240,6 +372,31 @@ export function DashboardPage() {
           <div className="mt-4">
             <PinSetupCard />
           </div>
+
+          {/* Latest activity from the record */}
+          <section className="mt-8">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold text-white">Latest activity</h2>
+              <Link
+                to="/memory"
+                className="text-sm font-medium text-brand-300 transition hover:text-brand-200"
+              >
+                Full memory →
+              </Link>
+            </div>
+            <p className="mt-1 text-sm text-gray-400">
+              {stats
+                ? `${stats.totalEvents.toLocaleString()} entries recorded, last one ${timeAgo(events?.[0]?.occurredAt)}.`
+                : 'Everything anyone does is recorded here.'}
+            </p>
+            <div className="mt-4">
+              {events === null ? (
+                <PanelSpinner label="Loading activity" />
+              ) : (
+                <MemoryFeed events={events} emptyLabel="Nothing recorded yet." />
+              )}
+            </div>
+          </section>
 
           {/* Linked accounts */}
           <div className="mt-8">
