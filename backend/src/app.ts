@@ -6,6 +6,7 @@ import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
 import { profileRouter } from './routes/profile.js';
+import { aiRouter } from './routes/ai.js';
 import { crmRouter } from './routes/crm.js';
 import { backupRouter } from './routes/backups.js';
 import { integrationsRouter } from './routes/integrations.js';
@@ -61,6 +62,11 @@ export function createApp(): Express {
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
   app.use('/api/profile', profileRouter);
+  // Task execution carries whole job files and documents, so it needs a much
+  // larger body limit than the auth routes. Mounted with its own parser rather
+  // than raising the global cap, which would widen the DoS surface on every
+  // unauthenticated endpoint.
+  app.use('/api/ai', express.json({ limit: '2mb' }), aiRouter);
   app.use('/api/crm', crmRouter);
   app.use('/api/backups', backupRouter);
   app.use('/api/integrations', integrationsRouter);
