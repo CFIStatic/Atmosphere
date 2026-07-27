@@ -21,6 +21,40 @@ body {
   color: #1c1917;
 }
 
+/*
+ * Status palette for the Project Manager screens.
+ *
+ * These are reserved: they mean good / needs-attention / wrong, and are never
+ * reused as decorative or series colors. The values match the `success`,
+ * `caution` and `danger` tokens in tailwind.config.js, so status reads the same
+ * whether it is drawn by a chart or by a component.
+ *
+ * A status colour never carries meaning on its own anywhere in the UI: every
+ * place one appears it is paired with an icon and a word, because roughly one
+ * man in twelve cannot rely on the hue.
+ */
+:root {
+  --pm-good: #3f7d4c;
+  --pm-warning: #946a0b;
+  --pm-critical: #b4361d;
+  /* Informational, not an alarm. Deliberately outside the brand ramp so it
+     never reads as either a severity or the accent. */
+  --pm-info: #2e6e8e;
+}
+
+.pm-good {
+  color: var(--pm-good);
+}
+.pm-warning {
+  color: var(--pm-warning);
+}
+.pm-critical {
+  color: var(--pm-critical);
+}
+.pm-info {
+  color: var(--pm-info);
+}
+
 /* Warm wash behind the auth screens — a hint of terracotta bleeding in from
    the top corners, not a gradient anyone should consciously notice. */
 .cx-aurora {

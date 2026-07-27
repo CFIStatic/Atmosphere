@@ -8,6 +8,9 @@ import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { TechnicianPage } from './pages/TechnicianPage';
+import { ProjectManagerPage } from './pages/ProjectManagerPage';
+import { PmProjectPage } from './pages/PmProjectPage';
+import { WebAccessPage } from './pages/WebAccessPage';
 import { ComputerUsePage } from './pages/ComputerUsePage';
 import { SpinnerIcon } from './components/icons';
 
@@ -83,6 +86,44 @@ export default function App() {
               <ProtectedRoute>
                 <RequireOnboarded>
                   <TechnicianPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* The Project Manager area. Guarded only by onboarding: the
+              database decides who may change a project, and a route guard that
+              hid the screens would just make a field technician's read-only
+              view unreachable. */}
+          <Route
+            path="/pm"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <ProjectManagerPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/pm/projects/:id"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <PmProjectPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Web Access sits behind onboarding: connections belong to an
+              organization, so there is nothing to show before you have one. */}
+          <Route
+            path="/web-access"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <WebAccessPage />
                 </RequireOnboarded>
               </ProtectedRoute>
             }

@@ -9,7 +9,8 @@ import {
 } from '../lib/api';
 import { Logo } from '../components/Logo';
 import { PinSetupCard } from '../components/PinSetupCard';
-import { SpinnerIcon, CheckIcon, MicIcon, MonitorIcon } from '../components/icons';
+import { EscalationQueue } from '../components/EscalationQueue';
+import { SpinnerIcon, CheckIcon, MicIcon, MonitorIcon, GlobeIcon } from '../components/icons';
 
 export function DashboardPage() {
   const { user, membership, logout } = useAuth();
@@ -125,13 +126,30 @@ export function DashboardPage() {
             </div>
           </div>
 
-          {/* The two things you can go and do from here. Same card shape so
-              neither reads as the more important one. */}
+          {/* Anything the verifier could not settle on its own. Renders nothing
+              when the queue is empty, so it only appears when it matters. */}
+          <EscalationQueue />
+
+          {/* The daily driver gets a card of its own — it is a summary you read,
+              not a destination you pick. */}
+          <Link
+            to="/pm"
+            className="mt-4 block rounded-xl border border-line bg-paper-0 p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50"
+          >
+            <p className="text-xs font-medium uppercase tracking-wide text-brand-600">
+              Project Manager
+            </p>
+            <p className="mt-1.5 text-lg font-semibold text-ink-900">What needs you today</p>
+            <p className="mt-1 max-w-lg text-sm text-ink-600">
+              Every open job checked against the drying log, the schedule, the crew board and the
+              paperwork — with the missed readings and the stalled dry-outs pulled to the top.
+            </p>
+          </Link>
+
+          {/* The places you can go and work. Same card shape throughout, so none
+              of them reads as the more important one. */}
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <Link
-              to="/technician"
-              className="flex items-start gap-3 rounded-xl border border-line bg-paper-0 p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50"
-            >
+            <Link to="/technician" className="flex items-start gap-3 rounded-xl border border-line bg-paper-0 p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50">
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-500 text-white shadow-card">
                 <MicIcon width={20} height={20} />
               </span>
@@ -143,10 +161,20 @@ export function DashboardPage() {
               </div>
             </Link>
 
-            <Link
-              to="/computer-use"
-              className="flex items-start gap-3 rounded-xl border border-line bg-paper-0 p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50"
-            >
+            <Link to="/web-access" className="flex items-start gap-3 rounded-xl border border-line bg-paper-0 p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-500 text-white shadow-card">
+                <GlobeIcon width={20} height={20} />
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-ink-900">Web access</p>
+                <p className="mt-0.5 text-sm text-ink-600">
+                  Sign in to carrier portals and vendor sites, pull data out, and enter data —
+                  without leaving Atmosphere.
+                </p>
+              </div>
+            </Link>
+
+            <Link to="/computer-use" className="flex items-start gap-3 rounded-xl border border-line bg-paper-0 p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50">
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-500 text-white shadow-card">
                 <MonitorIcon width={20} height={20} />
               </span>
