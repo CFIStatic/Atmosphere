@@ -15,6 +15,7 @@ import { Logo } from './Logo';
 import {
   ChevronRightIcon,
   CloseIcon,
+  GlobeIcon,
   HomeIcon,
   LogOutIcon,
   MenuIcon,
@@ -31,6 +32,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard', icon: HomeIcon },
+  { to: '/web-access', label: 'Web Access', icon: GlobeIcon },
   { to: '/computer-use', label: 'Computer Use', icon: MonitorIcon },
 ];
 
