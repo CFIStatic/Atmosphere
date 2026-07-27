@@ -30,6 +30,21 @@ export function errorHandler(
     return;
   }
 
+  // body-parser rejections (oversized or malformed JSON). They carry a status
+  // and a `type`, but are plain Errors — without this they fall through to the
+  // 500 below and a client that simply sent too much data is told the server
+  // broke, which sends them looking in entirely the wrong place.
+  const bodyErr = err as { type?: string; status?: number; statusCode?: number };
+  if (typeof bodyErr.type === 'string' && bodyErr.type.startsWith('entity.')) {
+    const status = bodyErr.status ?? bodyErr.statusCode ?? 400;
+    const tooLarge = bodyErr.type === 'entity.too.large';
+    res.status(status).json({
+      error: tooLarge ? 'That request body is too large.' : 'Could not parse the request body.',
+      code: tooLarge ? 'payload_too_large' : 'invalid_body',
+    });
+    return;
+  }
+
   // Unknown/unexpected error — log server-side, return generic message.
   console.error('[unhandled error]', err);
   res.status(500).json({
