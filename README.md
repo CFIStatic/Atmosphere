@@ -26,7 +26,8 @@ protected Postgres schema.
 5. **PIN sign-in** — an optional 4-digit PIN for fast repeat sign-in, bound to a single
    device (see below).
 6. **Mitigation Estimator** — reads a DocuSketch scan, a MICA report, iPhone photos and field
-   notes, and builds a priced, documented Xactimate estimate from them, flagging work that was
+   notes, and builds a priced, documented Xactimate estimate from them: classified against
+   IICRC S500, written to the carrier's program terms, and reviewed for work that was
    performed but never billed (see below).
 
 ## Why this shape?
@@ -57,6 +58,8 @@ JWT:
 | `xactimate_connections` | One row per user: consent grant + optional encrypted credential. |
 | `xactimate_audit`  | Append-only record of what was done in a user's Xactimate account.   |
 | `xactimate_price_lists` | Synced price lists, shared across the org.                     |
+| `carrier_agreements` | Per-org carrier program terms — one set per carrier + program.   |
+| `carrier_deviations` | Documented, evidence-backed exceptions to a term, per job.       |
 
 Membership checks used by the policies live in a **private schema** (not exposed as RPCs) to
 avoid recursive-policy issues and to keep the API surface minimal. Onboarding writes go
@@ -99,6 +102,7 @@ Atmosphere/
 │   │       ├── lib/              Geometry + IICRC S500 psychrometrics
 │   │       ├── rules/            Scope derivation, then scope → line items
 │   │       ├── standards/        IICRC citation registry + compliance review
+│   │       ├── carrier/          Carrier identification, program terms, deviations
 │   │       ├── catalog/          Seed line items + price-list reconciliation
 │   │       ├── pricing.ts        Subtotal, O&P, tax, margin
 │   │       ├── profitability.ts  Findings: unbilled work, evidence gaps, margin
@@ -114,7 +118,7 @@ Atmosphere/
 │   │   ├── pages/DashboardPage.tsx    Org overview, invite code, linked accounts
 │   │   ├── pages/EstimatorPage.tsx    Estimator workspace
 │   │   ├── context/AuthContext.tsx    Session + membership state
-│   │   ├── components/estimator/      Sources, results, Xactimate consent card
+│   │   ├── components/estimator/      Sources, results, program terms, consent card
 │   │   └── lib/api.ts                 Typed fetch client (credentials: include)
 │   └── .env.example
 └── supabase/migrations/               Estimator schema + RLS (apply before use)
@@ -178,6 +182,10 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | GET/PUT| `/api/estimator/settings` | cookie | margin/O&P/tax/cost knobs | Org estimating assumptions               |
 | GET    | `/api/estimator/catalog` | cookie | —                         | Line-item catalog + which prices are verified |
 | GET    | `/api/estimator/standards` | cookie | —                       | The IICRC citation registry + confidence of each |
+| GET    | `/api/estimator/carriers` | cookie | —                        | Carriers and assignment networks recognised   |
+| GET/PUT| `/api/estimator/agreements` | cookie | agreement terms        | The org's carrier program agreements          |
+| POST   | `/api/estimator/agreements/fetch` | cookie | `{ carrierId, programId? }` | Pull terms from the contractor portal |
+| GET/POST | `/api/estimator/jobs/:jobId/deviations` | cookie | `{ ruleId, reason, evidenceIds }` | Documented deviations from program terms |
 | GET    | `/api/estimator/demo-sources` | cookie | —                    | A worked example, for evaluation             |
 | GET    | `/api/xactimate/status` | cookie | —                          | Connection, scopes, expiry — never a credential |
 | POST   | `/api/xactimate/connect` | cookie | `{ username, password, scopes, storageMode, acknowledgedTerms }` | Sign in under an explicit grant |
@@ -261,6 +269,62 @@ Try it without a database, a network, or an Xactimate account:
 cd backend && npm run estimator:demo            # full run against a worked example
 cd backend && npm run estimator:demo -- --scope-sheet   # the adjuster-facing document
 ```
+
+### It knows which carrier it is writing for, and estimates to their terms
+
+A franchise on a national account is not free to write whatever scope the
+documentation supports. The program agreement — negotiated between the franchisor and
+the carrier, binding on every franchise in the network — sets the price list, whether
+overhead and profit is payable, what needs pre-approval, how many equipment days go
+unquestioned, what documentation must accompany the invoice, and how fast each milestone
+must happen. Estimating outside those terms produces chargebacks, delayed payment and
+eventually removal from the program, and the franchise wears all three.
+
+So the agreement is a **hard constraint**, and the profitability engine optimises inside
+it rather than around it.
+
+**Identifying the carrier.** Read from the MICA carrier field first, then from notes and
+photo captions, then from claim-number shape. The result carries *how* it knows —
+`stated`, `inferred` or `unknown` — because a wrong carrier applies the wrong price list
+and the wrong terms to the whole job. An inferred identification is offered for
+correction rather than presented as settled, and when several carriers appear in the
+sources it says so instead of picking. The **program** (Contractor Connection, Alacrity,
+Sedgwick, a direct national account) is identified separately, because that is what
+actually carries the terms — the same carrier can pay differently depending on which
+network assigned the job.
+
+**Applying them.** Pricing terms — the mandated price list, O&P eligibility, a negotiated
+concession — are applied *before* the estimate is priced, so no intermediate the reviewer
+reads is ever non-compliant. Scope terms — quantity caps, prohibited codes, approval
+thresholds, documentation, timelines — are checked after. Nothing is silently trimmed to
+fit a cap: quietly reducing equipment days would hide the exact fact the franchise needs
+to raise with the carrier.
+
+**Breaking them, in writing.** Real jobs exceed program limits legitimately — a structure
+that has not reached its drying goal on the day the equipment allowance expires is the
+obvious case. A term may be exceeded only through a deviation carrying a written reason
+**and evidence already in the job**. A reason with no evidence is an assertion, not
+documentation, and is rejected — by the API, and by a database constraint behind it.
+
+The agent goes looking for those grounds itself. When the allowance is exceeded it
+searches the moisture log for readings still above their goal after the cap expired, and
+assembles the argument with the evidence ids attached. It never accepts its own proposal:
+agreeing to exceed a carrier's terms is a commercial decision with a relationship behind
+it, so a human makes it. Accepted deviations print on the estimate that goes to the
+carrier.
+
+An unexcused breach of a binding term **blocks the push to Xactimate** outright. That one
+is not a confirmation the user can click past — the carrier will not pay a line the
+agreement prohibits.
+
+**Where the terms come from.** Hand-entered is the default and the only source guaranteed
+to match what the franchise signed. A portal adapter speaks a documented JSON contract
+that a franchisor endpoint (or a small internal shim in front of one) can serve. There is
+deliberately **no browser scraper** for a contractor portal: a scraper written against
+markup nobody has seen would not fail loudly when the page changed — it would return
+plausible terms, and an estimate built on a plausible-but-wrong equipment cap is worse
+than one built on no cap at all, because it is trusted. The failure would surface weeks
+later as a chargeback.
 
 ### It cites the standard, and it is honest about how firmly
 
@@ -386,9 +450,10 @@ minutes): a retry loop here walks a real company's account into a lockout mid-jo
 
 ### Setting it up
 
-1. Apply the migration: `supabase/migrations/0001_mitigation_estimator.sql` (via
-   `supabase db push`, or paste it into the SQL editor). Until it is applied the estimator
-   routes return a 503 saying exactly that.
+1. Apply the migrations in `supabase/migrations/` (via `supabase db push`, or paste them
+   into the SQL editor) — `0001_mitigation_estimator.sql` then
+   `0002_carrier_agreements.sql`. Until they are applied the estimator routes return a 503
+   saying exactly that.
 2. Leave `XACTIMATE_DRIVER` unset to run the mock driver, which needs nothing else.
 3. For a real connection set `XACTIMATE_DRIVER=api` plus `XACTIMATE_API_BASE_URL` and
    `XACTIMATE_API_KEY`, or `XACTIMATE_DRIVER=web` plus `XACTIMATE_WEB_AUTOMATION=true` and
@@ -451,7 +516,10 @@ See `backend/.env.example` and `frontend/.env.example`. Key points:
 - **Configure custom SMTP** before launch. Supabase's built-in mailer is rate-limited to a
   handful of messages per hour, which is fine for testing and will not carry real password
   resets.
-- Apply `supabase/migrations/0001_mitigation_estimator.sql` before the estimator is used;
-  its routes return a clear 503 until you do.
+- Apply both migrations in `supabase/migrations/` before the estimator is used; its routes
+  return a clear 503 until you do.
+- Load each carrier program agreement your franchise works under before estimating on it.
+  Working a program job blind to its terms is the usual route to a chargeback, and the
+  estimate says so when no agreement is loaded.
 - Leave `XACTIMATE_DRIVER` on `mock` until an estimator has checked the seed catalog against
   your own price list. A verified sync is what turns placeholder prices into real ones.

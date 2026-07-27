@@ -74,7 +74,7 @@ export const SAMPLE_DOCUSKETCH = {
 export const SAMPLE_MICA = {
   job: {
     claimNumber: 'FL-2026-0417839',
-    carrier: 'Gulfstream Mutual',
+    carrier: 'State Farm Fire & Casualty',
     insured: 'R. Okonkwo',
     address: '1841 Cypress Bend Dr, Sarasota, FL 34231',
     // Two days between the loss and arrival — enough for Category 1 water to
@@ -82,6 +82,7 @@ export const SAMPLE_MICA = {
     dateOfLoss: '2026-06-14T22:10:00Z',
     dateOfArrival: '2026-06-16T13:40:00Z',
     cause: 'Dishwasher supply line failure under the sink',
+    program: 'Contractor Connection assignment',
     category: 2,
   },
   rooms: [
@@ -140,7 +141,7 @@ export const SAMPLE_PHOTOS = [
   { filename: 'IMG_4460.HEIC', capturedAt: '2026-06-20T10:45:00Z', roomName: 'Kitchen', caption: 'After — HEPA vacuum complete, all materials at dry standard' },
 ];
 
-export const SAMPLE_NOTES = `Arrived 6/16 ~9:40am local. Cat 2 from the dishwasher supply line, ran overnight 6/14 into 6/15 before the homeowner noticed.
+export const SAMPLE_NOTES = `Contractor Connection assignment, State Farm. Arrived 6/16 ~9:40am local. Cat 2 from the dishwasher supply line, ran overnight 6/14 into 6/15 before the homeowner noticed.
 
 Kitchen 16x13.5x9 — sheet vinyl unsalvageable, wall cavity wet behind the north and west runs. Flood cut 24in both walls, insulation out, baseboard out. Toe kick opened on 22ft of cabinet.
 

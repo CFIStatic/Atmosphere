@@ -3,6 +3,7 @@ import { HttpError } from '../lib/errors.js';
 import type { ConsentAuditEntry, ConsentGrant, ConsentScope, CredentialStorageMode } from './xactimate/consent.js';
 import type { SealedCredential } from './xactimate/credentials.js';
 import type { PriceList } from './catalog/priceList.js';
+import type { ProgramAgreement, SlaDeviation } from './carrier/types.js';
 import type { MitigationEstimate } from './types.js';
 
 /**
@@ -406,4 +407,186 @@ export async function resolveOrgId(supabase: SupabaseClient, userId: string): Pr
     );
   }
   return orgId;
+}
+
+/* ------------------------------------------------------------------ *
+ * Carrier program agreements
+ * ------------------------------------------------------------------ */
+
+/**
+ * Agreements are org-scoped, not user-scoped.
+ *
+ * A franchise signs one agreement per carrier program and every estimator in the
+ * office works to it. Letting each user keep a private copy would produce
+ * estimates from the same office that disagree about what the carrier pays,
+ * which is exactly the failure the terms exist to prevent.
+ */
+export async function saveAgreement(
+  supabase: SupabaseClient,
+  orgId: string,
+  userId: string,
+  agreement: ProgramAgreement,
+): Promise<void> {
+  const { error } = await supabase.from('carrier_agreements').upsert(
+    {
+      org_id: orgId,
+      carrier_id: agreement.carrierId,
+      program_id: agreement.programId,
+      carrier_name: agreement.carrierName,
+      program_name: agreement.programName,
+      version: agreement.version,
+      effective_from: agreement.effectiveFrom ?? null,
+      effective_to: agreement.effectiveTo ?? null,
+      rules: agreement.rules,
+      source: agreement.source,
+      updated_by: userId,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'org_id,carrier_id,program_id' },
+  );
+  if (error) fail(error, 'Could not save the program agreement');
+}
+
+function toAgreement(row: any): ProgramAgreement {
+  return {
+    carrierId: row.carrier_id,
+    carrierName: row.carrier_name,
+    programId: row.program_id,
+    programName: row.program_name,
+    version: row.version,
+    effectiveFrom: row.effective_from ?? undefined,
+    effectiveTo: row.effective_to ?? undefined,
+    rules: (row.rules ?? []) as ProgramAgreement['rules'],
+    source: row.source as ProgramAgreement['source'],
+  };
+}
+
+export async function getAgreement(
+  supabase: SupabaseClient,
+  orgId: string,
+  carrierId: string,
+  programId?: string | null,
+): Promise<ProgramAgreement | null> {
+  let query = supabase
+    .from('carrier_agreements')
+    .select('*')
+    .eq('org_id', orgId)
+    .eq('carrier_id', carrierId);
+
+  // A program-specific agreement is preferred; a carrier-wide one is the
+  // fallback. Picking the wrong way round would apply generic terms to a job
+  // the network negotiated separately.
+  if (programId) query = query.eq('program_id', programId);
+
+  const { data, error } = await query.limit(1);
+  if (error) fail(error, 'Could not load the program agreement');
+  if (data?.[0]) return toAgreement(data[0]);
+
+  if (programId) return getAgreement(supabase, orgId, carrierId, null);
+  return null;
+}
+
+export async function listAgreements(
+  supabase: SupabaseClient,
+  orgId: string,
+): Promise<ProgramAgreement[]> {
+  const { data, error } = await supabase
+    .from('carrier_agreements')
+    .select('*')
+    .eq('org_id', orgId)
+    .order('carrier_name', { ascending: true });
+  if (error) fail(error, 'Could not list program agreements');
+  return (data ?? []).map(toAgreement);
+}
+
+export async function deleteAgreement(
+  supabase: SupabaseClient,
+  orgId: string,
+  carrierId: string,
+  programId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('carrier_agreements')
+    .delete()
+    .eq('org_id', orgId)
+    .eq('carrier_id', carrierId)
+    .eq('program_id', programId);
+  if (error) fail(error, 'Could not remove the program agreement');
+}
+
+/* ------------------------------------------------------------------ *
+ * Deviations
+ * ------------------------------------------------------------------ */
+
+/**
+ * A deviation is a decision someone made about one job, so it is stored against
+ * the job and carries who accepted it. `proposed` is never persisted — a
+ * proposal is the agent's suggestion, and only a human turning it into an
+ * accepted deviation makes it real.
+ */
+export async function saveDeviation(
+  supabase: SupabaseClient,
+  orgId: string,
+  userId: string,
+  jobId: string,
+  deviation: SlaDeviation,
+): Promise<void> {
+  if (!deviation.reason?.trim() || deviation.evidenceIds.length === 0) {
+    throw new HttpError(
+      400,
+      'A deviation needs a written reason and at least one piece of evidence from the job. A reason with nothing behind it is an assertion, not documentation.',
+      'deviation_undocumented',
+    );
+  }
+
+  const { error } = await supabase.from('carrier_deviations').upsert(
+    {
+      org_id: orgId,
+      external_job_id: jobId,
+      rule_id: deviation.ruleId,
+      reason: deviation.reason.trim(),
+      evidence_ids: deviation.evidenceIds,
+      authorized_by: deviation.authorizedBy ?? null,
+      authorized_at: deviation.authorizedAt ?? new Date().toISOString(),
+      accepted_by: userId,
+    },
+    { onConflict: 'org_id,external_job_id,rule_id' },
+  );
+  if (error) fail(error, 'Could not record the deviation');
+}
+
+export async function listDeviations(
+  supabase: SupabaseClient,
+  orgId: string,
+  jobId: string,
+): Promise<SlaDeviation[]> {
+  const { data, error } = await supabase
+    .from('carrier_deviations')
+    .select('rule_id, reason, evidence_ids, authorized_by, authorized_at')
+    .eq('org_id', orgId)
+    .eq('external_job_id', jobId);
+  if (error) fail(error, 'Could not load the job\'s deviations');
+
+  return (data ?? []).map((row: any) => ({
+    ruleId: row.rule_id,
+    reason: row.reason,
+    evidenceIds: row.evidence_ids ?? [],
+    authorizedBy: row.authorized_by ?? undefined,
+    authorizedAt: row.authorized_at ?? undefined,
+  }));
+}
+
+export async function deleteDeviation(
+  supabase: SupabaseClient,
+  orgId: string,
+  jobId: string,
+  ruleId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('carrier_deviations')
+    .delete()
+    .eq('org_id', orgId)
+    .eq('external_job_id', jobId)
+    .eq('rule_id', ruleId);
+  if (error) fail(error, 'Could not remove the deviation');
 }

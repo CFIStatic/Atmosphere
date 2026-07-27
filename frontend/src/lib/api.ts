@@ -191,6 +191,35 @@ export const api = {
   getDemoSources: () =>
     request<{ sources: BuildEstimateInput }>('/api/estimator/demo-sources', { method: 'GET' }),
 
+  getCarriers: () =>
+    request<{ carriers: Array<{ id: string; name: string }>; programs: Array<{ id: string; name: string }> }>(
+      '/api/estimator/carriers',
+      { method: 'GET' },
+    ),
+
+  getAgreements: () =>
+    request<{ agreements: ProgramAgreementSummary[]; source: string }>('/api/estimator/agreements', {
+      method: 'GET',
+    }),
+
+  getDeviations: (jobId: string) =>
+    request<{ deviations: SlaDeviation[] }>(
+      `/api/estimator/jobs/${encodeURIComponent(jobId)}/deviations`,
+      { method: 'GET' },
+    ),
+
+  acceptDeviation: (jobId: string, deviation: Omit<SlaDeviation, 'proposed'>) =>
+    request<{ deviations: SlaDeviation[] }>(
+      `/api/estimator/jobs/${encodeURIComponent(jobId)}/deviations`,
+      { method: 'POST', body: JSON.stringify(deviation) },
+    ),
+
+  removeDeviation: (jobId: string, ruleId: string) =>
+    request<{ ok: boolean }>(
+      `/api/estimator/jobs/${encodeURIComponent(jobId)}/deviations/${encodeURIComponent(ruleId)}`,
+      { method: 'DELETE' },
+    ),
+
   getStandards: () =>
     request<{
       editions: { s500: string; s520: string };
@@ -255,6 +284,8 @@ export const api = {
 
 export interface BuildEstimateInput {
   jobId?: string;
+  /** A human's correction to who the estimate is for. Always beats inference. */
+  carrier?: { carrierId?: string; programId?: string };
   docusketch?: unknown;
   mica?: unknown;
   photos?: PhotoManifestEntry[];
@@ -334,6 +365,71 @@ export interface StandardReference {
 }
 
 export type ComplianceStatus = 'met' | 'unmet' | 'undetermined' | 'not_applicable';
+
+/* ---- Carrier program terms ---- */
+
+export type SlaStatus =
+  | 'met'
+  | 'violated'
+  | 'deviation_documented'
+  | 'approval_required'
+  | 'not_applicable'
+  | 'undetermined';
+
+export interface SlaDeviation {
+  ruleId: string;
+  reason: string;
+  evidenceIds: string[];
+  authorizedBy?: string;
+  authorizedAt?: string;
+  proposed?: boolean;
+}
+
+export interface SlaCheck {
+  ruleId: string;
+  title: string;
+  status: SlaStatus;
+  severity: 'hard' | 'soft';
+  detail: string;
+  remedy?: string;
+  revenueImpact?: number;
+  deviation?: SlaDeviation;
+  sourceRef?: string;
+}
+
+export interface CarrierIdentification {
+  carrierId: string | null;
+  carrierName: string | null;
+  programId: string | null;
+  programName: string | null;
+  confidence: 'stated' | 'inferred' | 'unknown';
+  basis: string[];
+  alternatives: Array<{ carrierId: string; carrierName: string; basis: string }>;
+}
+
+export interface ProgramAgreementSummary {
+  carrierId: string;
+  carrierName: string;
+  programId: string;
+  programName: string;
+  version: string;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+  rules: Array<{ id: string; title: string; summary: string; severity: 'hard' | 'soft'; sourceRef?: string }>;
+  source: { kind: string; reference?: string; retrievedAt: string; enteredBy?: string };
+}
+
+export interface SlaComplianceReport {
+  identification: CarrierIdentification;
+  agreement: ProgramAgreementSummary | null;
+  checks: SlaCheck[];
+  met: number;
+  violated: number;
+  deviations: number;
+  proposedDeviations: SlaDeviation[];
+  blocksSubmission: boolean;
+  summary: string;
+}
 
 export interface ComplianceCheck {
   id: string;
@@ -416,6 +512,8 @@ export interface MitigationEstimate {
   profitability: ProfitabilitySummary;
   /** The estimate read back against the IICRC standards. */
   compliance: ComplianceReport;
+  /** The carrier program terms, and whether the estimate satisfies them. */
+  sla: SlaComplianceReport;
   /** Every standard cited anywhere in this estimate, resolved. */
   references: StandardReference[];
   narrative: string;

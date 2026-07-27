@@ -75,6 +75,14 @@ export const estimatorSettingsSchema = z
   })
   .optional();
 
+/** A human's answer about who the estimate is for. Always beats inference. */
+export const carrierOverrideSchema = z
+  .object({
+    carrierId: z.string().trim().max(60).regex(/^[a-z0-9_]+$/, 'Use the carrier id, not its display name').optional(),
+    programId: z.string().trim().max(60).regex(/^[a-z0-9_]+$/, 'Use the program id').optional(),
+  })
+  .optional();
+
 export const buildEstimateSchema = z
   .object({
     jobId: z.string().trim().max(120).optional(),
@@ -84,6 +92,7 @@ export const buildEstimateSchema = z
     notes: z.string().max(50_000, 'Those notes are longer than 50,000 characters.').optional(),
     overrides: overridesSchema,
     settings: estimatorSettingsSchema,
+    carrier: carrierOverrideSchema,
   })
   .refine(
     (value) => Boolean(value.docusketch || value.mica || value.photos?.length || value.notes?.trim()),
@@ -161,4 +170,100 @@ export const pushEstimateSchema = z.object({
 
 export const exportFormatSchema = z.object({
   format: z.enum(['csv', 'xml', 'scope']).default('csv'),
+});
+
+/* ------------------------------------------------------------------ *
+ * Carrier program agreements
+ * ------------------------------------------------------------------ */
+
+/**
+ * One machine-checkable term.
+ *
+ * A discriminated union rather than a loose object: a term whose shape does not
+ * validate is a term that would be silently skipped at check time, and an
+ * estimate believed to have been checked against terms it never was is worse
+ * than one checked against nothing.
+ */
+const slaConstraintSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('price_list'), priceListId: z.string().trim().min(1).max(120) }),
+  z.object({ kind: z.literal('overhead_and_profit'), allowed: z.boolean(), maxRate: z.number().min(0).max(0.5).optional() }),
+  z.object({
+    kind: z.literal('rate_concession'),
+    discountPct: z.number().min(0).max(0.5),
+    categories: z.array(z.string().trim().max(10)).max(20).optional(),
+  }),
+  z.object({
+    kind: z.literal('max_quantity'),
+    catalogKey: z.string().trim().min(1).max(40),
+    max: z.number().min(0).max(100_000),
+    unit: z.enum(['SF', 'LF', 'SY', 'CF', 'EA', 'DA', 'HR', 'WK', 'CY']),
+    per: z.enum(['job', 'room', 'day']),
+  }),
+  z.object({ kind: z.literal('max_equipment_days'), maxDays: z.number().int().min(0).max(120) }),
+  z.object({ kind: z.literal('approval_threshold'), amount: z.number().min(0).max(10_000_000) }),
+  z.object({ kind: z.literal('line_item_prohibited'), catalogKeys: z.array(z.string().trim().max(40)).min(1).max(200) }),
+  z.object({ kind: z.literal('required_documentation'), items: z.array(z.string().trim().min(1).max(120)).min(1).max(50) }),
+  z.object({
+    kind: z.literal('timeline'),
+    milestone: z.enum(['contact', 'on_site', 'inspection', 'estimate_submitted', 'work_complete']),
+    withinHours: z.number().min(0).max(2000),
+  }),
+  z.object({ kind: z.literal('invoice_window'), withinDays: z.number().int().min(0).max(365) }),
+]);
+
+export const agreementSchema = z.object({
+  carrier: z.object({
+    id: z.string().trim().min(1).max(60).regex(/^[a-z0-9_]+$/, 'Carrier id must be lowercase snake case'),
+    name: z.string().trim().min(1).max(120),
+  }),
+  program: z.object({
+    id: z.string().trim().min(1).max(60).regex(/^[a-z0-9_]+$/, 'Program id must be lowercase snake case'),
+    name: z.string().trim().min(1).max(120),
+  }),
+  version: z.string().trim().min(1).max(60),
+  effectiveFrom: z.string().trim().max(40).optional(),
+  effectiveTo: z.string().trim().max(40).optional(),
+  rules: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1).max(60),
+        title: z.string().trim().min(1).max(160),
+        summary: z.string().trim().max(2000).default(''),
+        // Terms default to binding. If whoever entered it did not say how
+        // binding it is, treating it as advisory is the expensive way to be
+        // wrong.
+        severity: z.enum(['hard', 'soft']).default('hard'),
+        sourceRef: z.string().trim().max(120).optional(),
+        constraint: slaConstraintSchema,
+      }),
+    )
+    .min(1, 'An agreement with no terms is not an agreement')
+    .max(200),
+});
+
+export const agreementFetchSchema = z.object({
+  carrierId: z.string().trim().min(1).max(60),
+  programId: z.string().trim().max(60).optional(),
+});
+
+/**
+ * Accepting a deviation.
+ *
+ * `reason` and `evidenceIds` are both required and neither may be empty. That is
+ * the whole mechanism: the difference between a documented deviation and simply
+ * ignoring the agreement is that a reviewer can open the evidence and see the
+ * reason for themselves.
+ */
+export const deviationSchema = z.object({
+  ruleId: z.string().trim().min(1).max(60),
+  reason: z
+    .string({ required_error: 'A written reason is required' })
+    .trim()
+    .min(20, 'Say why in enough detail that a reviewer who was not there understands it')
+    .max(4000),
+  evidenceIds: z
+    .array(z.string().trim().min(1).max(200))
+    .min(1, 'Cite at least one piece of evidence from this job. A reason with nothing behind it is an assertion, not documentation.')
+    .max(50),
+  authorizedBy: z.string().trim().max(120).optional(),
 });

@@ -1,9 +1,12 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
+import { config } from '../config.js';
 import { createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { HttpError, badRequest } from '../lib/errors.js';
-import { buildEstimate } from '../estimator/agent.js';
+import { buildEstimate, identifyFromSources } from '../estimator/agent.js';
+import { MockSlaSource, ManualSlaSource, PortalSlaSource, parseAgreement, resolveAgreement, type SlaSource } from '../estimator/carrier/source.js';
+import { CARRIERS, PROGRAMS } from '../estimator/carrier/identify.js';
 import { buildEstimatorConfig } from '../estimator/settings.js';
 import { CATALOG } from '../estimator/catalog/lineItems.js';
 import {
@@ -14,16 +17,26 @@ import {
 } from '../estimator/standards/s500.js';
 import { toLineItemCsv, toScopeSheet, toSketchXml } from '../estimator/export/xactimateExport.js';
 import {
+  agreementFetchSchema,
+  agreementSchema,
   buildEstimateSchema,
+  deviationSchema,
   estimatorSettingsSchema,
   exportFormatSchema,
 } from '../estimator/validation.js';
 import {
+  deleteAgreement,
+  deleteDeviation,
+  getAgreement,
   getEstimate,
   getPriceList,
   getSettings,
+  listAgreements,
+  listDeviations,
   listJobs,
   resolveOrgId,
+  saveAgreement,
+  saveDeviation,
   saveEstimate,
   saveSettings,
   getConnection,
@@ -65,6 +78,43 @@ async function loadContext(req: Request) {
 }
 
 /**
+ * Resolve the program agreement for a job before it is priced.
+ *
+ * The carrier has to be known first, so the sources are normalised once here to
+ * identify it. The org's own hand-entered agreement is preferred over anything a
+ * portal serves — a hand-entered agreement was read by someone at the franchise
+ * who is accountable for it; a portal response is a system's opinion.
+ */
+async function resolveJobAgreement(
+  supabase: ReturnType<typeof createUserClient>,
+  orgId: string,
+  input: { docusketch?: unknown; mica?: unknown; photos?: unknown; notes?: string; carrier?: { carrierId?: string; programId?: string } },
+) {
+  const identification = identifyFromSources(input as never, { override: input.carrier });
+  if (!identification.carrierId) return { identification, agreement: null, errors: [] as string[] };
+
+  const sources: SlaSource[] = [
+    new ManualSlaSource((lookup) => getAgreement(supabase, orgId, lookup.carrierId, lookup.programId)),
+  ];
+
+  // The remote sources are added only when configured. An unconfigured portal
+  // throwing on construction would take down the manual path with it.
+  try {
+    if (config.sla.source === 'portal') sources.push(new PortalSlaSource());
+    if (config.sla.source === 'mock') sources.push(new MockSlaSource());
+  } catch {
+    // Reported through `errors` below rather than thrown — a missing portal
+    // config must not stop an estimate being built from local terms.
+  }
+
+  const { agreement, errors } = await resolveAgreement(
+    { carrierId: identification.carrierId, programId: identification.programId },
+    sources,
+  );
+  return { identification, agreement, errors };
+}
+
+/**
  * POST /api/estimator/build
  *
  * Build an estimate from raw sources without saving anything. This is the
@@ -78,12 +128,15 @@ estimatorRouter.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const input = buildEstimateSchema.parse(req.body);
-      const { stored, priceList } = await loadContext(req);
+      const { supabase, orgId, stored, priceList } = await loadContext(req);
 
       const { config, warnings } = buildEstimatorConfig(
         { ...stored, ...(input.settings ?? {}) },
         priceList,
       );
+
+      const { agreement, errors } = await resolveJobAgreement(supabase, orgId, input);
+      const deviations = input.jobId ? await listDeviations(supabase, orgId, input.jobId) : [];
 
       const estimate = buildEstimate(
         {
@@ -94,13 +147,13 @@ estimatorRouter.post(
           notes: input.notes,
           overrides: input.overrides,
         },
-        config,
+        { ...config, agreement, deviations, carrier: { override: input.carrier } },
       );
 
       res.json({
         estimate: {
           ...estimate,
-          openQuestions: [...new Set([...estimate.openQuestions, ...warnings])],
+          openQuestions: [...new Set([...estimate.openQuestions, ...warnings, ...errors])],
         },
         priceListConnected: Boolean(priceList),
       });
@@ -129,6 +182,9 @@ estimatorRouter.post(
         priceList,
       );
 
+      const { agreement, errors } = await resolveJobAgreement(supabase, orgId, input);
+      const deviations = input.jobId ? await listDeviations(supabase, orgId, input.jobId) : [];
+
       const estimate = buildEstimate(
         {
           jobId: input.jobId,
@@ -138,9 +194,9 @@ estimatorRouter.post(
           notes: input.notes,
           overrides: input.overrides,
         },
-        config,
+        { ...config, agreement, deviations, carrier: { override: input.carrier } },
       );
-      estimate.openQuestions = [...new Set([...estimate.openQuestions, ...warnings])];
+      estimate.openQuestions = [...new Set([...estimate.openQuestions, ...warnings, ...errors])];
 
       const name =
         estimate.assessment.propertyAddress ??
@@ -323,3 +379,186 @@ estimatorRouter.get('/catalog', async (req: Request, res: Response, next: NextFu
     next(err);
   }
 });
+
+/* ------------------------------------------------------------------ *
+ * Carrier program agreements
+ * ------------------------------------------------------------------ */
+
+/**
+ * GET /api/estimator/carriers
+ *
+ * The carriers and assignment networks the identifier recognises, so the UI can
+ * offer a correction rather than making someone guess the canonical id.
+ */
+estimatorRouter.get('/carriers', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({
+      carriers: CARRIERS.map(({ id, name }) => ({ id, name })),
+      programs: PROGRAMS.map(({ id, name }) => ({ id, name })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /api/estimator/agreements — the org's loaded program terms. */
+estimatorRouter.get('/agreements', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const supabase = createUserClient(req.accessToken!);
+    const orgId = await resolveOrgId(supabase, req.user!.id);
+    res.json({ agreements: await listAgreements(supabase, orgId), source: config.sla.source });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PUT /api/estimator/agreements
+ *
+ * Enter a program agreement's terms by hand. This is the source that always
+ * works and the only one guaranteed to match what the franchise actually
+ * signed — someone reads the contract and records what it requires.
+ */
+estimatorRouter.put('/agreements', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = agreementSchema.parse(req.body);
+    const supabase = createUserClient(req.accessToken!);
+    const userId = req.user!.id;
+    const orgId = await resolveOrgId(supabase, userId);
+
+    const agreement = parseAgreement(input, {
+      kind: 'manual',
+      reference: `entered by hand — ${input.carrier.name} / ${input.program.name}`,
+      enteredBy: req.user!.email ?? userId,
+    });
+
+    await saveAgreement(supabase, orgId, userId, agreement);
+    res.status(201).json({ agreement });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/estimator/agreements/fetch
+ *
+ * Pull terms from the configured franchisor contractor portal.
+ *
+ * Deliberately does not save what it retrieves. Program terms decide what the
+ * franchise may bill, so a human reviews what came back and stores it via PUT —
+ * a portal response that silently became the org's binding terms would be a bad
+ * way to discover an endpoint had changed shape.
+ */
+estimatorRouter.post(
+  '/agreements/fetch',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { carrierId, programId } = agreementFetchSchema.parse(req.body);
+
+      if (config.sla.source === 'manual') {
+        throw new HttpError(
+          400,
+          'This server is configured for hand-entered program terms only. Set SLA_SOURCE=portal with a contractor-portal endpoint, or enter the agreement under Agreements.',
+          'sla_source_manual',
+        );
+      }
+
+      const source = config.sla.source === 'portal' ? new PortalSlaSource() : new MockSlaSource();
+      const agreement = await source.fetchAgreement({ carrierId, programId });
+
+      if (!agreement) {
+        throw new HttpError(
+          404,
+          `No agreement came back for ${carrierId}${programId ? ` via ${programId}` : ''}. Enter the terms by hand rather than estimating without them.`,
+          'agreement_not_found',
+        );
+      }
+
+      res.json({ agreement, saved: false });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** DELETE /api/estimator/agreements/:carrierId/:programId */
+estimatorRouter.delete(
+  '/agreements/:carrierId/:programId',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const supabase = createUserClient(req.accessToken!);
+      const orgId = await resolveOrgId(supabase, req.user!.id);
+      await deleteAgreement(supabase, orgId, req.params.carrierId, req.params.programId);
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/* ------------------------------------------------------------------ *
+ * Deviations
+ * ------------------------------------------------------------------ */
+
+/** GET /api/estimator/jobs/:jobId/deviations */
+estimatorRouter.get(
+  '/jobs/:jobId/deviations',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const supabase = createUserClient(req.accessToken!);
+      const orgId = await resolveOrgId(supabase, req.user!.id);
+      res.json({ deviations: await listDeviations(supabase, orgId, req.params.jobId) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/estimator/jobs/:jobId/deviations
+ *
+ * Accept a deviation from a program term.
+ *
+ * The evidence ids are checked against the job's own build, not taken on trust.
+ * A deviation citing evidence that is not in the file would look documented on
+ * the page and be worthless on review, which is the precise failure this whole
+ * mechanism exists to prevent.
+ */
+estimatorRouter.post(
+  '/jobs/:jobId/deviations',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const input = deviationSchema.parse(req.body);
+      const supabase = createUserClient(req.accessToken!);
+      const userId = req.user!.id;
+      const orgId = await resolveOrgId(supabase, userId);
+
+      await saveDeviation(supabase, orgId, userId, req.params.jobId, {
+        ruleId: input.ruleId,
+        reason: input.reason,
+        evidenceIds: input.evidenceIds,
+        authorizedBy: input.authorizedBy ?? req.user!.email ?? undefined,
+        authorizedAt: new Date().toISOString(),
+      });
+
+      res.status(201).json({ deviations: await listDeviations(supabase, orgId, req.params.jobId) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** DELETE /api/estimator/jobs/:jobId/deviations/:ruleId */
+estimatorRouter.delete(
+  '/jobs/:jobId/deviations/:ruleId',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const supabase = createUserClient(req.accessToken!);
+      const orgId = await resolveOrgId(supabase, req.user!.id);
+      await deleteDeviation(supabase, orgId, req.params.jobId, req.params.ruleId);
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  },
+);

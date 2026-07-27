@@ -172,6 +172,34 @@ export function toScopeSheet(estimate: MitigationEstimate): string {
   out.push(`TOTAL               ${profitability.total.toFixed(2).padStart(12)}`);
   out.push('');
 
+  /* ---- Program terms ---- */
+
+  const { sla } = estimate;
+  if (sla.agreement) {
+    out.push('PROGRAM TERMS');
+    out.push('-'.repeat(72));
+    out.push(
+      `${sla.agreement.carrierName} via ${sla.agreement.programName} (agreement ${sla.agreement.version})`,
+    );
+    out.push(wrap(sla.summary, 72));
+    out.push('');
+    for (const check of sla.checks) {
+      if (check.status === 'not_applicable' || check.status === 'met') continue;
+      const mark = { violated: '[!]', deviation_documented: '[~]', approval_required: '[A]', undetermined: '[?]' }[
+        check.status as 'violated' | 'deviation_documented' | 'approval_required' | 'undetermined'
+      ];
+      out.push(`${mark} ${check.title}${check.sourceRef ? `  (${check.sourceRef})` : ''}`);
+      out.push(wrap(`    ${check.detail}`, 72));
+      // A documented deviation is printed in full. The point of requiring it in
+      // writing is that it travels with the estimate to the carrier.
+      if (check.deviation) {
+        out.push(wrap(`    Authorised by: ${check.deviation.authorizedBy ?? 'unrecorded'}`, 72));
+        out.push(wrap(`    Evidence: ${check.deviation.evidenceIds.join(', ')}`, 72));
+      }
+      out.push('');
+    }
+  }
+
   /* ---- Standards compliance ---- */
 
   const { compliance } = estimate;

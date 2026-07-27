@@ -115,7 +115,22 @@ export const config = {
     // session-only mode, which is the safer configuration anyway.
     encryptionKey: process.env.XACTIMATE_ENC_KEY ?? '',
   },
+
+  sla: {
+    // Where carrier program agreements come from. 'manual' is the default and
+    // the only source guaranteed to match what the franchise actually signed —
+    // someone reads the contract and enters its terms. 'portal' pulls from a
+    // franchisor endpoint speaking the documented JSON contract; 'mock' serves
+    // representative demo terms.
+    source: parseSlaSource(process.env.SLA_SOURCE),
+    portalBaseUrl: process.env.SLA_PORTAL_BASE_URL ?? '',
+    portalApiKey: process.env.SLA_PORTAL_API_KEY ?? '',
+  },
 } as const;
+
+function parseSlaSource(value: string | undefined): 'manual' | 'portal' | 'mock' {
+  return value === 'portal' || value === 'mock' ? value : 'manual';
+}
 
 function parseDriver(value: string | undefined): 'mock' | 'api' | 'web' {
   return value === 'api' || value === 'web' ? value : 'mock';

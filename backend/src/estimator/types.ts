@@ -1,5 +1,6 @@
 import type { CitationId, StandardReference } from './standards/s500.js';
 import type { ComplianceReport } from './standards/compliance.js';
+import type { SlaComplianceReport } from './carrier/types.js';
 
 /**
  * Canonical domain model for the Mitigation Estimator.
@@ -426,6 +427,12 @@ export interface MitigationEstimate {
    */
   compliance: ComplianceReport;
   /**
+   * The carrier program terms this estimate was built against, and whether it
+   * satisfies them. Null-agreement is a valid and reported outcome — plenty of
+   * work is written outside a program.
+   */
+  sla: SlaComplianceReport;
+  /**
    * Every standard cited anywhere in this estimate, resolved. This is the
    * appendix a reader turns to with their own copy of the standard open.
    */
@@ -438,3 +445,12 @@ export interface MitigationEstimate {
 
 export type { CitationId, StandardReference } from './standards/s500.js';
 export type { ComplianceCheck, ComplianceReport, ComplianceStatus } from './standards/compliance.js';
+export type {
+  CarrierIdentification,
+  ProgramAgreement,
+  SlaCheck,
+  SlaComplianceReport,
+  SlaDeviation,
+  SlaRule,
+  SlaStatus,
+} from './carrier/types.js';

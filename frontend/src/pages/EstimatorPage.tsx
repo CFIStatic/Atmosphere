@@ -28,6 +28,7 @@ export function EstimatorPage() {
   const [sources, setSources] = useState<Sources>(EMPTY_SOURCES);
   const [estimate, setEstimate] = useState<MitigationEstimate | null>(null);
   const [estimateId, setEstimateId] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
 
   const [building, setBuilding] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -57,6 +58,7 @@ export function EstimatorPage() {
 
   function payload() {
     return {
+      jobId: jobId ?? undefined,
       docusketch: sources.docusketch,
       mica: sources.mica,
       photos: sources.photos.length ? sources.photos : undefined,
@@ -68,8 +70,10 @@ export function EstimatorPage() {
     setBuilding(true);
     setError(null);
     setNotice(null);
-    // A saved estimate is a snapshot of one moment. Rebuilding produces a
-    // different one, so the old id must not follow it around.
+    // A saved estimate is a snapshot of one moment, so rebuilding invalidates
+    // the saved one and its export links. The *job* id is kept — deviations are
+    // recorded against the job and must survive a rebuild, which is the whole
+    // reason accepting one can trigger a rebuild at all.
     setEstimateId(null);
     try {
       const { estimate } = await api.buildEstimate(payload());
@@ -88,6 +92,9 @@ export function EstimatorPage() {
       const result = await api.saveEstimate(payload());
       setEstimate(result.estimate);
       setEstimateId(result.estimateId);
+      // The agent's own job id, not the database row — deviations are recorded
+      // against it so they survive a rebuild.
+      setJobId(result.estimate.jobId);
       setNotice('Saved. Exports are available below.');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save the estimate.');
@@ -106,7 +113,11 @@ export function EstimatorPage() {
         `Wrote ${result.lineItemsWritten} line items into Xactimate as ${result.estimateId}.`,
       );
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
+      if (err instanceof ApiError && err.code === 'sla_blocked') {
+        setError(
+          'This estimate breaches its carrier program terms. Resolve them above, or accept a documented deviation for each, then rebuild.',
+        );
+      } else if (err instanceof ApiError && err.status === 409) {
         // The server refused because critical findings are outstanding. Make the
         // user look at them rather than offering a one-click override.
         setError(
@@ -132,6 +143,7 @@ export function EstimatorPage() {
       });
       setEstimate(null);
       setEstimateId(null);
+      setJobId(null);
       setNotice('Demo job loaded — build it to see the whole pipeline.');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not load the demo job.');
@@ -241,6 +253,10 @@ export function EstimatorPage() {
                 onPush={push}
                 pushing={pushing}
                 canPush={canPush}
+                jobId={jobId}
+                // Accepting a deviation changes what the terms check concludes,
+                // so the estimate is rebuilt rather than patched in place.
+                onDeviationAccepted={() => void build()}
               />
             ) : (
               <div className="grid h-64 place-items-center rounded-xl border border-dashed border-white/10 text-center">

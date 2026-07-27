@@ -9,6 +9,9 @@ import { gppDifferential, sizeAirMovers, sizeDehumidification } from './lib/psyc
 import { cubicFeet, round } from './lib/geometry.js';
 import { reviewCompliance } from './standards/compliance.js';
 import { caveatsFor, formatCitation, referencesFor, type CitationId } from './standards/s500.js';
+import { identifyCarrier, type IdentifyOptions } from './carrier/identify.js';
+import { applyAgreementToPricing, checkAgreement } from './carrier/sla.js';
+import type { ProgramAgreement, SlaDeviation } from './carrier/types.js';
 import type { LossAssessment, MitigationEstimate, ScopeItem } from './types.js';
 
 /**
@@ -36,6 +39,19 @@ export interface EstimatorConfig {
   /** Reconciled catalog from a price-list sync; falls back to the seed catalog. */
   catalog: readonly CatalogItem[];
   lineMarginFloor: number;
+
+  /**
+   * The carrier program agreement this job falls under, when one is loaded.
+   *
+   * Null is a valid, common state — plenty of work is written outside a program
+   * — and the estimate says so rather than quietly applying the org's own
+   * settings as though they were the carrier's.
+   */
+  agreement?: ProgramAgreement | null;
+  /** Deviations a human has accepted for this job. */
+  deviations?: SlaDeviation[];
+  /** Overrides and extra carriers for identification. */
+  carrier?: IdentifyOptions;
 }
 
 export const DEFAULT_ESTIMATOR_CONFIG: EstimatorConfig = {
@@ -45,6 +61,8 @@ export const DEFAULT_ESTIMATOR_CONFIG: EstimatorConfig = {
   priceList: null,
   catalog: CATALOG,
   lineMarginFloor: 0.25,
+  agreement: null,
+  deviations: [],
 };
 
 export function buildEstimate(
@@ -52,6 +70,14 @@ export function buildEstimate(
   config: EstimatorConfig = DEFAULT_ESTIMATOR_CONFIG,
 ): MitigationEstimate {
   const assessment = normalizeSources(sources);
+  const identification = identifyCarrier(assessment, config.carrier ?? {});
+  const agreement = config.agreement ?? null;
+
+  // Program pricing terms are applied *before* anything is priced. Building a
+  // non-compliant estimate and correcting it afterwards would leave the wrong
+  // numbers in every intermediate the reviewer reads.
+  const applied = applyAgreementToPricing(config.pricing, agreement);
+
   const scope = deriveScope(assessment, config.scope);
 
   const { lineItems, unmapped } = mapScopeToLineItems(scope, {
@@ -61,8 +87,19 @@ export function buildEstimate(
     catalog: config.catalog,
   });
 
+  // A negotiated concession is a real reduction in what the carrier pays, so it
+  // is applied to the line prices themselves — not netted off the total, which
+  // would leave every line on the page disagreeing with the bottom of it.
+  if (applied.discountPct > 0) {
+    for (const line of lineItems) {
+      if (applied.discountPct <= 0) break;
+      line.unitPrice = round(line.unitPrice * (1 - applied.discountPct));
+      line.rcv = round(line.quantity * line.unitPrice);
+    }
+  }
+
   const profitability = reviewProfitability(assessment, scope, lineItems, {
-    pricing: config.pricing,
+    pricing: applied.pricing,
     costBasis: config.costBasis,
     priceList: config.priceList,
     catalog: config.catalog,
@@ -74,6 +111,16 @@ export function buildEstimate(
   // overlap constantly, because the obligations a job skipped are usually
   // obligations it also failed to bill for.
   const compliance = reviewCompliance(assessment, scope, lineItems);
+
+  const sla = checkAgreement({
+    assessment,
+    lineItems,
+    profitability,
+    identification,
+    agreement,
+    deviations: config.deviations,
+    actualPriceListId: config.priceList?.id ?? null,
+  });
 
   // Everything cited anywhere: the scope rules, the line items, and the
   // compliance checks. This is the appendix a reader turns to with their own
@@ -92,9 +139,10 @@ export function buildEstimate(
     lineItems,
     profitability,
     compliance,
+    sla,
     references: referencesFor(cited),
     narrative: writeNarrative(assessment, lineItems.length),
-    openQuestions: collectOpenQuestions(assessment, scope, unmapped, config, compliance, cited),
+    openQuestions: collectOpenQuestions(assessment, scope, unmapped, config, compliance, cited, sla, applied.notes),
   };
 }
 
@@ -213,8 +261,46 @@ function collectOpenQuestions(
   config: EstimatorConfig,
   compliance: ReturnType<typeof reviewCompliance>,
   cited: CitationId[],
+  sla: ReturnType<typeof checkAgreement>,
+  pricingNotes: string[],
 ): string[] {
   const questions: string[] = [];
+
+  // Program terms lead everything else. An estimate that breaches its agreement
+  // does not get paid, however well it is scoped and however well it cites.
+  for (const check of sla.checks) {
+    if (check.status === 'met' || check.status === 'not_applicable') continue;
+    const prefix =
+      check.status === 'violated'
+        ? 'Program term not met'
+        : check.status === 'approval_required'
+          ? 'Program approval needed'
+          : check.status === 'deviation_documented'
+            ? 'Program term exceeded, documented'
+            : 'Program term unverified';
+    questions.push(
+      `${prefix} — ${check.title}: ${check.detail}${check.remedy ? ` ${check.remedy}` : ''}${check.sourceRef ? ` (${check.sourceRef})` : ''}`,
+    );
+  }
+
+  for (const proposal of sla.proposedDeviations) {
+    questions.push(
+      `A documented deviation looks available for "${sla.agreement?.rules.find((r) => r.id === proposal.ruleId)?.title ?? proposal.ruleId}": ${proposal.reason} Accept it to put that reasoning on the estimate — the agent will not agree to exceed a carrier's terms on your behalf.`,
+    );
+  }
+
+  questions.push(...pricingNotes);
+
+  if (sla.identification.confidence === 'inferred') {
+    questions.push(
+      `The carrier was inferred rather than stated — ${sla.identification.basis.join('; ')}. Confirm it, because it selects the price list and the terms for the whole job.`,
+    );
+  }
+  if (sla.identification.alternatives.length > 0) {
+    questions.push(
+      `More than one carrier appears in the sources: ${sla.identification.alternatives.map((a) => a.carrierName).join(', ')}. Confirm which one this estimate is for.`,
+    );
+  }
 
   // Unmet obligations lead, because they are the ones that cost the job twice —
   // once when the work goes unbilled and again when the estimate is challenged.
@@ -328,4 +414,20 @@ function collectOpenQuestions(
   }
 
   return [...new Set([...questions, ...assessment.warnings])];
+}
+
+/**
+ * Identify the carrier without building a full estimate.
+ *
+ * Routes need this before they can load the right program agreement, and the
+ * agreement has to be in hand before the estimate is priced. Normalising the
+ * sources twice is cheap and deterministic, and it keeps the carrier out of
+ * `buildEstimate`'s signature as a pre-computed argument only a caller who
+ * already knew the answer could supply.
+ */
+export function identifyFromSources(
+  sources: EstimatorSources,
+  options: IdentifyOptions = {},
+): ReturnType<typeof identifyCarrier> {
+  return identifyCarrier(normalizeSources(sources), options);
 }

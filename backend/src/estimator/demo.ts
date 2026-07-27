@@ -16,6 +16,9 @@ import { createConsent } from './xactimate/consent.js';
 import { toScopeSheet } from './export/xactimateExport.js';
 import { formatCitation } from './standards/s500.js';
 import { formatCheck } from './standards/compliance.js';
+import { MockSlaSource } from './carrier/source.js';
+import { identifyCarrier } from './carrier/identify.js';
+import { normalizeSources } from './ingest/index.js';
 
 const usdFormatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const usd = (value: number) => usdFormatter.format(value);
@@ -43,10 +46,20 @@ async function main(): Promise<void> {
   const priceList = await driver.fetchPriceList(connection.session, grant, 'DEMO8X_JAN26');
   const reconciled = reconcileCatalog(priceList);
 
+  // Identify the carrier from the sources, then pull that program's terms. The
+  // identification runs on the assessment, so it happens once here and again
+  // inside buildEstimate — cheap, deterministic, and it keeps the agent's
+  // signature free of a pre-computed argument only the demo would supply.
+  const probe = identifyCarrier(normalizeSources(SAMPLE_JOB));
+  const agreement = probe.carrierId
+    ? await new MockSlaSource().fetchAgreement({ carrierId: probe.carrierId, programId: probe.programId })
+    : null;
+
   const estimate = buildEstimate(SAMPLE_JOB, {
     ...DEFAULT_ESTIMATOR_CONFIG,
     priceList,
     catalog: reconciled.catalog,
+    agreement,
   });
 
   if (showScopeSheet) {
@@ -113,6 +126,39 @@ async function main(): Promise<void> {
     if (finding.actionRequired) console.log(`   → ${finding.actionRequired}`);
     console.log();
   }
+
+  console.log('PROGRAM (SLA) REVIEW');
+  console.log('─'.repeat(78));
+  const { sla } = estimate;
+  console.log(
+    `Carrier         ${sla.identification.carrierName ?? 'not identified'} (${sla.identification.confidence})` +
+      `${sla.identification.programName ? ` via ${sla.identification.programName}` : ''}`,
+  );
+  console.log(sla.summary);
+  console.log();
+  for (const check of sla.checks) {
+    if (check.status === 'not_applicable') continue;
+    const mark = {
+      met: '[x]',
+      violated: '[!]',
+      deviation_documented: '[~]',
+      approval_required: '[A]',
+      undetermined: '[?]',
+      not_applicable: '[-]',
+    }[check.status];
+    console.log(`${mark} ${check.title}${check.sourceRef ? `  (${check.sourceRef})` : ''}`);
+    console.log(`    ${check.detail}`);
+    if (check.remedy) console.log(`    → ${check.remedy}`);
+  }
+  if (sla.proposedDeviations.length > 0) {
+    console.log();
+    console.log(`    ${sla.proposedDeviations.length} documented deviation(s) available for a human to accept:`);
+    for (const proposal of sla.proposedDeviations) {
+      console.log(`    · ${proposal.ruleId}: ${proposal.reason}`);
+      console.log(`      evidence: ${proposal.evidenceIds.join(', ')}`);
+    }
+  }
+  console.log();
 
   console.log('STANDARDS REVIEW');
   console.log('─'.repeat(78));

@@ -305,6 +305,24 @@ xactimateRouter.post('/push', async (req: Request, res: Response, next: NextFunc
       throw new HttpError(400, 'That estimate has no line items to write.', 'empty_estimate');
     }
 
+    // A breach of a binding program term is not a judgement call the user can
+    // confirm past. The carrier will not pay a line the agreement prohibits, and
+    // writing it into the account produces a chargeback with the franchise's
+    // name on it. Either bring the estimate inside the terms, or record a
+    // documented deviation — which is exactly what the deviation route is for.
+    if (estimate.sla?.blocksSubmission) {
+      const breaches = estimate.sla.checks.filter(
+        (check) => check.status === 'violated' && check.severity === 'hard',
+      );
+      res.status(409).json({
+        status: 'sla_blocked',
+        message: `This estimate breaches ${breaches.length} binding ${estimate.sla.agreement?.programName ?? 'program'} term${breaches.length === 1 ? '' : 's'}. Resolve them, or record a documented deviation for each with the evidence that justifies it.`,
+        checks: breaches,
+        proposedDeviations: estimate.sla.proposedDeviations,
+      });
+      return;
+    }
+
     const blocking = estimate.profitability?.findings?.filter(
       (finding) => finding.severity === 'critical',
     ) ?? [];

@@ -6,6 +6,7 @@ import {
   type StandardReference,
 } from '../../lib/api';
 import { CompliancePanel, formatLocation } from './CompliancePanel';
+import { SlaPanel } from './SlaPanel';
 
 /**
  * The finished estimate.
@@ -21,11 +22,16 @@ export function EstimateResult({
   onPush,
   pushing,
   canPush,
+  jobId,
+  onDeviationAccepted,
 }: {
   estimate: MitigationEstimate;
   onPush?: () => void;
   pushing?: boolean;
   canPush?: boolean;
+  /** The saved job id, needed before a deviation can be recorded against it. */
+  jobId?: string | null;
+  onDeviationAccepted?: () => void;
 }) {
   const { assessment, profitability, lineItems } = estimate;
   const unverified = lineItems.filter((line) => !line.priceVerified).length;
@@ -65,6 +71,11 @@ export function EstimateResult({
           <Stat label="Monitoring visits" value={String(assessment.monitoringVisits)} />
         </dl>
       </section>
+
+      {/* ---- Carrier program terms ----
+          Above everything else on purpose: an estimate that breaches its
+          agreement does not get paid however well it is scoped. */}
+      <SlaPanel sla={estimate.sla} jobId={jobId} onDeviationAccepted={onDeviationAccepted} />
 
       {/* ---- Findings ---- */}
       {profitability.findings.length > 0 && (
@@ -200,11 +211,21 @@ export function EstimateResult({
       {onPush && (
         <button
           onClick={onPush}
-          disabled={pushing || !canPush}
+          disabled={pushing || !canPush || estimate.sla.blocksSubmission}
           className="w-full rounded-lg bg-brand-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-brand-500 disabled:opacity-50"
-          title={canPush ? undefined : 'Connect Xactimate with write permission first'}
+          title={
+            estimate.sla.blocksSubmission
+              ? 'Resolve the program breaches, or document a deviation for each'
+              : canPush
+                ? undefined
+                : 'Connect Xactimate with write permission first'
+          }
         >
-          {pushing ? 'Writing to Xactimate…' : 'Write this estimate into Xactimate'}
+          {pushing
+            ? 'Writing to Xactimate…'
+            : estimate.sla.blocksSubmission
+              ? 'Blocked — this estimate breaches its program terms'
+              : 'Write this estimate into Xactimate'}
         </button>
       )}
     </div>
