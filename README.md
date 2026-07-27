@@ -84,6 +84,14 @@ JWT:
 | `orgs`         | An organization; owns a unique `join_code`.                          |
 | `org_members`  | Links a user to an org with their `role` and `work_type`.            |
 | `device_credentials` | One row per PIN-enrolled device. Holds only hashes — no secret and no session token. |
+| `billing_plans` / `credit_packs` | Public catalog: subscription tiers and prepaid credit packs. |
+| `model_rate_card` | Public **sell** prices per model. Derived from the private cost table. |
+| `org_billing`  | One row per org: plan, seats, period, auto-reload, spend limit.       |
+| `credit_lots`  | The live balance. Consumed soonest-expiry-first.                      |
+| `credit_ledger`| Append-only audit trail of every credit movement.                     |
+| `credit_purchases` | Prepaid top-ups and their settlement state.                       |
+| `usage_events` / `usage_daily` | Every metered call, plus a trigger-maintained daily rollup. |
+| `payments`     | Payment history: charges, refunds, invoices and receipt links.        |
 | `web_connections` | A website the org has connected, with the username we sign in as.  |
 | `web_credentials` | The sealed site password, kept apart so a routine read can never carry it. |
 | `web_runs`     | One AI task against a connection: its instruction, step trace, and result. |
@@ -127,6 +135,7 @@ Atmosphere/
 │   │   ├── lib/
 │   │   │   ├── supabase.ts       Anon + per-request user-scoped client factories
 │   │   │   ├── session.ts        httpOnly session-cookie set/clear
+│   │   │   ├── validation.ts     zod schemas (credentials, org, billing, usage)
 │   │   │   ├── validation.ts     zod schemas (credentials, org create/join, web access)
 │   │   │   ├── errors.ts         Typed HTTP errors
 │   │   │   ├── webVault.ts       AES-256-GCM sealing for stored site passwords
@@ -143,6 +152,10 @@ Atmosphere/
 │   │   │   ├── validation.ts     zod schemas (credentials, org create/join)
 │   │   │   ├── crmValidation.ts  zod schemas + camelCase↔snake_case row mapping
 │   │   │   ├── orgContext.ts     Resolves the caller's org; never trusts the body
+│   │   │   ├── money.ts          Nanodollar arithmetic — no floats for money
+│   │   │   ├── anthropic.ts      Authoritative token measurement (+ tests)
+│   │   │   ├── billing.ts        DB error → HTTP mapping, response shaping
+│   │   │   ├── stripe.ts         Stripe client, customers, webhook helpers
 │   │   │   ├── errors.ts         Typed HTTP errors
 │   │   │   ├── backup/           Archive format, storage drivers, runner, scheduler
 │   │   │   └── integrations/     Connectors + the append-only external mirror
@@ -155,6 +168,7 @@ Atmosphere/
 │   │   │   └── providers/        OpenAI · Anthropic · Google · xAI · open weights
 │   │   ├── middleware/
 │   │   │   ├── requireAuth.ts    Verify access token; transparent refresh
+│   │   │   ├── requireOrg.ts     Resolve caller's org from their own membership
 │   │   │   └── errorHandler.ts   404 + central JSON error handler
 │   │   ├── computer/
 │   │   │   ├── protocol.ts       Wire protocol shared with the agent
@@ -180,6 +194,10 @@ Atmosphere/
 │   │   └── routes/
 │   │       ├── auth.ts           signup / login / logout / refresh / me
 │   │       ├── org.ts            onboarding: me / create / join / members
+│   │       ├── billing.ts        catalog / plan / credits / settings / ledger
+│   │       ├── usage.ts          quote / record / events / daily rollup
+│   │       ├── ai.ts             Learning-layer task execution + feedback
+│   │       ├── modelGateway.ts   Metered model calls (authorize-then-capture)
 │   │       ├── crm.ts            CRM CRUD, lead conversion, timeline, audit
 │   │       ├── backups.ts        Snapshot status / history / trigger / verify
 │   │       ├── integrations.ts   External sources, syncs, CSV import, mirror
@@ -193,6 +211,8 @@ Atmosphere/
 ├── db/
 │   ├── web_access.sql            Schema + RLS for Web Access (run once)
 │   └── verifier.sql              Schema + RLS for the Verifier (run once, after the above)
+├── supabase/
+│   └── migrations/               Billing schema, pricing engine, RLS policies
 ├── db/migrations/    SQL schema (RLS policies + SECURITY DEFINER write path)
 ├── docs/             Architecture notes
 ├── frontend/         React + Vite + TypeScript + Tailwind
@@ -200,6 +220,8 @@ Atmosphere/
 │   │   ├── pages/LoginPage.tsx        Branded login + signup screen
 │   │   ├── pages/OnboardingPage.tsx   3-step wizard: org → role → work type
 │   │   ├── pages/DashboardPage.tsx    Org overview, invite code, linked accounts
+│   │   ├── pages/BillingPage.tsx      Plans, credit packs, spend controls, rate card
+│   │   ├── pages/UsagePage.tsx        Spend charts, per-model breakdown, request log
 │   │   ├── pages/WebAccessPage.tsx    Connected sites, run a task, run history
 │   │   ├── pages/ComputerUsePage.tsx  Live screen, task composer, transcript
 │   │   ├── pages/EstimatorPage.tsx    Connections, runs, job review, estimate
@@ -269,6 +291,23 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | POST   | `/api/org`           | cookie | `{ name, role, workType }`    | Create an org and join as first member       |
 | POST   | `/api/org/join`      | cookie | `{ joinCode, role, workType }`| Link to an existing org by join code         |
 | GET    | `/api/org/members`   | cookie | —                             | Linked accounts in the caller's org          |
+| GET    | `/api/billing/catalog` | —    | —                             | Plans, credit packs, model rate card         |
+| GET    | `/api/billing/overview`| cookie | —                           | Plan, balance, settings, month-to-date usage |
+| POST   | `/api/billing/plan`  | cookie | `{ planCode, billingInterval, seats }` | Change subscription tier            |
+| PATCH  | `/api/billing/settings`| cookie | `{ autoReload…, monthlySpendLimitNanos }` | Auto-reload and spend cap    |
+| GET    | `/api/billing/ledger`| cookie | —                             | Credit history (append-only)                 |
+| POST   | `/api/billing/purchases` | cookie | `{ packCode }` or `{ amountCents }` | Start a credit purchase; returns `checkoutUrl` under Stripe |
+| POST   | `/api/billing/purchases/:id/confirm` | cookie | —         | Settle a purchase (dev provider only)        |
+| POST   | `/api/billing/checkout/subscription` | cookie | `{ planCode, billingInterval, seats }` | Stripe Checkout for a paid plan |
+| POST   | `/api/billing/portal` | cookie | —                    | Stripe billing portal (cards, invoices, cancel) |
+| GET    | `/api/billing/payments` | cookie | —                   | Payment history with receipt/invoice links   |
+| POST   | `/api/webhooks/stripe` | Stripe signature | raw event | Settles payments; the only path that mints credits |
+| POST   | `/api/model/count-tokens` | cookie | `{ model, messages, system }` | Exact pre-flight token count + input price |
+| POST   | `/api/model/messages`   | cookie | `{ model, messages, maxTokens, … }` | Run a model call and meter it          |
+| POST   | `/api/usage/quote`   | cookie | `{ modelId, …tokens }`        | Price a call without charging                |
+| POST   | `/api/usage/record`  | cookie | `{ modelId, requestId, …tokens }` | Meter caller-supplied counts (off by default) |
+| GET    | `/api/usage/events`  | cookie | —                             | Recent metered calls                         |
+| GET    | `/api/usage/daily`   | cookie | `?days=30`                    | Daily rollup for the usage chart             |
 | GET    | `/api/web-access/status` | cookie | —                         | Whether Web Access is configured here        |
 | GET    | `/api/web-access/connections` | cookie | —                    | The org's connected websites                 |
 | POST   | `/api/web-access/connections` | cookie | `{ label, siteUrl, loginUrl?, username, password }` | Connect a site |
@@ -367,6 +406,168 @@ which is what keeps that budget meaningless rather than a coin flip.
 Signing out deliberately does **not** clear the PIN — returning to the PIN pad instead of the
 password form is the whole point. Enrollment is per-device, capped at 5 devices per user.
 
+## Pricing, credits and metering
+
+Atmosphere resells model capacity. Customers pay a **monthly plan** that includes
+a usage allowance, and can **prepay credits** on top of it — the same shape
+Anthropic and OpenAI use.
+
+### The money rules
+
+- **1 credit = $1 USD.** Internally every amount is an integer count of
+  **nanodollars** (1e-9 USD). Never floats — a ledger that doesn't reconcile to
+  the penny is worthless — and never cents, because one cached-read token on the
+  cheapest model costs 200 nanodollars and would round to zero, letting a
+  customer read cache for free.
+- **Sell price = 2 × cost.** The markup lives in one column
+  (`private.model_costs.markup`). Change it there and the customer-facing rate
+  card is regenerated; nothing else needs editing.
+- **Margin never reaches the browser.** What we pay sits in `private.model_costs`,
+  in a schema PostgREST does not expose. What we charge sits in
+  `public.model_rate_card`, projected through the markup by
+  `private.sync_rate_card()`. A customer can read the rate card and can never
+  read the cost basis.
+
+Rates carry the provider's own structure, so the ratio holds across every
+component: cache writes cost 1.25× the input rate (5-minute TTL) or 2× (1-hour),
+cached reads 0.1×, and batch requests are half price.
+
+| Model | We pay (in/out per MTok) | We charge |
+| ----- | ------------------------ | --------- |
+| Atmosphere Apex  | $10 / $50 | $20 / $100 |
+| Atmosphere Pro   | $5 / $25  | $10 / $50  |
+| Atmosphere Core  | $3 / $15  | $6 / $30   |
+| Atmosphere Lite  | $1 / $5   | $2 / $10   |
+
+### Plans
+
+`rate_multiplier` is what "5x" and "20x" mean — throughput relative to Pro.
+Included credits sit at 1.25× the plan price, so an allowance burned to the last
+credit still clears a **37.5% gross margin** at a 2× markup.
+
+| Plan | Price | Included credits | Throughput |
+| ---- | ----- | ---------------- | ---------- |
+| Free    | $0             | $3/mo          | 0.2× |
+| Pro     | $20 ($17 annual) | $25/mo       | 1×   |
+| Max 5x  | $100           | $125/mo        | 5×   |
+| Max 20x | $200           | $250/mo        | 20×  |
+| Team    | $30/seat ($25 annual) | $40/seat/mo | 5× |
+| Enterprise | custom      | custom         | —    |
+
+### How a request gets billed
+
+Token counts decide revenue, so they come from exactly one place: **the model
+provider's own `usage` object**. Not an estimate, not a character heuristic, not
+a third-party tokenizer, and never a number supplied by the client. `POST
+/api/model/messages` runs **authorize-then-capture**, the shape a card payment uses:
+
+1. **Count** the input exactly via the provider's tokenizer (`count_tokens`).
+2. **Authorize** the worst case — that input plus a full `maxTokens` of output —
+   and refuse with `402` if the balance can't cover it. This happens *before* the
+   upstream call, so we never buy tokens we can't bill for.
+3. **Call** the model.
+4. **Capture** the actual usage from the response, which is almost always less
+   than was authorized.
+
+The provider reports four *disjoint* token classes — `input_tokens` excludes
+cached tokens, which are counted separately as reads and writes — so summing them
+double-counts nothing, but dropping one silently under-bills. Cache writes are
+split by TTL because the tiers price differently; when the provider omits the
+breakdown the whole amount is attributed to the cheaper 5-minute tier.
+`extractUsage` is covered by tests (`npm test` in `backend/`) for exactly these
+cases, including a breakdown that fails to reconcile with its own aggregate.
+
+`POST /api/usage/record`, which takes caller-supplied counts, is **disabled in
+production** (`ALLOW_CLIENT_METERING`). A browser reporting its own token counts
+could under-report and spend our margin.
+
+### Credits, in order
+
+Charges draw down `credit_lots` **soonest-expiry-first**, which spends the plan
+allowance a customer would otherwise lose before the credits they paid cash for.
+Purchased credits never expire. Every movement is mirrored into `credit_ledger`,
+so the ledger always sums to the live lot balances.
+
+Three things protect the balance: a **spend limit** per period, an idempotent
+`requestId` so a retried request is never billed twice, and the fact that every
+balance-changing write goes through a `SECURITY DEFINER` function that validates
+`auth.uid()` internally. The billing tables carry `SELECT` policies only — there
+is no way to mint credits by POSTing to a table.
+
+Billing periods roll forward on read, granting each elapsed period's credits, so
+the system stays correct without a scheduler.
+
+## Payments (Stripe)
+
+Setting `STRIPE_SECRET_KEY` switches billing to Stripe automatically. Without it
+the app falls back to `PAYMENT_PROVIDER=dev`, which lets a billing manager settle
+their own purchase so the credit flow is exercisable locally — and which is
+**refused at boot in production**, where it would let anyone mint credits.
+
+### Money is minted by the webhook, never by the browser
+
+Checkout endpoints only *open* a session. Credits and subscription changes are
+applied when Stripe confirms the payment settled, authenticated with the
+service-role key. A client that navigates back to the success URL has proved
+nothing, so the success page grants nothing — it just says the payment was
+received and refreshes the balance once the webhook lands.
+
+| Flow | Endpoint | Settled by |
+| ---- | -------- | ---------- |
+| Buy credits | `POST /api/billing/purchases` → `checkoutUrl` | `checkout.session.completed` |
+| Start/change a plan | `POST /api/billing/checkout/subscription` | `customer.subscription.*` |
+| Cards, invoices, cancel | `POST /api/billing/portal` | Stripe's hosted portal |
+
+Every handler is **replay-safe**, because Stripe guarantees at-least-once
+delivery and retries on any non-2xx. The event id is claimed before anything is
+applied, `credit_purchases` is unique on `(provider, provider_ref)`, `payments`
+is unique on both the payment-intent and invoice ids, and
+`stripe_sync_subscription` re-grants credits only when the plan, seats or period
+actually moved — Stripe sends `subscription.updated` for plenty of changes that
+don't affect entitlement, and re-granting on each would hand out free credits. A
+handler that fails returns 500 so Stripe retries; returning 200 on a failed write
+would silently lose a payment.
+
+Cancelling ends the plan allowance but **leaves purchased credits alone** — those
+were paid for in cash.
+
+### Receipts and payment history
+
+Stripe emails a receipt for every charge (`receipt_email` is set on the payment
+intent) and emails subscription invoices when *Billing → Invoices → email
+finalized invoices* is enabled in the dashboard. The webhook also stores the
+`receipt_url`, `hosted_invoice_url` and `invoice_pdf` on each `payments` row, so
+**Billing → Payment history** in-product lists every charge, refund and invoice
+with a link to the receipt. A customer who deletes the email can always retrieve
+proof of payment themselves.
+
+Note the two histories are deliberately separate: **payment history** is what was
+*charged*, **credit history** is how credits were *granted and consumed*.
+
+### Setting it up
+
+1. Create a product + recurring Price for each paid plan (monthly and annual),
+   then record the price ids:
+   ```sql
+   update public.billing_plans
+      set stripe_price_id_monthly = 'price_...', stripe_price_id_annual = 'price_...'
+    where code = 'pro';
+   ```
+   A plan with no price id returns a clear `price_not_configured` error rather
+   than a broken checkout.
+2. Set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and
+   `SUPABASE_SERVICE_ROLE_KEY` (the webhook has no user session to act under).
+3. Point a webhook endpoint at `POST /api/webhooks/stripe` subscribed to
+   `checkout.session.completed`, `invoice.paid`, `invoice.payment_failed`,
+   `customer.subscription.created/updated/deleted` and `charge.refunded`.
+
+Locally: `stripe listen --forward-to localhost:4000/api/webhooks/stripe`.
+
+The webhook route is mounted with a **raw body parser before `express.json()`** —
+signature verification is over the exact bytes Stripe sent, and once a JSON
+parser has consumed the stream the signature can no longer be checked. Without
+`STRIPE_WEBHOOK_SECRET` the endpoint rejects every request rather than trusting
+an unverified payload.
 ### Web Access
 
 A member connects a site once — name, address, username, password — and everyone in the
