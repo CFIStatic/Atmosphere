@@ -8,6 +8,7 @@ import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { AuditPage } from './pages/AuditPage';
+import { ComputerUsePage } from './pages/ComputerUsePage';
 import { AppLayout } from './components/AppLayout';
 import { SpinnerIcon } from './components/icons';
 
@@ -86,6 +87,17 @@ export default function App() {
                   <AppLayout>
                     <AuditPage />
                   </AppLayout>
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/computer-use"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <ComputerUsePage />
                 </RequireOnboarded>
               </ProtectedRoute>
             }
