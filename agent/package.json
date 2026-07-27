@@ -1,0 +1,29 @@
+{
+  "name": "atmosphere-agent",
+  "version": "1.0.0",
+  "description": "Atmosphere computer-use agent — runs on a computer and lets Claude see and control it",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "atmosphere-agent": "dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "sharp": "^0.33.5",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.4",
+    "@types/ws": "^8.5.12",
+    "tsx": "^4.19.1",
+    "typescript": "^5.5.4"
+  }
+}

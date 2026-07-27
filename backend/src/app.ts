@@ -7,6 +7,7 @@ import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
 import { webAccessRouter } from './routes/webAccess.js';
 import { verifierRouter } from './routes/verifier.js';
+import { computerRouter } from './routes/computer.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
@@ -62,6 +63,7 @@ export function createApp(): Express {
   app.use('/api/org', orgRouter);
   app.use('/api/web-access', webAccessRouter);
   app.use('/api/verifier', verifierRouter);
+  app.use('/api/computer', computerRouter);
 
   // 404 + error handling (must be last).
   app.use(notFound);
