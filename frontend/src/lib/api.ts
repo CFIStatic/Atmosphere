@@ -1171,6 +1171,31 @@ export const api = {
       { method: 'DELETE' },
     ),
 
+  appendDryingReport: (jobId: string, report: DryingReportInput) =>
+    request<{ report: DryingReportInput & { id: string }; reports: Array<DryingReportInput & { id: string }> }>(
+      `/api/mitigation/jobs/${encodeURIComponent(jobId)}/drying-reports`,
+      { method: 'POST', body: JSON.stringify(report) },
+    ),
+
+  getJobProgress: (jobId: string) =>
+    request<{
+      jobId: string;
+      reports: Array<DryingReportInput & { id: string }>;
+      dryingProgress: DryingProgress;
+      equipmentPlan: EquipmentPlan;
+    }>(`/api/mitigation/jobs/${encodeURIComponent(jobId)}/progress`, { method: 'GET' }),
+
+  rebuildEstimate: (jobId: string, input: BuildEstimateInput & { save?: boolean }) =>
+    request<{
+      estimate: MitigationEstimate;
+      saved: boolean;
+      estimateId?: string;
+      jobId?: string;
+    }>(`/api/mitigation/jobs/${encodeURIComponent(jobId)}/rebuild`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
   getStandards: () =>
     request<{
       editions: { s500: string; s520: string };
@@ -2371,10 +2396,104 @@ export interface BuildEstimateInput {
   mica?: unknown;
   photos?: PhotoManifestEntry[];
   notes?: string;
+  /** Visit timeline — merges into the live assessment as the job progresses. */
+  dryingReports?: DryingReportInput[];
   overrides?: Record<string, unknown>;
   settings?: EstimatorSettings;
   /** Knowledge key or scope item id → live account Xactimate code. */
   codeOverrides?: Record<string, string>;
+}
+
+/** One drying visit / export sent with build or appended to a saved job. */
+export interface DryingReportInput {
+  id?: string;
+  takenAt: string;
+  source: 'mica' | 'manual' | 'notes' | 'photos';
+  notes?: string;
+  moistureReadings?: Array<{
+    roomId: string;
+    material: string;
+    value: number;
+    dryStandard: number;
+    takenAt: string;
+    location?: string;
+  }>;
+  psychrometrics?: Array<{
+    takenAt: string;
+    zone: 'affected' | 'unaffected' | 'outside' | 'dehu_outlet';
+    temperatureF: number;
+    relativeHumidity: number;
+    gpp?: number;
+  }>;
+  equipment?: Array<{
+    kind: string;
+    quantity: number;
+    roomId?: string;
+    placedAt: string;
+    removedAt?: string;
+    days?: number;
+  }>;
+  roomsAtDryStandard?: string[];
+  roomsStillWet?: string[];
+}
+
+export interface DryingProgress {
+  reports: Array<{
+    id: string;
+    takenAt: string;
+    source: DryingReportInput['source'];
+    notes?: string;
+  }>;
+  latestAt?: string;
+  visitCount: number;
+  moistureReadingCount: number;
+  psychrometricCount: number;
+  roomsAtDryStandard: string[];
+  roomsStillWet: string[];
+  gppDifferential: number | null;
+  dryingComplete: boolean;
+  suggestedRemainingDays: number;
+  timeline: Array<{
+    takenAt: string;
+    source: DryingReportInput['source'];
+    summary: string;
+  }>;
+}
+
+export interface RoomEquipmentPlan {
+  roomId: string;
+  roomName: string;
+  cutHeightIn: number;
+  openWallSF: number;
+  wetFloorSF: number;
+  wetCeilingSF: number;
+  airMoversRequired: number;
+  injectidryRecommended: boolean;
+  floodCutRequired: boolean;
+  rationale: string;
+}
+
+export interface EquipmentPlan {
+  rooms: RoomEquipmentPlan[];
+  lines: Array<{
+    kind: string;
+    units: number;
+    days: number;
+    unitDays: number;
+    source: 'plan' | 'log' | 'merged';
+    rationale: string;
+  }>;
+  dehu: {
+    affectedCF: number;
+    requiredPintsPerDay: number;
+    unitsRequired: number;
+    factor: number;
+    dehuType: string;
+  };
+  scrubbersRequired: number;
+  airMoversRequired: number;
+  warnings: string[];
+  billingMode: 'as_logged' | 'recommended' | 'max';
 }
 
 export interface PhotoManifestEntry {
@@ -2627,6 +2746,10 @@ export interface MitigationEstimate {
   references: StandardReference[];
   /** What must be mitigated / documented, by authority. */
   requirements?: MitigationRequirement[];
+  /** S500-sized equipment plan (flood-cut open wall → air movers, class → dehu). */
+  equipmentPlan?: EquipmentPlan;
+  /** Progress from the drying-report timeline. */
+  dryingProgress?: DryingProgress;
   narrative: string;
   openQuestions: string[];
 }

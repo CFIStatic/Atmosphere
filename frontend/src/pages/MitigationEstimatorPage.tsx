@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, ApiError, type MitigationEstimate, type XactimateStatus } from '../lib/api';
+import {
+  api,
+  ApiError,
+  type DryingReportInput,
+  type MitigationEstimate,
+  type XactimateStatus,
+} from '../lib/api';
 import { Logo } from '../components/Logo';
 import { SpinnerIcon } from '../components/icons';
 import { SourcePanel, type Sources } from '../components/estimator/SourcePanel';
@@ -20,9 +26,13 @@ import { XactimateCard } from '../components/estimator/XactimateCard';
  *     connection, an explicit write permission, and — when the review found
  *     something critical — a confirmation. Pushing a bad estimate is worse than
  *     not pushing one.
+ *
+ * Drying reports ride along with sources and also append to a saved job. Each
+ * visit rebuilds the estimate so equipment days, dry-standard progress, and
+ * under-equipment flags stay current as the project progresses.
  */
 
-const EMPTY_SOURCES: Sources = { photos: [], notes: '' };
+const EMPTY_SOURCES: Sources = { photos: [], notes: '', dryingReports: [] };
 
 export function MitigationEstimatorPage() {
   const [sources, setSources] = useState<Sources>(EMPTY_SOURCES);
@@ -65,6 +75,7 @@ export function MitigationEstimatorPage() {
       mica: sources.mica,
       photos: sources.photos.length ? sources.photos : undefined,
       notes: sources.notes.trim() || undefined,
+      dryingReports: sources.dryingReports?.length ? sources.dryingReports : undefined,
       codeOverrides: Object.keys(codeOverrides).length ? codeOverrides : undefined,
     };
   }
@@ -99,7 +110,7 @@ export function MitigationEstimatorPage() {
       // The agent's own job id, not the database row — deviations are recorded
       // against it so they survive a rebuild.
       setJobId(result.estimate.jobId);
-      setNotice('Saved. Exports are available below.');
+      setNotice('Saved. Exports are available below. Drying visits will persist on this job.');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save the estimate.');
     } finally {
@@ -148,6 +159,78 @@ export function MitigationEstimatorPage() {
     }
   }
 
+  function appendLocalDryingReport(report: DryingReportInput) {
+    setSources((current) => ({
+      ...current,
+      dryingReports: [...(current.dryingReports ?? []), report],
+    }));
+    setNotice('Visit added — rebuilding with drying progress…');
+    // Rebuild after state flush via microtask so payload includes the new report.
+    queueMicrotask(() => {
+      void buildWithReports([...(sources.dryingReports ?? []), report]);
+    });
+  }
+
+  async function buildWithReports(dryingReports: DryingReportInput[]) {
+    setBuilding(true);
+    setError(null);
+    setConfirmPush(false);
+    setEstimateId(null);
+    try {
+      const { estimate: next } = await api.buildEstimate({
+        ...payload(),
+        dryingReports: dryingReports.length ? dryingReports : undefined,
+      });
+      setEstimate(next);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not build the estimate.');
+    } finally {
+      setBuilding(false);
+    }
+  }
+
+  async function appendSavedDryingReport(report: DryingReportInput) {
+    if (!jobId) {
+      appendLocalDryingReport(report);
+      return;
+    }
+    setBuilding(true);
+    setError(null);
+    try {
+      const { reports } = await api.appendDryingReport(jobId, report);
+      setSources((current) => ({
+        ...current,
+        dryingReports: reports.map((r) => ({
+          id: r.id,
+          takenAt: r.takenAt,
+          source: r.source,
+          notes: r.notes,
+          moistureReadings: r.moistureReadings,
+          psychrometrics: r.psychrometrics,
+          equipment: r.equipment,
+          roomsAtDryStandard: r.roomsAtDryStandard,
+          roomsStillWet: r.roomsStillWet,
+        })),
+      }));
+      const result = await api.rebuildEstimate(jobId, {
+        ...payload(),
+        dryingReports: undefined, // server merges stored reports
+      });
+      setEstimate(result.estimate);
+      if (result.estimateId) setEstimateId(result.estimateId);
+      setNotice(
+        `Visit ${reports.length} logged. Estimate updated with drying progress` +
+          (result.estimate.equipmentPlan
+            ? ` — plan calls for ${result.estimate.equipmentPlan.airMoversRequired} air movers.`
+            : '.'),
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save the drying report.');
+    } finally {
+      setBuilding(false);
+    }
+  }
+
   async function loadDemo() {
     setError(null);
     try {
@@ -157,6 +240,7 @@ export function MitigationEstimatorPage() {
         mica: demo.mica,
         photos: demo.photos ?? [],
         notes: demo.notes ?? '',
+        dryingReports: demo.dryingReports ?? [],
       });
       setEstimate(null);
       setEstimateId(null);
@@ -188,9 +272,10 @@ export function MitigationEstimatorPage() {
           <p className="text-sm font-medium text-brand-400">Mitigation</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-white">Estimator</h1>
           <p className="mt-2 max-w-2xl text-gray-400">
-            Photos and field notes alone are enough: the agent identifies what is wrong with the
-            property, what IICRC / insurance / code obliges, and builds the mitigation scope from
-            that. Add a DocuSketch scan or MICA log when you have them for measured quantities.
+            Photos and field notes alone are enough: the agent identifies what is wrong, what IICRC
+            / insurance / code obliges, and sizes equipment from the loss — including how many air
+            movers a 2-foot flood cut needs. Append drying reports as the job progresses and the
+            estimate stays current.
           </p>
         </div>
 
@@ -276,6 +361,10 @@ export function MitigationEstimatorPage() {
                 // Accepting a deviation changes what the terms check concludes,
                 // so the estimate is rebuilt rather than patched in place.
                 onDeviationAccepted={() => void build()}
+                localDryingReports={sources.dryingReports ?? []}
+                onAppendDryingReport={appendLocalDryingReport}
+                onAppendSavedDryingReport={appendSavedDryingReport}
+                busy={building}
               />
             ) : (
               <div className="grid h-64 place-items-center rounded-xl border border-dashed border-white/10 text-center">

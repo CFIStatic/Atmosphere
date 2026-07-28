@@ -3,6 +3,7 @@ import {
   api,
   usd,
   type CodeSearchHit,
+  type DryingReportInput,
   type MitigationEstimate,
   type ProfitFinding,
   type StandardReference,
@@ -11,6 +12,7 @@ import { CompliancePanel, formatLocation } from './CompliancePanel';
 import { SlaPanel } from './SlaPanel';
 import { CodePicker } from './CodePicker';
 import { FindingsPanel } from './FindingsPanel';
+import { DryingProgressPanel } from './DryingProgressPanel';
 
 /**
  * The finished estimate.
@@ -30,6 +32,10 @@ export function EstimateResult({
   onDeviationAccepted,
   onCodeOverride,
   confirmPush,
+  localDryingReports = [],
+  onAppendDryingReport,
+  onAppendSavedDryingReport,
+  busy,
 }: {
   estimate: MitigationEstimate;
   onPush?: () => void;
@@ -42,6 +48,10 @@ export function EstimateResult({
   onCodeOverride?: (catalogKey: string, code: string) => void;
   /** When true, the push button confirms critical findings on the next click. */
   confirmPush?: boolean;
+  localDryingReports?: DryingReportInput[];
+  onAppendDryingReport?: (report: DryingReportInput) => void;
+  onAppendSavedDryingReport?: (report: DryingReportInput) => Promise<void>;
+  busy?: boolean;
 }) {
   const { assessment, profitability, lineItems } = estimate;
   const unverified = lineItems.filter((line) => !line.priceVerified).length;
@@ -92,6 +102,20 @@ export function EstimateResult({
         findings={estimate.assessment.findings}
         requirements={estimate.requirements}
       />
+
+      {(estimate.equipmentPlan ||
+        estimate.dryingProgress ||
+        localDryingReports.length > 0 ||
+        onAppendDryingReport) && (
+        <DryingProgressPanel
+          estimate={estimate}
+          localReports={localDryingReports}
+          onAppendLocal={onAppendDryingReport ?? (() => undefined)}
+          onAppendSaved={onAppendSavedDryingReport}
+          jobId={jobId}
+          busy={busy}
+        />
+      )}
 
       {/* ---- Findings ---- */}
       {profitability.findings.length > 0 && (

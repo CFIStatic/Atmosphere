@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { PhotoManifestEntry } from '../../lib/api';
+import type { DryingReportInput, PhotoManifestEntry } from '../../lib/api';
 
 /**
  * Source intake.
@@ -15,6 +15,9 @@ import type { PhotoManifestEntry } from '../../lib/api';
  * pointless. Captions are editable here because they are what substantiate
  * demolition line items later — "flood cut 24in master bath" is worth more on
  * review than the photo it labels.
+ *
+ * Drying reports are the fifth input: visit-by-visit progress that updates the
+ * live assessment as the project unfolds (logged via the progress panel).
  */
 
 export interface Sources {
@@ -22,6 +25,7 @@ export interface Sources {
   mica?: unknown;
   photos: PhotoManifestEntry[];
   notes: string;
+  dryingReports?: DryingReportInput[];
 }
 
 export function SourcePanel({
