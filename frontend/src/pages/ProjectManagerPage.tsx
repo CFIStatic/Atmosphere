@@ -10,10 +10,13 @@ import {
   type PmBrief,
   type PmCommunication,
   type PmEngineResult,
+  type PmNetworkSummary,
   type PmOverview,
   type PmPlatformConnection,
   type PmProcurementRequest,
   type PmProjectSummary,
+  type PmThread,
+  type PmThreadMessage,
 } from '../lib/api';
 import { Logo } from '../components/Logo';
 import { SpinnerIcon } from '../components/icons';
@@ -37,7 +40,16 @@ import {
  * meant to give back.
  */
 
-type Tab = 'alerts' | 'approvals' | 'inbox' | 'procurement' | 'platforms' | 'projects' | 'crew';
+type Tab =
+  | 'alerts'
+  | 'approvals'
+  | 'inbox'
+  | 'threads'
+  | 'network'
+  | 'procurement'
+  | 'platforms'
+  | 'projects'
+  | 'crew';
 
 export function ProjectManagerPage() {
   const { user, membership } = useAuth();
@@ -58,6 +70,18 @@ export function ProjectManagerPage() {
     catalogue: { platform: string; label: string; description: string }[];
     connections: PmPlatformConnection[];
   } | null>(null);
+  const [network, setNetwork] = useState<PmNetworkSummary | null>(null);
+  const [threads, setThreads] = useState<PmThread[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [threadMessages, setThreadMessages] = useState<PmThreadMessage[]>([]);
+  const [threadDraft, setThreadDraft] = useState('');
+  const [inviteForm, setInviteForm] = useState({
+    inviteeKind: 'subcontractor',
+    inviteeName: '',
+    inviteeEmail: '',
+    inviteeCompany: '',
+  });
+  const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -84,8 +108,23 @@ export function ProjectManagerPage() {
       void api.pmProcurement().then((r) => setProcurement(r.requests)).catch(() => undefined);
     } else if (tab === 'platforms') {
       void api.pmPlatforms().then(setPlatforms).catch(() => undefined);
+    } else if (tab === 'network') {
+      void api.pmNetwork().then(setNetwork).catch(() => undefined);
+    } else if (tab === 'threads') {
+      void api.pmThreads().then((r) => setThreads(r.threads)).catch(() => undefined);
     }
   }, [tab]);
+
+  useEffect(() => {
+    if (!activeThreadId) {
+      setThreadMessages([]);
+      return;
+    }
+    void api
+      .pmThread(activeThreadId)
+      .then((r) => setThreadMessages(r.messages))
+      .catch(() => undefined);
+  }, [activeThreadId]);
 
   /**
    * Evaluate every rule now.
@@ -295,6 +334,8 @@ export function ProjectManagerPage() {
                   'inbox',
                   `Inbox (${data?.counts.unreviewedComms ?? communications.filter((c) => c.status === 'new').length})`,
                 ],
+                ['threads', 'Threads'],
+                ['network', 'Network'],
                 [
                   'procurement',
                   `Procurement (${data?.counts.openProcurement ?? procurement.length})`,
@@ -439,6 +480,259 @@ export function ProjectManagerPage() {
                   </Card>
                 ))
               )}
+            </div>
+          )}
+
+          {tab === 'threads' && (
+            <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+              <div className="space-y-3">
+                <p className="text-sm text-ink-600">
+                  Adaptive internal threads — Atmosphere opens a conversation when the situation
+                  needs one (approvals, vendor traffic, procurement) and stays quiet otherwise.
+                </p>
+                {threads.length === 0 ? (
+                  <Card>
+                    <EmptyState>No open threads. They appear when something needs a talk.</EmptyState>
+                  </Card>
+                ) : (
+                  threads.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setActiveThreadId(t.id)}
+                      className={`w-full rounded-lg border px-4 py-3 text-left transition ${
+                        activeThreadId === t.id
+                          ? 'border-brand-500 bg-paper-0'
+                          : 'border-line bg-paper-0 hover:bg-paper-50'
+                      }`}
+                    >
+                      <div className="flex flex-wrap gap-2">
+                        <Pill>{t.kind.replace(/_/g, ' ')}</Pill>
+                        <Pill>{t.mode}</Pill>
+                        <Pill>{t.urgency}</Pill>
+                      </div>
+                      <p className="mt-2 text-sm font-semibold text-ink-900">{t.title}</p>
+                      <p className="mt-1 text-xs text-ink-500">
+                        {t.lastMessageAt
+                          ? `Last activity ${new Date(t.lastMessageAt).toLocaleString()}`
+                          : 'No messages yet'}
+                      </p>
+                    </button>
+                  ))
+                )}
+              </div>
+              <Card>
+                {!activeThreadId ? (
+                  <EmptyState>Select a thread to read and reply.</EmptyState>
+                ) : (
+                  <div className="flex h-[28rem] flex-col">
+                    <div className="flex-1 space-y-3 overflow-y-auto">
+                      {threadMessages.map((m) => (
+                        <div key={m.id} className="rounded-lg bg-paper-100 px-3 py-2">
+                          <p className="text-xs text-ink-500">
+                            {m.authorKind === 'atmosphere' ? 'Atmosphere' : 'You'} ·{' '}
+                            {new Date(m.createdAt).toLocaleString()}
+                          </p>
+                          <p className="mt-1 whitespace-pre-wrap text-sm text-ink-800">{m.body}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <form
+                      className="mt-3 flex gap-2 border-t border-line pt-3"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        if (!threadDraft.trim() || !activeThreadId) return;
+                        const body = threadDraft.trim();
+                        setThreadDraft('');
+                        void api
+                          .pmPostThreadMessage(activeThreadId, body)
+                          .then((r) => setThreadMessages((prev) => [...prev, r.message]));
+                      }}
+                    >
+                      <input
+                        value={threadDraft}
+                        onChange={(e) => setThreadDraft(e.target.value)}
+                        placeholder="Write a reply…"
+                        className="flex-1 rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-800"
+                      />
+                      <button
+                        type="submit"
+                        className="rounded-lg bg-brand-500 px-3 py-2 text-xs font-medium text-ink-900"
+                      >
+                        Send
+                      </button>
+                    </form>
+                  </div>
+                )}
+              </Card>
+            </div>
+          )}
+
+          {tab === 'network' && (
+            <div className="mt-5 space-y-4">
+              <p className="text-sm text-ink-600">
+                Invite vendors and subcontractors onto Atmosphere. Every accepted invite grows the
+                network — the next job prefers an on-platform partner instead of another text
+                thread.
+              </p>
+              {network && (
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <StatTile label="Partners" value={network.counts.partners} hint="Active on Atmosphere" />
+                  <StatTile
+                    label="Pending invites"
+                    value={network.counts.pendingInvites}
+                    hint={`${network.profile.invitesAccepted} accepted all-time`}
+                  />
+                  <StatTile
+                    label="Preferred"
+                    value={network.counts.preferred}
+                    hint={network.profile.displayName}
+                  />
+                </div>
+              )}
+
+              {data?.canManage && (
+                <Card title="Invite a partner">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="text-sm text-ink-700">
+                      Kind
+                      <select
+                        className="mt-1 w-full rounded-lg border border-line bg-paper-0 px-3 py-2"
+                        value={inviteForm.inviteeKind}
+                        onChange={(e) =>
+                          setInviteForm((f) => ({ ...f, inviteeKind: e.target.value }))
+                        }
+                      >
+                        <option value="subcontractor">Subcontractor</option>
+                        <option value="vendor">Vendor</option>
+                        <option value="supplier">Supplier</option>
+                        <option value="specialty">Specialty</option>
+                        <option value="general_contractor">General contractor</option>
+                      </select>
+                    </label>
+                    <label className="text-sm text-ink-700">
+                      Name
+                      <input
+                        className="mt-1 w-full rounded-lg border border-line bg-paper-0 px-3 py-2"
+                        value={inviteForm.inviteeName}
+                        onChange={(e) =>
+                          setInviteForm((f) => ({ ...f, inviteeName: e.target.value }))
+                        }
+                      />
+                    </label>
+                    <label className="text-sm text-ink-700">
+                      Company
+                      <input
+                        className="mt-1 w-full rounded-lg border border-line bg-paper-0 px-3 py-2"
+                        value={inviteForm.inviteeCompany}
+                        onChange={(e) =>
+                          setInviteForm((f) => ({ ...f, inviteeCompany: e.target.value }))
+                        }
+                      />
+                    </label>
+                    <label className="text-sm text-ink-700">
+                      Email
+                      <input
+                        type="email"
+                        className="mt-1 w-full rounded-lg border border-line bg-paper-0 px-3 py-2"
+                        value={inviteForm.inviteeEmail}
+                        onChange={(e) =>
+                          setInviteForm((f) => ({ ...f, inviteeEmail: e.target.value }))
+                        }
+                      />
+                    </label>
+                  </div>
+                  <button
+                    className="mt-4 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-ink-900"
+                    onClick={() => {
+                      if (!inviteForm.inviteeName || !inviteForm.inviteeEmail) {
+                        setError('Name and email are required to invite a partner.');
+                        return;
+                      }
+                      void api
+                        .pmInvitePartner({
+                          inviteeKind: inviteForm.inviteeKind,
+                          inviteeName: inviteForm.inviteeName,
+                          inviteeEmail: inviteForm.inviteeEmail,
+                          inviteeCompany: inviteForm.inviteeCompany || undefined,
+                        })
+                        .then((r) => {
+                          setLastInviteUrl(r.inviteUrl);
+                          setInviteForm({
+                            inviteeKind: 'subcontractor',
+                            inviteeName: '',
+                            inviteeEmail: '',
+                            inviteeCompany: '',
+                          });
+                          return api.pmNetwork();
+                        })
+                        .then(setNetwork)
+                        .catch((err) =>
+                          setError(
+                            err instanceof ApiError ? err.message : 'Could not send invite.',
+                          ),
+                        );
+                    }}
+                  >
+                    Create invite link
+                  </button>
+                  {lastInviteUrl && (
+                    <p className="mt-3 break-all text-xs text-ink-600">
+                      Share this link:{' '}
+                      <a className="text-brand-700 underline" href={lastInviteUrl}>
+                        {lastInviteUrl}
+                      </a>
+                    </p>
+                  )}
+                </Card>
+              )}
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <Card title="Partners">
+                  {(network?.partnerships ?? []).length === 0 ? (
+                    <EmptyState>No partners on Atmosphere yet. Invite the first one.</EmptyState>
+                  ) : (
+                    <ul className="space-y-2">
+                      {network!.partnerships.map((p) => (
+                        <li
+                          key={p.id}
+                          className="flex items-center justify-between rounded-lg border border-line px-3 py-2 text-sm"
+                        >
+                          <span className="text-ink-800">
+                            {p.partnerKind.replace(/_/g, ' ')}
+                            {p.preferred ? ' · preferred' : ''}
+                          </span>
+                          <span className="text-xs text-ink-500">{p.sharedJobs} shared jobs</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Card>
+                <Card title="Invites">
+                  {(network?.invites ?? []).length === 0 ? (
+                    <EmptyState>No invites yet.</EmptyState>
+                  ) : (
+                    <ul className="space-y-2">
+                      {network!.invites.map((i) => (
+                        <li
+                          key={i.id}
+                          className="rounded-lg border border-line px-3 py-2 text-sm text-ink-800"
+                        >
+                          <div className="flex flex-wrap gap-2">
+                            <Pill>{i.inviteeKind}</Pill>
+                            <Pill>{i.status}</Pill>
+                          </div>
+                          <p className="mt-1 font-medium">
+                            {i.inviteeName}
+                            {i.inviteeCompany ? ` · ${i.inviteeCompany}` : ''}
+                          </p>
+                          <p className="text-xs text-ink-500">{i.inviteeEmail || i.inviteePhone}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Card>
+              </div>
             </div>
           )}
 

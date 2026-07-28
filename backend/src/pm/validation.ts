@@ -331,6 +331,7 @@ const channels = z.enum([
   'sms',
   'email',
   'outlook',
+  'internal',
   'other',
 ]);
 
@@ -455,7 +456,16 @@ export const mentionWebhookSchema = z.object({
   counterpartyName: optionalText(160),
   counterpartyHandle: optionalText(200),
   counterpartyKind: z
-    .enum(['vendor', 'customer', 'adjuster', 'crew', 'carrier', 'supplier', 'unknown'])
+    .enum([
+      'vendor',
+      'subcontractor',
+      'customer',
+      'adjuster',
+      'crew',
+      'carrier',
+      'supplier',
+      'unknown',
+    ])
     .optional(),
   threadKey: optionalText(200),
   externalMessageId: optionalText(200),
@@ -465,4 +475,86 @@ export const mentionWebhookSchema = z.object({
   addressHint: optionalText(200),
   projectId: uuid.optional().nullable(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+const inviteeKinds = z.enum([
+  'subcontractor',
+  'vendor',
+  'supplier',
+  'specialty',
+  'general_contractor',
+]);
+
+export const partnerInviteSchema = z
+  .object({
+    inviteeKind: inviteeKinds,
+    inviteeName: shortText(160),
+    inviteeEmail: optionalText(200),
+    inviteePhone: optionalText(40),
+    inviteeCompany: optionalText(160),
+    trades: z.array(shortText(60)).max(20).optional(),
+    message: optionalText(2000),
+    projectId: uuid.optional().nullable(),
+    crmAccountId: uuid.optional().nullable(),
+  })
+  .refine((v) => Boolean(v.inviteeEmail || v.inviteePhone), {
+    message: 'Provide an email or phone',
+  });
+
+export const partnerProfileSchema = z.object({
+  displayName: shortText(160).optional(),
+  kind: z
+    .enum([
+      'restoration',
+      'general_contractor',
+      'subcontractor',
+      'vendor',
+      'supplier',
+      'specialty',
+    ])
+    .optional(),
+  blurb: optionalText(1000),
+  trades: z.array(shortText(60)).max(30).optional(),
+  serviceAreas: z.array(shortText(40)).max(50).optional(),
+  phone: optionalText(40),
+  email: optionalText(200),
+  website: optionalText(400),
+  discoverable: z.boolean().optional(),
+});
+
+export const acceptPartnerInviteSchema = z.object({
+  token: shortText(80),
+  displayName: shortText(160),
+  kind: inviteeKinds,
+  trades: z.array(shortText(60)).max(20).optional(),
+});
+
+export const createThreadSchema = z.object({
+  kind: z.enum([
+    'project_ops',
+    'vendor_coordination',
+    'approval_followup',
+    'procurement',
+    'network',
+    'general',
+  ]),
+  title: shortText(200),
+  mode: z.enum(['live', 'digest', 'muted']).optional(),
+  urgency: z.enum(PRIORITIES).optional(),
+  projectId: uuid.optional().nullable(),
+  partnershipId: uuid.optional().nullable(),
+  seedMessage: optionalText(4000),
+  participantUserIds: z.array(uuid).max(40).optional(),
+});
+
+export const postThreadMessageSchema = z.object({
+  body: shortText(16000),
+  payload: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const updateThreadSchema = z.object({
+  status: z.enum(['open', 'resolved', 'archived']).optional(),
+  mode: z.enum(['live', 'digest', 'muted']).optional(),
+  urgency: z.enum(PRIORITIES).optional(),
+  title: shortText(200).optional(),
 });

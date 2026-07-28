@@ -7,6 +7,8 @@ import {
   mentionRequestsAction,
   communicationFingerprint,
 } from '../src/pm/orchestration/messaging.ts';
+import { proposeThreadAdaptations } from '../src/pm/orchestration/threads.ts';
+import type { OrgSnapshot } from '../src/pm/types.ts';
 
 describe('deriveEquipmentPlan', () => {
   it('maps mitigation equipment and infers a dumpster from tear-out', () => {
@@ -85,5 +87,138 @@ describe('messaging intake', () => {
       body: 'different',
     });
     assert.equal(a, b);
+  });
+});
+
+describe('adaptive threads', () => {
+  it('opens live approval follow-ups and procurement digests', () => {
+    const snapshot = {
+      orgId: 'org',
+      settings: {} as OrgSnapshot['settings'],
+      now: new Date(),
+      equipment: [],
+      members: [],
+      pendingApprovals: [
+        {
+          id: 'ap1',
+          orgId: 'org',
+          projectId: 'p1',
+          kind: 'accept_bid',
+          title: 'Accept dumpster bid',
+          detail: 'WM $450',
+          proposedAction: {},
+          platform: 'web',
+          priority: 'urgent',
+          status: 'pending',
+          requestedBy: null,
+          decidedBy: null,
+          decidedAt: null,
+          decisionNote: null,
+          executedAt: null,
+          executionResult: {},
+          expiresAt: null,
+          sourceRef: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ],
+      projects: [
+        {
+          project: {
+            id: 'p1',
+            projectNumber: 'PRJ-0001',
+            name: 'Elm',
+          },
+          tasks: [],
+          usedOriginKeys: [],
+          assignments: [],
+          areas: [],
+          readings: [],
+          placements: [],
+          documents: [],
+          milestones: [],
+          platformLinks: [],
+          communications: [
+            {
+              id: 'c1',
+              orgId: 'org',
+              projectId: 'p1',
+              channel: 'whatsapp',
+              direction: 'inbound',
+              intake: 'mention',
+              counterpartyName: 'Subco',
+              counterpartyHandle: null,
+              counterpartyKind: 'subcontractor',
+              body: 'need access',
+              mentionExcerpt: null,
+              threadKey: null,
+              externalMessageId: null,
+              fingerprint: 'f1',
+              status: 'new',
+              reviewedAt: null,
+              reviewedBy: null,
+              metadata: {},
+              occurredAt: new Date().toISOString(),
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+            {
+              id: 'c2',
+              orgId: 'org',
+              projectId: 'p1',
+              channel: 'sms',
+              direction: 'inbound',
+              intake: 'mention',
+              counterpartyName: 'Vendor',
+              counterpartyHandle: null,
+              counterpartyKind: 'vendor',
+              body: 'eta?',
+              mentionExcerpt: null,
+              threadKey: null,
+              externalMessageId: null,
+              fingerprint: 'f2',
+              status: 'new',
+              reviewedAt: null,
+              reviewedBy: null,
+              metadata: {},
+              occurredAt: new Date().toISOString(),
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+          ],
+          procurement: [
+            {
+              id: 'pr1',
+              orgId: 'org',
+              projectId: 'p1',
+              planItemId: null,
+              kind: 'dumpster',
+              title: 'Dumpster',
+              description: null,
+              quantity: 1,
+              unit: 'ea',
+              shipToPostal: null,
+              shipToAddress: null,
+              status: 'bidding',
+              selectedBidId: null,
+              referralVendorKey: null,
+              referralUrl: null,
+              approvalId: null,
+              metadata: {},
+              createdBy: null,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+          ],
+          planItems: [],
+        },
+      ],
+    } as unknown as OrgSnapshot;
+
+    const adaptations = proposeThreadAdaptations(snapshot);
+    assert.ok(adaptations.some((a) => a.kind === 'approval_followup' && a.mode === 'live'));
+    assert.ok(adaptations.some((a) => a.kind === 'project_ops'));
+    assert.ok(adaptations.some((a) => a.kind === 'procurement'));
+    assert.ok(adaptations.some((a) => a.kind === 'vendor_coordination'));
   });
 });

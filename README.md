@@ -1390,6 +1390,10 @@ The human PM takes on many more jobs because Atmosphere orchestrates the rest:
 Full design: [`docs/pm-orchestration.md`](docs/pm-orchestration.md).
 Migration: `supabase/migrations/20260728142600_pm_orchestration.sql`.
 
+Partner network + adaptive internal threads:
+[`docs/pm-network-comms.md`](docs/pm-network-comms.md)
+(`supabase/migrations/20260728150000_pm_network_and_comms.sql`).
+
 ## Learning layer
 
 Full architecture: **[docs/reinforcement-learning.md](docs/reinforcement-learning.md)**.

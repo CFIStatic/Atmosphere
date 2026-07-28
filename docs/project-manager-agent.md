@@ -357,3 +357,6 @@ XactAnalysis / Xactimate / Outlook sync in and write out only through
 `pm_communications`; estimates become equipment plans; dumpsters get web bids;
 material orders use Atmosphere referral links. The human PM scales because the
 agent watches and prepares — and still waits when the next step needs judgment.
+
+Partner network (invite vendors/subs onto Atmosphere) and adaptive internal
+threads: [`docs/pm-network-comms.md`](./pm-network-comms.md).

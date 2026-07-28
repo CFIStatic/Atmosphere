@@ -115,6 +115,29 @@ export async function runEngine(
       ? await createProposedTasks(supabase, snapshot, findings, run)
       : 0;
 
+    // Adaptive internal threads — open/adjust conversations the situation needs.
+    try {
+      const { applyThreadAdaptations } = await import('./orchestration/threads.js');
+      const adapted = await applyThreadAdaptations(
+        supabase,
+        orgId,
+        options.actorUserId ?? null,
+        snapshot,
+      );
+      if (adapted.opened || adapted.adjusted) {
+        await step(supabase, run, {
+          type: 'event',
+          action: 'adapt_threads',
+          detail: `Opened ${adapted.opened} thread(s), adjusted ${adapted.adjusted}.`,
+          payload: adapted,
+        });
+      }
+    } catch (err) {
+      if ((err as { code?: string })?.code !== 'pm_network_schema_missing') {
+        warnings.push(`thread adaptation: ${(err as Error).message}`);
+      }
+    }
+
     const result: EngineResult = {
       orgId,
       ranAt: now.toISOString(),

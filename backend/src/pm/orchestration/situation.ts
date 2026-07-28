@@ -1,11 +1,12 @@
 /**
  * Situation awareness — one timeline of what is happening across platforms,
- * messaging, approvals and procurement so a PM can see the whole board.
+ * messaging, approvals, procurement, partner network and adaptive threads.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import * as pmStore from '../store.js';
 import * as orch from './store.js';
+import * as net from './networkStore.js';
 import type { SituationEvent } from './types.js';
 
 export async function buildSituation(
@@ -20,6 +21,9 @@ export async function buildSituation(
     openProcurement: number;
     staleLinks: number;
     openAlerts: number;
+    openThreads: number;
+    pendingInvites: number;
+    partners: number;
   };
 }> {
   const limit = options.limit ?? 80;
@@ -50,6 +54,23 @@ export async function buildSituation(
       }),
       orch.listLinks(supabase, orgId, { projectId }),
     ]);
+
+  let threads: Awaited<ReturnType<typeof net.listThreads>> = [];
+  let invites: Awaited<ReturnType<typeof net.listInvites>> = [];
+  let partnerships: Awaited<ReturnType<typeof net.listPartnerships>> = [];
+  try {
+    [threads, invites, partnerships] = await Promise.all([
+      net.listThreads(supabase, orgId, {
+        projectId,
+        status: ['open'],
+        limit: 100,
+      }),
+      net.listInvites(supabase, orgId, { status: ['pending', 'sent'] }),
+      net.listPartnerships(supabase, orgId, { status: ['active'] }),
+    ]);
+  } catch (err) {
+    if ((err as { code?: string })?.code !== 'pm_network_schema_missing') throw err;
+  }
 
   const events: SituationEvent[] = [];
 
@@ -118,6 +139,19 @@ export async function buildSituation(
     });
   }
 
+  for (const t of threads) {
+    events.push({
+      id: `thread:${t.id}`,
+      kind: 'communication',
+      projectId: t.projectId,
+      occurredAt: t.lastMessageAt || t.createdAt,
+      title: `Thread · ${t.title}`,
+      detail: `${t.kind.replace(/_/g, ' ')} · ${t.mode}`,
+      severity: t.urgency === 'urgent' || t.urgency === 'high' ? 'warn' : 'info',
+      status: t.mode,
+    });
+  }
+
   events.sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1));
 
   const staleCutoff = Date.now() - 3 * 86_400_000;
@@ -135,6 +169,9 @@ export async function buildSituation(
       openProcurement: procurement.length,
       staleLinks,
       openAlerts: alerts.filter((a) => a.status === 'open').length,
+      openThreads: threads.length,
+      pendingInvites: invites.length,
+      partners: partnerships.length,
     },
   };
 }

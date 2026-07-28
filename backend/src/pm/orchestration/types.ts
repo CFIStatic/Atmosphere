@@ -38,6 +38,7 @@ export const COMMUNICATION_CHANNELS = [
   'sms',
   'email',
   'outlook',
+  'internal',
   'other',
 ] as const;
 export type CommunicationChannel = (typeof COMMUNICATION_CHANNELS)[number];
@@ -53,6 +54,7 @@ export type CommunicationStatus = (typeof COMMUNICATION_STATUSES)[number];
 
 export const COUNTERPARTY_KINDS = [
   'vendor',
+  'subcontractor',
   'customer',
   'adjuster',
   'crew',

@@ -1131,6 +1131,45 @@ export const api = {
       { method: 'POST', body: JSON.stringify(input) },
     ),
 
+  pmNetwork: () => request<PmNetworkSummary>('/api/pm/network', { method: 'GET' }),
+
+  pmInvitePartner: (input: Record<string, unknown>) =>
+    request<{ invite: PmPartnerInvite; inviteUrl: string; threadId: string | null }>(
+      '/api/pm/network/invites',
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+
+  pmUpdatePartnerProfile: (patch: Record<string, unknown>) =>
+    request<{ profile: PmPartnerProfile }>('/api/pm/network/profile', {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+
+  pmThreads: (status = 'open') =>
+    request<{ threads: PmThread[] }>(
+      `/api/pm/threads?status=${encodeURIComponent(status)}`,
+      { method: 'GET' },
+    ),
+
+  pmThread: (id: string) =>
+    request<{
+      thread: PmThread;
+      messages: PmThreadMessage[];
+      participants: { id: string; userId: string | null; roleInThread: string }[];
+    }>(`/api/pm/threads/${id}`, { method: 'GET' }),
+
+  pmPostThreadMessage: (id: string, body: string) =>
+    request<{ message: PmThreadMessage }>(`/api/pm/threads/${id}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ body }),
+    }),
+
+  pmCreateThread: (input: Record<string, unknown>) =>
+    request<{ thread: PmThread }>('/api/pm/threads', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
   // ---- Web Access ----
   webAccessStatus: () =>
     request<{ enabled: boolean; capacityAvailable: boolean; maxSteps: number }>(
@@ -2165,7 +2204,73 @@ export interface PmSituation {
     openProcurement: number;
     staleLinks: number;
     openAlerts: number;
+    openThreads?: number;
+    pendingInvites?: number;
+    partners?: number;
   };
+}
+
+export interface PmPartnerProfile {
+  orgId: string;
+  displayName: string;
+  kind: string;
+  blurb: string | null;
+  trades: string[];
+  serviceAreas: string[];
+  invitesSent: number;
+  invitesAccepted: number;
+  jobsCompleted: number;
+  discoverable: boolean;
+}
+
+export interface PmPartnerInvite {
+  id: string;
+  inviteeKind: string;
+  inviteeName: string;
+  inviteeEmail: string | null;
+  inviteePhone: string | null;
+  inviteeCompany: string | null;
+  status: string;
+  token: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface PmPartnership {
+  id: string;
+  partnerOrgId: string;
+  partnerKind: string;
+  status: string;
+  preferred: boolean;
+  sharedJobs: number;
+}
+
+export interface PmNetworkSummary {
+  profile: PmPartnerProfile;
+  partnerships: PmPartnership[];
+  invites: PmPartnerInvite[];
+  counts: { partners: number; pendingInvites: number; preferred: number };
+}
+
+export interface PmThread {
+  id: string;
+  projectId: string | null;
+  kind: string;
+  mode: string;
+  title: string;
+  status: string;
+  urgency: string;
+  lastMessageAt: string | null;
+  createdAt: string;
+}
+
+export interface PmThreadMessage {
+  id: string;
+  threadId: string;
+  authorUserId: string | null;
+  authorKind: string;
+  body: string;
+  createdAt: string;
 }
 
 export interface PmAreaAnalysis {

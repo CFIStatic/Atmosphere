@@ -34,9 +34,18 @@ import { ingestMention } from '../pm/orchestration/messaging.js';
 import { config } from '../config.js';
 import type { ProjectContext } from '../pm/types.js';
 import {
+  acceptPartnerInvite,
+  claimAcceptedInvites,
+  invitePartner,
+  networkSummary,
+} from '../pm/orchestration/network.js';
+import * as netStore from '../pm/orchestration/networkStore.js';
+import { createThread } from '../pm/orchestration/threads.js';
+import {
   alertActionSchema,
   assertPhaseAllowed,
   assignCrewSchema,
+  acceptPartnerInviteSchema,
   briefQuerySchema,
   communicationStatusSchema,
   connectPlatformSchema,
@@ -46,6 +55,7 @@ import {
   createProjectSchema,
   createReadingsSchema,
   createTaskSchema,
+  createThreadSchema,
   decideApprovalSchema,
   deriveEquipmentPlanSchema,
   draftUpdateSchema,
@@ -53,7 +63,10 @@ import {
   linkPlatformSchema,
   manualCommunicationSchema,
   materialReferralSchema,
+  partnerInviteSchema,
+  partnerProfileSchema,
   placeEquipmentSchema,
+  postThreadMessageSchema,
   projectQuerySchema,
   selectBidSchema,
   settingsSchema,
@@ -64,6 +77,7 @@ import {
   updateMilestoneSchema,
   updateProjectSchema,
   updateTaskSchema,
+  updateThreadSchema,
 } from '../pm/validation.js';
 
 export const pmRouter = Router();
@@ -1285,6 +1299,219 @@ pmRouter.post(
         bidId: input.bidId,
       });
       res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/* ------------------------------------------------------------------ *
+ * Partner network + adaptive internal threads
+ * ------------------------------------------------------------------ */
+
+pmRouter.get('/network', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, org, userId } = await ctxOf(req);
+    // Materialise any invites that accepted while we were away.
+    try {
+      await claimAcceptedInvites(supabase, org.orgId, userId);
+    } catch (err) {
+      if ((err as { code?: string })?.code !== 'pm_network_schema_missing') {
+        /* non-fatal */
+      }
+    }
+    const orgName =
+      (req as { membership?: { org?: { name?: string } } }).membership?.org?.name ||
+      'Atmosphere org';
+    // Prefer the name from org_members join if available via a cheap profiles peek —
+    // networkSummary will upsert a profile with this fallback.
+    const summary = await networkSummary(supabase, org.orgId, orgName);
+    res.json(summary);
+  } catch (err) {
+    next(err);
+  }
+});
+
+pmRouter.patch('/network/profile', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, org } = await ctxOf(req);
+    store.requireManager(org);
+    const input = partnerProfileSchema.parse(req.body);
+    const patch: Record<string, unknown> = {};
+    if (input.displayName !== undefined) patch.display_name = input.displayName;
+    if (input.kind !== undefined) patch.kind = input.kind;
+    if (input.blurb !== undefined) patch.blurb = input.blurb ?? null;
+    if (input.trades !== undefined) patch.trades = input.trades;
+    if (input.serviceAreas !== undefined) patch.service_areas = input.serviceAreas;
+    if (input.phone !== undefined) patch.phone = input.phone ?? null;
+    if (input.email !== undefined) patch.email = input.email ?? null;
+    if (input.website !== undefined) patch.website = input.website ?? null;
+    if (input.discoverable !== undefined) patch.discoverable = input.discoverable;
+    const profile = await netStore.upsertProfile(supabase, org.orgId, patch);
+    res.json({ profile });
+  } catch (err) {
+    next(err);
+  }
+});
+
+pmRouter.post('/network/invites', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, org, userId } = await ctxOf(req);
+    store.requireManager(org);
+    const input = partnerInviteSchema.parse(req.body);
+    const result = await invitePartner(supabase, org.orgId, userId, {
+      ...input,
+      orgName: 'Atmosphere org',
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+pmRouter.post(
+  '/network/invites/:id/revoke',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { supabase, org } = await ctxOf(req);
+      store.requireManager(org);
+      const invite = await netStore.updateInvite(supabase, req.params.id!, {
+        status: 'revoked',
+      });
+      if (invite.orgId !== org.orgId) {
+        throw new HttpError(404, 'Invite not found.', 'pm_not_found');
+      }
+      res.json({ invite });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+pmRouter.post('/network/accept', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, org, userId } = await ctxOf(req);
+    store.requireManager(org);
+    const input = acceptPartnerInviteSchema.parse(req.body);
+    const result = await acceptPartnerInvite(supabase, org.orgId, userId, input.token, {
+      displayName: input.displayName,
+      kind: input.kind,
+      trades: input.trades,
+    });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+pmRouter.get('/threads', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, org } = await ctxOf(req);
+    const threads = await netStore.listThreads(supabase, org.orgId, {
+      projectId: typeof req.query.projectId === 'string' ? req.query.projectId : undefined,
+      status:
+        typeof req.query.status === 'string' && req.query.status
+          ? req.query.status.split(',')
+          : ['open'],
+    });
+    res.json({ threads });
+  } catch (err) {
+    next(err);
+  }
+});
+
+pmRouter.post('/threads', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, org, userId } = await ctxOf(req);
+    const input = createThreadSchema.parse(req.body);
+    const thread = await createThread(supabase, org.orgId, userId, {
+      kind: input.kind,
+      mode: input.mode ?? 'live',
+      title: input.title,
+      urgency: input.urgency ?? 'normal',
+      projectId: input.projectId,
+      partnershipId: input.partnershipId,
+      seedMessage: input.seedMessage,
+      participantUserIds: input.participantUserIds,
+    });
+    res.status(201).json({ thread });
+  } catch (err) {
+    next(err);
+  }
+});
+
+pmRouter.get('/threads/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, org } = await ctxOf(req);
+    const threads = await netStore.listThreads(supabase, org.orgId, {
+      status: ['open', 'resolved', 'archived'],
+      limit: 500,
+    });
+    const thread = threads.find((t) => t.id === req.params.id);
+    if (!thread) throw new HttpError(404, 'Thread not found.', 'pm_not_found');
+    const [messages, participants] = await Promise.all([
+      netStore.listMessages(supabase, thread.id),
+      netStore.listParticipants(supabase, thread.id),
+    ]);
+    res.json({ thread, messages, participants });
+  } catch (err) {
+    next(err);
+  }
+});
+
+pmRouter.patch('/threads/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, org, userId } = await ctxOf(req);
+    const input = updateThreadSchema.parse(req.body);
+    const patch: Record<string, unknown> = {};
+    if (input.status !== undefined) {
+      patch.status = input.status;
+      if (input.status === 'resolved') {
+        patch.resolved_at = new Date().toISOString();
+        patch.resolved_by = userId;
+      }
+    }
+    if (input.mode !== undefined) patch.mode = input.mode;
+    if (input.urgency !== undefined) patch.urgency = input.urgency;
+    if (input.title !== undefined) patch.title = input.title;
+    const thread = await netStore.updateThread(supabase, req.params.id!, patch);
+    if (thread.orgId !== org.orgId) {
+      throw new HttpError(404, 'Thread not found.', 'pm_not_found');
+    }
+    res.json({ thread });
+  } catch (err) {
+    next(err);
+  }
+});
+
+pmRouter.post(
+  '/threads/:id/messages',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { supabase, org, userId } = await ctxOf(req);
+      const input = postThreadMessageSchema.parse(req.body);
+      const threads = await netStore.listThreads(supabase, org.orgId, {
+        status: ['open', 'resolved'],
+        limit: 500,
+      });
+      const thread = threads.find((t) => t.id === req.params.id);
+      if (!thread) throw new HttpError(404, 'Thread not found.', 'pm_not_found');
+      if (thread.status !== 'open') {
+        throw new HttpError(409, 'Thread is not open.', 'pm_thread_closed');
+      }
+      await netStore.addParticipant(supabase, org.orgId, {
+        thread_id: thread.id,
+        user_id: userId,
+        role_in_thread: 'member',
+      });
+      const message = await netStore.postMessage(supabase, org.orgId, {
+        thread_id: thread.id,
+        author_user_id: userId,
+        author_kind: 'user',
+        body: input.body,
+        payload: input.payload ?? {},
+      });
+      res.status(201).json({ message });
     } catch (err) {
       next(err);
     }

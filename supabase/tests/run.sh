@@ -35,6 +35,11 @@ echo "==> Migration (PM orchestration)"
 "${PSQL[@]}" -q -v ON_ERROR_STOP=1 -d "$DB" -f "$MIGRATION_ORCH" 2>&1 |
   grep -vE 'NOTICE:.*(does not exist, skipping|already exists, skipping)' || true
 
+echo "==> Migration (PM network + adaptive comms)"
+MIGRATION_NET="$HERE/../migrations/20260728150000_pm_network_and_comms.sql"
+"${PSQL[@]}" -q -v ON_ERROR_STOP=1 -d "$DB" -f "$MIGRATION_NET" 2>&1 |
+  grep -vE 'NOTICE:.*(does not exist, skipping|already exists, skipping)' || true
+
 echo "==> Assertions (core PM)"
 "${PSQL[@]}" -d "$DB" -f "$HERE/01_project_manager_test.sql"
 

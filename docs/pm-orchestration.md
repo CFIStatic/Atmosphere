@@ -131,10 +131,14 @@ The PM cockpit (`/pm`) gains tabs:
 
 - **Approvals** — approve / reject proposed actions
 - **Inbox** — `@atmosphere` messages
+- **Threads** — adaptive internal conversations (opened when needed)
+- **Network** — invite vendors/subs onto Atmosphere
 - **Procurement** — dumpster bids + referral orders
 - **Platforms** — connect Dash / XA / Xactimate / Outlook
 
 The "Waiting on you" stat combines pending approvals and unreviewed messages.
+
+Partner network + adaptive threads: [`docs/pm-network-comms.md`](./pm-network-comms.md).
 
 ---
 
