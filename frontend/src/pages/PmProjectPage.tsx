@@ -20,6 +20,7 @@ import {
   SeverityTag,
   StatTile,
 } from '../components/pm/primitives';
+import { HomeownerPortalPanel } from '../components/homeowner/HomeownerPortalPanel';
 
 /**
  * One project, in the order a project manager checks it: is it healthy, what is
@@ -471,6 +472,8 @@ export function PmProjectPage() {
               </ul>
             )}
           </Card>
+
+          <HomeownerPortalPanel projectId={id} />
 
           {/* Readings — the table view of the sparklines above */}
           {data.readings.length > 0 && (

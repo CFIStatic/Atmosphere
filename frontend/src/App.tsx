@@ -22,6 +22,7 @@ import { WebAccessPage } from './pages/WebAccessPage';
 import { ComputerUsePage } from './pages/ComputerUsePage';
 import { EstimatorPage } from './pages/EstimatorPage';
 import { MitigationEstimatorPage } from './pages/MitigationEstimatorPage';
+import { HomeownerReportPage } from './pages/HomeownerReportPage';
 import { SpinnerIcon } from './components/icons';
 
 function FullScreenSpinner() {
@@ -64,6 +65,9 @@ export default function App() {
               no session, and the reset link must work in a fresh browser. */}
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+
+          {/* Tokenized HomeOwner Report — no staff session required. */}
+          <Route path="/report/:token" element={<HomeownerReportPage />} />
 
           <Route
             path="/onboarding"
