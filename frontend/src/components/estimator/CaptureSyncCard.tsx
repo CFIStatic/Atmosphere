@@ -10,11 +10,11 @@ import {
 import { SpinnerIcon } from '../icons';
 
 /**
- * Capture apps — pull MICA Dash and Outlook drying reports into the estimate.
+ * Capture agent status.
  *
- * Crews already document the dry-out in those tools. This card syncs them so
- * the estimate updates itself when new visits land, instead of waiting for
- * someone to retype numbers.
+ * On an agent platform, MICA Dash and Outlook update estimates automatically.
+ * This card shows whether the agent is alive and offers a rare manual nudge /
+ * file import — not the primary workflow.
  */
 
 export function CaptureSyncCard({
@@ -26,7 +26,6 @@ export function CaptureSyncCard({
 }: {
   jobId?: string | null;
   claimNumber?: string;
-  /** Sources to seed the job snapshot when syncing before a save. */
   baseline?: {
     docusketch?: unknown;
     mica?: unknown;
@@ -40,43 +39,55 @@ export function CaptureSyncCard({
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [sources, setSources] = useState<CaptureSourceKind[]>(['mica_dash', 'outlook']);
   const fileRef = useRef<HTMLInputElement>(null);
   const [importKind, setImportKind] = useState<CaptureSourceKind>('mica_dash');
 
+  async function refreshStatus() {
+    try {
+      const next = await api.captureStatus();
+      setStatus(next);
+    } catch {
+      /* non-fatal */
+    }
+  }
+
   useEffect(() => {
-    let cancelled = false;
-    api
-      .captureStatus()
-      .then((next) => {
-        if (!cancelled) setStatus(next);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
+    void refreshStatus();
+    const id = window.setInterval(() => void refreshStatus(), 60_000);
+    return () => window.clearInterval(id);
   }, []);
 
-  async function sync() {
-    if (!jobId) {
-      setError('Build and save an estimate first so capture sync has a job to update.');
-      return;
-    }
+  async function runAgent() {
     setSyncing(true);
     setError(null);
     setNotice(null);
     try {
-      const result = await api.captureSync(jobId, {
-        sources,
+      const response = await api.runCaptureAgent({
+        jobId: jobId ?? undefined,
         claimNumber,
-        autoRebuild: true,
-        save: true,
         ...baseline,
       });
-      onSynced(result);
-      setNotice(summarize(result));
+      if ('result' in response && response.result) {
+        onSynced(response.result);
+        setNotice(summarize(response.result));
+      } else if ('pass' in response && response.pass) {
+        setNotice(
+          `Agent pass: ${response.pass.visitsImported} visit(s) imported, ${response.pass.jobsUpdated} estimate(s) updated.`,
+        );
+        if (jobId) {
+          // Refresh this job via a targeted sync so the open estimate updates.
+          const result = await api.captureSync(jobId, {
+            claimNumber,
+            autoRebuild: true,
+            save: true,
+            ...baseline,
+          });
+          onSynced(result);
+        }
+      }
+      await refreshStatus();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Capture sync failed.');
+      setError(err instanceof ApiError ? err.message : 'Capture agent failed.');
     } finally {
       setSyncing(false);
     }
@@ -84,7 +95,7 @@ export function CaptureSyncCard({
 
   async function importFile(file: File) {
     if (!jobId) {
-      setError('Build and save an estimate first so an import has a job to update.');
+      setError('Save an estimate first so the agent has a job to update.');
       return;
     }
     setSyncing(true);
@@ -113,6 +124,7 @@ export function CaptureSyncCard({
       });
       onSynced(result);
       setNotice(summarize(result));
+      await refreshStatus();
     } catch (err) {
       setError(
         err instanceof ApiError
@@ -126,52 +138,56 @@ export function CaptureSyncCard({
     }
   }
 
-  function toggle(kind: CaptureSourceKind) {
-    setSources((current) =>
-      current.includes(kind) ? current.filter((k) => k !== kind) : [...current, kind],
-    );
-  }
+  const agent = status?.agent;
+  const last = agent?.lastPass;
 
   return (
     <div className="rounded-xl border border-white/10 bg-ink-800/60 p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="text-sm font-medium text-white">Capture apps</p>
+          <p className="text-sm font-medium text-white">Capture agent</p>
           <p className="mt-0.5 text-xs text-gray-500">
-            Pull drying visits from MICA Dash and Outlook. New reports modify the estimate
-            automatically — equipment days, dry rooms, under-equipment flags.
+            Watches MICA Dash and Outlook automatically. When a drying report lands, the estimate
+            updates itself — no sync click required.
           </p>
         </div>
-        {status && (
-          <span className="rounded-md bg-white/5 px-2 py-0.5 text-[11px] uppercase tracking-wide text-gray-400">
-            {status.mode}
-          </span>
-        )}
+        <span
+          className={`rounded-md px-2 py-0.5 text-[11px] uppercase tracking-wide ${
+            agent?.enabled
+              ? 'bg-emerald-500/15 text-emerald-300'
+              : 'bg-white/5 text-gray-400'
+          }`}
+        >
+          {agent?.enabled ? 'automatic' : 'disabled'}
+        </span>
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-2">
-        {([
-          ['mica_dash', 'MICA Dash'],
-          ['outlook', 'Outlook reports'],
-        ] as const).map(([kind, label]) => (
-          <button
-            key={kind}
-            type="button"
-            onClick={() => toggle(kind)}
-            className={`rounded-lg border px-3 py-1.5 text-xs transition ${
-              sources.includes(kind)
-                ? 'border-brand-500/40 bg-brand-500/10 text-brand-200'
-                : 'border-white/10 text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <dl className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+        <div>
+          <dt className="text-gray-600">Interval</dt>
+          <dd className="text-gray-300">
+            {agent ? `every ${agent.intervalMinutes}m` : '—'}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-gray-600">Last run</dt>
+          <dd className="text-gray-300">
+            {agent?.lastRunAt ? formatWhen(agent.lastRunAt) : 'waiting for first pass'}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-gray-600">Last visits</dt>
+          <dd className="text-gray-300">{last ? last.visitsImported : '—'}</dd>
+        </div>
+        <div>
+          <dt className="text-gray-600">Estimates updated</dt>
+          <dd className="text-gray-300">{last ? last.jobsUpdated : '—'}</dd>
+        </div>
+      </dl>
 
       {status && (
         <p className="mt-2 text-[11px] text-gray-600">
-          {status.note}
+          Sources: {(agent?.sources ?? ['mica_dash', 'outlook']).join(' · ')} · {status.mode}
           {status.mode === 'live' &&
             ` · MICA ${status.configured.micaDash ? 'ready' : 'not configured'} · Outlook ${
               status.configured.outlook ? 'ready' : 'not configured'
@@ -182,12 +198,12 @@ export function CaptureSyncCard({
       <div className="mt-3 flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={() => void sync()}
-          disabled={syncing || busy || !jobId || sources.length === 0}
-          className="flex items-center gap-2 rounded-lg bg-brand-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-brand-500 disabled:opacity-50"
+          onClick={() => void runAgent()}
+          disabled={syncing || busy}
+          className="flex items-center gap-2 rounded-lg border border-white/10 bg-ink-700/70 px-3 py-2 text-xs text-gray-200 transition hover:bg-ink-600 disabled:opacity-50"
         >
           {syncing && <SpinnerIcon className="animate-spin" width={14} height={14} />}
-          {syncing ? 'Syncing…' : 'Sync & update estimate'}
+          {syncing ? 'Agent running…' : 'Run agent now'}
         </button>
 
         <select
@@ -204,7 +220,7 @@ export function CaptureSyncCard({
           disabled={syncing || busy || !jobId}
           className="rounded-lg border border-white/10 bg-ink-700/70 px-3 py-2 text-xs text-gray-200 transition hover:bg-ink-600 disabled:opacity-50"
         >
-          Choose file
+          Push file to agent
         </button>
         <input
           ref={fileRef}
@@ -220,9 +236,8 @@ export function CaptureSyncCard({
       </div>
 
       {!jobId && (
-        <p className="mt-2 text-xs text-amber-300">
-          Save the estimate once — then capture sync can update it on its own when Dash or Outlook
-          land new visits.
+        <p className="mt-2 text-xs text-gray-500">
+          Save an estimate once. After that the agent keeps it current as capture apps report.
         </p>
       )}
       {error && <p className="mt-2 text-xs text-red-300">{error}</p>}
@@ -237,9 +252,7 @@ function summarize(result: CaptureSyncResult): string {
   ];
   if (result.reportsSkipped) parts.push(`skipped ${result.reportsSkipped} already on file`);
   if (result.estimate) {
-    parts.push(
-      result.saved ? 'estimate saved' : 'estimate rebuilt',
-    );
+    parts.push(result.saved ? 'estimate saved' : 'estimate rebuilt');
     if (result.estimate.equipmentPlan) {
       parts.push(
         `plan ${result.estimate.equipmentPlan.airMoversRequired} movers / ${result.estimate.equipmentPlan.dehu.unitsRequired} dehu`,
@@ -247,4 +260,15 @@ function summarize(result: CaptureSyncResult): string {
     }
   }
   return parts.join(' · ');
+}
+
+function formatWhen(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }

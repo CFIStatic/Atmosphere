@@ -85,6 +85,38 @@ At dry standard: Dining Room, Hallway
   });
 });
 
+describe('capture agent posture', () => {
+  it('is enabled by default on the agent platform', async () => {
+    const { config } = await import('../src/config.js');
+    assert.equal(config.estimator.captureAgent.enabled, true);
+    assert.ok(config.estimator.captureAgent.intervalMinutes >= 5);
+    assert.ok(config.estimator.captureAgent.sources.includes('mica_dash'));
+    assert.ok(config.estimator.captureAgent.sources.includes('outlook'));
+  });
+
+  it('exposes readCaptureAgentStatus from stored settings', async () => {
+    const { readCaptureAgentStatus } = await import(
+      '../src/estimator/mitigation/capture/agent.js'
+    );
+    const status = readCaptureAgentStatus({
+      captureAgent: {
+        lastRunAt: '2026-06-19T12:00:00Z',
+        lastPassSummary: {
+          jobsConsidered: 2,
+          jobsUpdated: 1,
+          visitsImported: 3,
+          estimatesSaved: 1,
+          errorCount: 0,
+          ranAt: '2026-06-19T12:00:00Z',
+        },
+      },
+    });
+    assert.equal(status.enabled, true);
+    assert.equal(status.lastPass?.visitsImported, 3);
+    assert.equal(status.lastRunAt, '2026-06-19T12:00:00Z');
+  });
+});
+
 describe('capture import → modified estimate', () => {
   it('imports MICA Dash payload and modifies the estimate automatically', () => {
     const pull = importCapturePayload('mica_dash', SAMPLE_MICA, {

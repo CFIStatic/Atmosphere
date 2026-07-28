@@ -276,8 +276,8 @@ export function MitigationEstimatorPage() {
           <p className="mt-2 max-w-2xl text-gray-400">
             Photos and field notes alone are enough: the agent identifies what is wrong, what IICRC
             / insurance / code obliges, and sizes equipment from the loss — including how many air
-            movers a 2-foot flood cut needs. Sync MICA Dash or Outlook drying reports as the job
-            progresses and the estimate updates itself.
+            movers a 2-foot flood cut needs. The capture agent watches MICA Dash and Outlook and
+            rewrites the estimate automatically as drying reports arrive.
           </p>
         </div>
 

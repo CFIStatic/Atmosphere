@@ -1199,6 +1199,31 @@ export const api = {
   captureStatus: () =>
     request<CaptureStatus>('/api/mitigation/capture/status', { method: 'GET' }),
 
+  runCaptureAgent: (input?: {
+    jobId?: string;
+    claimNumber?: string;
+    docusketch?: unknown;
+    mica?: unknown;
+    photos?: PhotoManifestEntry[];
+    notes?: string;
+  }) =>
+    request<
+      | { scope: 'job'; result: CaptureSyncResult }
+      | {
+          scope: 'org';
+          pass: {
+            jobsConsidered: number;
+            jobsUpdated: number;
+            visitsImported: number;
+            estimatesSaved: number;
+            ranAt: string;
+          };
+        }
+    >('/api/mitigation/capture/agent/run', {
+      method: 'POST',
+      body: JSON.stringify(input ?? {}),
+    }),
+
   captureSync: (
     jobId: string,
     input: {
@@ -2487,6 +2512,19 @@ export interface CaptureStatus {
   connectors: Array<{ kind: CaptureSourceKind; name: string }>;
   configured: { micaDash: boolean; outlook: boolean };
   note: string;
+  agent?: {
+    enabled: boolean;
+    intervalMinutes: number;
+    lastRunAt?: string;
+    sources: CaptureSourceKind[];
+    lastPass?: {
+      jobsConsidered: number;
+      jobsUpdated: number;
+      visitsImported: number;
+      estimatesSaved: number;
+      ranAt: string;
+    };
+  };
 }
 
 export interface CaptureSyncResult {

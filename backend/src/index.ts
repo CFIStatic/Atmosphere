@@ -3,6 +3,10 @@ import { config } from './config.js';
 import { connections } from './estimator/mitigation/xactimate/index.js';
 import { startScheduler, stopScheduler } from './pm/scheduler.js';
 import { startBackupScheduler, stopBackupScheduler } from './lib/backup/scheduler.js';
+import {
+  startCaptureAgent,
+  stopCaptureAgent,
+} from './estimator/mitigation/capture/scheduler.js';
 import { agentHub } from './computer/agentHub.js';
 
 const app = createApp();
@@ -15,6 +19,7 @@ const server = app.listen(config.port, () => {
       `  → Allowed origins: ${config.frontendOrigins.join(', ')}\n` +
       `  → Xactimate driver: ${config.xactimate.driver}\n` +
       `  → Computer use: ${config.computerUse.enabled ? `on (${config.computerUse.defaultModel})` : 'off'}\n` +
+      `  → Capture agent: ${config.estimator.captureAgent.enabled ? `on (every ${config.estimator.captureAgent.intervalMinutes}m)` : 'off'}\n` +
       `  → Mode: ${config.isProduction ? 'production' : 'development'}`,
   );
 
@@ -22,6 +27,10 @@ const server = app.listen(config.port, () => {
   // a service-role key is configured — see backend/src/pm/scheduler.ts for why
   // it takes two decisions rather than one.
   startScheduler();
+
+  // Mitigation capture agent — on by default. Pulls MICA Dash / Outlook and
+  // rewrites open estimates without a human sync click.
+  startCaptureAgent();
 
   // Started after the listener so a backup can never delay readiness.
   startBackupScheduler();
@@ -39,11 +48,9 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
     // eslint-disable-next-line no-console
     console.log(`\n[atmosphere-backend] received ${signal}, shutting down…`);
-    // Three subsystems hold resources the process should not simply drop. The
-    // scheduler and the agent hub stop synchronously; the Xactimate teardown is
-    // asynchronous — a browser-driver session owns a real Chromium process and
-    // an in-memory credential — so the port is closed only once it settles.
+    // Subsystems that hold resources the process should not simply drop.
     stopScheduler();
+    stopCaptureAgent();
     stopBackupScheduler();
     agentHub.close();
     void connections

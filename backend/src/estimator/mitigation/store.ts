@@ -381,6 +381,21 @@ export interface StoredSettings {
    * auto-rebuild estimates when MICA Dash / Outlook land new visits.
    */
   jobSources?: Record<string, JobSourceSnapshot>;
+  /**
+   * Capture agent cursors + last pass summary (written by the background agent).
+   */
+  captureAgent?: {
+    lastRunAt?: string;
+    lastVisitAtByJob?: Record<string, string>;
+    lastPassSummary?: {
+      jobsConsidered: number;
+      jobsUpdated: number;
+      visitsImported: number;
+      estimatesSaved: number;
+      errorCount: number;
+      ranAt: string;
+    };
+  };
 }
 
 /** Baseline sources persisted with a job so capture sync can rebuild alone. */

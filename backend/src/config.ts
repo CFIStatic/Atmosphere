@@ -508,6 +508,21 @@ export const config = {
     outlookMailbox: process.env.OUTLOOK_MAILBOX ?? 'me',
     outlookFolder: process.env.OUTLOOK_FOLDER ?? 'inbox',
 
+    /**
+     * Background capture agent. On by default — this is an agent platform, so
+     * MICA Dash / Outlook visits update estimates without a human clicking Sync.
+     * Set CAPTURE_AGENT_ENABLED=false to disable. Still requires the service-role
+     * key for the unattended pass.
+     */
+    captureAgent: {
+      enabled: (process.env.CAPTURE_AGENT_ENABLED ?? 'true').toLowerCase() !== 'false',
+      intervalMinutes: Math.max(
+        5,
+        Number(process.env.CAPTURE_AGENT_INTERVAL_MINUTES ?? 15),
+      ),
+      sources: parseCaptureSources(process.env.CAPTURE_AGENT_SOURCES),
+    },
+
     // `live` talks to the vendors; `sandbox` serves deterministic fixtures so
     // the whole pipeline can be exercised end-to-end without credentials.
     connectorMode: (process.env.ESTIMATOR_CONNECTOR_MODE ??
@@ -533,6 +548,15 @@ function parseSlaSource(value: string | undefined): 'manual' | 'portal' | 'mock'
 
 function parseDriver(value: string | undefined): 'mock' | 'api' | 'web' {
   return value === 'api' || value === 'web' ? value : 'mock';
+}
+
+function parseCaptureSources(value: string | undefined): Array<'mica_dash' | 'outlook'> {
+  const allowed = new Set(['mica_dash', 'outlook']);
+  const parts = (value ?? 'mica_dash,outlook')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s): s is 'mica_dash' | 'outlook' => allowed.has(s));
+  return parts.length ? parts : ['mica_dash', 'outlook'];
 }
 
 /** Parse an optional JSON object env var, ignoring anything malformed. */

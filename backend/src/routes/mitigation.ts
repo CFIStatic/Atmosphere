@@ -57,6 +57,13 @@ import {
 } from '../estimator/mitigation/planning/dryingProgress.js';
 import { syncCaptureAndRebuild } from '../estimator/mitigation/capture/sync.js';
 import { buildCaptureConnectors, captureMode } from '../estimator/mitigation/capture/connectors.js';
+import {
+  listOpenCaptureJobs,
+  readCaptureAgentStatus,
+  runCaptureAgentForJob,
+  runCaptureAgentPass,
+} from '../estimator/mitigation/capture/agent.js';
+import { createAdminClient } from '../lib/supabase.js';
 import type { MaterialType } from '../estimator/mitigation/types.js';
 
 export const mitigationRouter = Router();
@@ -802,15 +809,18 @@ mitigationRouter.post(
 /**
  * GET /api/mitigation/capture/status
  *
- * Which capture connectors are available (sandbox vs live).
+ * Capture connectors + background agent status. Sync is automatic on this
+ * platform; the status exists so operators can see the agent is alive.
  */
-mitigationRouter.get('/capture/status', async (_req: Request, res: Response, next: NextFunction) => {
+mitigationRouter.get('/capture/status', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const mode = captureMode();
     const connectors = buildCaptureConnectors().map((c) => ({
       kind: c.kind,
       name: c.name,
     }));
+    const { stored } = await loadContext(req);
+    const agent = readCaptureAgentStatus(stored);
     res.json({
       mode,
       connectors,
@@ -818,10 +828,9 @@ mitigationRouter.get('/capture/status', async (_req: Request, res: Response, nex
         micaDash: Boolean(config.estimator.micaDashBaseUrl && config.estimator.micaDashApiKey),
         outlook: Boolean(config.estimator.outlookAccessToken),
       },
+      agent,
       note:
-        mode === 'sandbox'
-          ? 'Sandbox connectors return fixture drying visits so sync + auto-rebuild can be tested without vendor credentials.'
-          : 'Live connectors pull from MICA Dash and Outlook (Microsoft Graph) using server credentials.',
+        'The capture agent watches open jobs and updates estimates when MICA Dash or Outlook land new drying reports. Manual sync is a fallback, not the primary path.',
     });
   } catch (err) {
     next(err);
@@ -829,10 +838,127 @@ mitigationRouter.get('/capture/status', async (_req: Request, res: Response, nex
 });
 
 /**
+ * POST /api/mitigation/capture/agent/run
+ *
+ * Run the capture agent now for this org's open jobs (or one jobId in the body).
+ */
+mitigationRouter.post(
+  '/capture/agent/run',
+  buildLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { supabase, userId, orgId, stored, priceList } = await loadContext(req);
+      const jobId =
+        typeof req.body?.jobId === 'string' && req.body.jobId.trim()
+          ? req.body.jobId.trim()
+          : undefined;
+
+      if (jobId) {
+        const { config: estimatorConfig } = buildEstimatorConfig(stored, priceList);
+        const deviations = await listDeviations(supabase, orgId, jobId);
+        const result = await syncCaptureAndRebuild(
+          supabase,
+          { orgId, userId, config: estimatorConfig, deviations },
+          {
+            jobId,
+            claimNumber: typeof req.body?.claimNumber === 'string' ? req.body.claimNumber : undefined,
+            sources: config.estimator.captureAgent.sources,
+            autoRebuild: true,
+            save: true,
+            baselineSources: {
+              jobId,
+              docusketch: req.body?.docusketch,
+              mica: req.body?.mica,
+              photos: req.body?.photos,
+              notes: req.body?.notes,
+            },
+          },
+        );
+        res.json({ scope: 'job', result });
+        return;
+      }
+
+      // Prefer admin pass when available so the agent mirrors production.
+      const admin = createAdminClient();
+      if (admin) {
+        const pass = await runCaptureAgentPass(admin, { orgId });
+        res.json({ scope: 'org', pass });
+        return;
+      }
+
+      const jobs = await listOpenCaptureJobs(supabase, { orgId });
+      const results = [];
+      for (const job of jobs) {
+        results.push(await runCaptureAgentForJob(supabase, job));
+      }
+      res.json({
+        scope: 'org',
+        pass: {
+          jobsConsidered: jobs.length,
+          jobsUpdated: results.filter((r) => r.modified).length,
+          visitsImported: results.reduce((sum, r) => sum + r.reportsImported, 0),
+          estimatesSaved: results.filter((r) => r.saved).length,
+          errors: [],
+          results,
+          ranAt: new Date().toISOString(),
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/mitigation/jobs/:jobId/capture/webhook
+ *
+ * Push from MICA Dash / Outlook / Graph — the agent path. Import the payload
+ * and modify the estimate immediately without waiting for the poll interval.
+ */
+mitigationRouter.post(
+  '/jobs/:jobId/capture/webhook',
+  buildLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const input = captureImportSchema.parse(req.body);
+      const { supabase, userId, orgId, stored, priceList } = await loadContext(req);
+      const jobId = req.params.jobId;
+      const { config: estimatorConfig, warnings } = buildEstimatorConfig(stored, priceList);
+      const deviations = await listDeviations(supabase, orgId, jobId);
+
+      const result = await syncCaptureAndRebuild(
+        supabase,
+        { orgId, userId, config: estimatorConfig, deviations },
+        {
+          jobId,
+          claimNumber: input.claimNumber,
+          payload: input.payload,
+          payloadSource: input.source,
+          autoRebuild: true,
+          save: true,
+          baselineSources: {
+            jobId,
+            docusketch: input.docusketch,
+            mica: input.mica ?? (input.source === 'mica_dash' ? input.payload : undefined),
+            photos: input.photos,
+            notes: input.notes,
+          },
+        },
+      );
+      result.warnings = [...new Set([...result.warnings, ...warnings])];
+      res.status(202).json({ accepted: true, result });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
  * POST /api/mitigation/jobs/:jobId/capture/sync
  *
  * Pull from MICA Dash and/or Outlook, append new drying visits, and
- * automatically rebuild a modified estimate.
+ * automatically rebuild a modified estimate. Prefer the background agent /
+ * webhook; this remains for operators and the UI fallback.
  */
 mitigationRouter.post(
   '/jobs/:jobId/capture/sync',
