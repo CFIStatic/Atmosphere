@@ -1576,6 +1576,32 @@ from wall area and smaller ones are not, baseboard runs the perimeter less doorw
 windows, a doorway shared between two scoped rooms is cased once, and paint is measured wall to
 wall even when only a 2′ band of drywall was replaced.
 
+### Construction knowledge base — nothing optional is skipped
+
+After the primary scope is built, a knowledge layer expands every assembly to completion and
+sizes the equipment the rebuild actually needs:
+
+- **Dependent assemblies.** Drywall implies primer, corner bead, outlet/switch reset, cover
+  plates, HVAC register reset, masking, and baseboard if mitigation did not bill it separately.
+  Carpet implies pad, tack strip, and binder bars. LVP/wood imply underlayment, floor prep,
+  transitions, and shoe molding. Tile implies thinset, grout, and membrane. Vanities imply
+  sink/faucet reset. Final clean implies HEPA vacuuming and detail clean.
+- **Construction equipment sized to the space.** Dusty trades (drywall, tile, subfloor) require
+  HEPA air scrubbers at ~1 per 1,000 CF of work volume, **filter changes for every scrubber-day**,
+  containment barriers, zippered access doors, and plastic/floor protection. Large volumes also
+  get negative air and dumpster rental. Mitigation dryout equipment is still excluded — this is
+  rebuild dust control, not a second dryout.
+- **Local codes.** Jurisdiction packs (CA, NY, FL, TX, IRC baseline) add building permits and
+  inspection fees above drywall SF thresholds, smoke/CO detectors after bedroom wall work, and
+  GFCI receptacles when wet-area walls are opened. Water category from the notes surfaces as a
+  rebuild warning when Category 2/3 cavities must already have been treated.
+- **Completeness gate.** Before export, the estimate is checked for missing companions (carpet
+  without pad, scrubber without filters, drywall without paint/primer), unmatched mitigation
+  removals, and zero-quantity lines. Critical gaps block the Xactimate write.
+
+The knowledge modules live under `backend/src/estimator/knowledge/`
+(`dependents.ts`, `equipment.ts`, `codes.ts`, `completeness.ts`).
+
 ### Line item codes
 
 `backend/src/estimator/pricing/catalog.ts` maps semantic keys (`drywall_half`) to Xactimate
@@ -1604,7 +1630,7 @@ discriminate, a mitigation estimate mixing removals with dryout equipment, and a
 one room out of scope. Nothing is written to any vendor.
 
 ```bash
-cd backend && npm test    # 64 tests: quantity maths, rebuild rules, matching, import/export
+cd backend && npm test    # quantity maths, rebuild rules, matching, knowledge base, import/export
 ```
 
 ### Database

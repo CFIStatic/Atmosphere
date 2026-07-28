@@ -1,9 +1,16 @@
 import { CATALOG, CATALOG_KEYS, applyWaste, codeFor, type CatalogKey } from '../pricing/catalog.js';
+import {
+  assessCompleteness,
+  completenessBlockers,
+  type CompletenessReport,
+} from '../knowledge/completeness.js';
+import type { RebuildDerivation } from '../scope/rebuildFromMitigation.js';
 import type {
   ConstructionEstimate,
   CrmJob,
   EstimateLineItem,
   EstimateSummary,
+  MitigationEstimate,
   RoomMeasurements,
   ScopeItem,
 } from '../types.js';
@@ -29,12 +36,17 @@ const KEY_BY_CODE = new Map<string, CatalogKey>(
  * before cleanup, so an added catalog entry never lands in a nonsensical place.
  */
 const TRADE_ORDER = [
+  'Permits',
+  'Protection',
+  'Equipment',
   'Framing',
   'Insulation',
   'Drywall',
+  'Electrical',
+  'Plumbing',
+  'HVAC',
   'Finish Carpentry',
   'Cabinetry',
-  'Plumbing',
   'Flooring',
   'Painting',
   'General',
@@ -53,6 +65,9 @@ export interface EstimateInput {
   /** Where the scope came from — shown on the estimate and in the export. */
   basis: ConstructionEstimate['basis'];
   warnings: string[];
+  /** Mitigation derivation — feeds the completeness report. */
+  derivation?: RebuildDerivation | null;
+  mitigation?: MitigationEstimate | null;
 }
 
 export function buildEstimate(input: EstimateInput): ConstructionEstimate {
@@ -102,6 +117,17 @@ export function buildEstimate(input: EstimateInput): ConstructionEstimate {
     );
   }
 
+  const completeness = assessCompleteness({
+    items: input.scope,
+    rooms: input.rooms,
+    derivation: input.derivation,
+    mitigation: input.mitigation,
+  });
+
+  for (const issue of completeness.issues.filter((entry) => entry.severity !== 'info')) {
+    warnings.push(`[${issue.severity}] ${issue.message}`);
+  }
+
   return {
     jobId: input.job.id,
     jobNumber: input.job.jobNumber,
@@ -111,6 +137,7 @@ export function buildEstimate(input: EstimateInput): ConstructionEstimate {
     basis: input.basis,
     lineItems,
     summary: summarise(lineItems, input.rooms),
+    completeness,
     warnings,
     generatedAt: new Date().toISOString(),
   };
@@ -141,6 +168,10 @@ function summarise(lineItems: EstimateLineItem[], rooms: RoomMeasurements[]): Es
  * Writing an estimate into a customer's Xactimate account is outward-facing and
  * awkward to undo, so the pipeline never does it off the back of a confidence
  * score. This is the check the approve endpoint runs before it will export.
+ *
+ * Completeness criticals (missing pad with carpet, scrubber without filters,
+ * zero quantities) block export. Soft warnings do not — a reviewer who has
+ * looked at them can still approve.
  */
 export function readinessIssues(estimate: ConstructionEstimate): string[] {
   const issues: string[] = [];
@@ -158,5 +189,11 @@ export function readinessIssues(estimate: ConstructionEstimate): string[] {
     );
   }
 
-  return issues;
+  if (estimate.completeness) {
+    issues.push(...completenessBlockers(estimate.completeness));
+  }
+
+  return [...new Set(issues)];
 }
+
+export type { CompletenessReport };

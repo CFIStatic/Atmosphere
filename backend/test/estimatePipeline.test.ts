@@ -39,6 +39,7 @@ function run(observations: DamageObservation[] = []) {
     observations,
     directives,
     mitigationItems: derived.items,
+    address: job.address,
   });
   return {
     scope,
@@ -48,6 +49,8 @@ function run(observations: DamageObservation[] = []) {
       scope: scope.items,
       basis: observations.length > 0 ? 'both' : 'mitigation',
       warnings: scope.warnings,
+      derivation: derived,
+      mitigation,
     }),
   };
 }
@@ -58,7 +61,11 @@ describe('rebuild estimate from a mitigation estimate', () => {
   const line = (name: string, code: string) => inRoom(name).find((entry) => entry.code === code);
 
   it('scopes every room the mitigation crew worked in', () => {
-    const scoped = new Set(estimate.lineItems.map((entry) => entry.roomName));
+    const scoped = new Set(
+      estimate.lineItems
+        .map((entry) => entry.roomName)
+        .filter((name) => name !== 'General'),
+    );
     assert.deepEqual([...scoped].sort(), ['Hallway', 'Living Room', 'Master Bedroom']);
   });
 
@@ -97,6 +104,13 @@ describe('rebuild estimate from a mitigation estimate', () => {
     assert.equal(line('Living Room', 'DMO DUMP')?.quantity, 2);
   });
 
+  it('expands assemblies: scrubbers need filters, drywall needs primer', () => {
+    assert.ok(line('Living Room', 'WTR AS'), 'HEPA scrubber for dusty rebuild work');
+    assert.ok(line('Living Room', 'WTR FIL'), 'filter changes with scrubbers');
+    assert.ok(line('Living Room', 'PNT P'), 'primer on new drywall');
+    assert.ok(line('Living Room', 'FCV UL'), 'underlayment under LVP');
+  });
+
   it('orders the estimate room by room, in build order within a room', () => {
     const livingRoom = inRoom('Living Room').map((entry) => entry.trade);
     assert.ok(
@@ -109,7 +123,8 @@ describe('rebuild estimate from a mitigation estimate', () => {
     );
 
     const roomOrder = [...new Set(estimate.lineItems.map((entry) => entry.roomName))];
-    assert.deepEqual(roomOrder, ['Living Room', 'Hallway', 'Master Bedroom']);
+    // Job-level overhead (dumpster / permits) lands in General after the rooms.
+    assert.deepEqual(roomOrder, ['Living Room', 'Hallway', 'Master Bedroom', 'General']);
   });
 
   it('is ready to export — no line is missing a quantity', () => {
@@ -117,7 +132,8 @@ describe('rebuild estimate from a mitigation estimate', () => {
   });
 
   it('summarises what a reviewer needs to check', () => {
-    assert.equal(estimate.summary.roomCount, 3);
+    // Three work rooms + General (job-level dumpster / permits).
+    assert.equal(estimate.summary.roomCount, 4);
     assert.ok(estimate.summary.lineItemCount > 15);
     assert.deepEqual(estimate.summary.emptyRooms, ['Office']);
   });

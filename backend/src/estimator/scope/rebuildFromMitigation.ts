@@ -185,9 +185,28 @@ export const REBUILD_RULES: RebuildRule[] = [
     produces: [{ key: 'engineered_wood', quantity: sameQuantity }],
   },
   {
+    id: 'vinyl_cove',
+    description: /\b(cove\s*base|vinyl\s*base)\b/i,
+    produces: [{ key: 'vinyl_cove_base', quantity: sameQuantity }],
+  },
+  {
+    id: 'shoe_molding',
+    description: /\b(shoe\s*mould?ing|quarter\s*round)\b/i,
+    produces: [
+      { key: 'shoe_molding', quantity: sameQuantity },
+      { key: 'paint_trim', quantity: sameQuantity, confidence: 0.7 },
+    ],
+  },
+  {
     id: 'subfloor',
-    description: /\b(subfloor|sub-?floor|underlayment)\b/i,
+    description: /\b(subfloor|sub-?floor)\b/i,
+    notDescription: /\bunderlayment\b/i,
     produces: [{ key: 'subfloor', quantity: sameQuantity }],
+  },
+  {
+    id: 'underlayment',
+    description: /\bunderlayment\b/i,
+    produces: [{ key: 'floor_underlayment', quantity: sameQuantity }],
   },
   {
     id: 'insulation',
@@ -218,6 +237,32 @@ export const REBUILD_RULES: RebuildRule[] = [
     id: 'toilet',
     description: /\btoilet|water\s*closet\b/i,
     produces: [{ key: 'toilet_reset', quantity: sameQuantity }],
+  },
+  {
+    id: 'outlet',
+    description: /\b(outlet|receptacle|duplex)\b/i,
+    produces: [
+      { key: 'outlet_reset', quantity: sameQuantity },
+      { key: 'cover_plate', quantity: sameQuantity, confidence: 0.85 },
+    ],
+  },
+  {
+    id: 'switch',
+    description: /\b(light\s*)?switch\b/i,
+    produces: [
+      { key: 'switch_reset', quantity: sameQuantity },
+      { key: 'cover_plate', quantity: sameQuantity, confidence: 0.85 },
+    ],
+  },
+  {
+    id: 'register',
+    description: /\b(register|grille|vent\s*cover|air\s*vent)\b/i,
+    produces: [{ key: 'register_reset', quantity: sameQuantity }],
+  },
+  {
+    id: 'sink',
+    description: /\b(sink|lavatory)\b/i,
+    produces: [{ key: 'sink_reset', quantity: sameQuantity }],
   },
 ];
 
