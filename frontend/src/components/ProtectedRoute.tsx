@@ -13,7 +13,7 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
       <div
         role="status"
         aria-live="polite"
-        className="grid min-h-screen place-items-center text-brand-300"
+        className="grid min-h-screen place-items-center text-brand-600"
       >
         <SpinnerIcon className="animate-spin" width={28} height={28} />
         <span className="sr-only">Loading…</span>

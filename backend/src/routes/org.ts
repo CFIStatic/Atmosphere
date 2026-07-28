@@ -1,7 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { createOrgSchema, joinOrgSchema } from '../lib/validation.js';
+import { createOrgSchema, joinOrgSchema, updateMembershipSchema } from '../lib/validation.js';
 import { HttpError } from '../lib/errors.js';
 
 export const orgRouter = Router();
@@ -64,6 +64,38 @@ orgRouter.get('/me', async (req: Request, res: Response, next: NextFunction) => 
       .limit(1);
     if (error) throw new HttpError(500, error.message, 'org_me_failed');
     res.json({ membership: data?.[0] ? serializeMembership(data[0]) : null });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PATCH /api/org/me
+ * Lets a member correct their own account type or kind of work after onboarding
+ * — a technician promoted to project manager should not have to re-onboard.
+ *
+ * The write is scoped to `user_id = auth.uid()` here and again by the RLS policy
+ * on `org_members`, so this can only ever rewrite the caller's own row.
+ */
+orgRouter.patch('/me', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { role, workType } = updateMembershipSchema.parse(req.body);
+    const supabase = createUserClient(req.accessToken!);
+
+    const { data, error } = await supabase
+      .from('org_members')
+      .update({ role, work_type: workType })
+      .eq('user_id', req.user!.id)
+      .select('role, work_type, status, orgs(id, name, join_code)')
+      .limit(1);
+    if (error) throw new HttpError(500, error.message, 'membership_update_failed');
+
+    const updated = data?.[0];
+    if (!updated) {
+      throw new HttpError(404, 'You are not linked to an organization yet.', 'not_onboarded');
+    }
+
+    res.json({ membership: serializeMembership(updated) });
   } catch (err) {
     next(err);
   }

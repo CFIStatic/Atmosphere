@@ -1,0 +1,15 @@
+-- 20260727131707_credit_balance_allow_service_role
+--
+-- ALREADY APPLIED to Supabase project ccxatzfsvzetciiwsjlj as version 20260727131707.
+-- This file intentionally contains no DDL: it exists so the repository's
+-- migration history matches production, which is what the Supabase GitHub
+-- check compares. Running it is a no-op; the schema it describes is live.
+--
+-- The authoritative statement text is recorded on the project itself:
+--   select array_to_string(statements, '') from supabase_migrations.schema_migrations
+--   where version = '20260727131707';
+--   -- md5 2ef85b291b38ebb5586bc65233e0af67, 1604 bytes
+--
+-- To restore the full text here, run the query above and replace this file's
+-- contents verbatim (the md5 must match). Do not write new DDL under this
+-- version number.
