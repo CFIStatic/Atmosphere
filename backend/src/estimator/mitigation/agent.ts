@@ -12,6 +12,7 @@ import { caveatsFor, formatCitation, referencesFor, type CitationId } from './st
 import { identifyCarrier, type IdentifyOptions } from './carrier/identify.js';
 import { applyAgreementToPricing, checkAgreement } from './carrier/sla.js';
 import type { ProgramAgreement, SlaDeviation } from './carrier/types.js';
+import { deriveRequirements } from './requirements/obligations.js';
 import type { LossAssessment, MitigationEstimate, ScopeItem } from './types.js';
 
 /**
@@ -141,6 +142,13 @@ export function buildEstimate(
     ...compliance.citations,
   ];
 
+  const requirements = deriveRequirements({
+    assessment,
+    findings: assessment.findings,
+    scope,
+    sla,
+  });
+
   return {
     jobId: assessment.jobId,
     generatedAt: new Date().toISOString(),
@@ -151,6 +159,7 @@ export function buildEstimate(
     compliance,
     sla,
     references: referencesFor(cited),
+    requirements,
     narrative: writeNarrative(assessment, lineItems.length),
     openQuestions: collectOpenQuestions(assessment, scope, unmapped, config, compliance, cited, sla, applied.notes),
   };

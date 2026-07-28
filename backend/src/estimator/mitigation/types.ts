@@ -1,6 +1,8 @@
 import type { CitationId, StandardReference } from './standards/s500.js';
 import type { ComplianceReport } from './standards/compliance.js';
 import type { SlaComplianceReport } from './carrier/types.js';
+import type { DamageFinding } from './ingest/findings.js';
+import type { MitigationRequirement } from './requirements/obligations.js';
 
 /**
  * Canonical domain model for the Mitigation Estimator.
@@ -284,6 +286,13 @@ export interface LossAssessment {
   warnings: string[];
   /** Which adapters contributed, for provenance on the finished estimate. */
   sourcesUsed: SourceKind[];
+
+  /**
+   * What is wrong with the property — observational findings from photos/notes
+   * (and structured sources). Distinct from `scope` (what we bill) and from
+   * mitigation requirements (what rules oblige).
+   */
+  findings: DamageFinding[];
 }
 
 export type SourceKind = 'docusketch' | 'mica' | 'photos' | 'notes';
@@ -437,6 +446,12 @@ export interface MitigationEstimate {
    * appendix a reader turns to with their own copy of the standard open.
    */
   references: StandardReference[];
+  /**
+   * What must be mitigated / documented, by authority (IICRC, insurance,
+   * construction-code adjacent, carrier SLA). Scope fulfills these when
+   * findings + geometry support quantities.
+   */
+  requirements: MitigationRequirement[];
   /** Human-readable narrative for the estimate header, written for the adjuster. */
   narrative: string;
   /** Anything the agent could not decide on its own. */

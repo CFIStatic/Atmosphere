@@ -4,15 +4,23 @@ import { degradeCategory, determineClass, hoursBetween } from '../lib/psychromet
 import { parseDocuSketch, isPorous, surfaceFor } from './docusketch.js';
 import { parseMica, categoryForCause } from './mica.js';
 import { parsePhotos, type PhotoManifestEntry } from './photos.js';
-import { parseNotes } from './notes.js';
+import { parseNotes, type NotesParseResult } from './notes.js';
+import {
+  deriveFindings,
+  type DamageFinding,
+  type FindingsBundle,
+} from './findings.js';
 import type {
   AffectedMaterial,
   AssessedRoom,
+  EquipmentKind,
+  EquipmentPlacement,
   Evidence,
   LossAssessment,
   MaterialType,
   MoistureReading,
   SourceKind,
+  Unit,
   WaterCategory,
 } from '../types.js';
 
@@ -24,6 +32,11 @@ import type {
  * recorded beats written**. DocuSketch measured the room, so its geometry wins.
  * MICA recorded the drying, so its equipment log and category win over prose. A
  * technician's note fills the gaps nothing else covered.
+ *
+ * Photos and notes alone are a first-class path: many jobs arrive with captions
+ * and a paragraph of field notes and nothing else. This module still has to
+ * produce a LossAssessment those jobs can attach findings and requirements to —
+ * without inventing square footage the sources never stated.
  *
  * The exception is water category, which takes the *worst* value any source
  * reports rather than the highest-priority one. Under-calling contamination
@@ -89,21 +102,53 @@ export function normalizeSources(sources: EstimatorSources): LossAssessment {
 
   const overrides = sources.overrides ?? {};
 
+  /* ---- Findings (photos + notes) ---------------------------------- */
+
+  // Findings are observational and do not need geometry. Derive them before
+  // room fusion so named rooms in captions can seed placeholders when nothing
+  // else produced a room list.
+  const findingsBundle = deriveFindings({
+    photoEvidence: photos?.evidence ?? [],
+    noteEvidence: notes?.evidence ?? [],
+    cause: mica?.cause ?? notes?.cause,
+    sourceCategory: mica?.sourceCategory ?? notes?.sourceCategory,
+    microbialGrowthPresent:
+      Boolean(mica?.microbialGrowthPresent) || Boolean(notes?.microbialGrowthPresent),
+    notesText: typeof sources.notes === 'string' ? sources.notes : undefined,
+  });
+  warnings.push(...findingsBundle.warnings);
+
   /* ---- Rooms ------------------------------------------------------ */
 
   let rooms: AssessedRoom[] = sketch?.rooms ?? [];
   if (rooms.length === 0 && notes?.roomDimensions.length) {
-    rooms = roomsFromNotes(notes.roomDimensions);
+    rooms = roomsFromNotes(notes.roomDimensions, notes);
     warnings.push(
       'No DocuSketch scan was supplied — room geometry was read from the field notes and should be verified before the estimate is submitted.',
     );
   }
+
+  // Zero-geometry placeholders exist solely so findings have a room to hang on.
+  // They must never invent SF: quantities stay blocked until someone measures.
+  if (rooms.length === 0 && findingsBundle.namedRooms.length > 0) {
+    rooms = placeholderRoomsFromNames(findingsBundle.namedRooms);
+    warnings.push(
+      'Rooms were named in photos/notes but no dimensions were supplied. Placeholder rooms were created so findings can attach; square footage was NOT invented — add room sizes (e.g. "Kitchen 12x14") or a DocuSketch scan before quantities can be billed.',
+    );
+  }
+
   if (rooms.length === 0) {
-    warnings.push('No room geometry from any source. Quantities cannot be computed.');
+    warnings.push(
+      'No room geometry from any source. Quantities cannot be computed — do not invent square footage. Supply a DocuSketch scan or note dimensions (e.g. "12x14 bedroom").',
+    );
+  } else if (rooms.every((room) => room.geometry.floorSF <= 0)) {
+    warnings.push(
+      'Named rooms have no measured or stated dimensions. Demolition and extraction quantities are blocked until sizes are supplied — square footage was not invented.',
+    );
   }
 
   rooms = applyMicaHints(rooms, mica?.roomHints ?? []);
-  rooms = applyNoteHints(rooms, notes);
+  rooms = applyNoteHints(rooms, notes, { allowAffectedFractionFromNotes: !sketch });
   rooms = attachPhotoRooms(rooms, photos?.evidence ?? []);
 
   /* ---- Identity + dates ------------------------------------------- */
@@ -149,6 +194,13 @@ export function normalizeSources(sources: EstimatorSources): LossAssessment {
     );
   }
 
+  /* ---- Materials from findings + notes ---------------------------- */
+
+  // DocuSketch (and any room that already carries finishes) wins. Materials are
+  // only painted onto rooms whose materials list is still empty — otherwise a
+  // caption would silently double demolition against a measured finish list.
+  rooms = applyMaterialsFromEvidence(rooms, findingsBundle, notes, category);
+
   /* ---- Class ------------------------------------------------------ */
 
   const wetSurfaceFraction = computeWetSurfaceFraction(rooms);
@@ -164,16 +216,9 @@ export function normalizeSources(sources: EstimatorSources): LossAssessment {
     overrides.class ??
     determineClass({ wetSurfaceFraction, ceilingAffected, lowEvaporationMaterials });
 
-  /* ---- Moisture + equipment --------------------------------------- */
+  /* ---- Moisture + drying duration --------------------------------- */
 
   const moistureReadings = assignReadingRooms(mica?.moistureReadings ?? [], rooms);
-
-  const equipment = mica?.equipment ?? [];
-  if (equipment.length === 0 && notes?.equipmentMentioned.length) {
-    warnings.push(
-      'No MICA equipment log was supplied — equipment counts came from the field notes, so the billed days rest on the notes alone.',
-    );
-  }
 
   const dryingDays =
     overrides.dryingDays ??
@@ -182,6 +227,27 @@ export function normalizeSources(sources: EstimatorSources): LossAssessment {
       : estimateDryingDays(waterClass, category));
 
   const monitoringVisits = overrides.monitoringVisits ?? mica?.monitoringVisits ?? dryingDays;
+
+  /* ---- Equipment (MICA → notes → findings) ------------------------ */
+
+  const equipmentPlacedAt = dateOfArrival ?? new Date().toISOString();
+  let equipment: EquipmentPlacement[] = mica?.equipment ?? [];
+
+  if (equipment.length === 0 && notes?.equipmentMentioned.length) {
+    equipment = equipmentFromNotes(notes.equipmentMentioned, dryingDays, equipmentPlacedAt);
+    warnings.push(
+      'No MICA equipment log was supplied — equipment counts came from the field notes, so the billed days rest on the notes alone.',
+    );
+  }
+
+  if (equipment.length === 0) {
+    equipment = equipmentFromFindings(findingsBundle.findings, dryingDays, equipmentPlacedAt);
+    if (equipment.length > 0) {
+      warnings.push(
+        'No MICA or note equipment counts were supplied — equipment was inferred from photo/note findings that mention units on site.',
+      );
+    }
+  }
 
   /* ---- Evidence --------------------------------------------------- */
 
@@ -204,13 +270,18 @@ export function normalizeSources(sources: EstimatorSources): LossAssessment {
     category === 3 ||
     microbialGrowthPresent ||
     Boolean(notes?.containmentMentioned) ||
-    evidence.some((item) => item.tags.includes('containment'));
+    evidence.some((item) => item.tags.includes('containment')) ||
+    findingsBundle.findings.some((f) => f.kind === 'containment_built');
+
+  // Carrier: MICA identity wins; notes fill the gap so program SLAs can still load.
+  const carrier =
+    overrides.carrier ?? mica?.carrier ?? notes?.carrierMentioned;
 
   return {
     jobId: sources.jobId ?? `job-${Date.now().toString(36)}`,
     propertyAddress: overrides.propertyAddress ?? mica?.propertyAddress ?? sketch?.propertyAddress,
     claimNumber: overrides.claimNumber ?? mica?.claimNumber,
-    carrier: overrides.carrier ?? mica?.carrier,
+    carrier,
     insuredName: overrides.insuredName ?? mica?.insuredName,
     dateOfLoss,
     dateOfArrival,
@@ -229,6 +300,7 @@ export function normalizeSources(sources: EstimatorSources): LossAssessment {
     containmentRequired,
     warnings,
     sourcesUsed,
+    findings: findingsBundle.findings,
   };
 }
 
@@ -267,7 +339,8 @@ function applyMicaHints(
 }
 
 /**
- * Apply note-derived flood-cut heights.
+ * Apply note-derived flood-cut heights, ceiling wetness, and (when no scan
+ * measured affected floor) the stated wet-floor fraction.
  *
  * A note that says "cut 24in" records a *decision the crew made*, not a
  * measurement — so it lands on `documentedCutHeightIn`, where the scope rules
@@ -278,19 +351,31 @@ function applyMicaHints(
  */
 function applyNoteHints(
   rooms: AssessedRoom[],
-  notes: ReturnType<typeof parseNotes> | null,
+  notes: NotesParseResult | null,
+  options: { allowAffectedFractionFromNotes: boolean },
 ): AssessedRoom[] {
-  if (!notes || notes.floodCuts.length === 0) return rooms;
+  if (!notes) return rooms;
 
+  const hasCuts = notes.floodCuts.length > 0;
   // Without a room name on the cut, the note describes the job, so apply the
   // largest stated height everywhere a wall is already known to be wet.
-  const globalCut = Math.max(...notes.floodCuts.map((cut) => cut.heightIn));
+  const globalCut = hasCuts ? Math.max(...notes.floodCuts.map((cut) => cut.heightIn)) : undefined;
 
   return rooms.map((room) => {
     const scoped = notes.floodCuts.find(
       (cut) => cut.roomName && nameMatches(room.name, cut.roomName),
     );
-    return { ...room, documentedCutHeightIn: scoped?.heightIn ?? globalCut };
+    const documentedCutHeightIn = scoped?.heightIn ?? globalCut ?? room.documentedCutHeightIn;
+
+    return {
+      ...room,
+      documentedCutHeightIn,
+      ceilingAffected: room.ceilingAffected || notes.ceilingWet,
+      affectedFloorFraction:
+        options.allowAffectedFractionFromNotes && notes.affectedFloorFraction !== undefined
+          ? clamp(notes.affectedFloorFraction, 0, 1)
+          : room.affectedFloorFraction,
+    };
   });
 }
 
@@ -312,12 +397,17 @@ function photoCategoryHint(evidence: Evidence[]): WaterCategory | undefined {
 }
 
 /**
- * Build rooms from note dimensions when no scan exists. Materials are left empty
- * on purpose: guessing what was wet from a bare "12x14" would put demolition on
- * the estimate that nobody documented.
+ * Build rooms from note dimensions when no scan exists.
+ *
+ * Materials stay empty here on purpose when the notes only gave sizes — the
+ * findings / placement pass fills finishes separately so a bare "12x14" never
+ * invents demolition. Affected floor fraction and ceiling wetness *are* taken
+ * from the notes when stated, because those are observations about the loss,
+ * not guesses about finishes.
  */
 function roomsFromNotes(
   dimensions: Array<{ name?: string; lengthFt: number; widthFt: number; heightFt?: number }>,
+  notes: NotesParseResult,
 ): AssessedRoom[] {
   return dimensions.map((dim, index) => ({
     id: `note-room-${index}`,
@@ -328,10 +418,251 @@ function roomsFromNotes(
       widthFt: dim.widthFt,
       heightFt: dim.heightFt,
     }),
+    affectedFloorFraction: notes.affectedFloorFraction ?? 1,
+    materials: [],
+    ceilingAffected: notes.ceilingWet,
+    notes: 'Geometry read from field notes; not measured.',
+  }));
+}
+
+/**
+ * Zero-geometry rooms named in captions/notes when nothing else produced a
+ * room list. Findings need attachment points; inventing SF would be fraud.
+ */
+function placeholderRoomsFromNames(names: string[]): AssessedRoom[] {
+  // Literal zeros — do not call deriveGeometry here; it would fill a default
+  // ceiling height and look like measured space.
+  const zeroGeometry = {
+    lengthFt: 0,
+    widthFt: 0,
+    heightFt: 0,
+    floorSF: 0,
+    ceilingSF: 0,
+    wallSF: 0,
+    perimeterLF: 0,
+    offsets: 0,
+    openingSF: 0,
+  };
+  return names.map((name, index) => ({
+    id: `finding-room-${index}`,
+    name,
+    level: 'Main Level',
+    geometry: zeroGeometry,
     affectedFloorFraction: 1,
     materials: [],
     ceilingAffected: false,
-    notes: 'Geometry read from field notes; not measured.',
+    notes:
+      'Named in photos/notes without dimensions — placeholder only; quantities blocked until sizes are supplied.',
+  }));
+}
+
+/**
+ * Paint findings + note materials onto rooms that still have an empty finish
+ * list. Never overwrite DocuSketch (or any already-populated) materials.
+ *
+ * Salvageability: Category 3 porous finishes cannot be restored to a sanitary
+ * condition, so they are always non-salvageable. An explicit tear-out /
+ * "removed" signal also forces non-salvageable. When carpet is non-salvageable,
+ * carpet pad is added if missing — pad under a carpet that is coming out always
+ * comes out with it.
+ */
+function applyMaterialsFromEvidence(
+  rooms: AssessedRoom[],
+  findingsBundle: FindingsBundle,
+  notes: NotesParseResult | null,
+  category: WaterCategory,
+): AssessedRoom[] {
+  const emptyRooms = rooms.filter((room) => room.materials.length === 0);
+  if (emptyRooms.length === 0) return rooms;
+
+  type Spec = {
+    material: MaterialType;
+    roomName?: string;
+    wetHeightIn?: number;
+    cavityWet?: boolean;
+    removed?: boolean;
+  };
+
+  const specs: Spec[] = [];
+
+  for (const row of findingsBundle.materials) {
+    specs.push({
+      material: row.material,
+      roomName: row.roomName,
+      wetHeightIn: row.wetHeightIn,
+      cavityWet: row.cavityWet,
+      removed: row.removed,
+    });
+  }
+
+  if (notes) {
+    for (const placement of notes.materialPlacements) {
+      specs.push({
+        material: placement.material,
+        roomName: placement.roomName,
+        wetHeightIn: placement.wetHeightIn,
+        removed: placement.removed,
+        cavityWet:
+          notes.cavityWet &&
+          (placement.material === 'drywall' ||
+            placement.material === 'plaster' ||
+            placement.material === 'insulation')
+            ? true
+            : undefined,
+      });
+    }
+    for (const material of notes.materialsMentioned) {
+      if (!specs.some((s) => s.material === material && !s.roomName)) {
+        specs.push({ material });
+      }
+    }
+  }
+
+  if (specs.length === 0) return rooms;
+
+  return rooms.map((room) => {
+    if (room.materials.length > 0) return room;
+
+    const scoped = specs.filter((s) => s.roomName && nameMatches(room.name, s.roomName));
+    const unscoped = specs.filter((s) => !s.roomName);
+    // Room-named specs win for this room; unscoped specs apply to every empty
+    // room (field notes often describe the whole job without naming rooms).
+    const applicable = [...scoped, ...unscoped];
+    if (applicable.length === 0) return room;
+
+    const materials = buildAffectedMaterials(applicable, room, category);
+    return { ...room, materials };
+  });
+}
+
+function buildAffectedMaterials(
+  specs: Array<{
+    material: MaterialType;
+    wetHeightIn?: number;
+    cavityWet?: boolean;
+    removed?: boolean;
+  }>,
+  room: AssessedRoom,
+  category: WaterCategory,
+): AffectedMaterial[] {
+  const byMaterial = new Map<MaterialType, AffectedMaterial>();
+
+  for (const spec of specs) {
+    const porous = isPorous(spec.material);
+    // Cat 3 porous finishes cannot be cleaned to a sanitary standard — they
+    // come out. An explicit tear-out / "removed" signal does the same.
+    const salvageable = !(Boolean(spec.removed) || (category === 3 && porous));
+    const surface = surfaceFor(spec.material);
+    const unit = unitFor(spec.material);
+    const quantity = quantityFor(spec.material, unit, room);
+
+    const existing = byMaterial.get(spec.material);
+    if (!existing) {
+      byMaterial.set(spec.material, {
+        material: spec.material,
+        surface,
+        quantity,
+        unit,
+        wetHeightIn: spec.wetHeightIn,
+        cavityWet: Boolean(spec.cavityWet),
+        porous,
+        salvageable,
+      });
+      continue;
+    }
+
+    existing.wetHeightIn = existing.wetHeightIn ?? spec.wetHeightIn;
+    existing.cavityWet = existing.cavityWet || Boolean(spec.cavityWet);
+    // Non-salvageable wins: once any source says it comes out, it stays out.
+    if (!salvageable) existing.salvageable = false;
+  }
+
+  // Carpet that is coming out always takes its pad with it.
+  const carpet = byMaterial.get('carpet');
+  if (carpet && !carpet.salvageable && !byMaterial.has('carpet_pad')) {
+    byMaterial.set('carpet_pad', {
+      material: 'carpet_pad',
+      surface: surfaceFor('carpet_pad'),
+      quantity: quantityFor('carpet_pad', 'SF', room),
+      unit: 'SF',
+      porous: true,
+      salvageable: false,
+    });
+  }
+
+  return [...byMaterial.values()];
+}
+
+function unitFor(material: MaterialType): Unit {
+  return material === 'baseboard' || material === 'cabinetry' ? 'LF' : 'SF';
+}
+
+function quantityFor(material: MaterialType, unit: Unit, room: AssessedRoom): number {
+  const { geometry } = room;
+  if (unit === 'LF') {
+    return round(geometry.perimeterLF);
+  }
+  const surface = surfaceFor(material);
+  if (surface === 'ceiling') return round(geometry.ceilingSF * (room.ceilingAffected ? 1 : room.affectedFloorFraction));
+  if (surface === 'wall') {
+    // Wall SF is not known until a cut height is applied; seed with floor SF so
+    // a zero-geometry placeholder stays at zero rather than inventing area.
+    return round(geometry.floorSF * room.affectedFloorFraction);
+  }
+  return round(geometry.floorSF * room.affectedFloorFraction);
+}
+
+function equipmentFromNotes(
+  mentioned: NotesParseResult['equipmentMentioned'],
+  dryingDays: number,
+  placedAt: string,
+): EquipmentPlacement[] {
+  return mentioned.map((entry) => ({
+    kind: mapNoteEquipmentKind(entry.kind),
+    quantity: entry.quantity,
+    placedAt,
+    days: dryingDays,
+  }));
+}
+
+function mapNoteEquipmentKind(
+  kind: NotesParseResult['equipmentMentioned'][number]['kind'],
+): EquipmentKind {
+  if (kind === 'dehumidifier_lgr') return 'dehumidifier_lgr';
+  if (kind === 'dehumidifier') return 'dehumidifier_conventional';
+  return kind;
+}
+
+/**
+ * Last-resort equipment list: count distinct equipment_placed findings by tag.
+ * Quantities are a lower bound (one unit per finding), never a guess upward.
+ */
+function equipmentFromFindings(
+  findings: DamageFinding[],
+  dryingDays: number,
+  placedAt: string,
+): EquipmentPlacement[] {
+  const totals = new Map<EquipmentKind, number>();
+  for (const finding of findings) {
+    if (finding.kind !== 'equipment_placed') continue;
+    if (finding.tags.includes('air_mover')) {
+      totals.set('air_mover', (totals.get('air_mover') ?? 0) + 1);
+    }
+    if (finding.tags.includes('dehumidifier')) {
+      totals.set(
+        'dehumidifier_conventional',
+        (totals.get('dehumidifier_conventional') ?? 0) + 1,
+      );
+    }
+    if (finding.tags.includes('air_scrubber')) {
+      totals.set('air_scrubber', (totals.get('air_scrubber') ?? 0) + 1);
+    }
+  }
+  return [...totals].map(([kind, quantity]) => ({
+    kind,
+    quantity,
+    placedAt,
+    days: dryingDays,
   }));
 }
 
@@ -401,4 +732,4 @@ function estimateDryingDays(waterClass: number, category: WaterCategory): number
 
 /** Re-exported so scope rules can reason about porosity without a deep import. */
 export { isPorous, surfaceFor };
-export type { AffectedMaterial };
+export type { AffectedMaterial, DamageFinding };
