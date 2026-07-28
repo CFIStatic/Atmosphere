@@ -71,11 +71,82 @@ export const estimatorSettingsSchema = z
     hoursPerMonitoringVisit: z.number().min(0).max(12).optional(),
     techniciansOnSite: z.number().int().min(1).max(20).optional(),
     category3CutHeightIn: z.number().min(12).max(96).optional(),
+    planCutHeightIn: z.number().min(12).max(96).optional(),
+    equipmentBillingMode: z.enum(['as_logged', 'recommended', 'max']).optional(),
     costOverrides: z.record(z.string().max(40), z.number().min(0).max(100_000)).optional(),
     catalogRemaps: z.record(z.string().max(40), z.string().trim().min(1).max(40)).optional(),
     codeOverrides: z.record(z.string().max(80), z.string().trim().min(1).max(40)).optional(),
   })
   .optional();
+
+const equipmentKindSchema = z.enum([
+  'air_mover',
+  'axial_air_mover',
+  'dehumidifier_lgr',
+  'dehumidifier_conventional',
+  'dehumidifier_desiccant',
+  'air_scrubber',
+  'heater',
+  'injectidry',
+]);
+
+const moistureReadingSchema = z.object({
+  roomId: z.string().trim().max(200),
+  material: z.string().trim().max(60),
+  value: z.number().min(0).max(1000),
+  dryStandard: z.number().min(0).max(1000),
+  takenAt: z.string().trim().max(60),
+  location: z.string().trim().max(300).optional(),
+});
+
+const psychrometricSchema = z.object({
+  takenAt: z.string().trim().max(60),
+  zone: z.enum(['affected', 'unaffected', 'outside', 'dehu_outlet']),
+  temperatureF: z.number().min(-40).max(150),
+  relativeHumidity: z.number().min(0).max(100),
+  gpp: z.number().min(0).max(1000).optional(),
+});
+
+const equipmentPlacementSchema = z.object({
+  kind: equipmentKindSchema,
+  quantity: z.number().int().min(0).max(500),
+  roomId: z.string().trim().max(200).optional(),
+  placedAt: z.string().trim().max(60),
+  removedAt: z.string().trim().max(60).optional(),
+  days: z.number().min(0).max(120).optional(),
+});
+
+/**
+ * One drying visit / export. Used on build (inline array) and on the append
+ * endpoint (single report). Id is optional on append — the route will mint one.
+ */
+export const dryingReportSchema = z.object({
+  id: z.string().trim().max(120).optional(),
+  takenAt: z.string().trim().min(1).max(60),
+  source: z.enum(['mica', 'manual', 'notes', 'photos']),
+  notes: z.string().trim().max(10_000).optional(),
+  moistureReadings: z.array(moistureReadingSchema).max(500).optional(),
+  psychrometrics: z.array(psychrometricSchema).max(200).optional(),
+  equipment: z.array(equipmentPlacementSchema).max(200).optional(),
+  roomsAtDryStandard: z.array(z.string().trim().max(200)).max(100).optional(),
+  roomsStillWet: z.array(z.string().trim().max(200)).max(100).optional(),
+  evidence: z
+    .array(
+      z.object({
+        id: z.string().trim().max(200),
+        kind: z.enum(['photo', 'moisture_reading', 'psychrometric', 'note', 'sketch']),
+        roomId: z.string().trim().max(200).optional(),
+        capturedAt: z.string().trim().max(60).optional(),
+        description: z.string().trim().max(4000),
+        uri: z.string().trim().max(2000).optional(),
+        tags: z.array(z.string().trim().max(80)).max(50).default([]),
+      }),
+    )
+    .max(500)
+    .optional(),
+});
+
+export const dryingReportsSchema = z.array(dryingReportSchema).max(200).optional();
 
 /** A human's answer about who the estimate is for. Always beats inference. */
 export const carrierOverrideSchema = z
@@ -92,6 +163,7 @@ export const buildEstimateSchema = z
     mica: vendorPayload.optional(),
     photos: photoManifestSchema.optional(),
     notes: z.string().max(50_000, 'Those notes are longer than 50,000 characters.').optional(),
+    dryingReports: dryingReportsSchema,
     overrides: overridesSchema,
     settings: estimatorSettingsSchema,
     carrier: carrierOverrideSchema,
@@ -107,6 +179,22 @@ export const buildEstimateSchema = z
   );
 
 export type BuildEstimateInput = z.infer<typeof buildEstimateSchema>;
+
+/** Rebuild may omit sources when the caller only wants stored reports reapplied. */
+export const rebuildEstimateSchema = z.object({
+  jobId: z.string().trim().max(120).optional(),
+  docusketch: vendorPayload.optional(),
+  mica: vendorPayload.optional(),
+  photos: photoManifestSchema.optional(),
+  notes: z.string().max(50_000).optional(),
+  dryingReports: dryingReportsSchema,
+  overrides: overridesSchema,
+  settings: estimatorSettingsSchema,
+  carrier: carrierOverrideSchema,
+  codeOverrides: z.record(z.string().max(80), z.string().trim().min(1).max(40)).optional(),
+  /** Persist the rebuilt estimate when true. */
+  save: z.boolean().optional(),
+});
 
 /* ------------------------------------------------------------------ *
  * Xactimate

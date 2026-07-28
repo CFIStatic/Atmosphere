@@ -50,6 +50,12 @@ export interface EstimatorSources {
   mica?: unknown;
   photos?: PhotoManifestEntry[];
   notes?: string;
+  /**
+   * Chronological drying visits. Merged in the agent after normalizeSources —
+   * this field is declared here so buildEstimate accepts it through the same
+   * sources object, but normalizeSources stays pure for one-shot inputs.
+   */
+  dryingReports?: import('../planning/dryingProgress.js').DryingReport[];
   /** Overrides a human supplied directly — always authoritative. */
   overrides?: AssessmentOverrides;
 }

@@ -13,7 +13,15 @@ import { identifyCarrier, type IdentifyOptions } from './carrier/identify.js';
 import { applyAgreementToPricing, checkAgreement } from './carrier/sla.js';
 import type { ProgramAgreement, SlaDeviation } from './carrier/types.js';
 import { deriveRequirements } from './requirements/obligations.js';
+import { buildEquipmentPlan, type EquipmentPlan } from './planning/equipmentPlan.js';
+import {
+  mergeDryingReports,
+  type DryingProgress,
+  type DryingReport,
+} from './planning/dryingProgress.js';
 import type { LossAssessment, MitigationEstimate, ScopeItem } from './types.js';
+
+export type { DryingReport };
 
 /**
  * The Mitigation Estimator agent.
@@ -75,11 +83,50 @@ export const DEFAULT_ESTIMATOR_CONFIG: EstimatorConfig = {
   deviations: [],
 };
 
+const EMPTY_DRYING_PROGRESS: DryingProgress = {
+  reports: [],
+  visitCount: 0,
+  moistureReadingCount: 0,
+  psychrometricCount: 0,
+  roomsAtDryStandard: [],
+  roomsStillWet: [],
+  gppDifferential: null,
+  dryingComplete: false,
+  suggestedRemainingDays: 0,
+  timeline: [],
+};
+
 export function buildEstimate(
   sources: EstimatorSources,
   config: EstimatorConfig = DEFAULT_ESTIMATOR_CONFIG,
 ): MitigationEstimate {
-  const assessment = normalizeSources(sources);
+  let assessment = normalizeSources(sources);
+
+  // Drying reports are merged after normalizeSources so one-shot ingestion stays
+  // pure — visit timelines overlay moisture, psychro, equipment, and days here.
+  let dryingProgress: DryingProgress = EMPTY_DRYING_PROGRESS;
+  if (sources.dryingReports?.length) {
+    const merged = mergeDryingReports(sources.dryingReports, {
+      moistureReadings: assessment.moistureReadings,
+      psychrometrics: assessment.psychrometrics,
+      equipment: assessment.equipment,
+      evidence: assessment.evidence,
+      dryingDays: assessment.dryingDays,
+      monitoringVisits: assessment.monitoringVisits,
+    });
+    assessment = {
+      ...assessment,
+      moistureReadings: merged.moistureReadings,
+      psychrometrics: merged.psychrometrics,
+      equipment: merged.equipment,
+      evidence: merged.evidence,
+      dryingDays: merged.dryingDays,
+      monitoringVisits: merged.monitoringVisits,
+      warnings: [...assessment.warnings, ...merged.warnings],
+    };
+    dryingProgress = merged.progress;
+  }
+
   const identification = identifyCarrier(assessment, config.carrier ?? {});
   const agreement = config.agreement ?? null;
 
@@ -149,6 +196,12 @@ export function buildEstimate(
     sla,
   });
 
+  const equipmentPlan = buildEquipmentPlan(assessment, {
+    billingMode: config.scope.equipmentBillingMode,
+    planCutHeightIn: config.scope.planCutHeightIn,
+    preferInjectidryWhenSalvageable: assessment.category < 3,
+  });
+
   return {
     jobId: assessment.jobId,
     generatedAt: new Date().toISOString(),
@@ -160,7 +213,9 @@ export function buildEstimate(
     sla,
     references: referencesFor(cited),
     requirements,
-    narrative: writeNarrative(assessment, lineItems.length, requirements),
+    equipmentPlan,
+    dryingProgress,
+    narrative: writeNarrative(assessment, lineItems.length, requirements, equipmentPlan, dryingProgress),
     openQuestions: collectOpenQuestions(
       assessment,
       scope,
@@ -171,6 +226,7 @@ export function buildEstimate(
       sla,
       applied.notes,
       requirements,
+      equipmentPlan,
     ),
   };
 }
@@ -188,6 +244,8 @@ function writeNarrative(
   assessment: LossAssessment,
   lineCount: number,
   requirements: import('./requirements/obligations.js').MitigationRequirement[],
+  equipmentPlan?: EquipmentPlan,
+  dryingProgress?: DryingProgress,
 ): string {
   const rooms = assessment.rooms.length;
   const totalSF = round(assessment.rooms.reduce((sum, room) => sum + room.geometry.floorSF, 0));
@@ -233,6 +291,24 @@ function writeNarrative(
     `The loss was assessed as Class ${assessment.class} — ${describeClass(assessment.class)}. ${describeDehuBasis(assessment)}`,
   );
 
+  if (equipmentPlan && equipmentPlan.airMoversRequired > 0) {
+    const floodCutRooms = equipmentPlan.rooms.filter((r) => r.floodCutRequired && r.cutHeightIn > 0);
+    if (floodCutRooms.length > 0) {
+      const sample = floodCutRooms[0];
+      parts.push(
+        `Air movers sized at ${equipmentPlan.airMoversRequired} for open wall after flood cut` +
+          (sample
+            ? ` (e.g. ${sample.roomName}: ${sample.airMoversRequired} movers for ${sample.openWallSF} SF open wall at ${sample.cutHeightIn}")`
+            : '') +
+          ` (${formatCitation('AIRFLOW_SIZING')}).`,
+      );
+    } else {
+      parts.push(
+        `Equipment plan calls for ${equipmentPlan.airMoversRequired} air mover${equipmentPlan.airMoversRequired === 1 ? '' : 's'} and ${equipmentPlan.dehu.unitsRequired} dehumidifier unit${equipmentPlan.dehu.unitsRequired === 1 ? '' : 's'} (${formatCitation('AIRFLOW_SIZING')}).`,
+      );
+    }
+  }
+
   const differential = gppDifferential(assessment.psychrometrics);
   if (differential !== null) {
     parts.push(
@@ -252,6 +328,17 @@ function writeNarrative(
   if (unmet.length > 0 && photosOnly && !structured) {
     parts.push(
       `${unmet.length} mitigation obligation${unmet.length === 1 ? '' : 's'} from IICRC, insurance documentation rules, or construction/health practice ${unmet.length === 1 ? 'is' : 'are'} not yet fully covered by the scoped lines — see Requirements.`,
+    );
+  }
+
+  if (dryingProgress && dryingProgress.visitCount > 0) {
+    parts.push(
+      dryingProgress.dryingComplete
+        ? `Drying progress across ${dryingProgress.visitCount} visit${dryingProgress.visitCount === 1 ? '' : 's'} shows all tracked rooms at dry standard.`
+        : `Drying progress across ${dryingProgress.visitCount} visit${dryingProgress.visitCount === 1 ? '' : 's'}: ${dryingProgress.roomsAtDryStandard.length} room${dryingProgress.roomsAtDryStandard.length === 1 ? '' : 's'} at dry standard, ${dryingProgress.roomsStillWet.length} still wet` +
+            (dryingProgress.suggestedRemainingDays > 0
+              ? ` (~${dryingProgress.suggestedRemainingDays} day${dryingProgress.suggestedRemainingDays === 1 ? '' : 's'} remaining).`
+              : '.'),
     );
   }
 
@@ -324,6 +411,7 @@ function collectOpenQuestions(
   sla: ReturnType<typeof checkAgreement>,
   pricingNotes: string[],
   requirements: import('./requirements/obligations.js').MitigationRequirement[] = [],
+  equipmentPlan?: EquipmentPlan,
 ): string[] {
   const questions: string[] = [];
 
@@ -457,6 +545,26 @@ function collectOpenQuestions(
       questions.push(
         `${room.name} shows ${placed} air movers placed where the coverage figures call for ${required} (${formatCitation('AIRFLOW_SIZING')}). Either the log is incomplete — in which case there are unbilled equipment days — or the room dried under-equipped and that should be noted.`,
       );
+    }
+  }
+
+  // Equipment plan under-equipment: surface room rationales + plan warnings so
+  // flood-cut airflow gaps are visible even when the log has no per-room ids.
+  if (equipmentPlan) {
+    for (const warning of equipmentPlan.warnings) {
+      questions.push(warning);
+    }
+    const underEquipped = equipmentPlan.warnings.some((w) => /under-equipped/i.test(w));
+    if (underEquipped || equipmentPlan.billingMode === 'as_logged') {
+      for (const room of equipmentPlan.rooms) {
+        if (room.airMoversRequired <= 0) continue;
+        const placed = assessment.equipment
+          .filter((e) => (!e.roomId || e.roomId === room.roomId) && e.kind.includes('air_mover'))
+          .reduce((sum, e) => sum + e.quantity, 0);
+        if (placed > 0 && placed < room.airMoversRequired) {
+          questions.push(`${room.roomName}: ${room.rationale}`);
+        }
+      }
     }
   }
 

@@ -21,8 +21,10 @@ import {
   agreementSchema,
   buildEstimateSchema,
   deviationSchema,
+  dryingReportSchema,
   estimatorSettingsSchema,
   exportFormatSchema,
+  rebuildEstimateSchema,
 } from '../estimator/mitigation/validation.js';
 import {
   deleteAgreement,
@@ -33,14 +35,24 @@ import {
   getSettings,
   listAgreements,
   listDeviations,
+  listDryingReports,
   listJobs,
   resolveOrgId,
   saveAgreement,
   saveDeviation,
+  saveDryingReport,
   saveEstimate,
   saveSettings,
   getConnection,
 } from '../estimator/mitigation/store.js';
+import { normalizeSources } from '../estimator/mitigation/ingest/index.js';
+import { buildEquipmentPlan } from '../estimator/mitigation/planning/equipmentPlan.js';
+import {
+  dryingReportFromManual,
+  mergeDryingReports,
+  type DryingReport,
+} from '../estimator/mitigation/planning/dryingProgress.js';
+import type { MaterialType } from '../estimator/mitigation/types.js';
 
 export const mitigationRouter = Router();
 
@@ -153,6 +165,7 @@ mitigationRouter.post(
           mica: input.mica,
           photos: input.photos,
           notes: input.notes,
+          dryingReports: normalizeDryingReports(input.dryingReports),
           overrides: input.overrides,
         },
         { ...config, agreement, deviations, carrier: { override: input.carrier } },
@@ -208,6 +221,7 @@ mitigationRouter.post(
           mica: input.mica,
           photos: input.photos,
           notes: input.notes,
+          dryingReports: normalizeDryingReports(input.dryingReports),
           overrides: input.overrides,
         },
         { ...config, agreement, deviations, carrier: { override: input.carrier } },
@@ -578,3 +592,228 @@ mitigationRouter.delete(
     }
   },
 );
+
+/* ------------------------------------------------------------------ *
+ * Drying reports + progress
+ * ------------------------------------------------------------------ */
+
+/**
+ * POST /api/mitigation/jobs/:jobId/drying-reports
+ *
+ * Append a visit report. Persisted under estimator_settings.settings.dryingReports
+ * keyed by the job's external id.
+ */
+mitigationRouter.post(
+  '/jobs/:jobId/drying-reports',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = dryingReportSchema.parse(req.body);
+      const supabase = createUserClient(req.accessToken!);
+      const orgId = await resolveOrgId(supabase, req.user!.id);
+      const jobId = req.params.jobId;
+
+      const report: DryingReport = {
+        ...dryingReportFromManual({
+          takenAt: parsed.takenAt,
+          notes: parsed.notes,
+          moistureReadings: parsed.moistureReadings?.map((r) => ({
+            ...r,
+            material: r.material as MaterialType,
+          })),
+          psychrometrics: parsed.psychrometrics,
+          equipment: parsed.equipment,
+          roomsAtDryStandard: parsed.roomsAtDryStandard,
+          roomsStillWet: parsed.roomsStillWet,
+        }),
+        id: parsed.id ?? `report-${Date.now().toString(36)}`,
+        source: parsed.source,
+        evidence: parsed.evidence,
+      };
+
+      const reports = await saveDryingReport(supabase, orgId, jobId, report);
+      res.status(201).json({ report, reports });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * GET /api/mitigation/jobs/:jobId/progress
+ *
+ * Merge stored drying reports onto a baseline assessment and return the
+ * equipment plan + drying progress for the job.
+ */
+mitigationRouter.get(
+  '/jobs/:jobId/progress',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { supabase, orgId, stored, priceList } = await loadContext(req);
+      const jobId = req.params.jobId;
+      const reports = await listDryingReports(supabase, orgId, jobId);
+
+      const baseline = normalizeSources({ jobId });
+      const merged = mergeDryingReports(reports, {
+        moistureReadings: baseline.moistureReadings,
+        psychrometrics: baseline.psychrometrics,
+        equipment: baseline.equipment,
+        evidence: baseline.evidence,
+        dryingDays: baseline.dryingDays,
+        monitoringVisits: baseline.monitoringVisits,
+      });
+
+      const assessment = {
+        ...baseline,
+        moistureReadings: merged.moistureReadings,
+        psychrometrics: merged.psychrometrics,
+        equipment: merged.equipment,
+        evidence: merged.evidence,
+        dryingDays: merged.dryingDays,
+        monitoringVisits: merged.monitoringVisits,
+        warnings: [...baseline.warnings, ...merged.warnings],
+      };
+
+      const { config } = buildEstimatorConfig(stored, priceList);
+      const equipmentPlan = buildEquipmentPlan(assessment, {
+        billingMode: config.scope.equipmentBillingMode,
+        planCutHeightIn: config.scope.planCutHeightIn,
+        preferInjectidryWhenSalvageable: assessment.category < 3,
+      });
+
+      res.json({
+        jobId,
+        reports,
+        dryingProgress: merged.progress,
+        equipmentPlan,
+        assessment,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/mitigation/jobs/:jobId/rebuild
+ *
+ * Load stored drying reports, merge with body sources (when provided), and
+ * rebuild the estimate. Optionally persist.
+ */
+mitigationRouter.post(
+  '/jobs/:jobId/rebuild',
+  buildLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const input = rebuildEstimateSchema.parse(req.body);
+      const { supabase, userId, orgId, stored, priceList } = await loadContext(req);
+      const jobId = req.params.jobId;
+
+      const storedReports = await listDryingReports(supabase, orgId, jobId);
+      const bodyReports = normalizeDryingReports(input.dryingReports) ?? [];
+      // Body reports win on id collision; otherwise append.
+      const byId = new Map<string, DryingReport>();
+      for (const report of storedReports) byId.set(report.id, report);
+      for (const report of bodyReports) byId.set(report.id, report);
+      const dryingReports = [...byId.values()].sort(
+        (a, b) => Date.parse(a.takenAt) - Date.parse(b.takenAt),
+      );
+
+      const hasSources = Boolean(
+        input.docusketch || input.mica || input.photos?.length || input.notes?.trim(),
+      );
+      if (!hasSources && dryingReports.length === 0) {
+        throw badRequest(
+          'Rebuild needs sources in the body and/or stored drying reports for this job.',
+        );
+      }
+
+      const { config, warnings } = buildEstimatorConfig(
+        {
+          ...stored,
+          ...(input.settings ?? {}),
+          codeOverrides: {
+            ...(stored.codeOverrides ?? {}),
+            ...(input.settings?.codeOverrides ?? {}),
+            ...(input.codeOverrides ?? {}),
+          },
+        },
+        priceList,
+      );
+
+      const sources = {
+        jobId,
+        docusketch: input.docusketch,
+        mica: input.mica,
+        photos: input.photos,
+        notes: input.notes,
+        dryingReports,
+        overrides: input.overrides,
+      };
+
+      const { agreement, errors } = await resolveJobAgreement(supabase, orgId, sources);
+      const deviations = await listDeviations(supabase, orgId, jobId);
+
+      const estimate = buildEstimate(sources, {
+        ...config,
+        agreement,
+        deviations,
+        carrier: { override: input.carrier },
+      });
+      estimate.openQuestions = [...new Set([...estimate.openQuestions, ...warnings, ...errors])];
+
+      if (input.save) {
+        const name =
+          estimate.assessment.propertyAddress ??
+          estimate.assessment.claimNumber ??
+          `Mitigation estimate ${new Date().toISOString().slice(0, 10)}`;
+        const record = await saveEstimate(supabase, { orgId, userId, name, estimate });
+        res.json({ estimateId: record.id, jobId: record.jobId, estimate, saved: true });
+        return;
+      }
+
+      res.json({ estimate, saved: false });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** Coerce validated report rows into DryingReport (mint ids when omitted). */
+function normalizeDryingReports(
+  rows: Array<{
+    id?: string;
+    takenAt: string;
+    source: DryingReport['source'];
+    notes?: string;
+    moistureReadings?: Array<{
+      roomId: string;
+      material: string;
+      value: number;
+      dryStandard: number;
+      takenAt: string;
+      location?: string;
+    }>;
+    psychrometrics?: DryingReport['psychrometrics'];
+    equipment?: DryingReport['equipment'];
+    roomsAtDryStandard?: string[];
+    roomsStillWet?: string[];
+    evidence?: DryingReport['evidence'];
+  }> | undefined,
+): DryingReport[] | undefined {
+  if (!rows?.length) return undefined;
+  return rows.map((row, index) => ({
+    id: row.id ?? `report-${Date.now().toString(36)}-${index}`,
+    takenAt: row.takenAt,
+    source: row.source,
+    notes: row.notes,
+    moistureReadings: row.moistureReadings?.map((r) => ({
+      ...r,
+      material: r.material as MaterialType,
+    })),
+    psychrometrics: row.psychrometrics,
+    equipment: row.equipment,
+    roomsAtDryStandard: row.roomsAtDryStandard,
+    roomsStillWet: row.roomsStillWet,
+    evidence: row.evidence,
+  }));
+}

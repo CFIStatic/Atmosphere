@@ -5,6 +5,7 @@ import type { SealedCredential } from './xactimate/credentials.js';
 import type { PriceList } from './catalog/priceList.js';
 import type { ProgramAgreement, SlaDeviation } from './carrier/types.js';
 import type { MitigationEstimate } from './types.js';
+import type { DryingReport } from './planning/dryingProgress.js';
 
 /**
  * Persistence for the estimator.
@@ -355,6 +356,10 @@ export interface StoredSettings {
   hoursPerMonitoringVisit?: number;
   techniciansOnSite?: number;
   category3CutHeightIn?: number;
+  /** Force plan cut height in inches (e.g. 24 for a standard 2-ft flood cut). */
+  planCutHeightIn?: number;
+  /** How equipment days are billed when deriving scope from the plan. */
+  equipmentBillingMode?: 'as_logged' | 'recommended' | 'max';
   costOverrides?: Record<string, number>;
   /**
    * Human-approved knowledge-key → account Xactimate code bindings.
@@ -366,6 +371,11 @@ export interface StoredSettings {
    * Per-build / org defaults for code overrides (knowledge key or scope id → code).
    */
   codeOverrides?: Record<string, string>;
+  /**
+   * Drying reports keyed by external job id. Stored in settings JSON so visits
+   * can be appended without a dedicated table / migration.
+   */
+  dryingReports?: Record<string, DryingReport[]>;
 }
 
 export async function getSettings(
@@ -392,6 +402,46 @@ export async function saveSettings(
     .upsert({ org_id: orgId, settings: merged, updated_at: new Date().toISOString() }, { onConflict: 'org_id' });
   if (error) fail(error, 'Could not save estimator settings');
   return merged;
+}
+
+/* ------------------------------------------------------------------ *
+ * Drying reports (per job, in estimator_settings.settings.dryingReports)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Append a drying report for a job.
+ *
+ * Reports live under `settings.dryingReports[externalJobId]` so visits can be
+ * recorded without a dedicated table. Callers pass the job's external id (the
+ * same id used on estimates), not the internal UUID.
+ */
+export async function saveDryingReport(
+  supabase: SupabaseClient,
+  orgId: string,
+  jobExternalId: string,
+  report: DryingReport,
+): Promise<DryingReport[]> {
+  const settings = await getSettings(supabase, orgId);
+  const byJob = { ...(settings.dryingReports ?? {}) };
+  const existing = [...(byJob[jobExternalId] ?? [])];
+  const idx = existing.findIndex((r) => r.id === report.id);
+  if (idx >= 0) existing[idx] = report;
+  else existing.push(report);
+  existing.sort((a, b) => Date.parse(a.takenAt) - Date.parse(b.takenAt));
+  byJob[jobExternalId] = existing;
+  await saveSettings(supabase, orgId, { ...settings, dryingReports: byJob });
+  return existing;
+}
+
+export async function listDryingReports(
+  supabase: SupabaseClient,
+  orgId: string,
+  jobExternalId: string,
+): Promise<DryingReport[]> {
+  const settings = await getSettings(supabase, orgId);
+  return [...(settings.dryingReports?.[jobExternalId] ?? [])].sort(
+    (a, b) => Date.parse(a.takenAt) - Date.parse(b.takenAt),
+  );
 }
 
 /* ------------------------------------------------------------------ *

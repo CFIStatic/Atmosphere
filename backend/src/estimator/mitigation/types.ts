@@ -3,6 +3,8 @@ import type { ComplianceReport } from './standards/compliance.js';
 import type { SlaComplianceReport } from './carrier/types.js';
 import type { DamageFinding } from './ingest/findings.js';
 import type { MitigationRequirement } from './requirements/obligations.js';
+import type { EquipmentPlan } from './planning/equipmentPlan.js';
+import type { DryingProgress } from './planning/dryingProgress.js';
 
 /**
  * Canonical domain model for the Mitigation Estimator.
@@ -456,6 +458,14 @@ export interface MitigationEstimate {
   narrative: string;
   /** Anything the agent could not decide on its own. */
   openQuestions: string[];
+  /**
+   * S500-sized equipment plan for the loss (distinct from the equipment log).
+   * Always computed on every estimate so flood-cut airflow and dehu sizing are
+   * first-class, even when no drying reports have been appended yet.
+   */
+  equipmentPlan?: EquipmentPlan;
+  /** Progress across drying visits when reports were supplied. */
+  dryingProgress?: DryingProgress;
 }
 
 export type { CitationId, StandardReference } from './standards/s500.js';

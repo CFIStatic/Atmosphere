@@ -34,6 +34,8 @@ export function buildEstimatorConfig(
         hoursPerMonitoringVisit: stored.hoursPerMonitoringVisit ?? base.scope.hoursPerMonitoringVisit,
         techniciansOnSite: stored.techniciansOnSite ?? base.scope.techniciansOnSite,
         category3CutHeightIn: stored.category3CutHeightIn ?? base.scope.category3CutHeightIn,
+        planCutHeightIn: stored.planCutHeightIn ?? base.scope.planCutHeightIn,
+        equipmentBillingMode: stored.equipmentBillingMode ?? base.scope.equipmentBillingMode,
       },
       pricing: {
         overheadAndProfitRate: stored.overheadAndProfitRate ?? base.pricing.overheadAndProfitRate,
