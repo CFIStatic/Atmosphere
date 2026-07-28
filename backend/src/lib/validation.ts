@@ -124,23 +124,61 @@ export const MEMBER_ROLES = [
 /** The kind of work a member does. */
 export const WORK_TYPES = ['mitigation', 'construction'] as const;
 
+/** What kind of contractor the organization is. */
+export const CONTRACTOR_TYPES = [
+  'restoration',
+  'roofing',
+  'general_contractor',
+  'other',
+] as const;
+
+/** How a member plans to use Atmosphere — multi-select during onboarding. */
+export const USAGE_INTENTS = [
+  'mitigation_estimating',
+  'construction_estimating',
+  'project_management',
+  'crm',
+  'web_access',
+  'field_work',
+  'billing',
+  'exploring',
+] as const;
+
 const roleSchema = z.enum(MEMBER_ROLES, {
   errorMap: () => ({ message: 'Select a valid account type' }),
 });
 const workTypeSchema = z.enum(WORK_TYPES, {
   errorMap: () => ({ message: 'Select mitigation or construction' }),
 });
+const contractorTypeSchema = z.enum(CONTRACTOR_TYPES, {
+  errorMap: () => ({ message: 'Select what kind of contractor you are' }),
+});
+const usageIntentsSchema = z
+  .array(z.enum(USAGE_INTENTS, { errorMap: () => ({ message: 'Select a valid use for Atmosphere' }) }))
+  .min(1, 'Pick at least one way you plan to use Atmosphere')
+  .max(USAGE_INTENTS.length)
+  .refine((values) => new Set(values).size === values.length, {
+    message: 'Remove duplicate selections',
+  });
 
 export const createOrgSchema = z.object({
   name: z.string({ required_error: 'Organization name is required' }).trim().min(2, 'Organization name is too short').max(80, 'Organization name is too long'),
   role: roleSchema,
   workType: workTypeSchema,
+  contractorType: contractorTypeSchema,
+  usageIntents: usageIntentsSchema,
 });
 
-/** Body of a membership update — a member editing their own role / work type. */
+/** Body of a membership update — a member editing their own role / work type / usage. */
 export const updateMembershipSchema = z.object({
   role: roleSchema,
   workType: workTypeSchema,
+  usageIntents: usageIntentsSchema,
+});
+
+/** Body of an org-profile update — contractor type for the caller's organization. */
+export const updateOrgProfileSchema = z.object({
+  contractorType: contractorTypeSchema,
 });
 
 export const joinOrgSchema = z.object({
@@ -151,10 +189,12 @@ export const joinOrgSchema = z.object({
     .regex(/^[A-Z0-9]{6,12}$/, 'Enter a valid join code'),
   role: roleSchema,
   workType: workTypeSchema,
+  usageIntents: usageIntentsSchema,
 });
 
 export type CreateOrgInput = z.infer<typeof createOrgSchema>;
 export type JoinOrgInput = z.infer<typeof joinOrgSchema>;
+export type UpdateOrgProfileInput = z.infer<typeof updateOrgProfileSchema>;
 
 /* -------------------------------------------------------------------------
  * Audit ledger
