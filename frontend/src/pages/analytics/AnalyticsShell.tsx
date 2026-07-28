@@ -49,7 +49,7 @@ export function AnalyticsShell({
     <div className="cx-aurora min-h-screen bg-ink-900">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-6 py-4 sm:px-10">
         <div className="flex items-center gap-4">
-          <Logo />
+          <Logo className="text-white" />
           <span className="hidden rounded-full border border-white/10 bg-ink-700/60 px-2.5 py-0.5 text-xs font-medium text-gray-400 sm:inline">
             {viewLabel}
           </span>
