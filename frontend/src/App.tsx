@@ -19,6 +19,7 @@ import { UsagePage } from './pages/UsagePage';
 import { ProjectManagerPage } from './pages/ProjectManagerPage';
 import { PmProjectPage } from './pages/PmProjectPage';
 import { FinancePage } from './pages/FinancePage';
+import { FinanceSharePage } from './pages/FinanceSharePage';
 import { WebAccessPage } from './pages/WebAccessPage';
 import { ComputerUsePage } from './pages/ComputerUsePage';
 import { EstimatorPage } from './pages/EstimatorPage';
@@ -65,6 +66,9 @@ export default function App() {
               no session, and the reset link must work in a fresh browser. */}
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+
+          {/* Third-party financial dataroom — token in the URL is the credential. */}
+          <Route path="/share/finance/:token" element={<FinanceSharePage />} />
 
           <Route
             path="/onboarding"

@@ -1126,6 +1126,47 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
+  financeShares: () =>
+    request<{ packages: FinanceSharePackage[]; canManage: boolean }>('/api/finance/shares', {
+      method: 'GET',
+    }),
+
+  financeCreateShare: (input: Record<string, unknown>) =>
+    request<{ package: FinanceSharePackage; link: FinanceShareLink | null }>('/api/finance/shares', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  financeShare: (id: string) =>
+    request<{
+      package: FinanceSharePackage;
+      documents: FinanceShareDocument[];
+      links: FinanceShareLink[];
+      canManage: boolean;
+    }>(`/api/finance/shares/${id}`, { method: 'GET' }),
+
+  financePublishShare: (id: string, input: Record<string, unknown> = {}) =>
+    request<{ package: FinanceSharePackage; link: FinanceShareLink }>(
+      `/api/finance/shares/${id}/publish`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+
+  financeRevokeShare: (id: string) =>
+    request<{ package: FinanceSharePackage }>(`/api/finance/shares/${id}/revoke`, {
+      method: 'POST',
+    }),
+
+  financeAddShareDocument: (id: string, input: Record<string, unknown>) =>
+    request<{ document: FinanceShareDocument }>(`/api/finance/shares/${id}/documents`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  financeOpenPublicShare: (token: string) =>
+    request<{ share: FinancePublicShare }>(`/api/finance/public/shares/${encodeURIComponent(token)}`, {
+      method: 'GET',
+    }),
+
   // ---- Web Access ----
   webAccessStatus: () =>
     request<{ enabled: boolean; capacityAvailable: boolean; maxSteps: number }>(
@@ -2302,6 +2343,102 @@ export function formatMoneyCents(cents: number | null | undefined): string {
     maximumFractionDigits: 2,
   })}`;
 }
+
+export interface FinanceSharePackage {
+  id: string;
+  title: string;
+  purpose: string;
+  recipientName: string | null;
+  recipientOrg: string | null;
+  recipientEmail: string | null;
+  coverNote: string | null;
+  status: string;
+  publishedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+  documentCount?: number;
+  linkCount?: number;
+  report?: Record<string, unknown>;
+  companyProfile?: Record<string, unknown>;
+}
+
+export interface FinanceShareDocument {
+  id: string;
+  packageId: string;
+  title: string;
+  kind: string;
+  description: string | null;
+  externalRef: string | null;
+  periodLabel: string | null;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface FinanceShareLink {
+  id: string;
+  packageId: string;
+  tokenPrefix: string;
+  label: string | null;
+  expiresAt: string;
+  maxViews: number | null;
+  viewCount: number;
+  lastViewedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+  token?: string;
+  url?: string;
+}
+
+export interface FinancePublicShare {
+  packageId: string;
+  title: string;
+  purpose: string;
+  recipientName: string | null;
+  recipientOrg: string | null;
+  coverNote: string | null;
+  sections: Record<string, boolean>;
+  report: Record<string, unknown>;
+  companyProfile: Record<string, unknown>;
+  documents: {
+    id: string;
+    title: string;
+    kind: string;
+    description: string | null;
+    externalRef: string | null;
+    periodLabel: string | null;
+    sortOrder: number;
+  }[];
+  orgName: string;
+  publishedAt: string | null;
+  expiresAt: string;
+  viewCount: number;
+}
+
+export const FINANCE_SHARE_PURPOSE_LABELS: Record<string, string> = {
+  loan: 'Bank / loan underwriting',
+  insurance: 'Insurance / bonding',
+  investor: 'Investor',
+  auditor: 'Auditor',
+  partner: 'Partner / GC',
+  other: 'Other',
+};
+
+export const FINANCE_DOC_KIND_LABELS: Record<string, string> = {
+  articles_of_incorporation: 'Articles of incorporation',
+  operating_agreement: 'Operating agreement',
+  ein_letter: 'EIN letter',
+  business_license: 'Business license',
+  contractor_license: 'Contractor license',
+  insurance_coi: 'Insurance certificate (COI)',
+  tax_return: 'Tax return',
+  financial_statement: 'Financial statement',
+  bank_statement: 'Bank statement',
+  ar_aging: 'AR aging',
+  job_cost_summary: 'Job cost summary',
+  org_chart: 'Org chart',
+  resume_key_person: 'Key-person resume',
+  other: 'Other',
+};
 
 /** Human-readable phase labels, shared by the PM screens. */
 export const PM_PHASE_LABELS: Record<PmPhase, string> = {

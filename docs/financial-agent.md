@@ -164,6 +164,28 @@ Thresholds live in `finance_automation_settings` so a shop can argue about
 4. CFO brief (template first; LLM when `ANTHROPIC_API_KEY` is set)
 5. `/finance` cockpit UI for CEO / CFO / accountant
 6. Wire Web Access / Computer Use as alternate connection paths
+7. **Third-party shares / dataroom** — bank-ready packages with frozen report,
+   company narrative, org documents, and time-limited links
 
 Everything above Phase 1 is designed so the agent in later phases is a consumer
 of the same API surface a human accountant uses — not a parallel code path.
+
+---
+
+## 9. Sharing with banks and other third parties
+
+Accountants (and office managers / org owners) can publish a **financial
+dataroom** from `/finance`:
+
+1. Atmosphere freezes a report (cash, AR aging, job cost, backlog, alerts) and a
+   **company profile** that explains how the shop works and who does what.
+2. Supporting documents (licenses, COI, tax returns, statements, org chart) are
+   attached by URL/reference.
+3. A time-limited link (`/share/finance/:token`) is minted. The raw token is
+   shown once; only its SHA-256 hash is stored. Third parties open it with no
+   Atmosphere login.
+4. Links expire, can be view-capped, and can be revoked. Revoking the package
+   revokes every link under it.
+
+This is the path a restoration company uses when a bank asks for a complete
+picture for a loan — without emailing a messy folder of spreadsheets.

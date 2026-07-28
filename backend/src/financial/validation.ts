@@ -173,3 +173,81 @@ export const jobCostQuerySchema = z.object({
   status: z.enum(COST_STATUSES).optional(),
   limit: z.coerce.number().int().min(1).max(500).default(200),
 });
+
+const shareSectionSchema = z
+  .object({
+    executiveSummary: z.boolean().optional(),
+    companyOverview: z.boolean().optional(),
+    teamAndRoles: z.boolean().optional(),
+    howWeWork: z.boolean().optional(),
+    cashPosition: z.boolean().optional(),
+    accountsReceivable: z.boolean().optional(),
+    jobCosting: z.boolean().optional(),
+    backlog: z.boolean().optional(),
+    alerts: z.boolean().optional(),
+    documents: z.boolean().optional(),
+  })
+  .strict();
+
+export const shareCreateSchema = z
+  .object({
+    title: text(160),
+    purpose: z.enum(['loan', 'insurance', 'investor', 'auditor', 'partner', 'other']).default('loan'),
+    recipientName: optionalText(160),
+    recipientOrg: optionalText(160),
+    recipientEmail: z
+      .string()
+      .email()
+      .nullish()
+      .transform((v) => v ?? null),
+    coverNote: optionalText(8000),
+    sections: shareSectionSchema.optional(),
+    publish: z.boolean().default(true),
+    expiresInDays: z.number().int().min(1).max(365).default(14),
+    linkLabel: optionalText(120),
+    maxViews: z.number().int().min(1).max(100_000).nullish().transform((v) => v ?? null),
+  })
+  .strict();
+
+export const sharePublishSchema = z
+  .object({
+    refreshReport: z.boolean().default(true),
+    expiresInDays: z.number().int().min(1).max(365).default(14),
+    linkLabel: optionalText(120),
+    maxViews: z.number().int().min(1).max(100_000).nullish().transform((v) => v ?? null),
+  })
+  .strict();
+
+export const shareDocumentCreateSchema = z
+  .object({
+    title: text(200),
+    kind: z.enum([
+      'articles_of_incorporation',
+      'operating_agreement',
+      'ein_letter',
+      'business_license',
+      'contractor_license',
+      'insurance_coi',
+      'tax_return',
+      'financial_statement',
+      'bank_statement',
+      'ar_aging',
+      'job_cost_summary',
+      'org_chart',
+      'resume_key_person',
+      'other',
+    ]),
+    description: optionalText(2000),
+    externalRef: optionalText(2000),
+    periodLabel: optionalText(80),
+    sortOrder: z.number().int().min(0).max(10_000).default(0),
+  })
+  .strict();
+
+export const shareLinkCreateSchema = z
+  .object({
+    expiresInDays: z.number().int().min(1).max(365).default(14),
+    label: optionalText(120),
+    maxViews: z.number().int().min(1).max(100_000).nullish().transform((v) => v ?? null),
+  })
+  .strict();

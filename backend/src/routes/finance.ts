@@ -3,12 +3,14 @@ import rateLimit from 'express-rate-limit';
 import { createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { HttpError } from '../lib/errors.js';
+import { config } from '../config.js';
 import { generateBrief, writingEnabled } from '../financial/brief.js';
 import { runEngine } from '../financial/engine.js';
 import { formatCents, totalCashCents } from '../financial/jobCost.js';
 import { ruleCatalogue } from '../financial/rules.js';
 import { loadOrgSnapshot } from '../financial/snapshot.js';
 import { syncConnection } from '../financial/sync.js';
+import * as share from '../financial/share.js';
 import * as store from '../financial/store.js';
 import { PROVIDER_LABELS } from '../financial/types.js';
 import {
@@ -22,11 +24,13 @@ import {
   jobCostQuerySchema,
   jobCostUpdateSchema,
   settingsSchema,
+  shareCreateSchema,
+  shareDocumentCreateSchema,
+  shareLinkCreateSchema,
+  sharePublishSchema,
 } from '../financial/validation.js';
 
 export const financeRouter = Router();
-
-financeRouter.use(requireAuth);
 
 const engineLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
@@ -52,10 +56,45 @@ const writingLimiter = rateLimit({
   message: { error: 'Too many brief requests. Wait a moment.', code: 'rate_limited' },
 });
 
+const publicShareLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many share views. Wait a moment.', code: 'rate_limited' },
+});
+
+/**
+ * GET /api/finance/public/shares/:token
+ * Third-party dataroom view — no session. Token is the credential.
+ */
+financeRouter.get(
+  '/public/shares/:token',
+  publicShareLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = await share.openPublicShare(req.params.token);
+      res.json({ share: payload });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+financeRouter.use(requireAuth);
+
 async function ctxOf(req: Request) {
   const supabase = createUserClient(req.accessToken!);
   const org = await store.resolveOrgContext(supabase, req.user!.id);
   return { supabase, org, userId: req.user!.id };
+}
+
+function publicOrigin(req: Request): string {
+  const configured = config.frontendOrigins[0];
+  const forwarded = req.get('x-forwarded-host');
+  const proto = req.get('x-forwarded-proto') ?? req.protocol;
+  if (forwarded && !config.isProduction) return `${proto}://${forwarded}`;
+  return configured || `${proto}://${req.get('host')}`;
 }
 
 /**
@@ -364,3 +403,145 @@ financeRouter.get('/job-costs/rollups', async (req: Request, res: Response, next
     next(err);
   }
 });
+
+/* ------------------------------------------------------------------ *
+ * Third-party shares / dataroom
+ * ------------------------------------------------------------------ */
+
+financeRouter.get('/shares', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, org } = await ctxOf(req);
+    const packages = await share.listPackages(supabase, org.orgId);
+    res.json({ packages, canManage: org.canManage });
+  } catch (err) {
+    next(err);
+  }
+});
+
+financeRouter.post('/shares', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, org, userId } = await ctxOf(req);
+    store.assertCanManage(org);
+    const input = shareCreateSchema.parse(req.body);
+    const result = await share.createPackage(supabase, org.orgId, userId, {
+      ...input,
+      publicOrigin: publicOrigin(req),
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+financeRouter.get('/shares/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, org } = await ctxOf(req);
+    const detail = await share.getPackage(supabase, org.orgId, req.params.id);
+    res.json({ ...detail, canManage: org.canManage });
+  } catch (err) {
+    next(err);
+  }
+});
+
+financeRouter.post(
+  '/shares/:id/publish',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { supabase, org, userId } = await ctxOf(req);
+      store.assertCanManage(org);
+      const body = sharePublishSchema.parse(req.body ?? {});
+      const result = await share.publishPackage(supabase, org.orgId, userId, req.params.id, {
+        ...body,
+        publicOrigin: publicOrigin(req),
+      });
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+financeRouter.post(
+  '/shares/:id/revoke',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { supabase, org, userId } = await ctxOf(req);
+      store.assertCanManage(org);
+      const pkg = await share.revokePackage(supabase, org.orgId, userId, req.params.id);
+      res.json({ package: pkg });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+financeRouter.post(
+  '/shares/:id/documents',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { supabase, org, userId } = await ctxOf(req);
+      store.assertCanManage(org);
+      const input = shareDocumentCreateSchema.parse(req.body);
+      const document = await share.addDocument(
+        supabase,
+        org.orgId,
+        userId,
+        req.params.id,
+        input,
+      );
+      res.status(201).json({ document });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+financeRouter.delete(
+  '/shares/:id/documents/:docId',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { supabase, org } = await ctxOf(req);
+      store.assertCanManage(org);
+      await share.removeDocument(supabase, org.orgId, req.params.docId);
+      res.status(204).end();
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+financeRouter.post(
+  '/shares/:id/links',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { supabase, org, userId } = await ctxOf(req);
+      store.assertCanManage(org);
+      const body = shareLinkCreateSchema.parse(req.body ?? {});
+      // Ensure package belongs to org.
+      await share.getPackage(supabase, org.orgId, req.params.id);
+      const link = await share.mintLink(supabase, org.orgId, userId, req.params.id, {
+        expiresInDays: body.expiresInDays,
+        label: body.label,
+        maxViews: body.maxViews,
+        publicOrigin: publicOrigin(req),
+      });
+      res.status(201).json({ link });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+financeRouter.post(
+  '/shares/:id/links/:linkId/revoke',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { supabase, org, userId } = await ctxOf(req);
+      store.assertCanManage(org);
+      const link = await share.revokeLink(supabase, org.orgId, userId, req.params.linkId);
+      res.json({ link });
+    } catch (err) {
+      next(err);
+    }
+  },
+);

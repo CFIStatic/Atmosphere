@@ -2,12 +2,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   api,
   ApiError,
+  FINANCE_DOC_KIND_LABELS,
+  FINANCE_SHARE_PURPOSE_LABELS,
   formatMoneyCents,
   type FinanceAlert,
   type FinanceConnection,
   type FinanceEngineResult,
   type FinanceOverview,
   type FinanceBrief,
+  type FinanceSharePackage,
 } from '../lib/api';
 import { Logo } from '../components/Logo';
 import { SpinnerIcon } from '../components/icons';
@@ -28,7 +31,7 @@ import {
  * observe-only — the agent reports what is happening; it does not move money.
  */
 
-type Tab = 'alerts' | 'jobs' | 'connections';
+type Tab = 'alerts' | 'jobs' | 'connections' | 'shares';
 
 export function FinancePage() {
   const [data, setData] = useState<FinanceOverview | null>(null);
@@ -40,6 +43,23 @@ export function FinancePage() {
   const [briefLoading, setBriefLoading] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [shares, setShares] = useState<FinanceSharePackage[]>([]);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [mintedLink, setMintedLink] = useState<string | null>(null);
+  const [docPackageId, setDocPackageId] = useState<string | null>(null);
+  const [shareForm, setShareForm] = useState({
+    title: '',
+    purpose: 'loan',
+    recipientName: '',
+    recipientOrg: '',
+    recipientEmail: '',
+    coverNote: '',
+    expiresInDays: 14,
+    docTitle: '',
+    docKind: 'financial_statement',
+    docRef: '',
+  });
 
   const [newConn, setNewConn] = useState({
     label: '',
@@ -51,7 +71,12 @@ export function FinancePage() {
 
   const load = useCallback(async () => {
     try {
-      setData(await api.financeOverview());
+      const [overview, shareList] = await Promise.all([
+        api.financeOverview(),
+        api.financeShares().catch(() => ({ packages: [] as FinanceSharePackage[] })),
+      ]);
+      setData(overview);
+      setShares(shareList.packages);
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not load the financial board.');
@@ -151,6 +176,54 @@ export function FinancePage() {
     }
   }
 
+  async function createSharePackage() {
+    if (!data?.canManage) return;
+    setSharing(true);
+    setMintedLink(null);
+    try {
+      const title =
+        shareForm.title.trim() ||
+        `Financial package — ${shareForm.recipientOrg.trim() || 'third party'}`;
+      const { package: pkg, link } = await api.financeCreateShare({
+        title,
+        purpose: shareForm.purpose,
+        recipientName: shareForm.recipientName.trim() || null,
+        recipientOrg: shareForm.recipientOrg.trim() || null,
+        recipientEmail: shareForm.recipientEmail.trim() || null,
+        coverNote: shareForm.coverNote.trim() || null,
+        publish: true,
+        expiresInDays: shareForm.expiresInDays,
+        linkLabel: shareForm.recipientOrg.trim() || shareForm.recipientName.trim() || 'Third party',
+      });
+
+      if (shareForm.docTitle.trim() && shareForm.docRef.trim()) {
+        await api.financeAddShareDocument(pkg.id, {
+          title: shareForm.docTitle.trim(),
+          kind: shareForm.docKind,
+          externalRef: shareForm.docRef.trim(),
+        });
+      }
+
+      setDocPackageId(pkg.id);
+      setMintedLink(link?.url ?? null);
+      await load();
+      setTab('shares');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not create the share package.');
+    } finally {
+      setSharing(false);
+    }
+  }
+
+  async function revokeShare(id: string) {
+    try {
+      await api.financeRevokeShare(id);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not revoke the share.');
+    }
+  }
+
   const openAlerts = useMemo(
     () => (data?.alerts ?? []).filter((a) => a.status === 'open' || a.status === 'acknowledged'),
     [data],
@@ -186,6 +259,18 @@ export function FinancePage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {data?.canManage && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShareModalOpen(true);
+                  setMintedLink(null);
+                }}
+                className="rounded-lg border border-brand-300 bg-brand-50 px-3 py-2 text-sm font-medium text-brand-800 transition hover:bg-brand-100"
+              >
+                Share with bank / 3rd party
+              </button>
+            )}
             <button
               type="button"
               onClick={() => void loadBrief(Boolean(brief))}
@@ -274,6 +359,7 @@ export function FinancePage() {
                   ['alerts', `Alerts (${openAlerts.length})`],
                   ['jobs', `Job cost (${data.jobs.length})`],
                   ['connections', `Connections (${data.connections.length})`],
+                  ['shares', `Shares (${shares.length})`],
                 ] as const
               ).map(([key, label]) => (
                 <button
@@ -546,9 +632,223 @@ export function FinancePage() {
                 )}
               </div>
             )}
+
+            {tab === 'shares' && (
+              <div className="mt-4 space-y-4">
+                <p className="text-sm text-ink-600">
+                  Package a bank-ready financial report, company narrative (how you work and who
+                  does what), and supporting documents into a time-limited dataroom link.
+                </p>
+                {shares.length === 0 ? (
+                  <EmptyState>
+                    No packages yet. Use “Share with bank / 3rd party” to build one for a lender,
+                    insurer, auditor, or partner.
+                  </EmptyState>
+                ) : (
+                  shares.map((pkg) => (
+                    <Card
+                      key={pkg.id}
+                      className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium text-ink-900">{pkg.title}</p>
+                          <Pill>{FINANCE_SHARE_PURPOSE_LABELS[pkg.purpose] ?? pkg.purpose}</Pill>
+                          <Pill>{pkg.status}</Pill>
+                        </div>
+                        <p className="mt-1 text-sm text-ink-600">
+                          {[pkg.recipientName, pkg.recipientOrg].filter(Boolean).join(' · ') ||
+                            'No recipient named'}
+                          {' · '}
+                          {pkg.documentCount ?? 0} doc(s) · {pkg.linkCount ?? 0} link(s)
+                        </p>
+                        <p className="text-xs text-ink-500">
+                          Created {new Date(pkg.createdAt).toLocaleString()}
+                          {pkg.publishedAt
+                            ? ` · published ${new Date(pkg.publishedAt).toLocaleString()}`
+                            : ''}
+                        </p>
+                      </div>
+                      {data.canManage && pkg.status === 'active' && (
+                        <button
+                          type="button"
+                          onClick={() => void revokeShare(pkg.id)}
+                          className="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink-700 hover:bg-paper-100"
+                        >
+                          Revoke
+                        </button>
+                      )}
+                    </Card>
+                  ))
+                )}
+              </div>
+            )}
           </>
         )}
       </main>
+
+      {shareModalOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-ink-900/40 p-4">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-line bg-paper-0 p-6 shadow-card">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-ink-900">Share financial dataroom</h2>
+                <p className="mt-1 text-sm text-ink-600">
+                  Builds a frozen report for a bank or other third party: cash, AR, job cost,
+                  how the company works, who does what, and attached org documents.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShareModalOpen(false)}
+                className="text-sm text-ink-500 hover:text-ink-800"
+              >
+                Close
+              </button>
+            </div>
+
+            {mintedLink ? (
+              <div className="mt-5 space-y-3">
+                <p className="text-sm font-medium text-ink-900">Link ready — copy and send it.</p>
+                <input
+                  readOnly
+                  className="w-full rounded-lg border border-line bg-paper-100 px-3 py-2 text-sm"
+                  value={mintedLink}
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+                <button
+                  type="button"
+                  className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white"
+                  onClick={() => void navigator.clipboard.writeText(mintedLink)}
+                >
+                  Copy link
+                </button>
+                {docPackageId && (
+                  <p className="text-xs text-ink-500">
+                    Package {docPackageId.slice(0, 8)}… is published. Add more documents anytime
+                    from the Shares tab after we expand that editor.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="mt-5 grid gap-3">
+                <label className="text-sm text-ink-700">
+                  Purpose
+                  <select
+                    className="mt-1 w-full rounded-lg border border-line px-3 py-2"
+                    value={shareForm.purpose}
+                    onChange={(e) => setShareForm((s) => ({ ...s, purpose: e.target.value }))}
+                  >
+                    {Object.entries(FINANCE_SHARE_PURPOSE_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-sm text-ink-700">
+                  Package title
+                  <input
+                    className="mt-1 w-full rounded-lg border border-line px-3 py-2"
+                    value={shareForm.title}
+                    onChange={(e) => setShareForm((s) => ({ ...s, title: e.target.value }))}
+                    placeholder="Loan package — First National Bank"
+                  />
+                </label>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-sm text-ink-700">
+                    Recipient name
+                    <input
+                      className="mt-1 w-full rounded-lg border border-line px-3 py-2"
+                      value={shareForm.recipientName}
+                      onChange={(e) =>
+                        setShareForm((s) => ({ ...s, recipientName: e.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="text-sm text-ink-700">
+                    Recipient org
+                    <input
+                      className="mt-1 w-full rounded-lg border border-line px-3 py-2"
+                      value={shareForm.recipientOrg}
+                      onChange={(e) =>
+                        setShareForm((s) => ({ ...s, recipientOrg: e.target.value }))
+                      }
+                      placeholder="First National Bank"
+                    />
+                  </label>
+                </div>
+                <label className="text-sm text-ink-700">
+                  Cover note
+                  <textarea
+                    className="mt-1 w-full rounded-lg border border-line px-3 py-2"
+                    rows={3}
+                    value={shareForm.coverNote}
+                    onChange={(e) => setShareForm((s) => ({ ...s, coverNote: e.target.value }))}
+                    placeholder="We are applying for a working-capital line. This package includes our cash position, AR aging, job profitability, team roles, and supporting documents."
+                  />
+                </label>
+                <label className="text-sm text-ink-700">
+                  Link expires in (days)
+                  <input
+                    type="number"
+                    min={1}
+                    max={365}
+                    className="mt-1 w-full rounded-lg border border-line px-3 py-2"
+                    value={shareForm.expiresInDays}
+                    onChange={(e) =>
+                      setShareForm((s) => ({
+                        ...s,
+                        expiresInDays: Number(e.target.value) || 14,
+                      }))
+                    }
+                  />
+                </label>
+                <div className="rounded-lg border border-line p-3">
+                  <p className="text-sm font-medium text-ink-800">Optional first document</p>
+                  <p className="text-xs text-ink-500">
+                    Link to a statement, COI, tax return, or org chart (URL). You can add more
+                    after publishing.
+                  </p>
+                  <div className="mt-2 grid gap-2">
+                    <input
+                      className="w-full rounded-lg border border-line px-3 py-2 text-sm"
+                      placeholder="Document title"
+                      value={shareForm.docTitle}
+                      onChange={(e) => setShareForm((s) => ({ ...s, docTitle: e.target.value }))}
+                    />
+                    <select
+                      className="w-full rounded-lg border border-line px-3 py-2 text-sm"
+                      value={shareForm.docKind}
+                      onChange={(e) => setShareForm((s) => ({ ...s, docKind: e.target.value }))}
+                    >
+                      {Object.entries(FINANCE_DOC_KIND_LABELS).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      className="w-full rounded-lg border border-line px-3 py-2 text-sm"
+                      placeholder="https://… document URL"
+                      value={shareForm.docRef}
+                      onChange={(e) => setShareForm((s) => ({ ...s, docRef: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={sharing}
+                  onClick={() => void createSharePackage()}
+                  className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+                >
+                  {sharing ? 'Building package…' : 'Publish & get link'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
