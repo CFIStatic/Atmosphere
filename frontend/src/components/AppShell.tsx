@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type ComponentType, type SVGProps } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ROLE_LABELS } from '../lib/api';
@@ -19,10 +19,14 @@ import {
   ChevronDownIcon,
   LogOutIcon,
   SettingsIcon,
+  SparkIcon,
 } from './icons';
 
-const NAV = [
+type IconComp = ComponentType<SVGProps<SVGSVGElement>>;
+
+const NAV: Array<{ to: string; label: string; Icon: IconComp }> = [
   { to: '/dashboard', label: 'Dashboard', Icon: HomeIcon },
+  { to: '/sales', label: 'Sales Agent', Icon: SparkIcon },
   { to: '/jobs', label: 'Jobs', Icon: BriefcaseIcon },
   { to: '/memory', label: 'Memory', Icon: HistoryIcon },
   { to: '/team', label: 'Team', Icon: UsersIcon },
@@ -34,49 +38,63 @@ const NAV = [
 ];
 
 /**
- * Shared page frame: brand, primary navigation and sign-out. Keeps the header
- * identical across screens so navigation does not shift as you move between them.
+ * Shared page frame: brand on the left rail, primary navigation underneath,
+ * account menu in the top-right of the content pane.
  */
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({
+  children,
+  wide = false,
+}: {
+  children: ReactNode;
+  /** Drop the max-width constraint for workspace-style pages. */
+  wide?: boolean;
+}) {
   return (
-    <div className="cx-aurora min-h-screen bg-paper-100">
-      <header className="border-b border-line">
-        <div className="flex items-center justify-between gap-4 px-6 py-4 sm:px-10">
+    <div className="cx-aurora flex min-h-screen bg-paper-100">
+      <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r border-line bg-paper-0/80 backdrop-blur lg:flex">
+        <div className="border-b border-line px-4 py-4">
           <Logo />
-
-          <nav aria-label="Primary" className="hidden gap-1 lg:flex">
-            {NAV.map(({ to, label, Icon }) => (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) =>
-                  `flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition ${
-                    isActive
-                      ? 'bg-brand-50 text-brand-700'
-                      : 'text-ink-600 hover:bg-paper-100 hover:text-ink-900'
-                  }`
-                }
-              >
-                <Icon width={17} height={17} />
-                {label}
-              </NavLink>
-            ))}
-          </nav>
-
-          <AccountMenu />
         </div>
+        <nav aria-label="Primary" className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
+          {NAV.map(({ to, label, Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                  isActive
+                    ? 'bg-brand-50 text-brand-700'
+                    : 'text-ink-600 hover:bg-paper-100 hover:text-ink-900'
+                }`
+              }
+            >
+              <Icon width={17} height={17} />
+              {label}
+            </NavLink>
+          ))}
+        </nav>
+      </aside>
 
-        {/* The same navigation, kept reachable on narrow screens. */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex items-center justify-between gap-4 border-b border-line bg-paper-0/60 px-4 py-3 backdrop-blur sm:px-8">
+          <div className="lg:hidden">
+            <Logo />
+          </div>
+          <div className="hidden text-sm text-ink-500 lg:block">Atmosphere</div>
+          <AccountMenu />
+        </header>
+
+        {/* Mobile nav — horizontal scroll, same destinations as the left rail. */}
         <nav
           aria-label="Primary"
-          className="flex gap-1 overflow-x-auto border-t border-line px-4 py-2 lg:hidden"
+          className="flex gap-1 overflow-x-auto border-b border-line px-3 py-2 lg:hidden"
         >
           {NAV.map(({ to, label, Icon }) => (
             <NavLink
               key={to}
               to={to}
               className={({ isActive }) =>
-                `flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition ${
+                `flex items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition ${
                   isActive ? 'bg-brand-50 text-brand-700' : 'text-ink-600 hover:text-ink-900'
                 }`
               }
@@ -86,20 +104,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             </NavLink>
           ))}
         </nav>
-      </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-8 sm:px-10">{children}</main>
+        <main className={`w-full flex-1 px-4 py-6 sm:px-8 ${wide ? '' : 'mx-auto max-w-6xl'}`}>
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
 
-/**
- * The account block, sitting where the user's own details belong — beside their
- * name at the end of the header. It carries the two things that are about *you*
- * rather than about the work: Settings, and signing out. Keeping them here, off
- * the primary navigation, is what stops account actions from competing with the
- * screens people use all day.
- */
 function AccountMenu() {
   const { user, profile, membership, logout } = useAuth();
   const { confirmSignOut } = usePreferences();
@@ -110,8 +123,6 @@ function AccountMenu() {
 
   const name = displayName(profile?.fullName, user?.email);
 
-  // Dismiss on an outside click or Escape — a menu anchored to the corner is
-  // easy to leave open by accident.
   useEffect(() => {
     if (!open) return undefined;
     function onPointerDown(event: MouseEvent) {
@@ -197,6 +208,7 @@ function AccountMenu() {
     </div>
   );
 }
+
 /** Consistent page heading with an optional action on the right. */
 export function PageHeader({
   eyebrow,
