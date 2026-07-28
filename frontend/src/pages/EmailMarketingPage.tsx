@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   api,
   ApiError,
@@ -224,6 +225,12 @@ export function EmailMarketingPage() {
         description="Map your CRM contacts, watch for storms in their path, and send a personal check-in."
         action={
           <div className="flex flex-wrap gap-2">
+            <Link
+              to="/integrations"
+              className="inline-flex items-center gap-2 rounded-lg border border-line bg-paper-0 px-3.5 py-2 text-sm font-medium text-ink-700 transition hover:bg-paper-100"
+            >
+              Connect CRM
+            </Link>
             <button
               type="button"
               onClick={() => void scanWeather(false)}
@@ -304,7 +311,7 @@ export function EmailMarketingPage() {
           {data.contacts.length === 0 ? (
             <EmptyState
               title="No mapped contacts yet"
-              hint="Add latitude and longitude on CRM properties (or sync a CRM that has them). Once pins appear here, storm scanning can match contacts in the path."
+              hint="Connect Dash, Luxor, Salesforce, or any CRM under Integrations, sync & promote — or add lat/lng on CRM properties. Then storm scanning can match contacts in the path."
             />
           ) : (
             <ContactStormMap

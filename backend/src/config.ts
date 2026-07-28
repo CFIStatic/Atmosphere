@@ -420,6 +420,13 @@ export const config = {
   integrations: {
     enabled: (process.env.INTEGRATIONS_ENABLED ?? 'true') !== 'false',
     credentialEnvPrefix: 'ATM_INTEGRATION_',
+    // Seals CRM connection secrets entered through the UI (AES-256-GCM). Same
+    // separation as WEB_ACCESS_KEY / ESTIMATOR_CREDENTIAL_KEY: ciphertext in
+    // Postgres, key only in the environment. In development we fall back to a
+    // well-known placeholder so connect-from-UI works out of the box.
+    credentialKey:
+      process.env.INTEGRATIONS_CREDENTIAL_KEY ??
+      (isProduction ? '' : 'atmosphere-dev-integrations-key-do-not-use-in-production!!!!'),
     // Ceiling on a single sync run, so a vendor paginating forever cannot fill
     // the disk before anyone notices.
     maxRecordsPerRun: Number(process.env.INTEGRATION_MAX_RECORDS ?? 50_000),

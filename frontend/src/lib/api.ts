@@ -1526,6 +1526,82 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(input),
     }),
+
+  // ---- CRM Integrations (connect any CRM) ----
+  integrationCatalog: () =>
+    request<{ systems: CrmCatalogEntry[]; vaultConfigured: boolean; envPrefix: string }>(
+      '/api/integrations/catalog',
+      { method: 'GET' },
+    ),
+
+  listIntegrationSources: () =>
+    request<{ sources: IntegrationSource[] }>('/api/integrations/sources', { method: 'GET' }),
+
+  connectCrm: (input: {
+    system: string;
+    label?: string;
+    sandbox?: boolean;
+    baseUrl?: string;
+    direction?: 'pull' | 'push' | 'bidirectional';
+    credentials?: Record<string, string>;
+    credentialRef?: string;
+    config?: Record<string, unknown>;
+  }) =>
+    request<{ source: IntegrationSource; catalog: CrmCatalogEntry }>('/api/integrations/connect', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  syncIntegrationSource: (id: string, opts: { promote?: boolean } = {}) =>
+    request<{ sync: SyncResult; promotion: PromoteStats | null }>(
+      `/api/integrations/sources/${encodeURIComponent(id)}/sync${opts.promote ? '?promote=true' : ''}`,
+      { method: 'POST', body: JSON.stringify({ promote: opts.promote }) },
+    ),
+
+  promoteIntegrationSource: (id: string) =>
+    request<{ promotion: PromoteStats }>(
+      `/api/integrations/sources/${encodeURIComponent(id)}/promote`,
+      { method: 'POST' },
+    ),
+
+  pushToIntegration: (
+    id: string,
+    input: {
+      operation: 'create_note' | 'create_task' | 'create_contact' | 'update_contact';
+      entityType?: string;
+      externalId?: string;
+      contactId?: string;
+      subject?: string;
+      body?: string;
+      fields?: Record<string, unknown>;
+    },
+  ) =>
+    request<{ push: { status: string; externalId?: string; error?: string; runId: string } }>(
+      `/api/integrations/sources/${encodeURIComponent(id)}/push`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+
+  importIntegrationCsv: (
+    id: string,
+    input: {
+      entityType: string;
+      csv: string;
+      idColumn: string;
+      delimiter?: string;
+      promote?: boolean;
+    },
+  ) =>
+    request<{
+      sync: SyncResult;
+      promotion: PromoteStats | null;
+      parsed: { rows: number; skippedWithoutId: number; truncated: boolean };
+    }>(
+      `/api/integrations/sources/${encodeURIComponent(id)}/import${input.promote ? '?promote=true' : ''}`,
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+    ),
 };
 
 /** Labels for the run states, kept next to the other shared UI copy. */
@@ -3023,3 +3099,62 @@ export const EM_MESSAGE_STATUS_LABELS: Record<EmMessageStatus, string> = {
   failed: 'Failed',
   skipped: 'Skipped',
 };
+
+/* ------------------------------------------------------------------ */
+/* CRM Integrations                                                    */
+/* ------------------------------------------------------------------ */
+
+export interface CrmCatalogEntry {
+  id: string;
+  name: string;
+  blurb: string;
+  kind: 'rest' | 'csv' | 'manual';
+  direction: 'pull' | 'push' | 'bidirectional';
+  auth: string;
+  defaultConfig: Record<string, unknown>;
+  credentialFields: string[];
+  entities: string[];
+  supportsSandbox: boolean;
+}
+
+export interface IntegrationSource {
+  id: string;
+  system: string;
+  label: string;
+  kind: string;
+  config: Record<string, unknown>;
+  direction: 'pull' | 'push' | 'bidirectional';
+  credentialRef: string | null;
+  credentialConfigured: boolean;
+  credentialFingerprint: string | null;
+  credentialStorage: 'sealed' | 'env' | 'none';
+  enabled: boolean;
+  syncIntervalMinutes: number;
+  lastSyncAt: string | null;
+  lastPromoteAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SyncResult {
+  runId: string;
+  status: 'succeeded' | 'partial' | 'failed';
+  stats: {
+    seen: number;
+    created: number;
+    changed: number;
+    unchanged: number;
+    failed: number;
+  };
+  truncated: boolean;
+  error?: string;
+}
+
+export interface PromoteStats {
+  contactsUpserted: number;
+  propertiesUpserted: number;
+  accountsUpserted: number;
+  linked: number;
+  skipped: number;
+  errors: string[];
+}

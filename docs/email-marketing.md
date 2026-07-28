@@ -104,11 +104,23 @@ Mounted at `/api/email-marketing` (auth + org context required):
 
 ---
 
-## 7. Deliberately not built yet
+## 7. Connecting salesperson CRMs
 
-- Connecting a third-party salesperson CRM *other than* Atmosphere's own CRM /
-  external mirror (sync already lives under Integrations).
+Use **Integrations** (`/integrations`) to connect Dash, Luxor, Salesforce,
+HubSpot, JobNimbus, Encircle, any REST CRM, or a CSV export. Sync pulls a
+verbatim mirror; **Promote** maps contacts and properties into Atmosphere CRM
+(with coordinates when the vendor provides them). Email Marketing then plots
+those contacts automatically.
+
+Push notes and contacts back into the connected CRM from the same page.
+
+See `docs/CRM.md` §5–6 and the Integrations catalog for auth shapes.
+
+---
+
+## 8. Deliberately not built yet
+
 - A/B subject lines, drip sequences, or open/click analytics.
 - SMS or phone check-ins.
-- Automatic geocoding of addresses that lack lat/lng (properties already store
-  coordinates; unmapped rows are counted and skipped until coords exist).
+- Automatic geocoding of addresses that lack lat/lng (unmapped rows are counted
+  and skipped until coords exist — either from the vendor or a later geocode pass).

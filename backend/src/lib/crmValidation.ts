@@ -473,6 +473,7 @@ export const sourceCreateSchema = z.object({
     .or(z.literal('').transform(() => null)),
   enabled: z.boolean().default(true),
   syncIntervalMinutes: z.number().int().min(5).max(43_200).default(1440),
+  direction: z.enum(['pull', 'push', 'bidirectional']).optional(),
 });
 
 export const sourceUpdateSchema = sourceCreateSchema.partial();
@@ -486,7 +487,50 @@ export const sourceToRow = (v: z.infer<typeof sourceUpdateSchema>) =>
     credential_ref: v.credentialRef,
     enabled: v.enabled,
     sync_interval_minutes: v.syncIntervalMinutes,
+    direction: v.direction,
   });
+
+/** Connect a catalog CRM from the UI — may include a sealed secret payload. */
+export const connectCrmSchema = z.object({
+  system: requiredText(60, 'CRM system'),
+  label: text(120),
+  direction: z.enum(['pull', 'push', 'bidirectional']).default('bidirectional'),
+  sandbox: z.boolean().optional(),
+  baseUrl: text(500),
+  config: z.record(z.unknown()).optional(),
+  // Opaque secret fields — sealed server-side; never echoed back.
+  credentials: z
+    .object({
+      apiKey: z.string().trim().max(2000).optional(),
+      username: z.string().trim().max(320).optional(),
+      password: z.string().max(500).optional(),
+      securityToken: z.string().trim().max(200).optional(),
+      accountId: z.string().trim().max(200).optional(),
+      baseUrl: z.union([z.string().trim().url().max(500), z.literal('')]).optional(),
+      instanceUrl: z.union([z.string().trim().url().max(500), z.literal('')]).optional(),
+      accessToken: z.string().trim().max(4000).optional(),
+      refreshToken: z.string().trim().max(4000).optional(),
+    })
+    .optional(),
+  /** Still supported: name an ATM_INTEGRATION_* env var instead of sealing. */
+  credentialRef: z
+    .string()
+    .trim()
+    .regex(/^[A-Z0-9_]{1,64}$/)
+    .nullish()
+    .or(z.literal('').transform(() => null)),
+  syncIntervalMinutes: z.number().int().min(5).max(43_200).default(1440),
+});
+
+export const pushCrmSchema = z.object({
+  operation: z.enum(['create_note', 'create_task', 'create_contact', 'update_contact']),
+  entityType: text(60),
+  externalId: text(200),
+  contactId: optionalUuid,
+  subject: text(300),
+  body: text(20_000),
+  fields: z.record(z.unknown()).optional(),
+});
 
 /** Body of POST /api/integrations/sources/:id/import — a manual CSV drop. */
 export const csvImportSchema = z.object({

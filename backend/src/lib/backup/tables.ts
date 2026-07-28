@@ -56,6 +56,9 @@ export const BACKUP_TABLES: BackupTable[] = [
   { name: 'em_outreach', cursor: 'id', orgFilter: { kind: 'org_id' } },
   { name: 'em_outreach_messages', cursor: 'id', orgFilter: { kind: 'org_id' } },
   { name: 'em_checkins', cursor: 'id', orgFilter: { kind: 'org_id' } },
+
+  // ---- CRM push ledger -------------------------------------------------
+  { name: 'crm_push_runs', cursor: 'id', orgFilter: { kind: 'org_id' } },
 ];
 
 /**

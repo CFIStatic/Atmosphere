@@ -23,6 +23,7 @@ import { ComputerUsePage } from './pages/ComputerUsePage';
 import { EstimatorPage } from './pages/EstimatorPage';
 import { MitigationEstimatorPage } from './pages/MitigationEstimatorPage';
 import { EmailMarketingPage } from './pages/EmailMarketingPage';
+import { IntegrationsPage } from './pages/IntegrationsPage';
 import { SpinnerIcon } from './components/icons';
 
 function FullScreenSpinner() {
@@ -230,6 +231,17 @@ export default function App() {
               <ProtectedRoute>
                 <RequireOnboarded>
                   <EmailMarketingPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/integrations"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <IntegrationsPage />
                 </RequireOnboarded>
               </ProtectedRoute>
             }
