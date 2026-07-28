@@ -123,7 +123,7 @@ const equipmentPlacementSchema = z.object({
 export const dryingReportSchema = z.object({
   id: z.string().trim().max(120).optional(),
   takenAt: z.string().trim().min(1).max(60),
-  source: z.enum(['mica', 'manual', 'notes', 'photos']),
+  source: z.enum(['mica', 'manual', 'notes', 'photos', 'outlook']),
   notes: z.string().trim().max(10_000).optional(),
   moistureReadings: z.array(moistureReadingSchema).max(500).optional(),
   psychrometrics: z.array(psychrometricSchema).max(200).optional(),
@@ -194,6 +194,34 @@ export const rebuildEstimateSchema = z.object({
   codeOverrides: z.record(z.string().max(80), z.string().trim().min(1).max(40)).optional(),
   /** Persist the rebuilt estimate when true. */
   save: z.boolean().optional(),
+});
+
+export const captureSyncSchema = z.object({
+  sources: z.array(z.enum(['mica_dash', 'outlook'])).max(4).optional(),
+  claimNumber: z.string().trim().max(120).optional(),
+  since: z.string().trim().max(60).optional(),
+  autoRebuild: z.boolean().optional(),
+  save: z.boolean().optional(),
+  /** When present with payloadSource, import this body instead of pulling live. */
+  payload: vendorPayload.optional(),
+  payloadSource: z.enum(['mica_dash', 'outlook']).optional(),
+  /** Baseline sources if the job has never been saved. */
+  docusketch: vendorPayload.optional(),
+  mica: vendorPayload.optional(),
+  photos: photoManifestSchema.optional(),
+  notes: z.string().max(50_000).optional(),
+});
+
+export const captureImportSchema = z.object({
+  source: z.enum(['mica_dash', 'outlook']),
+  payload: vendorPayload,
+  claimNumber: z.string().trim().max(120).optional(),
+  autoRebuild: z.boolean().optional(),
+  save: z.boolean().optional(),
+  docusketch: vendorPayload.optional(),
+  mica: vendorPayload.optional(),
+  photos: photoManifestSchema.optional(),
+  notes: z.string().max(50_000).optional(),
 });
 
 /* ------------------------------------------------------------------ *

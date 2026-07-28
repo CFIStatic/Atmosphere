@@ -376,6 +376,28 @@ export interface StoredSettings {
    * can be appended without a dedicated table / migration.
    */
   dryingReports?: Record<string, DryingReport[]>;
+  /**
+   * Last-known source snapshot per external job id — lets capture sync
+   * auto-rebuild estimates when MICA Dash / Outlook land new visits.
+   */
+  jobSources?: Record<string, JobSourceSnapshot>;
+}
+
+/** Baseline sources persisted with a job so capture sync can rebuild alone. */
+export interface JobSourceSnapshot {
+  jobId: string;
+  docusketch?: unknown;
+  mica?: unknown;
+  photos?: Array<{
+    filename?: string;
+    capturedAt?: string;
+    caption?: string;
+    roomName?: string;
+    uri?: string;
+  }>;
+  notes?: string;
+  claimNumber?: string;
+  updatedAt: string;
 }
 
 export async function getSettings(
@@ -442,6 +464,28 @@ export async function listDryingReports(
   return [...(settings.dryingReports?.[jobExternalId] ?? [])].sort(
     (a, b) => Date.parse(a.takenAt) - Date.parse(b.takenAt),
   );
+}
+
+export async function saveJobSources(
+  supabase: SupabaseClient,
+  orgId: string,
+  jobExternalId: string,
+  snapshot: JobSourceSnapshot,
+): Promise<JobSourceSnapshot> {
+  const settings = await getSettings(supabase, orgId);
+  const byJob = { ...(settings.jobSources ?? {}) };
+  byJob[jobExternalId] = { ...snapshot, jobId: jobExternalId };
+  await saveSettings(supabase, orgId, { ...settings, jobSources: byJob });
+  return byJob[jobExternalId];
+}
+
+export async function getJobSources(
+  supabase: SupabaseClient,
+  orgId: string,
+  jobExternalId: string,
+): Promise<JobSourceSnapshot | null> {
+  const settings = await getSettings(supabase, orgId);
+  return settings.jobSources?.[jobExternalId] ?? null;
 }
 
 /* ------------------------------------------------------------------ *

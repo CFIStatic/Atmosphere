@@ -12,6 +12,8 @@ import { SpinnerIcon } from '../components/icons';
 import { SourcePanel, type Sources } from '../components/estimator/SourcePanel';
 import { EstimateResult } from '../components/estimator/EstimateResult';
 import { XactimateCard } from '../components/estimator/XactimateCard';
+import { CaptureSyncCard } from '../components/estimator/CaptureSyncCard';
+import type { CaptureSyncResult } from '../lib/api';
 
 /**
  * The Mitigation Estimator workspace.
@@ -274,8 +276,8 @@ export function MitigationEstimatorPage() {
           <p className="mt-2 max-w-2xl text-gray-400">
             Photos and field notes alone are enough: the agent identifies what is wrong, what IICRC
             / insurance / code obliges, and sizes equipment from the loss — including how many air
-            movers a 2-foot flood cut needs. Append drying reports as the job progresses and the
-            estimate stays current.
+            movers a 2-foot flood cut needs. Sync MICA Dash or Outlook drying reports as the job
+            progresses and the estimate updates itself.
           </p>
         </div>
 
@@ -304,6 +306,49 @@ export function MitigationEstimatorPage() {
               onChange={setSources}
               onLoadDemo={loadDemo}
               busy={building}
+            />
+
+            <CaptureSyncCard
+              jobId={jobId ?? estimate?.jobId}
+              claimNumber={estimate?.assessment.claimNumber}
+              baseline={{
+                docusketch: sources.docusketch,
+                mica: sources.mica,
+                photos: sources.photos.length ? sources.photos : undefined,
+                notes: sources.notes.trim() || undefined,
+              }}
+              busy={building}
+              onSynced={(result: CaptureSyncResult) => {
+                if (result.estimate) {
+                  setEstimate(result.estimate);
+                  if (result.estimateId) setEstimateId(result.estimateId);
+                  setJobId(result.estimate.jobId);
+                }
+                if (result.importedReports?.length) {
+                  setSources((current) => ({
+                    ...current,
+                    dryingReports: [
+                      ...(current.dryingReports ?? []),
+                      ...result.importedReports!.map((r) => ({
+                        id: r.id,
+                        takenAt: r.takenAt,
+                        source: r.source,
+                        notes: r.notes,
+                        roomsAtDryStandard: r.roomsAtDryStandard,
+                        roomsStillWet: r.roomsStillWet,
+                      })),
+                    ],
+                  }));
+                }
+                setNotice(
+                  result.modified
+                    ? `Capture sync updated the estimate (${result.reportsImported} new visit${result.reportsImported === 1 ? '' : 's'}).`
+                    : 'Capture sync complete — no new visits.',
+                );
+                if (result.warnings.length) {
+                  setError(result.warnings.slice(0, 3).join(' '));
+                }
+              }}
             />
 
             <div className="space-y-2">

@@ -16,7 +16,7 @@ import { gppDifferential, withDerivedGpp } from '../lib/psychrometrics.js';
  * dry-standard progress stay current.
  */
 
-export type DryingReportSource = 'mica' | 'manual' | 'notes' | 'photos';
+export type DryingReportSource = 'mica' | 'manual' | 'notes' | 'photos' | 'outlook';
 
 export interface DryingReport {
   id: string;

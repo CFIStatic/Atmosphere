@@ -1196,6 +1196,49 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
+  captureStatus: () =>
+    request<CaptureStatus>('/api/mitigation/capture/status', { method: 'GET' }),
+
+  captureSync: (
+    jobId: string,
+    input: {
+      sources?: CaptureSourceKind[];
+      claimNumber?: string;
+      since?: string;
+      autoRebuild?: boolean;
+      save?: boolean;
+      payload?: unknown;
+      payloadSource?: CaptureSourceKind;
+      docusketch?: unknown;
+      mica?: unknown;
+      photos?: PhotoManifestEntry[];
+      notes?: string;
+    },
+  ) =>
+    request<CaptureSyncResult>(`/api/mitigation/jobs/${encodeURIComponent(jobId)}/capture/sync`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  captureImport: (
+    jobId: string,
+    input: {
+      source: CaptureSourceKind;
+      payload: unknown;
+      claimNumber?: string;
+      autoRebuild?: boolean;
+      save?: boolean;
+      docusketch?: unknown;
+      mica?: unknown;
+      photos?: PhotoManifestEntry[];
+      notes?: string;
+    },
+  ) =>
+    request<CaptureSyncResult>(`/api/mitigation/jobs/${encodeURIComponent(jobId)}/capture/import`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
   getStandards: () =>
     request<{
       editions: { s500: string; s520: string };
@@ -2408,7 +2451,7 @@ export interface BuildEstimateInput {
 export interface DryingReportInput {
   id?: string;
   takenAt: string;
-  source: 'mica' | 'manual' | 'notes' | 'photos';
+  source: 'mica' | 'manual' | 'notes' | 'photos' | 'outlook';
   notes?: string;
   moistureReadings?: Array<{
     roomId: string;
@@ -2435,6 +2478,35 @@ export interface DryingReportInput {
   }>;
   roomsAtDryStandard?: string[];
   roomsStillWet?: string[];
+}
+
+export type CaptureSourceKind = 'mica_dash' | 'outlook';
+
+export interface CaptureStatus {
+  mode: 'live' | 'sandbox';
+  connectors: Array<{ kind: CaptureSourceKind; name: string }>;
+  configured: { micaDash: boolean; outlook: boolean };
+  note: string;
+}
+
+export interface CaptureSyncResult {
+  jobId: string;
+  reportsImported: number;
+  reportsSkipped: number;
+  totalReports: number;
+  warnings: string[];
+  estimate?: MitigationEstimate;
+  estimateId?: string;
+  saved: boolean;
+  modified: boolean;
+  importedReports?: Array<{
+    id: string;
+    takenAt: string;
+    source: DryingReportInput['source'];
+    notes?: string;
+    roomsAtDryStandard?: string[];
+    roomsStillWet?: string[];
+  }>;
 }
 
 export interface DryingProgress {

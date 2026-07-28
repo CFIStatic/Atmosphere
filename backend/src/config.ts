@@ -499,6 +499,14 @@ export const config = {
     docusketchBaseUrl: process.env.DOCUSKETCH_BASE_URL ?? '',
     dashBaseUrl: process.env.DASH_BASE_URL ?? '',
     xactimateBaseUrl: process.env.XACTIMATE_BASE_URL ?? '',
+    /** MICA Dash API root for automatic drying-export pulls. */
+    micaDashBaseUrl: process.env.MICA_DASH_BASE_URL ?? '',
+    micaDashApiKey: process.env.MICA_DASH_API_KEY ?? '',
+    /** Microsoft Graph base for Outlook drying-report mail sync. */
+    outlookGraphBaseUrl: process.env.OUTLOOK_GRAPH_BASE_URL ?? 'https://graph.microsoft.com/v1.0',
+    outlookAccessToken: process.env.OUTLOOK_ACCESS_TOKEN ?? '',
+    outlookMailbox: process.env.OUTLOOK_MAILBOX ?? 'me',
+    outlookFolder: process.env.OUTLOOK_FOLDER ?? 'inbox',
 
     // `live` talks to the vendors; `sandbox` serves deterministic fixtures so
     // the whole pipeline can be exercised end-to-end without credentials.

@@ -20,6 +20,8 @@ import {
   agreementFetchSchema,
   agreementSchema,
   buildEstimateSchema,
+  captureImportSchema,
+  captureSyncSchema,
   deviationSchema,
   dryingReportSchema,
   estimatorSettingsSchema,
@@ -42,6 +44,7 @@ import {
   saveDeviation,
   saveDryingReport,
   saveEstimate,
+  saveJobSources,
   saveSettings,
   getConnection,
 } from '../estimator/mitigation/store.js';
@@ -52,6 +55,8 @@ import {
   mergeDryingReports,
   type DryingReport,
 } from '../estimator/mitigation/planning/dryingProgress.js';
+import { syncCaptureAndRebuild } from '../estimator/mitigation/capture/sync.js';
+import { buildCaptureConnectors, captureMode } from '../estimator/mitigation/capture/connectors.js';
 import type { MaterialType } from '../estimator/mitigation/types.js';
 
 export const mitigationRouter = Router();
@@ -234,6 +239,18 @@ mitigationRouter.post(
         `Mitigation estimate ${new Date().toISOString().slice(0, 10)}`;
 
       const record = await saveEstimate(supabase, { orgId, userId, name, estimate });
+
+      // Persist sources so MICA Dash / Outlook sync can auto-rebuild later
+      // without the client re-posting the whole scan.
+      await saveJobSources(supabase, orgId, estimate.jobId, {
+        jobId: estimate.jobId,
+        docusketch: input.docusketch,
+        mica: input.mica,
+        photos: input.photos,
+        notes: input.notes,
+        claimNumber: estimate.assessment.claimNumber,
+        updatedAt: new Date().toISOString(),
+      });
 
       res.status(201).json({ estimateId: record.id, jobId: record.jobId, estimate });
     } catch (err) {
@@ -772,6 +789,157 @@ mitigationRouter.post(
       }
 
       res.json({ estimate, saved: false });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/* ------------------------------------------------------------------ *
+ * Capture apps — MICA Dash + Outlook drying reports
+ * ------------------------------------------------------------------ */
+
+/**
+ * GET /api/mitigation/capture/status
+ *
+ * Which capture connectors are available (sandbox vs live).
+ */
+mitigationRouter.get('/capture/status', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const mode = captureMode();
+    const connectors = buildCaptureConnectors().map((c) => ({
+      kind: c.kind,
+      name: c.name,
+    }));
+    res.json({
+      mode,
+      connectors,
+      configured: {
+        micaDash: Boolean(config.estimator.micaDashBaseUrl && config.estimator.micaDashApiKey),
+        outlook: Boolean(config.estimator.outlookAccessToken),
+      },
+      note:
+        mode === 'sandbox'
+          ? 'Sandbox connectors return fixture drying visits so sync + auto-rebuild can be tested without vendor credentials.'
+          : 'Live connectors pull from MICA Dash and Outlook (Microsoft Graph) using server credentials.',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/mitigation/jobs/:jobId/capture/sync
+ *
+ * Pull from MICA Dash and/or Outlook, append new drying visits, and
+ * automatically rebuild a modified estimate.
+ */
+mitigationRouter.post(
+  '/jobs/:jobId/capture/sync',
+  buildLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const input = captureSyncSchema.parse(req.body ?? {});
+      const { supabase, userId, orgId, stored, priceList } = await loadContext(req);
+      const jobId = req.params.jobId;
+
+      const { config: estimatorConfig, warnings } = buildEstimatorConfig(stored, priceList);
+      const { agreement, errors } = await resolveJobAgreement(supabase, orgId, {
+        docusketch: input.docusketch,
+        mica: input.mica,
+        photos: input.photos,
+        notes: input.notes,
+      });
+      const deviations = await listDeviations(supabase, orgId, jobId);
+
+      const result = await syncCaptureAndRebuild(
+        supabase,
+        {
+          orgId,
+          userId,
+          config: estimatorConfig,
+          agreement,
+          deviations,
+        },
+        {
+          jobId,
+          sources: input.sources,
+          claimNumber: input.claimNumber,
+          since: input.since,
+          payload: input.payload,
+          payloadSource: input.payloadSource,
+          autoRebuild: input.autoRebuild,
+          save: input.save,
+          baselineSources: {
+            jobId,
+            docusketch: input.docusketch,
+            mica: input.mica,
+            photos: input.photos,
+            notes: input.notes,
+          },
+        },
+      );
+
+      result.warnings = [...new Set([...result.warnings, ...warnings, ...errors])];
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/mitigation/jobs/:jobId/capture/import
+ *
+ * Push a MICA Dash export or Outlook message payload (webhook / file / Graph
+ * notification). Same auto-rebuild path as sync.
+ */
+mitigationRouter.post(
+  '/jobs/:jobId/capture/import',
+  buildLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const input = captureImportSchema.parse(req.body);
+      const { supabase, userId, orgId, stored, priceList } = await loadContext(req);
+      const jobId = req.params.jobId;
+
+      const { config: estimatorConfig, warnings } = buildEstimatorConfig(stored, priceList);
+      const { agreement, errors } = await resolveJobAgreement(supabase, orgId, {
+        docusketch: input.docusketch,
+        mica: input.mica ?? (input.source === 'mica_dash' ? input.payload : undefined),
+        photos: input.photos,
+        notes: input.notes,
+      });
+      const deviations = await listDeviations(supabase, orgId, jobId);
+
+      const result = await syncCaptureAndRebuild(
+        supabase,
+        {
+          orgId,
+          userId,
+          config: estimatorConfig,
+          agreement,
+          deviations,
+        },
+        {
+          jobId,
+          claimNumber: input.claimNumber,
+          payload: input.payload,
+          payloadSource: input.source,
+          autoRebuild: input.autoRebuild,
+          save: input.save,
+          baselineSources: {
+            jobId,
+            docusketch: input.docusketch,
+            mica: input.mica ?? (input.source === 'mica_dash' ? input.payload : undefined),
+            photos: input.photos,
+            notes: input.notes,
+          },
+        },
+      );
+
+      result.warnings = [...new Set([...result.warnings, ...warnings, ...errors])];
+      res.status(201).json(result);
     } catch (err) {
       next(err);
     }
