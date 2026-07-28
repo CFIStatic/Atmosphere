@@ -10,6 +10,8 @@ import {
   stripeClient,
   toIso,
 } from '../lib/stripe.js';
+import { ingestMention, verifyMentionSignature } from '../pm/orchestration/messaging.js';
+import { mentionWebhookSchema } from '../pm/validation.js';
 
 export const webhookRouter = Router();
 
@@ -267,3 +269,66 @@ async function onChargeRefunded(charge: Stripe.Charge, admin: any): Promise<void
   });
   if (error) throw new Error(`refund record failed: ${error.message}`);
 }
+
+/**
+ * @atmosphere mention intake — iMessage / WhatsApp / Signal / SMS bridges.
+ *
+ * Authenticated by HMAC over the raw body (header `X-Atmosphere-Signature:
+ * sha256=<hex>`), never by a user session. Writes go through the service-role
+ * client because a text message has no JWT; org scoping comes from the signed
+ * payload's orgId, which the bridge is entrusted to set correctly for the
+ * tenant it serves.
+ */
+webhookRouter.post('/atmosphere-mention', async (req: Request, res: Response) => {
+  if (!config.pm.mentionWebhookSecret) {
+    console.error('[mention] webhook received but ATMOSPHERE_MENTION_WEBHOOK_SECRET is not set');
+    res.status(503).json({ error: 'Webhook not configured', code: 'webhook_unconfigured' });
+    return;
+  }
+
+  const raw = Buffer.isBuffer(req.body)
+    ? req.body
+    : Buffer.from(typeof req.body === 'string' ? req.body : JSON.stringify(req.body ?? {}));
+
+  const signature =
+    (req.headers['x-atmosphere-signature'] as string | undefined) ||
+    (req.headers['x-hub-signature-256'] as string | undefined);
+
+  if (!verifyMentionSignature(raw, signature, config.pm.mentionWebhookSecret)) {
+    res.status(401).json({ error: 'Invalid signature', code: 'invalid_signature' });
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw.toString('utf8'));
+  } catch {
+    res.status(400).json({ error: 'Invalid JSON', code: 'invalid_json' });
+    return;
+  }
+
+  const payload = mentionWebhookSchema.safeParse(parsed);
+  if (!payload.success) {
+    res.status(400).json({
+      error: 'Invalid payload',
+      code: 'invalid_payload',
+      details: payload.error.flatten(),
+    });
+    return;
+  }
+
+  try {
+    const admin = adminClient();
+    const result = await ingestMention(admin, payload.data);
+    res.json({
+      received: true,
+      duplicate: result.duplicate,
+      communicationId: result.communication.id,
+      projectId: result.matchedProjectId,
+      approvalId: result.approvalId,
+    });
+  } catch (err) {
+    console.error('[mention] handler failed:', err);
+    res.status(500).json({ error: 'Webhook handler failed', code: 'webhook_failed' });
+  }
+});

@@ -7,6 +7,14 @@
  * snake_case key.
  */
 
+import type {
+  Approval,
+  Communication,
+  EquipmentPlanItem,
+  PlatformLink,
+  ProcurementRequest,
+} from './orchestration/types.js';
+
 export const WORK_TYPES = ['mitigation', 'construction'] as const;
 export type WorkType = (typeof WORK_TYPES)[number];
 
@@ -62,6 +70,9 @@ export const TASK_CATEGORIES = [
   'insurance',
   'inspection',
   'billing',
+  'procurement',
+  'platform',
+  'communication',
 ] as const;
 export type TaskCategory = (typeof TASK_CATEGORIES)[number];
 
@@ -124,6 +135,9 @@ export const ALERT_CATEGORIES = [
   'insurance',
   'billing',
   'customer',
+  'orchestration',
+  'communication',
+  'procurement',
 ] as const;
 export type AlertCategory = (typeof ALERT_CATEGORIES)[number];
 
@@ -418,6 +432,14 @@ export interface ProjectContext {
   placements: Placement[];
   documents: ProjectDocument[];
   milestones: Milestone[];
+  /** Platform links for this project (Dash / XA / Xactimate / Outlook). */
+  platformLinks: PlatformLink[];
+  /** Unreviewed / recent communications filed against this project. */
+  communications: Communication[];
+  /** Open procurement (dumpster bids, material referral orders). */
+  procurement: ProcurementRequest[];
+  /** Equipment plan items still needed. */
+  planItems: EquipmentPlanItem[];
 }
 
 /** The org-wide working set: every active project plus the shared inventory. */
@@ -429,6 +451,8 @@ export interface OrgSnapshot {
   projects: ProjectContext[];
   equipment: Equipment[];
   members: { userId: string; email: string | null; fullName: string | null; role: string }[];
+  /** Pending approvals across the org (human-in-the-loop queue). */
+  pendingApprovals: Approval[];
 }
 
 /**

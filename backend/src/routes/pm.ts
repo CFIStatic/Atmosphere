@@ -14,22 +14,50 @@ import { analyzeCrewLoad, analyzeSchedule } from '../pm/scheduling.js';
 import { seedProject } from '../pm/seed.js';
 import { loadOrgSnapshot } from '../pm/snapshot.js';
 import * as store from '../pm/store.js';
+import * as orch from '../pm/orchestration/store.js';
+import { deriveEquipmentPlan } from '../pm/orchestration/equipmentFromEstimate.js';
+import {
+  connectPlatform,
+  decideApproval,
+  disconnectPlatform,
+  linkProjectToPlatform,
+  PLATFORM_CATALOGUE,
+  syncPlatformLink,
+} from '../pm/orchestration/platforms.js';
+import {
+  openDumpsterProcurement,
+  openMaterialReferralOrder,
+  selectBidForApproval,
+} from '../pm/orchestration/procurement.js';
+import { buildSituation } from '../pm/orchestration/situation.js';
+import { ingestMention } from '../pm/orchestration/messaging.js';
+import { config } from '../config.js';
 import type { ProjectContext } from '../pm/types.js';
 import {
   alertActionSchema,
   assertPhaseAllowed,
   assignCrewSchema,
   briefQuerySchema,
+  communicationStatusSchema,
+  connectPlatformSchema,
   createAreaSchema,
   createEquipmentSchema,
   createMilestoneSchema,
   createProjectSchema,
   createReadingsSchema,
   createTaskSchema,
+  decideApprovalSchema,
+  deriveEquipmentPlanSchema,
   draftUpdateSchema,
+  dumpsterSearchSchema,
+  linkPlatformSchema,
+  manualCommunicationSchema,
+  materialReferralSchema,
   placeEquipmentSchema,
   projectQuerySchema,
+  selectBidSchema,
   settingsSchema,
+  syncPlatformSchema,
   updateAreaSchema,
   updateDocumentSchema,
   updateDraftSchema,
@@ -100,6 +128,26 @@ async function loadProjectContext(
       store.listMilestones(supabase, { projectId }),
     ]);
 
+  // Orchestration tables are optional until the migration is applied.
+  let platformLinks: ProjectContext['platformLinks'] = [];
+  let communications: ProjectContext['communications'] = [];
+  let procurement: ProjectContext['procurement'] = [];
+  let planItems: ProjectContext['planItems'] = [];
+  try {
+    const [links, comms, proc, items] = await Promise.all([
+      orch.listLinks(supabase, orgId, { projectId }),
+      orch.listCommunications(supabase, orgId, { projectId, limit: 100 }),
+      orch.listProcurement(supabase, orgId, { projectId, limit: 100 }),
+      orch.listPlanItems(supabase, orgId, { projectId }),
+    ]);
+    platformLinks = links;
+    communications = comms;
+    procurement = proc;
+    planItems = items;
+  } catch (err) {
+    if ((err as { code?: string })?.code !== 'pm_orchestration_schema_missing') throw err;
+  }
+
   return {
     project,
     // The detail screen shows every task; the analyzers only read the open ones,
@@ -112,6 +160,10 @@ async function loadProjectContext(
     placements,
     documents,
     milestones,
+    platformLinks,
+    communications,
+    procurement,
+    planItems,
   };
 }
 
@@ -128,6 +180,22 @@ pmRouter.get('/overview', async (req: Request, res: Response, next: NextFunction
     const { supabase, org, userId } = await ctxOf(req);
     const snapshot = await loadOrgSnapshot(supabase, org.orgId);
     const alerts = await store.listAlerts(supabase, org.orgId, { limit: 200 });
+
+    let orchestrationCounts = {
+      pendingApprovals: 0,
+      unreviewedComms: 0,
+      openProcurement: 0,
+    };
+    try {
+      const situation = await buildSituation(supabase, org.orgId, { limit: 1 });
+      orchestrationCounts = {
+        pendingApprovals: situation.counts.pendingApprovals,
+        unreviewedComms: situation.counts.unreviewedComms,
+        openProcurement: situation.counts.openProcurement,
+      };
+    } catch (err) {
+      if ((err as { code?: string })?.code !== 'pm_orchestration_schema_missing') throw err;
+    }
 
     const projects = snapshot.projects.map((ctx) => {
       const drying = analyzeDrying(ctx, snapshot.settings, snapshot.now);
@@ -169,6 +237,9 @@ pmRouter.get('/overview', async (req: Request, res: Response, next: NextFunction
         critical: alerts.filter((a) => a.severity === 'critical' && a.status === 'open').length,
         warn: alerts.filter((a) => a.severity === 'warn' && a.status === 'open').length,
         mine: projects.filter((p) => p.project.pmUserId === userId).length,
+        pendingApprovals: orchestrationCounts.pendingApprovals,
+        unreviewedComms: orchestrationCounts.unreviewedComms,
+        openProcurement: orchestrationCounts.openProcurement,
       },
       alerts,
       projects,
@@ -811,3 +882,411 @@ pmRouter.patch('/settings', async (req: Request, res: Response, next: NextFuncti
 pmRouter.get('/rules', (_req: Request, res: Response) => {
   res.json({ rules: ruleCatalogue() });
 });
+
+/* ------------------------------------------------------------------ *
+ * Orchestration — platforms, messaging, equipment plans, procurement
+ * ------------------------------------------------------------------ */
+
+pmRouter.get('/situation', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, org } = await ctxOf(req);
+    const projectId =
+      typeof req.query.projectId === 'string' && req.query.projectId
+        ? req.query.projectId
+        : undefined;
+    const situation = await buildSituation(supabase, org.orgId, { projectId });
+    res.json(situation);
+  } catch (err) {
+    next(err);
+  }
+});
+
+pmRouter.get('/platforms', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, org } = await ctxOf(req);
+    const connections = await orch.listConnections(supabase, org.orgId);
+    res.json({ catalogue: PLATFORM_CATALOGUE, connections });
+  } catch (err) {
+    next(err);
+  }
+});
+
+pmRouter.post('/platforms/connect', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, org, userId } = await ctxOf(req);
+    store.requireManager(org);
+    const input = connectPlatformSchema.parse(req.body);
+    const connection = await connectPlatform(supabase, org.orgId, userId, input.platform, {
+      label: input.label,
+      externalAccountId: input.externalAccountId,
+    });
+    res.status(201).json({ connection });
+  } catch (err) {
+    next(err);
+  }
+});
+
+pmRouter.post(
+  '/platforms/:platform/disconnect',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { supabase, org } = await ctxOf(req);
+      store.requireManager(org);
+      const platform = connectPlatformSchema.shape.platform.parse(req.params.platform);
+      const connection = await disconnectPlatform(supabase, org.orgId, platform);
+      res.json({ connection });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+pmRouter.get('/projects/:id/platforms', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, org } = await ctxOf(req);
+    const links = await orch.listLinks(supabase, org.orgId, { projectId: req.params.id });
+    const events = await orch.listPlatformEvents(supabase, org.orgId, {
+      projectId: req.params.id,
+      limit: 50,
+    });
+    res.json({ links, events });
+  } catch (err) {
+    next(err);
+  }
+});
+
+pmRouter.post('/projects/:id/platforms', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, org, userId } = await ctxOf(req);
+    store.requireManager(org);
+    const input = linkPlatformSchema.parse(req.body);
+    const result = await linkProjectToPlatform(supabase, org.orgId, userId, {
+      projectId: req.params.id!,
+      platform: input.platform,
+      externalId: input.externalId,
+      externalUrl: input.externalUrl,
+      externalLabel: input.externalLabel,
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+pmRouter.post('/platforms/links/:id/sync', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, org, userId } = await ctxOf(req);
+    store.requireManager(org);
+    const input = syncPlatformSchema.parse(req.body);
+    const result = await syncPlatformLink(supabase, org.orgId, userId, {
+      linkId: req.params.id!,
+      summary: input.summary,
+      detail: input.detail,
+      payload: input.payload,
+      proposeAction: input.proposeAction ?? null,
+    });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+pmRouter.get('/approvals', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, org } = await ctxOf(req);
+    const status =
+      typeof req.query.status === 'string' && req.query.status
+        ? req.query.status.split(',')
+        : ['pending'];
+    const approvals = await orch.listApprovals(supabase, org.orgId, {
+      status,
+      projectId: typeof req.query.projectId === 'string' ? req.query.projectId : undefined,
+    });
+    res.json({ approvals });
+  } catch (err) {
+    next(err);
+  }
+});
+
+pmRouter.post('/approvals/:id/decide', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, org, userId } = await ctxOf(req);
+    store.requireManager(org);
+    const input = decideApprovalSchema.parse(req.body);
+    const approval = await decideApproval(supabase, userId, {
+      approvalId: req.params.id!,
+      decision: input.decision,
+      note: input.note,
+    });
+    res.json({ approval });
+  } catch (err) {
+    next(err);
+  }
+});
+
+pmRouter.get('/communications', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, org } = await ctxOf(req);
+    const status =
+      typeof req.query.status === 'string' && req.query.status
+        ? req.query.status.split(',')
+        : undefined;
+    const communications = await orch.listCommunications(supabase, org.orgId, {
+      status,
+      projectId: typeof req.query.projectId === 'string' ? req.query.projectId : undefined,
+      limit: 100,
+    });
+    res.json({ communications });
+  } catch (err) {
+    next(err);
+  }
+});
+
+pmRouter.post('/communications', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, org, userId } = await ctxOf(req);
+    const input = manualCommunicationSchema.parse(req.body);
+    const result = await ingestMention(
+      supabase,
+      {
+        orgId: org.orgId,
+        channel: input.channel,
+        body: input.body,
+        counterpartyName: input.counterpartyName,
+        counterpartyHandle: input.counterpartyHandle,
+        counterpartyKind: input.counterpartyKind,
+        projectId: input.projectId,
+        occurredAt: input.occurredAt,
+        intake: 'manual',
+        metadata: { recordedBy: userId },
+      },
+      { recordedBy: userId },
+    );
+    res.status(201).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+pmRouter.patch('/communications/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, org, userId } = await ctxOf(req);
+    const input = communicationStatusSchema.parse(req.body);
+    const patch: Record<string, unknown> = {
+      status: input.status,
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: userId,
+    };
+    if (input.projectId !== undefined) patch.project_id = input.projectId;
+    const communication = await orch.updateCommunication(supabase, req.params.id!, patch);
+    if (communication.orgId !== org.orgId) {
+      throw new HttpError(404, 'Communication not found.', 'pm_not_found');
+    }
+    res.json({ communication });
+  } catch (err) {
+    next(err);
+  }
+});
+
+pmRouter.post(
+  '/projects/:id/equipment-plan',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { supabase, org, userId } = await ctxOf(req);
+      store.requireManager(org);
+      const input = deriveEquipmentPlanSchema.parse(req.body);
+      const derived = deriveEquipmentPlan({
+        source:
+          input.source === 'manual' || input.source === 's500'
+            ? 'mitigation_estimate'
+            : input.source,
+        sourceRef: input.sourceRef,
+        equipment: input.equipment,
+        lineItems: input.lineItems,
+        materials: input.materials,
+      });
+
+      const plan = await orch.createEquipmentPlan(supabase, org.orgId, {
+        project_id: req.params.id,
+        source: input.source,
+        source_ref: input.sourceRef ?? null,
+        status: input.approve ? 'approved' : 'draft',
+        summary: derived.summary,
+        dumpster_required: derived.dumpsterRequired,
+        created_by: userId,
+        approved_by: input.approve ? userId : null,
+        approved_at: input.approve ? new Date().toISOString() : null,
+      });
+
+      const items = await orch.insertPlanItems(
+        supabase,
+        org.orgId,
+        derived.items.map((item) => ({
+          plan_id: plan.id,
+          project_id: req.params.id,
+          item_kind: item.itemKind,
+          label: item.label,
+          quantity: item.quantity,
+          unit: item.unit,
+          fulfillment: item.fulfillment,
+          status: 'needed',
+          notes: item.notes ?? null,
+          estimate_code: item.estimateCode ?? null,
+          metadata: item.metadata ?? {},
+        })),
+      );
+
+      // Dumpster on an approved plan → open procurement automatically.
+      let dumpsterRequest = null;
+      if (input.approve && derived.dumpsterRequired) {
+        const dumpsterItem = items.find((i) => i.itemKind === 'dumpster');
+        const project = await store.getProject(supabase, req.params.id!);
+        dumpsterRequest = await openDumpsterProcurement(supabase, org.orgId, userId, {
+          projectId: req.params.id!,
+          planItemId: dumpsterItem?.id,
+          postal: project?.postalCode,
+          address: [project?.addressLine1, project?.city, project?.region]
+            .filter(Boolean)
+            .join(', '),
+          sizeHint: '20 yard',
+          searchUrl: config.pm.webSearchUrl || undefined,
+        });
+      }
+
+      res.status(201).json({ plan, items, derived, dumpsterRequest });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+pmRouter.get(
+  '/projects/:id/equipment-plan',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { supabase, org } = await ctxOf(req);
+      const plans = await orch.listEquipmentPlans(supabase, org.orgId, {
+        projectId: req.params.id,
+      });
+      const items = await orch.listPlanItems(supabase, org.orgId, { projectId: req.params.id });
+      res.json({ plans, items });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+pmRouter.get('/procurement', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, org } = await ctxOf(req);
+    const requests = await orch.listProcurement(supabase, org.orgId, {
+      projectId: typeof req.query.projectId === 'string' ? req.query.projectId : undefined,
+      limit: 100,
+    });
+    res.json({ requests });
+  } catch (err) {
+    next(err);
+  }
+});
+
+pmRouter.get('/procurement/referrals', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, org } = await ctxOf(req);
+    const referrals = await orch.listReferrals(supabase, org.orgId);
+    res.json({ referrals });
+  } catch (err) {
+    next(err);
+  }
+});
+
+pmRouter.post(
+  '/projects/:id/procurement/dumpster',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { supabase, org, userId } = await ctxOf(req);
+      store.requireManager(org);
+      const input = dumpsterSearchSchema.parse(req.body);
+      const project = await store.getProject(supabase, req.params.id!);
+      if (!project || project.orgId !== org.orgId) {
+        throw new HttpError(404, 'Project not found.', 'pm_not_found');
+      }
+      const result = await openDumpsterProcurement(supabase, org.orgId, userId, {
+        projectId: req.params.id!,
+        planItemId: input.planItemId,
+        title: input.title,
+        description: input.description,
+        sizeHint: input.sizeHint,
+        postal: input.postal ?? project.postalCode,
+        address:
+          input.address ??
+          [project.addressLine1, project.city, project.region].filter(Boolean).join(', '),
+        searchUrl: config.pm.webSearchUrl || undefined,
+      });
+      res.status(201).json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+pmRouter.post(
+  '/projects/:id/procurement/materials',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { supabase, org, userId } = await ctxOf(req);
+      store.requireManager(org);
+      const input = materialReferralSchema.parse(req.body);
+      const project = await store.getProject(supabase, req.params.id!);
+      if (!project || project.orgId !== org.orgId) {
+        throw new HttpError(404, 'Project not found.', 'pm_not_found');
+      }
+      const result = await openMaterialReferralOrder(supabase, org.orgId, userId, {
+        projectId: req.params.id!,
+        planItemId: input.planItemId,
+        vendorKey: input.vendorKey,
+        title: input.title,
+        query: input.query,
+        postal: input.postal ?? project.postalCode,
+        address: input.address,
+        orgSlug: org.orgId.slice(0, 8),
+      });
+      res.status(201).json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+pmRouter.get(
+  '/procurement/:id/bids',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { supabase, org } = await ctxOf(req);
+      const requests = await orch.listProcurement(supabase, org.orgId, { limit: 500 });
+      const request = requests.find((r) => r.id === req.params.id);
+      if (!request) throw new HttpError(404, 'Procurement request not found.', 'pm_not_found');
+      const bids = await orch.listBids(supabase, request.id);
+      res.json({ request, bids });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+pmRouter.post(
+  '/procurement/:id/select-bid',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { supabase, org, userId } = await ctxOf(req);
+      store.requireManager(org);
+      const input = selectBidSchema.parse(req.body);
+      const result = await selectBidForApproval(supabase, org.orgId, userId, {
+        requestId: req.params.id!,
+        bidId: input.bidId,
+      });
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+);

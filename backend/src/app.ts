@@ -69,6 +69,11 @@ export function createApp(): Express {
   // signature can no longer be verified. (The chooser below then skips it:
   // body-parser leaves an already-parsed request alone.)
   app.use('/api/webhooks/stripe', express.raw({ type: 'application/json', limit: '1mb' }));
+  // Same posture for @atmosphere mention bridges (iMessage / WhatsApp / Signal).
+  app.use(
+    '/api/webhooks/atmosphere-mention',
+    express.raw({ type: 'application/json', limit: '1mb' }),
+  );
 
   // Body + cookie parsing.
   //

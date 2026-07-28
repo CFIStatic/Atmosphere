@@ -13,7 +13,15 @@ import {
   listReadings,
   listTasks,
 } from './store.js';
+import * as orch from './orchestration/store.js';
 import type { OrgSnapshot, ProjectContext, Project } from './types.js';
+import type {
+  Approval,
+  Communication,
+  EquipmentPlanItem,
+  PlatformLink,
+  ProcurementRequest,
+} from './orchestration/types.js';
 
 /**
  * Load everything the rules need, in a fixed number of queries.
@@ -46,6 +54,47 @@ export interface SnapshotOptions {
   now?: Date;
 }
 
+/** Orchestration tables may not be applied yet — degrade to empty rather than 503 the cockpit. */
+async function loadOrchestration(
+  supabase: SupabaseClient,
+  orgId: string,
+): Promise<{
+  links: PlatformLink[];
+  communications: Communication[];
+  pendingApprovals: Approval[];
+  procurement: ProcurementRequest[];
+  planItems: EquipmentPlanItem[];
+}> {
+  try {
+    const [links, communications, pendingApprovals, procurement, planItems] = await Promise.all([
+      orch.listLinks(supabase, orgId),
+      orch.listCommunications(supabase, orgId, {
+        status: ['new', 'reviewed'],
+        limit: 500,
+      }),
+      orch.listApprovals(supabase, orgId, { status: ['pending'], limit: 500 }),
+      orch.listProcurement(supabase, orgId, {
+        status: ['open', 'bidding', 'awaiting_approval'],
+        limit: 500,
+      }),
+      orch.listPlanItems(supabase, orgId, { status: ['needed', 'reserved', 'ordered'] }),
+    ]);
+    return { links, communications, pendingApprovals, procurement, planItems };
+  } catch (err) {
+    const code = (err as { code?: string })?.code;
+    if (code === 'pm_orchestration_schema_missing') {
+      return {
+        links: [],
+        communications: [],
+        pendingApprovals: [],
+        procurement: [],
+        planItems: [],
+      };
+    }
+    throw err;
+  }
+}
+
 export async function loadOrgSnapshot(
   supabase: SupabaseClient,
   orgId: string,
@@ -68,9 +117,18 @@ export async function loadOrgSnapshot(
     ? allProjects.filter((p) => p.id === options.projectId)
     : allProjects;
 
+  const emptyOrchestration = {
+    links: [] as PlatformLink[],
+    communications: [] as Communication[],
+    pendingApprovals: [] as Approval[],
+    procurement: [] as ProcurementRequest[],
+    planItems: [] as EquipmentPlanItem[],
+  };
+
   // Nothing open: skip the rest of the round trips entirely. Ten queries saved
   // on every page load for an org between jobs.
   if (!projects.length) {
+    const orchestration = await loadOrchestration(supabase, orgId);
     return {
       orgId,
       settings,
@@ -78,6 +136,9 @@ export async function loadOrgSnapshot(
       projects: [],
       equipment: await listEquipment(supabase, orgId),
       members: await listMembers(supabase, orgId),
+      pendingApprovals: orchestration.pendingApprovals.length
+        ? orchestration.pendingApprovals
+        : emptyOrchestration.pendingApprovals,
     };
   }
 
@@ -92,6 +153,7 @@ export async function loadOrgSnapshot(
     milestones,
     equipment,
     members,
+    orchestration,
   ] = await Promise.all([
     listTasks(supabase, { orgId, open: true, completedSince: since }),
     listOriginKeys(supabase, orgId),
@@ -103,11 +165,13 @@ export async function loadOrgSnapshot(
     listMilestones(supabase, { orgId }),
     listEquipment(supabase, orgId),
     listMembers(supabase, orgId),
+    loadOrchestration(supabase, orgId),
   ]);
 
-  const byProject = <T extends { projectId: string }>(rows: T[]): Map<string, T[]> => {
+  const byProject = <T extends { projectId: string | null }>(rows: T[]): Map<string, T[]> => {
     const map = new Map<string, T[]>();
     for (const row of rows) {
+      if (!row.projectId) continue;
       const list = map.get(row.projectId);
       if (list) list.push(row);
       else map.set(row.projectId, [row]);
@@ -122,6 +186,10 @@ export async function loadOrgSnapshot(
   const placementsBy = byProject(placements);
   const documentsBy = byProject(documents);
   const milestonesBy = byProject(milestones);
+  const linksBy = byProject(orchestration.links);
+  const commsBy = byProject(orchestration.communications);
+  const procurementBy = byProject(orchestration.procurement);
+  const planItemsBy = byProject(orchestration.planItems);
 
   const contexts: ProjectContext[] = projects.map((project: Project) => ({
     project,
@@ -133,7 +201,19 @@ export async function loadOrgSnapshot(
     placements: placementsBy.get(project.id) ?? [],
     documents: documentsBy.get(project.id) ?? [],
     milestones: milestonesBy.get(project.id) ?? [],
+    platformLinks: linksBy.get(project.id) ?? [],
+    communications: commsBy.get(project.id) ?? [],
+    procurement: procurementBy.get(project.id) ?? [],
+    planItems: planItemsBy.get(project.id) ?? [],
   }));
 
-  return { orgId, settings, now, projects: contexts, equipment, members };
+  return {
+    orgId,
+    settings,
+    now,
+    projects: contexts,
+    equipment,
+    members,
+    pendingApprovals: orchestration.pendingApprovals,
+  };
 }

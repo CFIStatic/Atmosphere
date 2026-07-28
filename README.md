@@ -1373,6 +1373,23 @@ design, the rule list, the API surface, and what was deliberately left out.
 Schema: `supabase/migrations/20260727181539_project_manager_agent.sql` (already applied to the project).
 Schema tests: `supabase/tests/run.sh`.
 
+### Orchestration (platforms, messaging, procurement)
+
+The human PM takes on many more jobs because Atmosphere orchestrates the rest:
+
+- **Platforms** — Dash, XactAnalysis, Xactimate, Outlook: sync status in; outbound
+  writes wait in an approval queue.
+- **Messaging** — `@atmosphere` mentions from iMessage / WhatsApp / Signal / SMS
+  are documented against the job via a signed webhook.
+- **Equipment from estimate** — mitigation / construction estimates become a
+  bill of equipment and materials; dumpsters trigger a web bid search; building
+  materials open Atmosphere referral links (Home Depot, Lowe's, …) so Atmosphere
+  gets a cut.
+- **Approvals** — the PM gets involved for nuance and irreversible actions only.
+
+Full design: [`docs/pm-orchestration.md`](docs/pm-orchestration.md).
+Migration: `supabase/migrations/20260728142600_pm_orchestration.sql`.
+
 ## Learning layer
 
 Full architecture: **[docs/reinforcement-learning.md](docs/reinforcement-learning.md)**.

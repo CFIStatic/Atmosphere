@@ -318,3 +318,151 @@ export const briefQuerySchema = z.object({
   kind: z.enum(['morning', 'end_of_day', 'ad_hoc']).optional(),
   refresh: z.enum(['true', 'false']).optional(),
 });
+
+/* ------------------------------------------------------------------ *
+ * Orchestration
+ * ------------------------------------------------------------------ */
+
+const platforms = z.enum(['dash', 'xactanalysis', 'xactimate', 'outlook']);
+const channels = z.enum([
+  'imessage',
+  'whatsapp',
+  'signal',
+  'sms',
+  'email',
+  'outlook',
+  'other',
+]);
+
+export const connectPlatformSchema = z.object({
+  platform: platforms,
+  label: optionalText(120),
+  externalAccountId: optionalText(200),
+});
+
+export const linkPlatformSchema = z.object({
+  platform: platforms,
+  externalId: shortText(200),
+  externalUrl: optionalText(1000),
+  externalLabel: optionalText(200),
+});
+
+export const syncPlatformSchema = z.object({
+  summary: shortText(500),
+  detail: optionalText(8000),
+  payload: z.record(z.string(), z.unknown()).optional(),
+  proposeAction: z
+    .object({
+      kind: shortText(80),
+      title: shortText(200),
+      detail: optionalText(8000),
+      proposedAction: z.record(z.string(), z.unknown()),
+      priority: z.enum(PRIORITIES).optional(),
+    })
+    .optional()
+    .nullable(),
+});
+
+export const decideApprovalSchema = z.object({
+  decision: z.enum(['approved', 'rejected']),
+  note: optionalText(2000),
+});
+
+export const communicationStatusSchema = z.object({
+  status: z.enum(['reviewed', 'filed', 'actioned', 'ignored']),
+  projectId: uuid.optional().nullable(),
+});
+
+export const manualCommunicationSchema = z.object({
+  projectId: uuid.optional().nullable(),
+  channel: channels,
+  body: shortText(16000),
+  counterpartyName: optionalText(160),
+  counterpartyHandle: optionalText(200),
+  counterpartyKind: z
+    .enum(['vendor', 'customer', 'adjuster', 'crew', 'carrier', 'supplier', 'unknown'])
+    .optional(),
+  direction: z.enum(['inbound', 'outbound', 'note']).optional(),
+  occurredAt: isoDate.optional(),
+});
+
+export const deriveEquipmentPlanSchema = z.object({
+  source: z.enum(['mitigation_estimate', 'construction_estimate', 'manual', 's500']),
+  sourceRef: optionalText(200),
+  approve: z.boolean().optional(),
+  equipment: z
+    .array(
+      z.object({
+        kind: shortText(60),
+        quantity: z.number().positive().optional(),
+        days: z.number().nonnegative().optional(),
+        roomLabel: optionalText(120),
+      }),
+    )
+    .max(200)
+    .optional(),
+  lineItems: z
+    .array(
+      z.object({
+        code: optionalText(40),
+        description: optionalText(400),
+        quantity: z.number().positive().optional().nullable(),
+        unit: optionalText(20),
+        category: optionalText(80),
+      }),
+    )
+    .max(500)
+    .optional(),
+  materials: z
+    .array(
+      z.object({
+        material: optionalText(60),
+        action: optionalText(40),
+        quantity: z.number().positive().optional().nullable(),
+        unit: optionalText(20),
+      }),
+    )
+    .max(200)
+    .optional(),
+});
+
+export const dumpsterSearchSchema = z.object({
+  planItemId: uuid.optional().nullable(),
+  title: optionalText(200),
+  description: optionalText(4000),
+  sizeHint: optionalText(80),
+  postal: optionalText(20),
+  address: optionalText(500),
+});
+
+export const materialReferralSchema = z.object({
+  planItemId: uuid.optional().nullable(),
+  vendorKey: shortText(40),
+  title: shortText(200),
+  query: shortText(200),
+  postal: optionalText(20),
+  address: optionalText(500),
+});
+
+export const selectBidSchema = z.object({
+  bidId: uuid,
+});
+
+export const mentionWebhookSchema = z.object({
+  orgId: uuid,
+  channel: channels,
+  body: shortText(16000),
+  counterpartyName: optionalText(160),
+  counterpartyHandle: optionalText(200),
+  counterpartyKind: z
+    .enum(['vendor', 'customer', 'adjuster', 'crew', 'carrier', 'supplier', 'unknown'])
+    .optional(),
+  threadKey: optionalText(200),
+  externalMessageId: optionalText(200),
+  occurredAt: isoDate.optional(),
+  claimNumber: optionalText(80),
+  phone: optionalText(40),
+  addressHint: optionalText(200),
+  projectId: uuid.optional().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
