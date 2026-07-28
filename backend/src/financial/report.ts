@@ -204,8 +204,7 @@ export async function loadOrgIdentity(
   const { data: members } = await supabase
     .from('org_members')
     .select('user_id, role, work_type, profiles(full_name, email)')
-    .eq('org_id', orgId)
-    .eq('status', 'active');
+    .eq('org_id', orgId);
 
   /* eslint-disable @typescript-eslint/no-explicit-any */
   const team = (members ?? []).map((m: any) => {
