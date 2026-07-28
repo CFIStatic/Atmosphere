@@ -37,6 +37,8 @@ export const updateVisibilitySchema = z.object({
   showAdjusterContact: z.boolean().optional(),
   showFieldContact: z.boolean().optional(),
   allowChat: z.boolean().optional(),
+  allowAdjusterChat: z.boolean().optional(),
+  allowGroupChat: z.boolean().optional(),
   allowPolicyUpload: z.boolean().optional(),
   allowInsuranceQa: z.boolean().optional(),
   brandName: optionalTrimmed(160),
@@ -61,6 +63,7 @@ export const updateVisibilitySchema = z.object({
 });
 
 export const guestMessageSchema = z.object({
+  conversationId: z.string().uuid(),
   body: z.string().trim().min(1).max(4000),
   topic: z
     .enum(['general', 'schedule', 'progress', 'insurance', 'policy', 'contact'])
@@ -69,8 +72,10 @@ export const guestMessageSchema = z.object({
 });
 
 export const staffMessageSchema = z.object({
+  conversationId: z.string().uuid(),
   body: z.string().trim().min(1).max(4000),
-  shareId: z.string().uuid(),
+  /** Staff may post as the adjuster on adjuster/group threads when coordinating. */
+  as: z.enum(['staff', 'adjuster']).optional().default('staff'),
 });
 
 export const policyUploadSchema = z.object({
@@ -81,6 +86,7 @@ export const policyUploadSchema = z.object({
 });
 
 export const askSchema = z.object({
+  conversationId: z.string().uuid().optional(),
   question: z.string().trim().min(1).max(2000),
   history: z
     .array(

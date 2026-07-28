@@ -83,6 +83,8 @@ export interface HomeownerReport {
   customMessage: string | null;
   capabilities: {
     chat: boolean;
+    adjusterChat: boolean;
+    groupChat: boolean;
     policyUpload: boolean;
     insuranceQa: boolean;
   };
@@ -201,6 +203,8 @@ export function buildHomeownerReport(input: {
     customMessage: v.customMessage,
     capabilities: {
       chat: v.allowChat,
+      adjusterChat: v.allowAdjusterChat,
+      groupChat: v.allowGroupChat,
       policyUpload: v.allowPolicyUpload,
       insuranceQa: v.allowInsuranceQa,
     },

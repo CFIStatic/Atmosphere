@@ -85,6 +85,8 @@ create table if not exists public.homeowner_portal_visibility (
   show_adjuster_contact   boolean not null default true,
   show_field_contact      boolean not null default false,
   allow_chat              boolean not null default true,
+  allow_adjuster_chat     boolean not null default true,
+  allow_group_chat        boolean not null default true,
   allow_policy_upload     boolean not null default true,
   allow_insurance_qa      boolean not null default true,
 
@@ -120,22 +122,65 @@ create trigger homeowner_portal_visibility_touch
   for each row execute function private.touch_updated_at();
 
 -- ----------------------------------------------------------------------------
--- 3. Chat messages
+-- 3. Conversations + messages (communications platform)
 -- ----------------------------------------------------------------------------
+-- Side conversations for the homeowner portal:
+--   assistant — job / insurance Q&A bot
+--   company   — homeowner ↔ restoration company DM
+--   adjuster  — homeowner ↔ insurance adjuster DM
+--   group     — homeowner + company + adjuster on the same thread
+
+create table if not exists public.homeowner_portal_conversations (
+  id              uuid primary key default gen_random_uuid(),
+  org_id          uuid not null references public.orgs(id),
+  project_id      uuid not null references public.pm_projects(id),
+  share_id        uuid not null references public.homeowner_portal_shares(id) on delete cascade,
+
+  kind            text not null check (kind in ('assistant', 'company', 'adjuster', 'group')),
+  title           text not null check (length(btrim(title)) between 1 and 160),
+
+  -- Who is on this thread (drives UI labels and who may post).
+  includes_homeowner  boolean not null default true,
+  includes_company    boolean not null default false,
+  includes_adjuster   boolean not null default false,
+  includes_assistant  boolean not null default false,
+
+  status          text not null default 'open'
+                    check (status in ('open', 'archived')),
+  last_message_at timestamptz,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+
+  -- One thread of each kind per share (group can be expanded later).
+  unique (share_id, kind)
+);
+
+create index if not exists homeowner_portal_conversations_share_idx
+  on public.homeowner_portal_conversations (share_id, last_message_at desc nulls last);
+create index if not exists homeowner_portal_conversations_project_idx
+  on public.homeowner_portal_conversations (project_id, last_message_at desc nulls last);
+
+comment on table public.homeowner_portal_conversations is
+  'Side conversations on a homeowner portal share: company DM, adjuster DM, group, or assistant.';
+
+drop trigger if exists homeowner_portal_conversations_touch on public.homeowner_portal_conversations;
+create trigger homeowner_portal_conversations_touch
+  before update on public.homeowner_portal_conversations
+  for each row execute function private.touch_updated_at();
 
 create table if not exists public.homeowner_portal_messages (
   id              uuid primary key default gen_random_uuid(),
   org_id          uuid not null references public.orgs(id),
   project_id      uuid not null references public.pm_projects(id),
   share_id        uuid not null references public.homeowner_portal_shares(id),
+  conversation_id uuid not null references public.homeowner_portal_conversations(id) on delete cascade,
 
   author_kind     text not null
-                    check (author_kind in ('homeowner', 'staff', 'assistant', 'system')),
+                    check (author_kind in ('homeowner', 'staff', 'adjuster', 'assistant', 'system')),
   author_user_id  uuid references auth.users(id),
   author_name     text check (author_name is null or length(author_name) <= 160),
 
   body            text not null check (length(btrim(body)) between 1 and 4000),
-  -- When the assistant answered from policy/regulation context.
   topic           text check (topic is null or topic in (
                     'general', 'schedule', 'progress', 'insurance', 'policy', 'contact'
                   )),
@@ -143,13 +188,35 @@ create table if not exists public.homeowner_portal_messages (
   created_at      timestamptz not null default now()
 );
 
+create index if not exists homeowner_portal_messages_conversation_idx
+  on public.homeowner_portal_messages (conversation_id, created_at);
 create index if not exists homeowner_portal_messages_share_idx
   on public.homeowner_portal_messages (share_id, created_at);
 create index if not exists homeowner_portal_messages_project_idx
   on public.homeowner_portal_messages (project_id, created_at desc);
 
 comment on table public.homeowner_portal_messages is
-  'Homeowner ↔ company chat for one portal share, including assistant replies.';
+  'Messages inside a portal conversation — homeowner, company staff, adjuster, or assistant.';
+
+-- Keep last_message_at fresh so the sidebar can sort by activity.
+create or replace function private.homeowner_portal_bump_conversation()
+returns trigger
+language plpgsql
+set search_path to ''
+as $$
+begin
+  update public.homeowner_portal_conversations
+     set last_message_at = new.created_at,
+         updated_at = pg_catalog.now()
+   where id = new.conversation_id;
+  return new;
+end;
+$$;
+
+drop trigger if exists homeowner_portal_messages_bump on public.homeowner_portal_messages;
+create trigger homeowner_portal_messages_bump
+  after insert on public.homeowner_portal_messages
+  for each row execute function private.homeowner_portal_bump_conversation();
 
 -- ----------------------------------------------------------------------------
 -- 4. Uploaded policies (text extracted / pasted)
@@ -189,6 +256,7 @@ comment on table public.homeowner_portal_policies is
 
 alter table public.homeowner_portal_shares      enable row level security;
 alter table public.homeowner_portal_visibility  enable row level security;
+alter table public.homeowner_portal_conversations enable row level security;
 alter table public.homeowner_portal_messages    enable row level security;
 alter table public.homeowner_portal_policies    enable row level security;
 
@@ -226,6 +294,23 @@ create policy homeowner_portal_visibility_update on public.homeowner_portal_visi
   using (private.pm_can_manage(org_id))
   with check (private.pm_can_manage(org_id));
 
+-- Conversations
+drop policy if exists homeowner_portal_conversations_select on public.homeowner_portal_conversations;
+create policy homeowner_portal_conversations_select on public.homeowner_portal_conversations
+  for select to authenticated
+  using (private.is_org_member(org_id));
+
+drop policy if exists homeowner_portal_conversations_insert on public.homeowner_portal_conversations;
+create policy homeowner_portal_conversations_insert on public.homeowner_portal_conversations
+  for insert to authenticated
+  with check (private.pm_can_manage(org_id) and private.is_org_member(org_id));
+
+drop policy if exists homeowner_portal_conversations_update on public.homeowner_portal_conversations;
+create policy homeowner_portal_conversations_update on public.homeowner_portal_conversations
+  for update to authenticated
+  using (private.is_org_member(org_id))
+  with check (private.is_org_member(org_id));
+
 -- Messages: any org member can read/reply; homeowners insert via service role BFF
 drop policy if exists homeowner_portal_messages_select on public.homeowner_portal_messages;
 create policy homeowner_portal_messages_select on public.homeowner_portal_messages
@@ -237,7 +322,7 @@ create policy homeowner_portal_messages_insert on public.homeowner_portal_messag
   for insert to authenticated
   with check (
     private.is_org_member(org_id)
-    and author_kind in ('staff', 'system', 'assistant')
+    and author_kind in ('staff', 'adjuster', 'system', 'assistant')
   );
 
 -- Policies (documents)
@@ -249,5 +334,6 @@ create policy homeowner_portal_policies_select on public.homeowner_portal_polici
 -- Grants match the PM tables pattern.
 grant select, insert, update on public.homeowner_portal_shares to authenticated;
 grant select, insert, update on public.homeowner_portal_visibility to authenticated;
+grant select, insert, update on public.homeowner_portal_conversations to authenticated;
 grant select, insert on public.homeowner_portal_messages to authenticated;
 grant select on public.homeowner_portal_policies to authenticated;

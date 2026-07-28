@@ -1079,31 +1079,40 @@ export const api = {
       body: JSON.stringify(patch),
     }),
 
-  portalStaffReply: (projectId: string, shareId: string, body: string) =>
-    request<{ message: PortalMessage }>(`/api/portal/projects/${projectId}/messages`, {
-      method: 'POST',
-      body: JSON.stringify({ shareId, body }),
-    }),
+  portalStaffReply: (
+    projectId: string,
+    conversationId: string,
+    body: string,
+    as: 'staff' | 'adjuster' = 'staff',
+  ) =>
+    request<{ message: PortalMessage; conversation: PortalConversation }>(
+      `/api/portal/projects/${projectId}/messages`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ conversationId, body, as }),
+      },
+    ),
 
   // ---- HomeOwner Report portal (guest) ----
   portalGuestReport: (token: string) =>
-    request<{ report: HomeownerReport; assistantEnabled: boolean }>(
-      `/api/portal/report/${encodeURIComponent(token)}`,
+    request<{
+      report: HomeownerReport;
+      conversations: PortalConversation[];
+      assistantEnabled: boolean;
+    }>(`/api/portal/report/${encodeURIComponent(token)}`, { method: 'GET' }),
+
+  portalGuestConversationMessages: (token: string, conversationId: string) =>
+    request<{ conversation: PortalConversation; messages: PortalMessage[] }>(
+      `/api/portal/report/${encodeURIComponent(token)}/conversations/${conversationId}/messages`,
       { method: 'GET' },
     ),
 
-  portalGuestMessages: (token: string) =>
-    request<{ messages: PortalMessage[] }>(
-      `/api/portal/report/${encodeURIComponent(token)}/messages`,
-      { method: 'GET' },
-    ),
-
-  portalGuestSendMessage: (token: string, body: string, topic = 'general') =>
-    request<{ message: PortalMessage }>(
+  portalGuestSendMessage: (token: string, conversationId: string, body: string, topic = 'general') =>
+    request<{ message: PortalMessage; conversation: PortalConversation }>(
       `/api/portal/report/${encodeURIComponent(token)}/messages`,
       {
         method: 'POST',
-        body: JSON.stringify({ body, topic }),
+        body: JSON.stringify({ conversationId, body, topic }),
       },
     ),
 
@@ -1129,13 +1138,22 @@ export const api = {
     token: string,
     question: string,
     history: { role: 'user' | 'assistant'; content: string }[] = [],
+    conversationId?: string,
   ) =>
-    request<{ reply: string; model: string | null }>(
-      `/api/portal/report/${encodeURIComponent(token)}/ask`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ question, history }),
-      },
+    request<{
+      reply: string;
+      model: string | null;
+      conversationId: string;
+      message: PortalMessage;
+    }>(`/api/portal/report/${encodeURIComponent(token)}/ask`, {
+      method: 'POST',
+      body: JSON.stringify({ question, history, conversationId }),
+    }),
+
+  portalStaffConversationMessages: (projectId: string, conversationId: string) =>
+    request<{ conversation: PortalConversation; messages: PortalMessage[] }>(
+      `/api/portal/projects/${projectId}/conversations/${conversationId}/messages`,
+      { method: 'GET' },
     ),
 
   // ---- Web Access ----
@@ -1867,6 +1885,8 @@ export interface PortalVisibility {
   showAdjusterContact: boolean;
   showFieldContact: boolean;
   allowChat: boolean;
+  allowAdjusterChat: boolean;
+  allowGroupChat: boolean;
   allowPolicyUpload: boolean;
   allowInsuranceQa: boolean;
   brandName: string | null;
@@ -1879,12 +1899,32 @@ export interface PortalVisibility {
   customMessage: string | null;
 }
 
+export type PortalConversationKind = 'assistant' | 'company' | 'adjuster' | 'group';
+
+export interface PortalConversation {
+  id: string;
+  orgId: string;
+  projectId: string;
+  shareId: string;
+  kind: PortalConversationKind;
+  title: string;
+  includesHomeowner: boolean;
+  includesCompany: boolean;
+  includesAdjuster: boolean;
+  includesAssistant: boolean;
+  status: 'open' | 'archived';
+  lastMessageAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PortalMessage {
   id: string;
   orgId: string;
   projectId: string;
   shareId: string;
-  authorKind: 'homeowner' | 'staff' | 'assistant' | 'system';
+  conversationId: string;
+  authorKind: 'homeowner' | 'staff' | 'adjuster' | 'assistant' | 'system';
   authorUserId: string | null;
   authorName: string | null;
   body: string;
@@ -1905,6 +1945,7 @@ export interface PortalStaffView {
   projectId: string;
   shares: PortalShare[];
   visibility: PortalVisibility;
+  conversations: PortalConversation[];
   messages: PortalMessage[];
   portalPathPrefix: string;
 }
@@ -1955,7 +1996,13 @@ export interface HomeownerReport {
   } | null;
   documents: { label: string; kind: string; status: string }[] | null;
   customMessage: string | null;
-  capabilities: { chat: boolean; policyUpload: boolean; insuranceQa: boolean };
+  capabilities: {
+    chat: boolean;
+    adjusterChat: boolean;
+    groupChat: boolean;
+    policyUpload: boolean;
+    insuranceQa: boolean;
+  };
   regulation: {
     regionLabel: string;
     carrierLabel: string | null;

@@ -2,6 +2,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { HttpError } from '../lib/errors.js';
 import {
   defaultVisibility,
+  type ConversationKind,
+  type PortalConversation,
   type PortalMessage,
   type PortalPolicy,
   type PortalShare,
@@ -63,6 +65,8 @@ export function serializeVisibility(r: any): PortalVisibility {
     showAdjusterContact: Boolean(r.show_adjuster_contact),
     showFieldContact: Boolean(r.show_field_contact),
     allowChat: Boolean(r.allow_chat),
+    allowAdjusterChat: r.allow_adjuster_chat == null ? true : Boolean(r.allow_adjuster_chat),
+    allowGroupChat: r.allow_group_chat == null ? true : Boolean(r.allow_group_chat),
     allowPolicyUpload: Boolean(r.allow_policy_upload),
     allowInsuranceQa: Boolean(r.allow_insurance_qa),
     brandName: r.brand_name ?? null,
@@ -79,12 +83,32 @@ export function serializeVisibility(r: any): PortalVisibility {
   };
 }
 
+export function serializeConversation(r: any): PortalConversation {
+  return {
+    id: r.id,
+    orgId: r.org_id,
+    projectId: r.project_id,
+    shareId: r.share_id,
+    kind: r.kind,
+    title: r.title,
+    includesHomeowner: Boolean(r.includes_homeowner),
+    includesCompany: Boolean(r.includes_company),
+    includesAdjuster: Boolean(r.includes_adjuster),
+    includesAssistant: Boolean(r.includes_assistant),
+    status: r.status,
+    lastMessageAt: r.last_message_at ?? null,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
 export function serializeMessage(r: any): PortalMessage {
   return {
     id: r.id,
     orgId: r.org_id,
     projectId: r.project_id,
     shareId: r.share_id,
+    conversationId: r.conversation_id,
     authorKind: r.author_kind,
     authorUserId: r.author_user_id ?? null,
     authorName: r.author_name ?? null,
@@ -227,6 +251,8 @@ export async function upsertVisibility(
     show_adjuster_contact: next.showAdjusterContact,
     show_field_contact: next.showFieldContact,
     allow_chat: next.allowChat,
+    allow_adjuster_chat: next.allowAdjusterChat,
+    allow_group_chat: next.allowGroupChat,
     allow_policy_upload: next.allowPolicyUpload,
     allow_insurance_qa: next.allowInsuranceQa,
     brand_name: next.brandName,
@@ -273,15 +299,136 @@ export async function touchShareAccess(
   if (error) fail(error, 'touch portal share');
 }
 
-export async function listMessages(
+/** Seed the standard side conversations for a share (idempotent). */
+export async function ensureConversations(
+  supabase: SupabaseClient,
+  input: {
+    orgId: string;
+    projectId: string;
+    shareId: string;
+    brandName: string;
+    adjusterName: string | null;
+    visibility: PortalVisibility;
+  },
+): Promise<PortalConversation[]> {
+  const specs: {
+    kind: ConversationKind;
+    title: string;
+    includesCompany: boolean;
+    includesAdjuster: boolean;
+    includesAssistant: boolean;
+    enabled: boolean;
+  }[] = [
+    {
+      kind: 'assistant',
+      title: `Ask ${input.brandName}`,
+      includesCompany: false,
+      includesAdjuster: false,
+      includesAssistant: true,
+      enabled: input.visibility.allowInsuranceQa,
+    },
+    {
+      kind: 'company',
+      title: input.brandName,
+      includesCompany: true,
+      includesAdjuster: false,
+      includesAssistant: false,
+      enabled: input.visibility.allowChat,
+    },
+    {
+      kind: 'adjuster',
+      title: input.adjusterName ? `Adjuster · ${input.adjusterName}` : 'Insurance adjuster',
+      includesCompany: false,
+      includesAdjuster: true,
+      includesAssistant: false,
+      enabled: input.visibility.allowAdjusterChat,
+    },
+    {
+      kind: 'group',
+      title: input.adjusterName
+        ? `You, ${input.brandName} & ${input.adjusterName}`
+        : `You, ${input.brandName} & adjuster`,
+      includesCompany: true,
+      includesAdjuster: true,
+      includesAssistant: false,
+      enabled: input.visibility.allowGroupChat,
+    },
+  ];
+
+  const rows = specs
+    .filter((s) => s.enabled)
+    .map((s) => ({
+      org_id: input.orgId,
+      project_id: input.projectId,
+      share_id: input.shareId,
+      kind: s.kind,
+      title: s.title,
+      includes_homeowner: true,
+      includes_company: s.includesCompany,
+      includes_adjuster: s.includesAdjuster,
+      includes_assistant: s.includesAssistant,
+    }));
+
+  if (rows.length > 0) {
+    const { error } = await supabase
+      .from('homeowner_portal_conversations')
+      .upsert(rows, { onConflict: 'share_id,kind', ignoreDuplicates: true });
+    if (error) fail(error, 'seed portal conversations');
+  }
+
+  return listConversations(supabase, input.shareId);
+}
+
+export async function listConversations(
   supabase: SupabaseClient,
   shareId: string,
-  limit = 100,
+): Promise<PortalConversation[]> {
+  const { data, error } = await supabase
+    .from('homeowner_portal_conversations')
+    .select('*')
+    .eq('share_id', shareId)
+    .eq('status', 'open')
+    .order('kind', { ascending: true });
+  if (error) fail(error, 'list portal conversations');
+  return (data ?? []).map(serializeConversation);
+}
+
+export async function listProjectConversations(
+  supabase: SupabaseClient,
+  projectId: string,
+): Promise<PortalConversation[]> {
+  const { data, error } = await supabase
+    .from('homeowner_portal_conversations')
+    .select('*')
+    .eq('project_id', projectId)
+    .eq('status', 'open')
+    .order('last_message_at', { ascending: false, nullsFirst: false });
+  if (error) fail(error, 'list project conversations');
+  return (data ?? []).map(serializeConversation);
+}
+
+export async function getConversation(
+  supabase: SupabaseClient,
+  conversationId: string,
+): Promise<PortalConversation | null> {
+  const { data, error } = await supabase
+    .from('homeowner_portal_conversations')
+    .select('*')
+    .eq('id', conversationId)
+    .maybeSingle();
+  if (error) fail(error, 'load portal conversation');
+  return data ? serializeConversation(data) : null;
+}
+
+export async function listMessages(
+  supabase: SupabaseClient,
+  conversationId: string,
+  limit = 200,
 ): Promise<PortalMessage[]> {
   const { data, error } = await supabase
     .from('homeowner_portal_messages')
     .select('*')
-    .eq('share_id', shareId)
+    .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true })
     .limit(limit);
   if (error) fail(error, 'list portal messages');
@@ -309,6 +456,7 @@ export async function insertMessage(
     orgId: string;
     projectId: string;
     shareId: string;
+    conversationId: string;
     authorKind: MessageAuthorKind;
     authorUserId?: string | null;
     authorName?: string | null;
@@ -322,6 +470,7 @@ export async function insertMessage(
       org_id: input.orgId,
       project_id: input.projectId,
       share_id: input.shareId,
+      conversation_id: input.conversationId,
       author_kind: input.authorKind,
       author_user_id: input.authorUserId ?? null,
       author_name: input.authorName ?? null,

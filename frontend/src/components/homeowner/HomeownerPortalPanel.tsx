@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
   api,
   ApiError,
+  type PortalConversation,
   type PortalMessage,
   type PortalShare,
   type PortalVisibility,
@@ -23,6 +24,8 @@ const VISIBILITY_TOGGLES: {
     | 'showAdjusterContact'
     | 'showFieldContact'
     | 'allowChat'
+    | 'allowAdjusterChat'
+    | 'allowGroupChat'
     | 'allowPolicyUpload'
     | 'allowInsuranceQa';
   label: string;
@@ -39,19 +42,24 @@ const VISIBILITY_TOGGLES: {
   { key: 'showOfficeContact', label: 'Office contact', hint: 'Who the homeowner should call' },
   { key: 'showAdjusterContact', label: 'Adjuster contact', hint: 'From the project record' },
   { key: 'showFieldContact', label: 'Field contact', hint: 'Optional crew contact' },
-  { key: 'allowChat', label: 'Allow chat', hint: 'Homeowner can message the team' },
+  { key: 'allowChat', label: 'Company chat', hint: 'Homeowner ↔ your company DM' },
+  { key: 'allowAdjusterChat', label: 'Adjuster chat', hint: 'Homeowner ↔ adjuster DM' },
+  { key: 'allowGroupChat', label: 'Group chat', hint: 'Homeowner + company + adjuster' },
   { key: 'allowPolicyUpload', label: 'Allow policy upload', hint: 'Paste / upload policy text' },
-  { key: 'allowInsuranceQa', label: 'Insurance Q&A', hint: 'Location + carrier aware answers' },
+  { key: 'allowInsuranceQa', label: 'Assistant Q&A', hint: 'Location + carrier aware answers' },
 ];
 
 /**
- * Staff controls for the HomeOwner Report on a PM project: mint links, limit
- * what is shared, and reply to homeowner chat.
+ * Staff controls for the HomeOwner communications portal: mint links, brand,
+ * limit shared info, and reply in company / adjuster / group threads.
  */
 export function HomeownerPortalPanel({ projectId }: { projectId: string }) {
   const [shares, setShares] = useState<PortalShare[]>([]);
   const [visibility, setVisibility] = useState<PortalVisibility | null>(null);
+  const [conversations, setConversations] = useState<PortalConversation[]>([]);
   const [messages, setMessages] = useState<PortalMessage[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState('');
+  const [thread, setThread] = useState<PortalMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [freshLink, setFreshLink] = useState<string | null>(null);
@@ -62,21 +70,34 @@ export function HomeownerPortalPanel({ projectId }: { projectId: string }) {
   const [officeEmail, setOfficeEmail] = useState('');
   const [customMessage, setCustomMessage] = useState('');
   const [reply, setReply] = useState('');
-  const [replyShareId, setReplyShareId] = useState<string>('');
+  const [replyAs, setReplyAs] = useState<'staff' | 'adjuster'>('staff');
+
+  const activeConversation = useMemo(
+    () => conversations.find((c) => c.id === activeConversationId) ?? null,
+    [conversations, activeConversationId],
+  );
 
   const load = useCallback(async () => {
     try {
       const data = await api.portalProject(projectId);
       setShares(data.shares);
       setVisibility(data.visibility);
+      setConversations(data.conversations);
       setMessages(data.messages);
       setBrandName(data.visibility.brandName ?? '');
       setLogoUrl(data.visibility.logoUrl ?? '');
       setOfficePhone(data.visibility.officePhone ?? '');
       setOfficeEmail(data.visibility.officeEmail ?? '');
       setCustomMessage(data.visibility.customMessage ?? '');
-      const active = data.shares.find((s) => s.status === 'active');
-      if (active) setReplyShareId(active.id);
+      const preferred =
+        data.conversations.find((c) => c.kind === 'company') ??
+        data.conversations.find((c) => c.kind === 'group') ??
+        data.conversations[0];
+      if (preferred) {
+        setActiveConversationId(preferred.id);
+        const detail = await api.portalStaffConversationMessages(projectId, preferred.id);
+        setThread(detail.messages);
+      }
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not load homeowner portal settings.');
@@ -86,6 +107,21 @@ export function HomeownerPortalPanel({ projectId }: { projectId: string }) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  async function selectConversation(id: string) {
+    setActiveConversationId(id);
+    setBusy(true);
+    try {
+      const detail = await api.portalStaffConversationMessages(projectId, id);
+      setThread(detail.messages);
+      const conv = detail.conversation;
+      setReplyAs(conv.includesAdjuster && !conv.includesCompany ? 'adjuster' : 'staff');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not load conversation.');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function mintShare(e: FormEvent) {
     e.preventDefault();
@@ -143,12 +179,16 @@ export function HomeownerPortalPanel({ projectId }: { projectId: string }) {
 
   async function sendReply(e: FormEvent) {
     e.preventDefault();
-    if (!reply.trim() || !replyShareId) return;
+    if (!reply.trim() || !activeConversationId) return;
     setBusy(true);
     try {
-      await api.portalStaffReply(projectId, replyShareId, reply.trim());
+      await api.portalStaffReply(projectId, activeConversationId, reply.trim(), replyAs);
       setReply('');
-      await load();
+      const detail = await api.portalStaffConversationMessages(projectId, activeConversationId);
+      setThread(detail.messages);
+      const data = await api.portalProject(projectId);
+      setMessages(data.messages);
+      setConversations(data.conversations);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not send that reply.');
     } finally {
@@ -175,23 +215,21 @@ export function HomeownerPortalPanel({ projectId }: { projectId: string }) {
       className="mt-6"
       title="HomeOwner Report"
       action={
-        <span className="text-xs text-ink-500">
-          Customer portal · limit what they see
-        </span>
+        <span className="text-xs text-ink-500">Communications · company · adjuster · group</span>
       }
     >
       {error && <p className="mb-3 text-sm text-danger-700">{error}</p>}
 
       <form onSubmit={mintShare} className="space-y-3 rounded-lg border border-line bg-paper-50 p-3">
         <p className="text-sm text-ink-700">
-          Create a private link for this job. The homeowner can follow progress, ask questions, and
-          upload a policy — only the sections you enable below.
+          Create a private link. The homeowner gets side conversations with your company, their
+          adjuster, and a group thread so everyone stays aligned.
         </p>
         <textarea
           value={welcomeNote}
           onChange={(e) => setWelcomeNote(e.target.value)}
           rows={2}
-          placeholder="Optional welcome note on their report…"
+          placeholder="Optional welcome note…"
           className="w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm outline-none ring-brand-500 focus:ring-2"
         />
         <button
@@ -254,7 +292,7 @@ export function HomeownerPortalPanel({ projectId }: { projectId: string }) {
 
       <div className="mt-5">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-500">
-          What homeowners can see
+          What homeowners can see &amp; who they can message
         </h3>
         <ul className="mt-2 grid gap-2 sm:grid-cols-2">
           {VISIBILITY_TOGGLES.map(({ key, label, hint }) => {
@@ -293,9 +331,6 @@ export function HomeownerPortalPanel({ projectId }: { projectId: string }) {
         <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-500">
           Company brand on the chat
         </h3>
-        <p className="text-xs text-ink-500">
-          Shown in the homeowner chat header — e.g. ServiceMaster Recovery Services and your logo.
-        </p>
         <div className="grid gap-2 sm:grid-cols-2">
           <input
             value={brandName}
@@ -310,35 +345,6 @@ export function HomeownerPortalPanel({ projectId }: { projectId: string }) {
             className="rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm outline-none ring-brand-500 focus:ring-2"
           />
         </div>
-        {(brandName || logoUrl) && (
-          <div className="flex items-center gap-3 rounded-lg border border-line bg-paper-50 px-3 py-2">
-            {logoUrl ? (
-              <img
-                src={logoUrl}
-                alt=""
-                className="h-10 w-10 rounded-full object-contain bg-paper-0 ring-1 ring-line"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
-                }}
-              />
-            ) : (
-              <span className="grid h-10 w-10 place-items-center rounded-full bg-[#0B3D2E] text-xs font-semibold text-white">
-                {(brandName || 'RC')
-                  .split(/\s+/)
-                  .slice(0, 2)
-                  .map((w) => w[0])
-                  .join('')
-                  .toUpperCase()}
-              </span>
-            )}
-            <p className="text-sm font-medium text-ink-900">
-              {brandName || 'Company name on chat'}
-            </p>
-          </div>
-        )}
-        <h3 className="pt-2 text-xs font-semibold uppercase tracking-wide text-ink-500">
-          Office contact overrides
-        </h3>
         <div className="grid gap-2 sm:grid-cols-2">
           <input
             value={officePhone}
@@ -357,7 +363,7 @@ export function HomeownerPortalPanel({ projectId }: { projectId: string }) {
           value={customMessage}
           onChange={(e) => setCustomMessage(e.target.value)}
           rows={2}
-          placeholder="Custom message shown on the report…"
+          placeholder="Custom message shown on the portal…"
           className="w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm outline-none ring-brand-500 focus:ring-2"
         />
         <button
@@ -370,52 +376,101 @@ export function HomeownerPortalPanel({ projectId }: { projectId: string }) {
 
       <div className="mt-5">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-500">
-          Homeowner messages
+          Conversations
         </h3>
-        {messages.length === 0 ? (
-          <EmptyState>No portal messages yet.</EmptyState>
+        {conversations.length === 0 ? (
+          <EmptyState>No conversations yet — mint a homeowner link first.</EmptyState>
         ) : (
-          <ul className="mt-2 max-h-64 space-y-2 overflow-y-auto">
-            {messages.map((m) => (
-              <li key={m.id} className="rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm">
-                <p className="text-xs uppercase tracking-wide text-ink-500">
-                  {m.authorKind}
-                  {m.authorName ? ` · ${m.authorName}` : ''}
-                </p>
-                <p className="mt-1 whitespace-pre-wrap text-ink-800">{m.body}</p>
-              </li>
-            ))}
-          </ul>
+          <div className="mt-2 grid gap-3 lg:grid-cols-[14rem_1fr]">
+            <ul className="space-y-1">
+              {conversations.map((c) => (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    onClick={() => void selectConversation(c.id)}
+                    className={`w-full rounded-lg px-3 py-2 text-left text-sm transition ${
+                      activeConversationId === c.id
+                        ? 'bg-brand-50 text-brand-800'
+                        : 'text-ink-700 hover:bg-paper-100'
+                    }`}
+                  >
+                    <span className="block font-medium">{c.title}</span>
+                    <span className="block text-xs uppercase tracking-wide text-ink-500">
+                      {c.kind}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="rounded-lg border border-line bg-paper-0 p-3">
+              {activeConversation ? (
+                <>
+                  <p className="text-xs text-ink-500">
+                    {activeConversation.kind === 'group'
+                      ? 'Group · homeowner, company, adjuster'
+                      : activeConversation.kind === 'adjuster'
+                        ? 'Direct with adjuster — reply as adjuster when coordinating'
+                        : activeConversation.kind === 'company'
+                          ? 'Direct with company'
+                          : 'Assistant Q&A'}
+                  </p>
+                  <ul className="mt-2 max-h-56 space-y-2 overflow-y-auto">
+                    {thread.length === 0 ? (
+                      <li className="text-sm text-ink-500">No messages in this thread yet.</li>
+                    ) : (
+                      thread.map((m) => (
+                        <li key={m.id} className="rounded-lg bg-paper-50 px-3 py-2 text-sm">
+                          <p className="text-xs uppercase tracking-wide text-ink-500">
+                            {m.authorKind}
+                            {m.authorName ? ` · ${m.authorName}` : ''}
+                          </p>
+                          <p className="mt-1 whitespace-pre-wrap text-ink-800">{m.body}</p>
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                  {activeConversation.kind !== 'assistant' && (
+                    <form onSubmit={sendReply} className="mt-3 space-y-2">
+                      {activeConversation.includesAdjuster && (
+                        <select
+                          value={replyAs}
+                          onChange={(e) => setReplyAs(e.target.value as 'staff' | 'adjuster')}
+                          className="rounded-lg border border-line bg-paper-0 px-2 py-2 text-sm"
+                        >
+                          {activeConversation.includesCompany && (
+                            <option value="staff">Reply as company</option>
+                          )}
+                          <option value="adjuster">Reply as adjuster</option>
+                        </select>
+                      )}
+                      <div className="flex gap-2">
+                        <input
+                          value={reply}
+                          onChange={(e) => setReply(e.target.value)}
+                          placeholder="Reply in this conversation…"
+                          className="flex-1 rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm outline-none ring-brand-500 focus:ring-2"
+                        />
+                        <button
+                          type="submit"
+                          disabled={busy || !reply.trim()}
+                          className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+                        >
+                          Reply
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-ink-500">Select a conversation.</p>
+              )}
+            </div>
+          </div>
         )}
-        {shares.some((s) => s.status === 'active') && (
-          <form onSubmit={sendReply} className="mt-3 flex flex-col gap-2 sm:flex-row">
-            <select
-              value={replyShareId}
-              onChange={(e) => setReplyShareId(e.target.value)}
-              className="rounded-lg border border-line bg-paper-0 px-2 py-2 text-sm"
-            >
-              {shares
-                .filter((s) => s.status === 'active')
-                .map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.customerName ?? s.label ?? s.id.slice(0, 8)}
-                  </option>
-                ))}
-            </select>
-            <input
-              value={reply}
-              onChange={(e) => setReply(e.target.value)}
-              placeholder="Reply to the homeowner…"
-              className="flex-1 rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm outline-none ring-brand-500 focus:ring-2"
-            />
-            <button
-              type="submit"
-              disabled={busy || !reply.trim()}
-              className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
-            >
-              Reply
-            </button>
-          </form>
+        {messages.length > 0 && (
+          <p className="mt-2 text-xs text-ink-500">
+            {messages.length} recent message{messages.length === 1 ? '' : 's'} across all threads.
+          </p>
         )}
       </div>
     </Card>

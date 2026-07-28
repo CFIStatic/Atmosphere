@@ -47,8 +47,9 @@ Migration: `supabase/migrations/20260728143000_homeowner_portal.sql`
 | Table | Role |
 |---|---|
 | `homeowner_portal_shares` | Token hash, status, welcome note, expiry |
-| `homeowner_portal_visibility` | Per-project disclosure flags + office overrides |
-| `homeowner_portal_messages` | Homeowner / staff / assistant chat |
+| `homeowner_portal_visibility` | Disclosure flags, brand, chat channel toggles |
+| `homeowner_portal_conversations` | Side threads: assistant / company / adjuster / group |
+| `homeowner_portal_messages` | Messages inside a conversation |
 | `homeowner_portal_policies` | Uploaded policy text for Q&A grounding |
 
 Staff access is org-member RLS (`pm_can_manage` for mint/revoke/visibility).
@@ -79,15 +80,20 @@ Prefix: `/api/portal`
 
 ## 5. UI
 
-- Guest: `/report/:token` (`HomeownerReportPage`) — ChatGPT-style chat branded
-  with the restoration company logo + name; job details and policy upload live
-  in side drawers
-- Staff: HomeOwner Report card on `PmProjectPage` — links, brand (name/logo URL),
-  visibility toggles, replies
+- Guest: `/report/:token` — ChatGPT-style chat with a **side conversation list**:
+  - Assistant (job / insurance Q&A)
+  - Company DM (homeowner ↔ restoration company)
+  - Adjuster DM (homeowner ↔ adjuster)
+  - Group (homeowner + company + adjuster)
+- Staff: HomeOwner Report card on `PmProjectPage` — links, brand, visibility,
+  and per-conversation replies (as company or as adjuster when coordinating)
 
 Set **Company display name** and **Logo URL** on the project portal panel
-(e.g. `ServiceMaster Recovery Services` + their logo HTTPS URL). When no logo
-is set, the chat shows initials in a brand mark.
+(e.g. `ServiceMaster Recovery Services` + their logo HTTPS URL).
+
+Regulation bullets adapt from the project's `region` and `carrier` (see
+`backend/src/portal/regulations.ts`). The assistant reuses the technician Anthropic
+key when configured; otherwise a deterministic fallback answers.
 
 ---
 

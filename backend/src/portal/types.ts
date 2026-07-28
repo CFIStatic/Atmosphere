@@ -9,7 +9,10 @@
 export const SHARE_STATUSES = ['active', 'revoked', 'expired'] as const;
 export type ShareStatus = (typeof SHARE_STATUSES)[number];
 
-export const MESSAGE_AUTHORS = ['homeowner', 'staff', 'assistant', 'system'] as const;
+export const CONVERSATION_KINDS = ['assistant', 'company', 'adjuster', 'group'] as const;
+export type ConversationKind = (typeof CONVERSATION_KINDS)[number];
+
+export const MESSAGE_AUTHORS = ['homeowner', 'staff', 'adjuster', 'assistant', 'system'] as const;
 export type MessageAuthorKind = (typeof MESSAGE_AUTHORS)[number];
 
 export const MESSAGE_TOPICS = [
@@ -53,7 +56,12 @@ export interface PortalVisibility {
   showOfficeContact: boolean;
   showAdjusterContact: boolean;
   showFieldContact: boolean;
+  /** Homeowner ↔ company direct messages. */
   allowChat: boolean;
+  /** Homeowner ↔ adjuster direct messages. */
+  allowAdjusterChat: boolean;
+  /** Homeowner + company + adjuster group thread. */
+  allowGroupChat: boolean;
   allowPolicyUpload: boolean;
   allowInsuranceQa: boolean;
   /** Display name on the guest chat (e.g. ServiceMaster Recovery Services). */
@@ -71,11 +79,31 @@ export interface PortalVisibility {
   updatedAt: string;
 }
 
+export interface PortalConversation {
+  id: string;
+  orgId: string;
+  projectId: string;
+  shareId: string;
+  kind: ConversationKind;
+  title: string;
+  includesHomeowner: boolean;
+  includesCompany: boolean;
+  includesAdjuster: boolean;
+  includesAssistant: boolean;
+  status: 'open' | 'archived';
+  lastMessageAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** Optional preview for the sidebar. */
+  lastMessagePreview?: string | null;
+}
+
 export interface PortalMessage {
   id: string;
   orgId: string;
   projectId: string;
   shareId: string;
+  conversationId: string;
   authorKind: MessageAuthorKind;
   authorUserId: string | null;
   authorName: string | null;
@@ -116,6 +144,8 @@ export function defaultVisibility(orgId: string, projectId: string): PortalVisib
     showAdjusterContact: true,
     showFieldContact: false,
     allowChat: true,
+    allowAdjusterChat: true,
+    allowGroupChat: true,
     allowPolicyUpload: true,
     allowInsuranceQa: true,
     brandName: null,

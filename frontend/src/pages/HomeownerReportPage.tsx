@@ -4,30 +4,29 @@ import {
   api,
   ApiError,
   type HomeownerReport,
+  type PortalConversation,
   type PortalMessage,
   type PortalPolicyMeta,
 } from '../lib/api';
 import { SpinnerIcon } from '../components/icons';
 
-type ThreadItem =
-  | { kind: 'message'; message: PortalMessage }
-  | { kind: 'local'; id: string; role: 'user' | 'assistant'; content: string };
+const KIND_ORDER: PortalConversation['kind'][] = ['assistant', 'company', 'adjuster', 'group'];
 
 /**
- * HomeOwner Report — ChatGPT-style chat portal branded with the restoration
- * company's logo and name (e.g. ServiceMaster Recovery Services).
+ * HomeOwner communications portal — ChatGPT-style chat with side conversations:
+ * company DM, adjuster DM, and a group thread so everyone stays on the same page.
  */
 export function HomeownerReportPage() {
   const { token = '' } = useParams();
   const [report, setReport] = useState<HomeownerReport | null>(null);
+  const [conversations, setConversations] = useState<PortalConversation[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<PortalMessage[]>([]);
-  const [localTurns, setLocalTurns] = useState<
-    { id: string; role: 'user' | 'assistant'; content: string }[]
-  >([]);
   const [policies, setPolicies] = useState<PortalPolicyMeta[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showDetails, setShowDetails] = useState(false);
   const [showPolicy, setShowPolicy] = useState(false);
   const [policyText, setPolicyText] = useState('');
@@ -36,21 +35,44 @@ export function HomeownerReportPage() {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  const active = useMemo(
+    () => conversations.find((c) => c.id === activeId) ?? null,
+    [conversations, activeId],
+  );
+
+  const sortedConversations = useMemo(
+    () =>
+      [...conversations].sort(
+        (a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind),
+      ),
+    [conversations],
+  );
+
+  const loadMessages = useCallback(
+    async (conversationId: string) => {
+      const data = await api.portalGuestConversationMessages(token, conversationId);
+      setMessages(data.messages);
+    },
+    [token],
+  );
+
   const load = useCallback(async () => {
     try {
       const data = await api.portalGuestReport(token);
       setReport(data.report);
+      setConversations(data.conversations);
       setError(null);
       setLogoBroken(false);
 
-      if (data.report.capabilities.chat || data.report.capabilities.insuranceQa) {
-        try {
-          const { messages: msgs } = await api.portalGuestMessages(token);
-          setMessages(msgs);
-        } catch {
-          // Chat may be off; insurance Q&A can still work without history.
-        }
-      }
+      const preferred =
+        data.conversations.find((c) => c.kind === 'company') ??
+        data.conversations.find((c) => c.kind === 'assistant') ??
+        data.conversations[0] ??
+        null;
+      const nextId = preferred?.id ?? null;
+      setActiveId(nextId);
+      if (nextId) await loadMessages(nextId);
+
       if (data.report.capabilities.policyUpload) {
         const { policies: pols } = await api.portalGuestPolicies(token);
         setPolicies(pols);
@@ -59,7 +81,7 @@ export function HomeownerReportPage() {
       setError(err instanceof ApiError ? err.message : 'Could not open this report.');
       setReport(null);
     }
-  }, [token]);
+  }, [token, loadMessages]);
 
   useEffect(() => {
     void load();
@@ -69,101 +91,54 @@ export function HomeownerReportPage() {
     const el = scrollerRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [messages, localTurns, busy]);
+  }, [messages, busy, activeId]);
 
-  const brandName = report?.brand.name ?? report?.orgName ?? 'Restoration team';
-
-  const thread: ThreadItem[] = useMemo(() => {
-    const fromServer: ThreadItem[] = messages.map((m) => ({ kind: 'message', message: m }));
-    const fromLocal: ThreadItem[] = localTurns.map((t) => ({
-      kind: 'local',
-      id: t.id,
-      role: t.role,
-      content: t.content,
-    }));
-    return [...fromServer, ...fromLocal];
-  }, [messages, localTurns]);
-
-  const suggestions = useMemo(() => {
-    if (!report) return [];
-    const items: string[] = [];
-    if (report.schedule) items.push('What is the tentative schedule for my job?');
-    if (report.project.phaseLabel) items.push(`What does the ${report.project.phaseLabel} phase mean?`);
-    if (report.contacts.office || report.contacts.adjuster) {
-      items.push('Who should I call if I have a question?');
-    }
-    if (report.drying) items.push('How is the drying going on my property?');
-    items.push('What should I know about my insurance claim?');
-    if (report.capabilities.policyUpload) {
-      items.push('I uploaded my policy — what does my deductible mean here?');
-    }
-    return items.slice(0, 4);
-  }, [report]);
-
-  async function send(question: string) {
-    if (!report || !question.trim() || busy) return;
-    const text = question.trim();
-    const canAsk = report.capabilities.insuranceQa;
-    const canChat = report.capabilities.chat;
-
-    if (!canAsk && !canChat) {
-      setError('Messaging is turned off for this report.');
+  async function selectConversation(id: string) {
+    if (id === activeId) {
+      setSidebarOpen(false);
       return;
     }
+    setActiveId(id);
+    setMessages([]);
+    setSidebarOpen(false);
+    setBusy(true);
+    try {
+      await loadMessages(id);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not load that conversation.');
+    } finally {
+      setBusy(false);
+      inputRef.current?.focus();
+    }
+  }
 
+  async function send(textRaw: string) {
+    if (!report || !active || !textRaw.trim() || busy) return;
+    const text = textRaw.trim();
     setBusy(true);
     setDraft('');
     setError(null);
 
-    const history = thread
-      .map((item) => {
-        if (item.kind === 'local') {
-          return { role: item.role, content: item.content };
-        }
-        const role =
-          item.message.authorKind === 'homeowner'
-            ? ('user' as const)
-            : ('assistant' as const);
-        return { role, content: item.message.body };
-      })
-      .filter((t) => t.content.trim().length > 0)
-      .slice(-16);
-
-    if (canAsk) {
-      const userId = `local-u-${Date.now()}`;
-      setLocalTurns((prev) => [...prev, { id: userId, role: 'user', content: text }]);
-      try {
-        const { reply } = await api.portalGuestAsk(token, text, history);
-        setLocalTurns((prev) => [
-          ...prev,
-          { id: `local-a-${Date.now()}`, role: 'assistant', content: reply },
-        ]);
-        // Prefer server history when chat persistence is on.
-        if (canChat) {
-          const { messages: msgs } = await api.portalGuestMessages(token);
-          setMessages(msgs);
-          setLocalTurns([]);
-        }
-      } catch (err) {
-        setLocalTurns((prev) => [
-          ...prev,
-          {
-            id: `local-e-${Date.now()}`,
-            role: 'assistant',
-            content: err instanceof ApiError ? err.message : 'Could not answer that right now.',
-          },
-        ]);
-      } finally {
-        setBusy(false);
-        inputRef.current?.focus();
-      }
-      return;
-    }
-
-    // Chat-only mode: message the team without an assistant reply.
     try {
-      const { message } = await api.portalGuestSendMessage(token, text);
-      setMessages((prev) => [...prev, message]);
+      if (active.kind === 'assistant') {
+        const history = messages
+          .map((m) => ({
+            role: (m.authorKind === 'homeowner' ? 'user' : 'assistant') as 'user' | 'assistant',
+            content: m.body,
+          }))
+          .slice(-16);
+        await api.portalGuestAsk(token, text, history, active.id);
+        await loadMessages(active.id);
+      } else {
+        const { message } = await api.portalGuestSendMessage(token, active.id, text);
+        setMessages((prev) => [...prev, message]);
+      }
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === active.id ? { ...c, lastMessageAt: new Date().toISOString() } : c,
+        ),
+      );
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not send that message.');
     } finally {
@@ -198,10 +173,17 @@ export function HomeownerReportPage() {
       setPolicies((prev) => [policy, ...prev]);
       setPolicyText('');
       setShowPolicy(false);
-      setBusy(false);
-      await send(
-        'I just uploaded my insurance policy. Can you help me understand what matters for this claim?',
-      );
+      const assistant = conversations.find((c) => c.kind === 'assistant');
+      if (assistant) {
+        setActiveId(assistant.id);
+        setBusy(false);
+        await loadMessages(assistant.id);
+        await send(
+          'I just uploaded my insurance policy. Can you help me understand what matters for this claim?',
+        );
+      } else {
+        setBusy(false);
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not upload that policy.');
       setBusy(false);
@@ -234,18 +216,27 @@ export function HomeownerReportPage() {
     );
   }
 
-  const empty = thread.length === 0 && !busy;
-  const welcome =
-    report.share.welcomeNote ||
-    report.customMessage ||
-    `Ask anything about your restoration job with ${brandName}.`;
+  const brandName = report.brand.name;
+  const empty = messages.length === 0 && !busy;
+  const placeholder = active
+    ? active.kind === 'assistant'
+      ? `Ask ${brandName}…`
+      : active.kind === 'company'
+        ? `Message ${brandName}…`
+        : active.kind === 'adjuster'
+          ? 'Message your adjuster…'
+          : 'Message the group…'
+    : 'Select a conversation…';
 
   return (
-    <div className="gpt-shell flex h-[100dvh] flex-col overflow-hidden">
-      {/* Brand header */}
-      <header className="gpt-header shrink-0">
-        <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <div className="flex min-w-0 items-center gap-3">
+    <div className="gpt-shell flex h-[100dvh] overflow-hidden">
+      {/* Side conversations */}
+      <aside
+        className={`gpt-sidebar ${sidebarOpen ? 'gpt-sidebar-open' : ''}`}
+        aria-label="Conversations"
+      >
+        <div className="border-b border-line px-4 py-4">
+          <div className="flex items-center gap-3">
             <CompanyMark
               name={brandName}
               logoUrl={logoBroken ? null : report.brand.logoUrl}
@@ -253,147 +244,184 @@ export function HomeownerReportPage() {
               size="md"
             />
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold tracking-tight text-ink-900">
-                {brandName}
-              </p>
-              <p className="truncate text-xs text-ink-500">
-                Job {report.project.projectNumber}
-                {report.project.phaseLabel ? ` · ${report.project.phaseLabel}` : ''}
-              </p>
+              <p className="truncate text-sm font-semibold text-ink-900">{brandName}</p>
+              <p className="truncate text-xs text-ink-500">Communications</p>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            {report.capabilities.policyUpload && (
-              <button
-                type="button"
-                onClick={() => setShowPolicy(true)}
-                className="rounded-full border border-line bg-paper-0 px-3 py-1.5 text-xs font-medium text-ink-700 transition hover:bg-paper-100"
-              >
-                Policy
-              </button>
-            )}
+          <p className="mt-3 text-xs leading-relaxed text-ink-500">
+            Message the company, your adjuster, or start a group so everyone is on the same page.
+          </p>
+        </div>
+        <nav className="flex-1 overflow-y-auto p-2">
+          {sortedConversations.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => void selectConversation(c.id)}
+              className={`gpt-convo ${activeId === c.id ? 'gpt-convo-active' : ''}`}
+            >
+              <span className="gpt-convo-icon" aria-hidden>
+                {kindGlyph(c.kind)}
+              </span>
+              <span className="min-w-0 flex-1 text-left">
+                <span className="block truncate text-sm font-medium text-ink-900">{c.title}</span>
+                <span className="block truncate text-xs text-ink-500">{kindSubtitle(c)}</span>
+              </span>
+            </button>
+          ))}
+          {sortedConversations.length === 0 && (
+            <p className="px-3 py-6 text-sm text-ink-500">
+              No conversations are enabled for this job yet.
+            </p>
+          )}
+        </nav>
+        <div className="space-y-1 border-t border-line p-3">
+          {report.capabilities.policyUpload && (
             <button
               type="button"
-              onClick={() => setShowDetails(true)}
-              className="rounded-full border border-line bg-paper-0 px-3 py-1.5 text-xs font-medium text-ink-700 transition hover:bg-paper-100"
+              onClick={() => setShowPolicy(true)}
+              className="w-full rounded-xl px-3 py-2 text-left text-sm text-ink-700 hover:bg-paper-100"
             >
-              Job details
+              Upload policy
             </button>
-          </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowDetails(true)}
+            className="w-full rounded-xl px-3 py-2 text-left text-sm text-ink-700 hover:bg-paper-100"
+          >
+            Job details
+          </button>
         </div>
-      </header>
+      </aside>
 
-      {/* Thread */}
-      <div ref={scrollerRef} className="gpt-scroll flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
-          {empty ? (
-            <EmptyChat
-              brandName={brandName}
+      {sidebarOpen && (
+        <button
+          type="button"
+          className="gpt-sidebar-scrim lg:hidden"
+          aria-label="Close conversations"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Main chat */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="gpt-header shrink-0">
+          <div className="flex items-center justify-between gap-3 px-3 py-3 sm:px-5">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <button
+                type="button"
+                className="rounded-lg border border-line bg-paper-0 px-2.5 py-1.5 text-xs font-medium text-ink-700 lg:hidden"
+                onClick={() => setSidebarOpen(true)}
+              >
+                Chats
+              </button>
+              {active ? (
+                <>
+                  <span className="hidden text-ink-400 sm:inline" aria-hidden>
+                    {kindGlyph(active.kind)}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-ink-900">{active.title}</p>
+                    <p className="truncate text-xs text-ink-500">
+                      Job {report.project.projectNumber}
+                      {report.project.phaseLabel ? ` · ${report.project.phaseLabel}` : ''}
+                      {' · '}
+                      {participantLine(active, brandName)}
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-ink-600">Select a conversation</p>
+              )}
+            </div>
+            <CompanyMark
+              name={brandName}
               logoUrl={logoBroken ? null : report.brand.logoUrl}
               onLogoError={() => setLogoBroken(true)}
-              welcome={welcome}
-              customerName={report.share.customerName}
-              suggestions={suggestions}
-              onSuggest={(s) => void send(s)}
+              size="sm"
             />
-          ) : (
-            <ul className="space-y-6">
-              {thread.map((item) => {
-                if (item.kind === 'message') {
-                  const isUser = item.message.authorKind === 'homeowner';
-                  return (
-                    <ChatBubble
-                      key={item.message.id}
-                      isUser={isUser}
-                      brandName={brandName}
-                      logoUrl={logoBroken ? null : report.brand.logoUrl}
-                      onLogoError={() => setLogoBroken(true)}
-                      authorLabel={
-                        isUser
-                          ? 'You'
-                          : item.message.authorKind === 'staff'
-                            ? brandName
-                            : item.message.authorName ?? brandName
-                      }
-                      body={item.message.body}
-                    />
-                  );
-                }
-                return (
+          </div>
+        </header>
+
+        <div ref={scrollerRef} className="gpt-scroll flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
+            {!active ? (
+              <p className="text-center text-sm text-ink-500">
+                Choose a side conversation to get started.
+              </p>
+            ) : empty ? (
+              <EmptyConversation
+                conversation={active}
+                brandName={brandName}
+                logoUrl={logoBroken ? null : report.brand.logoUrl}
+                onLogoError={() => setLogoBroken(true)}
+                customerName={report.share.customerName}
+                suggestions={suggestionsFor(active, report)}
+                onSuggest={(s) => void send(s)}
+              />
+            ) : (
+              <ul className="space-y-5">
+                {messages.map((m) => (
                   <ChatBubble
-                    key={item.id}
-                    isUser={item.role === 'user'}
+                    key={m.id}
+                    message={m}
                     brandName={brandName}
                     logoUrl={logoBroken ? null : report.brand.logoUrl}
                     onLogoError={() => setLogoBroken(true)}
-                    authorLabel={item.role === 'user' ? 'You' : brandName}
-                    body={item.content}
                   />
-                );
-              })}
-              {busy && (
-                <li className="flex items-start gap-3">
-                  <CompanyMark
-                    name={brandName}
-                    logoUrl={logoBroken ? null : report.brand.logoUrl}
-                    onLogoError={() => setLogoBroken(true)}
-                    size="sm"
-                  />
-                  <div className="pt-1.5">
-                    <TypingDots />
-                  </div>
-                </li>
-              )}
-            </ul>
-          )}
+                ))}
+                {busy && active.kind === 'assistant' && (
+                  <li className="flex items-start gap-3">
+                    <CompanyMark
+                      name={brandName}
+                      logoUrl={logoBroken ? null : report.brand.logoUrl}
+                      onLogoError={() => setLogoBroken(true)}
+                      size="sm"
+                    />
+                    <div className="pt-1.5">
+                      <TypingDots />
+                    </div>
+                  </li>
+                )}
+              </ul>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* Composer */}
-      <div className="gpt-composer shrink-0">
-        <div className="mx-auto w-full max-w-3xl px-4 pb-4 pt-2 sm:px-6 sm:pb-6">
-          {error && (
-            <p className="mb-2 text-center text-xs text-danger-700">{error}</p>
-          )}
-          {!empty && suggestions.length > 0 && thread.length < 3 && (
-            <div className="mb-3 flex flex-wrap justify-center gap-2">
-              {suggestions.slice(0, 2).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void send(s)}
-                  className="rounded-full border border-line bg-paper-0 px-3 py-1.5 text-xs text-ink-700 transition hover:bg-paper-100 disabled:opacity-50"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          )}
-          <form onSubmit={onSubmit} className="gpt-input-shell">
-            <textarea
-              ref={inputRef}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={onKeyDown}
-              rows={1}
-              placeholder={`Message ${brandName}…`}
-              disabled={busy || (!report.capabilities.chat && !report.capabilities.insuranceQa)}
-              className="gpt-textarea"
-            />
-            <button
-              type="submit"
-              disabled={busy || !draft.trim()}
-              aria-label="Send message"
-              className="gpt-send"
-            >
-              <SendIcon />
-            </button>
-          </form>
-          <p className="mt-2 text-center text-[11px] text-ink-400">
-            Answers about your job and insurance are educational — confirm coverage with your
-            adjuster. Powered for {brandName}.
-          </p>
+        <div className="gpt-composer shrink-0">
+          <div className="mx-auto w-full max-w-3xl px-4 pb-4 pt-2 sm:px-6 sm:pb-6">
+            {error && <p className="mb-2 text-center text-xs text-danger-700">{error}</p>}
+            <form onSubmit={onSubmit} className="gpt-input-shell">
+              <textarea
+                ref={inputRef}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={onKeyDown}
+                rows={1}
+                placeholder={placeholder}
+                disabled={busy || !active}
+                className="gpt-textarea"
+              />
+              <button
+                type="submit"
+                disabled={busy || !draft.trim() || !active}
+                aria-label="Send message"
+                className="gpt-send"
+              >
+                <SendIcon />
+              </button>
+            </form>
+            <p className="mt-2 text-center text-[11px] text-ink-400">
+              {active?.kind === 'group'
+                ? 'Everyone in this group can see these messages — company and adjuster included.'
+                : active?.kind === 'adjuster'
+                  ? 'Direct with your adjuster. Use the group chat to loop in the company.'
+                  : active?.kind === 'company'
+                    ? `Direct with ${brandName}. Start a group chat to include your adjuster.`
+                    : `Answers are educational — confirm coverage with your adjuster.`}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -418,35 +446,36 @@ export function HomeownerReportPage() {
   );
 }
 
-function EmptyChat({
+function EmptyConversation({
+  conversation,
   brandName,
   logoUrl,
   onLogoError,
-  welcome,
   customerName,
   suggestions,
   onSuggest,
 }: {
+  conversation: PortalConversation;
   brandName: string;
   logoUrl: string | null;
   onLogoError: () => void;
-  welcome: string;
   customerName: string | null;
   suggestions: string[];
   onSuggest: (s: string) => void;
 }) {
   return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center px-2 text-center">
+    <div className="flex min-h-[50vh] flex-col items-center justify-center px-2 text-center">
       <div className="gpt-empty-mark">
         <CompanyMark name={brandName} logoUrl={logoUrl} onLogoError={onLogoError} size="lg" />
       </div>
-      <h1 className="mt-6 text-2xl font-semibold tracking-tight text-ink-900 sm:text-3xl">
-        {customerName ? `Hi ${customerName.split(' ')[0]}` : `Welcome`}
+      <h1 className="mt-5 text-xl font-semibold tracking-tight text-ink-900 sm:text-2xl">
+        {conversation.title}
       </h1>
-      <p className="mt-2 max-w-md text-sm leading-relaxed text-ink-600">{welcome}</p>
-      <p className="mt-1 text-xs text-ink-400">{brandName}</p>
+      <p className="mt-2 max-w-md text-sm leading-relaxed text-ink-600">
+        {emptyCopy(conversation, brandName, customerName)}
+      </p>
       {suggestions.length > 0 && (
-        <div className="mt-8 grid w-full max-w-xl gap-2 sm:grid-cols-2">
+        <div className="mt-7 grid w-full max-w-xl gap-2 sm:grid-cols-2">
           {suggestions.map((s) => (
             <button
               key={s}
@@ -464,43 +493,78 @@ function EmptyChat({
 }
 
 function ChatBubble({
-  isUser,
+  message,
   brandName,
   logoUrl,
   onLogoError,
-  authorLabel,
-  body,
 }: {
-  isUser: boolean;
+  message: PortalMessage;
   brandName: string;
   logoUrl: string | null;
   onLogoError: () => void;
-  authorLabel: string;
-  body: string;
 }) {
+  const isUser = message.authorKind === 'homeowner';
   if (isUser) {
     return (
       <li className="flex justify-end gap-3">
         <div className="max-w-[85%] sm:max-w-[75%]">
           <p className="mb-1 text-right text-[11px] font-medium text-ink-400">You</p>
           <div className="rounded-3xl rounded-br-md bg-ink-900 px-4 py-3 text-sm leading-relaxed text-white">
-            <p className="whitespace-pre-wrap">{body}</p>
+            <p className="whitespace-pre-wrap">{message.body}</p>
           </div>
         </div>
       </li>
     );
   }
 
+  const label =
+    message.authorKind === 'adjuster'
+      ? message.authorName ?? 'Adjuster'
+      : message.authorKind === 'staff'
+        ? message.authorName ?? brandName
+        : message.authorName ?? brandName;
+
   return (
     <li className="flex items-start gap-3">
-      <CompanyMark name={brandName} logoUrl={logoUrl} onLogoError={onLogoError} size="sm" />
+      <AuthorAvatar
+        kind={message.authorKind}
+        brandName={brandName}
+        logoUrl={logoUrl}
+        onLogoError={onLogoError}
+        name={label}
+      />
       <div className="min-w-0 max-w-[85%] flex-1 sm:max-w-[80%]">
-        <p className="mb-1 text-[11px] font-medium text-ink-500">{authorLabel}</p>
+        <p className="mb-1 text-[11px] font-medium text-ink-500">{label}</p>
         <div className="rounded-3xl rounded-tl-md bg-paper-0 px-4 py-3 text-sm leading-relaxed text-ink-800 shadow-card ring-1 ring-line/80">
-          <p className="whitespace-pre-wrap">{body}</p>
+          <p className="whitespace-pre-wrap">{message.body}</p>
         </div>
       </div>
     </li>
+  );
+}
+
+function AuthorAvatar({
+  kind,
+  brandName,
+  logoUrl,
+  onLogoError,
+  name,
+}: {
+  kind: PortalMessage['authorKind'];
+  brandName: string;
+  logoUrl: string | null;
+  onLogoError: () => void;
+  name: string;
+}) {
+  if (kind === 'adjuster') {
+    return (
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#1e3a5f] text-[10px] font-semibold text-white">
+        {companyInitials(name)}
+      </span>
+    );
+  }
+  return (
+    <CompanyMark name={brandName} logoUrl={logoUrl} onLogoError={onLogoError} size="sm" />
   );
 }
 
@@ -515,11 +579,8 @@ function CompanyMark({
   onLogoError?: () => void;
   size?: 'sm' | 'md' | 'lg';
 }) {
-  const dim =
-    size === 'lg' ? 'h-16 w-16' : size === 'md' ? 'h-10 w-10' : 'h-8 w-8';
+  const dim = size === 'lg' ? 'h-16 w-16' : size === 'md' ? 'h-10 w-10' : 'h-8 w-8';
   const text = size === 'lg' ? 'text-xl' : size === 'md' ? 'text-sm' : 'text-xs';
-  const initials = companyInitials(name);
-
   if (logoUrl) {
     return (
       <img
@@ -530,13 +591,12 @@ function CompanyMark({
       />
     );
   }
-
   return (
     <span
       className={`${dim} ${text} grid shrink-0 place-items-center rounded-full bg-[#0B3D2E] font-semibold text-white shadow-card`}
       aria-hidden
     >
-      {initials}
+      {companyInitials(name)}
     </span>
   );
 }
@@ -545,8 +605,91 @@ function companyInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return 'RC';
   if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
-  // Prefer first letters of first two meaningful words (skip "Recovery", "Services" if 3+)
   return (parts[0]![0]! + parts[1]![0]!).toUpperCase();
+}
+
+function kindGlyph(kind: PortalConversation['kind']): string {
+  switch (kind) {
+    case 'assistant':
+      return '✦';
+    case 'company':
+      return '⌂';
+    case 'adjuster':
+      return '◇';
+    case 'group':
+      return '☰';
+  }
+}
+
+function kindSubtitle(c: PortalConversation): string {
+  switch (c.kind) {
+    case 'assistant':
+      return 'Job & insurance Q&A';
+    case 'company':
+      return 'Direct message';
+    case 'adjuster':
+      return 'Direct with adjuster';
+    case 'group':
+      return 'You · company · adjuster';
+  }
+}
+
+function participantLine(c: PortalConversation, brandName: string): string {
+  const parts = ['You'];
+  if (c.includesCompany) parts.push(brandName);
+  if (c.includesAdjuster) parts.push('Adjuster');
+  if (c.includesAssistant) parts.push('Assistant');
+  return parts.join(' · ');
+}
+
+function emptyCopy(
+  c: PortalConversation,
+  brandName: string,
+  customerName: string | null,
+): string {
+  const hi = customerName ? `${customerName.split(' ')[0]}, ` : '';
+  switch (c.kind) {
+    case 'assistant':
+      return `${hi}ask about your schedule, drying progress, or insurance for this job.`;
+    case 'company':
+      return `${hi}message ${brandName} directly about access, schedule, or what is happening on site.`;
+    case 'adjuster':
+      return `${hi}message your insurance adjuster directly. The restoration company will not see this thread.`;
+    case 'group':
+      return `${hi}put ${brandName} and your adjuster in one thread so everyone stays aligned.`;
+  }
+}
+
+function suggestionsFor(c: PortalConversation, report: HomeownerReport): string[] {
+  if (c.kind === 'assistant') {
+    return [
+      'What is the tentative schedule?',
+      'Who should I call?',
+      'How is drying going?',
+      'What should I know about my claim?',
+    ].slice(0, 4);
+  }
+  if (c.kind === 'company') {
+    return [
+      'When will the crew be back on site?',
+      'Can someone call me about access?',
+      'Please update me on progress.',
+    ];
+  }
+  if (c.kind === 'adjuster') {
+    return [
+      'Can you confirm what is approved so far?',
+      'When is the next inspection?',
+      report.claim?.claimNumber
+        ? `This is about claim ${report.claim.claimNumber}.`
+        : 'I have a question about my claim.',
+    ];
+  }
+  return [
+    'Can we align on next steps for this claim?',
+    'Please confirm the schedule together.',
+    'I want both of you on the same page about scope.',
+  ];
 }
 
 function DetailsDrawer({
@@ -586,14 +729,6 @@ function DetailsDrawer({
               <p className="mt-1 text-ink-800">{location}</p>
             </section>
           )}
-          {report.project.phaseLabel && (
-            <section>
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-500">Progress</h3>
-              <p className="mt-1 text-ink-800">
-                {report.project.phaseLabel} · {report.project.status.replace('_', ' ')}
-              </p>
-            </section>
-          )}
           {report.schedule && (
             <section>
               <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-500">
@@ -602,14 +737,7 @@ function DetailsDrawer({
               <dl className="mt-2 space-y-1.5">
                 <Row label="Start" value={fmtDate(report.schedule.scheduledStartAt)} />
                 <Row label="Target completion" value={fmtDate(report.schedule.targetCompletionAt)} />
-                <Row label="Work started" value={fmtDate(report.schedule.startedAt)} />
               </dl>
-            </section>
-          )}
-          {report.drying && (
-            <section>
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-500">Drying</h3>
-              <p className="mt-1 text-ink-800">{report.drying.headline}</p>
             </section>
           )}
           {(report.contacts.office || report.contacts.adjuster || report.contacts.field) && (
@@ -630,54 +758,9 @@ function DetailsDrawer({
               <dl className="mt-2 space-y-1.5">
                 <Row label="Carrier" value={report.claim.carrier ?? '—'} />
                 <Row label="Claim #" value={report.claim.claimNumber ?? '—'} />
-                {report.claim.deductibleCents != null && (
-                  <Row
-                    label="Deductible"
-                    value={`$${(report.claim.deductibleCents / 100).toFixed(2)}`}
-                  />
-                )}
               </dl>
             </section>
           )}
-          {report.milestones && report.milestones.length > 0 && (
-            <section>
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-500">
-                Milestones
-              </h3>
-              <ul className="mt-2 space-y-2">
-                {report.milestones.map((m) => (
-                  <li key={`${m.label}-${m.dueAt}`} className="flex justify-between gap-2">
-                    <span className="text-ink-800">{m.label}</span>
-                    <span className="text-ink-500">{m.completedAt ? 'Done' : fmtDate(m.dueAt)}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-          {report.updates && report.updates.length > 0 && (
-            <section>
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-500">Updates</h3>
-              <ul className="mt-2 space-y-3">
-                {report.updates.map((u, i) => (
-                  <li key={`${u.createdAt}-${i}`} className="rounded-xl bg-paper-50 px-3 py-2">
-                    {u.subject && <p className="font-medium text-ink-900">{u.subject}</p>}
-                    <p className="mt-0.5 whitespace-pre-wrap text-ink-700">{u.body}</p>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-          <section>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-500">
-              For {report.regulation.regionLabel}
-            </h3>
-            <ul className="mt-2 list-disc space-y-1.5 pl-4 text-ink-700">
-              {report.regulation.bullets.slice(0, 3).map((b) => (
-                <li key={b.slice(0, 32)}>{b}</li>
-              ))}
-            </ul>
-            <p className="mt-2 text-xs text-ink-400">{report.regulation.disclaimer}</p>
-          </section>
         </div>
       </aside>
     </div>
@@ -723,8 +806,7 @@ function PolicyDrawer({
         </div>
         <form onSubmit={onUpload} className="space-y-3 overflow-y-auto px-5 py-4">
           <p className="text-sm text-ink-600">
-            Paste declarations text or upload a text file. We use it only to answer your questions
-            in this chat.
+            Paste declarations text or upload a text file for Q&amp;A in the assistant chat.
           </p>
           <input
             value={policyName}
