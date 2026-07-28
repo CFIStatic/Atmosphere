@@ -166,7 +166,7 @@ export async function searchWeb(query: string, limit = 10): Promise<SearchHit[]>
       try {
         const page = await browser.newPage({
           userAgent:
-            'Mozilla/5.0 (compatible; AtmosphereSalesAgent/1.0; +https://atmosphere.app)',
+            'Mozilla/5.0 (compatible; AtmosphereOutreach/1.0; +https://atmosphere.app)',
         });
         await page.goto('https://html.duckduckgo.com/html/', {
           waitUntil: 'domcontentloaded',
@@ -194,7 +194,7 @@ export async function searchWikipedia(query: string): Promise<SearchHit[]> {
   try {
     const url = `https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(query)}&limit=5&namespace=0&format=json`;
     const res = await fetch(url, {
-      headers: { 'User-Agent': 'AtmosphereSalesAgent/1.0' },
+      headers: { 'User-Agent': 'AtmosphereOutreach/1.0' },
       signal: AbortSignal.timeout(12_000),
     });
     if (!res.ok) return [];

@@ -1,49 +1,54 @@
-# Sales Agent — outbound prospecting
+# Atmosphere internal outreach pipeline
 
-Branch: `cursor/sales-agent-outbound-18e2`
+Branch: `cursor/atmosphere-internal-outreach-pipeline-3097`
 
-The Sales Agent sits on a **left-nav tab** in Atmosphere. A rep names a
-**territory** and a **sales focus**; the agent then researches businesses in
-that area, crawls public pages for decision-makers, personalises outreach,
-keeps emailing until someone answers, and books an in-person meeting.
+Forked from the outbound Sales Agent (`cursor/sales-agent-outbound-18e2`) and
+**retargeted solely for Atmosphere's own GTM**. This is not a tenant product for
+customer sales teams — it is our internal machine for marketing Atmosphere,
+finding restoration/construction buyers, automating outreach, and booking
+**product demos** so salespeople can spend the day closing.
 
-This is outbound prospecting — not the earlier CRM-estimate plan.
+Left-nav label: **Outreach** (Internal).
 
 ---
 
-## 1. What we are building
+## 1. Goal
 
-Flow the agent owns end-to-end:
+Automate the top of Atmosphere's funnel so human reps live in demos and closes:
 
 ```
-territory + focus
-  → research businesses in the area (Overpass/Nominatim + optional LLM)
-  → crawl public websites / about / contact pages for decision-makers
-  → research each person (hooks for personalisation)
-  → send a personalised email
-  → follow up on a cadence until they reply
-  → classify the reply and schedule a meeting autonomously
+territory + Atmosphere ICP
+  → research restoration / mitigation / rebuild companies
+  → crawl public pages for owners & ops decision-makers
+  → personalise Atmosphere product outreach
+  → follow up until they reply
+  → book a product demo (estimators, web access, field tools, audit trail)
+  → salesperson closes
 ```
 
-The human's job is to set the campaign (territory, focus, value prop, sender
-identity, availability) and supervise. The agent does the research and the
-outreach loop.
+Defaults pitch **Atmosphere** (value prop, sender org, demo CTA). Campaigns can
+override ICP focus or pitch copy, but empty fields fall back to product defaults
+in `backend/src/sales/atmosphereProduct.ts`.
 
 ---
 
 ## 2. Data model
 
-All tables in `public`, org-scoped, RLS via `private.is_org_member` /
-`private.can_sell`. Migration: `supabase/migrations/20260728140000_sales_agent.sql`.
+Same schema as the outbound Sales Agent (org-scoped, RLS via
+`private.is_org_member` / `private.can_sell`):
 
 | Table | Purpose |
 | ----- | ------- |
-| `sales_campaigns` | Territory, focus, sender, availability, pipeline status |
-| `sales_businesses` | Businesses found in the territory |
+| `sales_campaigns` | Territory, ICP focus, Atmosphere pitch, sender, availability |
+| `sales_businesses` | Buyer companies found in the territory |
 | `sales_contacts` | Decision-makers with research hooks |
 | `sales_outreach` | Outbound + inbound email trail |
-| `sales_meetings` | Proposed / confirmed meetings + ICS |
+| `sales_meetings` | Booked **product demos** + ICS |
 | `sales_events` | Campaign timeline |
+| `sales_people_searches` | NL people-search history |
+
+Migrations: `supabase/migrations/20260728140000_sales_agent.sql`,
+`…_sales_people_search.sql`.
 
 Campaign statuses: `draft → researching → crawling → outreach → following_up → scheduling → completed` (plus `paused` / `failed`).
 
@@ -51,86 +56,73 @@ Campaign statuses: `draft → researching → crawling → outreach → followin
 
 ## 3. Backend surface
 
-Router: `backend/src/routes/sales.ts` mounted at `/api/sales`.
+Router: `backend/src/routes/sales.ts` at `/api/sales` (unchanged paths).
 
 | Method | Path | Description |
 | ------ | ---- | ----------- |
 | GET | `/api/sales/status` | Capabilities (LLM, crawl, email, demo) |
-| GET/POST | `/api/sales/campaigns` | List / create |
+| GET/POST | `/api/sales/campaigns` | List / create (Atmosphere defaults applied) |
 | GET | `/api/sales/campaigns/:id` | Detail + counts |
 | PATCH | `/api/sales/campaigns/:id` | Update draft settings |
 | POST | `/api/sales/campaigns/:id/start` | Kick the agent |
 | POST | `/api/sales/campaigns/:id/pause` | Pause |
 | POST | `/api/sales/campaigns/:id/resume` | Resume follow-ups |
-| GET | `/api/sales/campaigns/:id/businesses` | Pipeline businesses |
+| GET | `/api/sales/campaigns/:id/businesses` | Buyer companies |
 | GET | `/api/sales/campaigns/:id/contacts` | Decision-makers |
 | GET | `/api/sales/campaigns/:id/outreach` | Email trail |
-| GET | `/api/sales/campaigns/:id/meetings` | Booked meetings |
+| GET | `/api/sales/campaigns/:id/meetings` | Booked demos |
 | GET | `/api/sales/campaigns/:id/events` | Timeline |
 | POST | `/api/sales/outreach/:id/reply` | Record / simulate an inbound reply |
 | POST | `/api/sales/meetings/:id/confirm` | Human confirm (optional) |
+| POST/GET | `/api/sales/people-search` | NL buyer lookup |
 
-Orchestration lives in `backend/src/sales/` (`research`, `crawl`, `email`, `schedule`, `runner`).
+Orchestration: `backend/src/sales/` (`atmosphereProduct`, `research`, `crawl`,
+`email`, `schedule`, `runner`, `peopleSearch`).
 
 ---
 
 ## 4. How each stage works
 
 ### Research
-Geocode the territory with Nominatim, query Overpass for amenity/shop nodes
-matching the sales focus, and enrich with an LLM when `ANTHROPIC_API_KEY` is
-set. Without external reach, a deterministic **demo** seed list still fills the
-pipeline so the UI is exercisable.
+Geocode the territory, query Overpass with **restoration/construction-first**
+filters (mitigation, rebuild GC, trade offices), enrich with Claude when
+`ANTHROPIC_API_KEY` is set. Demo seed list is restoration buyers (water, fire,
+mold, rebuild, disaster services, estimating groups).
 
 ### Crawl
-Playwright fetches the business website (home, `/about`, `/contact`, `/team`)
-and extracts emails, names, and titles. URL guardrails from Web Access apply —
-only `http(s)` public pages, no credential stuffing.
+Playwright fetches public website pages and extracts emails, names, titles.
+Prefers owners / ops / estimator leads (`ICP_BUYER_TITLES`).
 
 ### Outreach
-The agent drafts a short personalised email from research hooks. Delivery uses
-Resend when `RESEND_API_KEY` is set; otherwise messages are stored as
-`simulated` so the rest of the loop can be tested. Follow-ups fire on
-`next_followup_at` (day 3, day 7, day 14 by default).
+Drafts short emails that **pitch Atmosphere** and CTA a product demo. Resend when
+`RESEND_API_KEY` is set; otherwise `simulated`. Follow-ups on day 3 / 7 / 14.
 
-### Scheduling
-When a reply is classified as interested, the agent picks the next free slot
-from the campaign's `availability`, writes a `sales_meetings` row, emails a
-confirmation + ICS, and marks the contact `meeting_booked`.
+### Demo scheduling
+Positive reply → next free slot from campaign availability → `sales_meetings`
+row titled `Atmosphere product demo — {company}` → confirmation email + ICS.
 
 ---
 
 ## 5. Frontend
 
-- Left-hand primary nav includes **Sales Agent** (`AppShell`).
-- `/sales` — workspace with two modes:
-  - **Find people** — natural-language lookup with sourced web crawl results
-  - **Campaigns** — territory outbound pipeline
-- `/sales/:id` — deep link into one campaign.
+- Left-hand primary nav: **Outreach** (`AppShell`).
+- `/sales` — workspace:
+  - **Find people** — NL lookup tuned for restoration buyers
+  - **Campaigns** — territory Atmosphere outreach pipeline
+- `/sales/:id` — campaign detail (businesses, contacts, outreach, demos, events)
 
-### People search (text → real web intel)
-
-`POST /api/sales/people-search` with `{ "query": "director of facilities at ABC Supply in Milwaukee" }`:
-
-1. Parses role / company / location
-2. Runs multiple DuckDuckGo (and Bing fallback) searches
-3. Crawls company leadership pages, LinkedIn public profiles, Wikipedia, directories
-4. Extracts and ranks candidates with evidence quotes + source URLs
-5. Optionally re-ranks with Claude when `ANTHROPIC_API_KEY` is set
-6. Persists to `sales_people_searches` (migration `20260728143000_sales_people_search.sql`)
-
-The UI shows best match, alternate candidates, confidence, evidence, crawled sources, and a research trace.
+ICP focus, Atmosphere pitch, and sender name are prefilled for new campaigns.
 
 ---
 
 ## 6. Guardrails
 
 - Outbound email requires a configured sender and respects a per-org rate limit.
-- Contacts can be marked unsubscribed; the agent never emails them again.
+- Contacts marked unsubscribed are never emailed again.
 - Lead/website text is untrusted input — delimited in prompts, never executed.
-- The agent proposes and books meetings only inside the availability window the
-  human configured.
-- Audit: every campaign run writes `agent_runs` with `agent_key='sales_agent'`.
+- Demos only book inside the human-configured availability window.
+- Audit: every campaign run writes `agent_runs` with `agent_key='sales_agent'`
+  (catalog name: **Atmosphere Outreach**).
 
 ---
 
@@ -142,3 +134,13 @@ The UI shows best match, alternate candidates, confidence, evidence, crawled sou
 | `RESEND_API_KEY` | Real email send (optional) |
 | `SALES_FROM_EMAIL` | Default From address |
 | `SALES_DEMO_MODE` | Force demo discovery (`true`/`false`; auto when offline) |
+
+---
+
+## 8. Relationship to other branches
+
+| Branch | Role |
+| ------ | ---- |
+| `cursor/sales-agent-outbound-18e2` | Generic outbound Sales Agent this fork started from |
+| `cursor/email-marketing-9ac4` | Storm email marketing for *tenant* books of business |
+| This branch | Atmosphere-only GTM outreach + demo booking |

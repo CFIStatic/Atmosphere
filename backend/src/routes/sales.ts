@@ -7,6 +7,12 @@ import { HttpError } from '../lib/errors.js';
 import { config } from '../config.js';
 import { emailDeliveryEnabled } from '../sales/email.js';
 import {
+  DEFAULT_SALES_FOCUS,
+  DEFAULT_SENDER_NAME,
+  DEFAULT_VALUE_PROP,
+  resolveCampaignMessaging,
+} from '../sales/atmosphereProduct.js';
+import {
   createCampaignSchema,
   updateCampaignSchema,
   replySchema,
@@ -94,9 +100,14 @@ salesRouter.post('/campaigns', async (req: Request, res: Response, next: NextFun
     const body = createCampaignSchema.parse(req.body);
     const { orgId, userId, supabase } = await requireOrgContext(req);
 
+    const messaging = resolveCampaignMessaging({
+      salesFocus: body.salesFocus,
+      valueProp: body.valueProp,
+      senderName: body.senderName,
+    });
     const name =
       body.name?.trim() ||
-      `${body.salesFocus.trim()} · ${body.territory.trim()}`.slice(0, 200);
+      `Atmosphere outreach · ${messaging.salesFocus.trim()} · ${body.territory.trim()}`.slice(0, 200);
 
     const { data, error } = await supabase
       .from('sales_campaigns')
@@ -105,11 +116,11 @@ salesRouter.post('/campaigns', async (req: Request, res: Response, next: NextFun
         created_by: userId,
         name,
         territory: body.territory,
-        sales_focus: body.salesFocus,
-        value_prop: body.valueProp ?? null,
-        sender_name: body.senderName ?? null,
+        sales_focus: messaging.salesFocus,
+        value_prop: messaging.valueProp || DEFAULT_VALUE_PROP,
+        sender_name: messaging.senderName || DEFAULT_SENDER_NAME,
         sender_email: body.senderEmail ?? null,
-        meeting_duration_min: body.meetingDurationMin ?? 30,
+        meeting_duration_min: body.meetingDurationMin ?? 45,
         availability: body.availability ?? {
           mon: ['09:00-12:00', '13:00-17:00'],
           tue: ['09:00-12:00', '13:00-17:00'],
@@ -129,7 +140,7 @@ salesRouter.post('/campaigns', async (req: Request, res: Response, next: NextFun
       campaignId: data.id,
       actorType: 'user',
       eventType: 'campaign_created',
-      detail: `Campaign created for ${body.territory} / ${body.salesFocus}.`,
+      detail: `Atmosphere outreach campaign for ${body.territory} / ${messaging.salesFocus || DEFAULT_SALES_FOCUS}.`,
     });
 
     res.status(201).json({ campaign: serializeCampaign(data) });

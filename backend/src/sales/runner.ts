@@ -1,6 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createUserClient } from '../lib/supabase.js';
 import { startRun, recordStep, finishRun, auditWriter } from '../lib/auditLog.js';
+import {
+  DEFAULT_SENDER_NAME,
+  DEFAULT_SENDER_ORG,
+  DEFAULT_VALUE_PROP,
+  demoMeetingDescription,
+  demoMeetingTitle,
+  resolveCampaignMessaging,
+} from './atmosphereProduct.js';
 import { researchBusinesses } from './research.js';
 import { crawlBusinessContacts } from './crawl.js';
 import {
@@ -15,12 +23,11 @@ import { logSalesEvent } from './serialize.js';
 import type { ReplyIntent } from './types.js';
 
 /**
- * Campaign runner.
+ * Atmosphere internal outreach runner.
  *
  * One campaign advances through research → crawl → outreach → follow-ups →
- * scheduling. Work is kicked off asynchronously from the HTTP route so the
- * request can return immediately; progress is visible via campaign status,
- * events, and the audit ledger.
+ * product-demo scheduling. Built so Atmosphere salespeople can automate
+ * outbound and spend the day closing customers on demos.
  */
 
 const activeCampaigns = new Set<string>();
@@ -340,7 +347,13 @@ async function sendQueuedOutreach(input: {
   const { data: contacts } = await query.limit(40);
   if (!contacts?.length) return;
 
-  const senderName = campaign.sender_name || 'Atmosphere Sales';
+  const messaging = resolveCampaignMessaging({
+    salesFocus: campaign.sales_focus,
+    valueProp: campaign.value_prop,
+    senderName: campaign.sender_name,
+    senderOrg: DEFAULT_SENDER_ORG,
+  });
+  const senderName = messaging.senderName;
   const fromEmail = salesFromAddress(campaign.sender_email);
 
   for (const contact of contacts) {
@@ -358,9 +371,10 @@ async function sendQueuedOutreach(input: {
 
     const draft = await draftPersonalizedEmail({
       senderName,
+      senderOrg: messaging.senderOrg,
       territory: campaign.territory,
-      salesFocus: campaign.sales_focus,
-      valueProp: campaign.value_prop,
+      salesFocus: messaging.salesFocus,
+      valueProp: messaging.valueProp || DEFAULT_VALUE_PROP,
       businessName,
       contactName: contact.full_name,
       contactTitle: contact.title,
@@ -568,12 +582,12 @@ export async function handleInboundReply(input: {
     return { intent };
   }
 
-  const title = `Meeting: ${business?.name ?? 'Prospect'} × Atmosphere`;
-  const location = business?.address || campaign.territory || 'In person';
+  const title = demoMeetingTitle(business?.name);
+  const location = business?.address || campaign.territory || 'Video demo';
   const fromEmail = salesFromAddress(campaign.sender_email);
   const ics = buildIcs({
     title,
-    description: `In-person meeting about ${campaign.sales_focus}. Booked by the Atmosphere Sales Agent.`,
+    description: demoMeetingDescription(campaign.sales_focus),
     location,
     startsAt: slot.startsAt,
     endsAt: slot.endsAt,
@@ -594,7 +608,7 @@ export async function handleInboundReply(input: {
       location,
       status: 'confirmed',
       booked_by: 'agent',
-      notes: 'Autonomously booked after a positive reply.',
+      notes: 'Autonomously booked after a positive reply — Atmosphere product demo.',
       ics,
     })
     .select('*')
@@ -606,14 +620,14 @@ export async function handleInboundReply(input: {
 
   const confirmBody = `Hi ${contact.full_name.split(' ')[0]},
 
-Great — I've booked us for an in-person meeting:
+Great — I've booked an Atmosphere product demo for us:
 
 ${formatSlot(slot.startsAt, slot.endsAt)}
-Location: ${location}
+Location / join: ${location}
 
-A calendar invite is attached conceptually (ICS stored on the meeting). Looking forward to speaking about ${campaign.sales_focus}.
+We'll walk through estimators, web access, technician tools, and the audit trail so you can see how it fits ${business?.name ?? 'your team'}. A calendar invite is attached conceptually (ICS stored on the meeting).
 
-– ${campaign.sender_name || 'Atmosphere Sales'}`;
+– ${campaign.sender_name || DEFAULT_SENDER_NAME}`;
 
   await sendEmail({
     to: contact.email,

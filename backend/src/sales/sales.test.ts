@@ -5,6 +5,37 @@ import { classifyReply, nextFollowupAt, draftPersonalizedEmail } from './email.j
 import { researchBusinesses } from './research.js';
 import { parsePeopleQuery, runPeopleSearch } from './peopleSearch.js';
 import { searchWeb } from './webSearch.js';
+import {
+  DEFAULT_SALES_FOCUS,
+  DEFAULT_VALUE_PROP,
+  demoMeetingTitle,
+  resolveCampaignMessaging,
+} from './atmosphereProduct.js';
+
+describe('atmosphere product defaults', () => {
+  it('fills Atmosphere GTM messaging when campaign fields are empty', () => {
+    const messaging = resolveCampaignMessaging({});
+    assert.equal(messaging.salesFocus, DEFAULT_SALES_FOCUS);
+    assert.equal(messaging.valueProp, DEFAULT_VALUE_PROP);
+    assert.match(messaging.senderOrg, /Atmosphere/i);
+  });
+
+  it('keeps explicit campaign overrides', () => {
+    const messaging = resolveCampaignMessaging({
+      salesFocus: 'mold remediation shops',
+      valueProp: 'Custom pitch',
+      senderName: 'Sam',
+    });
+    assert.equal(messaging.salesFocus, 'mold remediation shops');
+    assert.equal(messaging.valueProp, 'Custom pitch');
+    assert.equal(messaging.senderName, 'Sam');
+  });
+
+  it('titles booked meetings as product demos', () => {
+    assert.match(demoMeetingTitle('Ridge Rebuild'), /Atmosphere product demo/);
+    assert.match(demoMeetingTitle('Ridge Rebuild'), /Ridge Rebuild/);
+  });
+});
 
 describe('sales schedule', () => {
   it('picks a future weekday slot inside availability', () => {
@@ -57,7 +88,7 @@ describe('sales schedule', () => {
 
 describe('sales email', () => {
   it('classifies interested and unsubscribe replies', async () => {
-    assert.equal(await classifyReply('Sounds good, let’s meet in person next week'), 'interested');
+    assert.equal(await classifyReply('Sounds good, let’s meet for a product demo next week'), 'interested');
     assert.equal(await classifyReply('Please unsubscribe me from this list'), 'unsubscribe');
     assert.equal(await classifyReply('Not interested, thanks'), 'not_interested');
   });
@@ -70,32 +101,39 @@ describe('sales email', () => {
     assert.equal(nextFollowupAt(from, 3), null);
   });
 
-  it('drafts a template email without an API key', async () => {
+  it('drafts an Atmosphere product email without an API key', async () => {
     const draft = await draftPersonalizedEmail({
       senderName: 'Sam',
+      senderOrg: 'Atmosphere',
       territory: 'Austin, TX',
-      salesFocus: 'property managers',
-      businessName: 'Harbor Properties',
+      salesFocus: 'water mitigation companies',
+      businessName: 'Austin Water Mitigation Pros',
       contactName: 'Alex Rivera',
-      contactTitle: 'GM',
+      contactTitle: 'Owner',
       hooks: ['Runs operations at Harbor'],
       sequenceStep: 1,
     });
-    assert.ok(draft.subject.includes('Harbor'));
+    assert.ok(draft.subject.includes('Atmosphere') || draft.subject.includes('Austin'));
     assert.match(draft.body, /Alex/);
     assert.match(draft.body, /Sam/);
+    assert.match(draft.body, /Atmosphere|demo/i);
   });
 });
 
 describe('sales research', () => {
-  it('returns demo businesses when forced', async () => {
-    const result = await researchBusinesses('Austin, TX', 'property managers', {
+  it('returns demo restoration buyers when forced', async () => {
+    const result = await researchBusinesses('Austin, TX', 'water mitigation', {
       forceDemo: true,
       limit: 4,
     });
     assert.equal(result.mode, 'demo');
     assert.equal(result.businesses.length, 4);
     assert.ok(result.businesses[0].name.includes('Austin'));
+    assert.ok(
+      /mitigation|restoration|mold|rebuild|disaster|estimating/i.test(
+        result.businesses.map((b) => `${b.name} ${b.category}`).join(' '),
+      ),
+    );
   });
 });
 

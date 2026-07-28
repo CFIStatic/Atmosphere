@@ -10,7 +10,7 @@ import { parseHttpUrl } from '../lib/webUrlGuard.js';
  */
 
 const USER_AGENT =
-  'Mozilla/5.0 (compatible; AtmosphereSalesAgent/1.0; +https://atmosphere.app)';
+  'Mozilla/5.0 (compatible; AtmosphereOutreach/1.0; +https://atmosphere.app)';
 
 function isPrivateIPv4(address: string): boolean {
   const parts = address.split('.').map(Number);

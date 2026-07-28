@@ -1,12 +1,19 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../config.js';
+import {
+  ATMOSPHERE_PRODUCT_BLURB,
+  ATMOSPHERE_PRODUCT_NAME,
+  DEMO_CTA,
+  resolveCampaignMessaging,
+} from './atmosphereProduct.js';
 import type { DraftEmail, ReplyIntent } from './types.js';
 
 /**
- * Personalised email drafting + optional delivery via Resend.
+ * Atmosphere GTM email drafting + optional delivery via Resend.
  *
- * Without RESEND_API_KEY (or SALES_FROM_EMAIL), messages are marked simulated
- * so the follow-up / scheduling loop can still be exercised end-to-end.
+ * Outreach pitches Atmosphere to restoration/construction buyers and CTAs a
+ * product demo. Without RESEND_API_KEY, messages are marked simulated so the
+ * follow-up / demo-booking loop can still be exercised end-to-end.
  */
 
 export function emailDeliveryEnabled(): boolean {
@@ -17,7 +24,7 @@ export function salesFromAddress(fallback?: string | null): string {
   return (
     process.env.SALES_FROM_EMAIL ||
     fallback ||
-    'sales-agent@atmosphere.local'
+    'outreach@atmosphere.local'
   );
 }
 
@@ -48,6 +55,13 @@ export async function draftPersonalizedEmail(input: {
     sequenceStep,
   } = input;
 
+  const messaging = resolveCampaignMessaging({
+    salesFocus,
+    valueProp,
+    senderName,
+    senderOrg,
+  });
+
   if (config.anthropic.apiKey) {
     try {
       const client = new Anthropic({ apiKey: config.anthropic.apiKey });
@@ -57,19 +71,23 @@ export async function draftPersonalizedEmail(input: {
         messages: [
           {
             role: 'user',
-            content: `Write a short B2B outreach email (sequence step ${sequenceStep}).
+            content: `Write a short B2B outbound email selling ${ATMOSPHERE_PRODUCT_NAME} (sequence step ${sequenceStep}).
+
+Product context:
+${ATMOSPHERE_PRODUCT_BLURB}
 
 Rules:
 - 90–140 words max for step 1; shorter for follow-ups
-- Specific to the person and business; no hype, no fake claims
-- Soft CTA: suggest a brief in-person meeting
+- Specific to the person and restoration/construction business; no hype, no fake claims
+- Pitch Atmosphere as the product — estimators, web access, field tools, audit trail
+- Soft CTA: suggest ${DEMO_CTA} so a salesperson can walk them through the product and close
 - Plain text only
 - Return JSON: {"subject":"...","body":"..."}
 
-Sender: ${senderName}${senderOrg ? ` at ${senderOrg}` : ''}
+Sender: ${messaging.senderName} at ${messaging.senderOrg}
 Territory: ${territory}
-What we sell / focus: ${salesFocus}
-Value prop: ${valueProp || '(not provided)'}
+ICP / buyer focus: ${messaging.salesFocus}
+Value prop: ${messaging.valueProp}
 Company: ${businessName}
 Contact: ${contactName}${contactTitle ? `, ${contactTitle}` : ''}
 Research: ${researchSummary || 'n/a'}
@@ -112,46 +130,53 @@ function templateEmail(input: {
   hooks: string[];
   sequenceStep: number;
 }): DraftEmail {
+  const messaging = resolveCampaignMessaging({
+    salesFocus: input.salesFocus,
+    valueProp: input.valueProp,
+    senderName: input.senderName,
+    senderOrg: input.senderOrg,
+  });
   const first = input.contactName.split(/\s+/)[0] || input.contactName;
   const hook = input.hooks[0] ? ` I noticed ${input.hooks[0].toLowerCase()}.` : '';
-  const orgBit = input.senderOrg ? ` with ${input.senderOrg}` : '';
 
   if (input.sequenceStep === 1) {
     return {
-      subject: `Quick idea for ${input.businessName}`,
+      subject: `${ATMOSPHERE_PRODUCT_NAME} for ${input.businessName}`,
       body: `Hi ${first},
 
-I'm ${input.senderName}${orgBit}. We help teams in ${input.territory} with ${input.salesFocus}.${hook}
-${input.valueProp ? `\n${input.valueProp}\n` : ''}
-Would you be open to a short in-person meeting next week to see if there's a fit? Happy to work around your schedule.
+I'm ${messaging.senderName} at ${messaging.senderOrg}. We build AI for restoration and construction teams in ${input.territory}.${hook}
+
+${messaging.valueProp}
+
+Would you be open to ${DEMO_CTA} next week? Happy to work around your schedule — our reps live in demos and closing conversations all day.
 
 Best,
-${input.senderName}`,
+${messaging.senderName}`,
     };
   }
 
   if (input.sequenceStep === 2) {
     return {
-      subject: `Re: Quick idea for ${input.businessName}`,
+      subject: `Re: ${ATMOSPHERE_PRODUCT_NAME} for ${input.businessName}`,
       body: `Hi ${first},
 
-Just floating this back to the top in case it got buried. Still glad to meet briefly about ${input.salesFocus} for ${input.businessName}.
+Just floating this back up in case it got buried. Still glad to show ${input.businessName} a short Atmosphere product demo — estimators, web access, and field tools in one walkthrough.
 
 If now isn't right, tell me and I'll close the loop.
 
 Thanks,
-${input.senderName}`,
+${messaging.senderName}`,
     };
   }
 
   return {
-    subject: `Re: Quick idea for ${input.businessName}`,
+    subject: `Re: ${ATMOSPHERE_PRODUCT_NAME} for ${input.businessName}`,
     body: `Hi ${first},
 
-Last note from me — if a quick in-person chat on ${input.salesFocus} would be useful, I'm happy to book a time that works for you. Otherwise I'll assume the timing isn't right.
+Last note from me — if a quick Atmosphere demo would help ${input.businessName} move faster on ${messaging.salesFocus}, I'm happy to book a time. Otherwise I'll assume the timing isn't right.
 
 Appreciate your time,
-${input.senderName}`,
+${messaging.senderName}`,
   };
 }
 
@@ -214,7 +239,7 @@ export async function classifyReply(body: string): Promise<ReplyIntent> {
     return 'ask_later';
   }
   if (
-    /\b(meet|meeting|schedule|book|calendar|available|coffee|come by|visit|in person|sounds good|interested|let'?s talk)\b/.test(
+    /\b(meet|meeting|schedule|book|calendar|available|coffee|come by|visit|in person|demo|walkthrough|sounds good|interested|let'?s talk|show me|product)\b/.test(
       text,
     )
   ) {

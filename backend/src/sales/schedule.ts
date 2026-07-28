@@ -94,7 +94,7 @@ export function buildIcs(input: {
   return [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Atmosphere//Sales Agent//EN',
+    'PRODID:-//Atmosphere//Internal Outreach//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:REQUEST',
     'BEGIN:VEVENT',
