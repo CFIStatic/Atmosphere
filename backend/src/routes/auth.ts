@@ -11,6 +11,7 @@ import {
 } from '../lib/session.js';
 import {
   credentialsSchema,
+  changePasswordSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
   pinSchema,
@@ -27,6 +28,7 @@ import {
   parseDeviceCookie,
 } from '../lib/deviceCrypto.js';
 import { requireAuth } from '../middleware/requireAuth.js';
+import { recordEvent } from '../lib/memory.js';
 
 export const authRouter = Router();
 
@@ -137,6 +139,17 @@ authRouter.post('/login', authLimiter, async (req: Request, res: Response, next:
     }
 
     setSessionCookies(res, data.session);
+
+    // Signing in is a real event with no row behind it, so the trigger that
+    // records everything else cannot see it. Recorded here instead — and
+    // deliberately awaited before responding, so a sign-in never lands in the
+    // memory after the work that followed it.
+    await recordEvent(createUserClient(data.session.access_token), {
+      type: 'auth.signed_in',
+      summary: 'signed in with a password',
+      entityId: data.user.id,
+    });
+
     res.json({ user: publicUser(data.user) });
   } catch (err) {
     next(err);
@@ -159,6 +172,13 @@ authRouter.post('/logout', async (req: Request, res: Response, next: NextFunctio
       // cookie is gone). This also rotates/consumes the old refresh token.
       const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
       if (!error && data.session) {
+        // Recorded while the session is still valid — after signOut there is no
+        // identity left to attribute it to.
+        await recordEvent(createUserClient(data.session.access_token), {
+          type: 'auth.signed_out',
+          summary: 'signed out',
+          entityId: data.session.user.id,
+        });
         // scope: 'local' revokes ONLY the current session, leaving the user's
         // other devices signed in.
         await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
@@ -329,6 +349,98 @@ authRouter.post(
 
       clearDeviceCookie(res);
       setSessionCookies(res, session);
+
+      await recordEvent(createUserClient(session.access_token), {
+        type: 'auth.password_reset',
+        summary: 'reset their password, signing out other sessions and revoking every PIN',
+        entityId: updated.user.id,
+      });
+
+      res.json({ user: publicUser(updated.user) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * Changing a password from Settings requires the current one, so this endpoint
+ * is also a password oracle for whoever is sitting at the browser. Cap the
+ * guesses well below what a search would need, but leave enough room for a user
+ * who simply mistypes.
+ */
+const changePasswordLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    res.status(429).json({
+      error: 'Too many password change attempts. Please wait an hour and try again.',
+      code: 'rate_limited',
+    });
+  },
+});
+
+/**
+ * POST /api/auth/change-password
+ * Changes the password of a signed-in user who can still supply the old one.
+ *
+ * Re-authenticating with the current password is deliberate: `requireAuth` only
+ * proves the browser holds a session cookie, and a session that has been left
+ * open should not be enough to lock the real owner out of their account.
+ */
+authRouter.post(
+  '/change-password',
+  changePasswordLimiter,
+  requireAuth,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
+
+      const email = req.user!.email;
+      if (!email) {
+        throw new HttpError(
+          400,
+          'This account has no email address, so its password cannot be changed here.',
+          'no_email',
+        );
+      }
+
+      // Verify the current password by signing in with it. The session this
+      // mints is also what authorises the update below, so the change is scoped
+      // to a caller who proved knowledge of the credential — not merely to
+      // whoever holds the cookie.
+      const supabase = createAnonClient();
+      const { data: verified, error: verifyError } = await supabase.auth.signInWithPassword({
+        email,
+        password: currentPassword,
+      });
+      if (verifyError || !verified.session) {
+        throw unauthorized('Your current password is incorrect.', 'invalid_credentials');
+      }
+
+      const { data: updated, error: updateError } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+      if (updateError || !updated.user) {
+        const status = updateError?.status === 422 ? 400 : 500;
+        throw new HttpError(
+          status,
+          status === 400
+            ? 'That password was rejected. Choose a different one.'
+            : 'Could not update your password. Please try again.',
+          'password_update_failed',
+        );
+      }
+
+      // Retire every other session: anyone still signed in elsewhere with the
+      // old password loses access, which is the point of changing it. This
+      // device keeps its session (and its PIN — the user knows their password
+      // here, so there is nothing to distrust about this browser).
+      await supabase.auth.signOut({ scope: 'others' }).catch(() => undefined);
+
+      setSessionCookies(res, verified.session);
       res.json({ user: publicUser(updated.user) });
     } catch (err) {
       next(err);
@@ -594,6 +706,13 @@ authRouter.post(
 
       const { session, user } = await mintSessionForUser(verify.user_id!);
       setSessionCookies(res, session);
+
+      await recordEvent(createUserClient(session.access_token), {
+        type: 'auth.pin_unlocked',
+        summary: 'signed in with a device PIN',
+        entityId: user.id,
+      });
+
       res.json({ user: publicUser(user) });
     } catch (err) {
       next(err);
@@ -620,6 +739,13 @@ authRouter.post(
         );
       }
       clearDeviceCookie(res);
+
+      await recordEvent(supabase, {
+        type: 'auth.pin_disabled',
+        summary: 'turned off PIN sign-in on every device',
+        entityId: req.user!.id,
+      });
+
       res.json({ ok: true });
     } catch (err) {
       next(err);

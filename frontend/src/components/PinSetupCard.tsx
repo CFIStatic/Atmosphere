@@ -108,37 +108,39 @@ export function PinSetupCard() {
   const busy = stage === 'saving';
 
   return (
-    <div className="rounded-xl border border-line/10 bg-surface/60 p-5 backdrop-blur">
+    <div className="rounded-xl border border-line bg-paper-0 shadow-card p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-fg-3">Quick sign-in</p>
-          <p className="mt-1.5 text-lg font-semibold text-fg">
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-500">
+            Quick sign-in
+          </p>
+          <p className="mt-1.5 text-lg font-semibold text-ink-900">
             {stage === 'on' ? 'PIN is on for this device' : '4-digit PIN'}
           </p>
         </div>
         {stage === 'on' && (
-          <span className="flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-300">
+          <span className="flex items-center gap-1 rounded-full border border-success-200 bg-success-50 px-2.5 py-1 text-xs font-medium text-success-600">
             <CheckIcon width={13} height={13} /> On
           </span>
         )}
       </div>
 
       {stage === 'loading' && (
-        <div className="mt-4 flex items-center gap-2 text-sm text-fg-3">
+        <div className="mt-4 flex items-center gap-2 text-sm text-ink-500">
           <SpinnerIcon className="animate-spin" width={16} height={16} /> Checking…
         </div>
       )}
 
       {stage === 'off' && (
         <>
-          <p className="mt-2 text-sm leading-relaxed text-fg-3">
-            Skip typing your password on this device. Your PIN only works here — it can't be used to
-            sign in from anywhere else.
+          <p className="mt-2 text-sm leading-relaxed text-ink-600">
+            Skip typing your password on this device. Your PIN only works here — it can't be used
+            to sign in from anywhere else.
           </p>
-          {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
+          {error && <p className="mt-3 text-sm text-danger-700">{error}</p>}
           <button
             onClick={beginSetup}
-            className="mt-4 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-500"
+            className="mt-4 rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-ink-900 transition hover:bg-brand-500"
           >
             Set up a PIN
           </button>
@@ -147,22 +149,22 @@ export function PinSetupCard() {
 
       {stage === 'on' && (
         <>
-          <p className="mt-2 text-sm leading-relaxed text-fg-3">
+          <p className="mt-2 text-sm leading-relaxed text-ink-600">
             {justSaved
               ? "Saved. You'll be asked for this PIN next time you sign in on this device."
               : 'You can sign in on this device with your PIN instead of your password.'}
           </p>
-          {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
+          {error && <p className="mt-3 text-sm text-danger-700">{error}</p>}
           <div className="mt-4 flex flex-wrap gap-2">
             <button
               onClick={beginSetup}
-              className="rounded-lg border border-line/10 bg-raised/70 px-4 py-2 text-sm font-medium text-fg-2 transition hover:bg-raised-2"
+              className="rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
             >
               Change PIN
             </button>
             <button
               onClick={handleDisable}
-              className="rounded-lg border border-red-500/25 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-200 transition hover:bg-red-500/20"
+              className="rounded-lg border border-danger-200 bg-danger-50 px-4 py-2 text-sm font-medium text-danger-700 transition hover:bg-danger-50"
             >
               Turn off
             </button>
@@ -172,7 +174,7 @@ export function PinSetupCard() {
 
       {(stage === 'enter' || stage === 'confirm' || busy) && (
         <div className="mt-4">
-          <p className="text-sm text-fg-2">
+          <p className="text-sm text-ink-700">
             {busy
               ? 'Saving your PIN…'
               : stage === 'enter'
@@ -181,7 +183,7 @@ export function PinSetupCard() {
           </p>
 
           {error && (
-            <p role="alert" className="mt-2 text-sm text-red-300">
+            <p role="alert" className="mt-2 text-sm text-danger-700">
               {error}
             </p>
           )}
@@ -205,7 +207,7 @@ export function PinSetupCard() {
                 setError(null);
                 setStage((s) => (s === 'confirm' ? 'enter' : enrolled ? 'on' : 'off'));
               }}
-              className="mt-5 w-full rounded-lg border border-line/10 bg-raised/60 px-4 py-2 text-sm font-medium text-fg-2 transition hover:bg-raised-2"
+              className="mt-5 w-full rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm font-medium text-ink-700 transition hover:bg-paper-100"
             >
               Cancel
             </button>

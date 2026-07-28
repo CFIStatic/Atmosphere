@@ -91,19 +91,19 @@ export function ResetPasswordPage() {
   const unusable = !credential;
 
   return (
-    <div className="cx-aurora relative flex min-h-screen flex-col bg-canvas">
+    <div className="cx-aurora relative flex min-h-screen flex-col bg-paper-100">
       <header className="px-6 py-6 sm:px-10">
         <Logo />
       </header>
 
       <main className="flex flex-1 items-center justify-center px-4 pb-16">
         <div className="w-full max-w-md animate-fade-in-up">
-          <div className="rounded-2xl border border-line/10 bg-surface/70 p-8 shadow-2xl shadow-scrim/40 backdrop-blur-xl sm:p-10">
-            <h1 className="text-2xl font-bold tracking-tight text-fg">Choose a new password</h1>
+          <div className="rounded-2xl border border-line bg-paper-0 shadow-lift p-8 shadow-2xl shadow-lift-xl sm:p-10">
+            <h1 className="text-2xl font-bold tracking-tight text-ink-900">Choose a new password</h1>
 
             {unusable ? (
               <>
-                <p className="mt-2 text-sm leading-relaxed text-fg-3">
+                <p className="mt-2 text-sm leading-relaxed text-ink-600">
                   {linkError
                     ? 'That reset link is no longer valid.'
                     : 'This page needs a reset link to work.'}{' '}
@@ -111,21 +111,21 @@ export function ResetPasswordPage() {
                 </p>
                 <Link
                   to="/forgot-password"
-                  className="mt-6 flex w-full items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 font-semibold text-white shadow-lg shadow-brand-900/40 transition hover:bg-brand-500"
+                  className="mt-6 flex w-full items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 font-semibold text-ink-900 shadow-lg shadow-card transition hover:bg-brand-500"
                 >
                   Request a new link
                 </Link>
               </>
             ) : (
               <>
-                <p className="mt-1.5 text-sm text-fg-3">
+                <p className="mt-1.5 text-sm text-ink-600">
                   Pick something you haven't used before. You'll be signed in once it's saved.
                 </p>
 
                 {error && (
                   <div
                     role="alert"
-                    className="mt-6 rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-3 text-sm text-red-200"
+                    className="mt-6 rounded-lg border border-danger-200 bg-danger-50 px-3.5 py-3 text-sm text-danger-700"
                   >
                     {error}
                   </div>
@@ -135,7 +135,7 @@ export function ResetPasswordPage() {
                   <div>
                     <label
                       htmlFor="new-password"
-                      className="mb-1.5 block text-sm font-medium text-fg-2"
+                      className="mb-1.5 block text-sm font-medium text-ink-700"
                     >
                       New password
                     </label>
@@ -151,26 +151,26 @@ export function ResetPasswordPage() {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="••••••••"
-                        className="w-full rounded-lg border border-line/10 bg-raised/80 px-3.5 py-2.5 pr-11 text-fg placeholder-fg-4 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/40"
+                        className="w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 pr-11 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword((s) => !s)}
                         aria-label={showPassword ? 'Hide password' : 'Show password'}
-                        className="absolute inset-y-0 right-0 grid w-11 place-items-center text-fg-3 transition hover:text-fg-2"
+                        className="absolute inset-y-0 right-0 grid w-11 place-items-center text-ink-600 transition hover:text-ink-900"
                       >
                         {showPassword ? <EyeOffIcon /> : <EyeIcon />}
                       </button>
                     </div>
                     {password.length > 0 && !passwordValid && (
-                      <p className="mt-1.5 text-xs text-amber-300/90">Use at least 8 characters.</p>
+                      <p className="mt-1.5 text-xs text-caution-600">Use at least 8 characters.</p>
                     )}
                   </div>
 
                   <div>
                     <label
                       htmlFor="confirm-password"
-                      className="mb-1.5 block text-sm font-medium text-fg-2"
+                      className="mb-1.5 block text-sm font-medium text-ink-700"
                     >
                       Confirm password
                     </label>
@@ -183,24 +183,24 @@ export function ResetPasswordPage() {
                       value={confirm}
                       onChange={(e) => setConfirm(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full rounded-lg border border-line/10 bg-raised/80 px-3.5 py-2.5 text-fg placeholder-fg-4 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/40"
+                      className="w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
                     />
                     {confirm.length > 0 && !matches && (
-                      <p className="mt-1.5 text-xs text-amber-300/90">
+                      <p className="mt-1.5 text-xs text-caution-600">
                         These passwords don't match.
                       </p>
                     )}
                   </div>
 
-                  <div className="rounded-lg border border-line/10 bg-raised/40 px-3.5 py-3 text-xs leading-relaxed text-fg-3">
-                    For your security, saving a new password signs you out everywhere else and turns
-                    off PIN sign-in on any device where you set one up.
+                  <div className="rounded-lg border border-line bg-paper-0 px-3.5 py-3 text-xs leading-relaxed text-ink-600">
+                    For your security, saving a new password signs you out everywhere else and
+                    turns off PIN sign-in on any device where you set one up.
                   </div>
 
                   <button
                     type="submit"
                     disabled={!canSubmit}
-                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 font-semibold text-white shadow-lg shadow-brand-900/40 transition hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 focus:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 font-semibold text-ink-900 shadow-lg shadow-card transition hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:ring-offset-2 focus:ring-offset-ink-800 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {submitting && <SpinnerIcon className="animate-spin" />}
                     {submitting ? 'Saving…' : 'Save new password'}
@@ -209,10 +209,10 @@ export function ResetPasswordPage() {
               </>
             )}
 
-            <p className="mt-6 text-center text-sm text-fg-3">
+            <p className="mt-6 text-center text-sm text-ink-600">
               <Link
                 to="/login"
-                className="font-semibold text-brand-400 transition hover:text-brand-300"
+                className="font-semibold text-brand-600 transition hover:text-brand-700"
               >
                 Back to sign in
               </Link>

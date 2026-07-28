@@ -1,94 +1,68 @@
 /** @type {import('tailwindcss').Config} */
-
-// Every colour resolves through a CSS variable defined in index.css, so the two
-// themes share one token set. Components never name a raw colour.
-const withAlpha = (variable) => `rgb(var(${variable}) / <alpha-value>)`;
-
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
-  darkMode: ['selector', '[data-theme="dark"]'],
   theme: {
     extend: {
       colors: {
-        // ── Surfaces, ascending by elevation ─────────────────────────────────
-        canvas: withAlpha('--canvas'),
-        sunken: withAlpha('--sunken'),
-        surface: withAlpha('--surface'),
-        raised: withAlpha('--raised'),
-        'raised-2': withAlpha('--raised-2'),
-
-        // ── Text ─────────────────────────────────────────────────────────────
-        fg: {
-          DEFAULT: withAlpha('--fg'),
-          2: withAlpha('--fg-2'),
-          3: withAlpha('--fg-3'),
-          4: withAlpha('--fg-4'),
-        },
-
-        // Hairlines and hover fills. White on dark, black on light — always
-        // used with an explicit opacity, e.g. `border-line/10`.
-        line: withAlpha('--line'),
-
-        scrim: withAlpha('--scrim'),
-        'on-accent': withAlpha('--on-accent'),
-
-        // ── Accent: the orange bar from the mark ─────────────────────────────
-        // 300 and 400 are variable because accent *text* has to darken on the
-        // off-white ground to stay readable; the fills are constant.
+        /**
+         * Atmosphere runs warm and light: paper surfaces, ink text, a single
+         * terracotta accent. The accent is load-bearing — it marks the one
+         * action on a screen that commits something — so it is used sparingly
+         * and never for decoration.
+         */
         brand: {
-          50: '#fdf3ee',
-          100: '#fbe1d3',
-          200: '#f8c3a7',
-          300: withAlpha('--brand-300'),
-          400: withAlpha('--brand-400'),
-          500: '#f26522',
-          600: '#dd5412',
-          700: '#b6420e',
-          800: '#8e340b',
-          900: '#5f2307',
+          50: '#FDF4EE',
+          100: '#FAE5D6',
+          200: '#F4C8A9',
+          300: '#EBA475',
+          400: '#DF7B44',
+          500: '#D2500A',
+          600: '#BC4508',
+          700: '#993607',
+          800: '#772B06',
+          900: '#5B2104',
         },
-
-        // ── Semantic state ───────────────────────────────────────────────────
-        state: {
-          ok: withAlpha('--ok'),
-          info: withAlpha('--info'),
-          warn: withAlpha('--warn'),
-          danger: withAlpha('--danger'),
-          running: withAlpha('--running'),
-          idle: withAlpha('--idle'),
+        /** Surfaces, lightest first. `0` is card white, `100` is the page. */
+        paper: {
+          0: '#FFFFFF',
+          50: '#FBFAF7',
+          100: '#F4F1EB',
+          200: '#EDE9E1',
+          300: '#E4DFD5',
+          400: '#D8D2C5',
         },
+        /** Text, darkest first. Warm greys — pure neutral looks cold on paper. */
+        ink: {
+          900: '#1C1917',
+          800: '#292524',
+          700: '#44403C',
+          600: '#57534E',
+          500: '#78716C',
+          400: '#A8A29E',
+        },
+        /** Hairlines. A separate token so borders tune in one place. */
+        line: {
+          DEFAULT: '#E3DED4',
+          strong: '#D3CCBE',
+        },
+        /** Status. Muted enough to sit on paper without shouting. */
+        danger: { 50: '#FDF2F0', 200: '#F3C7BF', 600: '#B4361D', 700: '#8F2A15' },
+        caution: { 50: '#FDF7EC', 200: '#EFDCAF', 600: '#946A0B' },
+        success: { 50: '#F0F7F1', 200: '#BEDCC3', 600: '#3F7D4C' },
       },
-
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
-
-      fontSize: {
-        // Operational density: a dedicated micro size for table meta and labels.
-        '2xs': ['0.6875rem', { lineHeight: '1rem' }],
+      boxShadow: {
+        /** The only two elevations. Soft and warm, never a hard grey drop. */
+        card: '0 1px 2px rgba(28, 25, 23, 0.04), 0 1px 3px rgba(28, 25, 23, 0.03)',
+        lift: '0 4px 12px rgba(28, 25, 23, 0.07), 0 2px 4px rgba(28, 25, 23, 0.04)',
       },
-
-      spacing: {
-        // Fixed shell dimensions, referenced by layout and by scroll offsets.
-        nav: '15rem',
-        'nav-collapsed': '3.75rem',
-        assistant: '23rem',
-        topbar: '3.5rem',
-      },
-
       keyframes: {
         'fade-in-up': {
           '0%': { opacity: '0', transform: 'translateY(12px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
-        },
-        'fade-in': {
-          '0%': { opacity: '0' },
-          '100%': { opacity: '1' },
-        },
-        'slide-in-right': {
-          '0%': { transform: 'translateX(100%)' },
-          '100%': { transform: 'translateX(0)' },
         },
         // Feedback for a rejected PIN — carries the same meaning as the error
         // text for users who are scanning rather than reading.
@@ -97,20 +71,10 @@ export default {
           '20%, 60%': { transform: 'translateX(-7px)' },
           '40%, 80%': { transform: 'translateX(7px)' },
         },
-        // Slow, low-contrast pulse for "an agent is working on this". Deliberately
-        // understated — this fires on live operational screens all day.
-        'pulse-soft': {
-          '0%, 100%': { opacity: '1' },
-          '50%': { opacity: '0.45' },
-        },
       },
-
       animation: {
         'fade-in-up': 'fade-in-up 0.5s ease-out both',
-        'fade-in': 'fade-in 0.2s ease-out both',
-        'slide-in-right': 'slide-in-right 0.22s cubic-bezier(0.32, 0.72, 0, 1) both',
         shake: 'shake 0.4s ease-in-out',
-        'pulse-soft': 'pulse-soft 2.4s ease-in-out infinite',
       },
     },
   },

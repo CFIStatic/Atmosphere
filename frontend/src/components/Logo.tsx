@@ -1,36 +1,32 @@
-/**
- * Atmosphere lockup: the stacked-bar mark beside the wordmark.
- *
- * The bars are one colour at four opacities rather than four separate greys.
- * That single definition reproduces both brand marks exactly — on the dark
- * ground the ramp climbs from faint charcoal to near-white, and on the light
- * ground from pale grey to near-black — because the foreground token already
- * flips with the theme.
- *
- * The wordmark is likewise a single colour that follows the theme, never a
- * two-tone split. Orange appears once, on the bottom bar.
- */
-export function Logo({ className = '' }: { className?: string }) {
+interface Props {
+  className?: string;
+  /** Glyph only — for narrow bars where the wordmark would crowd the row. */
+  compact?: boolean;
+}
+
+/** Atmosphere wordmark + glyph (a sphere ringed by its atmosphere). */
+export function Logo({ className = '', compact = false }: Props) {
   return (
     <div className={`flex items-center gap-2.5 ${className}`}>
-      <span className="grid shrink-0 place-items-center" aria-hidden="true">
-        <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
-          {[0.28, 0.48, 0.72, 1].map((opacity, i) => (
-            <rect
-              key={opacity}
-              x="3"
-              y={4 + i * 4.2}
-              width="20"
-              height="2.6"
-              rx="0.6"
-              className="fill-fg"
-              fillOpacity={opacity}
-            />
-          ))}
-          <rect x="3" y="20.8" width="20" height="2.6" rx="0.6" className="fill-brand-500" />
+      <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-500 shadow-card">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="5" fill="white" fillOpacity="0.95" />
+          <ellipse
+            cx="12"
+            cy="12"
+            rx="10"
+            ry="3.6"
+            stroke="white"
+            strokeWidth="1.6"
+            transform="rotate(-25 12 12)"
+          />
         </svg>
       </span>
-      <span className="text-xl font-extrabold tracking-tight text-fg">Atmosphere</span>
+      {!compact && (
+        <span className="text-lg font-extrabold tracking-tight text-ink-900">
+          Atmo<span className="text-brand-500">sphere</span>
+        </span>
+      )}
     </div>
   );
 }

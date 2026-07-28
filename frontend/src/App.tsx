@@ -1,85 +1,35 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { Suspense, lazy, type ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
-import { TooltipProvider } from './design';
-import { AssistantProvider } from './assistant/AssistantContext';
-import { ThemeProvider } from './shell/ThemeContext';
-import { ViewerProvider, useViewer } from './shell/ViewerContext';
-import { AppShell } from './shell/AppShell';
-import { homeFor } from './domain/permissions';
-
 import { LoginPage } from './pages/LoginPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
+import { DashboardPage } from './pages/DashboardPage';
+import { SettingsPage } from './pages/SettingsPage';
+import { AuditPage } from './pages/AuditPage';
+import { JobsPage } from './pages/JobsPage';
+import { JobDetailPage } from './pages/JobDetailPage';
+import { MemoryPage } from './pages/MemoryPage';
+import { TeamMemoryPage } from './pages/TeamMemoryPage';
+import { TechnicianPage } from './pages/TechnicianPage';
+import { BillingPage } from './pages/BillingPage';
+import { UsagePage } from './pages/UsagePage';
+import { ProjectManagerPage } from './pages/ProjectManagerPage';
+import { PmProjectPage } from './pages/PmProjectPage';
+import { WebAccessPage } from './pages/WebAccessPage';
+import { ComputerUsePage } from './pages/ComputerUsePage';
+import { EstimatorPage } from './pages/EstimatorPage';
+import { MitigationEstimatorPage } from './pages/MitigationEstimatorPage';
 import { SpinnerIcon } from './components/icons';
-
-// Workspace pages are split per route. No role sees all twelve sections, so
-// shipping them in the initial bundle would cost every user — including a
-// technician on site over cellular — for screens they will never open.
-const OverviewPage = lazy(() =>
-  import('./features/overview/OverviewPage').then((m) => ({ default: m.OverviewPage })),
-);
-const MyWorkPage = lazy(() =>
-  import('./features/myWork/MyWorkPage').then((m) => ({ default: m.MyWorkPage })),
-);
-const ApprovalsPage = lazy(() =>
-  import('./features/approvals/ApprovalsPage').then((m) => ({ default: m.ApprovalsPage })),
-);
-const JobsPage = lazy(() =>
-  import('./features/jobs/JobsPage').then((m) => ({ default: m.JobsPage })),
-);
-const JobWorkspacePage = lazy(() =>
-  import('./features/jobs/JobWorkspacePage').then((m) => ({ default: m.JobWorkspacePage })),
-);
-const SchedulePage = lazy(() =>
-  import('./features/schedule/SchedulePage').then((m) => ({ default: m.SchedulePage })),
-);
-const EstimatesPage = lazy(() =>
-  import('./features/estimates/EstimatesPage').then((m) => ({ default: m.EstimatesPage })),
-);
-const CustomersPage = lazy(() =>
-  import('./features/customers/CustomersPage').then((m) => ({ default: m.CustomersPage })),
-);
-const FinancialsPage = lazy(() =>
-  import('./features/financials/FinancialsPage').then((m) => ({ default: m.FinancialsPage })),
-);
-const AgentsPage = lazy(() =>
-  import('./features/agents/AgentsPage').then((m) => ({ default: m.AgentsPage })),
-);
-const WorkflowsPage = lazy(() =>
-  import('./features/workflows/WorkflowsPage').then((m) => ({ default: m.WorkflowsPage })),
-);
-const ConnectionsPage = lazy(() =>
-  import('./features/connections/ConnectionsPage').then((m) => ({ default: m.ConnectionsPage })),
-);
-const SettingsPage = lazy(() =>
-  import('./features/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })),
-);
-const FieldPage = lazy(() =>
-  import('./features/field/FieldPage').then((m) => ({ default: m.FieldPage })),
-);
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      // Operational data goes stale fast, but refetching on every window focus
-      // makes a dense dashboard flicker. 30s is the compromise.
-      staleTime: 30_000,
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
 
 function FullScreenSpinner() {
   return (
     <div
       role="status"
       aria-live="polite"
-      className="grid min-h-screen place-items-center bg-canvas text-brand-300"
+      className="grid min-h-screen place-items-center bg-paper-100 text-brand-600"
     >
       <SpinnerIcon className="animate-spin" width={28} height={28} />
       <span className="sr-only">Loading…</span>
@@ -95,101 +45,199 @@ function RequireOnboarded({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-/** For the onboarding route: if already onboarded, skip straight to the app. */
+/** For the onboarding route: if already onboarded, skip straight to the dashboard. */
 function RequireNotOnboarded({ children }: { children: ReactNode }) {
   const { membership, membershipLoading } = useAuth();
   if (membershipLoading) return <FullScreenSpinner />;
-  if (membership) return <Navigate to="/" replace />;
-  return <>{children}</>;
-}
-
-/**
- * Sends each role to the surface it actually works from — a field technician
- * lands on My Work, an accountant on Financials — rather than a shared dashboard
- * that is wrong for most of the company.
- */
-function RoleHome() {
-  const { role } = useViewer();
-  return <Navigate to={homeFor(role)} replace />;
-}
-
-/** Field mode is a phone surface; nudge desktop users back to the full app. */
-function FieldRedirectOnDesktop({ children }: { children: ReactNode }) {
-  const isDesktop =
-    typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches;
-  if (isDesktop) return <Navigate to="/my-work" replace />;
+  if (membership) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <BrowserRouter>
-          <AuthProvider>
-            <TooltipProvider>
-              <Routes>
-                {/* Public auth surfaces — unchanged. */}
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-                <Route path="/reset-password" element={<ResetPasswordPage />} />
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
 
-                <Route
-                  path="/onboarding"
-                  element={
-                    <ProtectedRoute>
-                      <RequireNotOnboarded>
-                        <OnboardingPage />
-                      </RequireNotOnboarded>
-                    </ProtectedRoute>
-                  }
-                />
+          {/* Recovery routes stay outside ProtectedRoute: a locked-out user has
+              no session, and the reset link must work in a fresh browser. */}
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-                {/* The operational command center. */}
-                <Route
-                  element={
-                    <ProtectedRoute>
-                      <RequireOnboarded>
-                        <ViewerProvider>
-                          <AssistantProvider>
-                            <Suspense fallback={<FullScreenSpinner />}>
-                              <AppShell />
-                            </Suspense>
-                          </AssistantProvider>
-                        </ViewerProvider>
-                      </RequireOnboarded>
-                    </ProtectedRoute>
-                  }
-                >
-                  <Route path="/" element={<RoleHome />} />
-                  <Route path="/overview" element={<OverviewPage />} />
-                  <Route path="/my-work" element={<MyWorkPage />} />
-                  <Route path="/approvals" element={<ApprovalsPage />} />
-                  <Route path="/jobs" element={<JobsPage />} />
-                  <Route path="/jobs/:jobId" element={<JobWorkspacePage />} />
-                  <Route path="/schedule" element={<SchedulePage />} />
-                  <Route path="/estimates" element={<EstimatesPage />} />
-                  <Route path="/customers" element={<CustomersPage />} />
-                  <Route path="/financials" element={<FinancialsPage />} />
-                  <Route path="/agents" element={<AgentsPage />} />
-                  <Route path="/workflows" element={<WorkflowsPage />} />
-                  <Route path="/connections" element={<ConnectionsPage />} />
-                  <Route path="/settings" element={<SettingsPage />} />
-                  <Route
-                    path="/field"
-                    element={
-                      <FieldRedirectOnDesktop>
-                        <FieldPage />
-                      </FieldRedirectOnDesktop>
-                    }
-                  />
-                  <Route path="*" element={<RoleHome />} />
-                </Route>
-              </Routes>
-            </TooltipProvider>
-          </AuthProvider>
-        </BrowserRouter>
-      </ThemeProvider>
-    </QueryClientProvider>
+          <Route
+            path="/onboarding"
+            element={
+              <ProtectedRoute>
+                <RequireNotOnboarded>
+                  <OnboardingPage />
+                </RequireNotOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <DashboardPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/audit"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <AuditPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Agent Memory. Same guard as the dashboard: all of it is scoped to
+              an organization, so onboarding has to come first. */}
+          {[
+            { path: '/jobs', element: <JobsPage /> },
+            { path: '/jobs/:id', element: <JobDetailPage /> },
+            { path: '/memory', element: <MemoryPage /> },
+            { path: '/team', element: <TeamMemoryPage /> },
+          ].map(({ path, element }) => (
+            <Route
+              key={path}
+              path={path}
+              element={
+                <ProtectedRoute>
+                  <RequireOnboarded>{element}</RequireOnboarded>
+                </ProtectedRoute>
+              }
+            />
+          ))}
+          {/* The technician app. Open to every onboarded member — a project
+              manager reviewing a job needs the same capture tools a field
+              technician does. */}
+          <Route
+            path="/technician"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <TechnicianPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* The Project Manager area. Guarded only by onboarding: the
+              database decides who may change a project, and a route guard that
+              hid the screens would just make a field technician's read-only
+              view unreachable. */}
+          <Route
+            path="/pm"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <ProjectManagerPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/pm/projects/:id"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <PmProjectPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Web Access sits behind onboarding: connections belong to an
+              organization, so there is nothing to show before you have one. */}
+          <Route
+            path="/web-access"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <WebAccessPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/billing"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <BillingPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/usage"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <UsagePage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/estimator"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <EstimatorPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/computer-use"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <ComputerUsePage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/mitigation"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <MitigationEstimatorPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <SettingsPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
