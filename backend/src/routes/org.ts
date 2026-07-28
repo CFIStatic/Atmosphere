@@ -155,7 +155,7 @@ orgRouter.patch('/me', async (req: Request, res: Response, next: NextFunction) =
     const { role, workType, usageIntents } = updateMembershipSchema.parse(req.body);
     const supabase = createUserClient(req.accessToken!);
 
-    let result = await supabase
+    let result: { data: any[] | null; error: { message: string } | null } = await supabase
       .from('org_members')
       .update({ role, work_type: workType, usage_intents: usageIntents })
       .eq('user_id', req.user!.id)
@@ -292,7 +292,7 @@ orgRouter.get('/members', async (req: Request, res: Response, next: NextFunction
       return;
     }
 
-    let result = await supabase
+    let result: { data: any[] | null; error: { message: string } | null } = await supabase
       .from('org_members')
       .select('user_id, role, work_type, usage_intents, status, profiles(email, full_name)')
       .eq('org_id', orgId)
