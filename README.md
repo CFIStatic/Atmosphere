@@ -235,7 +235,9 @@ Atmosphere/
 │   │   │   ├── integrations.ts   External sources, syncs, CSV import, mirror
 │   │   │   ├── ai.ts             task execution / feedback / policy visibility
 │   │   │   ├── computer.ts       computer use: keys, pairing, runs, SSE
+│   │   │   ├── cyber.ts          cyber defense status / events / blocks / patch
 │   │   │   └── health.ts         liveness probe
+│   │   ├── cyber/                Cyber Defense Agent — monitor, deceive, block, auto-patch
 │   │   ├── computer/
 │   │   │   ├── protocol.ts       Wire protocol shared with the agent
 │   │   │   ├── models.ts         Per-model tool version, beta header, image limits
@@ -402,6 +404,12 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | Method | Path                 | Auth   | Body                          | Description                                  |
 | ------ | -------------------- | ------ | ----------------------------- | -------------------------------------------- |
 | GET    | `/api/health`        | —      | —                             | Liveness probe                               |
+| GET    | `/api/cyber/status`  | cookie | —                             | Cyber defense posture snapshot               |
+| GET    | `/api/cyber/events`  | cookie | `?limit=`                     | Recent threat events                         |
+| GET    | `/api/cyber/blocks`  | cookie | —                             | Active IP bans                               |
+| GET    | `/api/cyber/patches` | cookie | `?limit=`                     | Recent auto-patch results                    |
+| POST   | `/api/cyber/unblock` | cookie | `{ ip }`                      | Lift an IP ban                               |
+| POST   | `/api/cyber/patch`   | cookie | —                             | Run one hardening cycle now                  |
 | POST   | `/api/auth/signup`   | —      | `{ email, password }`         | Create account; sets cookies if confirmed    |
 | POST   | `/api/auth/login`    | —      | `{ email, password }`         | Authenticate; sets session cookies           |
 | POST   | `/api/auth/logout`   | —      | —                             | Revoke session + clear cookies               |
@@ -1615,6 +1623,15 @@ cd backend && npm test    # 64 tests: quantity maths, rebuild rules, matching, i
 
 Apply `backend/supabase/migrations/20260727000001_construction_estimator.sql` (via `supabase db push`, or paste
 it into the SQL editor). It creates both tables with RLS enabled and is safe to re-run.
+
+## Cyber Defense Agent
+
+The backend runs a defensive agent in front of every route: it scores hostile traffic, **blocks**
+bad actors immediately, **deceives** scanners with honeypot surfaces (fake `.env`, admin JSON,
+SQL dumps — all ephemeral tokens), and **auto-patches** runtime hardening on a timer.
+
+See **[docs/cyber-defense.md](docs/cyber-defense.md)**. Operator API under `/api/cyber/*`
+(auth required). Toggle with `CYBER_DEFENSE_ENABLED` and related flags in `backend/.env.example`.
 
 ## Audit
 

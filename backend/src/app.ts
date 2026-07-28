@@ -26,7 +26,9 @@ import { estimatorRouter } from './routes/estimator.js';
 import { healthRouter } from './routes/health.js';
 import { mitigationRouter } from './routes/mitigation.js';
 import { xactimateRouter } from './routes/xactimate.js';
+import { cyberRouter } from './routes/cyber.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
+import { cyberMonitor } from './cyber/index.js';
 import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
 import { verificationHook, pumpVerificationQueue } from './lib/verifierRunner.js';
 
@@ -110,8 +112,15 @@ export function createApp(): Express {
 
   app.use(cookieParser());
 
+  // Cyber Defense Agent — after parsers so body/query signatures can fire, and
+  // before routers so blocked IPs and honeypot hits never reach auth, billing,
+  // or CRM. Stripe's raw webhook path is excluded above from JSON parsing and
+  // is still watched for path/UA probes.
+  app.use(cyberMonitor);
+
   // Routes.
   app.use('/api', healthRouter);
+  app.use('/api/cyber', cyberRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
   app.use('/api/profile', profileRouter);

@@ -69,6 +69,14 @@ export const AGENT_CATALOG: AgentDefinition[] = [
     accent: 'danger',
     intake: 'ledger',
   },
+  {
+    key: 'cyber_defense',
+    name: 'Cyber Defense',
+    blurb:
+      'Monitors every request, blocks hostile IPs, serves honeypot decoys, and auto-patches runtime hardening so attackers never reach real data.',
+    accent: 'danger',
+    intake: 'ledger',
+  },
 ];
 
 const BY_KEY = new Map(AGENT_CATALOG.map((agent) => [agent.key, agent]));
