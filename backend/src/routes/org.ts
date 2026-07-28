@@ -62,6 +62,15 @@ function serializeMember(row: any) {
 const MEMBERSHIP_SELECT =
   'role, work_type, usage_intents, status, orgs(id, name, join_code, contractor_type)';
 
+/** Pre-questionnaire columns — used if the new migration is not applied yet. */
+const MEMBERSHIP_SELECT_LEGACY =
+  'role, work_type, status, orgs(id, name, join_code)';
+
+function isMissingColumnError(message: string | undefined): boolean {
+  if (!message) return false;
+  return /usage_intents|contractor_type|column .* does not exist/i.test(message);
+}
+
 /** Ensure the caller has a profile row carrying their email (for directories). */
 async function ensureProfile(req: Request) {
   const supabase = createUserClient(req.accessToken!);
@@ -85,7 +94,35 @@ async function saveUsageIntents(
     .from('org_members')
     .update({ usage_intents: usageIntents })
     .eq('user_id', userId);
-  if (error) throw new HttpError(500, error.message, 'usage_intents_failed');
+  if (error) {
+    // Hosting before the questionnaire migration should still let create/join
+    // succeed — the answers are nice-to-have until the columns exist.
+    if (isMissingColumnError(error.message)) return;
+    throw new HttpError(500, error.message, 'usage_intents_failed');
+  }
+}
+
+async function loadMembership(
+  supabase: ReturnType<typeof createUserClient>,
+  userId: string,
+) {
+  const primary = await supabase
+    .from('org_members')
+    .select(MEMBERSHIP_SELECT)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true })
+    .limit(1);
+
+  if (!primary.error) return primary;
+
+  if (!isMissingColumnError(primary.error.message)) return primary;
+
+  return supabase
+    .from('org_members')
+    .select(MEMBERSHIP_SELECT_LEGACY)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true })
+    .limit(1);
 }
 
 /**
@@ -96,12 +133,7 @@ async function saveUsageIntents(
 orgRouter.get('/me', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const supabase = await ensureProfile(req);
-    const { data, error } = await supabase
-      .from('org_members')
-      .select(MEMBERSHIP_SELECT)
-      .eq('user_id', req.user!.id)
-      .order('created_at', { ascending: true })
-      .limit(1);
+    const { data, error } = await loadMembership(supabase, req.user!.id);
     if (error) throw new HttpError(500, error.message, 'org_me_failed');
     res.json({ membership: data?.[0] ? serializeMembership(data[0]) : null });
   } catch (err) {
@@ -123,15 +155,25 @@ orgRouter.patch('/me', async (req: Request, res: Response, next: NextFunction) =
     const { role, workType, usageIntents } = updateMembershipSchema.parse(req.body);
     const supabase = createUserClient(req.accessToken!);
 
-    const { data, error } = await supabase
+    let result = await supabase
       .from('org_members')
       .update({ role, work_type: workType, usage_intents: usageIntents })
       .eq('user_id', req.user!.id)
       .select(MEMBERSHIP_SELECT)
       .limit(1);
-    if (error) throw new HttpError(500, error.message, 'membership_update_failed');
 
-    const updated = data?.[0];
+    if (result.error && isMissingColumnError(result.error.message)) {
+      result = await supabase
+        .from('org_members')
+        .update({ role, work_type: workType })
+        .eq('user_id', req.user!.id)
+        .select(MEMBERSHIP_SELECT_LEGACY)
+        .limit(1);
+    }
+
+    if (result.error) throw new HttpError(500, result.error.message, 'membership_update_failed');
+
+    const updated = result.data?.[0];
     if (!updated) {
       throw new HttpError(404, 'You are not linked to an organization yet.', 'not_onboarded');
     }
@@ -156,9 +198,11 @@ orgRouter.patch('/', async (req: Request, res: Response, next: NextFunction) => 
       p_contractor_type: contractorType,
     });
     if (error) {
-      const message = /cannot change contractor type/i.test(error.message)
-        ? 'Only the organization creator can change the contractor type once it is set.'
-        : error.message;
+      const message = /could not find|does not exist|schema cache/i.test(error.message)
+        ? 'Apply the onboarding questionnaire migration before changing company type.'
+        : /cannot change contractor type/i.test(error.message)
+          ? 'Only the organization creator can change the contractor type once it is set.'
+          : error.message;
       throw new HttpError(400, message, 'org_profile_update_failed');
     }
     res.json({ org: serializeOrg(data) });
@@ -185,7 +229,11 @@ orgRouter.post('/', async (req: Request, res: Response, next: NextFunction) => {
     const { data: orgWithType, error: typeError } = await supabase.rpc('set_org_contractor_type', {
       p_contractor_type: contractorType,
     });
-    if (typeError) throw new HttpError(400, typeError.message, 'contractor_type_failed');
+    // Soft-fail when the questionnaire migration has not been applied yet so
+    // hosting still lets new orgs finish onboarding.
+    if (typeError && !/could not find|does not exist|schema cache|contractor_type/i.test(typeError.message)) {
+      throw new HttpError(400, typeError.message, 'contractor_type_failed');
+    }
 
     await saveUsageIntents(supabase, req.user!.id, usageIntents);
 
@@ -244,14 +292,23 @@ orgRouter.get('/members', async (req: Request, res: Response, next: NextFunction
       return;
     }
 
-    const { data, error } = await supabase
+    let result = await supabase
       .from('org_members')
       .select('user_id, role, work_type, usage_intents, status, profiles(email, full_name)')
       .eq('org_id', orgId)
       .order('created_at', { ascending: true });
-    if (error) throw new HttpError(500, error.message, 'members_failed');
 
-    res.json({ members: (data ?? []).map(serializeMember) });
+    if (result.error && isMissingColumnError(result.error.message)) {
+      result = await supabase
+        .from('org_members')
+        .select('user_id, role, work_type, status, profiles(email, full_name)')
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: true });
+    }
+
+    if (result.error) throw new HttpError(500, result.error.message, 'members_failed');
+
+    res.json({ members: (result.data ?? []).map(serializeMember) });
   } catch (err) {
     next(err);
   }
