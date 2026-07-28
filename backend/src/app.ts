@@ -23,6 +23,7 @@ import { backupRouter } from './routes/backups.js';
 import { integrationsRouter } from './routes/integrations.js';
 import { computerRouter } from './routes/computer.js';
 import { estimatorRouter } from './routes/estimator.js';
+import { financeRouter } from './routes/finance.js';
 import { healthRouter } from './routes/health.js';
 import { mitigationRouter } from './routes/mitigation.js';
 import { xactimateRouter } from './routes/xactimate.js';
@@ -133,6 +134,7 @@ export function createApp(): Express {
   // Server-to-server: no session cookie, authenticated by Stripe's signature.
   app.use('/api/webhooks', webhookRouter);
   app.use('/api/pm', pmRouter);
+  app.use('/api/finance', financeRouter);
   app.use('/api/web-access', webAccessRouter);
   app.use('/api/verifier', verifierRouter);
   app.use('/api/crm', crmRouter);

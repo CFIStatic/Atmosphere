@@ -239,6 +239,14 @@ export const config = {
     ),
   },
 
+  financial: {
+    // Optional writing layer for the CFO morning brief. Falls back to the same
+    // ANTHROPIC_API_KEY the PM agent uses; without a key the brief still builds
+    // from deterministic facts via a template.
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
+    model: process.env.FINANCIAL_MODEL ?? process.env.PM_MODEL ?? 'claude-opus-5',
+  },
+
   webAccess: {
     // Both secrets are optional. Without them the feature reports itself as
     // unavailable and every other part of the app carries on unaffected —

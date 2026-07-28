@@ -18,6 +18,7 @@ import { BillingPage } from './pages/BillingPage';
 import { UsagePage } from './pages/UsagePage';
 import { ProjectManagerPage } from './pages/ProjectManagerPage';
 import { PmProjectPage } from './pages/PmProjectPage';
+import { FinancePage } from './pages/FinancePage';
 import { WebAccessPage } from './pages/WebAccessPage';
 import { ComputerUsePage } from './pages/ComputerUsePage';
 import { EstimatorPage } from './pages/EstimatorPage';
@@ -150,6 +151,19 @@ export default function App() {
               <ProtectedRoute>
                 <RequireOnboarded>
                   <PmProjectPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Financial Agent — CEO / CFO / accountant cockpit. RLS decides who
+              may change connections and cost codes; every member can read. */}
+          <Route
+            path="/finance"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <FinancePage />
                 </RequireOnboarded>
               </ProtectedRoute>
             }

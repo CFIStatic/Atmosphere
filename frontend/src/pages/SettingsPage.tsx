@@ -523,6 +523,7 @@ const USAGE_ORDER: UsageIntent[] = [
   'web_access',
   'field_work',
   'billing',
+  'financial',
   'exploring',
 ];
 

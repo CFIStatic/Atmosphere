@@ -11,6 +11,7 @@ import {
   BriefcaseIcon,
   ChartIcon,
   CreditCardIcon,
+  GaugeIcon,
   HistoryIcon,
   HomeIcon,
   MicIcon,
@@ -24,6 +25,7 @@ import {
 const NAV = [
   { to: '/dashboard', label: 'Dashboard', Icon: HomeIcon },
   { to: '/jobs', label: 'Jobs', Icon: BriefcaseIcon },
+  { to: '/finance', label: 'Finance', Icon: GaugeIcon },
   { to: '/memory', label: 'Memory', Icon: HistoryIcon },
   { to: '/team', label: 'Team', Icon: UsersIcon },
   { to: '/technician', label: 'Technician', Icon: MicIcon },
