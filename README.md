@@ -42,11 +42,14 @@ replay step by step.
    server so no Supabase token is ever exposed to page JavaScript.
 5. **PIN sign-in** — an optional 4-digit PIN for fast repeat sign-in, bound to a single
    device (see below).
-6. **Mitigation Estimator** — reads a DocuSketch scan, a MICA report, iPhone photos and field
+6. **Connectors** — curated tabs for third-party apps restoration, roofing, and contractor
+   teams already use (ServiceTitan, AccuLynx, Xactimate, carrier portals, …). Each app
+   connects through Web Access, a Computer Use agent, or an Estimator API adapter.
+7. **Mitigation Estimator** — reads a DocuSketch scan, a MICA report, iPhone photos and field
    notes, and builds a priced, documented Xactimate estimate from them: classified against
    IICRC S500, written to the carrier's program terms, and reviewed for work that was
    performed but never billed (see below).
-7. **Computer use** — connect an Anthropic API key, run the agent on any computer, and
+8. **Computer use** — connect an Anthropic API key, run the agent on any computer, and
 6. **Web Access** — connect an outside website (a carrier portal, a supplier site) once,
    then ask Atmosphere to sign in and **pull data out of it** or **enter data into it**. Every
    step the AI takes is recorded, so a finished run reads back like a receipt.
@@ -490,6 +493,12 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | POST   | `/api/web-access/runs` | cookie | `{ connectionId, kind, instruction, data? }` | Start a task (returns 202)  |
 | GET    | `/api/web-access/runs` | cookie | —                           | The org's 25 most recent runs                |
 | GET    | `/api/web-access/runs/:id` | cookie | —                       | One run, with its full step trace            |
+| GET    | `/api/connectors/catalog` | cookie | `?all=1` optional        | Curated third-party apps (filtered by industry) |
+| GET    | `/api/connectors/connections` | cookie | —                    | Apps this org has connected                  |
+| POST   | `/api/connectors/connections` | cookie | `{ connectorKey, accessMode, …creds }` | Connect an app (web / computer / api) |
+| PATCH  | `/api/connectors/connections/:id` | cookie | `{ label?, notes?, status? }` | Rename or annotate a connection |
+| DELETE | `/api/connectors/connections/:id` | cookie | `?purge=true`      | Disconnect (optionally tear down credentials) |
+| POST   | `/api/connectors/connections/:id/run` | cookie | `{ templateId?, instruction? }` | Start a Web Access task for a connected app |
 | GET    | `/api/verifier/status` | cookie | —                           | Whether checks run here, and how they are set |
 | GET    | `/api/verifier/verifications` | cookie | `?runId=` optional   | Recent checks, or the checks for one run     |
 | GET    | `/api/verifier/verifications/:id` | cookie | —                | One check: expectations, findings, evidence  |
@@ -1212,6 +1221,19 @@ ever exposed).
 navigates by clicking. A site behind SSO with a hardware key, or one that demands a fresh
 one-time code on every sign-in, is out of reach by design — there is no second factor to
 supply.
+
+### Connectors
+
+`/connectors` is the curated catalog on top of Web Access, Computer Use, and Estimator API
+adapters. Restoration, roofing, and contractor apps (ServiceTitan, AccuLynx, Jobber,
+Xactimate, carrier portals, …) appear as industry tabs. Connecting an app stores an
+`app_connectors` row and either creates a Web Access login, marks a Computer Use target, or
+saves Estimator credentials.
+
+```bash
+psql "$SUPABASE_DB_URL" -f db/app_connectors.sql   # after web_access.sql
+# or apply supabase/migrations/20260728160000_app_connectors.sql
+```
 
 ### Verifier
 

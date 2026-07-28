@@ -726,3 +726,64 @@ export const selectJobSchema = z.object({
 
 export type CredentialInput = z.infer<typeof credentialSchema>;
 export type StartRunInput = z.infer<typeof startRunSchema>;
+
+/* ---- App Connectors --------------------------------------------------- */
+
+const connectorAccessModeSchema = z.enum(['web', 'computer', 'api'], {
+  errorMap: () => ({ message: 'Choose Web Access, Computer Use, or API' }),
+});
+
+/**
+ * Connect (or reconnect) a curated third-party app. Credentials are mode-
+ * specific: web needs username/password, api needs an API key or login pair,
+ * computer needs none (the paired desktop already has the session).
+ */
+export const connectAppConnectorSchema = z.object({
+  connectorKey: z
+    .string({ required_error: 'Choose an app' })
+    .trim()
+    .min(2, 'Choose an app')
+    .max(64, 'That app id is too long'),
+  accessMode: connectorAccessModeSchema,
+  label: z.string().trim().min(2).max(80).optional(),
+  siteUrl: siteUrlField.optional().or(z.literal('')).transform((v) => (v ? v : undefined)),
+  loginUrl: siteUrlField.optional().or(z.literal('')).transform((v) => (v ? v : undefined)),
+  username: z.string().trim().max(200).optional(),
+  password: z.string().max(500).optional(),
+  apiKey: z.string().trim().max(2000).optional(),
+  accountId: z.string().trim().max(200).optional(),
+  baseUrl: siteUrlField.optional().or(z.literal('')).transform((v) => (v ? v : undefined)),
+  notes: z
+    .string()
+    .trim()
+    .max(1000)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => (v ? v : undefined)),
+});
+
+export const updateAppConnectorSchema = z
+  .object({
+    label: z.string().trim().min(2).max(80).optional(),
+    notes: z
+      .string()
+      .trim()
+      .max(1000)
+      .optional()
+      .or(z.literal(''))
+      .transform((v) => (v === '' ? null : v)),
+    status: z.enum(['connected', 'needs_attention', 'disabled']).optional(),
+  })
+  .refine((value) => Object.values(value).some((field) => field !== undefined), {
+    message: 'Nothing to update',
+  });
+
+export const startConnectorRunSchema = z.object({
+  templateId: z.string().trim().min(1).max(64).optional(),
+  kind: z.enum(['pull', 'push']).optional(),
+  instruction: z.string().trim().max(4000).optional(),
+  data: z.unknown().optional(),
+});
+
+export type ConnectAppConnectorInput = z.infer<typeof connectAppConnectorSchema>;
+export type StartConnectorRunInput = z.infer<typeof startConnectorRunSchema>;

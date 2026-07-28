@@ -492,6 +492,97 @@ export interface WebConnectionInput {
 }
 
 /* ---------------------------------------------------------------------------
+ * App Connectors — curated third-party apps (ServiceTitan, AccuLynx, …)
+ * reached via Web Access, Computer Use, or Estimator API adapters.
+ * ------------------------------------------------------------------------- */
+
+export type ConnectorAccessMode = 'web' | 'computer' | 'api';
+export type ConnectorCategory =
+  | 'restoration'
+  | 'roofing'
+  | 'contractor'
+  | 'estimating'
+  | 'carriers'
+  | 'custom';
+export type AppConnectorStatus = 'connected' | 'needs_attention' | 'disabled';
+
+export interface ConnectorTaskTemplate {
+  id: string;
+  label: string;
+  kind: WebRunKind;
+  instruction: string;
+}
+
+export interface ConnectorDefinition {
+  key: string;
+  name: string;
+  blurb: string;
+  category: ConnectorCategory;
+  accessModes: ConnectorAccessMode[];
+  contractorTypes: Array<ContractorType | 'all'>;
+  siteUrl: string | null;
+  loginUrl: string | null;
+  estimatorProvider: EstimatorProvider | null;
+  computerAppHint: string | null;
+  taskTemplates: ConnectorTaskTemplate[];
+}
+
+export interface AppConnectorConnection {
+  id: string;
+  connectorKey: string;
+  accessMode: ConnectorAccessMode;
+  label: string;
+  status: AppConnectorStatus;
+  webConnectionId: string | null;
+  estimatorProvider: EstimatorProvider | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  definition: ConnectorDefinition | null;
+}
+
+export interface ConnectorCatalogResponse {
+  categories: Array<{ id: ConnectorCategory; label: string }>;
+  accessModes: Array<{ id: ConnectorAccessMode; label: string }>;
+  contractorType: ContractorType | null;
+  capabilities: {
+    webAccessEnabled: boolean;
+    computerUseAvailable: boolean;
+    estimatorCredentialStorageAvailable: boolean;
+  };
+  connectors: ConnectorDefinition[];
+}
+
+export interface ConnectAppConnectorInput {
+  connectorKey: string;
+  accessMode: ConnectorAccessMode;
+  label?: string;
+  siteUrl?: string;
+  loginUrl?: string;
+  username?: string;
+  password?: string;
+  apiKey?: string;
+  accountId?: string;
+  baseUrl?: string;
+  notes?: string;
+}
+
+export const CONNECTOR_CATEGORY_LABELS: Record<ConnectorCategory, string> = {
+  restoration: 'Restoration',
+  roofing: 'Roofing',
+  contractor: 'Contractors',
+  estimating: 'Estimating',
+  carriers: 'Carriers & portals',
+  custom: 'Custom',
+};
+
+export const CONNECTOR_ACCESS_MODE_LABELS: Record<ConnectorAccessMode, string> = {
+  web: 'Web access',
+  computer: 'Computer use',
+  api: 'API',
+};
+
+/* ---------------------------------------------------------------------------
  * Verifier — the second agent, which re-opens the site after a run reports
  * success and checks the work is really there.
  * ------------------------------------------------------------------------- */
@@ -1119,6 +1210,50 @@ export const api = {
   getWebRuns: () => request<{ runs: WebRun[] }>('/api/web-access/runs', { method: 'GET' }),
 
   getWebRun: (id: string) => request<{ run: WebRun }>(`/api/web-access/runs/${id}`, { method: 'GET' }),
+
+  // ---- App Connectors ----
+  getConnectorCatalog: (all = false) =>
+    request<ConnectorCatalogResponse>(
+      `/api/connectors/catalog${all ? '?all=1' : ''}`,
+      { method: 'GET' },
+    ),
+
+  getAppConnections: () =>
+    request<{ connections: AppConnectorConnection[] }>('/api/connectors/connections', {
+      method: 'GET',
+    }),
+
+  connectAppConnector: (input: ConnectAppConnectorInput) =>
+    request<{ connection: AppConnectorConnection }>('/api/connectors/connections', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  updateAppConnector: (id: string, input: { label?: string; notes?: string | null; status?: AppConnectorStatus }) =>
+    request<{ connection: AppConnectorConnection }>(`/api/connectors/connections/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+
+  deleteAppConnector: (id: string, purge = true) =>
+    request<{ ok: boolean }>(
+      `/api/connectors/connections/${id}${purge ? '?purge=true' : ''}`,
+      { method: 'DELETE' },
+    ),
+
+  startConnectorRun: (
+    id: string,
+    input: {
+      templateId?: string;
+      kind?: WebRunKind;
+      instruction?: string;
+      data?: unknown;
+    },
+  ) =>
+    request<{ run: WebRun; workspace: string }>(`/api/connectors/connections/${id}/run`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
 
   // ---- Verifier ----
   verifierStatus: () =>

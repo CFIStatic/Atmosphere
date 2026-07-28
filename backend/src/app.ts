@@ -14,6 +14,7 @@ import { billingRouter } from './routes/billing.js';
 import { usageRouter } from './routes/usage.js';
 import { pmRouter } from './routes/pm.js';
 import { webAccessRouter } from './routes/webAccess.js';
+import { connectorsRouter } from './routes/connectors.js';
 import { verifierRouter } from './routes/verifier.js';
 import { aiRouter } from './routes/ai.js';
 import { modelGatewayRouter } from './routes/modelGateway.js';
@@ -134,6 +135,7 @@ export function createApp(): Express {
   app.use('/api/webhooks', webhookRouter);
   app.use('/api/pm', pmRouter);
   app.use('/api/web-access', webAccessRouter);
+  app.use('/api/connectors', connectorsRouter);
   app.use('/api/verifier', verifierRouter);
   app.use('/api/crm', crmRouter);
   app.use('/api/backups', backupRouter);
