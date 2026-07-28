@@ -4,9 +4,13 @@ import { useAuth } from '../context/AuthContext';
 import {
   api,
   ApiError,
+  CONTRACTOR_TYPE_LABELS,
   ROLE_LABELS,
+  USAGE_INTENT_LABELS,
   WORK_TYPE_LABELS,
+  type ContractorType,
   type MemberRole,
+  type UsageIntent,
   type WorkType,
 } from '../lib/api';
 import { Logo } from '../components/Logo';
@@ -27,7 +31,32 @@ const WORK_OPTIONS: { value: WorkType; blurb: string }[] = [
   { value: 'construction', blurb: 'Rebuild and reconstruction after mitigation.' },
 ];
 
-const STEPS = ['Organization', 'Your role', 'Type of work'];
+const CONTRACTOR_OPTIONS: { value: ContractorType; blurb: string }[] = [
+  {
+    value: 'restoration',
+    blurb: 'Water, fire, mold, and related restoration — mitigation through rebuild.',
+  },
+  { value: 'roofing', blurb: 'Roofing installs, repairs, and storm work.' },
+  { value: 'general_contractor', blurb: 'General contracting across trades and scopes.' },
+  { value: 'other', blurb: 'Another kind of contractor or related business.' },
+];
+
+const USAGE_OPTIONS: { value: UsageIntent; blurb: string }[] = [
+  { value: 'mitigation_estimating', blurb: 'Build and price mitigation scopes.' },
+  { value: 'construction_estimating', blurb: 'Build and price reconstruction scopes.' },
+  { value: 'project_management', blurb: 'Keep jobs, tasks, and crews on track.' },
+  { value: 'crm', blurb: 'Track leads, contacts, properties, and jobs.' },
+  { value: 'web_access', blurb: 'Have AI sign into carrier and vendor portals for you.' },
+  { value: 'field_work', blurb: 'Support technicians on site.' },
+  { value: 'billing', blurb: 'Manage plans, seats, and usage credits.' },
+  { value: 'exploring', blurb: 'Not sure yet — just getting set up.' },
+];
+
+function stepsFor(mode: OrgMode): string[] {
+  return mode === 'create'
+    ? ['Organization', 'Company type', 'Your role', 'Type of work', 'How you will use it']
+    : ['Organization', 'Your role', 'Type of work', 'How you will use it'];
+}
 
 export function OnboardingPage() {
   const { user, refreshMembership, logout } = useAuth();
@@ -37,37 +66,67 @@ export function OnboardingPage() {
   const [mode, setMode] = useState<OrgMode>('create');
   const [orgName, setOrgName] = useState('');
   const [joinCode, setJoinCode] = useState('');
+  const [contractorType, setContractorType] = useState<ContractorType | null>(null);
   const [role, setRole] = useState<MemberRole | null>(null);
   const [workType, setWorkType] = useState<WorkType | null>(null);
+  const [usageIntents, setUsageIntents] = useState<UsageIntent[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const steps = useMemo(() => stepsFor(mode), [mode]);
 
   const orgStepValid = useMemo(() => {
     if (mode === 'create') return orgName.trim().length >= 2;
     return /^[A-Za-z0-9]{6,12}$/.test(joinCode.trim());
   }, [mode, orgName, joinCode]);
 
-  const canContinue =
-    (step === 0 && orgStepValid) || (step === 1 && role !== null) || (step === 2 && workType !== null);
+  const canContinue = useMemo(() => {
+    if (mode === 'create') {
+      if (step === 0) return orgStepValid;
+      if (step === 1) return contractorType !== null;
+      if (step === 2) return role !== null;
+      if (step === 3) return workType !== null;
+      if (step === 4) return usageIntents.length > 0;
+      return false;
+    }
+    if (step === 0) return orgStepValid;
+    if (step === 1) return role !== null;
+    if (step === 2) return workType !== null;
+    if (step === 3) return usageIntents.length > 0;
+    return false;
+  }, [mode, step, orgStepValid, contractorType, role, workType, usageIntents]);
+
+  function switchMode(next: OrgMode) {
+    setMode(next);
+    setStep(0);
+    setError(null);
+  }
 
   function next() {
     setError(null);
-    if (step < STEPS.length - 1) setStep((s) => s + 1);
+    if (step < steps.length - 1) setStep((s) => s + 1);
   }
   function back() {
     setError(null);
     if (step > 0) setStep((s) => s - 1);
   }
 
+  function toggleUsage(intent: UsageIntent) {
+    setUsageIntents((current) =>
+      current.includes(intent) ? current.filter((value) => value !== intent) : [...current, intent],
+    );
+  }
+
   async function finish() {
-    if (!role || !workType) return;
+    if (!role || !workType || usageIntents.length === 0) return;
+    if (mode === 'create' && !contractorType) return;
     setSubmitting(true);
     setError(null);
     try {
       if (mode === 'create') {
-        await api.createOrg(orgName.trim(), role, workType);
+        await api.createOrg(orgName.trim(), role, workType, contractorType!, usageIntents);
       } else {
-        await api.joinOrg(joinCode.trim().toUpperCase(), role, workType);
+        await api.joinOrg(joinCode.trim().toUpperCase(), role, workType, usageIntents);
       }
       await refreshMembership();
       navigate('/dashboard', { replace: true });
@@ -79,6 +138,12 @@ export function OnboardingPage() {
       setSubmitting(false);
     }
   }
+
+  const showOrg = step === 0;
+  const showContractor = mode === 'create' && step === 1;
+  const showRole = mode === 'create' ? step === 2 : step === 1;
+  const showWork = mode === 'create' ? step === 3 : step === 2;
+  const showUsage = mode === 'create' ? step === 4 : step === 3;
 
   return (
     <div className="cx-aurora flex min-h-screen flex-col bg-paper-100">
@@ -96,7 +161,7 @@ export function OnboardingPage() {
         <div className="w-full max-w-lg animate-fade-in-up">
           {/* Step indicator */}
           <ol className="mb-6 flex items-center gap-2" aria-label="Progress">
-            {STEPS.map((label, i) => (
+            {steps.map((label, i) => (
               <li key={label} className="flex flex-1 items-center gap-2">
                 <span
                   className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border text-xs font-semibold transition ${
@@ -114,7 +179,7 @@ export function OnboardingPage() {
                 >
                   {label}
                 </span>
-                {i < STEPS.length - 1 && <span className="h-px flex-1 bg-paper-200" />}
+                {i < steps.length - 1 && <span className="h-px flex-1 bg-paper-200" />}
               </li>
             ))}
           </ol>
@@ -129,8 +194,8 @@ export function OnboardingPage() {
               </div>
             )}
 
-            {/* Step 1: Organization */}
-            {step === 0 && (
+            {/* Step: Organization */}
+            {showOrg && (
               <section>
                 <h1 className="text-xl font-bold text-ink-900">Join or create an organization</h1>
                 <p className="mt-1.5 text-sm text-ink-600">
@@ -139,10 +204,10 @@ export function OnboardingPage() {
                 </p>
 
                 <div className="mt-5 grid grid-cols-2 gap-2 rounded-lg border border-line bg-paper-0 p-1">
-                  <ModeTab active={mode === 'create'} onClick={() => setMode('create')}>
+                  <ModeTab active={mode === 'create'} onClick={() => switchMode('create')}>
                     Create new
                   </ModeTab>
-                  <ModeTab active={mode === 'join'} onClick={() => setMode('join')}>
+                  <ModeTab active={mode === 'join'} onClick={() => switchMode('join')}>
                     Link existing
                   </ModeTab>
                 </div>
@@ -186,8 +251,29 @@ export function OnboardingPage() {
               </section>
             )}
 
-            {/* Step 2: Role */}
-            {step === 1 && (
+            {/* Step: Company type (create only) */}
+            {showContractor && (
+              <section>
+                <h1 className="text-xl font-bold text-ink-900">What kind of contractor are you?</h1>
+                <p className="mt-1.5 text-sm text-ink-600">
+                  This helps Atmosphere tailor defaults for your company.
+                </p>
+                <div className="mt-5 space-y-2.5">
+                  {CONTRACTOR_OPTIONS.map((opt) => (
+                    <OptionCard
+                      key={opt.value}
+                      selected={contractorType === opt.value}
+                      title={CONTRACTOR_TYPE_LABELS[opt.value]}
+                      blurb={opt.blurb}
+                      onClick={() => setContractorType(opt.value)}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Step: Role */}
+            {showRole && (
               <section>
                 <h1 className="text-xl font-bold text-ink-900">What's your role?</h1>
                 <p className="mt-1.5 text-sm text-ink-600">Pick the account type that fits you best.</p>
@@ -205,8 +291,8 @@ export function OnboardingPage() {
               </section>
             )}
 
-            {/* Step 3: Work type */}
-            {step === 2 && (
+            {/* Step: Work type */}
+            {showWork && (
               <section>
                 <h1 className="text-xl font-bold text-ink-900">Mitigation or construction?</h1>
                 <p className="mt-1.5 text-sm text-ink-600">
@@ -226,6 +312,28 @@ export function OnboardingPage() {
               </section>
             )}
 
+            {/* Step: How you'll use Atmosphere */}
+            {showUsage && (
+              <section>
+                <h1 className="text-xl font-bold text-ink-900">How do you plan to use Atmosphere?</h1>
+                <p className="mt-1.5 text-sm text-ink-600">
+                  Select everything that applies — you can change this later in Settings.
+                </p>
+                <div className="mt-5 space-y-2.5">
+                  {USAGE_OPTIONS.map((opt) => (
+                    <OptionCard
+                      key={opt.value}
+                      selected={usageIntents.includes(opt.value)}
+                      title={USAGE_INTENT_LABELS[opt.value]}
+                      blurb={opt.blurb}
+                      onClick={() => toggleUsage(opt.value)}
+                      multi
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
             {/* Nav buttons */}
             <div className="mt-7 flex items-center justify-between gap-3">
               <button
@@ -237,7 +345,7 @@ export function OnboardingPage() {
                 Back
               </button>
 
-              {step < STEPS.length - 1 ? (
+              {step < steps.length - 1 ? (
                 <button
                   type="button"
                   onClick={next}
@@ -299,11 +407,13 @@ function OptionCard({
   title,
   blurb,
   onClick,
+  multi = false,
 }: {
   selected: boolean;
   title: string;
   blurb: string;
   onClick: () => void;
+  multi?: boolean;
 }) {
   return (
     <button
@@ -317,9 +427,9 @@ function OptionCard({
       }`}
     >
       <span
-        className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border transition ${
-          selected ? 'border-brand-400 bg-brand-500 text-ink-900' : 'border-line'
-        }`}
+        className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center border transition ${
+          multi ? 'rounded-md' : 'rounded-full'
+        } ${selected ? 'border-brand-400 bg-brand-500 text-ink-900' : 'border-line'}`}
       >
         {selected && <CheckIcon width={14} height={14} />}
       </span>

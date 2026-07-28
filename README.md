@@ -113,8 +113,8 @@ JWT:
 | Table          | Purpose                                                              |
 | -------------- | ------------------------------------------------------------------- |
 | `profiles`     | One row per auth user (`id` → `auth.users`), carries email/name.     |
-| `orgs`         | An organization; owns a unique `join_code`.                          |
-| `org_members`  | Links a user to an org with their `role` and `work_type`.            |
+| `orgs`         | An organization; owns a unique `join_code` and `contractor_type`.    |
+| `org_members`  | Links a user to an org with their `role`, `work_type`, and `usage_intents`. |
 | `device_credentials` | One row per PIN-enrolled device. Holds only hashes — no secret and no session token. |
 | `estimator_jobs` / `estimator_estimates` | Estimating jobs and immutable estimate snapshots. |
 | `estimator_settings` | Per-org margin, O&P, tax and cost-basis assumptions.           |
@@ -163,6 +163,7 @@ through two `SECURITY DEFINER` functions that validate `auth.uid()` internally:
 
 - `create_org(name, role, work_type)` — creates an org + adds the caller as its first member.
 - `join_org(code, role, work_type)` — links the caller to an existing org by join code.
+- `set_org_contractor_type(type)` — records whether the org is restoration, roofing, GC, or other.
 - `enroll_device(…)` / `revoke_my_devices()` — manage PIN enrollments for `auth.uid()`.
 - `device_lookup(…)` / `device_verify_pin(…)` — the only two functions reachable by `anon`,
   because PIN unlock necessarily runs before the user has a session. Both are inert without
@@ -416,9 +417,10 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | GET    | `/api/profile`       | cookie | —                             | Caller's profile (display name, email)       |
 | PATCH  | `/api/profile`       | cookie | `{ fullName }`                | Update the caller's display name             |
 | GET    | `/api/org/me`        | cookie | —                             | Caller's membership, or `null` if onboarding |
-| PATCH  | `/api/org/me`        | cookie | `{ role, workType }`          | Update the caller's own role / work type     |
-| POST   | `/api/org`           | cookie | `{ name, role, workType }`    | Create an org and join as first member       |
-| POST   | `/api/org/join`      | cookie | `{ joinCode, role, workType }`| Link to an existing org by join code         |
+| PATCH  | `/api/org/me`        | cookie | `{ role, workType, usageIntents }` | Update the caller's role / work type / usage |
+| PATCH  | `/api/org`           | cookie | `{ contractorType }`          | Set the org's contractor type (creator)      |
+| POST   | `/api/org`           | cookie | `{ name, role, workType, contractorType, usageIntents }` | Create an org and join as first member |
+| POST   | `/api/org/join`      | cookie | `{ joinCode, role, workType, usageIntents }` | Link to an existing org by join code |
 | GET    | `/api/org/members`   | cookie | —                             | Linked accounts in the caller's org          |
 | POST   | `/api/estimator/build` | cookie | `{ docusketch?, mica?, photos?, notes? }` | Build an estimate; saves nothing |
 | POST   | `/api/estimator/estimates` | cookie | same as `build`         | Build and persist                            |
@@ -540,6 +542,8 @@ field-facing view of the same rows plus the operational layer over them.
 
 `role` ∈ `project_manager | field_technician | accountant | office_manager | sales`.
 `workType` ∈ `mitigation | construction`.
+`contractorType` ∈ `restoration | roofing | general_contractor | other` (org-level, set when creating).
+`usageIntents` ∈ multi-select of `mitigation_estimating | construction_estimating | project_management | crm | web_access | field_work | billing | exploring`.
 
 All endpoints validate input with zod. `signup` and `login` are rate-limited
 (20 attempts / 15 min / IP). Login failures return a generic message so the API does not

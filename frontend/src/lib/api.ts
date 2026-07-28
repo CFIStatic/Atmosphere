@@ -26,16 +26,34 @@ export type MemberRole =
 
 export type WorkType = 'mitigation' | 'construction';
 
+export type ContractorType =
+  | 'restoration'
+  | 'roofing'
+  | 'general_contractor'
+  | 'other';
+
+export type UsageIntent =
+  | 'mitigation_estimating'
+  | 'construction_estimating'
+  | 'project_management'
+  | 'crm'
+  | 'web_access'
+  | 'field_work'
+  | 'billing'
+  | 'exploring';
+
 export interface Org {
   id: string;
   name: string;
   joinCode: string;
   createdAt?: string;
+  contractorType?: ContractorType | null;
 }
 
 export interface Membership {
   role: MemberRole;
   workType: WorkType;
+  usageIntents: UsageIntent[];
   status: string;
   org: Org | null;
 }
@@ -54,6 +72,7 @@ export interface OrgMember {
   fullName: string | null;
   role: MemberRole;
   workType: WorkType;
+  usageIntents: UsageIntent[];
   status: string;
 }
 
@@ -764,22 +783,34 @@ export const api = {
   // ---- Organization / onboarding ----
   getMembership: () => request<{ membership: Membership | null }>('/api/org/me', { method: 'GET' }),
 
-  updateMembership: (role: MemberRole, workType: WorkType) =>
+  updateMembership: (role: MemberRole, workType: WorkType, usageIntents: UsageIntent[]) =>
     request<{ membership: Membership }>('/api/org/me', {
       method: 'PATCH',
-      body: JSON.stringify({ role, workType }),
+      body: JSON.stringify({ role, workType, usageIntents }),
     }),
 
-  createOrg: (name: string, role: MemberRole, workType: WorkType) =>
+  updateOrgProfile: (contractorType: ContractorType) =>
+    request<{ org: Org }>('/api/org', {
+      method: 'PATCH',
+      body: JSON.stringify({ contractorType }),
+    }),
+
+  createOrg: (
+    name: string,
+    role: MemberRole,
+    workType: WorkType,
+    contractorType: ContractorType,
+    usageIntents: UsageIntent[],
+  ) =>
     request<{ org: Org }>('/api/org', {
       method: 'POST',
-      body: JSON.stringify({ name, role, workType }),
+      body: JSON.stringify({ name, role, workType, contractorType, usageIntents }),
     }),
 
-  joinOrg: (joinCode: string, role: MemberRole, workType: WorkType) =>
+  joinOrg: (joinCode: string, role: MemberRole, workType: WorkType, usageIntents: UsageIntent[]) =>
     request<{ org: Org }>('/api/org/join', {
       method: 'POST',
-      body: JSON.stringify({ joinCode, role, workType }),
+      body: JSON.stringify({ joinCode, role, workType, usageIntents }),
     }),
 
   getMembers: () => request<{ members: OrgMember[] }>('/api/org/members', { method: 'GET' }),
@@ -2280,6 +2311,24 @@ export const ROLE_LABELS: Record<MemberRole, string> = {
 export const WORK_TYPE_LABELS: Record<WorkType, string> = {
   mitigation: 'Mitigation',
   construction: 'Construction',
+};
+
+export const CONTRACTOR_TYPE_LABELS: Record<ContractorType, string> = {
+  restoration: 'Restoration company',
+  roofing: 'Roofing company',
+  general_contractor: 'General contractor',
+  other: 'Something else',
+};
+
+export const USAGE_INTENT_LABELS: Record<UsageIntent, string> = {
+  mitigation_estimating: 'Mitigation estimating',
+  construction_estimating: 'Construction estimating',
+  project_management: 'Project management',
+  crm: 'CRM / leads and jobs',
+  web_access: 'AI access to other systems',
+  field_work: 'Field / technician work',
+  billing: 'Billing and credits',
+  exploring: 'Still exploring',
 };
 
 

@@ -39,7 +39,13 @@ create table if not exists public.orgs (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   join_code text unique not null,
-  created_at timestamptz not null default now()
+  created_by uuid references auth.users (id),
+  created_at timestamptz not null default now(),
+  contractor_type text
+    check (
+      contractor_type is null
+      or contractor_type in ('restoration', 'roofing', 'general_contractor', 'other')
+    )
 );
 
 do $$ begin
@@ -57,6 +63,7 @@ create table if not exists public.org_members (
   user_id uuid not null references auth.users (id),
   role public.member_role not null,
   work_type public.work_type not null,
+  usage_intents text[] not null default '{}',
   status text not null default 'active',
   created_at timestamptz not null default now(),
   unique (org_id, user_id)
