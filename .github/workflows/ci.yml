@@ -1,0 +1,90 @@
+name: CI
+
+# Runs on every branch, not just the default one. Work here lands through many
+# parallel branches that merge into main constantly, so a branch needs to know
+# it is green before it is merged, not after.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+# A new push to the same branch makes the previous run irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+        working-directory: backend
+      - run: npm run typecheck
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      # `npm run build` runs `tsc -b` first, so this covers the typecheck too.
+      - run: npm run build
+        working-directory: frontend
+
+  agent:
+    name: Agent
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: agent/package-lock.json
+      - run: npm ci
+        working-directory: agent
+      - run: npm run typecheck
+        working-directory: agent
+
+  migrations:
+    name: Migrations
+    runs-on: ubuntu-latest
+    # Applies the real migrations to a throwaway Postgres and asserts the
+    # behaviour they promise — the capture triggers, the append-only guarantee,
+    # and cross-organization isolation. The suite deliberately tries to delete
+    # history, so it needs a database it is allowed to destroy; that is why this
+    # never points at a Supabase project.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Agent Memory schema tests
+        env:
+          PGPASSWORD: postgres
+        run: backend/supabase/tests/run.sh -h localhost -p 5432 -U postgres

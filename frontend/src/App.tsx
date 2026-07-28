@@ -7,6 +7,8 @@ import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { SettingsPage } from './pages/SettingsPage';
+import { AuditPage } from './pages/AuditPage';
 import { JobsPage } from './pages/JobsPage';
 import { JobDetailPage } from './pages/JobDetailPage';
 import { MemoryPage } from './pages/MemoryPage';
@@ -19,6 +21,7 @@ import { PmProjectPage } from './pages/PmProjectPage';
 import { WebAccessPage } from './pages/WebAccessPage';
 import { ComputerUsePage } from './pages/ComputerUsePage';
 import { EstimatorPage } from './pages/EstimatorPage';
+import { MitigationEstimatorPage } from './pages/MitigationEstimatorPage';
 import { SpinnerIcon } from './components/icons';
 
 function FullScreenSpinner() {
@@ -79,6 +82,17 @@ export default function App() {
               <ProtectedRoute>
                 <RequireOnboarded>
                   <DashboardPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/audit"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <AuditPage />
                 </RequireOnboarded>
               </ProtectedRoute>
             }
@@ -177,6 +191,17 @@ export default function App() {
           />
 
           <Route
+            path="/estimator"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <EstimatorPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
             path="/computer-use"
             element={
               <ProtectedRoute>
@@ -188,11 +213,22 @@ export default function App() {
           />
 
           <Route
-            path="/estimator"
+            path="/mitigation"
             element={
               <ProtectedRoute>
                 <RequireOnboarded>
-                  <EstimatorPage />
+                  <MitigationEstimatorPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <SettingsPage />
                 </RequireOnboarded>
               </ProtectedRoute>
             }

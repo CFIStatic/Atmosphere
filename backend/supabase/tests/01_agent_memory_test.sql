@@ -126,3 +126,69 @@ truncate public.memory_events;
 
 \echo '=== 14. Final memory count (unchanged by everything above) ==='
 select count(*) as total_events from public.memory_events;
+
+-- ============================================================================
+-- 15. Assertions
+-- ============================================================================
+-- Everything above prints; only this section fails. The sections that expect an
+-- ERROR prove nothing on their own — psql keeps going with ON_ERROR_STOP off, so
+-- a guarantee that silently stopped holding would still look like a clean run.
+-- These checks turn each of those into something CI can go red on.
+\set ON_ERROR_STOP on
+
+do $$
+declare
+  v_events   bigint;
+  v_tasks    bigint;
+  v_logs     bigint;
+  v_crew     bigint;
+  v_forged   bigint;
+  v_orphans  bigint;
+begin
+  -- Sections 8, 9 and 13 all tried to destroy history. None of it may have worked.
+  select count(*) into v_events from public.memory_events;
+  if v_events = 0 then
+    raise exception 'memory_events is empty — the append-only guarantee failed';
+  end if;
+
+  select count(*) into v_tasks from public.job_tasks;
+  select count(*) into v_logs  from public.work_logs;
+  select count(*) into v_crew  from public.job_assignments;
+  if v_tasks = 0 or v_logs = 0 or v_crew = 0 then
+    raise exception 'a no-delete table lost rows: tasks=%, logs=%, crew=%',
+      v_tasks, v_logs, v_crew;
+  end if;
+
+  -- Section 10 tried to fabricate a job event through the client RPC.
+  select count(*) into v_forged
+  from public.memory_events
+  where source = 'app' and event_type not like 'auth.%'
+    and event_type not like 'note.%' and event_type not like 'export.%'
+    and event_type not like 'view.%' and event_type not like 'session.%';
+  if v_forged > 0 then
+    raise exception '% client-recorded event(s) escaped the namespace guard', v_forged;
+  end if;
+
+  -- Every job event must name the job it happened to.
+  select count(*) into v_orphans
+  from public.memory_events
+  where entity_type in ('job', 'task', 'assignment', 'work_log') and job_id is null;
+  if v_orphans > 0 then
+    raise exception '% entity event(s) carry no job_id', v_orphans;
+  end if;
+
+  -- The capture trigger must have produced one event per action taken above.
+  if (select count(*) from public.memory_events where event_type = 'job.created') <> 2 then
+    raise exception 'expected 2 job.created events, found %',
+      (select count(*) from public.memory_events where event_type = 'job.created');
+  end if;
+  if (select count(*) from public.memory_events where event_type = 'task.status_changed') <> 1 then
+    raise exception 'the task completion was not captured';
+  end if;
+  if (select count(*) from public.memory_events where event_type = 'work_log.created') <> 1 then
+    raise exception 'the work log was not captured';
+  end if;
+
+  raise notice 'All Agent Memory guarantees hold (% events recorded).', v_events;
+end;
+$$;

@@ -11,6 +11,7 @@ import {
 } from '../lib/session.js';
 import {
   credentialsSchema,
+  changePasswordSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
   pinSchema,
@@ -336,6 +337,91 @@ authRouter.post(
         entityId: updated.user.id,
       });
 
+      res.json({ user: publicUser(updated.user) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * Changing a password from Settings requires the current one, so this endpoint
+ * is also a password oracle for whoever is sitting at the browser. Cap the
+ * guesses well below what a search would need, but leave enough room for a user
+ * who simply mistypes.
+ */
+const changePasswordLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    res.status(429).json({
+      error: 'Too many password change attempts. Please wait an hour and try again.',
+      code: 'rate_limited',
+    });
+  },
+});
+
+/**
+ * POST /api/auth/change-password
+ * Changes the password of a signed-in user who can still supply the old one.
+ *
+ * Re-authenticating with the current password is deliberate: `requireAuth` only
+ * proves the browser holds a session cookie, and a session that has been left
+ * open should not be enough to lock the real owner out of their account.
+ */
+authRouter.post(
+  '/change-password',
+  changePasswordLimiter,
+  requireAuth,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
+
+      const email = req.user!.email;
+      if (!email) {
+        throw new HttpError(
+          400,
+          'This account has no email address, so its password cannot be changed here.',
+          'no_email',
+        );
+      }
+
+      // Verify the current password by signing in with it. The session this
+      // mints is also what authorises the update below, so the change is scoped
+      // to a caller who proved knowledge of the credential — not merely to
+      // whoever holds the cookie.
+      const supabase = createAnonClient();
+      const { data: verified, error: verifyError } = await supabase.auth.signInWithPassword({
+        email,
+        password: currentPassword,
+      });
+      if (verifyError || !verified.session) {
+        throw unauthorized('Your current password is incorrect.', 'invalid_credentials');
+      }
+
+      const { data: updated, error: updateError } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+      if (updateError || !updated.user) {
+        const status = updateError?.status === 422 ? 400 : 500;
+        throw new HttpError(
+          status,
+          status === 400
+            ? 'That password was rejected. Choose a different one.'
+            : 'Could not update your password. Please try again.',
+          'password_update_failed',
+        );
+      }
+
+      // Retire every other session: anyone still signed in elsewhere with the
+      // old password loses access, which is the point of changing it. This
+      // device keeps its session (and its PIN — the user knows their password
+      // here, so there is nothing to distrust about this browser).
+      await supabase.auth.signOut({ scope: 'others' }).catch(() => undefined);
+
+      setSessionCookies(res, verified.session);
       res.json({ user: publicUser(updated.user) });
     } catch (err) {
       next(err);

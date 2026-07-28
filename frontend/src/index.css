@@ -85,3 +85,25 @@ body {
 audio {
   color-scheme: light;
 }
+
+/* Set from Settings › Appearance, and honoured for anyone whose system already
+   asks for less motion. One rule covers the whole app, including the entrance
+   animations and the PIN pad's shake. */
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
