@@ -22,9 +22,9 @@ kind of work best**, and we learn it from the work itself.
             │                                                          │
             ▼                                                          │
    ┌─────────────────┐    ┌──────────────┐    ┌──────────────┐   ┌──────────────┐
-   │  ROUTE          │───▶│  EXECUTE     │───▶│  VERIFY      │──▶│  RECORD      │
-   │  pick an arm    │    │  call the    │    │  deterministic│   │  episode +   │
-   │  (model+prompt) │    │  provider    │    │  checks       │   │  reward      │
+   │  ASSESS         │───▶│  ROUTE       │───▶│  EXECUTE     │──▶│  VERIFY      │
+   │  complexity →   │    │  pick an arm │    │  call the    │   │  + RECORD    │
+   │  preferred tier │    │  (model+prompt)│  │  provider    │   │  episode     │
    └─────────────────┘    └──────────────┘    └──────────────┘   └──────┬───────┘
             ▲                                                          │
             │             ┌──────────────┐    ┌──────────────┐         │
@@ -37,10 +37,10 @@ Formally this is a **contextual bandit**:
 
 | RL concept | Here |
 | ---------- | ---- |
-| State / context | Task type, work type (mitigation/construction), input size |
+| State / context | Task type, work type, complexity assessment (simple/moderate/complex) |
 | Action | An **arm**: `provider × model × prompt variant × parameters` |
 | Reward | Scalar in `[0,1]` from verifier + human disposition + cost + latency |
-| Policy | Thompson sampling over Beta posteriors, behind a champion/challenger gate |
+| Policy | Assess complexity → preferred tier; Thompson sampling over Beta posteriors, behind a champion/challenger gate |
 
 ### Why a bandit and not fine-tuning or full RL
 
@@ -419,15 +419,17 @@ Stated plainly, because a system that hides its limits is not trustworthy:
 backend/src/ai/
 ├── types.ts              Domain types — the RL formulation
 ├── catalog.ts            Model catalog: pricing, tiers, priors
+├── assessor.ts           Pre-execution complexity → preferred model tier
 ├── taskTypes.ts          Task registry: what work is, how it is judged
 ├── policy.ts             Thompson sampling, context backoff, posteriors
 ├── reward.ts             The definition of "correct"
 ├── verifiers.ts          Deterministic checks + the serving gate
 ├── prompt.ts             Instruction + variant + exemplars
-├── executor.ts           route → execute → verify → record, with failover
+├── executor.ts           assess → route → execute → verify → record, with failover
 ├── learn.ts              Promotion gate, exemplar mining, preference export
 ├── store.ts              Persistence under the caller's JWT
 ├── learning.test.ts      Tests for the decision logic
+├── assessor.test.ts      Tests for complexity assessment
 └── providers/
     ├── types.ts          The provider interface
     ├── openaiCompatible.ts   OpenAI + xAI + open weights

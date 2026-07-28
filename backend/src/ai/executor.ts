@@ -1,20 +1,21 @@
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { config } from '../config.js';
+import { assessTask, type TaskAssessment } from './assessor.js';
 import { estimateCostUsd, lookupModel, tierPrior } from './catalog.js';
 import { buildPrompt } from './prompt.js';
-import { contextKeys, primaryContextKey, selectArm, sizeBucketFor } from './policy.js';
+import { contextKeys, primaryContextKey, selectArm } from './policy.js';
 import { getProvider, isProviderConfigured, ProviderError } from './providers/index.js';
 import { provisionalReward } from './reward.js';
 import { loadArms, loadExemplars, loadStats, recordRun } from './store.js';
 import { getTaskSpec } from './taskTypes.js';
 import { verify } from './verifiers.js';
-import type { Arm, ExecutionResult, TaskContext, TaskType } from './types.js';
+import type { Arm, AssessmentSummary, ExecutionResult, TaskContext, TaskType } from './types.js';
 
 /**
  * The execution loop — one turn of the cycle the whole branch is about:
  *
- *     route → execute → verify → score → record → (later) learn
+ *     assess → route → execute → verify → score → record → (later) learn
  *
  * Read the ordering as a set of guarantees:
  *
@@ -61,12 +62,16 @@ export async function executeTask(params: ExecuteInput): Promise<ExecutionResult
   }
   const input = parsedInput.data;
 
+  // Assess before spending a token: complexity decides which model tier to prefer.
+  const assessment = assessTask(params.taskType, input, params.workType);
+
   const context: TaskContext = {
     taskType: params.taskType,
     orgId: params.orgId,
     userId: params.userId,
     workType: params.workType,
-    sizeBucket: sizeBucketFor(input),
+    sizeBucket: assessment.sizeBucket,
+    complexity: assessment.complexity,
   };
 
   const arms = await loadArms(params.supabase, params.taskType);
@@ -76,7 +81,7 @@ export async function executeTask(params: ExecuteInput): Promise<ExecutionResult
     arms.map((arm) => arm.id),
   );
 
-  const selection = selectArm({ spec, context, arms, stats });
+  const selection = selectArm({ spec, context, arms, stats, assessment });
   const exemplars = await loadExemplars(
     params.supabase,
     params.orgId,
@@ -138,6 +143,8 @@ export async function executeTask(params: ExecuteInput): Promise<ExecutionResult
       costUsd: attempt.costUsd,
       latencyMs: attempt.latencyMs,
       explored,
+      assessment: toAssessmentSummary(assessment),
+      selectionReason: reason,
     };
   }
 
@@ -145,6 +152,74 @@ export async function executeTask(params: ExecuteInput): Promise<ExecutionResult
     `Could not produce a verified result for ${params.taskType}`,
     failures,
   );
+}
+
+/**
+ * Assess and pick a provider/model without calling any LLM.
+ *
+ * Used by the `/api/ai/route` preview so callers (and operators) can see which
+ * arm would run — and why — before spending tokens.
+ */
+export async function previewRoute(params: ExecuteInput): Promise<{
+  assessment: AssessmentSummary;
+  selection: {
+    provider: Arm['provider'];
+    model: string;
+    promptVariant: string;
+    armId: string;
+    explored: boolean;
+    reason: string;
+  };
+  contextKey: string;
+}> {
+  const spec = getTaskSpec(params.taskType);
+  const parsedInput = spec.inputSchema.safeParse(params.input);
+  if (!parsedInput.success) {
+    throw new TaskInputError(
+      parsedInput.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; '),
+    );
+  }
+  const input = parsedInput.data;
+  const assessment = assessTask(params.taskType, input, params.workType);
+  const context: TaskContext = {
+    taskType: params.taskType,
+    orgId: params.orgId,
+    userId: params.userId,
+    workType: params.workType,
+    sizeBucket: assessment.sizeBucket,
+    complexity: assessment.complexity,
+  };
+
+  const arms = await loadArms(params.supabase, params.taskType);
+  const stats = await loadStats(
+    params.supabase,
+    params.taskType,
+    arms.map((arm) => arm.id),
+  );
+  const selection = selectArm({ spec, context, arms, stats, assessment });
+
+  return {
+    assessment: toAssessmentSummary(assessment),
+    selection: {
+      provider: selection.arm.provider,
+      model: selection.arm.model,
+      promptVariant: selection.arm.promptVariant,
+      armId: selection.arm.id,
+      explored: selection.explored,
+      reason: selection.reason,
+    },
+    contextKey: primaryContextKey(context),
+  };
+}
+
+function toAssessmentSummary(assessment: TaskAssessment): AssessmentSummary {
+  return {
+    complexity: assessment.complexity,
+    score: Number(assessment.score.toFixed(3)),
+    preferredTiers: assessment.preferredTiers,
+    sizeBucket: assessment.sizeBucket,
+    reasons: assessment.reasons,
+  };
 }
 
 /**
@@ -284,12 +359,14 @@ export function runShadow(params: ExecuteInput & { arm: Arm }): void {
   const parsed = spec.inputSchema.safeParse(params.input);
   if (!parsed.success) return;
 
+  const assessment = assessTask(params.taskType, parsed.data, params.workType);
   const context: TaskContext = {
     taskType: params.taskType,
     orgId: params.orgId,
     userId: params.userId,
     workType: params.workType,
-    sizeBucket: sizeBucketFor(parsed.data),
+    sizeBucket: assessment.sizeBucket,
+    complexity: assessment.complexity,
   };
 
   void (async () => {
@@ -309,7 +386,7 @@ export function runShadow(params: ExecuteInput & { arm: Arm }): void {
         input: parsed.data,
         attempt,
         explored: true,
-        selectionReason: 'shadow evaluation',
+        selectionReason: `shadow evaluation (complexity=${assessment.complexity})`,
         mode: 'shadow',
       });
     } catch (err) {

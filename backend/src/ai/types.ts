@@ -48,6 +48,9 @@ export interface Arm {
   status: 'champion' | 'candidate' | 'retired';
 }
 
+/** How hard a unit of work looks before we spend a token. See assessor.ts. */
+export type Complexity = 'simple' | 'moderate' | 'complex';
+
 /** The observed context for one decision. Kept coarse — see contextKey(). */
 export interface TaskContext {
   taskType: TaskType;
@@ -57,6 +60,12 @@ export interface TaskContext {
   workType?: string;
   /** Bucketed input size; a long job file is a different problem to a short one. */
   sizeBucket?: 'small' | 'medium' | 'large';
+  /**
+   * Pre-execution complexity assessment. Complex work prefers frontier models;
+   * simple work prefers fast/cheap ones. Part of the context hierarchy so the
+   * bandit can specialise per difficulty once it has evidence.
+   */
+  complexity?: Complexity;
 }
 
 /** How a completed run was received. Drives the dominant term of the reward. */
@@ -119,6 +128,15 @@ export interface ArmStats {
   avgLatencyMs: number;
 }
 
+/** Snapshot of the pre-execution assessment returned with every run. */
+export interface AssessmentSummary {
+  complexity: Complexity;
+  score: number;
+  preferredTiers: Array<'frontier' | 'balanced' | 'fast'>;
+  sizeBucket: 'small' | 'medium' | 'large';
+  reasons: string[];
+}
+
 /** What the executor returns to a caller. */
 export interface ExecutionResult<T = unknown> {
   runId: string;
@@ -130,4 +148,7 @@ export interface ExecutionResult<T = unknown> {
   latencyMs: number;
   /** True when this run was an exploration pull rather than the champion. */
   explored: boolean;
+  /** Why this provider/model was chosen, including the complexity assessment. */
+  assessment: AssessmentSummary;
+  selectionReason: string;
 }
