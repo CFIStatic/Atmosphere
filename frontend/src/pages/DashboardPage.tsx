@@ -283,10 +283,14 @@ export function DashboardPage() {
                   Growth analytics
                 </p>
                 <p className="mt-1.5 text-lg font-semibold text-ink-900">
-                  {access.scope === 'internal' ? 'Internal dashboard' : 'Investor dashboard'}
+                  {access.scope === 'internal'
+                    ? 'Where the product is used — and what to cut'
+                    : 'Investor dashboard'}
                 </p>
                 <p className="mt-1 text-sm text-ink-600">
-                  User growth, seats, MRR/ARR, and which parts of the product are actually used.
+                  {access.scope === 'internal'
+                    ? 'Hottest features, dead weight to bury, and stickiness plays for the Atmosphere team.'
+                    : 'User growth, seats, MRR/ARR, and aggregate product engagement.'}
                 </p>
               </div>
               <span aria-hidden="true" className="shrink-0 text-2xl text-brand-600">

@@ -12,6 +12,7 @@ import {
 import { AppShell, PageHeader, PanelSpinner, EmptyState, ErrorNote } from '../components/AppShell';
 import { MemoryFeed } from '../components/MemoryFeed';
 import { SpinnerIcon, ChevronLeftIcon } from '../components/icons';
+import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 /**
  * The team, and what each person has actually done.
@@ -167,6 +168,7 @@ function AgentDetail({ userId, onBack }: { userId: string; onBack: () => void })
 }
 
 export function TeamMemoryPage() {
+  useFeatureTimer('team_memory');
   const [agents, setAgents] = useState<AgentMemory[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

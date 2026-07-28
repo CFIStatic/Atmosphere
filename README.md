@@ -1653,8 +1653,12 @@ Two dashboards, same numbers, different surface:
 
 | Route | Who | What it adds |
 | ----- | --- | ------------ |
-| `/analytics` | Atmosphere team (`internal` scope) | Everything below, plus named accounts, unit economics (model cost and gross margin), seat utilisation and churn |
+| `/analytics` | Atmosphere team (`internal` scope) | **Product intelligence** (where time goes, hottest/coldest tools, cut / invest / stickiness advice), plus named accounts, unit economics, seat utilisation and churn |
 | `/analytics/investor` | Investors (`investor` scope) and the team | ARR, MRR, growth rates, seats, plan mix, retention cohorts and feature engagement — **aggregate only** |
+
+The internal dashboard leads with product usage: which areas of Atmosphere people actually
+work in, which tools to bury or double down on, and concrete stickiness plays. Revenue and
+account tables sit below that. Investor scope never receives the advice payload.
 
 Both cover user growth, seat counts, average monthly spend, MRR, ARR, ARR on annual
 contracts, month-over-month growth rates, and which tools are used most and least by **time

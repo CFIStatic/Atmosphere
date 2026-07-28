@@ -1,9 +1,11 @@
 /**
  * The internal dashboard.
  *
- * Everything the investor view shows, plus the parts that only make sense
- * inside the company: named accounts, unit economics, seat utilisation, churn
- * and the operational read on which tools are being ignored.
+ * Built for the Atmosphere team — not investors. Shows where users actually
+ * spend time, which features are hot or cold, and concrete advice on what to
+ * cut and how to make the product stickier. Revenue and accounts stay below
+ * that product read so the day-to-day decision is "what should we build or
+ * kill," not just "how is MRR."
  */
 
 import { useMemo, useState } from 'react';
@@ -36,6 +38,7 @@ import {
   RetentionSection,
   RevenueCollectedChart,
 } from '../../components/analytics/sections';
+import { ProductIntelligenceSection } from '../../components/analytics/ProductIntelligenceSection';
 import { AnalyticsError, AnalyticsLoading, AnalyticsShell } from './AnalyticsShell';
 
 type AccountSort = 'mrr' | 'usage' | 'recent';
@@ -63,6 +66,7 @@ export function InternalAnalyticsPage() {
   const summary = data?.summary;
   const revenue = summary?.revenue;
   const economics = summary?.unitEconomics;
+  const intel = data?.productIntelligence ?? null;
 
   const churnedThisPeriod = (data?.monthly ?? []).reduce((sum, m) => sum + m.churnedOrgs, 0);
   const unusedTools = (data?.features ?? []).filter((f) => f.activeHours === 0);
@@ -129,8 +133,8 @@ export function InternalAnalyticsPage() {
     <AnalyticsShell
       scope="internal"
       viewLabel="Internal view"
-      title="Atmosphere — growth analytics"
-      strapline="Revenue, seats, engagement and per-account detail for the Atmosphere team."
+      title="Atmosphere — product & growth"
+      strapline="Where users spend time, which tools to cut or invest in, and how to make Atmosphere stickier — for the Atmosphere team only."
       preset={preset}
       onPresetChange={setPreset}
       range={range}
@@ -142,6 +146,56 @@ export function InternalAnalyticsPage() {
 
       {data && summary && revenue && (
         <>
+          <SectionHeading
+            title="Product intelligence"
+            hint="Internal only · cut, invest, stickiness"
+          />
+          <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatTile
+              tone="headline"
+              label="Hours in product"
+              value={hours(summary.engagement.trackedHours)}
+              footnote={`${count(summary.engagement.sessions)} sessions`}
+            />
+            <StatTile
+              label="Active users"
+              value={count(summary.users.usersActive)}
+              footnote={`of ${count(summary.users.usersTotal)} total`}
+            />
+            <StatTile
+              label="Tools used"
+              value={`${count(summary.engagement.featuresUsed)} / ${count(
+                summary.engagement.featuresTracked,
+              )}`}
+              footnote={
+                unusedTools.length > 0
+                  ? `${unusedTools.length} instrumented but untouched`
+                  : 'Every tool saw use'
+              }
+            />
+            <StatTile
+              label="AI requests"
+              value={count(summary.engagement.aiRequests)}
+              footnote="Model-backed calls in period"
+            />
+          </div>
+
+          {intel ? (
+            <ProductIntelligenceSection intel={intel} />
+          ) : (
+            <EmptyState
+              title="Product intelligence unavailable"
+              body="This section only loads for internal Atmosphere staff."
+            />
+          )}
+
+          <SectionHeading
+            title="Feature usage detail"
+            hint="Every instrumented tool, ranked by foreground time"
+          />
+          <FeatureUsageSection features={data.features} showAiColumn />
+
+          <SectionHeading title="Growth & revenue" hint="Point-in-time at each month end" />
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatTile
               tone="headline"
@@ -167,6 +221,14 @@ export function InternalAnalyticsPage() {
               footnote={`${count(summary.customers.orgsActive)} active in this period`}
             />
             <StatTile
+              label="Orgs churned"
+              value={count(churnedThisPeriod)}
+              footnote="Cancelled while carrying MRR"
+            />
+          </div>
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatTile
               label="Seats licensed"
               value={count(summary.seats.seatsLicensed)}
               delta={summary.seats.seatsGrowthMomPct}
@@ -175,18 +237,10 @@ export function InternalAnalyticsPage() {
                 summary.seats.seatUtilizationPct,
               )} utilisation`}
             />
-          </div>
-
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatTile
               label="Avg monthly spend / account"
               value={moneyCompact(revenue.avgMonthlySpendPerAccountCents)}
               footnote="Subscription + usage, per 30 days"
-            />
-            <StatTile
-              label="Avg monthly spend / seat"
-              value={moneyCompact(revenue.avgMonthlySpendPerSeatCents)}
-              footnote="Same basis, per licensed seat"
             />
             <StatTile
               label="ARPA"
@@ -219,8 +273,7 @@ export function InternalAnalyticsPage() {
             </>
           )}
 
-          <SectionHeading title="Growth" hint="Point-in-time at each month end" />
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
             <RecurringRevenueChart monthly={data.monthly} />
             <CustomerGrowthChart monthly={data.monthly} />
           </div>
@@ -228,42 +281,6 @@ export function InternalAnalyticsPage() {
             <RevenueCollectedChart monthly={data.monthly} />
             <PlanMixSection plans={data.planMix} />
           </div>
-
-          <SectionHeading
-            title="What the product is used for"
-            hint={`${hours(summary.engagement.trackedHours)} across ${count(
-              summary.engagement.sessions,
-            )} sessions`}
-          />
-          <div className="mb-4 grid gap-4 sm:grid-cols-4">
-            <StatTile
-              label="Active users"
-              value={count(summary.users.usersActive)}
-              footnote={`of ${count(summary.users.usersTotal)} total`}
-            />
-            <StatTile
-              label="Tools used"
-              value={`${count(summary.engagement.featuresUsed)} / ${count(
-                summary.engagement.featuresTracked,
-              )}`}
-              footnote={
-                unusedTools.length > 0
-                  ? `${unusedTools.length} instrumented but untouched`
-                  : 'Every tool saw use'
-              }
-            />
-            <StatTile
-              label="Orgs churned"
-              value={count(churnedThisPeriod)}
-              footnote="Cancelled while carrying MRR"
-            />
-            <StatTile
-              label="AI requests"
-              value={count(summary.engagement.aiRequests)}
-              footnote="Model-backed calls in period"
-            />
-          </div>
-          <FeatureUsageSection features={data.features} showAiColumn />
 
           <SectionHeading
             title="Accounts"

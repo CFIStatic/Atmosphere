@@ -3,6 +3,7 @@ import { AppShell } from '../components/AppShell';
 import { AlertIcon, SpinnerIcon } from '../components/icons';
 import { api, ApiError, type BillingOverview, type UsageDay, type UsageEvent } from '../lib/api';
 import { formatDate, formatTokens, formatUsd, formatUsdCompact } from '../lib/money';
+import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 /**
  * Categorical series colours for the per-model breakdown, in fixed slot order —
@@ -23,6 +24,7 @@ const RANGES = [
 ];
 
 export function UsagePage() {
+  useFeatureTimer('usage_console');
   const [days, setDays] = useState(30);
   const [daily, setDaily] = useState<UsageDay[]>([]);
   const [events, setEvents] = useState<UsageEvent[]>([]);

@@ -24,6 +24,7 @@ import {
 import { AppShell, PanelSpinner, ErrorNote, EmptyState } from '../components/AppShell';
 import { MemoryFeed } from '../components/MemoryFeed';
 import { SpinnerIcon, PlusIcon, ChevronLeftIcon, CheckIcon } from '../components/icons';
+import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 const inputClass =
   'w-full rounded-lg border border-white/10 bg-ink-900/70 px-3 py-2 text-sm text-white placeholder:text-gray-600 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400';
@@ -117,6 +118,7 @@ function TaskRow({
 /* -------------------------------------------------------------------------- */
 
 export function JobDetailPage() {
+  useFeatureTimer('job_detail');
   const { id = '' } = useParams();
   const [detail, setDetail] = useState<JobDetail | null>(null);
   const [members, setMembers] = useState<OrgMember[]>([]);

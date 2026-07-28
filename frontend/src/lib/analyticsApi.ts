@@ -155,6 +155,43 @@ export interface OverviewPayload {
   planMix: PlanMixRow[];
   retention: RetentionRow[];
   accounts: AccountRow[] | null;
+  /** Internal only — cut / invest / stickiness advice from product usage. */
+  productIntelligence: ProductIntelligence | null;
+}
+
+export type InsightKind = 'cut' | 'invest' | 'stickiness' | 'watch';
+export type InsightPriority = 'high' | 'medium' | 'low';
+export type InsightConfidence = 'low' | 'medium' | 'high';
+
+export interface AreaUsage {
+  area: string;
+  activeHours: number;
+  sharePct: number;
+  featuresUsed: number;
+  featuresTracked: number;
+  sessions: number;
+  peakUsers: number;
+}
+
+export interface ProductInsight {
+  id: string;
+  kind: InsightKind;
+  priority: InsightPriority;
+  title: string;
+  rationale: string;
+  action: string;
+  featureKeys: string[];
+  area: string | null;
+  metrics: Record<string, number | string | null>;
+}
+
+export interface ProductIntelligence {
+  confidence: InsightConfidence;
+  confidenceNote: string;
+  areas: AreaUsage[];
+  hottest: FeatureRow[];
+  coldest: FeatureRow[];
+  insights: ProductInsight[];
 }
 
 export type ExportDataset =

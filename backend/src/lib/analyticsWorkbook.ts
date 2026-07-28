@@ -363,6 +363,30 @@ export function buildWorkbook(payload: OverviewPayload, dataset: Dataset = 'all'
   if (want('accounts') && payload.accounts) {
     addTable(workbook, 'Accounts', accountColumns, payload.accounts, header(payload, 'Accounts'));
   }
+  if (
+    payload.scope === 'internal' &&
+    payload.productIntelligence &&
+    (dataset === 'all' || dataset === 'features')
+  ) {
+    addTable(
+      workbook,
+      'Product advice',
+      [
+        { header: 'Kind', value: (r) => r.kind, width: 12 },
+        { header: 'Priority', value: (r) => r.priority, width: 10 },
+        { header: 'Title', value: (r) => r.title, width: 40 },
+        { header: 'Why', value: (r) => r.rationale, width: 56 },
+        { header: 'What to do', value: (r) => r.action, width: 56 },
+        { header: 'Features', value: (r) => r.featureKeys.join(', '), width: 28 },
+        { header: 'Area', value: (r) => r.area ?? '', width: 14 },
+      ],
+      payload.productIntelligence.insights,
+      header(
+        payload,
+        `Product advice (${payload.productIntelligence.confidence} confidence) — cut, invest, stickiness`,
+      ),
+    );
+  }
 
   addDefinitionsSheet(workbook, payload.scope);
   return workbook;

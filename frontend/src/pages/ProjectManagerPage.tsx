@@ -22,6 +22,7 @@ import {
   SeverityTag,
   StatTile,
 } from '../components/pm/primitives';
+import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 /**
  * The Project Manager cockpit.
@@ -36,6 +37,7 @@ import {
 type Tab = 'alerts' | 'projects' | 'crew';
 
 export function ProjectManagerPage() {
+  useFeatureTimer('project_manager');
   const { user, membership } = useAuth();
   const navigate = useNavigate();
 

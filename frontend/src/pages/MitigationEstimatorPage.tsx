@@ -6,6 +6,7 @@ import { SpinnerIcon } from '../components/icons';
 import { SourcePanel, type Sources } from '../components/estimator/SourcePanel';
 import { EstimateResult } from '../components/estimator/EstimateResult';
 import { XactimateCard } from '../components/estimator/XactimateCard';
+import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 /**
  * The Mitigation Estimator workspace.
@@ -25,6 +26,7 @@ import { XactimateCard } from '../components/estimator/XactimateCard';
 const EMPTY_SOURCES: Sources = { photos: [], notes: '' };
 
 export function MitigationEstimatorPage() {
+  useFeatureTimer('mitigation_estimator');
   const [sources, setSources] = useState<Sources>(EMPTY_SOURCES);
   const [estimate, setEstimate] = useState<MitigationEstimate | null>(null);
   const [estimateId, setEstimateId] = useState<string | null>(null);

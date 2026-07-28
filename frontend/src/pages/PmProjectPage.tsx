@@ -20,6 +20,7 @@ import {
   SeverityTag,
   StatTile,
 } from '../components/pm/primitives';
+import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 /**
  * One project, in the order a project manager checks it: is it healthy, what is
@@ -30,6 +31,7 @@ import {
  * whether an area has stalled.
  */
 export function PmProjectPage() {
+  useFeatureTimer('project_manager');
   const { id = '' } = useParams();
   const [data, setData] = useState<PmProjectDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
