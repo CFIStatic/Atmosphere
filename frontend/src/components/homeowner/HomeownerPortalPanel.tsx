@@ -9,7 +9,25 @@ import {
 import { SpinnerIcon } from '../icons';
 import { Card, EmptyState } from '../pm/primitives';
 
-const VISIBILITY_TOGGLES: { key: keyof PortalVisibility; label: string; hint: string }[] = [
+const VISIBILITY_TOGGLES: {
+  key:
+    | 'showSchedule'
+    | 'showPhaseProgress'
+    | 'showMilestones'
+    | 'showCustomerUpdates'
+    | 'showDryingSummary'
+    | 'showDocuments'
+    | 'showClaimBasics'
+    | 'showDeductible'
+    | 'showOfficeContact'
+    | 'showAdjusterContact'
+    | 'showFieldContact'
+    | 'allowChat'
+    | 'allowPolicyUpload'
+    | 'allowInsuranceQa';
+  label: string;
+  hint: string;
+}[] = [
   { key: 'showSchedule', label: 'Tentative schedule', hint: 'Start / target dates' },
   { key: 'showPhaseProgress', label: 'Phase progress', hint: 'Current workflow phase' },
   { key: 'showMilestones', label: 'Milestones', hint: 'Customer / carrier / permit dates' },
@@ -38,6 +56,8 @@ export function HomeownerPortalPanel({ projectId }: { projectId: string }) {
   const [busy, setBusy] = useState(false);
   const [freshLink, setFreshLink] = useState<string | null>(null);
   const [welcomeNote, setWelcomeNote] = useState('');
+  const [brandName, setBrandName] = useState('');
+  const [logoUrl, setLogoUrl] = useState('');
   const [officePhone, setOfficePhone] = useState('');
   const [officeEmail, setOfficeEmail] = useState('');
   const [customMessage, setCustomMessage] = useState('');
@@ -50,6 +70,8 @@ export function HomeownerPortalPanel({ projectId }: { projectId: string }) {
       setShares(data.shares);
       setVisibility(data.visibility);
       setMessages(data.messages);
+      setBrandName(data.visibility.brandName ?? '');
+      setLogoUrl(data.visibility.logoUrl ?? '');
       setOfficePhone(data.visibility.officePhone ?? '');
       setOfficeEmail(data.visibility.officeEmail ?? '');
       setCustomMessage(data.visibility.customMessage ?? '');
@@ -111,6 +133,8 @@ export function HomeownerPortalPanel({ projectId }: { projectId: string }) {
   async function saveContactFields(e: FormEvent) {
     e.preventDefault();
     await saveVisibility({
+      brandName: brandName.trim() || null,
+      logoUrl: logoUrl.trim() || null,
       officePhone: officePhone.trim() || null,
       officeEmail: officeEmail.trim() || null,
       customMessage: customMessage.trim() || null,
@@ -267,6 +291,52 @@ export function HomeownerPortalPanel({ projectId }: { projectId: string }) {
 
       <form onSubmit={saveContactFields} className="mt-5 space-y-3">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-500">
+          Company brand on the chat
+        </h3>
+        <p className="text-xs text-ink-500">
+          Shown in the homeowner chat header — e.g. ServiceMaster Recovery Services and your logo.
+        </p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <input
+            value={brandName}
+            onChange={(e) => setBrandName(e.target.value)}
+            placeholder="Company display name"
+            className="rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm outline-none ring-brand-500 focus:ring-2"
+          />
+          <input
+            value={logoUrl}
+            onChange={(e) => setLogoUrl(e.target.value)}
+            placeholder="Logo URL (https://…)"
+            className="rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm outline-none ring-brand-500 focus:ring-2"
+          />
+        </div>
+        {(brandName || logoUrl) && (
+          <div className="flex items-center gap-3 rounded-lg border border-line bg-paper-50 px-3 py-2">
+            {logoUrl ? (
+              <img
+                src={logoUrl}
+                alt=""
+                className="h-10 w-10 rounded-full object-contain bg-paper-0 ring-1 ring-line"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            ) : (
+              <span className="grid h-10 w-10 place-items-center rounded-full bg-[#0B3D2E] text-xs font-semibold text-white">
+                {(brandName || 'RC')
+                  .split(/\s+/)
+                  .slice(0, 2)
+                  .map((w) => w[0])
+                  .join('')
+                  .toUpperCase()}
+              </span>
+            )}
+            <p className="text-sm font-medium text-ink-900">
+              {brandName || 'Company name on chat'}
+            </p>
+          </div>
+        )}
+        <h3 className="pt-2 text-xs font-semibold uppercase tracking-wide text-ink-500">
           Office contact overrides
         </h3>
         <div className="grid gap-2 sm:grid-cols-2">
@@ -294,7 +364,7 @@ export function HomeownerPortalPanel({ projectId }: { projectId: string }) {
           type="submit"
           className="rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-700 hover:bg-paper-100"
         >
-          Save contact details
+          Save brand &amp; contact details
         </button>
       </form>
 

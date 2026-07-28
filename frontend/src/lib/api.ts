@@ -1869,6 +1869,8 @@ export interface PortalVisibility {
   allowChat: boolean;
   allowPolicyUpload: boolean;
   allowInsuranceQa: boolean;
+  brandName: string | null;
+  logoUrl: string | null;
   officeName: string | null;
   officePhone: string | null;
   officeEmail: string | null;
@@ -1909,6 +1911,10 @@ export interface PortalStaffView {
 
 export interface HomeownerReport {
   orgName: string | null;
+  brand: {
+    name: string;
+    logoUrl: string | null;
+  };
   share: { id: string; welcomeNote: string | null; customerName: string | null };
   project: {
     projectNumber: string;

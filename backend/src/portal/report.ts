@@ -38,6 +38,11 @@ export interface DryingSummaryGuest {
 
 export interface HomeownerReport {
   orgName: string | null;
+  /** Brand shown in the guest chat header — logo + display name. */
+  brand: {
+    name: string;
+    logoUrl: string | null;
+  };
   share: {
     id: string;
     welcomeNote: string | null;
@@ -109,6 +114,10 @@ export function buildHomeownerReport(input: {
 
   return {
     orgName: input.orgName,
+    brand: {
+      name: v.brandName?.trim() || v.officeName?.trim() || input.orgName || 'Restoration team',
+      logoUrl: v.logoUrl,
+    },
     share: {
       id: share.id,
       welcomeNote: share.welcomeNote,

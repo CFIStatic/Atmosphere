@@ -88,6 +88,13 @@ create table if not exists public.homeowner_portal_visibility (
   allow_policy_upload     boolean not null default true,
   allow_insurance_qa      boolean not null default true,
 
+  -- Company brand on the guest chat portal (e.g. ServiceMaster Recovery Services).
+  brand_name              text check (brand_name is null or length(btrim(brand_name)) between 1 and 160),
+  logo_url                text check (logo_url is null or (
+                            length(logo_url) between 8 and 2000
+                            and logo_url ~* '^https?://'
+                          )),
+
   -- Optional overrides shown under "Who to call".
   office_name             text check (office_name is null or length(office_name) <= 160),
   office_phone            text check (office_phone is null or length(office_phone) <= 40),

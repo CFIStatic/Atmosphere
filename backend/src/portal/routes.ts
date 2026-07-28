@@ -430,7 +430,7 @@ guest.post(
         : null;
 
       const { reply, model } = await answerHomeownerQuestion(body.question, body.history, {
-        orgName: report.orgName,
+        orgName: report.brand.name || report.orgName,
         customerName: report.share.customerName,
         jobFacts: jobFactsForAssistant(report),
         regulation: report.regulation,

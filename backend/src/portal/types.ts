@@ -56,6 +56,10 @@ export interface PortalVisibility {
   allowChat: boolean;
   allowPolicyUpload: boolean;
   allowInsuranceQa: boolean;
+  /** Display name on the guest chat (e.g. ServiceMaster Recovery Services). */
+  brandName: string | null;
+  /** HTTPS URL for the company logo shown in the chat header. */
+  logoUrl: string | null;
   officeName: string | null;
   officePhone: string | null;
   officeEmail: string | null;
@@ -114,6 +118,8 @@ export function defaultVisibility(orgId: string, projectId: string): PortalVisib
     allowChat: true,
     allowPolicyUpload: true,
     allowInsuranceQa: true,
+    brandName: null,
+    logoUrl: null,
     officeName: null,
     officePhone: null,
     officeEmail: null,

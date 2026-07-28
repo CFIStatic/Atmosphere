@@ -39,6 +39,19 @@ export const updateVisibilitySchema = z.object({
   allowChat: z.boolean().optional(),
   allowPolicyUpload: z.boolean().optional(),
   allowInsuranceQa: z.boolean().optional(),
+  brandName: optionalTrimmed(160),
+  logoUrl: z
+    .union([
+      z
+        .string()
+        .url()
+        .max(2000)
+        .refine((u) => /^https?:\/\//i.test(u), 'Logo URL must be http(s)'),
+      z.literal(''),
+      z.null(),
+    ])
+    .optional()
+    .transform((v) => (v == null || v === '' ? null : v)),
   officeName: optionalTrimmed(160),
   officePhone: optionalTrimmed(40),
   officeEmail: optionalTrimmed(320),

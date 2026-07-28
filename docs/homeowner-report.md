@@ -79,12 +79,15 @@ Prefix: `/api/portal`
 
 ## 5. UI
 
-- Guest: `/report/:token` (`HomeownerReportPage`) — progress, ask & chat, policy
-- Staff: HomeOwner Report card on `PmProjectPage` — links, visibility toggles, replies
+- Guest: `/report/:token` (`HomeownerReportPage`) — ChatGPT-style chat branded
+  with the restoration company logo + name; job details and policy upload live
+  in side drawers
+- Staff: HomeOwner Report card on `PmProjectPage` — links, brand (name/logo URL),
+  visibility toggles, replies
 
-Regulation bullets adapt from the project's `region` and `carrier` (see
-`backend/src/portal/regulations.ts`). The assistant reuses the technician Anthropic
-key when configured; otherwise a deterministic fallback answers.
+Set **Company display name** and **Logo URL** on the project portal panel
+(e.g. `ServiceMaster Recovery Services` + their logo HTTPS URL). When no logo
+is set, the chat shows initials in a brand mark.
 
 ---
 
