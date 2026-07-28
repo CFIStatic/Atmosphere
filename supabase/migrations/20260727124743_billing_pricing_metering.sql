@@ -1,3 +1,8 @@
+-- NOTE: repo copy of this migration. It is ALREADY APPLIED to project
+-- ccxatzfsvzetciiwsjlj as version 20260727124743; the authoritative applied text
+-- (md5 ada55695eeee6892dd3b981ef7a7feda, 42573 bytes) is recorded in supabase_migrations.schema_migrations
+-- and may differ from this copy in comments or whitespace. Do not re-run by hand.
+--
 -- ============================================================================
 -- Atmosphere — pricing, metering, credits and subscriptions
 -- ============================================================================

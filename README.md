@@ -820,8 +820,8 @@ minutes): a retry loop here walks a real company's account into a lockout mid-jo
 ### Setting it up
 
 1. Apply the migrations in `supabase/migrations/` (via `supabase db push`, or paste them
-   into the SQL editor) — `0001_mitigation_estimator.sql` then
-   `0002_carrier_agreements.sql`. Until they are applied the estimator routes return a 503
+   into the SQL editor) — `backend/supabase/migrations/20260727190000_mitigation_estimator.sql` then
+   `20260727190001_carrier_agreements.sql`. Until they are applied the estimator routes return a 503
    saying exactly that.
 2. Leave `XACTIMATE_DRIVER` unset to run the mock driver, which needs nothing else.
 3. For a real connection set `XACTIMATE_DRIVER=api` plus `XACTIMATE_API_BASE_URL` and
@@ -1370,7 +1370,7 @@ with the service-role key, and it takes two explicit decisions to enable — see
 [`docs/project-manager-agent.md`](docs/project-manager-agent.md) for the full
 design, the rule list, the API surface, and what was deliberately left out.
 
-Schema: `supabase/migrations/20260727150000_project_manager_agent.sql`.
+Schema: `supabase/migrations/20260727181539_project_manager_agent.sql` (already applied to the project).
 Schema tests: `supabase/tests/run.sh`.
 
 ## Learning layer

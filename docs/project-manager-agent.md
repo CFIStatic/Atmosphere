@@ -218,7 +218,7 @@ catching a missed reading on a day nobody happened to log in.
 
 ```
 supabase/
-├── migrations/20260727150000_project_manager_agent.sql   13 tables, RLS, triggers
+├── migrations/20260727181539_project_manager_agent.sql   13 tables, RLS, triggers
 └── tests/                                               18 sections, run.sh
 backend/src/pm/
 ├── types.ts            domain types + the Rule/Finding contract

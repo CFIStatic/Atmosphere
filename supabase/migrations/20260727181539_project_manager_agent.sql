@@ -1,3 +1,8 @@
+-- NOTE: repo copy of this migration. It is ALREADY APPLIED to project
+-- ccxatzfsvzetciiwsjlj as version 20260727181539; the authoritative applied text
+-- (md5 02b4daba5e84525a3815e13ff6967cda, 47490 bytes) is recorded in supabase_migrations.schema_migrations
+-- and may differ from this copy in comments or whitespace. Do not re-run by hand.
+--
 -- ============================================================================
 -- Project Manager Agent
 -- ============================================================================

@@ -1,3 +1,8 @@
+-- NOTE: repo copy of this migration. It is ALREADY APPLIED to project
+-- ccxatzfsvzetciiwsjlj as version 20260727131206; the authoritative applied text
+-- (md5 285427e3fe84d9333b6e3ef1bcec7483, 12416 bytes) is recorded in supabase_migrations.schema_migrations
+-- and may differ from this copy in comments or whitespace. Do not re-run by hand.
+--
 -- ============================================================================
 -- Stripe payments, receipts and the in-product payment history
 -- ============================================================================
