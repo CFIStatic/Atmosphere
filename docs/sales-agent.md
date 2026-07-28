@@ -103,9 +103,23 @@ confirmation + ICS, and marks the contact `meeting_booked`.
 ## 5. Frontend
 
 - Left-hand primary nav includes **Sales Agent** (`AppShell`).
-- `/sales` — campaign workspace: left rail for setup / agent status, main pane
-  for businesses, contacts, outreach, and meetings.
+- `/sales` — workspace with two modes:
+  - **Find people** — natural-language lookup with sourced web crawl results
+  - **Campaigns** — territory outbound pipeline
 - `/sales/:id` — deep link into one campaign.
+
+### People search (text → real web intel)
+
+`POST /api/sales/people-search` with `{ "query": "director of facilities at ABC Supply in Milwaukee" }`:
+
+1. Parses role / company / location
+2. Runs multiple DuckDuckGo (and Bing fallback) searches
+3. Crawls company leadership pages, LinkedIn public profiles, Wikipedia, directories
+4. Extracts and ranks candidates with evidence quotes + source URLs
+5. Optionally re-ranks with Claude when `ANTHROPIC_API_KEY` is set
+6. Persists to `sales_people_searches` (migration `20260728143000_sales_people_search.sql`)
+
+The UI shows best match, alternate candidates, confidence, evidence, crawled sources, and a research trace.
 
 ---
 

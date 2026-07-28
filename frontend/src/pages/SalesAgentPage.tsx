@@ -4,6 +4,8 @@ import {
   ApiError,
   SALES_STATUS_LABELS,
   api,
+  type PeopleSearchCandidate,
+  type PeopleSearchRecord,
   type SalesBusiness,
   type SalesCampaign,
   type SalesCampaignStatus,
@@ -19,11 +21,13 @@ import {
   CheckIcon,
   MessageIcon,
   PlusIcon,
+  SearchIcon,
   SparkIcon,
   SpinnerIcon,
   UsersIcon,
 } from '../components/icons';
 
+type WorkspaceMode = 'find' | 'campaigns';
 type Tab = 'businesses' | 'contacts' | 'outreach' | 'meetings' | 'events';
 
 const ACTIVE: SalesCampaignStatus[] = [
@@ -32,6 +36,13 @@ const ACTIVE: SalesCampaignStatus[] = [
   'outreach',
   'following_up',
   'scheduling',
+];
+
+const SEARCH_EXAMPLES = [
+  'director of facilities at ABC Supply in Milwaukee',
+  'CEO of ABC Supply',
+  'Fleet & Facilities at ABC Supply',
+  'property manager at Greystar in Austin',
 ];
 
 function errorMessage(err: unknown): string {
@@ -48,17 +59,43 @@ function statusTone(status: SalesCampaignStatus): string {
   return 'border-line bg-paper-100 text-ink-600';
 }
 
+function confidenceLabel(value: number): string {
+  if (value >= 0.75) return 'High confidence';
+  if (value >= 0.5) return 'Medium confidence';
+  return 'Low confidence';
+}
+
+function confidenceTone(value: number): string {
+  if (value >= 0.75) return 'border-emerald-300 bg-emerald-50 text-emerald-800';
+  if (value >= 0.5) return 'border-amber-300 bg-amber-50 text-amber-900';
+  return 'border-line bg-paper-100 text-ink-600';
+}
+
 /**
  * Sales Agent workspace.
  *
- * Left rail: tell the agent your territory and sales focus, then watch it run.
- * Main pane: businesses, decision-makers, outreach, and meetings it booked.
+ * Two modes share the left rail:
+ *  - Find people — natural-language web research with sourced results
+ *  - Campaigns — territory outbound pipeline
  */
 export function SalesAgentPage() {
   const { id: routeId } = useParams<{ id?: string }>();
   const navigate = useNavigate();
 
+  const [mode, setMode] = useState<WorkspaceMode>(routeId ? 'campaigns' : 'find');
   const [status, setStatus] = useState<SalesStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // People search
+  const [searchQuery, setSearchQuery] = useState(
+    'find me the director of facilities at ABC Supply company in Milwaukee',
+  );
+  const [searchResult, setSearchResult] = useState<PeopleSearchRecord | null>(null);
+  const [searchHistory, setSearchHistory] = useState<PeopleSearchRecord[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  // Campaigns
   const [campaigns, setCampaigns] = useState<SalesCampaign[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(routeId ?? null);
   const [campaign, setCampaign] = useState<SalesCampaign | null>(null);
@@ -69,10 +106,6 @@ export function SalesAgentPage() {
   const [meetings, setMeetings] = useState<SalesMeeting[]>([]);
   const [events, setEvents] = useState<SalesEvent[]>([]);
   const [tab, setTab] = useState<Tab>('businesses');
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  // Intake form
   const [territory, setTerritory] = useState('');
   const [salesFocus, setSalesFocus] = useState('');
   const [valueProp, setValueProp] = useState('');
@@ -88,6 +121,15 @@ export function SalesAgentPage() {
     setStatus(caps);
     if (!selectedId && list[0]) setSelectedId(list[0].id);
   }, [selectedId]);
+
+  const loadSearchHistory = useCallback(async () => {
+    try {
+      const { searches } = await api.listSalesPeopleSearches();
+      setSearchHistory(searches);
+    } catch {
+      // Table may not be migrated yet — live search still works.
+    }
+  }, []);
 
   const loadDetail = useCallback(async (id: string) => {
     const [{ campaign: c, running: isRunning }, biz, con, out, meet, ev] = await Promise.all([
@@ -109,21 +151,24 @@ export function SalesAgentPage() {
 
   useEffect(() => {
     let cancelled = false;
-    loadCampaigns().catch((err) => {
+    Promise.all([loadCampaigns(), loadSearchHistory()]).catch((err) => {
       if (!cancelled) setError(errorMessage(err));
     });
     return () => {
       cancelled = true;
     };
-  }, [loadCampaigns]);
+  }, [loadCampaigns, loadSearchHistory]);
 
   useEffect(() => {
-    if (routeId) setSelectedId(routeId);
+    if (routeId) {
+      setSelectedId(routeId);
+      setMode('campaigns');
+    }
   }, [routeId]);
 
   useEffect(() => {
-    if (!selectedId) {
-      setCampaign(null);
+    if (!selectedId || mode !== 'campaigns') {
+      if (!selectedId) setCampaign(null);
       return undefined;
     }
     let cancelled = false;
@@ -133,9 +178,11 @@ export function SalesAgentPage() {
     });
 
     const shouldPoll = running || (campaign && ACTIVE.includes(campaign.status));
-    if (!shouldPoll) return () => {
-      cancelled = true;
-    };
+    if (!shouldPoll) {
+      return () => {
+        cancelled = true;
+      };
+    }
 
     const timer = window.setInterval(() => {
       loadDetail(selectedId).catch(() => undefined);
@@ -144,7 +191,24 @@ export function SalesAgentPage() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [selectedId, running, campaign?.status, loadDetail]);
+  }, [selectedId, running, campaign?.status, loadDetail, mode]);
+
+  async function handlePeopleSearch(event: FormEvent) {
+    event.preventDefault();
+    if (!searchQuery.trim()) return;
+    setSearching(true);
+    setError(null);
+    setMode('find');
+    try {
+      const { search } = await api.searchSalesPeople(searchQuery.trim());
+      setSearchResult(search);
+      setSearchHistory((prev) => [search, ...prev.filter((s) => s.id && s.id !== search.id)].slice(0, 30));
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setSearching(false);
+    }
+  }
 
   async function handleCreate(event: FormEvent) {
     event.preventDefault();
@@ -164,6 +228,7 @@ export function SalesAgentPage() {
       setValueProp('');
       setCampaigns((prev) => [created, ...(prev ?? [])]);
       setSelectedId(created.id);
+      setMode('campaigns');
       navigate(`/sales/${created.id}`, { replace: true });
       await loadDetail(created.id);
     } catch (err) {
@@ -229,136 +294,247 @@ export function SalesAgentPage() {
   return (
     <AppShell wide>
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-        {/* Left agent rail */}
         <aside className="w-full shrink-0 space-y-4 lg:sticky lg:top-6 lg:w-80">
           <div className="rounded-xl border border-line bg-paper-0 p-5 shadow-card animate-fade-in-up">
             <div className="mb-3 flex items-center gap-2 text-brand-700">
               <SparkIcon width={18} height={18} />
               <h2 className="text-sm font-semibold tracking-tight">Sales Agent</h2>
             </div>
-            <p className="mb-4 text-sm text-ink-600">
-              Tell me your territory and what you sell into. I&apos;ll research businesses, find
-              decision-makers, email them personally, and book the meeting when they reply.
-            </p>
 
-            <form onSubmit={handleCreate} className="space-y-3">
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-ink-500">Territory</span>
-                <input
-                  required
-                  value={territory}
-                  onChange={(e) => setTerritory(e.target.value)}
-                  placeholder="Austin, TX · Downtown Dallas · 78701"
-                  className="w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none ring-brand-500 focus:ring-2"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-ink-500">Sales focus</span>
-                <input
-                  required
-                  value={salesFocus}
-                  onChange={(e) => setSalesFocus(e.target.value)}
-                  placeholder="Property managers · Dental clinics · GCs"
-                  className="w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none ring-brand-500 focus:ring-2"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-ink-500">Value proposition</span>
-                <textarea
-                  value={valueProp}
-                  onChange={(e) => setValueProp(e.target.value)}
-                  rows={2}
-                  placeholder="Optional — what you want them to know"
-                  className="w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none ring-brand-500 focus:ring-2"
-                />
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-ink-500">Your name</span>
-                  <input
-                    value={senderName}
-                    onChange={(e) => setSenderName(e.target.value)}
-                    className="w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm outline-none ring-brand-500 focus:ring-2"
-                  />
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-ink-500">Reply-to email</span>
-                  <input
-                    type="email"
-                    value={senderEmail}
-                    onChange={(e) => setSenderEmail(e.target.value)}
-                    className="w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm outline-none ring-brand-500 focus:ring-2"
-                  />
-                </label>
-              </div>
+            <div className="mb-4 grid grid-cols-2 gap-1 rounded-lg bg-paper-100 p-1">
               <button
-                type="submit"
-                disabled={busy || !territory.trim() || !salesFocus.trim()}
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:opacity-60"
+                type="button"
+                onClick={() => setMode('find')}
+                className={`rounded-md px-2 py-1.5 text-xs font-semibold transition ${
+                  mode === 'find' ? 'bg-paper-0 text-brand-700 shadow-sm' : 'text-ink-500'
+                }`}
               >
-                {busy ? <SpinnerIcon className="animate-spin" width={16} height={16} /> : <PlusIcon width={16} height={16} />}
-                Start prospecting
+                Find people
               </button>
-            </form>
+              <button
+                type="button"
+                onClick={() => setMode('campaigns')}
+                className={`rounded-md px-2 py-1.5 text-xs font-semibold transition ${
+                  mode === 'campaigns' ? 'bg-paper-0 text-brand-700 shadow-sm' : 'text-ink-500'
+                }`}
+              >
+                Campaigns
+              </button>
+            </div>
+
+            {mode === 'find' ? (
+              <>
+                <p className="mb-3 text-sm text-ink-600">
+                  Ask in plain English. I search the live web, crawl company and profile pages, and
+                  show sourced decision-maker intel.
+                </p>
+                <form onSubmit={handlePeopleSearch} className="space-y-3">
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium text-ink-500">Search</span>
+                    <textarea
+                      required
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      rows={4}
+                      placeholder="director of facilities at ABC Supply in Milwaukee"
+                      className="w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none ring-brand-500 focus:ring-2"
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    disabled={searching || !searchQuery.trim()}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:opacity-60"
+                  >
+                    {searching ? (
+                      <SpinnerIcon className="animate-spin" width={16} height={16} />
+                    ) : (
+                      <SearchIcon width={16} height={16} />
+                    )}
+                    {searching ? 'Crawling the web…' : 'Search the web'}
+                  </button>
+                </form>
+                <div className="mt-3 space-y-1">
+                  <p className="text-xs font-medium text-ink-500">Try</p>
+                  {SEARCH_EXAMPLES.map((example) => (
+                    <button
+                      key={example}
+                      type="button"
+                      onClick={() => setSearchQuery(example)}
+                      className="block w-full truncate rounded-md px-2 py-1 text-left text-xs text-ink-600 transition hover:bg-paper-100 hover:text-ink-900"
+                    >
+                      {example}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="mb-4 text-sm text-ink-600">
+                  Name a territory and sales focus. I research businesses, find decision-makers,
+                  email them, and book meetings when they reply.
+                </p>
+                <form onSubmit={handleCreate} className="space-y-3">
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium text-ink-500">Territory</span>
+                    <input
+                      required
+                      value={territory}
+                      onChange={(e) => setTerritory(e.target.value)}
+                      placeholder="Austin, TX · Downtown Dallas · 78701"
+                      className="w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none ring-brand-500 focus:ring-2"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium text-ink-500">Sales focus</span>
+                    <input
+                      required
+                      value={salesFocus}
+                      onChange={(e) => setSalesFocus(e.target.value)}
+                      placeholder="Property managers · Dental clinics · GCs"
+                      className="w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none ring-brand-500 focus:ring-2"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium text-ink-500">Value proposition</span>
+                    <textarea
+                      value={valueProp}
+                      onChange={(e) => setValueProp(e.target.value)}
+                      rows={2}
+                      placeholder="Optional — what you want them to know"
+                      className="w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none ring-brand-500 focus:ring-2"
+                    />
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-medium text-ink-500">Your name</span>
+                      <input
+                        value={senderName}
+                        onChange={(e) => setSenderName(e.target.value)}
+                        className="w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm outline-none ring-brand-500 focus:ring-2"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-medium text-ink-500">Reply-to email</span>
+                      <input
+                        type="email"
+                        value={senderEmail}
+                        onChange={(e) => setSenderEmail(e.target.value)}
+                        className="w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm outline-none ring-brand-500 focus:ring-2"
+                      />
+                    </label>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={busy || !territory.trim() || !salesFocus.trim()}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:opacity-60"
+                  >
+                    {busy ? (
+                      <SpinnerIcon className="animate-spin" width={16} height={16} />
+                    ) : (
+                      <PlusIcon width={16} height={16} />
+                    )}
+                    Start prospecting
+                  </button>
+                </form>
+              </>
+            )}
 
             {status && (
               <dl className="mt-4 grid grid-cols-2 gap-2 border-t border-line pt-3 text-xs text-ink-500">
                 <div>
-                  <dt>Research LLM</dt>
-                  <dd className="font-medium text-ink-800">{status.llm ? 'On' : 'Template mode'}</dd>
+                  <dt>Web crawl</dt>
+                  <dd className="font-medium text-ink-800">Live</dd>
                 </div>
                 <div>
-                  <dt>Email send</dt>
-                  <dd className="font-medium text-ink-800">{status.email ? 'Resend' : 'Simulated'}</dd>
+                  <dt>Research LLM</dt>
+                  <dd className="font-medium text-ink-800">{status.llm ? 'On' : 'Heuristic'}</dd>
                 </div>
               </dl>
             )}
           </div>
 
-          <div className="rounded-xl border border-line bg-paper-0 p-3 shadow-card">
-            <p className="mb-2 px-1 text-xs font-medium uppercase tracking-wide text-ink-500">
-              Campaigns
-            </p>
-            {campaigns === null ? (
-              <PanelSpinner label="Loading campaigns" />
-            ) : campaigns.length === 0 ? (
-              <p className="px-2 py-4 text-sm text-ink-500">No campaigns yet.</p>
-            ) : (
-              <ul className="max-h-72 space-y-1 overflow-y-auto">
-                {campaigns.map((c) => (
-                  <li key={c.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedId(c.id);
-                        navigate(`/sales/${c.id}`);
-                      }}
-                      className={`w-full rounded-lg px-3 py-2 text-left transition ${
-                        selectedId === c.id
-                          ? 'bg-brand-50 text-brand-800'
-                          : 'hover:bg-paper-100 text-ink-800'
-                      }`}
-                    >
-                      <span className="block truncate text-sm font-medium">{c.name}</span>
-                      <span className="mt-0.5 block truncate text-xs text-ink-500">
-                        {SALES_STATUS_LABELS[c.status]} · {c.meetingsBooked} meetings
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+          {mode === 'find' ? (
+            <div className="rounded-xl border border-line bg-paper-0 p-3 shadow-card">
+              <p className="mb-2 px-1 text-xs font-medium uppercase tracking-wide text-ink-500">
+                Recent searches
+              </p>
+              {searchHistory.length === 0 ? (
+                <p className="px-2 py-4 text-sm text-ink-500">No searches yet.</p>
+              ) : (
+                <ul className="max-h-72 space-y-1 overflow-y-auto">
+                  {searchHistory.map((s, idx) => (
+                    <li key={s.id || `${s.query}-${idx}`}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearchResult(s);
+                          setSearchQuery(s.query);
+                          setMode('find');
+                        }}
+                        className={`w-full rounded-lg px-3 py-2 text-left transition ${
+                          searchResult?.id && searchResult.id === s.id
+                            ? 'bg-brand-50 text-brand-800'
+                            : 'text-ink-800 hover:bg-paper-100'
+                        }`}
+                      >
+                        <span className="block truncate text-sm font-medium">{s.query}</span>
+                        <span className="mt-0.5 block truncate text-xs text-ink-500">
+                          {s.status}
+                          {s.bestMatch ? ` · ${s.bestMatch.fullName}` : ''}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-line bg-paper-0 p-3 shadow-card">
+              <p className="mb-2 px-1 text-xs font-medium uppercase tracking-wide text-ink-500">
+                Campaigns
+              </p>
+              {campaigns === null ? (
+                <PanelSpinner label="Loading campaigns" />
+              ) : campaigns.length === 0 ? (
+                <p className="px-2 py-4 text-sm text-ink-500">No campaigns yet.</p>
+              ) : (
+                <ul className="max-h-72 space-y-1 overflow-y-auto">
+                  {campaigns.map((c) => (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedId(c.id);
+                          navigate(`/sales/${c.id}`);
+                        }}
+                        className={`w-full rounded-lg px-3 py-2 text-left transition ${
+                          selectedId === c.id
+                            ? 'bg-brand-50 text-brand-800'
+                            : 'text-ink-800 hover:bg-paper-100'
+                        }`}
+                      >
+                        <span className="block truncate text-sm font-medium">{c.name}</span>
+                        <span className="mt-0.5 block truncate text-xs text-ink-500">
+                          {SALES_STATUS_LABELS[c.status]} · {c.meetingsBooked} meetings
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </aside>
 
-        {/* Main workspace */}
         <section className="min-w-0 flex-1 space-y-4 animate-fade-in-up">
           {error && <ErrorNote message={error} />}
 
-          {!campaign ? (
+          {mode === 'find' ? (
+            <PeopleSearchResults searching={searching} result={searchResult} />
+          ) : !campaign ? (
             <EmptyState
               title="Pick a campaign or start a new one"
-              hint="The agent asks for territory and focus on the left, then builds the pipeline here."
+              hint="Or switch to Find people to look up a specific decision-maker on the live web."
             />
           ) : (
             <>
@@ -433,9 +609,7 @@ export function SalesAgentPage() {
                     type="button"
                     onClick={() => setTab(key)}
                     className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                      tab === key
-                        ? 'bg-brand-50 text-brand-700'
-                        : 'text-ink-600 hover:bg-paper-100'
+                      tab === key ? 'bg-brand-50 text-brand-700' : 'text-ink-600 hover:bg-paper-100'
                     }`}
                   >
                     {label}
@@ -443,9 +617,7 @@ export function SalesAgentPage() {
                 ))}
               </div>
 
-              {tab === 'businesses' && (
-                <BusinessList businesses={businesses} />
-              )}
+              {tab === 'businesses' && <BusinessList businesses={businesses} />}
               {tab === 'contacts' && <ContactList contacts={contacts} />}
               {tab === 'outreach' && (
                 <OutreachList
@@ -461,6 +633,257 @@ export function SalesAgentPage() {
         </section>
       </div>
     </AppShell>
+  );
+}
+
+function PeopleSearchResults({
+  searching,
+  result,
+}: {
+  searching: boolean;
+  result: PeopleSearchRecord | null;
+}) {
+  if (searching) {
+    return (
+      <div className="rounded-xl border border-line bg-paper-0 px-6 py-16 text-center shadow-card">
+        <SpinnerIcon className="mx-auto animate-spin text-brand-600" width={28} height={28} />
+        <p className="mt-4 text-sm font-medium text-ink-800">Searching and crawling public sources…</p>
+        <p className="mt-1 text-sm text-ink-500">
+          Web search → company leadership pages → profile pages → ranked matches
+        </p>
+      </div>
+    );
+  }
+
+  if (!result) {
+    return (
+      <EmptyState
+        title="Find a decision-maker on the live web"
+        hint='Try “director of facilities at ABC Supply in Milwaukee” — results include names, titles, evidence, and source links.'
+      />
+    );
+  }
+
+  const parsed = result.parsed;
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-line bg-paper-0 p-5 shadow-card">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-brand-600">People search</p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink-900">{result.query}</h1>
+            <p className="mt-2 text-sm text-ink-600">{result.summary}</p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full border border-line bg-paper-100 px-3 py-1 font-medium text-ink-700">
+              {result.status}
+            </span>
+            <span className="rounded-full border border-line bg-paper-100 px-3 py-1 text-ink-600">
+              {result.searchesRun} searches · {result.pagesCrawled} pages
+              {result.durationMs != null ? ` · ${(result.durationMs / 1000).toFixed(1)}s` : ''}
+            </span>
+          </div>
+        </div>
+
+        {(parsed?.role || parsed?.company || parsed?.location) && (
+          <dl className="mt-4 grid gap-3 border-t border-line pt-4 sm:grid-cols-3">
+            <div>
+              <dt className="text-xs font-medium text-ink-500">Role</dt>
+              <dd className="text-sm font-medium text-ink-900">{parsed?.role || '—'}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium text-ink-500">Company</dt>
+              <dd className="text-sm font-medium text-ink-900">{parsed?.company || '—'}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium text-ink-500">Location</dt>
+              <dd className="text-sm font-medium text-ink-900">{parsed?.location || '—'}</dd>
+            </div>
+          </dl>
+        )}
+      </div>
+
+      {result.bestMatch && (
+        <CandidateCard candidate={result.bestMatch} featured />
+      )}
+
+      {result.candidates.filter((c) => c !== result.bestMatch && c.fullName !== result.bestMatch?.fullName).length >
+        0 && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold text-ink-800">Other matches</h2>
+          {result.candidates
+            .filter((c) => c.fullName !== result.bestMatch?.fullName)
+            .map((candidate) => (
+              <CandidateCard key={`${candidate.fullName}-${candidate.title}`} candidate={candidate} />
+            ))}
+        </div>
+      )}
+
+      {result.sources?.length > 0 && (
+        <div className="rounded-xl border border-line bg-paper-0 p-4 shadow-card">
+          <h2 className="text-sm font-semibold text-ink-800">Sources crawled</h2>
+          <ul className="mt-3 space-y-2">
+            {result.sources.slice(0, 12).map((source) => (
+              <li key={source.url} className="text-sm">
+                <a
+                  href={source.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-brand-700 hover:underline"
+                >
+                  {source.title || source.url}
+                </a>
+                {source.snippet && (
+                  <p className="mt-0.5 line-clamp-2 text-ink-500">{source.snippet}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {result.trace?.length > 0 && (
+        <details className="rounded-xl border border-line bg-paper-0 p-4 shadow-card">
+          <summary className="cursor-pointer text-sm font-semibold text-ink-800">
+            Research trace ({result.trace.length} steps)
+          </summary>
+          <ol className="mt-3 space-y-2">
+            {result.trace.map((step, idx) => (
+              <li key={`${step.at}-${idx}`} className="text-sm">
+                <span className="font-medium text-ink-800">{step.step.replace(/_/g, ' ')}</span>
+                <span className="text-ink-500"> — {step.detail}</span>
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function CandidateCard({
+  candidate,
+  featured = false,
+}: {
+  candidate: PeopleSearchCandidate;
+  featured?: boolean;
+}) {
+  return (
+    <article
+      className={`rounded-xl border bg-paper-0 p-5 shadow-card ${
+        featured ? 'border-brand-200 ring-1 ring-brand-100' : 'border-line'
+      }`}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          {featured && (
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">Best match</p>
+          )}
+          <h3 className="text-xl font-bold tracking-tight text-ink-900">{candidate.fullName}</h3>
+          <p className="mt-1 text-sm text-ink-600">
+            {[candidate.title, candidate.company, candidate.location].filter(Boolean).join(' · ')}
+          </p>
+        </div>
+        <span
+          className={`rounded-full border px-3 py-1 text-xs font-medium ${confidenceTone(candidate.confidence)}`}
+        >
+          {confidenceLabel(candidate.confidence)} · {Math.round(candidate.confidence * 100)}%
+        </span>
+      </div>
+
+      {candidate.summary && <p className="mt-3 text-sm text-ink-700">{candidate.summary}</p>}
+
+      <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+        {candidate.email && (
+          <div>
+            <dt className="text-xs font-medium text-ink-500">Email</dt>
+            <dd className="text-sm text-ink-900">{candidate.email}</dd>
+          </div>
+        )}
+        {candidate.phone && (
+          <div>
+            <dt className="text-xs font-medium text-ink-500">Phone</dt>
+            <dd className="text-sm text-ink-900">{candidate.phone}</dd>
+          </div>
+        )}
+        {candidate.linkedinUrl && (
+          <div className="sm:col-span-2">
+            <dt className="text-xs font-medium text-ink-500">LinkedIn</dt>
+            <dd>
+              <a
+                href={candidate.linkedinUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sm text-brand-700 hover:underline"
+              >
+                {candidate.linkedinUrl}
+              </a>
+            </dd>
+          </div>
+        )}
+        {candidate.profileUrl && (
+          <div className="sm:col-span-2">
+            <dt className="text-xs font-medium text-ink-500">Profile / page</dt>
+            <dd>
+              <a
+                href={candidate.profileUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="break-all text-sm text-brand-700 hover:underline"
+              >
+                {candidate.profileUrl}
+              </a>
+            </dd>
+          </div>
+        )}
+      </dl>
+
+      {candidate.matchReasons?.length > 0 && (
+        <ul className="mt-4 flex flex-wrap gap-2">
+          {candidate.matchReasons.map((reason) => (
+            <li
+              key={reason}
+              className="rounded-full border border-line bg-paper-100 px-2.5 py-1 text-xs text-ink-600"
+            >
+              {reason}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {candidate.evidence?.length > 0 && (
+        <div className="mt-4 border-t border-line pt-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-500">Evidence</p>
+          <ul className="mt-2 space-y-2">
+            {candidate.evidence.slice(0, 4).map((item) => (
+              <li
+                key={item.slice(0, 40)}
+                className="rounded-lg bg-paper-100 px-3 py-2 text-sm italic text-ink-700"
+              >
+                “{item}”
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {candidate.sources?.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-3">
+          {candidate.sources.slice(0, 4).map((source) => (
+            <a
+              key={source.url}
+              href={source.url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs font-medium text-brand-700 hover:underline"
+            >
+              {source.title || 'Source'}
+            </a>
+          ))}
+        </div>
+      )}
+    </article>
   );
 }
 
@@ -585,9 +1008,7 @@ function MeetingList({ meetings }: { meetings: SalesMeeting[] }) {
 }
 
 function EventList({ events }: { events: SalesEvent[] }) {
-  if (!events.length) {
-    return <EmptyState title="No activity yet" />;
-  }
+  if (!events.length) return <EmptyState title="No activity yet" />;
   return (
     <ol className="space-y-2">
       {events.map((e) => (

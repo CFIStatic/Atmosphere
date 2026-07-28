@@ -3,13 +3,15 @@ import { describe, it } from 'node:test';
 import { pickMeetingSlot, buildIcs, formatSlot } from './schedule.js';
 import { classifyReply, nextFollowupAt, draftPersonalizedEmail } from './email.js';
 import { researchBusinesses } from './research.js';
+import { parsePeopleQuery, runPeopleSearch } from './peopleSearch.js';
+import { searchWeb } from './webSearch.js';
 
 describe('sales schedule', () => {
   it('picks a future weekday slot inside availability', () => {
     const slot = pickMeetingSlot({
       availability: { mon: ['09:00-12:00'], tue: ['13:00-17:00'] },
       durationMin: 30,
-      after: new Date('2026-07-27T12:00:00Z'), // Monday
+      after: new Date('2026-07-27T12:00:00Z'),
       searchDays: 14,
     });
     assert.ok(slot);
@@ -94,5 +96,53 @@ describe('sales research', () => {
     assert.equal(result.mode, 'demo');
     assert.equal(result.businesses.length, 4);
     assert.ok(result.businesses[0].name.includes('Austin'));
+  });
+});
+
+describe('people query parse', () => {
+  it('parses role, company, and location from natural language', () => {
+    const parsed = parsePeopleQuery(
+      'find me the director of facilities at abc supply company in milwaukee',
+    );
+    assert.equal(parsed.role, 'Director of Facilities');
+    assert.match(parsed.company || '', /abc supply/i);
+    assert.match(parsed.location || '', /milwaukee/i);
+    assert.ok(parsed.searchQueries.length >= 3);
+  });
+
+  it('parses CEO queries', () => {
+    const parsed = parsePeopleQuery('CEO of ABC Supply');
+    assert.equal(parsed.role, 'CEO');
+    assert.match(parsed.company || '', /ABC Supply/i);
+  });
+});
+
+describe('live web people search', () => {
+  it('returns DuckDuckGo hits for ABC Supply facilities query', async () => {
+    const hits = await searchWeb('director of facilities "ABC Supply" Milwaukee', 8);
+    assert.ok(hits.length >= 3, `expected search hits, got ${hits.length}`);
+    assert.ok(
+      hits.some((h) => /abcsupply|linkedin|leadership/i.test(h.url)),
+      'expected ABC Supply or profile URLs',
+    );
+  });
+
+  it('finds real facilities-related people at ABC Supply in Milwaukee', async () => {
+    const result = await runPeopleSearch(
+      'find me the director of facilities at ABC Supply company in Milwaukee',
+    );
+    assert.ok(result.pagesCrawled >= 1);
+    assert.ok(result.searchesRun >= 1);
+    assert.ok(result.candidates.length >= 1, 'expected at least one candidate');
+    const hay = result.candidates
+      .map((c) => `${c.fullName} ${c.title} ${c.summary} ${c.evidence.join(' ')}`)
+      .join(' ')
+      .toLowerCase();
+    assert.ok(
+      /facilities|operations|milwaukee|abc supply|olsen|castaneda|kyle|jost/i.test(hay),
+      `candidates lacked expected signals: ${hay.slice(0, 400)}`,
+    );
+    assert.ok(result.bestMatch || result.candidates[0]);
+    assert.ok(result.sourcesCrawled.length >= 1);
   });
 });

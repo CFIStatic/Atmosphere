@@ -165,3 +165,24 @@ export function serializeEvent(row: Record<string, unknown>) {
     createdAt: row.created_at,
   };
 }
+
+export function serializePeopleSearch(row: Record<string, unknown>) {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    createdBy: row.created_by,
+    query: row.query,
+    parsed: row.parsed ?? {},
+    status: row.status,
+    summary: row.summary ?? null,
+    bestMatch: row.best_match ?? null,
+    candidates: Array.isArray(row.candidates) ? row.candidates : [],
+    sources: Array.isArray(row.sources) ? row.sources : [],
+    trace: Array.isArray(row.trace) ? row.trace : [],
+    pagesCrawled: row.pages_crawled ?? 0,
+    searchesRun: row.searches_run ?? 0,
+    durationMs: row.duration_ms ?? null,
+    error: row.error ?? null,
+    createdAt: row.created_at,
+  };
+}

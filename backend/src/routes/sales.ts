@@ -10,6 +10,7 @@ import {
   createCampaignSchema,
   updateCampaignSchema,
   replySchema,
+  peopleSearchSchema,
 } from '../sales/validation.js';
 import {
   serializeCampaign,
@@ -18,9 +19,11 @@ import {
   serializeOutreach,
   serializeMeeting,
   serializeEvent,
+  serializePeopleSearch,
   logSalesEvent,
 } from '../sales/serialize.js';
 import { runCampaign, handleInboundReply, isCampaignRunning } from '../sales/runner.js';
+import { runPeopleSearch } from '../sales/peopleSearch.js';
 
 export const salesRouter = Router();
 salesRouter.use(requireAuth);
@@ -31,6 +34,14 @@ const startLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: { message: 'Too many campaign starts, slow down.', code: 'rate_limited' } },
+});
+
+const searchLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: { message: 'Too many people searches, slow down.', code: 'rate_limited' } },
 });
 
 function mapZod(err: unknown, next: NextFunction) {
@@ -52,6 +63,7 @@ salesRouter.get('/status', async (_req: Request, res: Response, next: NextFuncti
           process.env.SALES_DEMO_MODE === 'true' || process.env.SALES_DEMO_MODE === '1',
         crawl: true,
         scheduling: true,
+        peopleSearch: true,
       },
     });
   } catch (err) {
@@ -356,6 +368,111 @@ salesRouter.post('/meetings/:id/confirm', async (req: Request, res: Response, ne
     if (error) throw new HttpError(500, error.message, 'sales_meeting_failed');
     if (!data) throw new HttpError(404, 'Meeting not found', 'not_found');
     res.json({ meeting: serializeMeeting(data) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/sales/people-search
+ * Natural-language lookup: "director of facilities at ABC Supply in Milwaukee".
+ * Crawls the public web, extracts candidates with sources, and persists the run.
+ */
+salesRouter.post(
+  '/people-search',
+  searchLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = peopleSearchSchema.parse(req.body);
+      const { orgId, userId, supabase } = await requireOrgContext(req);
+
+      const result = await runPeopleSearch(body.query);
+
+      const { data, error } = await supabase
+        .from('sales_people_searches')
+        .insert({
+          org_id: orgId,
+          created_by: userId,
+          query: body.query,
+          parsed: result.query,
+          status: result.status,
+          summary: result.summary,
+          best_match: result.bestMatch,
+          candidates: result.candidates,
+          sources: result.sourcesCrawled,
+          trace: result.trace,
+          pages_crawled: result.pagesCrawled,
+          searches_run: result.searchesRun,
+          duration_ms: result.durationMs,
+        })
+        .select('*')
+        .single();
+
+      // Persistence is best-effort — still return the live result if the table
+      // has not been migrated yet.
+      if (error) {
+        res.status(200).json({
+          search: {
+            id: null,
+            query: body.query,
+            parsed: result.query,
+            status: result.status,
+            summary: result.summary,
+            bestMatch: result.bestMatch,
+            candidates: result.candidates,
+            sources: result.sourcesCrawled,
+            trace: result.trace,
+            pagesCrawled: result.pagesCrawled,
+            searchesRun: result.searchesRun,
+            durationMs: result.durationMs,
+            error: null,
+            createdAt: new Date().toISOString(),
+            persisted: false,
+            persistError: error.message,
+          },
+        });
+        return;
+      }
+
+      res.status(201).json({
+        search: { ...serializePeopleSearch(data), persisted: true },
+      });
+    } catch (err) {
+      mapZod(err, next);
+    }
+  },
+);
+
+/** GET /api/sales/people-search — recent lookups for this org */
+salesRouter.get('/people-search', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { orgId, supabase } = await requireOrgContext(req);
+    const { data, error } = await supabase
+      .from('sales_people_searches')
+      .select('*')
+      .eq('org_id', orgId)
+      .order('created_at', { ascending: false })
+      .limit(30);
+    if (error) throw new HttpError(500, error.message, 'sales_search_list_failed');
+    res.json({ searches: (data ?? []).map((row) => serializePeopleSearch(row)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /api/sales/people-search/:id */
+salesRouter.get('/people-search/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { orgId, supabase } = await requireOrgContext(req);
+    const { data, error } = await supabase
+      .from('sales_people_searches')
+      .select('*')
+      .eq('org_id', orgId)
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (error) throw new HttpError(500, error.message, 'sales_search_get_failed');
+    if (!data) throw new HttpError(404, 'Search not found', 'not_found');
+    res.json({ search: serializePeopleSearch(data) });
   } catch (err) {
     next(err);
   }

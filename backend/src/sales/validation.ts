@@ -45,5 +45,14 @@ export const replySchema = z.object({
   subject: z.string().trim().max(500).optional().nullable(),
 });
 
+export const peopleSearchSchema = z.object({
+  query: z
+    .string()
+    .trim()
+    .min(3, 'Enter a search — e.g. director of facilities at ABC Supply in Milwaukee')
+    .max(1000),
+});
+
 export type CreateCampaignInput = z.infer<typeof createCampaignSchema>;
 export type UpdateCampaignInput = z.infer<typeof updateCampaignSchema>;
+export type PeopleSearchInput = z.infer<typeof peopleSearchSchema>;

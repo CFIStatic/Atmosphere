@@ -774,6 +774,60 @@ export interface SalesStatus {
   demoMode: boolean;
   crawl: boolean;
   scheduling: boolean;
+  peopleSearch?: boolean;
+}
+
+export interface PeopleSearchSource {
+  title: string;
+  url: string;
+  snippet: string;
+  engine?: string;
+}
+
+export interface PeopleSearchCandidate {
+  fullName: string;
+  title: string | null;
+  company: string | null;
+  location: string | null;
+  email: string | null;
+  phone: string | null;
+  linkedinUrl: string | null;
+  profileUrl: string | null;
+  confidence: number;
+  summary: string;
+  evidence: string[];
+  sources: PeopleSearchSource[];
+  matchReasons: string[];
+}
+
+export interface PeopleSearchTraceStep {
+  step: string;
+  detail: string;
+  at: string;
+}
+
+export interface PeopleSearchRecord {
+  id: string | null;
+  query: string;
+  parsed?: {
+    role?: string | null;
+    company?: string | null;
+    location?: string | null;
+    personName?: string | null;
+    searchQueries?: string[];
+  };
+  status: 'running' | 'completed' | 'partial' | 'failed';
+  summary: string | null;
+  bestMatch: PeopleSearchCandidate | null;
+  candidates: PeopleSearchCandidate[];
+  sources: PeopleSearchSource[];
+  trace: PeopleSearchTraceStep[];
+  pagesCrawled: number;
+  searchesRun: number;
+  durationMs: number | null;
+  error: string | null;
+  createdAt: string;
+  persisted?: boolean;
 }
 
 export const SALES_STATUS_LABELS: Record<SalesCampaignStatus, string> = {
@@ -1612,6 +1666,18 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ body, subject }),
     }),
+
+  searchSalesPeople: (query: string) =>
+    request<{ search: PeopleSearchRecord }>('/api/sales/people-search', {
+      method: 'POST',
+      body: JSON.stringify({ query }),
+    }),
+
+  listSalesPeopleSearches: () =>
+    request<{ searches: PeopleSearchRecord[] }>('/api/sales/people-search', { method: 'GET' }),
+
+  getSalesPeopleSearch: (id: string) =>
+    request<{ search: PeopleSearchRecord }>(`/api/sales/people-search/${id}`, { method: 'GET' }),
 };
 
 /** Labels for the run states, kept next to the other shared UI copy. */
