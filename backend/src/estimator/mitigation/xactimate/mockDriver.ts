@@ -164,6 +164,29 @@ function buildMockPriceList(summary: { id: string; name: string; effectiveDate?:
     });
   }
 
+  // Extra account-only codes a real regional list carries — exercises search /
+  // code-picker against entries that are not in the knowledge profiles.
+  entries.push(
+    {
+      code: 'WTRBAG',
+      description: 'Bag and dispose of debris — per bag',
+      unit: 'EA',
+      unitPrice: 12.5,
+    },
+    {
+      code: 'WTRMASK',
+      description: 'Apply polyethylene masking / containment poly',
+      unit: 'SF',
+      unitPrice: 0.55,
+    },
+    {
+      code: 'CLNCONTMV',
+      description: 'Content pack-out — box and move to storage (hourly)',
+      unit: 'HR',
+      unitPrice: 52.0,
+    },
+  );
+
   return { id: summary.id, name: summary.name, effectiveDate: summary.effectiveDate, entries };
 }
 

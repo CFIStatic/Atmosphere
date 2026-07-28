@@ -29,6 +29,8 @@ export function MitigationEstimatorPage() {
   const [estimate, setEstimate] = useState<MitigationEstimate | null>(null);
   const [estimateId, setEstimateId] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
+  const [codeOverrides, setCodeOverrides] = useState<Record<string, string>>({});
+  const [confirmPush, setConfirmPush] = useState(false);
 
   const [building, setBuilding] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -63,6 +65,7 @@ export function MitigationEstimatorPage() {
       mica: sources.mica,
       photos: sources.photos.length ? sources.photos : undefined,
       notes: sources.notes.trim() || undefined,
+      codeOverrides: Object.keys(codeOverrides).length ? codeOverrides : undefined,
     };
   }
 
@@ -70,6 +73,7 @@ export function MitigationEstimatorPage() {
     setBuilding(true);
     setError(null);
     setNotice(null);
+    setConfirmPush(false);
     // A saved estimate is a snapshot of one moment, so rebuilding invalidates
     // the saved one and its export links. The *job* id is kept — deviations are
     // recorded against the job and must survive a rebuild, which is the whole
@@ -108,26 +112,39 @@ export function MitigationEstimatorPage() {
     setPushing(true);
     setError(null);
     try {
-      const result = await api.xactimatePush(estimate, false);
+      const result = await api.xactimatePush(estimate, confirmPush);
+      setConfirmPush(false);
       setNotice(
-        `Wrote ${result.lineItemsWritten} line items into Xactimate as ${result.estimateId}.`,
+        `Wrote ${result.lineItemsWritten} line items into Xactimate as ${result.estimateId}` +
+          (result.url ? `. Open: ${result.url}` : '.') +
+          (result.warnings?.length ? ` Warnings: ${result.warnings.join(' ')}` : ''),
       );
     } catch (err) {
       if (err instanceof ApiError && err.code === 'sla_blocked') {
         setError(
           'This estimate breaches its carrier program terms. Resolve them above, or accept a documented deviation for each, then rebuild.',
         );
-      } else if (err instanceof ApiError && err.status === 409) {
-        // The server refused because critical findings are outstanding. Make the
-        // user look at them rather than offering a one-click override.
+      } else if (err instanceof ApiError && (err.code === 'confirmation_required' || err.status === 409)) {
+        setConfirmPush(true);
         setError(
-          'This estimate still has critical findings. Work through the review above, rebuild, and push again.',
+          'Critical findings are outstanding. Review them above, then press the push button again to confirm and write into Xactimate.',
         );
       } else {
         setError(err instanceof ApiError ? err.message : 'Could not write to Xactimate.');
       }
     } finally {
       setPushing(false);
+    }
+  }
+
+  async function onCodeOverride(catalogKey: string, code: string) {
+    setCodeOverrides((current) => ({ ...current, [catalogKey]: code }));
+    try {
+      await api.xactimateOverrideCode(catalogKey, code, true);
+      setNotice(`Locked ${catalogKey} → ${code}. Rebuilding with the account code…`);
+      await build();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save that code pick.');
     }
   }
 
@@ -254,6 +271,8 @@ export function MitigationEstimatorPage() {
                 pushing={pushing}
                 canPush={canPush}
                 jobId={jobId}
+                confirmPush={confirmPush}
+                onCodeOverride={(key, code) => void onCodeOverride(key, code)}
                 // Accepting a deviation changes what the terms check concludes,
                 // so the estimate is rebuilt rather than patched in place.
                 onDeviationAccepted={() => void build()}

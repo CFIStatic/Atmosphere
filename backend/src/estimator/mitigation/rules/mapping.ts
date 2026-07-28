@@ -1,46 +1,56 @@
 import { round, toSquareYards } from '../lib/geometry.js';
 import { uniqueCitations } from '../standards/s500.js';
 import { CATALOG, type CatalogItem } from '../catalog/lineItems.js';
-import { resolvePrice, type CostBasis, type PriceList, DEFAULT_COST_BASIS } from '../catalog/priceList.js';
+import { catalogItemFromAccountCode } from '../catalog/accountCatalog.js';
+import { findPriceListEntry, searchPriceList } from '../catalog/codeSearch.js';
+import {
+  resolvePrice,
+  type CostBasis,
+  type PriceList,
+  DEFAULT_COST_BASIS,
+} from '../catalog/priceList.js';
 import type { AssessedRoom, EstimateLineItem, ScopeItem, Unit } from '../types.js';
 
 /**
  * Scope → Xactimate line items.
  *
  * Picking the right selector is the part of this job that separates an estimate
- * that gets paid from one that comes back with half its lines struck. Three
- * things decide it:
+ * that gets paid from one that comes back with half its lines struck. Authority
+ * for *which code* is the account's price list — knowledge profiles (tags) only
+ * propose a candidate, and a human override always wins.
  *
- * - **Specificity.** `WTRDHMLGR` (LGR dehumidifier) pays materially more than
- *   `WTRDHM` (conventional) and is the correct code when an LGR was on site.
- *   Reaching for the generic code because it is easier to remember is a
- *   straight-line margin loss, so the mapping always resolves to the most
- *   specific entry the evidence supports.
- * - **Unit agreement.** A quantity in SF billed against an item priced by the
- *   square yard is off by 9×. Conversions are explicit here and never implicit.
- * - **One line per code per room.** Xactimate expects consolidated lines;
- *   duplicates are a review flag even when the arithmetic is right.
+ * Resolution order per scope item:
+ *   1. Explicit override (catalogKey or scope item id → account code)
+ *   2. Tag → knowledge key → catalog entry (already reconciled to account codes)
+ *   3. Live price-list search from the knowledge profile's searchTerms
+ *
+ * Unmapped items are never dropped — they surface as open questions so an
+ * estimator can pick a real account code.
  */
 
 export interface MappingContext {
   rooms: AssessedRoom[];
   priceList: PriceList | null;
   costBasis?: CostBasis;
-  /** A reconciled catalog when one is available; otherwise the seeded one. */
+  /** Account-reconciled catalog when one is available; otherwise knowledge defaults. */
   catalog?: readonly CatalogItem[];
+  /**
+   * Human-picked account codes, keyed by knowledge catalog key or scope item id.
+   * These always beat automatic resolution.
+   */
+  codeOverrides?: Record<string, string>;
 }
 
 /**
- * Tag sets that resolve to a specific catalog entry, most specific first.
+ * Tag sets that resolve to a specific knowledge profile, most specific first.
  *
- * The scope layer emits domain tags; this table is the only place that knows
- * which catalog entry those tags mean. Entries are addressed by their stable
- * `key`, never by `code` — a price-list sync rewrites `code` to whatever the
- * account calls the item, and a table keyed on the selector would silently stop
- * matching the moment a region renamed one.
+ * Entries are addressed by stable `key` (the knowledge id), never by the live
+ * Xactimate selector — a price-list sync rewrites `code`, and a table keyed on
+ * the selector would silently stop matching the moment a region renamed one.
  */
 const MAPPINGS: Array<{ tags: string[]; code: string; when?: (item: ScopeItem) => boolean }> = [
   // Extraction — carpet and hard surface are different codes at different rates.
+  { tags: ['extraction', 'carpet', 'heavy'], code: 'WTRXTRCHV' },
   { tags: ['extraction', 'carpet'], code: 'WTRXTRC' },
   { tags: ['extraction', 'hard_surface'], code: 'WTRXTRHD' },
 
@@ -66,6 +76,7 @@ const MAPPINGS: Array<{ tags: string[]; code: string; when?: (item: ScopeItem) =
   { tags: ['equipment', 'heater'], code: 'WTRHEAT' },
 
   // Labour.
+  { tags: ['labor', 'emergency'], code: 'WTREMER' },
   { tags: ['labor', 'after_hours'], code: 'WTRDRYAH' },
   { tags: ['labor', 'monitoring'], code: 'WTRDRY' },
   { tags: ['contents', 'labor'], code: 'CLNCONT' },
@@ -94,14 +105,14 @@ export function mapScopeToLineItems(scope: ScopeItem[], context: MappingContext)
   const costBasis = context.costBasis ?? DEFAULT_COST_BASIS;
   const byKey = new Map(catalog.map((item) => [item.key, item]));
   const roomsById = new Map(context.rooms.map((room) => [room.id, room]));
+  const overrides = context.codeOverrides ?? {};
 
   const unmapped: ScopeItem[] = [];
   /** Consolidation key → accumulated line. */
   const lines = new Map<string, EstimateLineItem>();
 
   for (const item of scope) {
-    const key = resolveCode(item);
-    const catalogItem = key ? byKey.get(key) : undefined;
+    const catalogItem = resolveCatalogItem(item, byKey, catalog, context.priceList, costBasis, overrides);
 
     if (!catalogItem) {
       unmapped.push(item);
@@ -109,11 +120,21 @@ export function mapScopeToLineItems(scope: ScopeItem[], context: MappingContext)
     }
 
     const price = resolvePrice(catalogItem, context.priceList, costBasis);
-    const quantity = convertQuantity(item.quantity, item.unit, price.unit);
+    let quantity = convertQuantity(item.quantity, item.unit, price.unit);
 
+    // A human-picked account code may not share the scope unit (e.g. they swapped
+    // a day-rate machine for an each accessory). Prefer the pick over dropping
+    // the line — the quantity stays as scoped and the adjuster sees the unit.
     if (quantity === null) {
-      unmapped.push(item);
-      continue;
+      const wasOverridden = Boolean(
+        overrides[item.id] ?? (catalogItem.key ? overrides[catalogItem.key] : undefined),
+      );
+      if (wasOverridden) {
+        quantity = item.quantity;
+      } else {
+        unmapped.push(item);
+        continue;
+      }
     }
 
     const room = item.roomId ? roomsById.get(item.roomId) : undefined;
@@ -121,14 +142,11 @@ export function mapScopeToLineItems(scope: ScopeItem[], context: MappingContext)
     const existing = lines.get(consolidationKey);
 
     if (existing) {
-      // Same code, same room — consolidate rather than emit a duplicate line.
       existing.quantity = round(existing.quantity + quantity);
       existing.rcv = round(existing.quantity * existing.unitPrice);
       existing.totalCost = round(existing.quantity * existing.unitCost);
       existing.scopeItemIds.push(item.id);
       existing.evidenceIds = [...new Set([...existing.evidenceIds, ...item.evidenceIds])];
-      // Consolidated lines carry the union of their scope items' citations —
-      // a merged line rests on every requirement that produced it.
       existing.citations = uniqueCitations([...existing.citations, ...item.citations]);
       if (!existing.justification.includes(item.justification)) {
         existing.justification = `${existing.justification} ${item.justification}`;
@@ -161,8 +179,69 @@ export function mapScopeToLineItems(scope: ScopeItem[], context: MappingContext)
   return { lineItems: [...lines.values()], unmapped };
 }
 
+function resolveCatalogItem(
+  item: ScopeItem,
+  byKey: Map<string, CatalogItem>,
+  catalog: readonly CatalogItem[],
+  priceList: PriceList | null,
+  costBasis: CostBasis,
+  overrides: Record<string, string>,
+): CatalogItem | undefined {
+  const knowledgeKey = resolveKnowledgeKey(item);
+
+  // 1. Explicit override — by scope item id or knowledge key.
+  const overrideCode =
+    overrides[item.id] ?? (knowledgeKey ? overrides[knowledgeKey] : undefined) ?? undefined;
+  if (overrideCode && priceList) {
+    const knowledge = knowledgeKey ? byKey.get(knowledgeKey) : undefined;
+    const fromAccount = catalogItemFromAccountCode(overrideCode, priceList, knowledge, costBasis);
+    if (fromAccount) return fromAccount;
+  }
+
+  // 2. Knowledge key → reconciled catalog entry.
+  if (knowledgeKey) {
+    const direct = byKey.get(knowledgeKey);
+    if (direct) {
+      // If the catalog entry is unverified but the price list has this code (or a
+      // strong search hit), prefer the live row so we never bill a placeholder
+      // when the account already has the selector.
+      if (!direct.verified && priceList) {
+        const live =
+          findPriceListEntry(priceList, direct.code) ??
+          searchPriceList(priceList, direct.searchTerms.join(' '), {
+            preferUnit: direct.unit,
+            preferCategory: direct.category,
+            limit: 1,
+            minScore: 0.55,
+          })[0];
+        if (live) {
+          const fromAccount = catalogItemFromAccountCode(live.code, priceList, direct, costBasis);
+          if (fromAccount) return fromAccount;
+        }
+      }
+      return direct;
+    }
+  }
+
+  // 3. Last-resort: search the live list from scope tags / description.
+  if (priceList) {
+    const query = [...item.tags, item.description].join(' ');
+    const hit = searchPriceList(priceList, query, {
+      preferUnit: item.unit,
+      limit: 1,
+      minScore: 0.7,
+    })[0];
+    if (hit) {
+      const knowledge = knowledgeKey ? catalog.find((c) => c.key === knowledgeKey) : undefined;
+      return catalogItemFromAccountCode(hit.code, priceList, knowledge, costBasis) ?? undefined;
+    }
+  }
+
+  return undefined;
+}
+
 /** First mapping whose tags are all present on the scope item. */
-function resolveCode(item: ScopeItem): string | undefined {
+function resolveKnowledgeKey(item: ScopeItem): string | undefined {
   for (const mapping of MAPPINGS) {
     if (!mapping.tags.every((tag) => item.tags.includes(tag))) continue;
     if (mapping.when && !mapping.when(item)) continue;
@@ -187,4 +266,13 @@ export function convertQuantity(quantity: number, from: Unit, to: Unit): number 
   if (from === 'CF' && to === 'CY') return round(quantity / 27);
   if (from === 'CY' && to === 'CF') return round(quantity * 27);
   return null;
+}
+
+/** Exported for tests and the code-picker UI (shows which key a tag set resolves to). */
+export function knowledgeKeyForTags(tags: string[]): string | undefined {
+  for (const mapping of MAPPINGS) {
+    if (!mapping.tags.every((tag) => tags.includes(tag))) continue;
+    return mapping.code;
+  }
+  return undefined;
 }

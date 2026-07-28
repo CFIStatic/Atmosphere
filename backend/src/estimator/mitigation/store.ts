@@ -356,6 +356,16 @@ export interface StoredSettings {
   techniciansOnSite?: number;
   category3CutHeightIn?: number;
   costOverrides?: Record<string, number>;
+  /**
+   * Human-approved knowledge-key → account Xactimate code bindings.
+   * Locked after reviewing a fuzzy reconcile so the next build uses the
+   * approved selector instead of re-guessing from descriptions.
+   */
+  catalogRemaps?: Record<string, string>;
+  /**
+   * Per-build / org defaults for code overrides (knowledge key or scope id → code).
+   */
+  codeOverrides?: Record<string, string>;
 }
 
 export async function getSettings(

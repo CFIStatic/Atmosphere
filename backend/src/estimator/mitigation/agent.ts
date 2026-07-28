@@ -36,9 +36,18 @@ export interface EstimatorConfig {
   costBasis: CostBasis;
   /** The account's real price list, once synced. Null means placeholder pricing. */
   priceList: PriceList | null;
-  /** Reconciled catalog from a price-list sync; falls back to the seed catalog. */
+  /**
+   * Working catalog built from the account price list (selectors + prices) with
+   * knowledge profiles supplying tags and evidence gates. Falls back to unverified
+   * knowledge defaults when no list is connected.
+   */
   catalog: readonly CatalogItem[];
   lineMarginFloor: number;
+  /**
+   * Human-picked account codes, keyed by knowledge catalog key or scope item id.
+   * Always beat automatic resolution during mapping.
+   */
+  codeOverrides?: Record<string, string>;
 
   /**
    * The carrier program agreement this job falls under, when one is loaded.
@@ -85,6 +94,7 @@ export function buildEstimate(
     priceList: config.priceList,
     costBasis: config.costBasis,
     catalog: config.catalog,
+    codeOverrides: config.codeOverrides,
   });
 
   // A negotiated concession is a real reduction in what the carrier pays, so it

@@ -1210,9 +1210,81 @@ export const api = {
     ),
 
   xactimateSyncPriceList: (priceListId: string) =>
-    request<{ priceListId: string; name: string; entryCount: number }>(
-      '/api/xactimate/price-lists/sync',
-      { method: 'POST', body: JSON.stringify({ priceListId }) },
+    request<{
+      priceListId: string;
+      name: string;
+      entryCount: number;
+      matched?: number;
+      unmatched?: string[];
+      remapped?: Array<{ from: string; to: string; description: string; via: string }>;
+      warnings?: string[];
+    }>('/api/xactimate/price-lists/sync', {
+      method: 'POST',
+      body: JSON.stringify({ priceListId }),
+    }),
+
+  xactimateUploadPriceList: (input: {
+    id: string;
+    name: string;
+    effectiveDate?: string;
+    content?: string;
+    format?: 'csv' | 'tsv' | 'json' | 'auto';
+    entries?: Array<{ code: string; description: string; unit: string; unitPrice: number }>;
+  }) =>
+    request<{
+      priceListId: string;
+      name?: string;
+      entryCount: number;
+      matched?: number;
+      unmatched?: string[];
+      remapped?: Array<{ from: string; to: string; description: string; via: string }>;
+      warnings?: string[];
+    }>('/api/xactimate/price-lists/upload', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  xactimateSearchCodes: (q: string, opts?: { limit?: number; preferUnit?: string; preferCategory?: string }) => {
+    const params = new URLSearchParams({ q });
+    if (opts?.limit) params.set('limit', String(opts.limit));
+    if (opts?.preferUnit) params.set('preferUnit', opts.preferUnit);
+    if (opts?.preferCategory) params.set('preferCategory', opts.preferCategory);
+    return request<{
+      hits: CodeSearchHit[];
+      priceListId: string | null;
+      entryCount?: number;
+      message?: string;
+    }>(`/api/xactimate/catalog/codes?${params.toString()}`, { method: 'GET' });
+  },
+
+  xactimateReconcileCatalog: () =>
+    request<{
+      live: boolean;
+      priceListId?: string;
+      entryCount?: number;
+      matched: number;
+      unmatched: string[];
+      remapped: Array<{ from: string; to: string; description: string; via: string }>;
+      warnings: string[];
+      remaps: Record<string, string>;
+    }>('/api/xactimate/catalog/reconcile', { method: 'GET' }),
+
+  xactimateSaveRemaps: (remaps: Record<string, string>) =>
+    request<{ remaps: Record<string, string> }>('/api/xactimate/catalog/remaps', {
+      method: 'PUT',
+      body: JSON.stringify({ remaps }),
+    }),
+
+  xactimateOverrideCode: (key: string, code: string, persist = true) =>
+    request<{ key: string; code: string; persisted: boolean; remaps?: Record<string, string> }>(
+      '/api/xactimate/catalog/override',
+      { method: 'POST', body: JSON.stringify({ key, code, persist }) },
+    ),
+
+  xactimateResume: () =>
+    request<{ status: 'connected'; profile: { username: string; displayName?: string } }>(
+      '/api/xactimate/resume',
+      { method: 'POST', body: JSON.stringify({}) },
     ),
 
   xactimateActivity: () =>
@@ -1223,7 +1295,6 @@ export const api = {
       '/api/xactimate/push',
       { method: 'POST', body: JSON.stringify({ estimate, confirmedFindings }) },
     ),
-
 
 
   // ---- Construction Estimator ----
@@ -2302,6 +2373,8 @@ export interface BuildEstimateInput {
   notes?: string;
   overrides?: Record<string, unknown>;
   settings?: EstimatorSettings;
+  /** Knowledge key or scope item id → live account Xactimate code. */
+  codeOverrides?: Record<string, string>;
 }
 
 export interface PhotoManifestEntry {
@@ -2335,6 +2408,7 @@ export interface EstimatorJob {
 
 export interface MitigationLineItem {
   id: string;
+  catalogKey?: string;
   code: string;
   category: string;
   description: string;
@@ -2572,6 +2646,15 @@ export interface PriceListSummary {
   id: string;
   name: string;
   effectiveDate?: string;
+}
+
+export interface CodeSearchHit {
+  code: string;
+  description: string;
+  unit: string;
+  unitPrice: number;
+  score: number;
+  match: 'exact_code' | 'prefix_code' | 'description' | 'token';
 }
 
 export interface XactimateActivity {

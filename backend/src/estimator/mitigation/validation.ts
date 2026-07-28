@@ -72,6 +72,8 @@ export const estimatorSettingsSchema = z
     techniciansOnSite: z.number().int().min(1).max(20).optional(),
     category3CutHeightIn: z.number().min(12).max(96).optional(),
     costOverrides: z.record(z.string().max(40), z.number().min(0).max(100_000)).optional(),
+    catalogRemaps: z.record(z.string().max(40), z.string().trim().min(1).max(40)).optional(),
+    codeOverrides: z.record(z.string().max(80), z.string().trim().min(1).max(40)).optional(),
   })
   .optional();
 
@@ -93,6 +95,11 @@ export const buildEstimateSchema = z
     overrides: overridesSchema,
     settings: estimatorSettingsSchema,
     carrier: carrierOverrideSchema,
+    /**
+     * Per-build code picks: knowledge key or scope item id → account Xactimate code.
+     * Merged on top of any org-level codeOverrides in settings.
+     */
+    codeOverrides: z.record(z.string().max(80), z.string().trim().min(1).max(40)).optional(),
   })
   .refine(
     (value) => Boolean(value.docusketch || value.mica || value.photos?.length || value.notes?.trim()),
@@ -156,7 +163,35 @@ export const priceListUploadSchema = z.object({
       }),
     )
     .min(1, 'That price list has no rows')
-    .max(50_000, 'That price list is too large to upload in one request'),
+    .max(50_000, 'That price list is too large to upload in one request')
+    .optional(),
+  /** Raw CSV / TSV / JSON export from Xactimate Online — alternative to `entries`. */
+  content: z.string().min(1).max(20_000_000).optional(),
+  format: z.enum(['csv', 'tsv', 'json', 'auto']).optional(),
+}).refine((value) => Boolean(value.entries?.length || value.content?.trim()), {
+  message: 'Provide either structured entries or a raw export file body (content).',
+});
+
+export const codeSearchSchema = z.object({
+  q: z.string().trim().min(1, 'Enter a code or description').max(200),
+  limit: z.number().int().min(1).max(100).optional(),
+  preferUnit: z.enum(['SF', 'LF', 'SY', 'CF', 'EA', 'DA', 'HR', 'WK', 'CY']).optional(),
+  preferCategory: z.string().trim().max(10).optional(),
+});
+
+export const catalogRemapSchema = z.object({
+  remaps: z
+    .record(z.string().max(40), z.string().trim().min(1).max(40))
+    .refine((value) => Object.keys(value).length > 0, 'Provide at least one remap'),
+});
+
+export const applyCodeOverrideSchema = z.object({
+  /** Knowledge key or scope item id. */
+  key: z.string().trim().min(1).max(80),
+  /** Live account Xactimate selector. */
+  code: z.string().trim().min(1).max(40),
+  /** Persist on the org so later builds reuse it. */
+  persist: z.boolean().default(true),
 });
 
 export const pushEstimateSchema = z.object({

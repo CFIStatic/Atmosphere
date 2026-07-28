@@ -131,7 +131,15 @@ mitigationRouter.post(
       const { supabase, orgId, stored, priceList } = await loadContext(req);
 
       const { config, warnings } = buildEstimatorConfig(
-        { ...stored, ...(input.settings ?? {}) },
+        {
+          ...stored,
+          ...(input.settings ?? {}),
+          codeOverrides: {
+            ...(stored.codeOverrides ?? {}),
+            ...(input.settings?.codeOverrides ?? {}),
+            ...(input.codeOverrides ?? {}),
+          },
+        },
         priceList,
       );
 
@@ -178,7 +186,15 @@ mitigationRouter.post(
       const { supabase, userId, orgId, stored, priceList } = await loadContext(req);
 
       const { config, warnings } = buildEstimatorConfig(
-        { ...stored, ...(input.settings ?? {}) },
+        {
+          ...stored,
+          ...(input.settings ?? {}),
+          codeOverrides: {
+            ...(stored.codeOverrides ?? {}),
+            ...(input.settings?.codeOverrides ?? {}),
+            ...(input.codeOverrides ?? {}),
+          },
+        },
         priceList,
       );
 

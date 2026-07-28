@@ -1,7 +1,7 @@
 import type { EvidenceKind, Unit } from '../types.js';
 
 /**
- * The Xactimate line-item catalog.
+ * Mitigation line-item **knowledge profiles** — not the account catalog.
  *
  * ## Read this before trusting a code
  *
@@ -10,18 +10,16 @@ import type { EvidenceKind, Unit } from '../types.js';
  * monthly), and by the carrier program a job falls under. A code that is right
  * in `FLMI8X_JAN26` may not exist in `TXHO_DEC25`.
  *
- * So this file is a **seed**, not an authority. Every entry ships with
- * `verified: false`, and the real codes and prices are pulled from the
- * connected Xactimate account by `reconcileCatalog()` in `priceList.ts`, which
- * matches on `searchTerms` against the account's actual price list. Until that
- * reconciliation runs, every line the estimator writes is flagged
- * `priceVerified: false` and the UI says so — an estimate is never presented as
- * ready to submit on the strength of these defaults.
+ * This file is **domain knowledge**, not an authority. Each entry teaches the
+ * agent *what kind of work* to bill (tags, evidence gates, cost basis, search
+ * terms). The live selector and unit price come only from the connected
+ * Xactimate account via `buildAccountCatalog()` — login + sync/upload, then
+ * optional human remaps / code picks. Until that happens every line is flagged
+ * `priceVerified: false` and push is gated.
  *
- * `defaultUnitPrice` figures are order-of-magnitude industry values for sanity
- * checks and demos. `defaultUnitCost` is the internal cost basis — what the work
- * actually costs the contractor to perform — and it is what makes margin
- * analysis possible at all. Both belong to the org and are overridable.
+ * `defaultUnitPrice` figures are order-of-magnitude industry values for demos
+ * only. `defaultUnitCost` is the internal cost basis — what the work costs the
+ * contractor — and is org-overridable.
  */
 
 export interface CatalogItem {

@@ -21,6 +21,9 @@ import {
   type XactimateDriver,
 } from '../estimator/mitigation/xactimate/index.js';
 import {
+  applyCodeOverrideSchema,
+  catalogRemapSchema,
+  codeSearchSchema,
   priceListSyncSchema,
   priceListUploadSchema,
   pushEstimateSchema,
@@ -29,13 +32,18 @@ import {
 import {
   getConnection,
   getPriceList,
+  getSettings,
   listAudit,
   recordAudit,
   resolveOrgId,
   revokeConnection,
   savePriceList,
   saveConnection,
+  saveSettings,
 } from '../estimator/mitigation/store.js';
+import { buildAccountCatalog } from '../estimator/mitigation/catalog/accountCatalog.js';
+import { searchPriceList } from '../estimator/mitigation/catalog/codeSearch.js';
+import { parsePriceListExport, PriceListParseError } from '../estimator/mitigation/catalog/priceListImport.js';
 import type { MitigationEstimate } from '../estimator/mitigation/types.js';
 
 export const xactimateRouter = Router();
@@ -243,11 +251,18 @@ xactimateRouter.post(
 
       await savePriceList(supabase, orgId, userId, priceList);
 
+      const stored = await getSettings(supabase, orgId);
+      const account = buildAccountCatalog(priceList, { remaps: stored.catalogRemaps ?? {} });
+
       res.json({
         priceListId: priceList.id,
         name: priceList.name,
         effectiveDate: priceList.effectiveDate ?? null,
         entryCount: priceList.entries.length,
+        matched: account.matched,
+        unmatched: account.unmatched,
+        remapped: account.remapped,
+        warnings: account.warnings,
       });
     } catch (err) {
       next(err instanceof ConsentError ? new HttpError(403, err.message, err.code) : err);
@@ -258,9 +273,11 @@ xactimateRouter.post(
 /**
  * POST /api/xactimate/price-lists/upload
  *
- * The no-login path: export the price list from Xactimate and upload it. Orgs
- * without API access get real prices this way without any credential ever
- * changing hands, which is why the browser driver refuses to scrape one.
+ * The no-login path: export the price list from Xactimate Online and upload it.
+ * Orgs without API access get real account codes and prices this way without
+ * any credential changing hands — which is why the browser driver refuses to
+ * scrape the paginated grid. Accepts structured `entries` or a raw CSV/TSV/JSON
+ * `content` body from an XO export.
  */
 xactimateRouter.post(
   '/price-lists/upload',
@@ -271,19 +288,203 @@ xactimateRouter.post(
       const userId = req.user!.id;
       const orgId = await resolveOrgId(supabase, userId);
 
-      await savePriceList(supabase, orgId, userId, {
+      let priceList: import('../estimator/mitigation/catalog/priceList.js').PriceList = {
         id: input.id,
         name: input.name,
         effectiveDate: input.effectiveDate,
-        entries: input.entries,
-      });
+        entries: input.entries ?? [],
+      };
+      const parseWarnings: string[] = [];
 
-      res.status(201).json({ priceListId: input.id, entryCount: input.entries.length });
+      if (input.content?.trim()) {
+        try {
+          const parsed = parsePriceListExport({
+            id: input.id,
+            name: input.name,
+            effectiveDate: input.effectiveDate,
+            content: input.content,
+            format: input.format ?? 'auto',
+          });
+          priceList = parsed.priceList;
+          parseWarnings.push(...parsed.warnings);
+        } catch (err) {
+          if (err instanceof PriceListParseError) {
+            throw new HttpError(400, err.message, err.code);
+          }
+          throw err;
+        }
+      }
+
+      if (!priceList.entries.length) {
+        throw new HttpError(400, 'That price list has no rows.', 'no_entries');
+      }
+
+      await savePriceList(supabase, orgId, userId, priceList);
+
+      const stored = await getSettings(supabase, orgId);
+      const account = buildAccountCatalog(priceList, { remaps: stored.catalogRemaps ?? {} });
+
+      res.status(201).json({
+        priceListId: priceList.id,
+        name: priceList.name,
+        entryCount: priceList.entries.length,
+        matched: account.matched,
+        unmatched: account.unmatched,
+        remapped: account.remapped,
+        warnings: [...parseWarnings, ...account.warnings],
+      });
     } catch (err) {
       next(err);
     }
   },
 );
+
+/**
+ * GET /api/xactimate/catalog/codes?q=…
+ *
+ * Search the org's synced account price list. This is how estimators pick real
+ * Xactimate selectors — the knowledge profiles propose work; the account list
+ * is the only place codes come from.
+ */
+xactimateRouter.get('/catalog/codes', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = codeSearchSchema.parse({
+      q: req.query.q,
+      limit: req.query.limit ? Number(req.query.limit) : undefined,
+      preferUnit: req.query.preferUnit,
+      preferCategory: req.query.preferCategory,
+    });
+    const supabase = createUserClient(req.accessToken!);
+    const userId = req.user!.id;
+    const orgId = await resolveOrgId(supabase, userId);
+    const record = await getConnection(supabase, userId);
+
+    if (!record?.priceListId) {
+      res.json({ hits: [], priceListId: null, message: 'Sync or upload a price list first.' });
+      return;
+    }
+
+    const priceList = await getPriceList(supabase, orgId, record.priceListId);
+    const hits = searchPriceList(priceList, input.q, {
+      limit: input.limit,
+      preferUnit: input.preferUnit,
+      preferCategory: input.preferCategory,
+    });
+
+    res.json({
+      hits,
+      priceListId: record.priceListId,
+      entryCount: priceList?.entries.length ?? 0,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/xactimate/catalog/reconcile
+ *
+ * Preview how knowledge profiles map onto the account price list, including
+ * fuzzy remaps that a human should lock before trusting a push.
+ */
+xactimateRouter.get('/catalog/reconcile', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const supabase = createUserClient(req.accessToken!);
+    const userId = req.user!.id;
+    const orgId = await resolveOrgId(supabase, userId);
+    const record = await getConnection(supabase, userId);
+    const stored = await getSettings(supabase, orgId);
+
+    if (!record?.priceListId) {
+      res.json({
+        live: false,
+        matched: 0,
+        unmatched: [],
+        remapped: [],
+        warnings: ['No price list connected.'],
+        remaps: stored.catalogRemaps ?? {},
+      });
+      return;
+    }
+
+    const priceList = await getPriceList(supabase, orgId, record.priceListId);
+    const account = buildAccountCatalog(priceList, { remaps: stored.catalogRemaps ?? {} });
+
+    res.json({
+      live: account.live,
+      priceListId: record.priceListId,
+      entryCount: priceList?.entries.length ?? 0,
+      matched: account.matched,
+      unmatched: account.unmatched,
+      remapped: account.remapped,
+      warnings: account.warnings,
+      remaps: stored.catalogRemaps ?? {},
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PUT /api/xactimate/catalog/remaps
+ *
+ * Lock human-approved knowledge-key → account-code bindings so the next build
+ * uses the account selector instead of re-guessing from descriptions.
+ */
+xactimateRouter.put('/catalog/remaps', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { remaps } = catalogRemapSchema.parse(req.body);
+    const supabase = createUserClient(req.accessToken!);
+    const userId = req.user!.id;
+    const orgId = await resolveOrgId(supabase, userId);
+    const stored = await getSettings(supabase, orgId);
+    const merged = { ...(stored.catalogRemaps ?? {}), ...remaps };
+    const settings = await saveSettings(supabase, orgId, { catalogRemaps: merged });
+    res.json({ remaps: settings.catalogRemaps ?? {} });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/xactimate/catalog/override
+ *
+ * Persist a single code pick (from the estimate code picker) onto the org.
+ */
+xactimateRouter.post('/catalog/override', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = applyCodeOverrideSchema.parse(req.body);
+    const supabase = createUserClient(req.accessToken!);
+    const userId = req.user!.id;
+    const orgId = await resolveOrgId(supabase, userId);
+    const record = await getConnection(supabase, userId);
+
+    if (record?.priceListId) {
+      const priceList = await getPriceList(supabase, orgId, record.priceListId);
+      const hit = searchPriceList(priceList, input.code, { limit: 1, minScore: 1 });
+      const exact = priceList?.entries.some((e) => e.code.toUpperCase() === input.code.toUpperCase());
+      if (!exact && hit.length === 0) {
+        throw new HttpError(
+          400,
+          `Code "${input.code}" is not on the connected price list. Search the account catalog and pick a real selector.`,
+          'code_not_on_price_list',
+        );
+      }
+    }
+
+    if (!input.persist) {
+      res.json({ key: input.key, code: input.code, persisted: false });
+      return;
+    }
+
+    const stored = await getSettings(supabase, orgId);
+    const catalogRemaps = { ...(stored.catalogRemaps ?? {}), [input.key]: input.code };
+    await saveSettings(supabase, orgId, { catalogRemaps });
+    res.json({ key: input.key, code: input.code, persisted: true, remaps: catalogRemaps });
+  } catch (err) {
+    next(err);
+  }
+});
 
 /**
  * POST /api/xactimate/push
