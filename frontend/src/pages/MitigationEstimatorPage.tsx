@@ -188,9 +188,9 @@ export function MitigationEstimatorPage() {
           <p className="text-sm font-medium text-brand-400">Mitigation</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-white">Estimator</h1>
           <p className="mt-2 max-w-2xl text-gray-400">
-            Give it the scan, the drying record, the photos and your notes. It classifies the loss
-            against IICRC S500, scopes the work, prices it against your Xactimate price list, and
-            tells you what documented work is not yet on the estimate.
+            Photos and field notes alone are enough: the agent identifies what is wrong with the
+            property, what IICRC / insurance / code obliges, and builds the mitigation scope from
+            that. Add a DocuSketch scan or MICA log when you have them for measured quantities.
           </p>
         </div>
 

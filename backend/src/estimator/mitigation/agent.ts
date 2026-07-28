@@ -160,8 +160,18 @@ export function buildEstimate(
     sla,
     references: referencesFor(cited),
     requirements,
-    narrative: writeNarrative(assessment, lineItems.length),
-    openQuestions: collectOpenQuestions(assessment, scope, unmapped, config, compliance, cited, sla, applied.notes),
+    narrative: writeNarrative(assessment, lineItems.length, requirements),
+    openQuestions: collectOpenQuestions(
+      assessment,
+      scope,
+      unmapped,
+      config,
+      compliance,
+      cited,
+      sla,
+      applied.notes,
+      requirements,
+    ),
   };
 }
 
@@ -174,7 +184,11 @@ export function buildEstimate(
  * seconds. It states the classification and *why*, because a classification
  * without its reasoning is the thing that gets argued with.
  */
-function writeNarrative(assessment: LossAssessment, lineCount: number): string {
+function writeNarrative(
+  assessment: LossAssessment,
+  lineCount: number,
+  requirements: import('./requirements/obligations.js').MitigationRequirement[],
+): string {
   const rooms = assessment.rooms.length;
   const totalSF = round(assessment.rooms.reduce((sum, room) => sum + room.geometry.floorSF, 0));
   const affectedSF = round(
@@ -182,10 +196,20 @@ function writeNarrative(assessment: LossAssessment, lineCount: number): string {
   );
 
   const parts: string[] = [];
+  const photosOnly =
+    assessment.sourcesUsed.includes('photos') || assessment.sourcesUsed.includes('notes');
+  const structured =
+    assessment.sourcesUsed.includes('docusketch') || assessment.sourcesUsed.includes('mica');
 
-  parts.push(
-    `${describeCause(assessment.cause)} affected ${rooms} room${rooms === 1 ? '' : 's'} totalling ${totalSF} SF, of which ${affectedSF} SF was water-affected.`,
-  );
+  if (totalSF > 0) {
+    parts.push(
+      `${describeCause(assessment.cause)} affected ${rooms} room${rooms === 1 ? '' : 's'} totalling ${totalSF} SF, of which ${affectedSF} SF was water-affected.`,
+    );
+  } else {
+    parts.push(
+      `${describeCause(assessment.cause)} was documented from field photos and notes${rooms > 0 ? ` across ${rooms} named area${rooms === 1 ? '' : 's'}` : ''}. Room dimensions are still needed before quantities can be billed.`,
+    );
+  }
 
   if (assessment.category > assessment.sourceCategory) {
     parts.push(
@@ -193,6 +217,16 @@ function writeNarrative(assessment: LossAssessment, lineCount: number): string {
     );
   } else {
     parts.push(`Water was classified as Category ${assessment.category} at the source.`);
+  }
+
+  if (assessment.findings.length > 0) {
+    const top = assessment.findings
+      .filter((f) => f.kind === 'wet_material' || f.kind === 'demolition_performed' || f.kind === 'microbial_growth')
+      .slice(0, 4)
+      .map((f) => f.summary.replace(/\.$/, ''));
+    if (top.length > 0) {
+      parts.push(`Findings from the documentation: ${top.join('; ')}.`);
+    }
   }
 
   parts.push(
@@ -210,12 +244,19 @@ function writeNarrative(assessment: LossAssessment, lineCount: number): string {
 
   if (assessment.microbialGrowthPresent) {
     parts.push(
-      'Microbial growth was documented, so demolition was performed inside containment under negative pressure with full PPE.',
+      'Microbial growth was documented, so demolition must be performed inside containment under negative pressure with full PPE.',
+    );
+  }
+
+  const unmet = requirements.filter((r) => !r.addressed && r.status !== 'recommended');
+  if (unmet.length > 0 && photosOnly && !structured) {
+    parts.push(
+      `${unmet.length} mitigation obligation${unmet.length === 1 ? '' : 's'} from IICRC, insurance documentation rules, or construction/health practice ${unmet.length === 1 ? 'is' : 'are'} not yet fully covered by the scoped lines — see Requirements.`,
     );
   }
 
   parts.push(
-    `Drying ran ${assessment.dryingDays} day${assessment.dryingDays === 1 ? '' : 's'} across ${assessment.monitoringVisits} documented monitoring visit${assessment.monitoringVisits === 1 ? '' : 's'}, supported by ${assessment.moistureReadings.length} moisture readings and ${assessment.evidence.filter((e) => e.kind === 'photo').length} photographs. The estimate carries ${lineCount} line items, each tied to that documentation.`,
+    `Drying ran ${assessment.dryingDays} day${assessment.dryingDays === 1 ? '' : 's'} across ${assessment.monitoringVisits} monitoring visit${assessment.monitoringVisits === 1 ? '' : 's'}, supported by ${assessment.moistureReadings.length} moisture readings and ${assessment.evidence.filter((e) => e.kind === 'photo').length} photographs. The estimate carries ${lineCount} line items, each tied to that documentation.`,
   );
 
   return parts.join(' ');
@@ -282,6 +323,7 @@ function collectOpenQuestions(
   cited: CitationId[],
   sla: ReturnType<typeof checkAgreement>,
   pricingNotes: string[],
+  requirements: import('./requirements/obligations.js').MitigationRequirement[] = [],
 ): string[] {
   const questions: string[] = [];
 
@@ -300,6 +342,20 @@ function collectOpenQuestions(
     questions.push(
       `${prefix} — ${check.title}: ${check.detail}${check.remedy ? ` ${check.remedy}` : ''}${check.sourceRef ? ` (${check.sourceRef})` : ''}`,
     );
+  }
+
+  // Unmet mitigation obligations from IICRC / insurance / construction practice.
+  for (const req of requirements) {
+    if (req.addressed || req.status === 'recommended') continue;
+    const label =
+      req.authority === 'iicrc'
+        ? 'IICRC'
+        : req.authority === 'insurance'
+          ? 'Insurance'
+          : req.authority === 'construction_code'
+            ? 'Code / health'
+            : 'Carrier SLA';
+    questions.push(`${label} — ${req.title}: ${req.action}`);
   }
 
   for (const proposal of sla.proposedDeviations) {
@@ -428,7 +484,7 @@ function collectOpenQuestions(
 
   if (scope.length === 0) {
     questions.push(
-      'The sources did not describe any affected materials, so no scope could be derived. Check that the DocuSketch export includes affected-material flags.',
+      'The sources did not describe enough to derive a billable scope. For photos and notes alone, include room dimensions (e.g. "Kitchen 12x14"), materials (carpet, pad, drywall), cut heights, and equipment counts — or upload a DocuSketch / MICA export.',
     );
   }
 

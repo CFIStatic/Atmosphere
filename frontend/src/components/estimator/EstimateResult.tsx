@@ -10,6 +10,7 @@ import {
 import { CompliancePanel, formatLocation } from './CompliancePanel';
 import { SlaPanel } from './SlaPanel';
 import { CodePicker } from './CodePicker';
+import { FindingsPanel } from './FindingsPanel';
 
 /**
  * The finished estimate.
@@ -86,6 +87,11 @@ export function EstimateResult({
           Above everything else on purpose: an estimate that breaches its
           agreement does not get paid however well it is scoped. */}
       <SlaPanel sla={estimate.sla} jobId={jobId} onDeviationAccepted={onDeviationAccepted} />
+
+      <FindingsPanel
+        findings={estimate.assessment.findings}
+        requirements={estimate.requirements}
+      />
 
       {/* ---- Findings ---- */}
       {profitability.findings.length > 0 && (

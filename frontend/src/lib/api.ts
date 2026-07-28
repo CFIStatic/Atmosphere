@@ -2586,6 +2586,31 @@ export interface LossAssessmentSummary {
   microbialGrowthPresent: boolean;
   sourcesUsed: string[];
   evidence: Array<{ id: string; kind: string; description: string; tags: string[] }>;
+  findings?: DamageFinding[];
+}
+
+export interface DamageFinding {
+  id: string;
+  kind: string;
+  summary: string;
+  roomName?: string;
+  material?: string;
+  evidenceIds: string[];
+  confidence: 'stated' | 'inferred' | 'undetermined';
+  tags: string[];
+}
+
+export interface MitigationRequirement {
+  id: string;
+  authority: 'iicrc' | 'insurance' | 'construction_code' | 'carrier_sla';
+  status: 'required' | 'recommended' | 'documentation_required' | 'undetermined';
+  title: string;
+  detail: string;
+  action: string;
+  citationId?: string;
+  sourceRef?: string;
+  findingIds: string[];
+  addressed: boolean;
 }
 
 export interface MitigationEstimate {
@@ -2600,6 +2625,8 @@ export interface MitigationEstimate {
   sla: SlaComplianceReport;
   /** Every standard cited anywhere in this estimate, resolved. */
   references: StandardReference[];
+  /** What must be mitigated / documented, by authority. */
+  requirements?: MitigationRequirement[];
   narrative: string;
   openQuestions: string[];
 }
