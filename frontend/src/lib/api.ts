@@ -1400,6 +1400,132 @@ export const api = {
   /** SSE URL for a run's transcript. `after` replays what the browser missed. */
   runEventsUrl: (runId: string, after = 0) =>
     `${API_BASE}/api/computer/runs/${encodeURIComponent(runId)}/events?after=${after}`,
+
+  // ---- Email Marketing (storm outreach) ----
+  emMap: () => request<EmMapResponse>('/api/email-marketing/map', { method: 'GET' }),
+
+  emSettings: () =>
+    request<{ settings: EmSettings; emailProvider: string; weatherProvider: string }>(
+      '/api/email-marketing/settings',
+      { method: 'GET' },
+    ),
+
+  emUpdateSettings: (input: Partial<EmSettingsUpdate>) =>
+    request<{ settings: EmSettings }>('/api/email-marketing/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+
+  emScanStorms: (input: { demo?: boolean; region?: string } = {}) =>
+    request<EmScanResult>('/api/email-marketing/storms/scan', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  emListStorms: (params: { status?: string; limit?: number; offset?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (params.status) q.set('status', params.status);
+    if (params.limit != null) q.set('limit', String(params.limit));
+    if (params.offset != null) q.set('offset', String(params.offset));
+    const qs = q.toString();
+    return request<{ items: EmStorm[]; total: number }>('/api/email-marketing/storms' + (qs ? `?${qs}` : ''), {
+      method: 'GET',
+    });
+  },
+
+  emStormMatches: (stormId: string) =>
+    request<{ storm: EmStorm; matches: EmStormMatch[] }>(
+      `/api/email-marketing/storms/${encodeURIComponent(stormId)}/matches`,
+      { method: 'GET' },
+    ),
+
+  emCreateOutreach: (input: {
+    stormId: string;
+    subjectTemplate?: string;
+    bodyTemplate?: string;
+  }) =>
+    request<EmOutreachDetail>('/api/email-marketing/outreach', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  emListOutreach: (params: { status?: string; limit?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (params.status) q.set('status', params.status);
+    if (params.limit != null) q.set('limit', String(params.limit));
+    const qs = q.toString();
+    return request<{ items: EmOutreach[]; total: number }>(
+      '/api/email-marketing/outreach' + (qs ? `?${qs}` : ''),
+      { method: 'GET' },
+    );
+  },
+
+  emGetOutreach: (id: string) =>
+    request<EmOutreachDetail>(`/api/email-marketing/outreach/${encodeURIComponent(id)}`, {
+      method: 'GET',
+    }),
+
+  emSendOutreach: (id: string) =>
+    request<EmOutreachDetail>(`/api/email-marketing/outreach/${encodeURIComponent(id)}/send`, {
+      method: 'POST',
+    }),
+
+  emSendOutreachMessage: (outreachId: string, messageId: string) =>
+    request<{ message: EmOutreachMessage }>(
+      `/api/email-marketing/outreach/${encodeURIComponent(outreachId)}/messages/${encodeURIComponent(messageId)}/send`,
+      { method: 'POST' },
+    ),
+
+  emUpdateOutreachMessage: (
+    outreachId: string,
+    messageId: string,
+    input: { subject?: string; bodyText?: string },
+  ) =>
+    request<{ message: EmOutreachMessage }>(
+      `/api/email-marketing/outreach/${encodeURIComponent(outreachId)}/messages/${encodeURIComponent(messageId)}`,
+      { method: 'PATCH', body: JSON.stringify(input) },
+    ),
+
+  emScheduleCheckins: (input: {
+    stormId: string;
+    outreachId?: string;
+    followUpDays?: number;
+  }) =>
+    request<{ items: EmCheckin[]; scheduledFor: string; count: number }>(
+      '/api/email-marketing/checkins/schedule',
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+
+  emListCheckins: (params: { status?: string; limit?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (params.status) q.set('status', params.status);
+    if (params.limit != null) q.set('limit', String(params.limit));
+    const qs = q.toString();
+    return request<{ items: EmCheckin[]; total: number }>(
+      '/api/email-marketing/checkins' + (qs ? `?${qs}` : ''),
+      { method: 'GET' },
+    );
+  },
+
+  emSendCheckin: (id: string) =>
+    request<{ checkin: EmCheckin; provider: string; messageId: string }>(
+      `/api/email-marketing/checkins/${encodeURIComponent(id)}/send`,
+      { method: 'POST' },
+    ),
+
+  emUpdateCheckin: (
+    id: string,
+    input: {
+      status?: EmCheckin['status'];
+      outcomeNotes?: string | null;
+      subject?: string;
+      bodyText?: string;
+    },
+  ) =>
+    request<{ checkin: EmCheckin }>(`/api/email-marketing/checkins/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
 };
 
 /** Labels for the run states, kept next to the other shared UI copy. */
@@ -2717,3 +2843,183 @@ export function timeAgo(iso: string | null | undefined): string {
   }
   return new Date(iso).toLocaleDateString();
 }
+
+/* ------------------------------------------------------------------ */
+/* Email Marketing                                                     */
+/* ------------------------------------------------------------------ */
+
+export type EmStormSeverity = 'advisory' | 'watch' | 'warning' | 'emergency';
+export type EmStormStatus = 'active' | 'expired' | 'cancelled';
+export type EmOutreachStatus = 'draft' | 'sending' | 'sent' | 'cancelled';
+export type EmMessageStatus = 'draft' | 'queued' | 'sent' | 'failed' | 'skipped';
+export type EmCheckinStatus = 'scheduled' | 'sent' | 'completed' | 'cancelled';
+
+export interface EmMapContact {
+  contactId: string;
+  propertyId: string | null;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  city: string | null;
+  region: string | null;
+  lat: number;
+  lng: number;
+  marketingOptOut: boolean;
+  label: string | null;
+}
+
+export interface EmStorm {
+  id: string;
+  orgId: string;
+  externalId: string;
+  source: string;
+  name: string;
+  eventType: string;
+  severity: EmStormSeverity;
+  status: EmStormStatus;
+  headline: string | null;
+  description: string | null;
+  instruction: string | null;
+  centerLat: number;
+  centerLng: number;
+  radiusMiles: number;
+  geometry: unknown | null;
+  areaDesc: string | null;
+  onsetAt: string | null;
+  endsAt: string | null;
+}
+
+export interface EmSettings {
+  id: string;
+  orgId: string;
+  fromName: string;
+  replyToEmail: string | null;
+  companySignature: string | null;
+  autoSend: boolean;
+  followUpDays: number;
+  includeOfferOfHelp: boolean;
+}
+
+export interface EmSettingsUpdate {
+  fromName: string;
+  replyToEmail: string | null;
+  companySignature: string | null;
+  autoSend: boolean;
+  followUpDays: number;
+  includeOfferOfHelp: boolean;
+}
+
+export interface EmMapResponse {
+  contacts: EmMapContact[];
+  unmappedCount: number;
+  storms: EmStorm[];
+  settings: EmSettings;
+  emailProvider: string;
+  weatherProvider: string;
+}
+
+export interface EmStormMatch {
+  contactId: string;
+  propertyId: string | null;
+  name: string;
+  email: string | null;
+  city: string | null;
+  region: string | null;
+  lat: number;
+  lng: number;
+  distanceMiles: number;
+  marketingOptOut: boolean;
+  skipReason: string | null;
+}
+
+export interface EmScanResult {
+  sourceUsed: string;
+  note: string | null;
+  storms: EmStorm[];
+  matches: Array<{
+    stormId: string;
+    name: string;
+    eventType: string;
+    severity: EmStormSeverity;
+    matchedCount: number;
+    emailableCount: number;
+    skippedCount: number;
+  }>;
+  contactCount: number;
+}
+
+export interface EmOutreach {
+  id: string;
+  orgId: string;
+  stormId: string;
+  status: EmOutreachStatus;
+  subjectTemplate: string;
+  bodyTemplate: string;
+  matchedCount: number;
+  sentCount: number;
+  skippedCount: number;
+  failedCount: number;
+  createdAt: string;
+  sentAt: string | null;
+  emStorms?: Partial<EmStorm> | null;
+}
+
+export interface EmOutreachMessage {
+  id: string;
+  outreachId: string;
+  contactId: string;
+  propertyId: string | null;
+  toEmail: string;
+  toName: string | null;
+  subject: string;
+  bodyText: string;
+  status: EmMessageStatus;
+  skipReason: string | null;
+  errorMessage: string | null;
+  distanceMiles: number | null;
+  sentAt: string | null;
+}
+
+export interface EmOutreachDetail {
+  outreach: EmOutreach;
+  messages: EmOutreachMessage[];
+}
+
+export interface EmCheckin {
+  id: string;
+  orgId: string;
+  stormId: string;
+  outreachId: string | null;
+  contactId: string;
+  propertyId: string | null;
+  status: EmCheckinStatus;
+  scheduledFor: string;
+  subject: string | null;
+  bodyText: string | null;
+  toEmail: string | null;
+  outcomeNotes: string | null;
+  sentAt: string | null;
+  completedAt: string | null;
+  emStorms?: Partial<EmStorm> | null;
+  crmContacts?: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    email: string | null;
+  } | null;
+}
+
+export const EM_SEVERITY_LABELS: Record<EmStormSeverity, string> = {
+  advisory: 'Advisory',
+  watch: 'Watch',
+  warning: 'Warning',
+  emergency: 'Emergency',
+};
+
+export const EM_MESSAGE_STATUS_LABELS: Record<EmMessageStatus, string> = {
+  draft: 'Draft',
+  queued: 'Queued',
+  sent: 'Sent',
+  failed: 'Failed',
+  skipped: 'Skipped',
+};

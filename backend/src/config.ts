@@ -517,6 +517,23 @@ export const config = {
     requestTimeoutMs: Number(process.env.ESTIMATOR_REQUEST_TIMEOUT_MS ?? 30_000),
     maxRetries: Number(process.env.ESTIMATOR_MAX_RETRIES ?? 3),
   },
+
+  emailMarketing: {
+    // Where storm alerts come from. 'auto' tries the National Weather Service
+    // and falls back to demo storms anchored on the org's mapped contacts —
+    // that is what makes the whole outreach + check-in flow exercisable on a
+    // quiet weather day.
+    weatherProvider: parseWeatherProvider(process.env.WEATHER_PROVIDER),
+
+    // How outreach leaves the building. 'log' (default) records the send
+    // without calling an ESP — safe for development. 'resend' requires
+    // RESEND_API_KEY and actually delivers.
+    provider: parseEmailMarketingProvider(process.env.EMAIL_MARKETING_PROVIDER),
+    resendApiKey: process.env.RESEND_API_KEY ?? '',
+    // From address / domain for Resend. Defaults to Resend's onboarding sender
+    // so a key alone is enough to try a real delivery in development.
+    fromDomain: process.env.EMAIL_MARKETING_FROM ?? 'onboarding@resend.dev',
+  },
 } as const;
 
 function parseSlaSource(value: string | undefined): 'manual' | 'portal' | 'mock' {
@@ -525,6 +542,14 @@ function parseSlaSource(value: string | undefined): 'manual' | 'portal' | 'mock'
 
 function parseDriver(value: string | undefined): 'mock' | 'api' | 'web' {
   return value === 'api' || value === 'web' ? value : 'mock';
+}
+
+function parseWeatherProvider(value: string | undefined): 'nws' | 'demo' | 'auto' {
+  return value === 'nws' || value === 'demo' ? value : 'auto';
+}
+
+function parseEmailMarketingProvider(value: string | undefined): 'log' | 'resend' {
+  return value === 'resend' ? 'resend' : 'log';
 }
 
 /** Parse an optional JSON object env var, ignoring anything malformed. */

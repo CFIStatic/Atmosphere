@@ -452,6 +452,16 @@ export function MessageIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+/** Envelope — used by Email Marketing outreach actions. */
+export function MailIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Glyph {...props}>
+      <rect x="3.5" y="6" width="17" height="12" rx="2" {...auditStroke} />
+      <path d="M4 7.5 12 13l8-5.5" {...auditStroke} />
+    </Glyph>
+  );
+}
+
 export function FlagIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <Glyph {...props}>
