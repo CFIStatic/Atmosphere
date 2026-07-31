@@ -4,6 +4,7 @@
 The preview inlines the shared stylesheet, stacks every page's content into
 route containers, and swaps cross-page links for a tiny hash router — so the
 whole suite can be reviewed as a single HTML file with working navigation.
+404.html is deliberately excluded: it has no route to be "not found" from.
 
 Usage: python3 build-preview.py <output-file>
 """
@@ -44,9 +45,6 @@ def reroute(html: str) -> str:
         return f'href="#/{ROUTE_OF[m.group(1)]}"'
     html = re.sub(r'href="((?:index|platform|sales|operations|field|manager|security|pricing|docs|about|careers|contact|signin|signup)\.html)(?:#[\w-]+)?"',
                   page_link, html)
-    # App routes don't exist inside the preview; neutralize them but say why.
-    html = re.sub(r'href="(/(?:signin|signup|technician))"',
-                  r'href="#app" title="App route (\1) — outside this design preview"', html)
     return html
 
 
@@ -57,9 +55,6 @@ for route, fname in PAGES:
     routes_html.append(f'<div class="route" id="route-{route}"{hidden}>\n'
                        f'{reroute(extract(fname))}\n</div>')
 
-nav_links = '\n      '.join(
-    f'<a href="#/{r}" data-nav="{r}">{r.capitalize()}</a>'
-    for r, _ in PAGES if r not in ('home', 'sales', 'operations', 'field', 'manager', 'careers', 'contact', 'signin', 'signup'))
 
 out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
 <style>
@@ -181,8 +176,11 @@ out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
       var el = document.getElementById('route-' + name);
       if (el) el.hidden = (name !== r);
     }});
+    var NAV_GROUP = {{ platform: 'platform', sales: 'platform', operations: 'platform',
+      field: 'platform', manager: 'platform', security: 'security', pricing: 'pricing',
+      docs: 'docs', about: 'about', careers: 'about', contact: 'about' }};
     document.querySelectorAll('[data-nav]').forEach(function (a) {{
-      if (a.getAttribute('data-nav') === r) a.setAttribute('aria-current', 'page');
+      if (a.getAttribute('data-nav') === NAV_GROUP[r]) a.setAttribute('aria-current', 'page');
       else a.removeAttribute('aria-current');
     }});
     if (changed) window.scrollTo(0, 0);

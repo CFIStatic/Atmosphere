@@ -1,10 +1,20 @@
 // Shared behavior for the Atmosphere corporate site.
 (function () {
-  // Highlight the nav group for the page being read.
+  // Highlight the nav group for the page being read. Platform-family pages
+  // light the Platform menu; company-family pages light Company.
   var page = location.pathname.split('/').pop() || 'index.html';
-  document.querySelectorAll('.nav-links a[data-nav]').forEach(function (a) {
-    if (a.getAttribute('href').split('#')[0] === page) a.setAttribute('aria-current', 'page');
-  });
+  var NAV_GROUP = {
+    'platform.html': 'platform', 'sales.html': 'platform', 'operations.html': 'platform',
+    'field.html': 'platform', 'manager.html': 'platform',
+    'security.html': 'security', 'pricing.html': 'pricing', 'docs.html': 'docs',
+    'about.html': 'about', 'careers.html': 'about', 'contact.html': 'about'
+  };
+  var group = NAV_GROUP[page];
+  if (group) {
+    document.querySelectorAll('.nav-links a[data-nav]').forEach(function (a) {
+      if (a.getAttribute('data-nav') === group) a.setAttribute('aria-current', 'page');
+    });
+  }
 
   // Mobile drawer.
   var burger = document.getElementById('nav-burger');

@@ -563,11 +563,6 @@ a { color: inherit; }
 .plans-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 1000px) { .plans-6 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 620px)  { .plans-6 { grid-template-columns: 1fr; } }
-.plan .plan-credits { /* retired with included credits; kept harmless */
-  margin: 0 0 18px; padding: 9px 12px;
-  background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
-  font-size: 12.5px; color: var(--ink);
-}
 .plan .price .amt { font-variant-numeric: tabular-nums; }
 
 /* The four products share this page; the strip says so without a fake switcher. */
@@ -654,13 +649,9 @@ a { color: inherit; }
 }
 .work-line { margin-top: 22px; font-size: 13px; color: var(--ink-faint); letter-spacing: .06em; }
 .job-list { border-top: 1px solid var(--line-strong); margin-top: 8px; }
-.job-row {
-  display: flex; justify-content: space-between; align-items: baseline; gap: 20px;
-  padding: 18px 0; border-bottom: 1px solid var(--line); text-decoration: none;
-}
-.job-row .job-title { font-weight: 600; font-size: 15.5px; }
-.job-row .job-meta { font-size: 12px; color: var(--ink-faint); white-space: nowrap; }
-.job-row:hover .job-title { text-decoration: underline; text-underline-offset: 3px; }
+.job-list .job-title { font-weight: 600; font-size: 15.5px; }
+.job-list .job-meta { font-size: 12px; color: var(--ink-faint); white-space: nowrap; }
+.job-list summary:hover .job-title { text-decoration: underline; text-underline-offset: 3px; }
 
 /* ---------- Forms (contact) ---------- */
 .contact-grid {
