@@ -19,7 +19,11 @@ PAGES = [
     ('pricing', 'pricing.html'),
     ('docs', 'docs.html'),
     ('about', 'about.html'),
+    ('careers', 'careers.html'),
     ('contact', 'contact.html'),
+    ('technician', 'technician.html'),
+    ('signin', 'signin.html'),
+    ('signup', 'signup.html'),
 ]
 ROUTE_OF = {fname: route for route, fname in PAGES}
 
@@ -35,7 +39,7 @@ def extract(fname: str) -> str:
 def reroute(html: str) -> str:
     def page_link(m):
         return f'href="#/{ROUTE_OF[m.group(1)]}"'
-    html = re.sub(r'href="((?:index|platform|security|pricing|docs|about|contact)\.html)(?:#[\w-]+)?"',
+    html = re.sub(r'href="((?:index|platform|security|pricing|docs|about|careers|contact|technician|signin|signup)\.html)(?:#[\w-]+)?"',
                   page_link, html)
     # App routes don't exist inside the preview; neutralize them but say why.
     html = re.sub(r'href="(/(?:signin|signup|technician))"',
@@ -52,7 +56,7 @@ for route, fname in PAGES:
 
 nav_links = '\n      '.join(
     f'<a href="#/{r}" data-nav="{r}">{r.capitalize()}</a>'
-    for r, _ in PAGES if r not in ('home', 'contact'))
+    for r, _ in PAGES if r not in ('home', 'careers', 'contact', 'technician', 'signin', 'signup'))
 
 preview_bar = ' '.join(f'<a href="#/{r}">{r.upper()}</a>' for r, _ in PAGES)
 
@@ -71,7 +75,7 @@ out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
 .preview-bar .lbl {{ opacity: .45; padding-right: 8px; }}
 </style>
 
-<div class="preview-bar mono"><span class="lbl">DESIGN PREVIEW · 7 PAGES</span>{preview_bar}</div>
+<div class="preview-bar mono"><span class="lbl">DESIGN PREVIEW · {len(PAGES)} PAGES</span>{preview_bar}</div>
 
 <nav class="nav">
   <div class="wrap nav-inner">
@@ -81,8 +85,8 @@ out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
     </a>
     <div class="nav-links">
       {nav_links}
-      <a class="btn-quiet" href="#app" title="App route (/signin) — outside this design preview">Sign in</a>
-      <a class="btn" href="#app" title="App route (/signup) — outside this design preview">Get started</a>
+      <a class="btn-quiet" href="#/signin">Sign in</a>
+      <a class="btn" href="#/signup">Get started</a>
     </div>
   </div>
 </nav>
@@ -97,7 +101,6 @@ out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
           <svg width="18" height="18" viewBox="0 0 22 22" aria-hidden="true"><rect class="lb lb1" width="22" height="2.8"/><rect class="lb lb2" y="4.8" width="22" height="2.8"/><rect class="lb lb3" y="9.6" width="22" height="2.8"/><rect class="lb lb4" y="14.4" width="22" height="2.8"/><rect class="lb-a" y="19.2" width="22" height="2.8"/></svg>
           Atmosphere
         </a>
-        <p>AI that does the work — and proves it did. Built for the trades that put homes back together.</p>
       </div>
       <div class="foot-col">
         <h4>Product</h4>
@@ -109,14 +112,14 @@ out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
       <div class="foot-col">
         <h4>Company</h4>
         <a href="#/about">About</a>
-        <a href="#/about">Careers</a>
+        <a href="#/careers">Careers</a>
         <a href="#/contact">Contact</a>
       </div>
       <div class="foot-col">
         <h4>App</h4>
-        <a href="#app" title="App route (/signin) — outside this design preview">Sign in</a>
-        <a href="#app" title="App route (/signup) — outside this design preview">Create an organization</a>
-        <a href="#app" title="App route (/technician) — outside this design preview">Technician app</a>
+        <a href="#/signin">Sign in</a>
+        <a href="#/signup">Create an organization</a>
+        <a href="#/technician">Technician app</a>
       </div>
     </div>
     <div class="foot-note">
@@ -154,6 +157,22 @@ out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
   }}
   window.addEventListener('hashchange', show);
   show();
+
+  document.querySelectorAll('.apply-link').forEach(function (link) {{
+    link.addEventListener('click', function () {{
+      var sel = document.getElementById('ap-role');
+      if (sel && link.dataset.role) sel.value = link.dataset.role;
+    }});
+  }});
+  var careersForm = document.getElementById('careers-form');
+  if (careersForm) {{
+    careersForm.addEventListener('submit', function (ev) {{
+      ev.preventDefault();
+      var s = document.getElementById('careers-status');
+      s.className = 'form-status ok';
+      s.textContent = 'Design preview — when hosted, this posts to /api/careers/apply and emails the hiring inbox.';
+    }});
+  }}
 
   var receipt = document.getElementById('receipt');
   var btn = document.getElementById('replay');

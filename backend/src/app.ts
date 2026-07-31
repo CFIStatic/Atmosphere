@@ -24,6 +24,7 @@ import { integrationsRouter } from './routes/integrations.js';
 import { computerRouter } from './routes/computer.js';
 import { estimatorRouter } from './routes/estimator.js';
 import { healthRouter } from './routes/health.js';
+import { careersRouter } from './routes/careers.js';
 import { mitigationRouter } from './routes/mitigation.js';
 import { xactimateRouter } from './routes/xactimate.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
@@ -140,6 +141,7 @@ export function createApp(): Express {
   app.use('/api/integrations', integrationsRouter);
   app.use('/api/computer', computerRouter);
   app.use('/api/estimator', estimatorRouter);
+  app.use('/api/careers', careersRouter);
 
   // 404 + error handling (must be last).
   app.use(notFound);

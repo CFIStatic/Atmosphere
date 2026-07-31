@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Create your Atmosphere organization — or join an existing one with a code. Pick your role, choose your kind of work, and bring the whole team in." />
+  <meta name="theme-color" content="#FBFAF7" />
+  <title>Create your organization · Atmosphere</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect width='22' height='2.8' fill='%23A8A29E'/%3E%3Crect y='4.8' width='22' height='2.8' fill='%2378716C'/%3E%3Crect y='9.6' width='22' height='2.8' fill='%2357534E'/%3E%3Crect y='14.4' width='22' height='2.8' fill='%23292524'/%3E%3Crect y='19.2' width='22' height='2.8' fill='%23F2670C'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="wordmark" href="index.html" aria-label="Atmosphere home">
+      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect class="lb lb1" width="22" height="2.8"/><rect class="lb lb2" y="4.8" width="22" height="2.8"/><rect class="lb lb3" y="9.6" width="22" height="2.8"/><rect class="lb lb4" y="14.4" width="22" height="2.8"/><rect class="lb-a" y="19.2" width="22" height="2.8"/></svg>
+      Atmosphere
+    </a>
+    <div class="nav-links">
+      <a href="platform.html">Platform</a>
+      <a href="security.html">Security</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="docs.html">Docs</a>
+      <a href="about.html">About</a>
+      <a class="btn-quiet" href="signin.html">Sign in</a>
+      <a class="btn" href="signup.html" aria-current="page">Get started</a>
+    </div>
+  </div>
+</nav>
+
+<!-- page:start -->
+<main>
+
+<header class="page-hero">
+  <div class="wrap">
+    <div class="eyebrow mono">Get started</div>
+    <h1>Create your organization</h1>
+    <p class="lede">
+      One account, one organization, one join code — and everyone from the office to
+      the truck works in the same place, with every agent run on the record.
+    </p>
+  </div>
+</header>
+
+<section class="auth-section">
+  <div class="wrap auth-grid">
+    <div>
+      <div class="contact-block">
+        <h3>1 · Create your account</h3>
+        <p>Email and password. The password goes straight to Supabase Auth — we never see or store it.</p>
+      </div>
+      <div class="contact-block">
+        <h3>2 · Name your organization</h3>
+        <p>Or skip this — if your team already exists, the join code drops you straight into their workspace.</p>
+      </div>
+      <div class="contact-block">
+        <h3>3 · Pick your role and work</h3>
+        <p>Project Manager, Field Technician, Accountant, Office Manager, or Sales — doing Mitigation, Construction, or both.</p>
+      </div>
+      <div class="contact-block">
+        <h3>4 · Share the join code</h3>
+        <p>Every organization gets one. Hand it to a teammate and they're in — no invites, no admin console.</p>
+      </div>
+    </div>
+
+    <div>
+      <form class="form" action="#" method="post">
+        <div class="seg" role="tablist" aria-label="Create or join">
+          <button type="button" class="on" role="tab" aria-selected="true">Create a new organization</button>
+          <button type="button" role="tab" aria-selected="false">Join with a code</button>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="su-name">Your name</label>
+            <input id="su-name" name="name" type="text" autocomplete="name" required />
+          </div>
+          <div class="field">
+            <label for="su-email">Work email</label>
+            <input id="su-email" name="email" type="email" autocomplete="email" required />
+          </div>
+        </div>
+        <div class="field">
+          <label for="su-password">Password</label>
+          <input id="su-password" name="password" type="password" autocomplete="new-password" required />
+        </div>
+        <div class="field">
+          <label for="su-org">Organization name</label>
+          <input id="su-org" name="org" type="text" autocomplete="organization" placeholder="e.g. Hartwell Restoration" required />
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="su-role">Your role</label>
+            <select id="su-role" name="role">
+              <option>Project Manager</option>
+              <option>Field Technician</option>
+              <option>Accountant</option>
+              <option>Office Manager</option>
+              <option>Sales</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="su-work">Kind of work</label>
+            <select id="su-work" name="work">
+              <option>Mitigation</option>
+              <option>Construction</option>
+              <option>Both</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-foot">
+          <button class="btn btn-lg" type="submit">Create organization</button>
+          <span class="fine">Already set up? <a href="signin.html" style="color: inherit;">Sign in</a></span>
+        </div>
+      </form>
+
+      <div class="join-card" style="margin-top: 20px;">
+        <div class="lbl mono">Joining instead?</div>
+        <div class="join-code mono">ATM-7X4K</div>
+        <p>Switch to "Join with a code," enter your team's code, and skip the organization step — everything else stays the same.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+<!-- page:end -->
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <a class="wordmark" href="index.html" aria-label="Atmosphere home">
+          <svg width="18" height="18" viewBox="0 0 22 22" aria-hidden="true"><rect class="lb lb1" width="22" height="2.8"/><rect class="lb lb2" y="4.8" width="22" height="2.8"/><rect class="lb lb3" y="9.6" width="22" height="2.8"/><rect class="lb lb4" y="14.4" width="22" height="2.8"/><rect class="lb-a" y="19.2" width="22" height="2.8"/></svg>
+          Atmosphere
+        </a>
+      </div>
+      <div class="foot-col">
+        <h4>Product</h4>
+        <a href="platform.html">Platform</a>
+        <a href="security.html">Security</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="docs.html">Docs</a>
+      </div>
+      <div class="foot-col">
+        <h4>Company</h4>
+        <a href="about.html">About</a>
+        <a href="careers.html">Careers</a>
+        <a href="contact.html">Contact</a>
+      </div>
+      <div class="foot-col">
+        <h4>App</h4>
+        <a href="signin.html">Sign in</a>
+        <a href="signup.html">Create an organization</a>
+        <a href="technician.html">Technician app</a>
+      </div>
+    </div>
+    <div class="foot-note">
+      <span>© 2026 Atmosphere.</span>
+      <span>Every run, on the record.</span>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>

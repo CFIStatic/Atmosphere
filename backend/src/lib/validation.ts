@@ -726,3 +726,27 @@ export const selectJobSchema = z.object({
 
 export type CredentialInput = z.infer<typeof credentialSchema>;
 export type StartRunInput = z.infer<typeof startRunSchema>;
+
+/**
+ * A job application from the corporate site's careers page. `website` is a
+ * honeypot — the field is invisible in the browser, so a non-empty value means
+ * a bot filled the form; the route accepts and discards it.
+ */
+export const careersApplicationSchema = z.object({
+  name: z.string({ required_error: 'Name is required' }).trim().min(1, 'Name is required').max(200),
+  email: z
+    .string({ required_error: 'Email is required' })
+    .trim()
+    .toLowerCase()
+    .email('Enter a valid email address'),
+  role: z.string({ required_error: 'Pick a role' }).trim().min(1, 'Pick a role').max(200),
+  links: z.string().trim().max(1000).optional().default(''),
+  message: z
+    .string({ required_error: 'Tell us something about your work' })
+    .trim()
+    .min(10, 'Tell us a little more — a sentence or two is plenty')
+    .max(10_000, 'That message is longer than we can take in one go'),
+  website: z.string().max(200).optional().default(''),
+});
+
+export type CareersApplication = z.infer<typeof careersApplicationSchema>;

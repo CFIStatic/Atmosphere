@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Talk to Atmosphere — sales, support, careers, and partnerships. Bring a real scan and a real claim; we'll show you the run." />
+  <meta name="description" content="Sign in to Atmosphere — email and password, or the 4-digit PIN on a device you've enrolled." />
   <meta name="theme-color" content="#FBFAF7" />
-  <title>Contact · Atmosphere</title>
+  <title>Sign in · Atmosphere</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect width='22' height='2.8' fill='%23A8A29E'/%3E%3Crect y='4.8' width='22' height='2.8' fill='%2378716C'/%3E%3Crect y='9.6' width='22' height='2.8' fill='%2357534E'/%3E%3Crect y='14.4' width='22' height='2.8' fill='%23292524'/%3E%3Crect y='19.2' width='22' height='2.8' fill='%23F2670C'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="assets/site.css" />
 </head>
@@ -23,7 +23,7 @@
       <a href="pricing.html">Pricing</a>
       <a href="docs.html">Docs</a>
       <a href="about.html">About</a>
-      <a class="btn-quiet" href="signin.html">Sign in</a>
+      <a class="btn-quiet" href="signin.html" aria-current="page">Sign in</a>
       <a class="btn" href="signup.html">Get started</a>
     </div>
   </div>
@@ -32,86 +32,53 @@
 <!-- page:start -->
 <main>
 
-<header class="page-hero">
-  <div class="wrap">
-    <div class="eyebrow mono">Contact</div>
-    <h1>Talk to a human</h1>
-    <p class="lede">
-      Whether you're a two-truck shop or a regional operation, we'll walk you through
-      what Atmosphere would do on your jobs — with your files, not a canned demo.
-    </p>
+<header class="page-hero" style="padding-bottom: 24px;">
+  <div class="wrap" style="text-align: center;">
+    <div class="eyebrow mono">Workspace</div>
+    <h1>Sign in</h1>
   </div>
 </header>
 
-<section class="section" id="reach-us">
-  <div class="wrap contact-grid">
-    <div>
-      <div class="contact-block">
-        <h3>See it on your jobs</h3>
-        <p>
-          Bring a scan and a job you know well — a claim, a rebuild, a remodel.
-          We'll run it and hand you the record.
-        </p>
-      </div>
-      <div class="contact-block">
-        <h3>Already on Atmosphere?</h3>
-        <p>
-          Sign in — anyone linked to your organization can reach us from the dashboard,
-          and your message arrives with the context of your org.
-        </p>
-      </div>
-      <div class="contact-block">
-        <h3>Careers &amp; partnerships</h3>
-        <p>
-          Same form — tell us which role or idea brought you here, and it gets to the
-          right person.
-        </p>
-      </div>
-    </div>
-
-    <form class="form" action="#" method="post">
-      <div class="form-row">
+<section class="auth-section">
+  <div class="wrap">
+    <div class="auth-wrap">
+      <form class="form" action="#" method="post">
         <div class="field">
-          <label for="name">Name</label>
-          <input id="name" name="name" type="text" autocomplete="name" required />
-        </div>
-        <div class="field">
-          <label for="email">Work email</label>
+          <label for="email">Email</label>
           <input id="email" name="email" type="email" autocomplete="email" required />
         </div>
-      </div>
-      <div class="form-row">
         <div class="field">
-          <label for="company">Company</label>
-          <input id="company" name="company" type="text" autocomplete="organization" />
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required />
         </div>
-        <div class="field">
-          <label for="team-size">Team size</label>
-          <select id="team-size" name="team-size">
-            <option>1–5</option>
-            <option>6–20</option>
-            <option>21–100</option>
-            <option>100+</option>
-          </select>
+        <button class="btn btn-lg" type="submit">Sign in</button>
+        <div class="auth-links">
+          <a href="#">Forgot password?</a>
+          <a href="signup.html">New here? Create your organization&nbsp;→</a>
         </div>
+      </form>
+
+      <div class="or-rule mono">OR</div>
+
+      <div class="pin-card">
+        <div>
+          <div class="lbl mono">This device enrolled?</div>
+          <p>Sign in with your 4-digit PIN. It only works on this device — that's the point.</p>
+        </div>
+        <div class="pin-dots" aria-hidden="true">
+          <span class="pin-dot filled"></span>
+          <span class="pin-dot filled"></span>
+          <span class="pin-dot"></span>
+          <span class="pin-dot"></span>
+        </div>
+        <button class="btn-outline" type="button">Use PIN</button>
       </div>
-      <div class="field">
-        <label for="work-type">Kind of work</label>
-        <select id="work-type" name="work-type">
-          <option>Mitigation</option>
-          <option>Construction</option>
-          <option>Both</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="message">What should Atmosphere take off your plate?</label>
-        <textarea id="message" name="message" placeholder="e.g. We write ~40 mitigation estimates a month and every one of them is a late night."></textarea>
-      </div>
-      <div class="form-foot">
-        <button class="btn btn-lg" type="submit">Send</button>
-        <span class="fine">We read everything. A person replies — usually within one business day.</span>
-      </div>
-    </form>
+
+      <p class="plans-note" style="margin-top: 8px; text-align: center;">
+        Your password is never stored by us, and no token ever touches this page's
+        JavaScript. <a href="security.html" style="color: inherit;">How sign-in is built&nbsp;→</a>
+      </p>
+    </div>
   </div>
 </section>
 
