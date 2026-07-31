@@ -84,7 +84,7 @@ python3 -m http.server -d website 8080
 
 ## Single-file preview
 
-`build-preview.py` flattens the eleven routed pages (the 404 stays standalone)
+`build-preview.py` flattens the fourteen routed pages (the 404 stays standalone)
 into one self-contained HTML file with a hash router, for sharing a working
 walkthrough of the whole suite:
 
@@ -94,7 +94,8 @@ python3 website/build-preview.py preview.html
 
 ## Known gaps before production
 
-- Pricing figures and the careers listings are design placeholders.
+- Pricing now mirrors the billing migration; the careers listings and benefits
+  are still placeholders, and the on-site roles need a real location named.
 - The contact form posts nowhere yet — the careers form is the wired example to
   copy when giving it a backend route.
 - The sign-in and sign-up pages are designed surfaces; hook them to the real
