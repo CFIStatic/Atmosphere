@@ -16,7 +16,7 @@ written to appeal to contractors of every trade.
 | `field.html`      | Field Platform — capture on site, with a capture-log hero   |
 | `manager.html`    | Manager Platform — job costing, accounting, business insights |
 | `security.html`   | Security — architecture diagram and six structural claims   |
-| `pricing.html`    | Pricing — the six plans, credit packs, and the usage model  |
+| `pricing.html`    | Pricing — the 30-day test, seat plans, and the 2× rate card |
 | `docs.html`       | Docs — quickstart cards and an index of `../docs/*.md`      |
 | `about.html`      | About — story and principles                                |
 | `careers.html`    | Careers — roles, hiring process, and a working application form |
@@ -28,24 +28,30 @@ written to appeal to contractors of every trade.
 Shared assets live in `assets/site.css` (design tokens + components, light and
 dark themes) and `assets/site.js` (receipt replay + the careers form).
 
-## Pricing is repo data, not copywriting
+## Pricing
 
-`pricing.html` mirrors the real billing model in
-`supabase/migrations/20260727124743_billing_pricing_metering.sql`. The six
-plans (Free, Pro, Max 5x, Max 20x, Team, Enterprise), their monthly and annual
-prices, included credit allowances, seat minimums, and throughput multipliers
-come from the `billing_plans` seed; the pack table comes from `credit_packs`,
-volume bonuses included. **Change the migration and this page must change with
-it** — or the site is quoting prices the product will not honor.
+`pricing.html` sells one model across all four products:
 
-The same model applies to all four products: each is bought separately at these
-same tiers. Usage is metered per token through the backend gateway and drawn
-from credits (1 credit = $1 USD), so the site must never claim customers bring
-their own API key for billing. The key that *is* customer-supplied is the one
-for computer use, which is a setup step, not a billing arrangement.
+- **A 30-day test plan**, not a free tier. Full platform, one seat, usage billed
+  at the ordinary rate.
+- **Seat plans** — Pro ($20/$17 annual), Max 5x ($100), Max 20x ($200), Team
+  ($30/seat, 5 seat minimum, $25 annual), Enterprise (contact). The seat price
+  buys access and the throughput multiplier, nothing else.
+- **Usage billed separately at 2× the model's list price**, on every plan. There
+  are **no included credits and no bundled allowance** — the page must never
+  imply either.
 
-`GET /api/billing/catalog` serves plans, packs, and the public rate card
-unauthenticated — the natural source if this page is ever made dynamic.
+The rate card is derived: the Anthropic list prices in
+`backend/src/ai/catalog.ts` (Opus 5 $15/$75, Sonnet 5 $3/$15, Haiku 4.5 $1/$5
+per MTok), doubled. Change the catalog and the rate card must be doubled again
+to match.
+
+Two things to keep straight. The `billing_plans` seed in
+`supabase/migrations/20260727124743_billing_pricing_metering.sql` still carries
+a `free` plan and `included_credits_nanos` values from an earlier model — the
+site deliberately does **not** follow it on those two points, and the migration
+is the thing that needs updating. And the API key a customer supplies is for
+computer use, which is a setup step, never a billing arrangement.
 
 ## Careers applications (frontend + backend)
 
