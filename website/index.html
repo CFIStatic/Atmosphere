@@ -320,13 +320,6 @@
 </section>
 
 
-<section class="section statement">
-  <div class="wrap">
-    <h2>Nights are for dinner, not data entry.</h2>
-    <p>Hand tonight's paperwork to an agent — and read the receipt over coffee.</p>
-    <a class="btn btn-lg" href="signup.html">Create your organization</a>
-  </div>
-</section>
 
 <section class="section" id="security-overview">
   <div class="wrap">
@@ -342,33 +335,31 @@
     <div class="sec-grid">
       <div class="sec-card">
         <span class="kbd mono">auth</span>
-        <h3>Passwords are never stored by us</h3>
-        <p>
-          Supabase Auth holds only a bcrypt hash in its secure users table. The
-          application never sees or persists a plaintext password.
-        </p>
+        <h3>Your password isn't ours to lose</h3>
+        <p>We never see it and never store it.</p>
       </div>
       <div class="sec-card">
         <span class="kbd mono">httpOnly</span>
-        <h3>Tokens never touch browser JavaScript</h3>
-        <p>
-          Sessions live in httpOnly cookies set by the backend. Page JavaScript holds no
-          tokens, which shuts the door on token theft via XSS.
-        </p>
+        <h3>A hijacked page isn't a hijacked account</h3>
+        <p>No token this site loads can be read by its own JavaScript.</p>
       </div>
       <div class="sec-card">
         <span class="kbd mono">RLS</span>
-        <h3>The database decides who sees what</h3>
-        <p>
-          Every query runs under the caller's own identity, so Row-Level Security — not
-          application code — enforces access. Another organization's data is invisible at
-          the database layer.
-        </p>
+        <h3>Another contractor's jobs don't exist for you</h3>
+        <p>The database enforces that, not our code.</p>
       </div>
     </div>
     <div class="section-foot">
-      <a class="link-arrow" href="security.html">Read the full security model&nbsp;→</a>
+      <a class="link-arrow" href="security.html">See how each one is enforced&nbsp;→</a>
     </div>
+  </div>
+</section>
+
+<section class="section statement">
+  <div class="wrap">
+    <h2>Nights are for dinner, not data entry.</h2>
+    <p>Hand tonight's paperwork to an agent — and read the receipt over coffee.</p>
+    <a class="btn btn-lg" href="signup.html">Create your organization</a>
   </div>
 </section>
 
