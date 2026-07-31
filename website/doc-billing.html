@@ -121,10 +121,20 @@
 <pre><code>Input   $30  per million tokens   (2 × $15 list)
 Output  $150 per million tokens   (2 × $75 list)</code></pre>
 <p>Every token is billed at that rate <strong>whichever model actually ran the task</strong>. Because the rate never moves, routing work to a weaker model could only cost us quality — so the router picks the model that does the work best, not the one that protects a margin.</p>
+<h2>Credits: prepaid, always</h2>
+<p>Usage is prepaid. You buy credits — one credit is one dollar of usage at the flat rate — and agents draw the balance down as they work. Nothing ever runs on an unpaid balance, which is also why there is never a surprise bill: what you loaded is the most you can spend.</p>
+<p>Credits come in packs from $10 to $1,000, and the larger packs carry a volume bonus ($100 buys $103 of usage; $1,000 buys $1,075).</p>
+<h2>Auto-reload or manual reload</h2>
+<p>In <strong>Settings &rarr; Billing</strong> you choose how the balance stays topped up:</p>
+<ul>
+<li><strong>Auto-reload on</strong> — set a threshold and an amount; when the balance dips below the threshold, a reload purchases itself. The defaults are a $25 reload when the balance falls under $5.</li>
+<li><strong>Auto-reload off (manual)</strong> — every purchase is one you made. When the balance reaches zero, new runs pause and resume the moment you top up; nothing in your record is lost while paused.</li>
+</ul>
+<p>Either way, an organization-level <strong>monthly spend cap</strong> is available, and no reload — automatic or manual — will carry usage past it.</p>
 <h2>How usage is counted</h2>
 <p>Token counts come from the model provider's own response, never from the browser — what you are billed is what was actually spent. Every grant, charge, and adjustment lands in an append-only ledger you can read by run, by agent, and by platform.</p>
-<h2>There is no allowance</h2>
-<p>No bundled credits, nothing to run out of, nothing to waste. Agents spend tokens while they work, you are billed for exactly those, and a quiet week costs you the seat and nothing more.</p>
+<h2>There is no bundled allowance</h2>
+<p>Plans include no free usage — the seat buys access and throughput, and every token comes out of credits you loaded. A quiet week costs you the seat and nothing more; unused credits just wait.</p>
 
     <div class="doc-pager">
       <a class="prev" href="doc-field.html"><span class="dir mono">&larr; PREVIOUS</span>The Field Platform</a>

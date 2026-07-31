@@ -583,6 +583,29 @@ a { color: inherit; }
 .billing-toggle .seg button { padding: 8px 18px; white-space: nowrap; }
 .billing-toggle .save { font-size: 11px; color: var(--success); margin-left: 6px; }
 
+/* Credit packs read as a rate table. */
+.packs {
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: var(--shadow-card); overflow: hidden; margin-bottom: 40px;
+}
+.pack-head, .pack-row {
+  display: grid; grid-template-columns: 140px 1fr 140px; gap: 20px;
+  padding: 13px 24px; align-items: baseline;
+}
+.pack-head {
+  font-size: 10.5px; letter-spacing: .1em; color: var(--ink-faint);
+  border-bottom: 1px solid var(--line);
+}
+.pack-row { border-top: 1px solid var(--line); font-size: 14.5px; }
+.pack-row:first-of-type { border-top: none; }
+.pack-price { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pack-bonus { color: var(--success); font-size: 13px; text-align: right; }
+@media (max-width: 620px) {
+  .pack-head { display: none; }
+  .pack-row { grid-template-columns: 1fr auto; gap: 4px 16px; }
+  .pack-bonus { grid-column: 2; }
+}
+
 /* The rate: two figures and the basis for them. */
 .rate-hero {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.5fr);

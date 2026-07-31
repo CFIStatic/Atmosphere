@@ -698,22 +698,45 @@ function SpendControls({
   return (
     <section className="mt-12 grid gap-4 md:grid-cols-2">
       <div className="rounded-xl border border-line bg-paper-0 p-5">
-        <h3 className="font-semibold text-ink-900">Auto-reload</h3>
+        <h3 className="font-semibold text-ink-900">Reload</h3>
         <p className="mt-1 text-sm text-ink-600">
-          Top up automatically when the balance drops below{' '}
-          {formatUsd(settings.autoReloadThresholdNanos)}.
+          How the credit balance tops back up — every purchase on your say-so, or
+          automatically before work can pause.
         </p>
 
-        <label className="mt-4 flex items-center gap-3 text-sm text-ink-700">
-          <input
-            type="checkbox"
-            checked={settings.autoReloadEnabled}
+        <div className="mt-4 grid grid-cols-2 gap-2" role="group" aria-label="Reload mode">
+          <button
+            onClick={() => onSave({ autoReloadEnabled: false }, 'autoreload')}
             disabled={!canManage || busy !== null}
-            onChange={(e) => onSave({ autoReloadEnabled: e.target.checked }, 'autoreload')}
-            className="h-4 w-4 rounded border-line bg-paper-100 text-brand-500 focus:ring-brand-500"
-          />
-          Enable auto-reload
-        </label>
+            aria-pressed={!settings.autoReloadEnabled}
+            className={`rounded-lg border px-3 py-2 text-left text-sm transition disabled:opacity-50 ${
+              !settings.autoReloadEnabled
+                ? 'border-brand-500 bg-brand-50 text-ink-900'
+                : 'border-line bg-paper-0 text-ink-600 hover:bg-paper-100'
+            }`}
+          >
+            Manual reload
+            <span className="block text-xs text-ink-500">
+              You approve every purchase; runs pause at zero
+            </span>
+          </button>
+          <button
+            onClick={() => onSave({ autoReloadEnabled: true }, 'autoreload')}
+            disabled={!canManage || busy !== null}
+            aria-pressed={settings.autoReloadEnabled}
+            className={`rounded-lg border px-3 py-2 text-left text-sm transition disabled:opacity-50 ${
+              settings.autoReloadEnabled
+                ? 'border-brand-500 bg-brand-50 text-ink-900'
+                : 'border-line bg-paper-0 text-ink-600 hover:bg-paper-100'
+            }`}
+          >
+            Auto-reload
+            <span className="block text-xs text-ink-500">
+              Tops up when the balance drops below{' '}
+              {formatUsd(settings.autoReloadThresholdNanos)}
+            </span>
+          </button>
+        </div>
 
         <div className="mt-4 flex items-end gap-2">
           <div className="flex-1">

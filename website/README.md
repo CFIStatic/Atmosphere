@@ -38,8 +38,17 @@ dark themes) and `assets/site.js` (receipt replay + the careers form).
 - **Seat plans** — Pro ($20/$17 annual), Max 5x ($100), Max 20x ($200), Team
   ($30/seat, 5 seat minimum, $25 annual), Enterprise (contact). The seat price
   buys access and the throughput multiplier, nothing else.
-- **Usage billed separately at one flat rate**, on every plan. There are **no
-  included credits and no bundled allowance** — the page must never imply either.
+- **Usage is prepaid credits at one flat rate**, on every plan. Customers buy
+  credits (the `credit_packs` seed, bonuses included) before agents spend them,
+  and work pauses at a zero balance. There is **no bundled allowance and no
+  postpaid usage** — the page must never imply either. Reload behavior is a
+  per-organization setting (`PATCH /api/billing/settings`: `autoReloadEnabled`
+  + threshold + amount, surfaced in the app's Billing page); auto-reload off
+  *is* manual reload.
+
+  This ordering is the margin guarantee: every token is sold at 2× list and
+  paid for before it is spent, so usage can never be served at a loss or go
+  uncollected.
 
 **The rate is flat and set by the frontier model.** Claude Opus 5 lists at
 $15/$75 per million tokens in `backend/src/ai/catalog.ts`; doubled, that is the
