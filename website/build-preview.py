@@ -139,15 +139,6 @@ out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
         <a href="#/docs">Docs</a>
       </div>
       <div class="foot-col">
-        <h4>Agents</h4>
-        <a href="#/platform">Mitigation Estimator</a>
-        <a href="#/platform">Construction Estimator</a>
-        <a href="#/platform">Web Access</a>
-        <a href="#/platform">Computer use</a>
-        <a href="#/platform">The Verifier</a>
-        <a href="#/platform">Audit trail</a>
-      </div>
-      <div class="foot-col">
         <h4>Company</h4>
         <a href="#/about">About</a>
         <a href="#/careers">Careers</a>
