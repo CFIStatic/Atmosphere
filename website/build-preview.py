@@ -58,24 +58,12 @@ nav_links = '\n      '.join(
     f'<a href="#/{r}" data-nav="{r}">{r.capitalize()}</a>'
     for r, _ in PAGES if r not in ('home', 'careers', 'contact', 'technician', 'signin', 'signup'))
 
-preview_bar = ' '.join(f'<a href="#/{r}">{r.upper()}</a>' for r, _ in PAGES)
-
 out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
 <style>
 {css}
 /* ---------- Preview-only chrome ---------- */
 .route[hidden] {{ display: none; }}
-.preview-bar {{
-  background: var(--ink); color: var(--bg);
-  font-size: 10.5px; letter-spacing: .08em;
-  padding: 6px 12px; text-align: center;
-}}
-.preview-bar a {{ color: inherit; text-decoration: none; opacity: .75; padding: 0 7px; }}
-.preview-bar a:hover {{ opacity: 1; }}
-.preview-bar .lbl {{ opacity: .45; padding-right: 8px; }}
 </style>
-
-<div class="preview-bar mono"><span class="lbl">DESIGN PREVIEW · {len(PAGES)} PAGES</span>{preview_bar}</div>
 
 <nav class="nav">
   <div class="wrap nav-inner">
@@ -87,6 +75,10 @@ out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
       {nav_links}
       <a class="btn-quiet" href="#/signin">Sign in</a>
       <a class="btn" href="#/signup">Get started</a>
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch between light and dark mode">
+        <svg class="icon-moon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        <svg class="icon-sun" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="3.2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v1.8M8 13.2V15M15 8h-1.8M2.8 8H1M12.95 3.05l-1.27 1.27M4.32 11.68l-1.27 1.27M12.95 12.95l-1.27-1.27M4.32 4.32 3.05 3.05" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      </button>
     </div>
   </div>
 </nav>
@@ -157,6 +149,17 @@ out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
   }}
   window.addEventListener('hashchange', show);
   show();
+
+  var toggle = document.getElementById('theme-toggle');
+  if (toggle) {{
+    toggle.addEventListener('click', function () {{
+      var root = document.documentElement;
+      var explicit = root.getAttribute('data-theme');
+      var isDark = explicit ? explicit === 'dark'
+        : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      root.setAttribute('data-theme', isDark ? 'light' : 'dark');
+    }});
+  }}
 
   document.querySelectorAll('.apply-link').forEach(function (link) {{
     link.addEventListener('click', function () {{

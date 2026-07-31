@@ -1,5 +1,19 @@
 // Shared behavior for the Atmosphere corporate site.
 (function () {
+  // Light/dark toggle. A saved choice wins; otherwise the OS preference shows.
+  var toggle = document.getElementById('theme-toggle');
+  if (toggle) {
+    var root = document.documentElement;
+    toggle.addEventListener('click', function () {
+      var explicit = root.getAttribute('data-theme');
+      var isDark = explicit
+        ? explicit === 'dark'
+        : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      var next = isDark ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      try { localStorage.setItem('atm-theme', next); } catch (e) { /* private mode */ }
+    });
+  }
   // Replay restarts the receipt animation — the audit trail's replay, embodied.
   var receipt = document.getElementById('receipt');
   var btn = document.getElementById('replay');

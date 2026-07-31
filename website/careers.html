@@ -8,6 +8,7 @@
   <title>Careers · Atmosphere</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect width='22' height='2.8' fill='%23A8A29E'/%3E%3Crect y='4.8' width='22' height='2.8' fill='%2378716C'/%3E%3Crect y='9.6' width='22' height='2.8' fill='%2357534E'/%3E%3Crect y='14.4' width='22' height='2.8' fill='%23292524'/%3E%3Crect y='19.2' width='22' height='2.8' fill='%23F2670C'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="assets/site.css" />
+  <script>try{var t=localStorage.getItem('atm-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
 </head>
 <body>
 
@@ -25,9 +26,11 @@
       <a href="about.html">About</a>
       <a class="btn-quiet" href="signin.html">Sign in</a>
       <a class="btn" href="signup.html">Get started</a>
-    </div>
-  </div>
-</nav>
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch between light and dark mode">
+        <svg class="icon-moon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        <svg class="icon-sun" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="3.2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v1.8M8 13.2V15M15 8h-1.8M2.8 8H1M12.95 3.05l-1.27 1.27M4.32 11.68l-1.27 1.27M12.95 12.95l-1.27-1.27M4.32 4.32 3.05 3.05" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      </button>
+
 
 <!-- page:start -->
 <main>
@@ -62,6 +65,49 @@
       <div class="quiet-item">
         <h3>Proof over promises, internally too</h3>
         <p>The principles we sell are the ones we run on. Demos are replays of real runs, and "done" means verified.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<section class="section" id="benefits">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">What you get</div>
+      <h2>Paid, covered, equipped — and heard</h2>
+      <p>The package is built the way the product is: nothing clever, nothing missing.</p>
+    </div>
+    <div class="feature-grid">
+      <div class="feature">
+        <div class="tag mono">Comp</div>
+        <h3>Salary + real equity</h3>
+        <p>Paid like the senior people you are, with equity that actually means something at a team this size.</p>
+      </div>
+      <div class="feature">
+        <div class="tag mono">Health</div>
+        <h3>Health, dental, vision</h3>
+        <p>Fully covered for you, heavily subsidized for your family — from day one, not day ninety.</p>
+      </div>
+      <div class="feature">
+        <div class="tag mono">Kit</div>
+        <h3>Hardware + home office</h3>
+        <p>The machine you want and a budget that makes the desk, the chair, and the second monitor a non-conversation.</p>
+      </div>
+      <div class="feature">
+        <div class="tag mono">Travel</div>
+        <h3>Ride-alongs, paid</h3>
+        <p>Time on real job sites is part of the job, so the flights, the truck, and the steel toes are on us.</p>
+      </div>
+      <div class="feature">
+        <div class="tag mono">Time</div>
+        <h3>Time off people actually take</h3>
+        <p>Flexible PTO with a floor, not a ceiling — the thing we track is that you took enough.</p>
+      </div>
+      <div class="feature">
+        <div class="tag mono">Seat</div>
+        <h3>A real seat at a small table</h3>
+        <p>Early team means you shape what Atmosphere becomes — the roadmap argument is yours to win.</p>
       </div>
     </div>
   </div>
@@ -197,6 +243,33 @@
   </div>
 </section>
 
+
+<section class="section" id="first-90">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">Your first 90 days</div>
+      <h2>Shipping by Friday, on a job site by summer</h2>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="num mono">WEEK 1</div>
+        <h3>Ship something real</h3>
+        <p>Access on day one, a small production change by the end of the week — code, copy, or process.</p>
+      </div>
+      <div class="step">
+        <div class="num mono">MONTH 1</div>
+        <h3>Own a surface</h3>
+        <p>An agent, a page, a pipeline, a region of customers — something with your name on the record.</p>
+      </div>
+      <div class="step">
+        <div class="num mono">DAY 90</div>
+        <h3>Stand where the work happens</h3>
+        <p>A ride-along with a real crew, watching real people use what you built — and telling you what's wrong with it.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section class="section" id="process">
   <div class="wrap">
     <div class="section-head">
@@ -228,6 +301,48 @@
     </div>
   </div>
 </section>
+
+<section class="section" id="careers-faq">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">Candidate questions</div>
+      <h2>Asked in almost every intro call</h2>
+    </div>
+    <div class="faq">
+      <details>
+        <summary>Do I need restoration or construction experience?</summary>
+        <p>
+          For the Estimating Lead — yes, that's the job. For everything else: no, but
+          you need to want it. The ride-alongs exist so the industry stops being an
+          abstraction by your first quarter.
+        </p>
+      </details>
+      <details>
+        <summary>How remote is "remote"?</summary>
+        <p>
+          Fully — we hire across US time zones and run on written records instead of
+          standing meetings. We get together in person roughly quarterly, plus the job
+          site visits.
+        </p>
+      </details>
+      <details>
+        <summary>How long does the process take?</summary>
+        <p>
+          About two weeks from intro call to decision, and the work sample is paid.
+          If we're slower than that, you're allowed to nudge us.
+        </p>
+      </details>
+      <details>
+        <summary>Can I apply to more than one role?</summary>
+        <p>
+          Yes — send one application and say so in the message. Range is a feature on
+          a team this small.
+        </p>
+      </details>
+    </div>
+  </div>
+</section>
+
 
 <section class="section">
   <div class="wrap">

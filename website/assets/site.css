@@ -140,6 +140,49 @@ a { color: inherit; }
 .nav-links a[aria-current="page"] { color: var(--ink); font-weight: 600; }
 @media (max-width: 860px) { .nav-links a:not(.btn):not(.btn-quiet) { display: none; } }
 
+/* Nav CTAs — pill-shaped, and re-asserted over `.nav-links a`, which
+   otherwise out-specifies `.btn` and turns the label grey. */
+.nav-links a.btn {
+  color: var(--accent-ink);
+  border-radius: 999px;
+  padding: 9px 20px;
+  box-shadow: 0 1px 2px rgba(28, 25, 23, .15), inset 0 1px 0 rgba(255, 255, 255, .14);
+  transition: background .15s ease, transform .15s ease, box-shadow .15s ease;
+}
+.nav-links a.btn:hover {
+  color: var(--accent-ink);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(28, 25, 23, .18), inset 0 1px 0 rgba(255, 255, 255, .14);
+}
+.nav-links a.btn-quiet {
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 8px 18px;
+  transition: border-color .15s ease;
+}
+.nav-links a.btn-quiet:hover { border-color: var(--ink-faint); }
+
+/* Theme toggle — moon in light mode, sun in dark, viewer/system aware. */
+.theme-toggle {
+  width: 34px; height: 34px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 1px solid var(--line-strong); border-radius: 50%;
+  color: var(--ink-soft); cursor: pointer; padding: 0;
+  transition: color .15s ease, border-color .15s ease;
+}
+.theme-toggle:hover { color: var(--ink); border-color: var(--ink-faint); }
+.theme-toggle svg { display: block; }
+.theme-toggle .icon-sun { display: none; }
+@media (prefers-color-scheme: dark) {
+  .theme-toggle .icon-moon { display: none; }
+  .theme-toggle .icon-sun { display: block; }
+}
+:root[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+:root[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+:root[data-theme="light"] .theme-toggle .icon-moon { display: block; }
+:root[data-theme="light"] .theme-toggle .icon-sun { display: none; }
+
 /* ---------- Buttons & links ---------- */
 .btn {
   display: inline-block;
