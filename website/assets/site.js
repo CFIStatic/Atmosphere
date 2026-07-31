@@ -6,10 +6,10 @@
   var NAV_GROUP = {
     'platform.html': 'platform', 'sales.html': 'platform', 'operations.html': 'platform',
     'field.html': 'platform', 'manager.html': 'platform',
-    'security.html': 'security', 'pricing.html': 'pricing', 'docs.html': 'docs',
+    'security.html': 'resources', 'pricing.html': 'pricing', 'docs.html': 'resources',
     'about.html': 'about', 'careers.html': 'about', 'contact.html': 'about'
   };
-  var group = NAV_GROUP[page];
+  var group = NAV_GROUP[page] || (page.indexOf('doc-') === 0 ? 'resources' : null);
   if (group) {
     document.querySelectorAll('.nav-links a[data-nav]').forEach(function (a) {
       if (a.getAttribute('data-nav') === group) a.setAttribute('aria-current', 'page');

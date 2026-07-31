@@ -17,7 +17,8 @@ written to appeal to contractors of every trade.
 | `manager.html`    | Manager Platform — job costing, accounting, business insights |
 | `security.html`   | Security — architecture diagram and six structural claims   |
 | `pricing.html`    | Pricing — the 30-day test, seat plans, and the flat rate    |
-| `docs.html`       | Docs — quickstart cards and an index of `../docs/*.md`      |
+| `docs.html`       | Resources hub — documentation index, guides, troubleshooting |
+| `doc-*.html`      | Eight resource pages: getting started, recipes, troubleshooting, estimators, web access, computer use, field, billing |
 | `about.html`      | About — story and principles                                |
 | `careers.html`    | Careers — roles, hiring process, and a working application form |
 | `contact.html`    | Contact — sales/support blocks and an intake form           |
@@ -59,6 +60,17 @@ site deliberately does **not** follow it on those two points, and the migration
 is the thing that needs updating. And the API key a customer supplies is for
 computer use, which is a setup step, never a billing arrangement.
 
+## Resources
+
+The nav's Resources tab gathers `docs.html` (the hub), the eight `doc-*.html`
+pages, and Security. Doc pages share a sidebar generated in one place — when
+adding a doc, add it to every sidebar (they are static copies), to the hub's
+list, and to `build-preview.py`'s PAGES. The preview's link-rewrite pattern is
+derived from PAGES, so registering the route there is the only wiring needed.
+Doc content is customer-facing prose grounded in `../README.md` and
+`../docs/*.md` — the internal engineering plans themselves are deliberately not
+published.
+
 ## Careers applications (frontend + backend)
 
 The form on `careers.html` posts JSON to **`POST /api/careers/apply`**, served
@@ -96,7 +108,7 @@ python3 -m http.server -d website 8080
 
 ## Single-file preview
 
-`build-preview.py` flattens the fourteen routed pages (the 404 stays standalone)
+`build-preview.py` flattens the routed pages (the 404 stays standalone)
 into one self-contained HTML file with a hash router, for sharing a working
 walkthrough of the whole suite:
 

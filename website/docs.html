@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Atmosphere documentation — the audit trail, the CRM backend, the agents, and the learning layer, written plainly and in the open." />
+  <meta name="description" content="Atmosphere docs and resources — documentation for every piece of the platform, guides and recipes for real crews, and troubleshooting for when something misbehaves." />
   <meta name="theme-color" content="#FBFAF7" />
-  <title>Docs · Atmosphere</title>
+  <title>Docs &amp; resources · Atmosphere</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect width='22' height='2.8' fill='%23A8A29E'/%3E%3Crect y='4.8' width='22' height='2.8' fill='%2378716C'/%3E%3Crect y='9.6' width='22' height='2.8' fill='%2357534E'/%3E%3Crect y='14.4' width='22' height='2.8' fill='%23292524'/%3E%3Crect y='19.2' width='22' height='2.8' fill='%23F2670C'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="assets/site.css" />
   <script>try{var t=localStorage.getItem('atm-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
@@ -29,9 +29,16 @@
           <a href="manager.html">Manager Platform <span>Run the business</span></a>
         </div>
       </div>
-      <a href="security.html" data-nav="security">Security</a>
       <a href="pricing.html" data-nav="pricing">Pricing</a>
-      <a href="docs.html" data-nav="docs">Docs</a>
+      <div class="nav-item">
+        <a href="docs.html" data-nav="resources">Resources <span class="caret" aria-hidden="true"></span></a>
+        <div class="menu">
+          <a href="docs.html">Documentation <span>How every piece works</span></a>
+          <a href="doc-recipes.html">Guides &amp; recipes <span>Ways crews use Atmosphere</span></a>
+          <a href="doc-troubleshooting.html">Troubleshooting <span>Solving errors, step by step</span></a>
+          <a href="security.html">Security <span>The model, by construction</span></a>
+        </div>
+      </div>
       <div class="nav-item">
         <a href="about.html" data-nav="about">Company <span class="caret" aria-hidden="true"></span></a>
         <div class="menu">
@@ -58,9 +65,12 @@
     <a class="sub" href="operations.html">Operations Platform</a>
     <a class="sub" href="field.html">Field Platform</a>
     <a class="sub" href="manager.html">Manager Platform</a>
-    <a href="security.html">Security</a>
     <a href="pricing.html">Pricing</a>
-    <a href="docs.html">Docs</a>
+    <div class="grp mono">Resources</div>
+    <a class="sub" href="docs.html">Documentation</a>
+    <a class="sub" href="doc-recipes.html">Guides &amp; recipes</a>
+    <a class="sub" href="doc-troubleshooting.html">Troubleshooting</a>
+    <a class="sub" href="security.html">Security</a>
     <div class="grp mono">Company</div>
     <a class="sub" href="about.html">About</a>
     <a class="sub" href="careers.html">Careers</a>
@@ -75,46 +85,41 @@
 
 <header class="page-hero">
   <div class="wrap">
-    <div class="eyebrow mono">Docs</div>
-    <h1>Read how it's built</h1>
+    <div class="eyebrow mono">Resources</div>
+    <h1>Read it, use it, unstick it</h1>
     <p class="lede">
-      The platform is documented the way it works — plainly, and in the open. Start with
-      the three things people do first, then go as deep as you like.
+      Documentation for every piece of the platform, guides for the ways real crews use
+      it, and troubleshooting for the day something misbehaves — written plainly, like
+      the product.
     </p>
   </div>
 </header>
 
-<section class="section" id="quickstart">
+<section class="section" id="start-here">
   <div class="wrap">
     <div class="section-head">
-      <div class="eyebrow mono">First hour</div>
-      <h2>Three ways in</h2>
+      <div class="eyebrow mono">Start here</div>
+      <h2>Three doors in</h2>
     </div>
-    <div class="quickstart-grid">
-      <div class="feature">
-        <div class="tag mono">01</div>
-        <h3>Bring your team</h3>
-        <p>
-          Create an organization at sign-up, pick your role and kind of work, then share
-          the join code. Everyone who enters it lands in your workspace.
-        </p>
-      </div>
-      <div class="feature">
-        <div class="tag mono">02</div>
-        <h3>Connect a site</h3>
-        <p>
-          Link a carrier portal or supplier site once. From then on, hand Atmosphere work
-          that lives inside it — every step recorded.
-        </p>
-      </div>
-      <div class="feature">
-        <div class="tag mono">03</div>
-        <h3>Run the agent</h3>
-        <p>
-          One Anthropic API key and one command put an agent at a real computer — macOS,
-          Windows, or Linux — connected outbound-only.
-        </p>
-      </div>
+    <div class="feature-grid">
+      <a class="feature plat-card" href="doc-getting-started.html">
+        <div class="tag mono">New here</div>
+        <h3>Getting started</h3>
+        <p>Organization, join code, roles, and your first agent run — end to end in one read.</p>
+        <span class="plat-go">Read the guide&nbsp;&rarr;</span>
+      </a>
+      <a class="feature plat-card" href="doc-recipes.html">
+        <div class="tag mono">Already running</div>
+        <h3>Guides &amp; recipes</h3>
+        <p>The situations crews actually hit, what to hand the agent, and what comes back — from Friday-afternoon pipeline to month-end margin.</p>
+        <span class="plat-go">Browse recipes&nbsp;&rarr;</span>
+      </a>
+      <a class="feature plat-card" href="doc-troubleshooting.html">
+        <div class="tag mono">Something's wrong</div>
+        <h3>Troubleshooting</h3>
+        <p>Sign-in, join codes, stuck runs, agent connections, billing — the errors we see, and the fix for each.</p>
+        <span class="plat-go">Solve it&nbsp;&rarr;</span>
+      </a>
     </div>
   </div>
 </section>
@@ -122,58 +127,58 @@
 <section class="section" id="reference">
   <div class="wrap">
     <div class="section-head">
-      <div class="eyebrow mono">Reference</div>
+      <div class="eyebrow mono">Documentation</div>
       <h2>The written record</h2>
-      <p>Each document lives in the open repository, versioned alongside the code it describes.</p>
+      <p>Every doc opens right here on the site — no repository account required.</p>
     </div>
     <div class="doc-list">
-      <a class="doc-row" href="https://github.com/CFIStatic/Atmosphere/blob/main/README.md" target="_blank" rel="noopener">
-        <span class="doc-file mono">README.md</span>
+      <a class="doc-row" href="doc-getting-started.html">
+        <span class="doc-file mono">GUIDES</span>
         <span>
-          <h3>The whole system, top to bottom</h3>
-          <p>What Atmosphere does, why it's shaped this way, and the data model underneath it.</p>
+          <h3>Getting started</h3>
+          <p>Create an organization, bring the crew in with one code, and hand an agent its first job.</p>
         </span>
-        <span class="go" aria-hidden="true">↗</span>
+        <span class="go" aria-hidden="true">&rarr;</span>
       </a>
-      <a class="doc-row" href="https://github.com/CFIStatic/Atmosphere/blob/main/docs/AUDIT.md" target="_blank" rel="noopener">
-        <span class="doc-file mono">docs/AUDIT.md</span>
+      <a class="doc-row" href="doc-estimators.html">
+        <span class="doc-file mono">PLATFORMS</span>
         <span>
-          <h3>The audit trail</h3>
-          <p>Every unit of work every agent performed, replayable step by step.</p>
+          <h3>The estimators</h3>
+          <p>How the Mitigation and Construction Estimators read evidence and write Xactimate estimates.</p>
         </span>
-        <span class="go" aria-hidden="true">↗</span>
+        <span class="go" aria-hidden="true">&rarr;</span>
       </a>
-      <a class="doc-row" href="https://github.com/CFIStatic/Atmosphere/blob/main/docs/CRM.md" target="_blank" rel="noopener">
-        <span class="doc-file mono">docs/CRM.md</span>
+      <a class="doc-row" href="doc-web-access.html">
+        <span class="doc-file mono">PLATFORMS</span>
         <span>
-          <h3>The CRM backend</h3>
-          <p>Customers, properties, leads, jobs, and the timeline underneath them — plus backups and mirrored data.</p>
+          <h3>Web Access &amp; the Verifier</h3>
+          <p>Connect a portal once, hand work to it, and read the run back like a receipt.</p>
         </span>
-        <span class="go" aria-hidden="true">↗</span>
+        <span class="go" aria-hidden="true">&rarr;</span>
       </a>
-      <a class="doc-row" href="https://github.com/CFIStatic/Atmosphere/blob/main/docs/project-manager-agent.md" target="_blank" rel="noopener">
-        <span class="doc-file mono">docs/project-manager-agent.md</span>
+      <a class="doc-row" href="doc-computer-use.html">
+        <span class="doc-file mono">PLATFORMS</span>
         <span>
-          <h3>The Project Manager agent</h3>
-          <p>How the PM agent runs jobs — tasks, crew, and the work logged against them.</p>
+          <h3>Computer use</h3>
+          <p>Put an agent at a real computer — one key, one command, outbound-only.</p>
         </span>
-        <span class="go" aria-hidden="true">↗</span>
+        <span class="go" aria-hidden="true">&rarr;</span>
       </a>
-      <a class="doc-row" href="https://github.com/CFIStatic/Atmosphere/blob/main/docs/sales-agent.md" target="_blank" rel="noopener">
-        <span class="doc-file mono">docs/sales-agent.md</span>
+      <a class="doc-row" href="doc-field.html">
+        <span class="doc-file mono">PLATFORMS</span>
         <span>
-          <h3>The Sales agent</h3>
-          <p>How leads move — and what the agent does at each stage.</p>
+          <h3>The Field Platform</h3>
+          <p>Record, speak, and let the camera name what it sees — evidence from the job site.</p>
         </span>
-        <span class="go" aria-hidden="true">↗</span>
+        <span class="go" aria-hidden="true">&rarr;</span>
       </a>
-      <a class="doc-row" href="https://github.com/CFIStatic/Atmosphere/blob/main/docs/reinforcement-learning.md" target="_blank" rel="noopener">
-        <span class="doc-file mono">docs/reinforcement-learning.md</span>
+      <a class="doc-row" href="doc-billing.html">
+        <span class="doc-file mono">ACCOUNT</span>
         <span>
-          <h3>The learning layer</h3>
-          <p>How runs are scored, and how the routing policy improves from the scores.</p>
+          <h3>Billing &amp; the flat rate</h3>
+          <p>The 30-day test, seat plans, and how the flat token rate is set and metered.</p>
         </span>
-        <span class="go" aria-hidden="true">↗</span>
+        <span class="go" aria-hidden="true">&rarr;</span>
       </a>
     </div>
   </div>
@@ -188,7 +193,7 @@
       </div>
       <div class="cta-actions">
         <a class="btn btn-lg" href="signup.html">Create your organization</a>
-        <a class="btn-quiet" href="contact.html">Something still unanswered?&nbsp;→</a>
+        <a class="btn-quiet" href="contact.html">Something still unanswered?&nbsp;&rarr;</a>
       </div>
     </div>
   </div>
@@ -216,9 +221,11 @@
       </div>
       <div class="foot-col">
         <h4>Resources</h4>
+        <a href="docs.html">Documentation</a>
+        <a href="doc-recipes.html">Guides &amp; recipes</a>
+        <a href="doc-troubleshooting.html">Troubleshooting</a>
         <a href="pricing.html">Pricing</a>
         <a href="security.html">Security</a>
-        <a href="docs.html">Docs</a>
       </div>
       <div class="foot-col">
         <h4>Company</h4>

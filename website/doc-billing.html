@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Talk to Atmosphere — sales, support, careers, and partnerships. Bring a real scan and a real claim; we'll show you the run." />
+  <meta name="description" content="The 30-day test, seat plans, and how the one flat token rate is set and metered." />
   <meta name="theme-color" content="#FBFAF7" />
-  <title>Contact · Atmosphere</title>
+  <title>Billing & the flat rate · Atmosphere Docs</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect width='22' height='2.8' fill='%23A8A29E'/%3E%3Crect y='4.8' width='22' height='2.8' fill='%2378716C'/%3E%3Crect y='9.6' width='22' height='2.8' fill='%2357534E'/%3E%3Crect y='14.4' width='22' height='2.8' fill='%23292524'/%3E%3Crect y='19.2' width='22' height='2.8' fill='%23F2670C'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="assets/site.css" />
   <script>try{var t=localStorage.getItem('atm-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
@@ -83,103 +83,54 @@
 <!-- page:start -->
 <main>
 
-<header class="page-hero">
-  <div class="wrap">
-    <div class="eyebrow mono">Contact</div>
-    <h1>Talk to a human</h1>
-    <p class="lede">
-      Whether you're a two-truck shop or a regional operation, we'll walk you through
-      what Atmosphere would do on your jobs — with your files, not a canned demo.
-    </p>
-  </div>
-</header>
+<div class="wrap docs-layout">
+  <aside class="docs-side" aria-label="Documentation">
+      <a class="all" href="docs.html">&larr; All resources</a>
+      <div class="grp mono">Guides</div>
+      <a href="doc-getting-started.html">Getting started</a>
+      <a href="doc-recipes.html">Guides &amp; recipes</a>
+      <a href="doc-troubleshooting.html">Troubleshooting</a>
+      <div class="grp mono">Platforms</div>
+      <a href="doc-estimators.html">The estimators</a>
+      <a href="doc-web-access.html">Web Access &amp; the Verifier</a>
+      <a href="doc-computer-use.html">Computer use</a>
+      <a href="doc-field.html">The Field Platform</a>
+      <div class="grp mono">Account</div>
+      <a class="active" href="doc-billing.html">Billing &amp; the flat rate</a>
+  </aside>
+  <article class="docs-prose">
+    <div class="eyebrow mono">Resources · Account</div>
+    <h1>Billing &amp; the flat rate</h1>
+    <p class="lede">The 30-day test, seat plans, and how the one flat token rate is set and metered.</p>
 
-<section class="section" id="reach-us">
-  <div class="wrap contact-grid">
-    <div>
-      <div class="contact-block">
-        <h3>See it on your jobs</h3>
-        <p>
-          Bring a scan and a job you know well — a claim, a rebuild, a remodel.
-          We'll run it and hand you the record.
-        </p>
-      </div>
-      <div class="contact-block">
-        <h3>Already on Atmosphere?</h3>
-        <p>
-          Sign in — anyone linked to your organization can reach us from the dashboard,
-          and your message arrives with the context of your org.
-        </p>
-      </div>
-      <div class="contact-block">
-        <h3>Careers &amp; partnerships</h3>
-        <p>
-          Same form — tell us which role or idea brought you here, and it gets to the
-          right person.
-        </p>
-      </div>
+<h2>The 30-day test</h2>
+<p>Every organization starts with thirty days of the full platform — no feature held back, one seat. Usage during the test is billed at the same flat rate as everyone else, so what you spend testing is what the thing would actually cost you. Nothing auto-upgrades when the thirty days end: you pick a plan, or you stop.</p>
+<h2>Seats</h2>
+<p>The seat price buys access and a throughput ceiling, nothing else:</p>
+<table>
+<tr><th>Plan</th><th>Monthly</th><th>Annual</th><th>Throughput</th></tr>
+<tr><td>Pro</td><td>$20 / person</td><td>$17 / person</td><td>1×</td></tr>
+<tr><td>Max 5x</td><td>$100 / person</td><td>$100 / person</td><td>5×</td></tr>
+<tr><td>Max 20x</td><td>$200 / person</td><td>$200 / person</td><td>20×</td></tr>
+<tr><td>Team</td><td>$30 / seat, 5 min</td><td>$25 / seat</td><td>5×</td></tr>
+<tr><td>Enterprise</td><td colspan="2">Annual, 25 seats minimum</td><td>Custom</td></tr>
+</table>
+<p>All four platforms — Sales, Operations, Field, Manager — are bought separately at these same tiers.</p>
+<h2>The flat rate</h2>
+<p>Usage is billed per token at one rate, set by the most advanced model we run — Claude Opus 5 — at twice its list price:</p>
+<pre><code>Input   $30  per million tokens   (2 × $15 list)
+Output  $150 per million tokens   (2 × $75 list)</code></pre>
+<p>Every token is billed at that rate <strong>whichever model actually ran the task</strong>. Because the rate never moves, routing work to a weaker model could only cost us quality — so the router picks the model that does the work best, not the one that protects a margin.</p>
+<h2>How usage is counted</h2>
+<p>Token counts come from the model provider's own response, never from the browser — what you are billed is what was actually spent. Every grant, charge, and adjustment lands in an append-only ledger you can read by run, by agent, and by platform.</p>
+<h2>There is no allowance</h2>
+<p>No bundled credits, nothing to run out of, nothing to waste. Agents spend tokens while they work, you are billed for exactly those, and a quiet week costs you the seat and nothing more.</p>
+
+    <div class="doc-pager">
+      <a class="prev" href="doc-field.html"><span class="dir mono">&larr; PREVIOUS</span>The Field Platform</a>
     </div>
-
-    <form class="form" action="#" method="post">
-      <div class="form-row">
-        <div class="field">
-          <label for="name">Name</label>
-          <input id="name" name="name" type="text" autocomplete="name" required />
-        </div>
-        <div class="field">
-          <label for="email">Work email</label>
-          <input id="email" name="email" type="email" autocomplete="email" required />
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="field">
-          <label for="company">Company</label>
-          <input id="company" name="company" type="text" autocomplete="organization" />
-        </div>
-        <div class="field">
-          <label for="team-size">Team size</label>
-          <select id="team-size" name="team-size">
-            <option>1–5</option>
-            <option>6–20</option>
-            <option>21–100</option>
-            <option>100+</option>
-          </select>
-        </div>
-      </div>
-      <div class="field">
-        <label for="work-type">Kind of work</label>
-        <select id="work-type" name="work-type">
-          <option>Mitigation</option>
-          <option>Construction</option>
-          <option>Both</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="message">What should Atmosphere take off your plate?</label>
-        <textarea id="message" name="message" placeholder="e.g. We write ~40 mitigation estimates a month and every one of them is a late night."></textarea>
-      </div>
-      <div class="form-foot">
-        <button class="btn btn-lg" type="submit">Send</button>
-        <span class="fine">We read everything. A person replies — usually within one business day.</span>
-      </div>
-    </form>
-  </div>
-</section>
-
-<section class="section">
-  <div class="wrap">
-    <div class="cta-band">
-      <div>
-        <h2>Or skip the call and start now</h2>
-        <p>Nothing here needs a salesperson: create your organization and hand an agent its first job.</p>
-      </div>
-      <div class="cta-actions">
-        <a class="btn btn-lg" href="signup.html">Create your organization</a>
-        <a class="btn-quiet" href="platform.html">Look around first&nbsp;→</a>
-      </div>
-    </div>
-  </div>
-</section>
+  </article>
+</div>
 
 </main>
 <!-- page:end -->

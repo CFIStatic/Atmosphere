@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Talk to Atmosphere — sales, support, careers, and partnerships. Bring a real scan and a real claim; we'll show you the run." />
+  <meta name="description" content="When something misbehaves — sign-in, join codes, stuck runs, connections, billing — start here." />
   <meta name="theme-color" content="#FBFAF7" />
-  <title>Contact · Atmosphere</title>
+  <title>Troubleshooting · Atmosphere Docs</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect width='22' height='2.8' fill='%23A8A29E'/%3E%3Crect y='4.8' width='22' height='2.8' fill='%2378716C'/%3E%3Crect y='9.6' width='22' height='2.8' fill='%2357534E'/%3E%3Crect y='14.4' width='22' height='2.8' fill='%23292524'/%3E%3Crect y='19.2' width='22' height='2.8' fill='%23F2670C'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="assets/site.css" />
   <script>try{var t=localStorage.getItem('atm-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
@@ -83,103 +83,65 @@
 <!-- page:start -->
 <main>
 
-<header class="page-hero">
-  <div class="wrap">
-    <div class="eyebrow mono">Contact</div>
-    <h1>Talk to a human</h1>
-    <p class="lede">
-      Whether you're a two-truck shop or a regional operation, we'll walk you through
-      what Atmosphere would do on your jobs — with your files, not a canned demo.
-    </p>
-  </div>
-</header>
+<div class="wrap docs-layout">
+  <aside class="docs-side" aria-label="Documentation">
+      <a class="all" href="docs.html">&larr; All resources</a>
+      <div class="grp mono">Guides</div>
+      <a href="doc-getting-started.html">Getting started</a>
+      <a href="doc-recipes.html">Guides &amp; recipes</a>
+      <a class="active" href="doc-troubleshooting.html">Troubleshooting</a>
+      <div class="grp mono">Platforms</div>
+      <a href="doc-estimators.html">The estimators</a>
+      <a href="doc-web-access.html">Web Access &amp; the Verifier</a>
+      <a href="doc-computer-use.html">Computer use</a>
+      <a href="doc-field.html">The Field Platform</a>
+      <div class="grp mono">Account</div>
+      <a href="doc-billing.html">Billing &amp; the flat rate</a>
+  </aside>
+  <article class="docs-prose">
+    <div class="eyebrow mono">Resources · Guides</div>
+    <h1>Troubleshooting</h1>
+    <p class="lede">When something misbehaves — sign-in, join codes, stuck runs, connections, billing — start here.</p>
 
-<section class="section" id="reach-us">
-  <div class="wrap contact-grid">
-    <div>
-      <div class="contact-block">
-        <h3>See it on your jobs</h3>
-        <p>
-          Bring a scan and a job you know well — a claim, a rebuild, a remodel.
-          We'll run it and hand you the record.
-        </p>
-      </div>
-      <div class="contact-block">
-        <h3>Already on Atmosphere?</h3>
-        <p>
-          Sign in — anyone linked to your organization can reach us from the dashboard,
-          and your message arrives with the context of your org.
-        </p>
-      </div>
-      <div class="contact-block">
-        <h3>Careers &amp; partnerships</h3>
-        <p>
-          Same form — tell us which role or idea brought you here, and it gets to the
-          right person.
-        </p>
-      </div>
+<h2>Signing in</h2>
+<h3>My password isn't working</h3>
+<p>Use <strong>Forgot password</strong> on the sign-in screen. A reset link arrives by email, and the token exchange happens on the server — if the link has expired, request a fresh one rather than retrying it.</p>
+<h3>My PIN doesn't work on this phone</h3>
+<p>That is the PIN doing its job: it is bound to the single device you enrolled it on. On any other device, sign in with your password, then enroll a PIN there too if you want one.</p>
+<h2>Organizations and join codes</h2>
+<h3>The join code is rejected</h3>
+<p>Codes are exact — check for a mistyped character first. If it still fails, the code may have been rotated; ask whoever runs your organization to read it to you from their dashboard.</p>
+<h3>I created a second organization by mistake</h3>
+<p>Sign out, sign back in, and join the right organization with its code. Ask us via the contact page to remove the empty one.</p>
+<h2>Runs and agents</h2>
+<h3>A run failed or seems stuck</h3>
+<p>Open the run in the audit trail and replay it — the record shows the exact step where it stopped and what the agent saw there. Most failures are the outside system changing (a portal login page moved, a session expired); reconnect the site and run it again.</p>
+<h3>The Verifier flagged something</h3>
+<p>Working as intended. The Verifier corrects only what is safe and asks about everything else — answer its question and the run completes. It never guesses on your behalf.</p>
+<h3>Web Access can't reach a site</h3>
+<p>Portals change. If a connected site stops working, re-connect it (credentials may have rotated or the portal added a verification step). The run record shows precisely where access stopped.</p>
+<h2>Computer use</h2>
+<h3>The agent won't connect to my machine</h3>
+<p>Three things to check, in order:</p>
+<ol>
+<li>The agent command is running on the machine, and the machine is awake.</li>
+<li>The network allows <strong>outbound</strong> HTTPS/WebSocket traffic — the agent only dials out, so no inbound port or port-forward is ever needed.</li>
+<li>The Anthropic API key in Settings is valid — it is how the agent sees the screen.</li>
+</ol>
+<h2>Billing</h2>
+<h3>Work is paused</h3>
+<p>A lapsed payment pauses new runs rather than silently billing on. Update the payment method under billing and work resumes; nothing in your record is lost while paused.</p>
+<h3>A charge looks wrong</h3>
+<p>Every token is metered from the model provider's own response and lands in the append-only ledger — read it by run, by agent, and by platform. If the ledger and your invoice disagree, that is a bug: send us both.</p>
+<h2>Still stuck?</h2>
+<p><a href="contact.html">Write to us</a> with the <strong>run ID from the audit trail</strong> if the problem involves a run — it lets us replay exactly what you saw, which is usually the whole diagnosis.</p>
+
+    <div class="doc-pager">
+      <a class="prev" href="doc-recipes.html"><span class="dir mono">&larr; PREVIOUS</span>Guides &amp; recipes</a>
+      <a class="next" href="doc-estimators.html"><span class="dir mono">NEXT &rarr;</span>The estimators</a>
     </div>
-
-    <form class="form" action="#" method="post">
-      <div class="form-row">
-        <div class="field">
-          <label for="name">Name</label>
-          <input id="name" name="name" type="text" autocomplete="name" required />
-        </div>
-        <div class="field">
-          <label for="email">Work email</label>
-          <input id="email" name="email" type="email" autocomplete="email" required />
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="field">
-          <label for="company">Company</label>
-          <input id="company" name="company" type="text" autocomplete="organization" />
-        </div>
-        <div class="field">
-          <label for="team-size">Team size</label>
-          <select id="team-size" name="team-size">
-            <option>1–5</option>
-            <option>6–20</option>
-            <option>21–100</option>
-            <option>100+</option>
-          </select>
-        </div>
-      </div>
-      <div class="field">
-        <label for="work-type">Kind of work</label>
-        <select id="work-type" name="work-type">
-          <option>Mitigation</option>
-          <option>Construction</option>
-          <option>Both</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="message">What should Atmosphere take off your plate?</label>
-        <textarea id="message" name="message" placeholder="e.g. We write ~40 mitigation estimates a month and every one of them is a late night."></textarea>
-      </div>
-      <div class="form-foot">
-        <button class="btn btn-lg" type="submit">Send</button>
-        <span class="fine">We read everything. A person replies — usually within one business day.</span>
-      </div>
-    </form>
-  </div>
-</section>
-
-<section class="section">
-  <div class="wrap">
-    <div class="cta-band">
-      <div>
-        <h2>Or skip the call and start now</h2>
-        <p>Nothing here needs a salesperson: create your organization and hand an agent its first job.</p>
-      </div>
-      <div class="cta-actions">
-        <a class="btn btn-lg" href="signup.html">Create your organization</a>
-        <a class="btn-quiet" href="platform.html">Look around first&nbsp;→</a>
-      </div>
-    </div>
-  </div>
-</section>
+  </article>
+</div>
 
 </main>
 <!-- page:end -->

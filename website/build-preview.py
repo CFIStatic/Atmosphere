@@ -23,6 +23,14 @@ PAGES = [
     ('security', 'security.html'),
     ('pricing', 'pricing.html'),
     ('docs', 'docs.html'),
+    ('doc-getting-started', 'doc-getting-started.html'),
+    ('doc-recipes', 'doc-recipes.html'),
+    ('doc-troubleshooting', 'doc-troubleshooting.html'),
+    ('doc-estimators', 'doc-estimators.html'),
+    ('doc-web-access', 'doc-web-access.html'),
+    ('doc-computer-use', 'doc-computer-use.html'),
+    ('doc-field', 'doc-field.html'),
+    ('doc-billing', 'doc-billing.html'),
     ('about', 'about.html'),
     ('careers', 'careers.html'),
     ('contact', 'contact.html'),
@@ -43,8 +51,8 @@ def extract(fname: str) -> str:
 def reroute(html: str) -> str:
     def page_link(m):
         return f'href="#/{ROUTE_OF[m.group(1)]}"'
-    html = re.sub(r'href="((?:index|platform|sales|operations|field|manager|security|pricing|docs|about|careers|contact|signin|signup)\.html)(?:#[\w-]+)?"',
-                  page_link, html)
+    pattern = '|'.join(re.escape(f) for f in ROUTE_OF)
+    html = re.sub('href="(' + pattern + ')(?:#[\\w-]+)?"', page_link, html)
     return html
 
 
@@ -80,9 +88,16 @@ out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
           <a href="#/manager">Manager Platform <span>Run the business</span></a>
         </div>
       </div>
-      <a href="#/security" data-nav="security">Security</a>
       <a href="#/pricing" data-nav="pricing">Pricing</a>
-      <a href="#/docs" data-nav="docs">Docs</a>
+      <div class="nav-item">
+        <a href="#/docs" data-nav="resources">Resources <span class="caret" aria-hidden="true"></span></a>
+        <div class="menu">
+          <a href="#/docs">Documentation <span>How every piece works</span></a>
+          <a href="#/doc-recipes">Guides &amp; recipes <span>Ways crews use Atmosphere</span></a>
+          <a href="#/doc-troubleshooting">Troubleshooting <span>Solving errors, step by step</span></a>
+          <a href="#/security">Security <span>The model, by construction</span></a>
+        </div>
+      </div>
       <div class="nav-item">
         <a href="#/about" data-nav="about">Company <span class="caret" aria-hidden="true"></span></a>
         <div class="menu">
@@ -106,9 +121,12 @@ out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
     <div class="grp mono">Platform</div>
     <a class="sub" href="#/platform">Overview</a>
     <a class="sub" href="#/field">Field Platform</a>
-    <a href="#/security">Security</a>
     <a href="#/pricing">Pricing</a>
-    <a href="#/docs">Docs</a>
+    <div class="grp mono">Resources</div>
+    <a class="sub" href="#/docs">Documentation</a>
+    <a class="sub" href="#/doc-recipes">Guides &amp; recipes</a>
+    <a class="sub" href="#/doc-troubleshooting">Troubleshooting</a>
+    <a class="sub" href="#/security">Security</a>
     <div class="grp mono">Company</div>
     <a class="sub" href="#/about">About</a>
     <a class="sub" href="#/careers">Careers</a>
@@ -177,10 +195,11 @@ out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
       if (el) el.hidden = (name !== r);
     }});
     var NAV_GROUP = {{ platform: 'platform', sales: 'platform', operations: 'platform',
-      field: 'platform', manager: 'platform', security: 'security', pricing: 'pricing',
-      docs: 'docs', about: 'about', careers: 'about', contact: 'about' }};
+      field: 'platform', manager: 'platform', security: 'resources', pricing: 'pricing',
+      docs: 'resources', about: 'about', careers: 'about', contact: 'about' }};
+    var g = NAV_GROUP[r] || (r.indexOf('doc-') === 0 ? 'resources' : null);
     document.querySelectorAll('[data-nav]').forEach(function (a) {{
-      if (a.getAttribute('data-nav') === NAV_GROUP[r]) a.setAttribute('aria-current', 'page');
+      if (a.getAttribute('data-nav') === g) a.setAttribute('aria-current', 'page');
       else a.removeAttribute('aria-current');
     }});
     if (changed) window.scrollTo(0, 0);
