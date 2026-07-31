@@ -150,5 +150,7 @@ absolutize the `og:image` URL then too). Pricing embeds its FAQ as JSON-LD.
 - The investor page is a designed surface — the data room behind it (auth +
   documents) doesn't exist yet; "Request access" routes to contact.
 - Replace the sitemap/robots/OG placeholder domain at deploy.
-- The sign-in and sign-up pages are designed surfaces; hook them to the real
-  app routes (or replace them with the frontend app) at deploy time.
+- The sign-in, sign-up, and investor pages are designed surfaces; submitting
+  shows an early-access notice via `stubForm` in `site.js`. At deploy, hook
+  them to the real app routes (or replace them with the frontend app) and
+  remove the stubs.

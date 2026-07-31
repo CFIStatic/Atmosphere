@@ -152,6 +152,25 @@
     links: 'ap-links', message: 'ap-message', website: 'ap-website'
   }, 'Application sent — a person reads every one, and replies either way.');
 
+  // Auth surfaces: the live app takes these routes over at deploy. Until
+  // then, submitting explains the state instead of dead-reloading the page.
+  function stubForm(formId, statusId, text) {
+    var form = document.getElementById(formId);
+    if (!form) return;
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      var status = document.getElementById(statusId);
+      status.className = 'form-status ok';
+      status.textContent = text;
+    });
+  }
+  stubForm('signin-form', 'signin-status',
+    "We're onboarding organizations personally during early access — your team's workspace link gets you in.");
+  stubForm('signup-form', 'signup-status',
+    "We're onboarding organizations personally during early access — reach out via the contact page and yours will be ready today.");
+  stubForm('investors-form', 'investors-status',
+    'Access keys are issued personally — use Request access and we will be in touch.');
+
   wireForm('contact-form', 'contact-status', '/api/contact/send', {
     name: 'ct-name', email: 'ct-email', company: 'ct-company',
     teamSize: 'ct-team', workType: 'ct-work',

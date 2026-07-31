@@ -101,7 +101,7 @@
 <section class="auth-section">
   <div class="wrap">
     <div class="auth-wrap">
-      <form class="form" action="#" method="post">
+      <form class="form" id="signin-form" novalidate>
         <div class="field">
           <label for="email">Email</label>
           <input id="email" name="email" type="email" autocomplete="email" required />
@@ -115,6 +115,7 @@
           <a href="contact.html">Forgot password?</a>
           <a href="signup.html">New here? Create your organization&nbsp;→</a>
         </div>
+        <span class="form-status" id="signin-status" role="status" aria-live="polite"></span>
       </form>
 
       <div class="or-rule mono">OR</div>
