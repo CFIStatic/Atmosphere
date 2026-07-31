@@ -50,11 +50,13 @@ dark themes) and `assets/site.js` (receipt replay + the careers form).
   paid for before it is spent, so usage can never be served at a loss or go
   uncollected.
 
-**The rate is flat and set by the frontier model.** Claude Opus 5 lists at
-$15/$75 per million tokens in `backend/src/ai/catalog.ts`; doubled, that is the
-$30/$150 the page quotes — and it is charged for *every* token regardless of
-which model actually ran the task. Raise the flagship in the catalog and this
-number moves with it.
+**The rate is flat and internally derived.** The flagship entry in
+`backend/src/ai/catalog.ts` lists $15/$75 per million tokens; doubled, that is
+the $30/$150 the page quotes, charged for *every* token regardless of which
+model ran the task. Raise the flagship in the catalog and this number moves
+with it. **The derivation is internal only**: customer-facing copy quotes the
+two numbers and never names the underlying model, the provider, or the 2×
+multiple — keep it that way when editing.
 
 That flat rate constrains the copy: the site must never claim routing makes a
 customer's bill cheaper, because it cannot. What it may claim — and what is
