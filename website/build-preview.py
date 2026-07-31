@@ -72,14 +72,51 @@ out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
       Atmosphere
     </a>
     <div class="nav-links">
-      {nav_links}
+      <div class="nav-item">
+        <a href="#/platform" data-nav="platform">Platform <span class="caret" aria-hidden="true"></span></a>
+        <div class="menu">
+          <a href="#/platform">Overview <span>Every agent, end to end</span></a>
+          <a href="#/platform">Estimators <span>Mitigation &amp; rebuild, for Xactimate</span></a>
+          <a href="#/platform">Web Access &amp; Computer use <span>Portals, sites, real machines</span></a>
+          <a href="#/platform">Verifier &amp; audit trail <span>Checked work, replayable proof</span></a>
+          <a href="#/technician">Technician app <span>The field tool</span></a>
+        </div>
+      </div>
+      <a href="#/security" data-nav="security">Security</a>
+      <a href="#/pricing" data-nav="pricing">Pricing</a>
+      <a href="#/docs" data-nav="docs">Docs</a>
+      <div class="nav-item">
+        <a href="#/about" data-nav="about">Company <span class="caret" aria-hidden="true"></span></a>
+        <div class="menu">
+          <a href="#/about">About <span>Why proof-first</span></a>
+          <a href="#/careers">Careers <span>Open roles</span></a>
+          <a href="#/contact">Contact <span>Talk to a human</span></a>
+        </div>
+      </div>
       <a class="btn-quiet" href="#/signin">Sign in</a>
       <a class="btn" href="#/signup">Get started</a>
       <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch between light and dark mode">
         <svg class="icon-moon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
         <svg class="icon-sun" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="3.2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v1.8M8 13.2V15M15 8h-1.8M2.8 8H1M12.95 3.05l-1.27 1.27M4.32 11.68l-1.27 1.27M12.95 12.95l-1.27-1.27M4.32 4.32 3.05 3.05" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
       </button>
+      <button class="nav-burger" id="nav-burger" type="button" aria-label="Open menu" aria-expanded="false">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
     </div>
+  </div>
+  <div class="nav-panel" id="nav-panel">
+    <div class="grp mono">Platform</div>
+    <a class="sub" href="#/platform">Overview</a>
+    <a class="sub" href="#/technician">Technician app</a>
+    <a href="#/security">Security</a>
+    <a href="#/pricing">Pricing</a>
+    <a href="#/docs">Docs</a>
+    <div class="grp mono">Company</div>
+    <a class="sub" href="#/about">About</a>
+    <a class="sub" href="#/careers">Careers</a>
+    <a class="sub" href="#/contact">Contact</a>
+    <a href="#/signin">Sign in</a>
+    <a href="#/signup">Create your organization</a>
   </div>
 </nav>
 
@@ -100,6 +137,15 @@ out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
         <a href="#/security">Security</a>
         <a href="#/pricing">Pricing</a>
         <a href="#/docs">Docs</a>
+      </div>
+      <div class="foot-col">
+        <h4>Agents</h4>
+        <a href="#/platform">Mitigation Estimator</a>
+        <a href="#/platform">Construction Estimator</a>
+        <a href="#/platform">Web Access</a>
+        <a href="#/platform">Computer use</a>
+        <a href="#/platform">The Verifier</a>
+        <a href="#/platform">Audit trail</a>
       </div>
       <div class="foot-col">
         <h4>Company</h4>
@@ -149,6 +195,40 @@ out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
   }}
   window.addEventListener('hashchange', show);
   show();
+
+  var burger = document.getElementById('nav-burger');
+  var navEl = document.querySelector('.nav');
+  if (burger && navEl) {{
+    burger.addEventListener('click', function () {{
+      var open = navEl.classList.toggle('nav-open');
+      burger.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }});
+    document.querySelectorAll('.nav-panel a').forEach(function (a) {{
+      a.addEventListener('click', function () {{
+        navEl.classList.remove('nav-open');
+        burger.setAttribute('aria-expanded', 'false');
+      }});
+    }});
+  }}
+
+  document.querySelectorAll('.subnav').forEach(function (sub) {{
+    var links = Array.prototype.slice.call(sub.querySelectorAll('a[href^="#"]'));
+    if (!links.length || !('IntersectionObserver' in window)) return;
+    var byId = {{}};
+    links.forEach(function (a) {{
+      var el = document.getElementById(a.getAttribute('href').slice(1));
+      if (el) byId[el.id] = a;
+    }});
+    var io = new IntersectionObserver(function (entries) {{
+      entries.forEach(function (entry) {{
+        if (entry.isIntersecting && byId[entry.target.id]) {{
+          links.forEach(function (a) {{ a.classList.remove('active'); }});
+          byId[entry.target.id].classList.add('active');
+        }}
+      }});
+    }}, {{ rootMargin: '-25% 0px -65% 0px' }});
+    Object.keys(byId).forEach(function (id) {{ io.observe(document.getElementById(id)); }});
+  }});
 
   var toggle = document.getElementById('theme-toggle');
   if (toggle) {{

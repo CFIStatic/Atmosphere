@@ -1,5 +1,46 @@
 // Shared behavior for the Atmosphere corporate site.
 (function () {
+  // Highlight the nav group for the page being read.
+  var page = location.pathname.split('/').pop() || 'index.html';
+  document.querySelectorAll('.nav-links a[data-nav]').forEach(function (a) {
+    if (a.getAttribute('href').split('#')[0] === page) a.setAttribute('aria-current', 'page');
+  });
+
+  // Mobile drawer.
+  var burger = document.getElementById('nav-burger');
+  var navEl = document.querySelector('.nav');
+  if (burger && navEl) {
+    burger.addEventListener('click', function () {
+      var open = navEl.classList.toggle('nav-open');
+      burger.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    document.querySelectorAll('.nav-panel a').forEach(function (a) {
+      a.addEventListener('click', function () {
+        navEl.classList.remove('nav-open');
+        burger.setAttribute('aria-expanded', 'false');
+      });
+    });
+  }
+
+  // "On this page" rail: highlight the section in view.
+  document.querySelectorAll('.subnav').forEach(function (sub) {
+    var links = Array.prototype.slice.call(sub.querySelectorAll('a[href^="#"]'));
+    if (!links.length || !('IntersectionObserver' in window)) return;
+    var byId = {};
+    links.forEach(function (a) {
+      var el = document.getElementById(a.getAttribute('href').slice(1));
+      if (el) byId[el.id] = a;
+    });
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting && byId[entry.target.id]) {
+          links.forEach(function (a) { a.classList.remove('active'); });
+          byId[entry.target.id].classList.add('active');
+        }
+      });
+    }, { rootMargin: '-25% 0px -65% 0px' });
+    Object.keys(byId).forEach(function (id) { io.observe(document.getElementById(id)); });
+  });
   // Light/dark toggle. A saved choice wins; otherwise the OS preference shows.
   var toggle = document.getElementById('theme-toggle');
   if (toggle) {
