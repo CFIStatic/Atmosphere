@@ -597,6 +597,64 @@ a { color: inherit; }
 .job-list details p { margin: 0 0 16px; font-size: 14.5px; color: var(--ink-soft); max-width: 60ch; }
 .job-list details .btn-outline { margin-bottom: 22px; }
 
+/* ---------- Unbilled-math calculator ---------- */
+.calc {
+  display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
+  gap: 52px; align-items: center;
+}
+@media (max-width: 860px) { .calc { grid-template-columns: 1fr; } }
+.calc-controls { display: grid; gap: 30px; }
+.calc-row label {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 16px;
+  font-size: 14.5px; font-weight: 600; margin-bottom: 12px;
+}
+.calc-row label .val { font-size: 15px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.slider {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 4px; border-radius: 999px;
+  background: var(--line-strong); outline: none; margin: 0;
+}
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--accent); border: 3px solid var(--card);
+  box-shadow: var(--shadow-lift); cursor: pointer;
+}
+.slider::-moz-range-thumb {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--accent); border: 3px solid var(--card);
+  box-shadow: var(--shadow-lift); cursor: pointer;
+}
+.slider:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; }
+.calc-note { margin: 0; font-size: 13px; color: var(--ink-faint); max-width: 34em; }
+.calc-result {
+  background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+  padding: 36px 38px; box-shadow: var(--shadow-lift);
+}
+.calc-result .big {
+  font-size: clamp(2.6rem, 4.5vw, 3.6rem); font-weight: 800; letter-spacing: -0.03em;
+  line-height: 1; margin: 12px 0 4px; font-variant-numeric: tabular-nums;
+}
+.calc-result .per { font-size: 12px; letter-spacing: .1em; color: var(--ink-faint); }
+.calc-result .year {
+  margin: 18px 0 0; font-size: 15px; color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+.calc-result .year strong { color: var(--ink); }
+.calc-result .btn { margin-top: 26px; }
+
+/* ---------- Statement band ---------- */
+.statement { text-align: center; padding: 110px 0; }
+.statement h2 {
+  margin: 0 0 14px;
+  font-size: clamp(2rem, 4.6vw, 3.4rem); font-weight: 800; letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+.statement p { margin: 0 0 32px; color: var(--ink-soft); font-size: 17px; }
+
+/* Hero trust microcopy */
+.hero-fine { margin-top: 22px; font-size: 11px; letter-spacing: .08em; color: var(--ink-faint); }
+
 /* ---------- CTA band (interior pages) ---------- */
 .cta-band {
   background: var(--card); border: 1px solid var(--line); border-radius: 16px;

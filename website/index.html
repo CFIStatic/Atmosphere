@@ -46,9 +46,10 @@
         and hands you a record you can replay step by step.
       </p>
       <div class="hero-ctas fade-up d3">
-        <a class="btn btn-lg" href="#get-started">Get started</a>
+        <a class="btn btn-lg" href="signup.html">Create your organization</a>
         <a class="btn-quiet" href="#how">See how a run works&nbsp;→</a>
       </div>
+      <div class="hero-fine mono fade-up d3">ONE JOIN CODE FOR THE WHOLE CREW&nbsp;&nbsp;·&nbsp;&nbsp;YOUR OWN ANTHROPIC KEY&nbsp;&nbsp;·&nbsp;&nbsp;EVERY RUN ON THE RECORD</div>
     </div>
 
     <div class="receipt mono" id="receipt" aria-label="Example agent run record">
@@ -73,6 +74,64 @@
       </div>
     </div>
   </div>
+</section>
+
+
+<section class="section" id="unbilled">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">The unbilled math</div>
+      <h2>Money you already earned is sitting in the walls</h2>
+      <p>
+        Work performed but never billed is the quietest leak in the trade — the labor's
+        paid, the line item never lands. Slide to your volume and look at a year of it.
+      </p>
+    </div>
+    <div class="calc">
+      <div class="calc-controls">
+        <div class="calc-row">
+          <label for="c-jobs">Jobs per month <span class="val mono" id="c-jobs-val">12</span></label>
+          <input class="slider" type="range" id="c-jobs" min="1" max="80" value="12" />
+        </div>
+        <div class="calc-row">
+          <label for="c-miss">Unbilled work per job <span class="val mono" id="c-miss-val">$250</span></label>
+          <input class="slider" type="range" id="c-miss" min="0" max="2000" step="25" value="250" />
+        </div>
+        <p class="calc-note">
+          The run up top found $1,840 on a single water loss. $250 is one forgotten
+          line item — set the slider where your gut says, not where it's comfortable.
+        </p>
+      </div>
+      <div class="calc-result" aria-live="polite">
+        <div class="eyebrow mono">Left on the table</div>
+        <div class="big" id="c-month">$3,000</div>
+        <div class="per mono">PER MONTH</div>
+        <p class="year">
+          ≈ <strong id="c-year">$36,000</strong> a year. The Estimator reads every job
+          back for work performed but never billed — before the estimate goes out.
+        </p>
+        <a class="btn btn-lg" href="signup.html">Go get it — create your organization</a>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      var jobs = document.getElementById('c-jobs');
+      var miss = document.getElementById('c-miss');
+      if (!jobs || !miss) return;
+      function fmt(n) { return '$' + n.toLocaleString('en-US'); }
+      function update() {
+        var monthly = jobs.value * miss.value;
+        document.getElementById('c-jobs-val').textContent = jobs.value;
+        document.getElementById('c-miss-val').textContent = fmt(+miss.value);
+        document.getElementById('c-month').textContent = fmt(monthly);
+        document.getElementById('c-year').textContent = fmt(monthly * 12);
+      }
+      jobs.addEventListener('input', update);
+      miss.addEventListener('input', update);
+      update();
+    })();
+  </script>
 </section>
 
 <section class="section" id="platform-overview">
@@ -222,6 +281,15 @@
   </div>
 </section>
 
+
+<section class="section statement">
+  <div class="wrap">
+    <h2>Nights are for dinner, not data entry.</h2>
+    <p>Hand tonight's paperwork to an agent — and read the receipt over coffee.</p>
+    <a class="btn btn-lg" href="signup.html">Create your organization</a>
+  </div>
+</section>
+
 <section class="section" id="security-overview">
   <div class="wrap">
     <div class="section-head">
@@ -293,8 +361,8 @@
       <div>
         <h2>Put Atmosphere on the job</h2>
         <p>
-          Create your organization, share the join code, and your whole team is in — from
-          the office to the truck.
+          Create your organization now, drop the join code in the group chat, and the
+          whole crew is in before the morning meeting — office to truck.
         </p>
         <a class="btn btn-lg" href="signup.html">Create your organization</a>
       </div>
