@@ -79,9 +79,9 @@
     <h1>Thirty days to test. Then you pay for what it uses.</h1>
     <p class="lede">
       Sales, Operations, Field, and Manager are bought separately and priced identically —
-      a seat on the platform, and the tokens your agents actually spend at twice the model's
-      list price. Nothing is bundled, nothing expires unused, and nothing is metered
-      differently because of which platform the work ran in.
+      a seat on the platform, and the tokens your agents actually spend at one flat rate, set by
+      the most advanced model we run. Nothing is bundled, nothing expires unused, and nothing
+      is priced differently because of which model or which platform did the work.
     </p>
   </div>
 </header>
@@ -90,7 +90,7 @@
   <div class="subnav-inner">
     <a href="#plans">PLANS</a>
     <a href="#usage">USAGE</a>
-    <a href="#rates">RATE CARD</a>
+    <a href="#rates">THE RATE</a>
     <a href="#faq">FAQ</a>
   </div>
 </nav>
@@ -121,7 +121,7 @@
         <p class="plan-desc">Thirty days to put it on real jobs</p>
         <ul class="checks">
           <li>Full platform, no feature held back</li>
-          <li>Usage billed at the same rate card</li>
+          <li>Usage billed at the same flat rate</li>
           <li>1 seat</li>
           <li>Every run in the audit trail</li>
         </ul>
@@ -193,7 +193,7 @@
     <p class="plans-note">
       Every plan includes the audit trail and the Verifier — proof is never an upgrade. The
       seat price buys access and throughput; token usage is billed separately on every plan,
-      at the rates below. Annual billing is shown as the equivalent monthly rate.
+      at the flat rate below. Annual billing is shown as the equivalent monthly rate.
     </p>
   </div>
 </section>
@@ -211,9 +211,9 @@
     </div>
     <div class="sec-grid">
       <div class="sec-card">
-        <span class="kbd mono">2×</span>
-        <h3>Twice the model's list price</h3>
-        <p>One number, published below, the same on every plan and every platform. What we add on top pays for running the agents, the Verifier's second pass, and the record.</p>
+        <span class="kbd mono">flat</span>
+        <h3>One rate, set by the top model</h3>
+        <p>Priced off Claude Opus 5 at twice list, and charged for every token no matter which model ran it. One number on every plan and every platform.</p>
       </div>
       <div class="sec-card">
         <span class="kbd mono">metered</span>
@@ -232,48 +232,59 @@
 <section class="section" id="rates">
   <div class="wrap">
     <div class="section-head">
-      <div class="eyebrow mono">Rate card</div>
-      <h2>What a million tokens costs</h2>
+      <div class="eyebrow mono">The rate</div>
+      <h2>One rate, whichever model does the work</h2>
       <p>
-        Our rate is exactly twice the model's published list price — so you can always check
-        our arithmetic against the provider's own page.
+        We price off the most advanced model we run — Claude Opus 5 — at twice its list
+        price. Every token is billed at that one rate, whether the task went to Opus, to a
+        mid-size model, or to a small fast one.
       </p>
     </div>
-    <div class="rates">
-      <div class="rate-head mono">
-        <span>MODEL</span>
-        <span>LIST IN</span>
-        <span>LIST OUT</span>
-        <span class="rate-ours">YOU PAY IN</span>
-        <span class="rate-ours">YOU PAY OUT</span>
+
+    <div class="rate-hero">
+      <div class="rate-cell">
+        <div class="rate-lbl mono">INPUT</div>
+        <div class="rate-big mono">$30</div>
+        <div class="rate-unit mono">PER MILLION TOKENS</div>
       </div>
-        <div class="rate-row">
-          <span class="rate-model">Claude Opus 5<span class="rate-use">the estimators, the hard reasoning</span></span>
-          <span class="rate-num mono">$15</span>
-          <span class="rate-num mono">$75</span>
-          <span class="rate-num mono rate-ours">$30</span>
-          <span class="rate-num mono rate-ours">$150</span>
-        </div>
-        <div class="rate-row">
-          <span class="rate-model">Claude Sonnet 5<span class="rate-use">most day-to-day agent work</span></span>
-          <span class="rate-num mono">$3</span>
-          <span class="rate-num mono">$15</span>
-          <span class="rate-num mono rate-ours">$6</span>
-          <span class="rate-num mono rate-ours">$30</span>
-        </div>
-        <div class="rate-row">
-          <span class="rate-model">Claude Haiku 4.5<span class="rate-use">extraction, classification, watching</span></span>
-          <span class="rate-num mono">$1</span>
-          <span class="rate-num mono">$5</span>
-          <span class="rate-num mono rate-ours">$2</span>
-          <span class="rate-num mono rate-ours">$10</span>
-        </div>
+      <div class="rate-cell">
+        <div class="rate-lbl mono">OUTPUT</div>
+        <div class="rate-big mono">$150</div>
+        <div class="rate-unit mono">PER MILLION TOKENS</div>
+      </div>
+      <div class="rate-basis">
+        <div class="tag mono">How it's set</div>
+        <p>
+          Claude Opus 5 lists at $15 and $75 per million tokens. We charge twice that, and
+          we charge it for everything — so the number above is the whole price list.
+        </p>
+      </div>
     </div>
-    <p class="plans-note">
-      Per million tokens, in US dollars. Atmosphere routes each task to the cheapest model
-      that can do it well — and the learning layer makes that routing better run over run,
-      which shows up on this bill rather than in a slide.
-    </p>
+
+    <div class="quiet-row">
+      <div class="quiet-item">
+        <h3>You can estimate the bill yourself</h3>
+        <p>
+          Two numbers and the token counts in your audit trail. No model mix to work out,
+          no per-agent table to reconcile at month end.
+        </p>
+      </div>
+      <div class="quiet-item">
+        <h3>We never have a reason to downgrade you</h3>
+        <p>
+          Because the rate does not move, routing a job to a cheaper model would only cost
+          us quality — so the router picks the model that does the work best, not the one
+          that protects a margin.
+        </p>
+      </div>
+      <div class="quiet-item">
+        <h3>Better routing shows up as better work</h3>
+        <p>
+          The learning layer improves which model handles what, run over run. On a flat
+          rate that lands in the estimates you send, not in a fluctuating invoice.
+        </p>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -295,16 +306,17 @@
         <summary>Is the trial limited?</summary>
         <p>
           Not in features. You get the whole platform for thirty days, and usage is billed at
-          the same rate card as everyone else — so what you spend testing is what it would
+          the same flat rate as everyone else — so what you spend testing is what it would
           actually cost you.
         </p>
       </details>
       <details>
-        <summary>Why twice the list price?</summary>
+        <summary>Why price off the most advanced model?</summary>
         <p>
-          Because a token is not the product. The margin covers running the agents, the
-          Verifier's second pass over the work, and keeping the record — none of which the
-          model provider does for you.
+          So there is one number instead of a matrix, and so we are never choosing between
+          your result and our margin. A token is also not the product: what you are paying
+          for is the agents running, the Verifier's second pass, and the record — none of
+          which the model provider does for you.
         </p>
       </details>
       <details>

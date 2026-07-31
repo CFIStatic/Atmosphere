@@ -16,7 +16,7 @@ written to appeal to contractors of every trade.
 | `field.html`      | Field Platform — capture on site, with a capture-log hero   |
 | `manager.html`    | Manager Platform — job costing, accounting, business insights |
 | `security.html`   | Security — architecture diagram and six structural claims   |
-| `pricing.html`    | Pricing — the 30-day test, seat plans, and the 2× rate card |
+| `pricing.html`    | Pricing — the 30-day test, seat plans, and the flat rate    |
 | `docs.html`       | Docs — quickstart cards and an index of `../docs/*.md`      |
 | `about.html`      | About — story and principles                                |
 | `careers.html`    | Careers — roles, hiring process, and a working application form |
@@ -37,14 +37,20 @@ dark themes) and `assets/site.js` (receipt replay + the careers form).
 - **Seat plans** — Pro ($20/$17 annual), Max 5x ($100), Max 20x ($200), Team
   ($30/seat, 5 seat minimum, $25 annual), Enterprise (contact). The seat price
   buys access and the throughput multiplier, nothing else.
-- **Usage billed separately at 2× the model's list price**, on every plan. There
-  are **no included credits and no bundled allowance** — the page must never
-  imply either.
+- **Usage billed separately at one flat rate**, on every plan. There are **no
+  included credits and no bundled allowance** — the page must never imply either.
 
-The rate card is derived: the Anthropic list prices in
-`backend/src/ai/catalog.ts` (Opus 5 $15/$75, Sonnet 5 $3/$15, Haiku 4.5 $1/$5
-per MTok), doubled. Change the catalog and the rate card must be doubled again
-to match.
+**The rate is flat and set by the frontier model.** Claude Opus 5 lists at
+$15/$75 per million tokens in `backend/src/ai/catalog.ts`; doubled, that is the
+$30/$150 the page quotes — and it is charged for *every* token regardless of
+which model actually ran the task. Raise the flagship in the catalog and this
+number moves with it.
+
+That flat rate constrains the copy: the site must never claim routing makes a
+customer's bill cheaper, because it cannot. What it may claim — and what is
+true — is that a fixed rate leaves us no incentive to route work to a weaker
+model, and that better routing lands as better output rather than a smaller
+invoice.
 
 Two things to keep straight. The `billing_plans` seed in
 `supabase/migrations/20260727124743_billing_pricing_metering.sql` still carries
