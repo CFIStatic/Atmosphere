@@ -15,13 +15,16 @@ HERE = Path(__file__).parent
 PAGES = [
     ('home', 'index.html'),
     ('platform', 'platform.html'),
+    ('sales', 'sales.html'),
+    ('operations', 'operations.html'),
+    ('field', 'field.html'),
+    ('manager', 'manager.html'),
     ('security', 'security.html'),
     ('pricing', 'pricing.html'),
     ('docs', 'docs.html'),
     ('about', 'about.html'),
     ('careers', 'careers.html'),
     ('contact', 'contact.html'),
-    ('technician', 'technician.html'),
     ('signin', 'signin.html'),
     ('signup', 'signup.html'),
 ]
@@ -39,7 +42,7 @@ def extract(fname: str) -> str:
 def reroute(html: str) -> str:
     def page_link(m):
         return f'href="#/{ROUTE_OF[m.group(1)]}"'
-    html = re.sub(r'href="((?:index|platform|security|pricing|docs|about|careers|contact|technician|signin|signup)\.html)(?:#[\w-]+)?"',
+    html = re.sub(r'href="((?:index|platform|sales|operations|field|manager|security|pricing|docs|about|careers|contact|signin|signup)\.html)(?:#[\w-]+)?"',
                   page_link, html)
     # App routes don't exist inside the preview; neutralize them but say why.
     html = re.sub(r'href="(/(?:signin|signup|technician))"',
@@ -56,7 +59,7 @@ for route, fname in PAGES:
 
 nav_links = '\n      '.join(
     f'<a href="#/{r}" data-nav="{r}">{r.capitalize()}</a>'
-    for r, _ in PAGES if r not in ('home', 'careers', 'contact', 'technician', 'signin', 'signup'))
+    for r, _ in PAGES if r not in ('home', 'sales', 'operations', 'field', 'manager', 'careers', 'contact', 'signin', 'signup'))
 
 out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
 <style>
@@ -75,11 +78,11 @@ out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
       <div class="nav-item">
         <a href="#/platform" data-nav="platform">Platform <span class="caret" aria-hidden="true"></span></a>
         <div class="menu">
-          <a href="#/platform">Overview <span>Every agent, end to end</span></a>
-          <a href="#/platform">Estimators <span>Mitigation &amp; rebuild, for Xactimate</span></a>
-          <a href="#/platform">Web Access &amp; Computer use <span>Portals, sites, real machines</span></a>
-          <a href="#/platform">Verifier &amp; audit trail <span>Checked work, replayable proof</span></a>
-          <a href="#/technician">Technician app <span>The field tool</span></a>
+          <a href="#/platform">Platform overview <span>How the four fit together</span></a>
+          <a href="#/sales">Sales Platform <span>Win the work</span></a>
+          <a href="#/operations">Operations Platform <span>Run the work</span></a>
+          <a href="#/field">Field Platform <span>Capture the job site</span></a>
+          <a href="#/manager">Manager Platform <span>Run the business</span></a>
         </div>
       </div>
       <a href="#/security" data-nav="security">Security</a>
@@ -107,7 +110,7 @@ out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
   <div class="nav-panel" id="nav-panel">
     <div class="grp mono">Platform</div>
     <a class="sub" href="#/platform">Overview</a>
-    <a class="sub" href="#/technician">Technician app</a>
+    <a class="sub" href="#/field">Field Platform</a>
     <a href="#/security">Security</a>
     <a href="#/pricing">Pricing</a>
     <a href="#/docs">Docs</a>
@@ -148,7 +151,7 @@ out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
         <h4>App</h4>
         <a href="#/signin">Sign in</a>
         <a href="#/signup">Create an organization</a>
-        <a href="#/technician">Technician app</a>
+        <a href="#/field">Field Platform</a>
       </div>
     </div>
     <div class="foot-note">

@@ -434,6 +434,23 @@ a { color: inherit; }
 .feature h3 { margin: 10px 0 8px; font-size: 18.5px; letter-spacing: -0.015em; font-weight: 700; }
 .feature p { margin: 0; font-size: 14.5px; line-height: 1.6; color: var(--ink-soft); }
 
+/* Four platforms read as a set, so they wrap 4 → 2 → 1, never 3 + 1. */
+.plat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 1080px) { .plat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 620px)  { .plat-grid { grid-template-columns: 1fr; } }
+
+/* Platform hub cards — a whole card is the link. */
+.plat-card {
+  display: flex; flex-direction: column; text-decoration: none;
+}
+.plat-card .plat-line {
+  margin: 0 0 10px; font-size: 15px; font-weight: 600; color: var(--ink);
+}
+.plat-card .plat-go {
+  margin-top: auto; padding-top: 18px; font-size: 13.5px; font-weight: 600; color: var(--accent);
+}
+.plat-card:hover .plat-go { text-decoration: underline; text-underline-offset: 3px; }
+
 .quiet-row {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 36px; margin-top: 48px;

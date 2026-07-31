@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Sign in to Atmosphere — email and password, or the 4-digit PIN on a device you've enrolled." />
+  <meta name="description" content="The Atmosphere Sales Platform — leads, bids, and an agent that drafts follow-ups, summarizes history, and flags pipeline going cold." />
   <meta name="theme-color" content="#FBFAF7" />
-  <title>Sign in · Atmosphere</title>
+  <title>Sales Platform · Atmosphere</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect width='22' height='2.8' fill='%23A8A29E'/%3E%3Crect y='4.8' width='22' height='2.8' fill='%2378716C'/%3E%3Crect y='9.6' width='22' height='2.8' fill='%2357534E'/%3E%3Crect y='14.4' width='22' height='2.8' fill='%23292524'/%3E%3Crect y='19.2' width='22' height='2.8' fill='%23F2670C'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="assets/site.css" />
   <script>try{var t=localStorage.getItem('atm-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
@@ -73,48 +73,113 @@
 <!-- page:start -->
 <main>
 
-<header class="page-hero" style="padding-bottom: 24px;">
-  <div class="wrap" style="text-align: center;">
-    <div class="eyebrow mono">Workspace</div>
-    <h1>Sign in</h1>
+<header class="page-hero">
+  <div class="wrap">
+    <div class="eyebrow mono">Sales Platform</div>
+    <h1>Win the work</h1>
+    <p class="lede">Leads come in, get worked, turn into bids, and are won or lost. The Sales Platform models that job as data — then puts an agent on top of it that drafts, follows up, and notices the deal going quiet before you do.</p>
   </div>
 </header>
 
-<section class="auth-section">
+<nav class="subnav mono" aria-label="On this page">
+  <div class="subnav-inner">
+    <a href="#pipeline">PIPELINE</a>
+    <a href="#agent">THE AGENT</a>
+    <a href="#handoff">HANDOFF</a>
+  </div>
+</nav>
+
+<section class="section" id="pipeline">
   <div class="wrap">
-    <div class="auth-wrap">
-      <form class="form" action="#" method="post">
-        <div class="field">
-          <label for="email">Email</label>
-          <input id="email" name="email" type="email" autocomplete="email" required />
-        </div>
-        <div class="field">
-          <label for="password">Password</label>
-          <input id="password" name="password" type="password" autocomplete="current-password" required />
-        </div>
-        <button class="btn btn-lg" type="submit">Sign in</button>
-        <div class="auth-links">
-          <a href="#">Forgot password?</a>
-          <a href="signup.html">New here? Create your organization&nbsp;→</a>
-        </div>
-      </form>
-
-      <div class="or-rule mono">OR</div>
-
-      <div class="pin-card">
-        <div>
-          <div class="lbl mono">This device enrolled?</div>
-          <p>Sign in with your 4-digit PIN. It only works on this device — that's the point.</p>
-        </div>
-        <div class="pin-dots" aria-hidden="true">
-          <span class="pin-dot filled"></span>
-          <span class="pin-dot filled"></span>
-          <span class="pin-dot"></span>
-          <span class="pin-dot"></span>
-        </div>
-        <button class="btn-outline" type="button">Use PIN</button>
+    <div class="section-head">
+      <div class="eyebrow mono">The workspace</div>
+      <h2>The pipeline, modelled properly</h2>
+      <p>Before an agent can help, the work has to exist as something other than a notebook and a memory. Leads, bids, and outcomes are first-class records — org-scoped, and visible to your team only.</p>
+    </div>
+    <div class="split">
+      <div>
+        <div class="tag mono">Leads</div>
+        <h3>Every lead in one place</h3>
+        <p>A lead carries the property, the loss or the scope, who referred it, and everything said since. No more reconstructing a week of history from a phone log before you can call someone back.</p>
       </div>
+      <div class="spec mono" aria-label="Every lead in one place specification">
+        <div class="spec-row"><span class="spec-key">Holds</span><span class="spec-val">Property · contact · source · full history</span></div>
+        <div class="spec-row"><span class="spec-key">Moves</span><span class="spec-val">New → working → bid → won or lost</span></div>
+        <div class="spec-row"><span class="spec-key">Scopes</span><span class="spec-val">To your organization — <em>RLS at the database</em></span></div>
+      </div>
+    </div>
+    <div class="split">
+      <div>
+        <div class="tag mono">Bids</div>
+        <h3>Bids that come from the inspection, not the memory</h3>
+        <p>A bid is built from what was actually captured on the walk-through — the notes, the photos, the measurements — and stays attached to the lead it came from.</p>
+      </div>
+      <div class="spec mono" aria-label="Bids that come from the inspection, not the memory specification">
+        <div class="spec-row"><span class="spec-key">Reads</span><span class="spec-val">Inspection notes · photos · measurements</span></div>
+        <div class="spec-row"><span class="spec-key">Writes</span><span class="spec-val">A priced bid, attached to the lead</span></div>
+        <div class="spec-row"><span class="spec-key">Keeps</span><span class="spec-val">Every version — <em>what changed, and when</em></span></div>
+      </div>
+    </div>
+  </div>
+</section>
 
+<section class="section" id="agent">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">The agent</div>
+      <h2>Never bored, never behind</h2>
+      <p>The agent works on the same records a person does — no parallel system, no export. It drafts the tedious parts and watches the parts that go quiet.</p>
+    </div>
+    <div class="split">
+      <div>
+        <div class="tag mono">Drafts</div>
+        <h3>The writing nobody has time for</h3>
+        <p>Estimates from inspection notes. The follow-up you meant to send Tuesday. A summary of everything that has happened on a lead, for the person picking it up cold.</p>
+      </div>
+      <div class="spec mono" aria-label="The writing nobody has time for specification">
+        <div class="spec-row"><span class="spec-key">Drafts</span><span class="spec-val">Estimates · follow-ups · lead summaries</span></div>
+        <div class="spec-row"><span class="spec-key">Waits</span><span class="spec-val">You approve before anything is sent</span></div>
+      </div>
+    </div>
+    <div class="split">
+      <div>
+        <div class="tag mono">Watches</div>
+        <h3>Pipeline that has gone cold</h3>
+        <p>Deals do not die loudly. They just stop — and nobody notices, because a quiet lead generates no phone calls. The agent counts the days and says so.</p>
+      </div>
+      <div class="spec mono" aria-label="Pipeline that has gone cold specification">
+        <div class="spec-row"><span class="spec-key">Flags</span><span class="spec-val">Leads with no movement</span></div>
+        <div class="spec-row"><span class="spec-key">Surfaces</span><span class="spec-val">What is owed, and to whom</span></div>
+        <div class="spec-row"><span class="spec-key">Records</span><span class="spec-val">Every action — <em>in the audit trail</em></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="handoff">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">The handoff</div>
+      <h2>Sold work arrives already staffed with facts</h2>
+      <p>Sales stops at won. Everything the rep learned — the scope, the customer, the promises made — crosses into the Operations Platform as the job's starting record, so the project manager is not re-interviewing the customer on day one.</p>
+    </div>
+    <div class="section-foot">
+      <a class="link-arrow" href="operations.html">See what happens after it's won&nbsp;→</a>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="cta-band">
+      <div>
+        <h2>Stop losing work you already found</h2>
+        <p>The pipeline is only worth as much as the follow-up. Put an agent on it.</p>
+      </div>
+      <div class="cta-actions">
+        <a class="btn btn-lg" href="signup.html">Create your organization</a>
+        <a class="btn-quiet" href="operations.html">Operations Platform&nbsp;→</a>
+      </div>
     </div>
   </div>
 </section>

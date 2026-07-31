@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="What Atmosphere does, end to end — estimating agents, web access, computer use, the Verifier, the audit trail, the technician app, CRM &amp; Agent Memory, and the learning layer." />
+  <meta name="description" content="Atmosphere's four platforms — Sales, Operations, Field, and Manager — on one shared record, one audit trail, and one learning layer." />
   <meta name="theme-color" content="#FBFAF7" />
   <title>Platform · Atmosphere</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect width='22' height='2.8' fill='%23A8A29E'/%3E%3Crect y='4.8' width='22' height='2.8' fill='%2378716C'/%3E%3Crect y='9.6' width='22' height='2.8' fill='%2357534E'/%3E%3Crect y='14.4' width='22' height='2.8' fill='%23292524'/%3E%3Crect y='19.2' width='22' height='2.8' fill='%23F2670C'/%3E%3C/svg%3E" />
@@ -22,11 +22,11 @@
       <div class="nav-item">
         <a href="platform.html" data-nav="platform">Platform <span class="caret" aria-hidden="true"></span></a>
         <div class="menu">
-          <a href="platform.html">Overview <span>Every agent, end to end</span></a>
-          <a href="platform.html#estimating">Estimators <span>Mitigation &amp; rebuild, for Xactimate</span></a>
-          <a href="platform.html#access">Web Access &amp; Computer use <span>Portals, sites, real machines</span></a>
-          <a href="platform.html#trust">Verifier &amp; audit trail <span>Checked work, replayable proof</span></a>
-          <a href="technician.html">Technician app <span>The field tool</span></a>
+          <a href="platform.html">Platform overview <span>How the three fit together</span></a>
+          <a href="sales.html">Sales Platform <span>Win the work</span></a>
+          <a href="operations.html">Operations Platform <span>Run the work</span></a>
+          <a href="field.html">Field Platform <span>Capture the job site</span></a>
+          <a href="manager.html">Manager Platform <span>Run the business</span></a>
         </div>
       </div>
       <a href="security.html" data-nav="security">Security</a>
@@ -53,11 +53,11 @@
   </div>
   <div class="nav-panel" id="nav-panel">
     <div class="grp mono">Platform</div>
-    <a class="sub" href="platform.html">Overview</a>
-    <a class="sub" href="platform.html#estimating">Estimators</a>
-    <a class="sub" href="platform.html#access">Web Access &amp; Computer use</a>
-    <a class="sub" href="platform.html#trust">Verifier &amp; audit trail</a>
-    <a class="sub" href="technician.html">Technician app</a>
+    <a class="sub" href="platform.html">Platform overview</a>
+    <a class="sub" href="sales.html">Sales Platform</a>
+    <a class="sub" href="operations.html">Operations Platform</a>
+    <a class="sub" href="field.html">Field Platform</a>
+    <a class="sub" href="manager.html">Manager Platform</a>
     <a href="security.html">Security</a>
     <a href="pricing.html">Pricing</a>
     <a href="docs.html">Docs</a>
@@ -76,268 +76,160 @@
 <header class="page-hero">
   <div class="wrap">
     <div class="eyebrow mono">Platform</div>
-    <h1>Agents for the whole job, end to end</h1>
+    <h1>Four platforms. One record.</h1>
     <p class="lede">
-      From the first scan to the final line item — Atmosphere reads what your field team
-      captures, writes what the carrier — or the client — expects, and records every step in between.
+      A job moves through your company in stages, and so does Atmosphere: win it, run it,
+      capture it on site, and account for it. Each platform stands on its own — and all four
+      write to the same record, check their work the same way, and get better from the same
+      scores.
     </p>
   </div>
 </header>
 
 <nav class="subnav mono" aria-label="On this page">
   <div class="subnav-inner">
-    <a href="#estimating">ESTIMATING</a>
+    <a href="#platforms">THE FOUR PLATFORMS</a>
+    <a href="#foundation">SHARED FOUNDATION</a>
     <a href="#access">ACCESS</a>
     <a href="#trust">TRUST</a>
-    <a href="#field-office">FIELD &amp; OFFICE</a>
     <a href="#learning">LEARNING</a>
   </div>
 </nav>
 
-
-<section class="section" id="estimating">
+<section class="section" id="platforms">
   <div class="wrap">
     <div class="section-head">
-      <div class="eyebrow mono">Estimating</div>
-      <h2>Estimates written from the evidence, not from memory</h2>
+      <div class="eyebrow mono">The four platforms</div>
+      <h2>Follow a job from lead to ledger</h2>
       <p>
-        Both estimators start from what was actually captured on site, and both end in
-        Xactimate — priced, documented, and defensible.
+        They are sold and used separately, but they were designed as one pass through the
+        life of a job — so nothing gets re-entered at a handoff.
       </p>
     </div>
-
-    <div class="split">
-      <div>
-        <div class="tag mono">Mitigation</div>
-        <h3>Mitigation Estimator</h3>
-        <p>
-          Give it the DocuSketch scan, the MICA report, the iPhone photos, and the field
-          notes. It classifies the loss against IICRC S500, writes the estimate to the
-          carrier's program terms, and prices every line.
-        </p>
-        <p>
-          Then it does the thing estimators rarely have time for: it reads the record
-          again looking for work that was performed but never billed.
-        </p>
-      </div>
-      <div class="spec mono" aria-label="Mitigation Estimator specification">
-        <div class="spec-row"><span class="spec-key">Reads</span><span class="spec-val">DocuSketch scan · MICA report · iPhone photos · field notes</span></div>
-        <div class="spec-row"><span class="spec-key">Writes</span><span class="spec-val">Priced, documented Xactimate estimate</span></div>
-        <div class="spec-row"><span class="spec-key">Checks</span><span class="spec-val">IICRC S500 classification · carrier program terms · work performed, never billed</span></div>
-      </div>
+    <div class="feature-grid plat-grid">
+      <a class="feature plat-card" href="sales.html">
+        <div class="tag mono">01 · Before the job</div>
+        <h3>Sales Platform</h3>
+        <p class="plat-line">Win the work</p>
+        <p>Leads, bids, and an agent that drafts the follow-ups, summarizes a lead cold, and flags the pipeline that has gone quiet.</p>
+        <span class="plat-go">Explore&nbsp;→</span>
+      </a>
+      <a class="feature plat-card" href="operations.html">
+        <div class="tag mono">02 · During the job</div>
+        <h3>Operations Platform</h3>
+        <p class="plat-line">Run the work</p>
+        <p>Nineteen rules watching every open job — drying, documentation, equipment, crew — plus both estimators and the assistance around them.</p>
+        <span class="plat-go">Explore&nbsp;→</span>
+      </a>
+      <a class="feature plat-card" href="field.html">
+        <div class="tag mono">03 · On site</div>
+        <h3>Field Platform</h3>
+        <p class="plat-line">Capture the job site</p>
+        <p>Recording, a spoken assistant, and a camera that names what it sees — built for gloved hands and loud rooms.</p>
+        <span class="plat-go">Explore&nbsp;→</span>
+      </a>
+      <a class="feature plat-card" href="manager.html">
+        <div class="tag mono">04 · Over the business</div>
+        <h3>Manager Platform</h3>
+        <p class="plat-line">Run the business</p>
+        <p>Live job costing, the accounting work around your books, and the insight to see which work is actually worth taking.</p>
+        <span class="plat-go">Explore&nbsp;→</span>
+      </a>
     </div>
-
-    <div class="split">
-      <div>
-        <div class="tag mono">Construction</div>
-        <h3>Construction Estimator</h3>
-        <p>
-          The rebuild estimate starts where mitigation ended. The agent signs in to
-          DocuSketch itself, reads the scan and the field photos, identifies the matching
-          job in your CRM, and reads the mitigation estimate that came before it.
-        </p>
-        <p>
-          What comes out is the construction estimate for Xactimate — grounded in what
-          was demoed, dried, and documented.
-        </p>
-      </div>
-      <div class="spec mono" aria-label="Construction Estimator specification">
-        <div class="spec-row"><span class="spec-key">Signs in</span><span class="spec-val">DocuSketch</span></div>
-        <div class="spec-row"><span class="spec-key">Reads</span><span class="spec-val">Scan · field photos · matching CRM job · mitigation estimate</span></div>
-        <div class="spec-row"><span class="spec-key">Writes</span><span class="spec-val">Construction / rebuild estimate for Xactimate</span></div>
-      </div>
-    </div>
+    <p class="plans-note">
+      Every platform writes to the same customers, properties, and jobs — so a lead your rep
+      worked in January is the same record your accountant closes out in June.
+    </p>
   </div>
 </section>
 
-<section class="section" id="access">
+<section class="section" id="foundation">
   <div class="wrap">
     <div class="section-head">
-      <div class="eyebrow mono">Access</div>
-      <h2>It goes where the work is</h2>
+      <div class="eyebrow mono">Shared foundation</div>
+      <h2>What all four stand on</h2>
       <p>
-        Carrier portals, supplier sites, builder platforms — and the desktop software your office already
-        runs. Atmosphere signs in and works — it doesn't ask your data to migrate.
+        The parts that would be worth building once even if you only ever bought one
+        platform — how agents reach your systems, how their work gets checked, and how the
+        whole thing improves.
       </p>
     </div>
 
-    <div class="split">
+    <div class="split" id="access">
       <div>
-        <div class="tag mono">Browser</div>
-        <h3>Web Access</h3>
+        <div class="tag mono">Access</div>
+        <h3>It goes where the work already is</h3>
         <p>
-          Connect an outside website once — a carrier portal, a supplier site. From then
-          on, ask Atmosphere to sign in and pull data out of it or enter data into it.
+          Connect a carrier portal, a supplier site, or a builder platform once, and
+          Atmosphere signs in to pull data out or enter data in — recording every step, so a
+          finished run reads back like a receipt.
         </p>
         <p>
-          Every step the AI takes is recorded as it happens, so a finished run reads
-          back like a receipt.
-        </p>
-      </div>
-      <div class="spec mono" aria-label="Web Access specification">
-        <div class="spec-row"><span class="spec-key">Connect</span><span class="spec-val">Once per site — carrier portal, supplier site</span></div>
-        <div class="spec-row"><span class="spec-key">Does</span><span class="spec-val">Signs in · pulls data out · enters data in</span></div>
-        <div class="spec-row"><span class="spec-key">Records</span><span class="spec-val">Every step, as it happens</span></div>
-      </div>
-    </div>
-
-    <div class="split">
-      <div>
-        <div class="tag mono">Desktop</div>
-        <h3>Computer use</h3>
-        <p>
-          Some work only exists inside installed software. Run the Atmosphere agent on
-          any computer — macOS, Windows, or Linux — and Claude sees the screen and
-          operates it: the mouse, the keyboard, the software you already own.
-        </p>
-        <p>
-          The whole setup is one Anthropic API key and one command. The machine connects
-          outward — nothing connects in.
+          Some work only exists inside installed software. Run the agent on any computer —
+          macOS, Windows, or Linux — and it sees the screen and operates it, in the software
+          you already own.
         </p>
       </div>
-      <div class="spec mono" aria-label="Computer use specification">
-        <div class="spec-row"><span class="spec-key">Runs on</span><span class="spec-val">macOS · Windows · Linux</span></div>
+      <div class="spec mono" aria-label="Access specification">
+        <div class="spec-row"><span class="spec-key">Connect</span><span class="spec-val">Once per site — portal, supplier, builder platform</span></div>
+        <div class="spec-row"><span class="spec-key">Operates</span><span class="spec-val">macOS · Windows · Linux</span></div>
         <div class="spec-row"><span class="spec-key">Needs</span><span class="spec-val">One API key · one command</span></div>
         <div class="spec-row"><span class="spec-key">Link</span><span class="spec-val">Outbound-only WebSocket — <em>no inbound port</em></span></div>
       </div>
     </div>
-  </div>
-</section>
 
-<section class="section" id="trust">
-  <div class="wrap">
-    <div class="section-head">
-      <div class="eyebrow mono">Trust</div>
-      <h2>No agent grades its own work</h2>
-      <p>
-        Autonomy is only useful if you can trust what came back. Atmosphere's answer is
-        structural: a second agent that checks, and a record that can't be edited.
-      </p>
-    </div>
-
-    <div class="split">
+    <div class="split" id="trust">
       <div>
-        <div class="tag mono">Second agent</div>
-        <h3>The Verifier</h3>
+        <div class="tag mono">Trust</div>
+        <h3>No agent grades its own work</h3>
         <p>
-          After a run finishes, the Verifier goes back and looks. It re-opens the work in
-          a browser that cannot change anything and confirms it against the task as it
-          was originally written.
+          After a run finishes, a second agent re-opens the work in a browser that cannot
+          change anything and confirms it against the task as it was originally written. What
+          is safe to correct, it corrects; what it is unsure of, it brings to you.
         </p>
         <p>
-          What's safe to correct, it corrects. What it isn't sure about, it brings to
-          you — with the evidence attached.
+          Every unit of work every agent performed lands in one append-only record you can
+          replay step by step — no matter which platform it came from.
         </p>
       </div>
-      <div class="spec mono" aria-label="Verifier specification">
+      <div class="spec mono" aria-label="Trust specification">
         <div class="spec-row"><span class="spec-key">Opens</span><span class="spec-val">Read-only browser — <em>cannot change anything</em></span></div>
         <div class="spec-row"><span class="spec-key">Confirms</span><span class="spec-val">The work, against the task as written</span></div>
-        <div class="spec-row"><span class="spec-key">Corrects</span><span class="spec-val">Only what is safe to correct</span></div>
-        <div class="spec-row"><span class="spec-key">Asks</span><span class="spec-val">About anything it is unsure of</span></div>
-      </div>
-    </div>
-
-    <div class="split">
-      <div>
-        <div class="tag mono">Record</div>
-        <h3>The audit trail</h3>
-        <p>
-          Every unit of work every agent performed for your organization lands in one
-          record: what it saw, what it did, what the verifier found. Replay any run step
-          by step, or read it back like a receipt.
-        </p>
-        <p>
-          The trail is append-only. Nothing edits history — not even us.
-        </p>
-      </div>
-      <div class="spec mono" aria-label="Audit trail specification">
-        <div class="spec-row"><span class="spec-key">Records</span><span class="spec-val">Every unit of work, by every agent</span></div>
-        <div class="spec-row"><span class="spec-key">Replays</span><span class="spec-val">Step by step, any run</span></div>
+        <div class="spec-row"><span class="spec-key">Replays</span><span class="spec-val">Any run, step by step</span></div>
         <div class="spec-row"><span class="spec-key">Keeps</span><span class="spec-val">Append-only — <em>history is never rewritten</em></span></div>
       </div>
     </div>
-  </div>
-</section>
 
-<section class="section" id="field-office">
-  <div class="wrap">
-    <div class="section-head">
-      <div class="eyebrow mono">Field &amp; office</div>
-      <h2>From the truck to the back office</h2>
-      <p>
-        The agents run on a foundation the whole organization shares: what the field
-        captures, and what the office keeps.
-      </p>
-    </div>
-
-    <div class="split">
+    <div class="split" id="data">
       <div>
-        <div class="tag mono">Field</div>
-        <h3>Technician app</h3>
+        <div class="tag mono">Data</div>
+        <h3>One record underneath all four</h3>
         <p>
-          The field tool, built for gloved hands and loud rooms: record audio and video,
-          hold a spoken conversation with an assistant, and let the camera name what it
-          sees.
-        </p>
-        <p>
-          Everything captured on site becomes evidence the estimators read.
+          Customers, properties, leads, jobs and their timeline — plus our own backups and a
+          verbatim copy of the data that currently lives only inside other companies'
+          software. Agent Memory layers the operational detail on top: the tasks under a job,
+          the crew on it, and the work logged against it.
         </p>
       </div>
-      <div class="spec mono" aria-label="Technician app specification">
-        <div class="spec-row"><span class="spec-key">Records</span><span class="spec-val">Audio · video, from the job site</span></div>
-        <div class="spec-row"><span class="spec-key">Speaks</span><span class="spec-val">A spoken conversation with an assistant</span></div>
-        <div class="spec-row"><span class="spec-key">Sees</span><span class="spec-val">The camera names what it's looking at</span></div>
-      </div>
-    </div>
-
-    <div class="split">
-      <div>
-        <div class="tag mono">Office</div>
-        <h3>CRM &amp; Agent Memory</h3>
-        <p>
-          Customers, properties, leads, jobs, and their timeline — plus our own backups
-          and a verbatim copy of the data that currently lives only inside other
-          companies' software.
-        </p>
-        <p>
-          Agent Memory is the operational layer on top: the tasks under a job, the crew
-          on it, and the work people log against it — with a complete, append-only
-          record of everything that happens to any of it.
-        </p>
-      </div>
-      <div class="spec mono" aria-label="CRM and Agent Memory specification">
+      <div class="spec mono" aria-label="Data specification">
         <div class="spec-row"><span class="spec-key">Holds</span><span class="spec-val">Customers · properties · leads · jobs · timeline</span></div>
-        <div class="spec-row"><span class="spec-key">Mirrors</span><span class="spec-val">A verbatim copy of data held in other companies' software</span></div>
+        <div class="spec-row"><span class="spec-key">Mirrors</span><span class="spec-val">A verbatim copy of data held in other software</span></div>
         <div class="spec-row"><span class="spec-key">Logs</span><span class="spec-val">Tasks · crew · work entries — append-only</span></div>
       </div>
     </div>
-  </div>
-</section>
 
-<section class="section" id="learning">
-  <div class="wrap">
-    <div class="section-head">
-      <div class="eyebrow mono">Learning layer</div>
-      <h2>It gets measurably better at your work</h2>
-      <p>
-        Every run — a drafted scope, a built estimate, extracted document fields, a
-        customer update — is scored. The routing policy improves from those scores, so
-        the platform executes your work better this month than it did last month. And
-        you can see it, because the scores are on the record too.
-      </p>
-    </div>
-    <div class="split" style="border-top: none; padding-top: 0;">
+    <div class="split" id="learning">
       <div>
+        <div class="tag mono">Learning</div>
+        <h3>It gets measurably better at your work</h3>
         <p>
-          This isn't a model trained on the internet's idea of restoration. It's a
-          routing layer tuned by the outcomes of your organization's own runs — which
-          strategies produced work that passed verification, and which didn't.
-        </p>
-        <p>
-          <a class="link-arrow" href="docs.html">Read how the learning layer works&nbsp;→</a>
+          Every run — a drafted scope, a built estimate, extracted document fields, a customer
+          update — is scored, and the routing policy improves from those scores. Not a model
+          trained on the internet's idea of restoration: a routing layer tuned by the outcomes
+          of your organization's own runs.
         </p>
       </div>
-      <div class="spec mono" aria-label="Example run scores">
+      <div class="spec mono" aria-label="Learning specification">
         <div class="spec-row"><span class="spec-key">Scored</span><span class="spec-val">scope drafts&nbsp;&nbsp;▮▮▮▮▮▮▮▮▮░&nbsp;&nbsp;0.91</span></div>
         <div class="spec-row"><span class="spec-key">Scored</span><span class="spec-val">field extraction&nbsp;&nbsp;▮▮▮▮▮▮▮▮░░&nbsp;&nbsp;0.86</span></div>
         <div class="spec-row"><span class="spec-key">Scored</span><span class="spec-val">customer updates&nbsp;&nbsp;▮▮▮▮▮▮▮▮▮░&nbsp;&nbsp;0.93&nbsp;&nbsp;<em>↑</em></span></div>
@@ -351,8 +243,8 @@
   <div class="wrap">
     <div class="cta-band">
       <div>
-        <h2>Ready to hand it a real job?</h2>
-        <p>Bring a scan and a claim you know well. The first run leaves a record you can read back.</p>
+        <h2>Start with one. They all read the same record.</h2>
+        <p>Take the platform that hurts most today; the others have nothing to import when you add them.</p>
       </div>
       <div class="cta-actions">
         <a class="btn btn-lg" href="signup.html">Create your organization</a>
@@ -391,7 +283,7 @@
         <h4>App</h4>
         <a href="signin.html">Sign in</a>
         <a href="signup.html">Create an organization</a>
-        <a href="technician.html">Technician app</a>
+        <a href="field.html">Field Platform</a>
       </div>
     </div>
     <div class="foot-note">

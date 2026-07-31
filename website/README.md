@@ -10,8 +10,11 @@ written to appeal to contractors of every trade.
 | File              | Page                                                        |
 | ----------------- | ----------------------------------------------------------- |
 | `index.html`      | Home — thesis, replayable run receipt, platform overview    |
-| `platform.html`   | Platform — every agent, with a READS/WRITES/CHECKS spec     |
-| `technician.html` | Technician app — the field tool, with a capture-log hero    |
+| `platform.html`   | Platform hub — the four platforms + the shared foundation   |
+| `sales.html`      | Sales Platform — pipeline, the agent, the handoff           |
+| `operations.html` | Operations Platform — project management, estimating, assistance |
+| `field.html`      | Field Platform — capture on site, with a capture-log hero   |
+| `manager.html`    | Manager Platform — job costing, accounting, business insights |
 | `security.html`   | Security — architecture diagram and six structural claims   |
 | `pricing.html`    | Pricing — plans, BYO-API-key note, FAQ                      |
 | `docs.html`       | Docs — quickstart cards and an index of `../docs/*.md`      |

@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="The Atmosphere Operations Platform — project management across every open job, both estimators, and assistance that reaches the field." />
+  <meta name="theme-color" content="#FBFAF7" />
+  <title>Operations Platform · Atmosphere</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect width='22' height='2.8' fill='%23A8A29E'/%3E%3Crect y='4.8' width='22' height='2.8' fill='%2378716C'/%3E%3Crect y='9.6' width='22' height='2.8' fill='%2357534E'/%3E%3Crect y='14.4' width='22' height='2.8' fill='%23292524'/%3E%3Crect y='19.2' width='22' height='2.8' fill='%23F2670C'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="assets/site.css" />
+  <script>try{var t=localStorage.getItem('atm-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="wordmark" href="index.html" aria-label="Atmosphere home">
+      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect class="lb lb1" width="22" height="2.8"/><rect class="lb lb2" y="4.8" width="22" height="2.8"/><rect class="lb lb3" y="9.6" width="22" height="2.8"/><rect class="lb lb4" y="14.4" width="22" height="2.8"/><rect class="lb-a" y="19.2" width="22" height="2.8"/></svg>
+      Atmosphere
+    </a>
+    <div class="nav-links">
+      <div class="nav-item">
+        <a href="platform.html" data-nav="platform">Platform <span class="caret" aria-hidden="true"></span></a>
+        <div class="menu">
+          <a href="platform.html">Platform overview <span>How the three fit together</span></a>
+          <a href="sales.html">Sales Platform <span>Win the work</span></a>
+          <a href="operations.html">Operations Platform <span>Run the work</span></a>
+          <a href="field.html">Field Platform <span>Capture the job site</span></a>
+          <a href="manager.html">Manager Platform <span>Run the business</span></a>
+        </div>
+      </div>
+      <a href="security.html" data-nav="security">Security</a>
+      <a href="pricing.html" data-nav="pricing">Pricing</a>
+      <a href="docs.html" data-nav="docs">Docs</a>
+      <div class="nav-item">
+        <a href="about.html" data-nav="about">Company <span class="caret" aria-hidden="true"></span></a>
+        <div class="menu">
+          <a href="about.html">About <span>Why proof-first</span></a>
+          <a href="careers.html">Careers <span>Open roles</span></a>
+          <a href="contact.html">Contact <span>Talk to a human</span></a>
+        </div>
+      </div>
+      <a class="btn-quiet" href="signin.html">Sign in</a>
+      <a class="btn" href="signup.html">Get started</a>
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch between light and dark mode">
+        <svg class="icon-moon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        <svg class="icon-sun" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="3.2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v1.8M8 13.2V15M15 8h-1.8M2.8 8H1M12.95 3.05l-1.27 1.27M4.32 11.68l-1.27 1.27M12.95 12.95l-1.27-1.27M4.32 4.32 3.05 3.05" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      </button>
+      <button class="nav-burger" id="nav-burger" type="button" aria-label="Open menu" aria-expanded="false">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="nav-panel" id="nav-panel">
+    <div class="grp mono">Platform</div>
+    <a class="sub" href="platform.html">Platform overview</a>
+    <a class="sub" href="sales.html">Sales Platform</a>
+    <a class="sub" href="operations.html">Operations Platform</a>
+    <a class="sub" href="field.html">Field Platform</a>
+    <a class="sub" href="manager.html">Manager Platform</a>
+    <a href="security.html">Security</a>
+    <a href="pricing.html">Pricing</a>
+    <a href="docs.html">Docs</a>
+    <div class="grp mono">Company</div>
+    <a class="sub" href="about.html">About</a>
+    <a class="sub" href="careers.html">Careers</a>
+    <a class="sub" href="contact.html">Contact</a>
+    <a href="signin.html">Sign in</a>
+    <a href="signup.html">Create your organization</a>
+  </div>
+</nav>
+
+<!-- page:start -->
+<main>
+
+<header class="page-hero">
+  <div class="wrap">
+    <div class="eyebrow mono">Operations Platform</div>
+    <h1>Run the work</h1>
+    <p class="lede">A project manager runs fifteen to forty jobs at once, and the one that goes wrong is never the one they are looking at. The Operations Platform watches all of them — the readings, the paperwork, the equipment, the crew — and writes the estimates.</p>
+  </div>
+</header>
+
+<nav class="subnav mono" aria-label="On this page">
+  <div class="subnav-inner">
+    <a href="#project-management">PROJECT MANAGEMENT</a>
+    <a href="#estimating">ESTIMATING</a>
+    <a href="#assistance">ASSISTANCE</a>
+  </div>
+</nav>
+
+<section class="section" id="project-management">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">Project management</div>
+      <h2>The agent is not smarter than your PM. It is just never bored.</h2>
+      <p>Nineteen deterministic rules run over every active job, continuously. The model never decides what is true — the engine computes the facts first, and only then does anything get written.</p>
+    </div>
+    <div class="split">
+      <div>
+        <div class="tag mono">Drying</div>
+        <h3>The dry-out, watched daily</h3>
+        <p>A reading nobody took on Tuesday puts a hole in Wednesday's log, and a carrier can knock the whole dry-out for it. The rules catch the missed reading, the moisture that stopped falling, the area that is under-equipped for what is recorded wet — and the job that is already dry and should demobilise.</p>
+      </div>
+      <div class="spec mono" aria-label="The dry-out, watched daily specification">
+        <div class="spec-row"><span class="spec-key">Catches</span><span class="spec-val">Overdue readings · missed monitoring visits</span></div>
+        <div class="spec-row"><span class="spec-key">Detects</span><span class="spec-val">Stalled drying · under-equipping vs S500 sizing</span></div>
+        <div class="spec-row"><span class="spec-key">Calls</span><span class="spec-val">Dry standard met — <em>sign off and pull equipment</em></span></div>
+      </div>
+    </div>
+    <div class="split">
+      <div>
+        <div class="tag mono">Paperwork</div>
+        <h3>Requirements, dated from the loss</h3>
+        <p>A new job arrives carrying its own documentation checklist — the requirements for this trade, this loss type, and whether it is an insurance claim — with commitments counted from the loss date, because that is what a carrier counts from.</p>
+      </div>
+      <div class="spec mono" aria-label="Requirements, dated from the loss specification">
+        <div class="spec-row"><span class="spec-key">Builds</span><span class="spec-val">The checklist for <em>this</em> job, on creation</span></div>
+        <div class="spec-row"><span class="spec-key">Counts</span><span class="spec-val">From the loss date, not from intake</span></div>
+        <div class="spec-row"><span class="spec-key">Blocks</span><span class="spec-val">Invoicing when a required document is missing</span></div>
+      </div>
+    </div>
+    <div class="split">
+      <div>
+        <div class="tag mono">Equipment &amp; crew</div>
+        <h3>The dehumidifier nobody went back for</h3>
+        <p>Equipment sitting on a job that dried out last Thursday is not billable there and not on the next job either. The same rules watch crew load, unstaffed start dates, and jobs with no project manager on them at all.</p>
+      </div>
+      <div class="spec mono" aria-label="The dehumidifier nobody went back for specification">
+        <div class="spec-row"><span class="spec-key">Finds</span><span class="spec-val">Idle equipment · overloaded crew · unstaffed starts</span></div>
+        <div class="spec-row"><span class="spec-key">Notices</span><span class="spec-val">Stale jobs · no next step · target date at risk</span></div>
+        <div class="spec-row"><span class="spec-key">Writes</span><span class="spec-val">A morning brief, from computed facts only</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="estimating">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">Estimating</div>
+      <h2>Estimates written from the evidence</h2>
+      <p>Both estimators start from what was actually captured on site, and both end in Xactimate — priced, documented, and defensible.</p>
+    </div>
+    <div class="split">
+      <div>
+        <div class="tag mono">Mitigation</div>
+        <h3>Mitigation Estimator</h3>
+        <p>Give it the DocuSketch scan, the MICA report, the iPhone photos, and the field notes. It classifies the loss against IICRC S500, writes to the carrier's program terms, and prices every line.</p>
+        <p>Then it does the thing estimators rarely have time for: it reads the record again looking for work that was performed but never billed.</p>
+      </div>
+      <div class="spec mono" aria-label="Mitigation Estimator specification">
+        <div class="spec-row"><span class="spec-key">Reads</span><span class="spec-val">DocuSketch scan · MICA report · photos · field notes</span></div>
+        <div class="spec-row"><span class="spec-key">Writes</span><span class="spec-val">Priced, documented Xactimate estimate</span></div>
+        <div class="spec-row"><span class="spec-key">Checks</span><span class="spec-val">S500 classification · program terms · unbilled work</span></div>
+      </div>
+    </div>
+    <div class="split">
+      <div>
+        <div class="tag mono">Construction</div>
+        <h3>Construction Estimator</h3>
+        <p>The rebuild estimate starts where mitigation ended. The agent signs in to DocuSketch itself, reads the scan and the photos, finds the matching job in your CRM, and reads the mitigation estimate that came before it.</p>
+      </div>
+      <div class="spec mono" aria-label="Construction Estimator specification">
+        <div class="spec-row"><span class="spec-key">Signs in</span><span class="spec-val">DocuSketch</span></div>
+        <div class="spec-row"><span class="spec-key">Reads</span><span class="spec-val">Scan · photos · matching job · mitigation estimate</span></div>
+        <div class="spec-row"><span class="spec-key">Writes</span><span class="spec-val">Construction / rebuild estimate for Xactimate</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="assistance">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">Assistance</div>
+      <h2>Help that reaches the truck</h2>
+      <p>The people doing the work are holding a moisture meter, not a laptop. Assistance meets them where they are.</p>
+    </div>
+    <div class="split">
+      <div>
+        <div class="tag mono">Field</div>
+        <h3>What the Field Platform sends up</h3>
+        <p>Recordings, spoken notes, and named objects arrive from the job site and become the evidence the estimators read — no re-typing between the truck and the estimate.</p>
+      </div>
+      <div class="spec mono" aria-label="What the Field Platform sends up specification">
+        <div class="spec-row"><span class="spec-key">Captures</span><span class="spec-val">Audio · video · spoken notes</span></div>
+        <div class="spec-row"><span class="spec-key">Sees</span><span class="spec-val">Materials · damage · equipment</span></div>
+        <div class="spec-row"><span class="spec-key">Feeds</span><span class="spec-val">The estimate written the next morning</span></div>
+      </div>
+    </div>
+    <div class="split">
+      <div>
+        <div class="tag mono">Office</div>
+        <h3>Updates you did not have to write</h3>
+        <p>Customer and adjuster updates come drafted from the same computed facts the alerts came from — so a week-old job never goes seven days without contact just because everyone was busy.</p>
+      </div>
+      <div class="spec mono" aria-label="Updates you did not have to write specification">
+        <div class="spec-row"><span class="spec-key">Drafts</span><span class="spec-val">Customer &amp; adjuster updates</span></div>
+        <div class="spec-row"><span class="spec-key">Triggers</span><span class="spec-val">On a real fact — <em>not a calendar reminder</em></span></div>
+        <div class="spec-row"><span class="spec-key">Sends</span><span class="spec-val">Only after a person says so</span></div>
+      </div>
+    </div>
+    <div class="section-foot">
+      <a class="link-arrow" href="field.html">See the Field Platform&nbsp;→</a>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="cta-band">
+      <div>
+        <h2>Put it on the jobs you are running now</h2>
+        <p>It reads the ones already open — you do not start clean to start.</p>
+      </div>
+      <div class="cta-actions">
+        <a class="btn btn-lg" href="signup.html">Create your organization</a>
+        <a class="btn-quiet" href="field.html">Field Platform&nbsp;→</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+<!-- page:end -->
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <a class="wordmark" href="index.html" aria-label="Atmosphere home">
+          <svg width="18" height="18" viewBox="0 0 22 22" aria-hidden="true"><rect class="lb lb1" width="22" height="2.8"/><rect class="lb lb2" y="4.8" width="22" height="2.8"/><rect class="lb lb3" y="9.6" width="22" height="2.8"/><rect class="lb lb4" y="14.4" width="22" height="2.8"/><rect class="lb-a" y="19.2" width="22" height="2.8"/></svg>
+          Atmosphere
+        </a>
+      </div>
+      <div class="foot-col">
+        <h4>Product</h4>
+        <a href="platform.html">Platform</a>
+        <a href="security.html">Security</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="docs.html">Docs</a>
+      </div>
+      <div class="foot-col">
+        <h4>Company</h4>
+        <a href="about.html">About</a>
+        <a href="careers.html">Careers</a>
+        <a href="contact.html">Contact</a>
+      </div>
+      <div class="foot-col">
+        <h4>App</h4>
+        <a href="signin.html">Sign in</a>
+        <a href="signup.html">Create an organization</a>
+        <a href="field.html">Field Platform</a>
+      </div>
+    </div>
+    <div class="foot-note">
+      <span>© 2026 Atmosphere.</span>
+      <span>Every run, on the record.</span>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>
