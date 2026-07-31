@@ -24,6 +24,9 @@ written to appeal to contractors of every trade.
 | `contact.html`    | Contact — sales/support blocks and an intake form           |
 | `signin.html`     | Sign in — email/password plus the device-bound PIN          |
 | `signup.html`     | Create your organization — onboarding walkthrough and form  |
+| `investors.html`  | Investors — invite-only data-room sign-in (under Company)   |
+| `privacy.html`    | Privacy policy — plain-language draft pending counsel       |
+| `terms.html`      | Terms of service — plain-language draft pending counsel     |
 | `404.html`        | Not found — a run receipt that comes up empty               |
 
 Shared assets live in `assets/site.css` (design tokens + components, light and
@@ -82,13 +85,18 @@ Doc content is customer-facing prose grounded in `../README.md` and
 `../docs/*.md` — the internal engineering plans themselves are deliberately not
 published.
 
-## Careers applications (frontend + backend)
+## Forms (frontend + backend)
 
-The form on `careers.html` posts JSON to **`POST /api/careers/apply`**, served
-by `backend/src/routes/careers.ts`. The backend validates the application
-(`careersApplicationSchema`), drops honeypot submissions, rate-limits to 5/hour
-per IP, and emails the application to the hiring inbox via SMTP
-(`backend/src/lib/careersMail.ts`).
+Both site forms are wired end to end through one JS helper in `assets/site.js`:
+
+- `careers.html` posts to **`POST /api/careers/apply`**
+  (`backend/src/routes/careers.ts`) — emails the hiring inbox.
+- `contact.html` posts to **`POST /api/contact/send`**
+  (`backend/src/routes/contact.ts`) — emails the sales inbox
+  (`CONTACT_TO_EMAIL`, falling back to the careers inbox).
+
+Both validate with zod, drop honeypot submissions, rate-limit to 5/hour per IP,
+and share one SMTP transport (`backend/src/lib/careersMail.ts`).
 
 Configure delivery with environment variables on the backend:
 
@@ -127,11 +135,20 @@ walkthrough of the whole suite:
 python3 website/build-preview.py preview.html
 ```
 
+## SEO & sharing
+
+Every page carries Open Graph / Twitter meta; `assets/og.png` is the share
+card. `sitemap.xml` and `robots.txt` use the placeholder
+`https://REPLACE-WITH-YOUR-DOMAIN` — substitute the real origin at deploy (and
+absolutize the `og:image` URL then too). Pricing embeds its FAQ as JSON-LD.
+
 ## Known gaps before production
 
-- Pricing now mirrors the billing migration; the careers listings and benefits
-  are still placeholders, and the on-site roles need a real location named.
-- The contact form posts nowhere yet — the careers form is the wired example to
-  copy when giving it a backend route.
+- The careers listings and benefits are placeholders, and the on-site roles
+  still need a real city named.
+- Privacy and terms are plain-language drafts and need review by counsel.
+- The investor page is a designed surface — the data room behind it (auth +
+  documents) doesn't exist yet; "Request access" routes to contact.
+- Replace the sitemap/robots/OG placeholder domain at deploy.
 - The sign-in and sign-up pages are designed surfaces; hook them to the real
   app routes (or replace them with the frontend app) at deploy time.

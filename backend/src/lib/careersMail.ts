@@ -13,12 +13,17 @@ import type { CareersApplication } from './validation.js';
 
 let transporter: Transporter | null = null;
 
-export function careersMailConfigured(): boolean {
+/** True when the SMTP transport itself is usable, regardless of destination. */
+export function smtpConfigured(): boolean {
   const { host, user, pass } = config.careers.smtp;
-  return Boolean(host && user && pass && config.careers.toEmail);
+  return Boolean(host && user && pass);
 }
 
-function getTransporter(): Transporter {
+export function careersMailConfigured(): boolean {
+  return smtpConfigured() && Boolean(config.careers.toEmail);
+}
+
+export function getTransporter(): Transporter {
   if (!transporter) {
     const { host, port, secure, user, pass } = config.careers.smtp;
     transporter = nodemailer.createTransport({

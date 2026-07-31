@@ -6,6 +6,12 @@
   <meta name="description" content="Talk to Atmosphere — sales, support, careers, and partnerships. Bring a real scan and a real claim; we'll show you the run." />
   <meta name="theme-color" content="#FBFAF7" />
   <title>Contact · Atmosphere</title>
+  <meta property="og:title" content="Contact · Atmosphere" />
+  <meta property="og:description" content="Talk to Atmosphere — sales, support, careers, and partnerships. Bring a real scan and a real claim; we'll show you the run." />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Atmosphere" />
+  <meta property="og:image" content="/assets/og.png" />
+  <meta name="twitter:card" content="summary_large_image" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect width='22' height='2.8' fill='%23A8A29E'/%3E%3Crect y='4.8' width='22' height='2.8' fill='%2378716C'/%3E%3Crect y='9.6' width='22' height='2.8' fill='%2357534E'/%3E%3Crect y='14.4' width='22' height='2.8' fill='%23292524'/%3E%3Crect y='19.2' width='22' height='2.8' fill='%23F2670C'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="assets/site.css" />
   <script>try{var t=localStorage.getItem('atm-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
@@ -44,6 +50,7 @@
         <div class="menu">
           <a href="about.html">About <span>Why proof-first</span></a>
           <a href="careers.html">Careers <span>Open roles</span></a>
+          <a href="investors.html">Investors <span>The data room</span></a>
           <a href="contact.html">Contact <span>Talk to a human</span></a>
         </div>
       </div>
@@ -74,6 +81,7 @@
     <div class="grp mono">Company</div>
     <a class="sub" href="about.html">About</a>
     <a class="sub" href="careers.html">Careers</a>
+    <a class="sub" href="investors.html">Investors</a>
     <a class="sub" href="contact.html">Contact</a>
     <a href="signin.html">Sign in</a>
     <a href="signup.html">Create your organization</a>
@@ -120,25 +128,25 @@
       </div>
     </div>
 
-    <form class="form" action="#" method="post">
+    <form class="form" id="contact-form" data-api="" novalidate>
       <div class="form-row">
         <div class="field">
-          <label for="name">Name</label>
-          <input id="name" name="name" type="text" autocomplete="name" required />
+          <label for="ct-name">Name</label>
+          <input id="ct-name" name="name" type="text" autocomplete="name" required />
         </div>
         <div class="field">
-          <label for="email">Work email</label>
-          <input id="email" name="email" type="email" autocomplete="email" required />
+          <label for="ct-email">Work email</label>
+          <input id="ct-email" name="email" type="email" autocomplete="email" required />
         </div>
       </div>
       <div class="form-row">
         <div class="field">
-          <label for="company">Company</label>
-          <input id="company" name="company" type="text" autocomplete="organization" />
+          <label for="ct-company">Company</label>
+          <input id="ct-company" name="company" type="text" autocomplete="organization" />
         </div>
         <div class="field">
-          <label for="team-size">Team size</label>
-          <select id="team-size" name="team-size">
+          <label for="ct-team">Team size</label>
+          <select id="ct-team" name="team-size">
             <option>1–5</option>
             <option>6–20</option>
             <option>21–100</option>
@@ -147,20 +155,24 @@
         </div>
       </div>
       <div class="field">
-        <label for="work-type">Kind of work</label>
-        <select id="work-type" name="work-type">
+        <label for="ct-work">Kind of work</label>
+        <select id="ct-work" name="work-type">
           <option>Mitigation</option>
           <option>Construction</option>
           <option>Both</option>
         </select>
       </div>
       <div class="field">
-        <label for="message">What should Atmosphere take off your plate?</label>
-        <textarea id="message" name="message" placeholder="e.g. We write ~40 mitigation estimates a month and every one of them is a late night."></textarea>
+        <label for="ct-message">What should Atmosphere take off your plate?</label>
+        <textarea id="ct-message" name="message" required minlength="10" placeholder="e.g. We write ~40 mitigation estimates a month and every one of them is a late night."></textarea>
+      </div>
+      <div class="field hp" aria-hidden="true">
+        <label for="ct-website">Website</label>
+        <input id="ct-website" name="website" type="text" tabindex="-1" autocomplete="off" />
       </div>
       <div class="form-foot">
         <button class="btn btn-lg" type="submit">Send</button>
-        <span class="fine">We read everything. A person replies — usually within one business day.</span>
+        <span class="form-status" id="contact-status" role="status" aria-live="polite"></span>
       </div>
     </form>
   </div>
@@ -213,6 +225,7 @@
         <h4>Company</h4>
         <a href="about.html">About</a>
         <a href="careers.html">Careers</a>
+        <a href="investors.html">Investors</a>
         <a href="contact.html">Contact</a>
       </div>
       <div class="foot-col">
@@ -222,7 +235,7 @@
       </div>
     </div>
     <div class="foot-note">
-      <span>© 2026 Atmosphere.</span>
+      <span>© 2026 Atmosphere. · <a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a></span>
       <span>Every run, on the record.</span>
     </div>
   </div>

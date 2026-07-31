@@ -750,3 +750,29 @@ export const careersApplicationSchema = z.object({
 });
 
 export type CareersApplication = z.infer<typeof careersApplicationSchema>;
+
+
+/**
+ * A message from the corporate site's contact form. Same honeypot convention
+ * as the careers application: `website` is invisible in the browser, so a
+ * non-empty value means a bot filled the form.
+ */
+export const contactMessageSchema = z.object({
+  name: z.string({ required_error: 'Name is required' }).trim().min(1, 'Name is required').max(200),
+  email: z
+    .string({ required_error: 'Email is required' })
+    .trim()
+    .toLowerCase()
+    .email('Enter a valid email address'),
+  company: z.string().trim().max(200).optional().default(''),
+  teamSize: z.string().trim().max(50).optional().default(''),
+  workType: z.string().trim().max(50).optional().default(''),
+  message: z
+    .string({ required_error: 'Tell us what you need' })
+    .trim()
+    .min(10, 'Tell us a little more — a sentence or two is plenty')
+    .max(10_000, 'That message is longer than we can take in one go'),
+  website: z.string().max(200).optional().default(''),
+});
+
+export type ContactMessage = z.infer<typeof contactMessageSchema>;

@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="How the Mitigation and Construction Estimators read evidence and write Xactimate estimates." />
+  <meta name="description" content="How Atmosphere handles your data — what we hold, what we never hold, who processes it, and how to reach us." />
   <meta name="theme-color" content="#FBFAF7" />
-  <title>The estimators · Atmosphere Docs</title>
-  <meta property="og:title" content="The estimators · Atmosphere Docs" />
-  <meta property="og:description" content="How the Mitigation and Construction Estimators read evidence and write Xactimate estimates." />
+  <title>Privacy policy · Atmosphere</title>
+  <meta property="og:title" content="Privacy policy · Atmosphere" />
+  <meta property="og:description" content="How Atmosphere handles your data — what we hold, what we never hold, who processes it, and how to reach us." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Atmosphere" />
   <meta property="og:image" content="/assets/og.png" />
@@ -91,45 +91,41 @@
 <!-- page:start -->
 <main>
 
-<div class="wrap docs-layout">
-  <aside class="docs-side" aria-label="Documentation">
-      <a class="all" href="docs.html">&larr; All resources</a>
-      <div class="grp mono">Guides</div>
-      <a href="doc-getting-started.html">Getting started</a>
-      <a href="doc-recipes.html">Guides &amp; recipes</a>
-      <a href="doc-troubleshooting.html">Troubleshooting</a>
-      <div class="grp mono">Platforms</div>
-      <a class="active" href="doc-estimators.html">The estimators</a>
-      <a href="doc-web-access.html">Web Access &amp; the Verifier</a>
-      <a href="doc-computer-use.html">Computer use</a>
-      <a href="doc-field.html">The Field Platform</a>
-      <div class="grp mono">Account</div>
-      <a href="doc-billing.html">Billing &amp; the flat rate</a>
-  </aside>
-  <article class="docs-prose">
-    <div class="eyebrow mono">Resources · Platforms</div>
-    <h1>The estimators</h1>
-    <p class="lede">How the Mitigation and Construction Estimators read evidence and write Xactimate estimates.</p>
+<div class="wrap docs-layout" style="grid-template-columns: minmax(0, 1fr);">
+  <article class="docs-prose" style="max-width: 68ch;">
+    <div class="eyebrow mono">Legal</div>
+    <h1>Privacy policy</h1>
+    <p class="lede">Last updated July 31, 2026. Written to be read, like everything else here.</p>
 
-<h2>Mitigation Estimator</h2>
-<p>Give it what the job actually produced and it writes the estimate:</p>
-<ul>
-<li><strong>Reads:</strong> the DocuSketch scan, the MICA drying report, iPhone photos, and field notes.</li>
-<li><strong>Classifies:</strong> the loss against IICRC S500.</li>
-<li><strong>Writes:</strong> a priced, documented estimate for Xactimate, in the carrier's program terms.</li>
-</ul>
-<p>Then it does the pass estimators rarely have time for: it reads the record again looking for <strong>work that was performed but never billed</strong>, and adds the line items with the evidence attached.</p>
-<h2>Construction Estimator</h2>
-<p>The rebuild estimate starts where mitigation ended. The agent signs in to DocuSketch itself, reads the scan and the field photos, identifies the matching job in your CRM, and reads the mitigation estimate that came before it. What comes out is the construction estimate for Xactimate — grounded in what was demoed, dried, and documented.</p>
-<h2>Your pricing assumptions</h2>
-<p>Per-organization settings hold your <strong>margin, overhead &amp; profit, tax, and cost-basis</strong> assumptions. The estimators price from them, and the Manager Platform's job costing reads the same numbers — so the bid and the books are never two different opinions.</p>
-<h2>Every estimate is a run</h2>
-<p>Estimates are written as immutable snapshots, and the run that produced one lands in the audit trail: what the agent read, what it wrote, and what the Verifier confirmed. If a carrier questions a line, you replay the run that priced it.</p>
+    <h2>What we hold</h2>
+    <p>Your account carries an email address and a display name. Your organization carries the working data your team puts into it — customers, properties, jobs, estimates, captures from the field, and the runs agents perform. That data belongs to your organization and is scoped to it: Row-Level Security at the database means another organization's members and agents cannot read it.</p>
 
-    <div class="doc-pager">
-      <a class="prev" href="doc-troubleshooting.html"><span class="dir mono">&larr; PREVIOUS</span>Troubleshooting</a>
-      <a class="next" href="doc-web-access.html"><span class="dir mono">NEXT &rarr;</span>Web Access &amp; the Verifier</a>
-    </div>
+    <h2>What we never hold</h2>
+    <ul>
+      <li><strong>Your password.</strong> It goes to our authentication provider, which stores only a cryptographic hash. We never see or store the plaintext.</li>
+      <li><strong>Your card number.</strong> Payments are processed by Stripe; we hold references and receipts, not card details.</li>
+      <li><strong>Session tokens in the page.</strong> Sign-in tokens live in httpOnly cookies that page JavaScript cannot read.</li>
+    </ul>
+
+    <h2>Forms on this site</h2>
+    <p>The contact and careers forms email what you submit to our inbox so a person can reply. We don't build marketing profiles from them, and we don't sell or rent anything you send us — or anything else.</p>
+
+    <h2>Who processes data on our behalf</h2>
+    <p>Atmosphere runs on a small set of processors: Supabase (authentication and database), Stripe (payments), the model providers that power agent runs, and an email provider for transactional mail. Each receives only what its job requires.</p>
+
+    <h2>Agents and your other systems</h2>
+    <p>When you connect an outside site or a computer, agents act only under the access your organization granted, and every step is recorded in your audit trail — which is append-only, so the record of what was done with your data cannot be quietly rewritten.</p>
+
+    <h2>The learning layer</h2>
+    <p>Runs are scored to improve how work is routed for your organization. Your data stays inside your organization's boundary while that happens.</p>
+
+    <h2>Retention and deletion</h2>
+    <p>Working data lives as long as your organization does. Write to us to ask for an export or deletion of your account data; audit records are append-only by design and are removed when the organization that owns them is deleted.</p>
+
+    <h2>Questions</h2>
+    <p>Use the <a href="contact.html">contact page</a>. A person reads it.</p>
+
+    <div class="callout">This policy is a plain-language draft pending review by counsel; the practices it describes reflect how the product is actually built.</div>
   </article>
 </div>
 

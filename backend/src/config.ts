@@ -163,6 +163,15 @@ export const config = {
     defaultModel: process.env.ANTHROPIC_DEFAULT_MODEL ?? 'claude-opus-5',
   },
 
+  contact: {
+    // Where messages from the corporate site's contact form land. Falls back
+    // to the careers inbox so one configured address serves both forms.
+    toEmail:
+      process.env.CONTACT_TO_EMAIL ??
+      process.env.CAREERS_TO_EMAIL ??
+      'jackcyganiak@yahoo.com',
+  },
+
   careers: {
     // Where job applications from the corporate site's careers page land.
     toEmail: process.env.CAREERS_TO_EMAIL ?? 'jackcyganiak@yahoo.com',

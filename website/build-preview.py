@@ -36,6 +36,9 @@ PAGES = [
     ('contact', 'contact.html'),
     ('signin', 'signin.html'),
     ('signup', 'signup.html'),
+    ('investors', 'investors.html'),
+    ('privacy', 'privacy.html'),
+    ('terms', 'terms.html'),
 ]
 ROUTE_OF = {fname: route for route, fname in PAGES}
 
@@ -57,6 +60,12 @@ def reroute(html: str) -> str:
 
 
 css = (HERE / 'assets' / 'site.css').read_text()
+
+# The preview's nav and footer ARE the site's — extracted from index.html and
+# rerouted — so they can never drift from the real pages again.
+_index = (HERE / 'index.html').read_text()
+site_nav = reroute(re.search(r'<nav class="nav">.*?</nav>', _index, re.S).group(0))
+site_footer = reroute(re.search(r'<footer>.*?</footer>', _index, re.S).group(0))
 routes_html = []
 for route, fname in PAGES:
     hidden = '' if route == 'home' else ' hidden'
@@ -71,108 +80,11 @@ out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
 .route[hidden] {{ display: none; }}
 </style>
 
-<nav class="nav">
-  <div class="wrap nav-inner">
-    <a class="wordmark" href="#/home" aria-label="Atmosphere home">
-      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect class="lb lb1" width="22" height="2.8"/><rect class="lb lb2" y="4.8" width="22" height="2.8"/><rect class="lb lb3" y="9.6" width="22" height="2.8"/><rect class="lb lb4" y="14.4" width="22" height="2.8"/><rect class="lb-a" y="19.2" width="22" height="2.8"/></svg>
-      Atmosphere
-    </a>
-    <div class="nav-links">
-      <div class="nav-item">
-        <a href="#/platform" data-nav="platform">Platform <span class="caret" aria-hidden="true"></span></a>
-        <div class="menu">
-          <a href="#/platform">Platform overview <span>How the four fit together</span></a>
-          <a href="#/sales">Sales Platform <span>Win the work</span></a>
-          <a href="#/operations">Operations Platform <span>Run the work</span></a>
-          <a href="#/field">Field Platform <span>Capture the job site</span></a>
-          <a href="#/manager">Manager Platform <span>Run the business</span></a>
-        </div>
-      </div>
-      <a href="#/pricing" data-nav="pricing">Pricing</a>
-      <div class="nav-item">
-        <a href="#/docs" data-nav="resources">Resources <span class="caret" aria-hidden="true"></span></a>
-        <div class="menu">
-          <a href="#/docs">Documentation <span>How every piece works</span></a>
-          <a href="#/doc-recipes">Guides &amp; recipes <span>Ways crews use Atmosphere</span></a>
-          <a href="#/doc-troubleshooting">Troubleshooting <span>Solving errors, step by step</span></a>
-          <a href="#/security">Security <span>The model, by construction</span></a>
-        </div>
-      </div>
-      <div class="nav-item">
-        <a href="#/about" data-nav="about">Company <span class="caret" aria-hidden="true"></span></a>
-        <div class="menu">
-          <a href="#/about">About <span>Why proof-first</span></a>
-          <a href="#/careers">Careers <span>Open roles</span></a>
-          <a href="#/contact">Contact <span>Talk to a human</span></a>
-        </div>
-      </div>
-      <a class="btn-quiet" href="#/signin">Sign in</a>
-      <a class="btn" href="#/signup">Get started</a>
-      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch between light and dark mode">
-        <svg class="icon-moon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
-        <svg class="icon-sun" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="3.2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v1.8M8 13.2V15M15 8h-1.8M2.8 8H1M12.95 3.05l-1.27 1.27M4.32 11.68l-1.27 1.27M12.95 12.95l-1.27-1.27M4.32 4.32 3.05 3.05" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-      </button>
-      <button class="nav-burger" id="nav-burger" type="button" aria-label="Open menu" aria-expanded="false">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-      </button>
-    </div>
-  </div>
-  <div class="nav-panel" id="nav-panel">
-    <div class="grp mono">Platform</div>
-    <a class="sub" href="#/platform">Overview</a>
-    <a class="sub" href="#/field">Field Platform</a>
-    <a href="#/pricing">Pricing</a>
-    <div class="grp mono">Resources</div>
-    <a class="sub" href="#/docs">Documentation</a>
-    <a class="sub" href="#/doc-recipes">Guides &amp; recipes</a>
-    <a class="sub" href="#/doc-troubleshooting">Troubleshooting</a>
-    <a class="sub" href="#/security">Security</a>
-    <div class="grp mono">Company</div>
-    <a class="sub" href="#/about">About</a>
-    <a class="sub" href="#/careers">Careers</a>
-    <a class="sub" href="#/contact">Contact</a>
-    <a href="#/signin">Sign in</a>
-    <a href="#/signup">Create your organization</a>
-  </div>
-</nav>
+{site_nav}
 
 {chr(10).join(routes_html)}
 
-<footer>
-  <div class="wrap">
-    <div class="foot-grid">
-      <div class="foot-brand">
-        <a class="wordmark" href="#/home" aria-label="Atmosphere home">
-          <svg width="18" height="18" viewBox="0 0 22 22" aria-hidden="true"><rect class="lb lb1" width="22" height="2.8"/><rect class="lb lb2" y="4.8" width="22" height="2.8"/><rect class="lb lb3" y="9.6" width="22" height="2.8"/><rect class="lb lb4" y="14.4" width="22" height="2.8"/><rect class="lb-a" y="19.2" width="22" height="2.8"/></svg>
-          Atmosphere
-        </a>
-      </div>
-      <div class="foot-col">
-        <h4>Product</h4>
-        <a href="#/platform">Platform</a>
-        <a href="#/security">Security</a>
-        <a href="#/pricing">Pricing</a>
-        <a href="#/docs">Docs</a>
-      </div>
-      <div class="foot-col">
-        <h4>Company</h4>
-        <a href="#/about">About</a>
-        <a href="#/careers">Careers</a>
-        <a href="#/contact">Contact</a>
-      </div>
-      <div class="foot-col">
-        <h4>App</h4>
-        <a href="#/signin">Sign in</a>
-        <a href="#/signup">Create an organization</a>
-        <a href="#/field">Field Platform</a>
-      </div>
-    </div>
-    <div class="foot-note">
-      <span>© 2026 Atmosphere.</span>
-      <span>Every run, on the record.</span>
-    </div>
-  </div>
-</footer>
+{site_footer}
 
 <script>
 (function () {{
@@ -196,7 +108,8 @@ out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
     }});
     var NAV_GROUP = {{ platform: 'platform', sales: 'platform', operations: 'platform',
       field: 'platform', manager: 'platform', security: 'resources', pricing: 'pricing',
-      docs: 'resources', about: 'about', careers: 'about', contact: 'about' }};
+      docs: 'resources', about: 'about', careers: 'about', contact: 'about',
+      investors: 'about' }};
     var g = NAV_GROUP[r] || (r.indexOf('doc-') === 0 ? 'resources' : null);
     document.querySelectorAll('[data-nav]').forEach(function (a) {{
       if (a.getAttribute('data-nav') === g) a.setAttribute('aria-current', 'page');

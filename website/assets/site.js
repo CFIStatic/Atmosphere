@@ -7,7 +7,8 @@
     'platform.html': 'platform', 'sales.html': 'platform', 'operations.html': 'platform',
     'field.html': 'platform', 'manager.html': 'platform',
     'security.html': 'resources', 'pricing.html': 'pricing', 'docs.html': 'resources',
-    'about.html': 'about', 'careers.html': 'about', 'contact.html': 'about'
+    'about.html': 'about', 'careers.html': 'about', 'contact.html': 'about',
+    'investors.html': 'about'
   };
   var group = NAV_GROUP[page] || (page.indexOf('doc-') === 0 ? 'resources' : null);
   if (group) {
@@ -91,10 +92,54 @@
     });
   }
 
-  // Careers: role listings prefill the application form.
-  var form = document.getElementById('careers-form');
-  if (!form) return;
+  // Site forms post JSON to the backend, which emails the right inbox.
+  // `data-api` on a form overrides the API origin when the site is hosted
+  // separately from the backend.
+  function wireForm(formId, statusId, endpoint, fields, successText) {
+    var form = document.getElementById(formId);
+    if (!form) return;
+    var status = document.getElementById(statusId);
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      var submit = form.querySelector('button[type="submit"]');
+      submit.disabled = true;
+      status.className = 'form-status';
+      status.textContent = 'Sending…';
+      var payload = {};
+      Object.keys(fields).forEach(function (key) {
+        payload[key] = document.getElementById(fields[key]).value;
+      });
+      fetch((form.dataset.api || '') + endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+        .then(function (res) {
+          return res.json().catch(function () { return {}; }).then(function (body) {
+            return { ok: res.ok, body: body };
+          });
+        })
+        .then(function (result) {
+          if (result.ok) {
+            form.reset();
+            status.className = 'form-status ok';
+            status.textContent = successText;
+          } else {
+            status.className = 'form-status err';
+            status.textContent = (result.body && result.body.error) ||
+              'Something went wrong on our end — please try again in a minute.';
+          }
+        })
+        .catch(function () {
+          status.className = 'form-status err';
+          status.textContent = 'Could not reach the server — check your connection and try again.';
+        })
+        .then(function () { submit.disabled = false; });
+    });
+  }
 
+  // Careers: role listings prefill the application form.
   document.querySelectorAll('.apply-link').forEach(function (link) {
     link.addEventListener('click', function () {
       var select = document.getElementById('ap-role');
@@ -102,53 +147,14 @@
     });
   });
 
-  // Careers: submit the application to the backend, which emails the hiring
-  // inbox. `data-api` on the form overrides the API origin when the site is
-  // hosted separately from the backend.
-  var status = document.getElementById('careers-status');
-  form.addEventListener('submit', function (event) {
-    event.preventDefault();
-    if (!form.reportValidity()) return;
+  wireForm('careers-form', 'careers-status', '/api/careers/apply', {
+    name: 'ap-name', email: 'ap-email', role: 'ap-role',
+    links: 'ap-links', message: 'ap-message', website: 'ap-website'
+  }, 'Application sent — a person reads every one, and replies either way.');
 
-    var submit = form.querySelector('button[type="submit"]');
-    submit.disabled = true;
-    status.className = 'form-status';
-    status.textContent = 'Sending…';
-
-    var payload = {
-      name: document.getElementById('ap-name').value,
-      email: document.getElementById('ap-email').value,
-      role: document.getElementById('ap-role').value,
-      links: document.getElementById('ap-links').value,
-      message: document.getElementById('ap-message').value,
-      website: document.getElementById('ap-website').value
-    };
-
-    fetch((form.dataset.api || '') + '/api/careers/apply', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-      .then(function (res) {
-        return res.json().catch(function () { return {}; }).then(function (body) {
-          return { ok: res.ok, body: body };
-        });
-      })
-      .then(function (result) {
-        if (result.ok) {
-          form.reset();
-          status.className = 'form-status ok';
-          status.textContent = 'Application sent — a person reads every one, and replies either way.';
-        } else {
-          status.className = 'form-status err';
-          status.textContent = (result.body && result.body.error) ||
-            'Something went wrong on our end — please try again in a minute.';
-        }
-      })
-      .catch(function () {
-        status.className = 'form-status err';
-        status.textContent = 'Could not reach the server — check your connection and try again.';
-      })
-      .then(function () { submit.disabled = false; });
-  });
+  wireForm('contact-form', 'contact-status', '/api/contact/send', {
+    name: 'ct-name', email: 'ct-email', company: 'ct-company',
+    teamSize: 'ct-team', workType: 'ct-work',
+    message: 'ct-message', website: 'ct-website'
+  }, "Sent — a person replies, usually within one business day.");
 })();
