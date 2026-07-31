@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Atmosphere documentation — the audit trail, the CRM backend, the agents, and the learning layer, written plainly and in the open." />
+  <meta name="theme-color" content="#FBFAF7" />
+  <title>Docs · Atmosphere</title>
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="wordmark" href="index.html" aria-label="Atmosphere home">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+        <circle cx="11" cy="11" r="8.5" class="horizon-stroke" stroke-width="1.8"/>
+        <line x1="3.2" y1="14" x2="18.8" y2="14" class="horizon-stroke" stroke-width="1.8"/>
+      </svg>
+      Atmosphere
+    </a>
+    <div class="nav-links">
+      <a href="platform.html">Platform</a>
+      <a href="security.html">Security</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="docs.html" aria-current="page">Docs</a>
+      <a href="about.html">About</a>
+      <a class="btn-quiet" href="/signin">Sign in</a>
+      <a class="btn" href="/signup">Get started</a>
+    </div>
+  </div>
+</nav>
+
+<!-- page:start -->
+<main>
+
+<header class="page-hero">
+  <div class="wrap">
+    <div class="eyebrow mono">Docs</div>
+    <h1>Read how it's built</h1>
+    <p class="lede">
+      The platform is documented the way it works — plainly, and in the open. Start with
+      the three things people do first, then go as deep as you like.
+    </p>
+  </div>
+</header>
+
+<section class="section" id="quickstart">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">First hour</div>
+      <h2>Three ways in</h2>
+    </div>
+    <div class="quickstart-grid">
+      <div class="feature">
+        <div class="tag mono">01</div>
+        <h3>Bring your team</h3>
+        <p>
+          Create an organization at sign-up, pick your role and kind of work, then share
+          the join code. Everyone who enters it lands in your workspace.
+        </p>
+      </div>
+      <div class="feature">
+        <div class="tag mono">02</div>
+        <h3>Connect a site</h3>
+        <p>
+          Link a carrier portal or supplier site once. From then on, hand Atmosphere work
+          that lives inside it — every step recorded.
+        </p>
+      </div>
+      <div class="feature">
+        <div class="tag mono">03</div>
+        <h3>Run the agent</h3>
+        <p>
+          One Anthropic API key and one command put an agent at a real computer — macOS,
+          Windows, or Linux — connected outbound-only.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="reference">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">Reference</div>
+      <h2>The written record</h2>
+      <p>Each document lives in the open repository, versioned alongside the code it describes.</p>
+    </div>
+    <div class="doc-list">
+      <a class="doc-row" href="https://github.com/CFIStatic/Atmosphere/blob/main/README.md" target="_blank" rel="noopener">
+        <span class="doc-file mono">README.md</span>
+        <span>
+          <h3>The whole system, top to bottom</h3>
+          <p>What Atmosphere does, why it's shaped this way, and the data model underneath it.</p>
+        </span>
+        <span class="go" aria-hidden="true">↗</span>
+      </a>
+      <a class="doc-row" href="https://github.com/CFIStatic/Atmosphere/blob/main/docs/AUDIT.md" target="_blank" rel="noopener">
+        <span class="doc-file mono">docs/AUDIT.md</span>
+        <span>
+          <h3>The audit trail</h3>
+          <p>Every unit of work every agent performed, replayable step by step.</p>
+        </span>
+        <span class="go" aria-hidden="true">↗</span>
+      </a>
+      <a class="doc-row" href="https://github.com/CFIStatic/Atmosphere/blob/main/docs/CRM.md" target="_blank" rel="noopener">
+        <span class="doc-file mono">docs/CRM.md</span>
+        <span>
+          <h3>The CRM backend</h3>
+          <p>Customers, properties, leads, jobs, and the timeline underneath them — plus backups and mirrored data.</p>
+        </span>
+        <span class="go" aria-hidden="true">↗</span>
+      </a>
+      <a class="doc-row" href="https://github.com/CFIStatic/Atmosphere/blob/main/docs/project-manager-agent.md" target="_blank" rel="noopener">
+        <span class="doc-file mono">docs/project-manager-agent.md</span>
+        <span>
+          <h3>The Project Manager agent</h3>
+          <p>How the PM agent runs jobs — tasks, crew, and the work logged against them.</p>
+        </span>
+        <span class="go" aria-hidden="true">↗</span>
+      </a>
+      <a class="doc-row" href="https://github.com/CFIStatic/Atmosphere/blob/main/docs/sales-agent.md" target="_blank" rel="noopener">
+        <span class="doc-file mono">docs/sales-agent.md</span>
+        <span>
+          <h3>The Sales agent</h3>
+          <p>How leads move — and what the agent does at each stage.</p>
+        </span>
+        <span class="go" aria-hidden="true">↗</span>
+      </a>
+      <a class="doc-row" href="https://github.com/CFIStatic/Atmosphere/blob/main/docs/reinforcement-learning.md" target="_blank" rel="noopener">
+        <span class="doc-file mono">docs/reinforcement-learning.md</span>
+        <span>
+          <h3>The learning layer</h3>
+          <p>How runs are scored, and how the routing policy improves from the scores.</p>
+        </span>
+        <span class="go" aria-hidden="true">↗</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="cta-band">
+      <div>
+        <h2>Something the docs didn't answer?</h2>
+        <p>Ask a person. We wrote them; we can explain them.</p>
+      </div>
+      <div class="cta-actions">
+        <a class="btn btn-lg" href="contact.html">Contact us</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+<!-- page:end -->
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <a class="wordmark" href="index.html" aria-label="Atmosphere home">
+          <svg width="18" height="18" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+            <circle cx="11" cy="11" r="8.5" class="horizon-stroke" stroke-width="1.8"/>
+            <line x1="3.2" y1="14" x2="18.8" y2="14" class="horizon-stroke" stroke-width="1.8"/>
+          </svg>
+          Atmosphere
+        </a>
+        <p>AI that does the work — and proves it did. Built for the trades that put homes back together.</p>
+      </div>
+      <div class="foot-col">
+        <h4>Product</h4>
+        <a href="platform.html">Platform</a>
+        <a href="security.html">Security</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="docs.html">Docs</a>
+      </div>
+      <div class="foot-col">
+        <h4>Company</h4>
+        <a href="about.html">About</a>
+        <a href="about.html#careers">Careers</a>
+        <a href="contact.html">Contact</a>
+      </div>
+      <div class="foot-col">
+        <h4>App</h4>
+        <a href="/signin">Sign in</a>
+        <a href="/signup">Create an organization</a>
+        <a href="/technician">Technician app</a>
+      </div>
+    </div>
+    <div class="foot-note">
+      <span>© 2026 Atmosphere.</span>
+      <span>Every run, on the record.</span>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>

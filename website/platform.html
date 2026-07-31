@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="What Atmosphere does, end to end — estimating agents, web access, computer use, the Verifier, the audit trail, the technician app, CRM &amp; Agent Memory, and the learning layer." />
+  <meta name="theme-color" content="#FBFAF7" />
+  <title>Platform · Atmosphere</title>
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="wordmark" href="index.html" aria-label="Atmosphere home">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+        <circle cx="11" cy="11" r="8.5" class="horizon-stroke" stroke-width="1.8"/>
+        <line x1="3.2" y1="14" x2="18.8" y2="14" class="horizon-stroke" stroke-width="1.8"/>
+      </svg>
+      Atmosphere
+    </a>
+    <div class="nav-links">
+      <a href="platform.html" aria-current="page">Platform</a>
+      <a href="security.html">Security</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="docs.html">Docs</a>
+      <a href="about.html">About</a>
+      <a class="btn-quiet" href="/signin">Sign in</a>
+      <a class="btn" href="/signup">Get started</a>
+    </div>
+  </div>
+</nav>
+
+<!-- page:start -->
+<main>
+
+<header class="page-hero">
+  <div class="wrap">
+    <div class="eyebrow mono">Platform</div>
+    <h1>Agents for the whole claim, end to end</h1>
+    <p class="lede">
+      From the first scan to the final line item — Atmosphere reads what your field team
+      captures, writes what the carrier expects, and records every step in between.
+    </p>
+  </div>
+</header>
+
+<section class="section" id="estimating">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">Estimating</div>
+      <h2>Estimates written from the evidence, not from memory</h2>
+      <p>
+        Both estimators start from what was actually captured on site, and both end in
+        Xactimate — priced, documented, and defensible.
+      </p>
+    </div>
+
+    <div class="split">
+      <div>
+        <div class="tag mono">Mitigation</div>
+        <h3>Mitigation Estimator</h3>
+        <p>
+          Give it the DocuSketch scan, the MICA report, the iPhone photos, and the field
+          notes. It classifies the loss against IICRC S500, writes the estimate to the
+          carrier's program terms, and prices every line.
+        </p>
+        <p>
+          Then it does the thing estimators rarely have time for: it reads the record
+          again looking for work that was performed but never billed.
+        </p>
+      </div>
+      <div class="spec mono" aria-label="Mitigation Estimator specification">
+        <div class="spec-row"><span class="spec-key">Reads</span><span class="spec-val">DocuSketch scan · MICA report · iPhone photos · field notes</span></div>
+        <div class="spec-row"><span class="spec-key">Writes</span><span class="spec-val">Priced, documented Xactimate estimate</span></div>
+        <div class="spec-row"><span class="spec-key">Checks</span><span class="spec-val">IICRC S500 classification · carrier program terms · work performed, never billed</span></div>
+      </div>
+    </div>
+
+    <div class="split">
+      <div>
+        <div class="tag mono">Construction</div>
+        <h3>Construction Estimator</h3>
+        <p>
+          The rebuild estimate starts where mitigation ended. The agent signs in to
+          DocuSketch itself, reads the scan and the field photos, identifies the matching
+          job in your CRM, and reads the mitigation estimate that came before it.
+        </p>
+        <p>
+          What comes out is the construction estimate for Xactimate — grounded in what
+          was demoed, dried, and documented.
+        </p>
+      </div>
+      <div class="spec mono" aria-label="Construction Estimator specification">
+        <div class="spec-row"><span class="spec-key">Signs in</span><span class="spec-val">DocuSketch</span></div>
+        <div class="spec-row"><span class="spec-key">Reads</span><span class="spec-val">Scan · field photos · matching CRM job · mitigation estimate</span></div>
+        <div class="spec-row"><span class="spec-key">Writes</span><span class="spec-val">Construction / rebuild estimate for Xactimate</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="access">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">Access</div>
+      <h2>It goes where the work is</h2>
+      <p>
+        Carrier portals, supplier sites, and the desktop software your office already
+        runs. Atmosphere signs in and works — it doesn't ask your data to migrate.
+      </p>
+    </div>
+
+    <div class="split">
+      <div>
+        <div class="tag mono">Browser</div>
+        <h3>Web Access</h3>
+        <p>
+          Connect an outside website once — a carrier portal, a supplier site. From then
+          on, ask Atmosphere to sign in and pull data out of it or enter data into it.
+        </p>
+        <p>
+          Every step the AI takes is recorded as it happens, so a finished run reads
+          back like a receipt.
+        </p>
+      </div>
+      <div class="spec mono" aria-label="Web Access specification">
+        <div class="spec-row"><span class="spec-key">Connect</span><span class="spec-val">Once per site — carrier portal, supplier site</span></div>
+        <div class="spec-row"><span class="spec-key">Does</span><span class="spec-val">Signs in · pulls data out · enters data in</span></div>
+        <div class="spec-row"><span class="spec-key">Records</span><span class="spec-val">Every step, as it happens</span></div>
+      </div>
+    </div>
+
+    <div class="split">
+      <div>
+        <div class="tag mono">Desktop</div>
+        <h3>Computer use</h3>
+        <p>
+          Some work only exists inside installed software. Run the Atmosphere agent on
+          any computer — macOS, Windows, or Linux — and Claude sees the screen and
+          operates it: the mouse, the keyboard, the software you already own.
+        </p>
+        <p>
+          The whole setup is one Anthropic API key and one command. The machine connects
+          outward — nothing connects in.
+        </p>
+      </div>
+      <div class="spec mono" aria-label="Computer use specification">
+        <div class="spec-row"><span class="spec-key">Runs on</span><span class="spec-val">macOS · Windows · Linux</span></div>
+        <div class="spec-row"><span class="spec-key">Needs</span><span class="spec-val">One API key · one command</span></div>
+        <div class="spec-row"><span class="spec-key">Link</span><span class="spec-val">Outbound-only WebSocket — <em>no inbound port</em></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="trust">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">Trust</div>
+      <h2>No agent grades its own work</h2>
+      <p>
+        Autonomy is only useful if you can trust what came back. Atmosphere's answer is
+        structural: a second agent that checks, and a record that can't be edited.
+      </p>
+    </div>
+
+    <div class="split">
+      <div>
+        <div class="tag mono">Second agent</div>
+        <h3>The Verifier</h3>
+        <p>
+          After a run finishes, the Verifier goes back and looks. It re-opens the work in
+          a browser that cannot change anything and confirms it against the task as it
+          was originally written.
+        </p>
+        <p>
+          What's safe to correct, it corrects. What it isn't sure about, it brings to
+          you — with the evidence attached.
+        </p>
+      </div>
+      <div class="spec mono" aria-label="Verifier specification">
+        <div class="spec-row"><span class="spec-key">Opens</span><span class="spec-val">Read-only browser — <em>cannot change anything</em></span></div>
+        <div class="spec-row"><span class="spec-key">Confirms</span><span class="spec-val">The work, against the task as written</span></div>
+        <div class="spec-row"><span class="spec-key">Corrects</span><span class="spec-val">Only what is safe to correct</span></div>
+        <div class="spec-row"><span class="spec-key">Asks</span><span class="spec-val">About anything it is unsure of</span></div>
+      </div>
+    </div>
+
+    <div class="split">
+      <div>
+        <div class="tag mono">Record</div>
+        <h3>The audit trail</h3>
+        <p>
+          Every unit of work every agent performed for your organization lands in one
+          record: what it saw, what it did, what the verifier found. Replay any run step
+          by step, or read it back like a receipt.
+        </p>
+        <p>
+          The trail is append-only. Nothing edits history — not even us.
+        </p>
+      </div>
+      <div class="spec mono" aria-label="Audit trail specification">
+        <div class="spec-row"><span class="spec-key">Records</span><span class="spec-val">Every unit of work, by every agent</span></div>
+        <div class="spec-row"><span class="spec-key">Replays</span><span class="spec-val">Step by step, any run</span></div>
+        <div class="spec-row"><span class="spec-key">Keeps</span><span class="spec-val">Append-only — <em>history is never rewritten</em></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="field-office">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">Field &amp; office</div>
+      <h2>From the truck to the back office</h2>
+      <p>
+        The agents run on a foundation the whole organization shares: what the field
+        captures, and what the office keeps.
+      </p>
+    </div>
+
+    <div class="split">
+      <div>
+        <div class="tag mono">Field</div>
+        <h3>Technician app</h3>
+        <p>
+          The field tool, built for gloved hands and loud rooms: record audio and video,
+          hold a spoken conversation with an assistant, and let the camera name what it
+          sees.
+        </p>
+        <p>
+          Everything captured on site becomes evidence the estimators read.
+        </p>
+      </div>
+      <div class="spec mono" aria-label="Technician app specification">
+        <div class="spec-row"><span class="spec-key">Records</span><span class="spec-val">Audio · video, from the job site</span></div>
+        <div class="spec-row"><span class="spec-key">Speaks</span><span class="spec-val">A spoken conversation with an assistant</span></div>
+        <div class="spec-row"><span class="spec-key">Sees</span><span class="spec-val">The camera names what it's looking at</span></div>
+      </div>
+    </div>
+
+    <div class="split">
+      <div>
+        <div class="tag mono">Office</div>
+        <h3>CRM &amp; Agent Memory</h3>
+        <p>
+          Customers, properties, leads, jobs, and their timeline — plus our own backups
+          and a verbatim copy of the data that currently lives only inside other
+          companies' software.
+        </p>
+        <p>
+          Agent Memory is the operational layer on top: the tasks under a job, the crew
+          on it, and the work people log against it — with a complete, append-only
+          record of everything that happens to any of it.
+        </p>
+      </div>
+      <div class="spec mono" aria-label="CRM and Agent Memory specification">
+        <div class="spec-row"><span class="spec-key">Holds</span><span class="spec-val">Customers · properties · leads · jobs · timeline</span></div>
+        <div class="spec-row"><span class="spec-key">Mirrors</span><span class="spec-val">A verbatim copy of data held in other companies' software</span></div>
+        <div class="spec-row"><span class="spec-key">Logs</span><span class="spec-val">Tasks · crew · work entries — append-only</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="learning">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">Learning layer</div>
+      <h2>It gets measurably better at your work</h2>
+      <p>
+        Every run — a drafted scope, a built estimate, extracted document fields, a
+        customer update — is scored. The routing policy improves from those scores, so
+        the platform executes your work better this month than it did last month. And
+        you can see it, because the scores are on the record too.
+      </p>
+    </div>
+    <div class="split" style="border-top: none; padding-top: 0;">
+      <div>
+        <p>
+          This isn't a model trained on the internet's idea of restoration. It's a
+          routing layer tuned by the outcomes of your organization's own runs — which
+          strategies produced work that passed verification, and which didn't.
+        </p>
+        <p>
+          <a class="link-arrow" href="docs.html">Read how the learning layer works&nbsp;→</a>
+        </p>
+      </div>
+      <div class="spec mono" aria-label="Example run scores">
+        <div class="spec-row"><span class="spec-key">Scored</span><span class="spec-val">scope drafts&nbsp;&nbsp;▮▮▮▮▮▮▮▮▮░&nbsp;&nbsp;0.91</span></div>
+        <div class="spec-row"><span class="spec-key">Scored</span><span class="spec-val">field extraction&nbsp;&nbsp;▮▮▮▮▮▮▮▮░░&nbsp;&nbsp;0.86</span></div>
+        <div class="spec-row"><span class="spec-key">Scored</span><span class="spec-val">customer updates&nbsp;&nbsp;▮▮▮▮▮▮▮▮▮░&nbsp;&nbsp;0.93&nbsp;&nbsp;<em>↑</em></span></div>
+        <div class="spec-row"><span class="spec-key">Routes</span><span class="spec-val">Improve from the scores, run over run</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="cta-band">
+      <div>
+        <h2>See it on one of your jobs</h2>
+        <p>Bring a real scan and a real claim — we'll show you the run, and the record it leaves.</p>
+      </div>
+      <div class="cta-actions">
+        <a class="btn btn-lg" href="contact.html">Talk to us</a>
+        <a class="btn-quiet" href="pricing.html">See pricing&nbsp;→</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+<!-- page:end -->
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <a class="wordmark" href="index.html" aria-label="Atmosphere home">
+          <svg width="18" height="18" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+            <circle cx="11" cy="11" r="8.5" class="horizon-stroke" stroke-width="1.8"/>
+            <line x1="3.2" y1="14" x2="18.8" y2="14" class="horizon-stroke" stroke-width="1.8"/>
+          </svg>
+          Atmosphere
+        </a>
+        <p>AI that does the work — and proves it did. Built for the trades that put homes back together.</p>
+      </div>
+      <div class="foot-col">
+        <h4>Product</h4>
+        <a href="platform.html">Platform</a>
+        <a href="security.html">Security</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="docs.html">Docs</a>
+      </div>
+      <div class="foot-col">
+        <h4>Company</h4>
+        <a href="about.html">About</a>
+        <a href="about.html#careers">Careers</a>
+        <a href="contact.html">Contact</a>
+      </div>
+      <div class="foot-col">
+        <h4>App</h4>
+        <a href="/signin">Sign in</a>
+        <a href="/signup">Create an organization</a>
+        <a href="/technician">Technician app</a>
+      </div>
+    </div>
+    <div class="foot-note">
+      <span>© 2026 Atmosphere.</span>
+      <span>Every run, on the record.</span>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>

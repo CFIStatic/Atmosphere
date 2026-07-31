@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Atmosphere's security model — no stored passwords, httpOnly sessions, Row-Level Security under the caller's identity, device-bound PIN sign-in, and an append-only audit trail." />
+  <meta name="theme-color" content="#FBFAF7" />
+  <title>Security · Atmosphere</title>
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="wordmark" href="index.html" aria-label="Atmosphere home">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+        <circle cx="11" cy="11" r="8.5" class="horizon-stroke" stroke-width="1.8"/>
+        <line x1="3.2" y1="14" x2="18.8" y2="14" class="horizon-stroke" stroke-width="1.8"/>
+      </svg>
+      Atmosphere
+    </a>
+    <div class="nav-links">
+      <a href="platform.html">Platform</a>
+      <a href="security.html" aria-current="page">Security</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="docs.html">Docs</a>
+      <a href="about.html">About</a>
+      <a class="btn-quiet" href="/signin">Sign in</a>
+      <a class="btn" href="/signup">Get started</a>
+    </div>
+  </div>
+</nav>
+
+<!-- page:start -->
+<main>
+
+<header class="page-hero">
+  <div class="wrap">
+    <div class="eyebrow mono">Security</div>
+    <h1>The shape of the system is the security model</h1>
+    <p class="lede">
+      Access control at Atmosphere isn't a policy we promise to enforce in application
+      code. It's architecture: the database, the cookie jar, and the network direction
+      do the enforcing — and they can't be talked out of it.
+    </p>
+  </div>
+</header>
+
+<section class="section" id="architecture">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">Architecture</div>
+      <h2>Every request wears the caller's identity</h2>
+      <p>
+        The browser talks to a backend-for-frontend. The backend talks to Postgres with
+        the caller's own JWT — never a service-role key — so Row-Level Security decides
+        what every query can see.
+      </p>
+    </div>
+    <div class="diagram mono">
+      <pre>
+┌───────────┐   httpOnly cookies    ┌───────────────┐   caller's JWT, never    ┌──────────────────┐
+│  Browser  │ ────────────────────▶ │  Express BFF  │ ───service-role key────▶ │ Postgres + RLS   │
+│ (no       │ ◀──────────────────── │  auth proxy   │ ◀──────────────────────  │ (Supabase Auth)  │
+│  tokens)  │     SSE transcript    └───────┬───────┘                          └──────────────────┘
+└───────────┘                               │  ▲
+                                            ▼  │
+                                    ┌───────────────┐
+                                    │ Anthropic API │
+                                    └───────────────┘
+                                            ▲
+                    outbound-only WebSocket │  screenshots ↓ · clicks + keys ↑
+                                    ┌───────┴───────────┐
+                                    │ Atmosphere agent  │  ← runs on the computer
+                                    │ macOS · Win · Lin │     being operated
+                                    └───────────────────┘</pre>
+      <p class="diagram-caption">
+        The frontend holds no tokens. The database enforces access. The operated machine
+        only ever dials out.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="principles">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">Principles</div>
+      <h2>Six things that are true by construction</h2>
+      <p>
+        Each of these holds because of where the data lives and which direction the
+        wires point — not because a code path remembered to check.
+      </p>
+    </div>
+    <div class="sec-grid">
+      <div class="sec-card">
+        <span class="kbd mono">bcrypt</span>
+        <h3>Passwords are never stored by us</h3>
+        <p>
+          Supabase Auth stores only a bcrypt hash in the secure <span class="mono">auth.users</span>
+          table. The app never sees or persists a plaintext password.
+        </p>
+      </div>
+      <div class="sec-card">
+        <span class="kbd mono">httpOnly</span>
+        <h3>Tokens never touch browser JavaScript</h3>
+        <p>
+          The backend exchanges credentials for a session and puts the access and
+          refresh tokens in httpOnly cookies. Page JavaScript holds nothing worth
+          stealing, which mitigates token theft via XSS.
+        </p>
+      </div>
+      <div class="sec-card">
+        <span class="kbd mono">RLS</span>
+        <h3>Row-Level Security is the source of truth</h3>
+        <p>
+          Every org query runs under the caller's JWT — never the service-role key. Who
+          can see what is decided at the database layer, where cross-organization data
+          simply doesn't exist for you.
+        </p>
+      </div>
+      <div class="sec-card">
+        <span class="kbd mono">device</span>
+        <h3>PIN sign-in is bound to one device</h3>
+        <p>
+          The optional 4-digit PIN enrolls a single device, and the server keeps only
+          hashes — no secret and no session token. A stolen PIN without the enrolled
+          device is worthless.
+        </p>
+      </div>
+      <div class="sec-card">
+        <span class="kbd mono">server-side</span>
+        <h3>Password recovery happens on the server</h3>
+        <p>
+          Reset links arrive by email, and the token exchange is performed on the
+          server — so no Supabase token is ever exposed to page JavaScript, even during
+          recovery.
+        </p>
+      </div>
+      <div class="sec-card">
+        <span class="kbd mono">outbound</span>
+        <h3>The agent dials out, never in</h3>
+        <p>
+          A computer running the Atmosphere agent connects over an outbound-only
+          WebSocket. No inbound port is opened on the machine being operated.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="verification">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">Verification</div>
+      <h2>Trust is a workflow, not a checkbox</h2>
+      <p>
+        Work the AI does in someone else's system is checked afterwards by a second
+        agent that goes and looks — in a read-only browser that cannot change anything.
+        And everything every agent does lands in one append-only audit trail your
+        organization can replay step by step.
+      </p>
+    </div>
+    <div class="section-foot">
+      <a class="link-arrow" href="platform.html#trust">How the Verifier and the audit trail work&nbsp;→</a>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="cta-band">
+      <div>
+        <h2>Questions about the model?</h2>
+        <p>We'll walk your IT folks — or your carrier — through exactly how it holds.</p>
+      </div>
+      <div class="cta-actions">
+        <a class="btn btn-lg" href="contact.html">Talk to us</a>
+        <a class="btn-quiet" href="docs.html">Read the docs&nbsp;→</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+<!-- page:end -->
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <a class="wordmark" href="index.html" aria-label="Atmosphere home">
+          <svg width="18" height="18" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+            <circle cx="11" cy="11" r="8.5" class="horizon-stroke" stroke-width="1.8"/>
+            <line x1="3.2" y1="14" x2="18.8" y2="14" class="horizon-stroke" stroke-width="1.8"/>
+          </svg>
+          Atmosphere
+        </a>
+        <p>AI that does the work — and proves it did. Built for the trades that put homes back together.</p>
+      </div>
+      <div class="foot-col">
+        <h4>Product</h4>
+        <a href="platform.html">Platform</a>
+        <a href="security.html">Security</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="docs.html">Docs</a>
+      </div>
+      <div class="foot-col">
+        <h4>Company</h4>
+        <a href="about.html">About</a>
+        <a href="about.html#careers">Careers</a>
+        <a href="contact.html">Contact</a>
+      </div>
+      <div class="foot-col">
+        <h4>App</h4>
+        <a href="/signin">Sign in</a>
+        <a href="/signup">Create an organization</a>
+        <a href="/technician">Technician app</a>
+      </div>
+    </div>
+    <div class="foot-note">
+      <span>© 2026 Atmosphere.</span>
+      <span>Every run, on the record.</span>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>

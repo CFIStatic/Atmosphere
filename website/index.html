@@ -1,331 +1,18 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Atmosphere — the AI platform for restoration and construction organizations. Estimates built, portals worked, computers operated — with a second agent that checks, and an audit trail you can replay." />
-    <meta name="theme-color" content="#FBFAF7" />
-    <title>Atmosphere — AI for Restoration &amp; Construction</title>
-  </head>
-  <body>
-<style>
-  :root {
-    --bg: #FBFAF7;
-    --card: #FFFFFF;
-    --ink: #1C1917;
-    --ink-soft: #57534E;
-    --ink-faint: #78716C;
-    --line: #E3DED4;
-    --line-strong: #D3CCBE;
-    --accent: #D2500A;
-    --accent-hover: #BC4508;
-    --accent-ink: #FFFFFF;
-    --success: #3F7D4C;
-    --success-soft: #F0F7F1;
-    --shadow-card: 0 1px 2px rgba(28,25,23,.04), 0 1px 3px rgba(28,25,23,.03);
-    --shadow-lift: 0 4px 12px rgba(28,25,23,.07), 0 2px 4px rgba(28,25,23,.04);
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #171310;
-      --card: #201B17;
-      --ink: #F0EBE3;
-      --ink-soft: #BFB6AA;
-      --ink-faint: #948B7F;
-      --line: #322B24;
-      --line-strong: #443A30;
-      --accent: #E0662B;
-      --accent-hover: #E97F49;
-      --accent-ink: #1C1108;
-      --success: #7FBF8D;
-      --success-soft: #1E2B20;
-      --shadow-card: 0 1px 2px rgba(0,0,0,.25), 0 1px 3px rgba(0,0,0,.2);
-      --shadow-lift: 0 4px 12px rgba(0,0,0,.35), 0 2px 4px rgba(0,0,0,.25);
-    }
-  }
-  :root[data-theme="dark"] {
-    --bg: #171310;
-    --card: #201B17;
-    --ink: #F0EBE3;
-    --ink-soft: #BFB6AA;
-    --ink-faint: #948B7F;
-    --line: #322B24;
-    --line-strong: #443A30;
-    --accent: #E0662B;
-    --accent-hover: #E97F49;
-    --accent-ink: #1C1108;
-    --success: #7FBF8D;
-    --success-soft: #1E2B20;
-    --shadow-card: 0 1px 2px rgba(0,0,0,.25), 0 1px 3px rgba(0,0,0,.2);
-    --shadow-lift: 0 4px 12px rgba(0,0,0,.35), 0 2px 4px rgba(0,0,0,.25);
-  }
-  :root[data-theme="light"] {
-    --bg: #FBFAF7;
-    --card: #FFFFFF;
-    --ink: #1C1917;
-    --ink-soft: #57534E;
-    --ink-faint: #78716C;
-    --line: #E3DED4;
-    --line-strong: #D3CCBE;
-    --accent: #D2500A;
-    --accent-hover: #BC4508;
-    --accent-ink: #FFFFFF;
-    --success: #3F7D4C;
-    --success-soft: #F0F7F1;
-    --shadow-card: 0 1px 2px rgba(28,25,23,.04), 0 1px 3px rgba(28,25,23,.03);
-    --shadow-lift: 0 4px 12px rgba(28,25,23,.07), 0 2px 4px rgba(28,25,23,.04);
-  }
-
-  * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
-  @media (prefers-reduced-motion: reduce) {
-    html { scroll-behavior: auto; }
-    *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; }
-  }
-  body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--ink);
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    font-size: 16px;
-    line-height: 1.6;
-    -webkit-font-smoothing: antialiased;
-  }
-  ::selection { background: var(--accent); color: var(--accent-ink); }
-  a { color: inherit; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
-
-  .mono {
-    font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
-  }
-  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
-
-  /* ---------- Nav ---------- */
-  .nav {
-    position: sticky; top: 0; z-index: 50;
-    background: color-mix(in srgb, var(--bg) 84%, transparent);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border-bottom: 1px solid var(--line);
-  }
-  .nav-inner {
-    display: flex; align-items: center; gap: 32px;
-    height: 60px;
-  }
-  .wordmark {
-    display: flex; align-items: center; gap: 10px;
-    font-weight: 700; font-size: 17px; letter-spacing: -0.02em;
-    text-decoration: none; margin-right: auto;
-  }
-  .wordmark svg { display: block; }
-  .wordmark .horizon-stroke { stroke: var(--ink); }
-  .nav-links { display: flex; gap: 26px; align-items: center; }
-  .nav-links a {
-    text-decoration: none; font-size: 14.5px; color: var(--ink-soft);
-    transition: color .15s ease;
-  }
-  .nav-links a:hover { color: var(--ink); }
-  .btn {
-    display: inline-block;
-    background: var(--accent); color: var(--accent-ink);
-    font-weight: 600; font-size: 14.5px;
-    padding: 9px 18px; border-radius: 8px;
-    text-decoration: none; border: none; cursor: pointer;
-    transition: background .15s ease;
-  }
-  .btn:hover { background: var(--accent-hover); }
-  .btn-lg { font-size: 16px; padding: 13px 26px; }
-  .btn-quiet {
-    display: inline-block;
-    font-weight: 600; font-size: 14.5px; color: var(--ink-soft);
-    padding: 9px 14px; text-decoration: none; border-radius: 8px;
-    transition: color .15s ease;
-  }
-  .btn-quiet:hover { color: var(--ink); }
-  @media (max-width: 720px) { .nav-links a:not(.btn) { display: none; } }
-
-  /* ---------- Hero ---------- */
-  .hero { padding: 88px 0 96px; overflow: hidden; }
-  .hero-grid {
-    display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
-    gap: 64px; align-items: center;
-  }
-  @media (max-width: 920px) { .hero-grid { grid-template-columns: 1fr; gap: 56px; } }
-  .eyebrow {
-    font-size: 12px; letter-spacing: .1em; text-transform: uppercase;
-    color: var(--ink-faint);
-  }
-  .hero h1 {
-    margin: 18px 0 22px;
-    font-size: clamp(2.5rem, 5.6vw, 4.1rem);
-    line-height: 1.04; letter-spacing: -0.035em; font-weight: 800;
-    text-wrap: balance;
-  }
-  .hero p.lede {
-    max-width: 34em; font-size: 18px; line-height: 1.65; color: var(--ink-soft);
-    margin: 0 0 34px;
-  }
-  .hero-ctas { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
-  .fade-up { opacity: 0; animation: fadeUp .6s ease-out forwards; }
-  .fade-up.d1 { animation-delay: .08s; } .fade-up.d2 { animation-delay: .16s; }
-  .fade-up.d3 { animation-delay: .24s; }
-  @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
-
-  /* ---------- Receipt ---------- */
-  .receipt {
-    background: var(--card); border: 1px solid var(--line);
-    border-radius: 12px; box-shadow: var(--shadow-lift);
-    font-size: 13px; line-height: 1.5;
-    overflow: hidden;
-  }
-  .receipt-head {
-    display: flex; align-items: center; gap: 10px;
-    padding: 12px 16px; border-bottom: 1px solid var(--line);
-    color: var(--ink-soft); font-size: 12px; letter-spacing: .04em;
-  }
-  .receipt-head .run-id { color: var(--ink); font-weight: 600; }
-  .replay-btn {
-    margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
-    background: none; border: 1px solid var(--line-strong); border-radius: 6px;
-    color: var(--ink-soft); font: inherit; font-size: 11.5px;
-    padding: 4px 10px; cursor: pointer; letter-spacing: .04em;
-    transition: color .15s ease, border-color .15s ease;
-  }
-  .replay-btn:hover { color: var(--ink); border-color: var(--ink-faint); }
-  .receipt-body { padding: 14px 16px 16px; }
-  .r-line {
-    display: grid; grid-template-columns: 62px 1fr; gap: 12px;
-    padding: 4px 0;
-    opacity: 0; animation: lineIn .35s ease-out forwards;
-    animation-delay: var(--d, 0s);
-  }
-  @keyframes lineIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-  .r-time { color: var(--ink-faint); white-space: nowrap; }
-  .r-text { color: var(--ink); overflow-wrap: break-word; }
-  .r-text em { font-style: normal; color: var(--ink-faint); }
-  .r-divider {
-    display: flex; align-items: center; gap: 10px;
-    margin: 10px 0 6px; color: var(--ink-faint);
-    font-size: 11px; letter-spacing: .12em;
-    opacity: 0; animation: lineIn .35s ease-out forwards;
-    animation-delay: var(--d, 0s);
-  }
-  .r-divider::before, .r-divider::after { content: ''; flex: 1; border-top: 1px solid var(--line); }
-  .r-check { color: var(--success); font-weight: 700; }
-  .r-status {
-    display: flex; align-items: center; gap: 8px;
-    margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line);
-    opacity: 0; animation: lineIn .35s ease-out forwards;
-    animation-delay: var(--d, 0s);
-  }
-  .pill {
-    display: inline-block; padding: 2px 10px; border-radius: 999px;
-    font-size: 11px; letter-spacing: .08em; font-weight: 700;
-    background: var(--success-soft); color: var(--success);
-  }
-  .r-status .note { color: var(--ink-faint); font-size: 12px; }
-
-  /* ---------- Sections ---------- */
-  .section { padding: 92px 0; border-top: 1px solid var(--line); }
-  .section-head { max-width: 40em; margin-bottom: 52px; }
-  .section-head h2 {
-    margin: 14px 0 14px;
-    font-size: clamp(1.7rem, 3vw, 2.3rem);
-    line-height: 1.15; letter-spacing: -0.025em; font-weight: 800;
-    text-wrap: balance;
-  }
-  .section-head p { margin: 0; color: var(--ink-soft); font-size: 16.5px; max-width: 36em; }
-
-  /* Feature grid */
-  .feature-grid {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
-    gap: 20px;
-  }
-  .feature {
-    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-    padding: 26px 26px 28px; box-shadow: var(--shadow-card);
-    transition: box-shadow .2s ease, transform .2s ease;
-  }
-  .feature:hover { box-shadow: var(--shadow-lift); transform: translateY(-2px); }
-  .feature .tag { font-size: 11px; letter-spacing: .1em; color: var(--ink-faint); text-transform: uppercase; }
-  .feature h3 { margin: 10px 0 8px; font-size: 18.5px; letter-spacing: -0.015em; font-weight: 700; }
-  .feature p { margin: 0; font-size: 14.5px; line-height: 1.6; color: var(--ink-soft); }
-
-  .quiet-row {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 36px; margin-top: 48px;
-  }
-  .quiet-item { border-top: 1px solid var(--line-strong); padding-top: 18px; }
-  .quiet-item h3 { margin: 0 0 6px; font-size: 15.5px; font-weight: 700; letter-spacing: -0.01em; }
-  .quiet-item p { margin: 0; font-size: 14px; color: var(--ink-soft); }
-
-  /* Steps */
-  .steps {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-    gap: 36px;
-  }
-  .step { border-top: 2px solid var(--ink); padding-top: 20px; }
-  .step .num { font-size: 12px; letter-spacing: .1em; color: var(--ink-faint); }
-  .step h3 { margin: 12px 0 8px; font-size: 17px; font-weight: 700; letter-spacing: -0.015em; }
-  .step p { margin: 0; font-size: 14.5px; color: var(--ink-soft); }
-
-  /* Security */
-  .sec-grid {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 20px;
-  }
-  .sec-card {
-    border: 1px solid var(--line); border-radius: 12px; padding: 24px 26px;
-    background: var(--card); box-shadow: var(--shadow-card);
-  }
-  .sec-card h3 { margin: 0 0 8px; font-size: 16.5px; font-weight: 700; letter-spacing: -0.01em; }
-  .sec-card p { margin: 0; font-size: 14.5px; color: var(--ink-soft); }
-  .sec-card .kbd {
-    font-size: 12px; color: var(--ink-faint);
-    display: inline-block; margin-bottom: 12px;
-  }
-
-  /* Teams */
-  .roles { display: flex; flex-wrap: wrap; gap: 10px; margin: 26px 0 0; }
-  .role-chip {
-    border: 1px solid var(--line-strong); border-radius: 999px;
-    padding: 7px 16px; font-size: 14px; color: var(--ink-soft); background: var(--card);
-  }
-  .work-line { margin-top: 22px; font-size: 13px; color: var(--ink-faint); letter-spacing: .06em; }
-
-  /* CTA */
-  .cta { text-align: left; }
-  .cta-box {
-    background: var(--card); border: 1px solid var(--line); border-radius: 16px;
-    box-shadow: var(--shadow-card);
-    padding: 56px; display: grid; grid-template-columns: minmax(0,1.2fr) minmax(0,.8fr);
-    gap: 48px; align-items: center;
-  }
-  @media (max-width: 820px) { .cta-box { grid-template-columns: 1fr; padding: 36px 28px; } }
-  .cta-box h2 {
-    margin: 0 0 12px; font-size: clamp(1.7rem, 3vw, 2.3rem);
-    letter-spacing: -0.025em; font-weight: 800; line-height: 1.12; text-wrap: balance;
-  }
-  .cta-box p { margin: 0 0 28px; color: var(--ink-soft); max-width: 32em; }
-  .join-card { border: 1px dashed var(--line-strong); border-radius: 12px; padding: 22px 24px; }
-  .join-card .lbl { font-size: 11px; letter-spacing: .1em; color: var(--ink-faint); text-transform: uppercase; }
-  .join-code {
-    margin: 10px 0 8px; font-size: 26px; letter-spacing: .18em; font-weight: 600;
-  }
-  .join-card p { margin: 0; font-size: 13px; color: var(--ink-faint); }
-
-  /* Footer */
-  footer { border-top: 1px solid var(--line); padding: 44px 0 56px; }
-  .foot-inner { display: flex; flex-wrap: wrap; gap: 28px; align-items: baseline; justify-content: space-between; }
-  .foot-links { display: flex; gap: 22px; }
-  .foot-links a { font-size: 13.5px; color: var(--ink-faint); text-decoration: none; }
-  .foot-links a:hover { color: var(--ink); }
-  .foot-note { width: 100%; margin-top: 18px; font-size: 13px; color: var(--ink-faint); }
-</style>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Atmosphere — the AI platform for restoration and construction organizations. Estimates built, portals worked, computers operated — with a second agent that checks, and an audit trail you can replay." />
+  <meta name="theme-color" content="#FBFAF7" />
+  <title>Atmosphere — AI for Restoration &amp; Construction</title>
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
 
 <nav class="nav">
   <div class="wrap nav-inner">
-    <a class="wordmark" href="#top" aria-label="Atmosphere home">
+    <a class="wordmark" href="index.html" aria-label="Atmosphere home">
       <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
         <circle cx="11" cy="11" r="8.5" class="horizon-stroke" stroke-width="1.8"/>
         <line x1="3.2" y1="14" x2="18.8" y2="14" class="horizon-stroke" stroke-width="1.8"/>
@@ -333,16 +20,21 @@
       Atmosphere
     </a>
     <div class="nav-links">
-      <a href="#platform">Platform</a>
-      <a href="#how">How it works</a>
-      <a href="#security">Security</a>
+      <a href="platform.html">Platform</a>
+      <a href="security.html">Security</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="docs.html">Docs</a>
+      <a href="about.html">About</a>
       <a class="btn-quiet" href="/signin">Sign in</a>
-      <a class="btn" href="#get-started">Get started</a>
+      <a class="btn" href="/signup">Get started</a>
     </div>
   </div>
 </nav>
 
-<header class="hero" id="top">
+<!-- page:start -->
+<main>
+
+<section class="hero" id="top">
   <div class="wrap hero-grid">
     <div>
       <div class="eyebrow mono fade-up">For restoration &amp; construction organizations</div>
@@ -380,9 +72,9 @@
       </div>
     </div>
   </div>
-</header>
+</section>
 
-<section class="section" id="platform">
+<section class="section" id="platform-overview">
   <div class="wrap">
     <div class="section-head">
       <div class="eyebrow mono">Platform</div>
@@ -475,6 +167,10 @@
         </p>
       </div>
     </div>
+
+    <div class="section-foot">
+      <a class="link-arrow" href="platform.html">Explore the full platform&nbsp;→</a>
+    </div>
   </div>
 </section>
 
@@ -525,14 +221,15 @@
   </div>
 </section>
 
-<section class="section" id="security">
+<section class="section" id="security-overview">
   <div class="wrap">
     <div class="section-head">
       <div class="eyebrow mono">Security</div>
       <h2>Built like it handles your books — because it does</h2>
       <p>
-        The shape of the system is the security model. These aren't policies; they're
-        architecture.
+        Passwords are never stored by us. Tokens never touch browser JavaScript. The
+        database — not application code — decides who sees what. The shape of the system
+        is the security model.
       </p>
     </div>
     <div class="sec-grid">
@@ -562,6 +259,9 @@
         </p>
       </div>
     </div>
+    <div class="section-foot">
+      <a class="link-arrow" href="security.html">Read the full security model&nbsp;→</a>
+    </div>
   </div>
 </section>
 
@@ -586,7 +286,7 @@
   </div>
 </section>
 
-<section class="section cta" id="get-started">
+<section class="section" id="get-started">
   <div class="wrap">
     <div class="cta-box">
       <div>
@@ -606,38 +306,49 @@
   </div>
 </section>
 
+</main>
+<!-- page:end -->
+
 <footer>
-  <div class="wrap foot-inner">
-    <a class="wordmark" href="#top" aria-label="Atmosphere home">
-      <svg width="18" height="18" viewBox="0 0 22 22" fill="none" aria-hidden="true">
-        <circle cx="11" cy="11" r="8.5" class="horizon-stroke" stroke-width="1.8"/>
-        <line x1="3.2" y1="14" x2="18.8" y2="14" class="horizon-stroke" stroke-width="1.8"/>
-      </svg>
-      Atmosphere
-    </a>
-    <div class="foot-links">
-      <a href="#platform">Platform</a>
-      <a href="#how">How it works</a>
-      <a href="#security">Security</a>
-      <a href="/signin">Sign in</a>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <a class="wordmark" href="index.html" aria-label="Atmosphere home">
+          <svg width="18" height="18" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+            <circle cx="11" cy="11" r="8.5" class="horizon-stroke" stroke-width="1.8"/>
+            <line x1="3.2" y1="14" x2="18.8" y2="14" class="horizon-stroke" stroke-width="1.8"/>
+          </svg>
+          Atmosphere
+        </a>
+        <p>AI that does the work — and proves it did. Built for the trades that put homes back together.</p>
+      </div>
+      <div class="foot-col">
+        <h4>Product</h4>
+        <a href="platform.html">Platform</a>
+        <a href="security.html">Security</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="docs.html">Docs</a>
+      </div>
+      <div class="foot-col">
+        <h4>Company</h4>
+        <a href="about.html">About</a>
+        <a href="about.html#careers">Careers</a>
+        <a href="contact.html">Contact</a>
+      </div>
+      <div class="foot-col">
+        <h4>App</h4>
+        <a href="/signin">Sign in</a>
+        <a href="/signup">Create an organization</a>
+        <a href="/technician">Technician app</a>
+      </div>
     </div>
-    <div class="foot-note">© 2026 Atmosphere. Built for the trades that put homes back together.</div>
+    <div class="foot-note">
+      <span>© 2026 Atmosphere.</span>
+      <span>Every run, on the record.</span>
+    </div>
   </div>
 </footer>
 
-<script>
-  // Replay restarts the receipt animation — the audit trail's replay, embodied.
-  (function () {
-    var receipt = document.getElementById('receipt');
-    var btn = document.getElementById('replay');
-    if (!receipt || !btn) return;
-    btn.addEventListener('click', function () {
-      var lines = receipt.querySelectorAll('.r-line, .r-divider, .r-status');
-      lines.forEach(function (el) { el.style.animation = 'none'; });
-      void receipt.offsetWidth;
-      lines.forEach(function (el) { el.style.animation = ''; });
-    });
-  })();
-</script>
-  </body>
+<script src="assets/site.js"></script>
+</body>
 </html>
