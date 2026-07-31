@@ -67,6 +67,20 @@
     });
   }
 
+  // Pricing: monthly ↔ annual swaps the figure each plan advertises.
+  var seg = document.getElementById('billing-seg');
+  if (seg) {
+    seg.addEventListener('click', function (event) {
+      var btn = event.target.closest('button[data-period]');
+      if (!btn) return;
+      var annual = btn.dataset.period === 'annual';
+      seg.querySelectorAll('button').forEach(function (b) { b.classList.toggle('on', b === btn); });
+      document.querySelectorAll('.plan .amt[data-monthly]').forEach(function (el) {
+        el.textContent = annual ? el.dataset.annual : el.dataset.monthly;
+      });
+    });
+  }
+
   // Careers: role listings prefill the application form.
   var form = document.getElementById('careers-form');
   if (!form) return;

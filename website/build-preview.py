@@ -224,6 +224,19 @@ out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
     Object.keys(byId).forEach(function (id) {{ io.observe(document.getElementById(id)); }});
   }});
 
+  var seg = document.getElementById('billing-seg');
+  if (seg) {{
+    seg.addEventListener('click', function (event) {{
+      var b2 = event.target.closest('button[data-period]');
+      if (!b2) return;
+      var annual = b2.dataset.period === 'annual';
+      seg.querySelectorAll('button').forEach(function (b) {{ b.classList.toggle('on', b === b2); }});
+      document.querySelectorAll('.plan .amt[data-monthly]').forEach(function (el) {{
+        el.textContent = annual ? el.dataset.annual : el.dataset.monthly;
+      }});
+    }});
+  }}
+
   var toggle = document.getElementById('theme-toggle');
   if (toggle) {{
     toggle.addEventListener('click', function () {{

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Atmosphere pricing — plans for crews, offices, and whole organizations. Model usage runs on your own Anthropic API key, never marked up." />
+  <meta name="description" content="Atmosphere pricing — one model across all four platforms. Free, Pro, Max 5x, Max 20x, Team, and Enterprise, each with monthly usage credits and prepaid packs." />
   <meta name="theme-color" content="#FBFAF7" />
   <title>Pricing · Atmosphere</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect width='22' height='2.8' fill='%23A8A29E'/%3E%3Crect y='4.8' width='22' height='2.8' fill='%2378716C'/%3E%3Crect y='9.6' width='22' height='2.8' fill='%2357534E'/%3E%3Crect y='14.4' width='22' height='2.8' fill='%23292524'/%3E%3Crect y='19.2' width='22' height='2.8' fill='%23F2670C'/%3E%3C/svg%3E" />
@@ -76,68 +76,216 @@
 <header class="page-hero">
   <div class="wrap">
     <div class="eyebrow mono">Pricing</div>
-    <h1>Pay for the platform. The model is yours.</h1>
+    <h1>One pricing model. Four products.</h1>
     <p class="lede">
-      Atmosphere runs on your own Anthropic API key — model usage is billed to you by
-      Anthropic directly, and we never mark it up. Plans cover the platform, the
-      Verifier, and the record.
+      Sales, Operations, Field, and Manager are bought separately and priced identically —
+      a seat on the platform, a monthly allowance of usage credits, and more credits any
+      time you need them. Nothing is metered differently because of which platform the work
+      ran in.
     </p>
   </div>
 </header>
 
+<nav class="subnav mono" aria-label="On this page">
+  <div class="subnav-inner">
+    <a href="#plans">PLANS</a>
+    <a href="#credits">HOW USAGE WORKS</a>
+    <a href="#packs">CREDIT PACKS</a>
+    <a href="#faq">FAQ</a>
+  </div>
+</nav>
+
 <section class="section" id="plans">
   <div class="wrap">
-    <div class="plans">
-      <div class="plan">
-        <div class="plan-name mono">Field</div>
-        <div class="price">$29</div>
-        <p class="per">per user / month</p>
-        <p class="plan-desc">For crews getting their first agent on the job.</p>
-        <ul class="checks">
-          <li>Organization &amp; join codes</li>
-          <li><a href="field.html">Field Platform for the crew</a></li>
-          <li><a href="operations.html#estimating">Mitigation Estimator</a></li>
-          <li>PIN sign-in, device-bound</li>
-          <li><a href="platform.html#trust">Audit trail on every run</a></li>
-        </ul>
-        <a class="btn-outline plan-cta" href="signup.html">Create your organization</a>
-      </div>
+    <div class="prod-strip">
+      <span class="prod-lbl mono">SAME PLANS ON</span>
+      <a href="sales.html">Sales</a>
+      <a href="operations.html">Operations</a>
+      <a href="field.html">Field</a>
+      <a href="manager.html">Manager</a>
+    </div>
 
+    <div class="billing-toggle">
+      <div class="seg" id="billing-seg" role="group" aria-label="Billing period">
+        <button type="button" class="on" data-period="monthly">Monthly</button>
+        <button type="button" data-period="annual">Annual <span class="save">save up to 17%</span></button>
+      </div>
+    </div>
+
+    <div class="plans plans-6">
+      <div class="plan">
+        <div class="plan-name mono">Free</div>
+        <div class="price"><span class="amt" data-monthly="$0" data-annual="$0">$0</span></div>
+        <p class="per">forever</p>
+        <p class="plan-desc">Try Atmosphere on a single project</p>
+        <div class="plan-credits mono">$3 of credits / month</div>
+        <ul class="checks">
+          <li>1 seat</li>
+          <li>Community support</li>
+          <li>Every run in the audit trail</li>
+        </ul>
+        <a class="btn-outline plan-cta" href="signup.html">Start free</a>
+      </div>
       <div class="plan plan-featured">
-        <span class="flag mono">MOST TEAMS</span>
-        <div class="plan-name mono">Office</div>
-        <div class="price">$79</div>
-        <p class="per">per user / month</p>
-        <p class="plan-desc">The whole job, from scan to rebuild — verified.</p>
+        <span class="flag mono">MOST PEOPLE</span>
+        <div class="plan-name mono">Pro</div>
+        <div class="price"><span class="amt" data-monthly="$20" data-annual="$17">$20</span></div>
+        <p class="per">per person / month</p>
+        <p class="plan-desc">For individual estimators and PMs</p>
+        <div class="plan-credits mono">$25 of credits / month</div>
         <ul class="checks">
-          <li>Everything in Field</li>
-          <li><a href="operations.html#estimating">Construction Estimator</a></li>
-          <li><a href="platform.html#access">Web Access — carrier portals &amp; supplier sites</a></li>
-          <li><a href="platform.html#trust">Verifier on every run</a></li>
-          <li>CRM &amp; Agent Memory</li>
-          <li>Learning layer</li>
+          <li>Priority model access</li>
+          <li>Usage analytics</li>
+          <li>Email support</li>
         </ul>
-        <a class="btn plan-cta" href="signup.html">Create your organization</a>
+        <a class="btn plan-cta" href="signup.html">Choose Pro</a>
       </div>
-
       <div class="plan">
-        <div class="plan-name mono">Organization</div>
-        <div class="price">Custom</div>
-        <p class="per">annual, by agreement</p>
-        <p class="plan-desc">For operations running agents across offices and machines.</p>
+        <div class="plan-name mono">Max 5x</div>
+        <div class="price"><span class="amt" data-monthly="$100" data-annual="$100">$100</span></div>
+        <p class="per">per person / month</p>
+        <p class="plan-desc">Heavier daily workloads</p>
+        <div class="plan-credits mono">$125 of credits / month</div>
         <ul class="checks">
-          <li>Everything in Office</li>
-          <li><a href="platform.html#access">Computer use on your machines</a></li>
-          <li>Custom carrier program terms</li>
-          <li>Onboarding with your estimators</li>
+          <li>5× Pro throughput</li>
+          <li>Batch processing</li>
           <li>Priority support</li>
+        </ul>
+        <a class="btn-outline plan-cta" href="signup.html">Choose Max 5x</a>
+      </div>
+      <div class="plan">
+        <div class="plan-name mono">Max 20x</div>
+        <div class="price"><span class="amt" data-monthly="$200" data-annual="$200">$200</span></div>
+        <p class="per">per person / month</p>
+        <p class="plan-desc">Power users running all day</p>
+        <div class="plan-credits mono">$250 of credits / month</div>
+        <ul class="checks">
+          <li>20× Pro throughput</li>
+          <li>Batch processing</li>
+          <li>Priority support</li>
+        </ul>
+        <a class="btn-outline plan-cta" href="signup.html">Choose Max 20x</a>
+      </div>
+      <div class="plan">
+        <div class="plan-name mono">Team</div>
+        <div class="price"><span class="amt" data-monthly="$30" data-annual="$25">$30</span></div>
+        <p class="per">per seat / month · 5 seats minimum</p>
+        <p class="plan-desc">Shared credits across the crew</p>
+        <div class="plan-credits mono">$40 of credits per seat / month</div>
+        <ul class="checks">
+          <li>Pooled organization credit balance</li>
+          <li>Central billing and spend limits</li>
+          <li>Role-based billing access</li>
+          <li>5× Pro throughput</li>
+        </ul>
+        <a class="btn-outline plan-cta" href="signup.html">Choose Team</a>
+      </div>
+      <div class="plan">
+        <div class="plan-name mono">Enterprise</div>
+        <div class="price"><span class="amt">Custom</span></div>
+        <p class="per">annual · 25 seats minimum</p>
+        <p class="plan-desc">Custom volume and terms</p>
+        <div class="plan-credits mono">Custom credit allowance</div>
+        <ul class="checks">
+          <li>Volume pricing</li>
+          <li>SSO and audit logs</li>
+          <li>Dedicated support</li>
         </ul>
         <a class="btn-outline plan-cta" href="contact.html">Talk to us</a>
       </div>
     </div>
     <p class="plans-note">
-      Every plan includes the audit trail — proof isn't an upgrade. Model usage runs on
-      your own Anthropic API key and is billed by Anthropic at their rates.
+      Every plan includes the audit trail and the Verifier — proof is never an upgrade.
+      Annual billing is shown as the equivalent monthly rate. Max and Enterprise throughput
+      multipliers are relative to Pro.
+    </p>
+  </div>
+</section>
+
+<section class="section" id="credits">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">How usage works</div>
+      <h2>One credit is one dollar</h2>
+      <p>
+        Every plan grants an allowance of usage credits at the start of each billing period.
+        Agents draw them down as they work, metered per token against a published rate card
+        — the same rates whichever platform the run belongs to.
+      </p>
+    </div>
+    <div class="sec-grid">
+      <div class="sec-card">
+        <span class="kbd mono">allowance</span>
+        <h3>Credits arrive with the period</h3>
+        <p>Your plan's allowance lands automatically each period. On Team, credits pool across the whole organization instead of stranding on one person's seat.</p>
+      </div>
+      <div class="sec-card">
+        <span class="kbd mono">metered</span>
+        <h3>Drawn down by the token</h3>
+        <p>Token counts come from the provider's own response, never from the browser — so what you are charged is what was actually used.</p>
+      </div>
+      <div class="sec-card">
+        <span class="kbd mono">ledger</span>
+        <h3>Every movement is on the record</h3>
+        <p>Grants, purchases, draw-downs and expirations land in an append-only credit ledger — the same discipline as the audit trail.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="packs">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">Credit packs</div>
+      <h2>Run out mid-month? Top up.</h2>
+      <p>
+        Prepaid packs sit on top of any plan and never expire with the period. Larger packs
+        carry a volume bonus.
+      </p>
+    </div>
+    <div class="packs">
+      <div class="pack-head mono">
+        <span>PACK</span><span>YOU GET</span><span>BONUS</span>
+      </div>
+        <div class="pack-row">
+          <span class="pack-price mono">$10</span>
+          <span class="pack-credits">$10 of credits</span>
+          <span class="pack-bonus mono">—</span>
+        </div>
+        <div class="pack-row">
+          <span class="pack-price mono">$25</span>
+          <span class="pack-credits">$25 of credits</span>
+          <span class="pack-bonus mono">—</span>
+        </div>
+        <div class="pack-row">
+          <span class="pack-price mono">$50</span>
+          <span class="pack-credits">$50 of credits</span>
+          <span class="pack-bonus mono">—</span>
+        </div>
+        <div class="pack-row">
+          <span class="pack-price mono">$100</span>
+          <span class="pack-credits">$103 of credits</span>
+          <span class="pack-bonus mono">+$3 bonus</span>
+        </div>
+        <div class="pack-row">
+          <span class="pack-price mono">$250</span>
+          <span class="pack-credits">$260 of credits</span>
+          <span class="pack-bonus mono">+$10 bonus</span>
+        </div>
+        <div class="pack-row">
+          <span class="pack-price mono">$500</span>
+          <span class="pack-credits">$525 of credits</span>
+          <span class="pack-bonus mono">+$25 bonus</span>
+        </div>
+        <div class="pack-row">
+          <span class="pack-price mono">$1,000</span>
+          <span class="pack-credits">$1,075 of credits</span>
+          <span class="pack-bonus mono">+$75 bonus</span>
+        </div>
+    </div>
+    <p class="plans-note">
+      Auto-reload can top the balance back up when it runs low, so a Friday afternoon estimate
+      never stops halfway.
     </p>
   </div>
 </section>
@@ -150,33 +298,47 @@
     </div>
     <div class="faq">
       <details>
-        <summary>What counts as a user?</summary>
+        <summary>Do I have to buy all four platforms?</summary>
         <p>
-          Anyone linked to your organization with the join code — office staff on the
-          dashboard and crews on the Field Platform alike. You can see every
-          linked account from the dashboard.
+          No. They are four products — take the one that hurts most today. They read the same
+          record, so adding another later has nothing to import.
         </p>
       </details>
       <details>
-        <summary>Do you mark up model usage?</summary>
+        <summary>What is a credit?</summary>
         <p>
-          No. Atmosphere connects your own Anthropic API key, and Anthropic bills you
-          directly for what the agents use. Our plans cover the platform only.
+          One credit is one US dollar of usage at our published rates. Your plan includes an
+          allowance every period, and packs top it up when you need more.
+        </p>
+      </details>
+      <details>
+        <summary>What happens when I run out of credits?</summary>
+        <p>
+          Work pauses rather than silently billing you for more. Buy a pack, or turn on
+          auto-reload and set the limit you are comfortable with.
+        </p>
+      </details>
+      <details>
+        <summary>What do the throughput multipliers mean?</summary>
+        <p>
+          They are ceilings on how much work you can push through at once, relative to Pro.
+          Max 5× and Max 20× exist for people running agents continuously rather than a few
+          times a day.
+        </p>
+      </details>
+      <details>
+        <summary>What counts as a seat?</summary>
+        <p>
+          Anyone linked to your organization who uses that platform. Team pools credits across
+          seats and starts at five; Enterprise starts at twenty-five.
         </p>
       </details>
       <details>
         <summary>Does Atmosphere train on our data?</summary>
         <p>
           The learning layer scores your organization's own runs and improves how work is
-          routed for you. Your data stays inside your organization, behind Row-Level
-          Security — another org's agents can't see it, at the database layer.
-        </p>
-      </details>
-      <details>
-        <summary>Can we change plans?</summary>
-        <p>
-          Yes — plans are monthly, and you can move between Field and Office as your team
-          changes. Organization agreements are annual and shaped with you.
+          routed for you. Your data stays inside your organization, behind Row-Level Security
+          — another org's agents cannot see it, at the database layer.
         </p>
       </details>
     </div>
@@ -187,8 +349,8 @@
   <div class="wrap">
     <div class="cta-band">
       <div>
-        <h2>Start on the plan that fits</h2>
-        <p>Create your organization, share the join code, and change plans whenever the team does.</p>
+        <h2>Start on Free, on any platform</h2>
+        <p>Three dollars of credits is a real estimate. Spend it before you spend anything else.</p>
       </div>
       <div class="cta-actions">
         <a class="btn btn-lg" href="signup.html">Create your organization</a>

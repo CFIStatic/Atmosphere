@@ -16,7 +16,7 @@ written to appeal to contractors of every trade.
 | `field.html`      | Field Platform — capture on site, with a capture-log hero   |
 | `manager.html`    | Manager Platform — job costing, accounting, business insights |
 | `security.html`   | Security — architecture diagram and six structural claims   |
-| `pricing.html`    | Pricing — plans, BYO-API-key note, FAQ                      |
+| `pricing.html`    | Pricing — the six plans, credit packs, and the usage model  |
 | `docs.html`       | Docs — quickstart cards and an index of `../docs/*.md`      |
 | `about.html`      | About — story and principles                                |
 | `careers.html`    | Careers — roles, hiring process, and a working application form |
@@ -27,6 +27,25 @@ written to appeal to contractors of every trade.
 
 Shared assets live in `assets/site.css` (design tokens + components, light and
 dark themes) and `assets/site.js` (receipt replay + the careers form).
+
+## Pricing is repo data, not copywriting
+
+`pricing.html` mirrors the real billing model in
+`supabase/migrations/20260727124743_billing_pricing_metering.sql`. The six
+plans (Free, Pro, Max 5x, Max 20x, Team, Enterprise), their monthly and annual
+prices, included credit allowances, seat minimums, and throughput multipliers
+come from the `billing_plans` seed; the pack table comes from `credit_packs`,
+volume bonuses included. **Change the migration and this page must change with
+it** — or the site is quoting prices the product will not honor.
+
+The same model applies to all four products: each is bought separately at these
+same tiers. Usage is metered per token through the backend gateway and drawn
+from credits (1 credit = $1 USD), so the site must never claim customers bring
+their own API key for billing. The key that *is* customer-supplied is the one
+for computer use, which is a setup step, not a billing arrangement.
+
+`GET /api/billing/catalog` serves plans, packs, and the public rate card
+unauthenticated — the natural source if this page is ever made dynamic.
 
 ## Careers applications (frontend + backend)
 
