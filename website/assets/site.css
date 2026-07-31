@@ -122,7 +122,15 @@ a { color: inherit; }
   text-decoration: none; margin-right: auto;
 }
 .wordmark svg { display: block; }
-.wordmark .horizon-stroke { stroke: var(--ink); }
+/* Logo mark: four atmosphere bars fading toward the ground, one orange base.
+   Bars are ink at rising opacity, so the one asset matches both brand
+   lockups — light-to-dark on paper, dark-to-light on a dark ground. */
+.wordmark .lb { fill: var(--ink); }
+.wordmark .lb1 { opacity: .3; }
+.wordmark .lb2 { opacity: .5; }
+.wordmark .lb3 { opacity: .68; }
+.wordmark .lb4 { opacity: .88; }
+.wordmark .lb-a { fill: #F2670C; }
 .nav-links { display: flex; gap: 24px; align-items: center; }
 .nav-links a {
   text-decoration: none; font-size: 14.5px; color: var(--ink-soft);

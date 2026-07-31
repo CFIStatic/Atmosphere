@@ -76,10 +76,7 @@ out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
 <nav class="nav">
   <div class="wrap nav-inner">
     <a class="wordmark" href="#/home" aria-label="Atmosphere home">
-      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
-        <circle cx="11" cy="11" r="8.5" class="horizon-stroke" stroke-width="1.8"/>
-        <line x1="3.2" y1="14" x2="18.8" y2="14" class="horizon-stroke" stroke-width="1.8"/>
-      </svg>
+      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect class="lb lb1" width="22" height="2.8"/><rect class="lb lb2" y="4.8" width="22" height="2.8"/><rect class="lb lb3" y="9.6" width="22" height="2.8"/><rect class="lb lb4" y="14.4" width="22" height="2.8"/><rect class="lb-a" y="19.2" width="22" height="2.8"/></svg>
       Atmosphere
     </a>
     <div class="nav-links">
@@ -97,10 +94,7 @@ out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
     <div class="foot-grid">
       <div class="foot-brand">
         <a class="wordmark" href="#/home" aria-label="Atmosphere home">
-          <svg width="18" height="18" viewBox="0 0 22 22" fill="none" aria-hidden="true">
-            <circle cx="11" cy="11" r="8.5" class="horizon-stroke" stroke-width="1.8"/>
-            <line x1="3.2" y1="14" x2="18.8" y2="14" class="horizon-stroke" stroke-width="1.8"/>
-          </svg>
+          <svg width="18" height="18" viewBox="0 0 22 22" aria-hidden="true"><rect class="lb lb1" width="22" height="2.8"/><rect class="lb lb2" y="4.8" width="22" height="2.8"/><rect class="lb lb3" y="9.6" width="22" height="2.8"/><rect class="lb lb4" y="14.4" width="22" height="2.8"/><rect class="lb-a" y="19.2" width="22" height="2.8"/></svg>
           Atmosphere
         </a>
         <p>AI that does the work — and proves it did. Built for the trades that put homes back together.</p>
