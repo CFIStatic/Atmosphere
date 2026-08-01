@@ -446,6 +446,42 @@ const ESCALATIONS: Escalation[] = [
   },
 ];
 
+/* ------------------------------------------------------------------- CRM */
+
+const LEADS: Array<Record<string, any>> = [
+  { id: 'ld-1', title: 'Westlake townhomes — burst riser, 6 units', status: 'estimate_sent', source: 'insurance_carrier', workType: 'mitigation', lossType: 'water', estimatedValue: 48200, description: 'Six units affected off a single riser. Carrier wants one estimate covering all of them.', updatedAt: '2026-08-01T09:10:00Z' },
+  { id: 'ld-2', title: 'Verano Apartments — roof hail claim', status: 'qualified', source: 'referral', workType: 'construction', lossType: 'storm', estimatedValue: 96500, description: 'Property manager walked the roof with us; adjuster inspection booked.', updatedAt: '2026-07-31T14:40:00Z' },
+  { id: 'ld-3', title: 'Delgado residence — kitchen supply line', status: 'contacted', source: 'web', workType: 'mitigation', lossType: 'water', estimatedValue: 12400, description: 'Homeowner available after 4pm. Cabinets likely affected.', updatedAt: '2026-08-01T11:05:00Z' },
+  { id: 'ld-4', title: 'Riverbend Church — sanctuary water damage', status: 'new', source: 'phone', workType: 'mitigation', lossType: 'water', estimatedValue: 31000, description: 'Called Sunday evening. Services Wednesday — timing matters.', updatedAt: '2026-08-01T12:30:00Z' },
+  { id: 'ld-5', title: 'Nguyen residence — storm siding', status: 'new', source: 'referral', workType: 'construction', lossType: 'storm', estimatedValue: 8700, updatedAt: '2026-07-30T16:20:00Z' },
+  { id: 'ld-6', title: 'Foster Dental — sprinkler discharge', status: 'qualified', source: 'insurance_carrier', workType: 'mitigation', lossType: 'water', estimatedValue: 27300, description: 'After-hours discharge; practice closed until dry.', updatedAt: '2026-07-29T10:15:00Z' },
+  { id: 'ld-7', title: 'Cedar Ridge — storm damage', status: 'won', source: 'referral', estimatedValue: 13980, convertedJobId: 'job-1038', updatedAt: '2026-07-19T08:30:00Z' },
+  { id: 'ld-8', title: 'Meridian Ave — water loss', status: 'won', source: 'insurance_carrier', estimatedValue: 18420, convertedJobId: 'job-1041', updatedAt: '2026-07-24T15:02:00Z' },
+  { id: 'ld-9', title: 'Alder Court — mold survey', status: 'lost', source: 'web', estimatedValue: 6400, lostReason: 'Went with the carrier preferred vendor', updatedAt: '2026-07-22T09:00:00Z' },
+];
+
+const ACCOUNTS: Array<Record<string, any>> = [
+  { id: 'acc-1', name: 'Alliance Mutual Insurance', kind: 'insurance_carrier', email: 'claims@alliancemutual.com', phone: '(512) 555-0184', city: 'Austin', region: 'TX' },
+  { id: 'acc-2', name: 'Camden Court HOA', kind: 'property_management', email: 'board@camdencourt.org', phone: '(512) 555-0139', city: 'Austin', region: 'TX' },
+  { id: 'acc-3', name: 'Hollis Family', kind: 'other', email: 'j.hollis@example.com', phone: '(512) 555-0122', city: 'Round Rock', region: 'TX' },
+  { id: 'acc-4', name: 'Brightway Dental', kind: 'property_management', email: 'office@brightwaydental.com', phone: '(512) 555-0166', city: 'Austin', region: 'TX' },
+];
+
+const CONTACTS: Array<Record<string, any>> = [
+  { id: 'ct-1', firstName: 'Jordan', lastName: 'Hollis', companyName: null, email: 'j.hollis@example.com', phone: '(512) 555-0122', mobile: null },
+  { id: 'ct-2', firstName: 'Rita', lastName: 'Calloway', companyName: 'Alliance Mutual', email: 'r.calloway@alliancemutual.com', phone: '(512) 555-0184', mobile: null },
+  { id: 'ct-3', firstName: 'Sam', lastName: 'Okafor', companyName: 'Camden Court HOA', email: 'sam@camdencourt.org', phone: null, mobile: '(512) 555-0171' },
+];
+
+const ACTIVITIES: Array<Record<string, any>> = [
+  { id: 'act-1', kind: 'call', body: 'Spoke with the property manager — adjuster walks it Thursday, wants our scope same day.', leadId: 'ld-2', occurredAt: '2026-07-31T14:40:00Z' },
+  { id: 'act-2', kind: 'email', subject: 'Estimate attached — Westlake townhomes', body: 'Sent the six-unit estimate to the carrier desk; asked for confirmation of the program terms.', leadId: 'ld-1', occurredAt: '2026-08-01T09:10:00Z' },
+  { id: 'act-3', kind: 'note', body: 'Homeowner prefers texts. Gate code 4417.', leadId: 'ld-3', occurredAt: '2026-08-01T11:05:00Z' },
+];
+
+/** The activities handler needs the query it was called with. */
+const LAST_QUERY: { leadId?: string } = {};
+
 const COMPUTER_STATUS: ComputerStatus = {
   enabled: true,
   credential: { connected: true, source: 'organization', hint: 'sk-…-4KQ2', updatedAt: '2026-07-12T10:00:00Z' },
@@ -583,41 +619,102 @@ const routes: Array<[string, RegExp, Handler]> = [
   }],
 
   ['GET', /^\/api\/crm\/accounts$/, () => ({
-    body: {
-      items: [
-        { id: 'acc-1', name: 'Alliance Mutual Insurance', kind: 'carrier', email: 'claims@alliancemutual.com', phone: '(512) 555-0184', city: 'Austin', region: 'TX' },
-        { id: 'acc-2', name: 'Camden Court HOA', kind: 'commercial', email: 'board@camdencourt.org', phone: '(512) 555-0139', city: 'Austin', region: 'TX' },
-        { id: 'acc-3', name: 'Hollis Family', kind: 'residential', email: 'j.hollis@example.com', phone: '(512) 555-0122', city: 'Round Rock', region: 'TX' },
-        { id: 'acc-4', name: 'Brightway Dental', kind: 'commercial', email: 'office@brightwaydental.com', phone: '(512) 555-0166', city: 'Austin', region: 'TX' },
-      ],
-      total: 4, limit: 50, offset: 0,
-    },
+    body: { items: ACCOUNTS, total: ACCOUNTS.length, limit: 50, offset: 0 },
   })],
   ['GET', /^\/api\/crm\/leads$/, () => ({
+    body: { items: LEADS, total: LEADS.length, limit: 50, offset: 0 },
+  })],
+  ['POST', /^\/api\/crm\/leads$/, (_m, b) => {
+    const lead = {
+      id: `ld-${LEADS.length + 100}`,
+      title: String(b.title ?? 'Untitled lead'),
+      status: 'new',
+      source: (b.source as string) ?? 'other',
+      workType: (b.workType as string) ?? null,
+      lossType: (b.lossType as string) ?? null,
+      estimatedValue: b.estimatedValue == null ? null : Number(b.estimatedValue),
+      description: (b.description as string) ?? null,
+      accountId: (b.accountId as string) ?? null,
+      updatedAt: '2026-08-01T13:00:00Z',
+      createdAt: '2026-08-01T13:00:00Z',
+    };
+    LEADS.unshift(lead as (typeof LEADS)[number]);
+    return { status: 201, body: { item: lead } };
+  }],
+  ['PATCH', /^\/api\/crm\/leads\/([\w-]+)$/, (m, b) => {
+    const lead = LEADS.find((l) => l.id === m[1]);
+    if (!lead) return { status: 404, body: { error: 'Lead not found', code: 'not_found' } };
+    Object.assign(lead, b, { updatedAt: '2026-08-01T13:05:00Z' });
+    return { body: { item: lead } };
+  }],
+  ['POST', /^\/api\/crm\/leads\/([\w-]+)\/convert$/, (m) => {
+    const lead = LEADS.find((l) => l.id === m[1]);
+    if (!lead) return { status: 404, body: { error: 'Lead not found', code: 'not_found' } };
+    if (lead.convertedJobId) {
+      return { status: 409, body: { error: 'This lead has already been converted.', code: 'already_converted' } };
+    }
+    const jobId = `job-${1100 + LEADS.indexOf(lead)}`;
+    lead.status = 'won';
+    lead.convertedJobId = jobId;
+    JOBS.unshift({
+      jobId, jobNumber: 1100 + LEADS.indexOf(lead), title: lead.title, status: 'scheduled',
+      priority: 3, workType: (lead.workType as 'mitigation' | 'construction') ?? 'mitigation',
+      ownerId: 'demo-user-1', claimNumber: null, taskCount: 0, tasksDone: 0, crewSize: 0,
+      minutesLogged: 0, eventCount: 1, lastEvent: 'Converted from a won lead',
+      lastEventAt: '2026-08-01T13:05:00Z', contractAmount: lead.estimatedValue ?? null,
+      invoicedAmount: 0, paidAmount: 0, scheduledStart: null,
+      createdAt: '2026-08-01T13:05:00Z', updatedAt: '2026-08-01T13:05:00Z',
+    });
+    return { status: 201, body: { job: { id: jobId, title: lead.title }, leadUpdated: true } };
+  }],
+  ['GET', /^\/api\/crm\/activities$/, (_m, _b) => {
+    const url = LAST_QUERY.leadId;
+    const items = ACTIVITIES.filter((a) => !url || a.leadId === url);
+    return { body: { items, total: items.length, limit: 50, offset: 0 } };
+  }],
+  ['POST', /^\/api\/crm\/activities$/, (_m, b) => {
+    const item = {
+      id: `act-${ACTIVITIES.length + 1}`,
+      kind: (b.kind as string) ?? 'note',
+      subject: (b.subject as string) ?? null,
+      body: (b.body as string) ?? null,
+      leadId: (b.leadId as string) ?? null,
+      accountId: (b.accountId as string) ?? null,
+      jobId: (b.jobId as string) ?? null,
+      occurredAt: '2026-08-01T13:10:00Z',
+      createdAt: '2026-08-01T13:10:00Z',
+    };
+    ACTIVITIES.unshift(item as (typeof ACTIVITIES)[number]);
+    return { status: 201, body: { item } };
+  }],
+  ['GET', /^\/api\/crm\/summary$/, () => ({
     body: {
-      items: [
-        { id: 'ld-1', title: 'Westlake townhomes — burst riser, 6 units', status: 'estimate_sent', source: 'insurance_carrier', workType: 'mitigation', estimatedValue: 48200, updatedAt: '2026-08-01T09:10:00Z' },
-        { id: 'ld-2', title: 'Verano Apartments — roof hail claim', status: 'qualified', source: 'referral', workType: 'construction', estimatedValue: 96500, updatedAt: '2026-07-31T14:40:00Z' },
-        { id: 'ld-3', title: 'Delgado residence — kitchen supply line', status: 'contacted', source: 'web', workType: 'mitigation', estimatedValue: 12400, updatedAt: '2026-08-01T11:05:00Z' },
-        { id: 'ld-4', title: 'Riverbend Church — sanctuary water damage', status: 'new', source: 'phone', workType: 'mitigation', estimatedValue: 31000, updatedAt: '2026-08-01T12:30:00Z' },
-        { id: 'ld-5', title: 'Nguyen residence — storm siding', status: 'new', source: 'referral', workType: 'construction', estimatedValue: 8700, updatedAt: '2026-07-30T16:20:00Z' },
-        { id: 'ld-6', title: 'Foster Dental — sprinkler discharge', status: 'qualified', source: 'insurance_carrier', workType: 'mitigation', estimatedValue: 27300, updatedAt: '2026-07-29T10:15:00Z' },
-        { id: 'ld-7', title: 'Cedar Ridge — storm damage', status: 'won', source: 'referral', estimatedValue: 13980, updatedAt: '2026-07-19T08:30:00Z' },
-        { id: 'ld-8', title: 'Meridian Ave — water loss', status: 'won', source: 'insurance_carrier', estimatedValue: 18420, updatedAt: '2026-07-24T15:02:00Z' },
-        { id: 'ld-9', title: 'Alder Court — mold survey', status: 'lost', source: 'web', estimatedValue: 6400, lostReason: 'Went with the carrier preferred vendor', updatedAt: '2026-07-22T09:00:00Z' },
-      ],
-      total: 9, limit: 50, offset: 0,
+      summary: {
+        contacts: 3, properties: 4,
+        openLeads: LEADS.filter((l) => l.status === 'new').length,
+        activeJobs: JOBS.filter((j) => j.status === 'in_progress').length,
+        completedJobs: JOBS.filter((j) => j.status === 'completed').length,
+      },
     },
   })],
+  ['POST', /^\/api\/crm\/accounts$/, (_m, b) => {
+    const item = { id: `acc-${Date.parse('2026-08-01')}`, name: String(b.name ?? 'New account'),
+      kind: (b.type as string) ?? 'other', email: (b.email as string) ?? null,
+      phone: (b.phone as string) ?? null, city: (b.city as string) ?? null,
+      region: (b.region as string) ?? null };
+    ACCOUNTS.unshift(item);
+    return { status: 201, body: { item } };
+  }],
+  ['POST', /^\/api\/crm\/contacts$/, (_m, b) => {
+    const item = { id: `ct-${CONTACTS.length + 1}`, firstName: (b.firstName as string) ?? null,
+      lastName: (b.lastName as string) ?? null, companyName: (b.companyName as string) ?? null,
+      email: (b.email as string) ?? null, phone: (b.phone as string) ?? null,
+      mobile: (b.mobile as string) ?? null };
+    CONTACTS.unshift(item);
+    return { status: 201, body: { item } };
+  }],
   ['GET', /^\/api\/crm\/contacts$/, () => ({
-    body: {
-      items: [
-        { id: 'ct-1', firstName: 'Jordan', lastName: 'Hollis', companyName: null, email: 'j.hollis@example.com', phone: '(512) 555-0122', mobile: null },
-        { id: 'ct-2', firstName: 'Rita', lastName: 'Calloway', companyName: 'Alliance Mutual', email: 'r.calloway@alliancemutual.com', phone: '(512) 555-0184', mobile: null },
-        { id: 'ct-3', firstName: 'Sam', lastName: 'Okafor', companyName: 'Camden Court HOA', email: 'sam@camdencourt.org', phone: null, mobile: '(512) 555-0171' },
-      ],
-      total: 3, limit: 50, offset: 0,
-    },
+    body: { items: CONTACTS, total: CONTACTS.length, limit: 50, offset: 0 },
   })],
   ['GET', /^\/api\/computer\/status$/, () => ({ body: COMPUTER_STATUS })],
   ['GET', /^\/api\/computer\/agents$/, () => ({ body: { agents: COMPUTER_STATUS.agents } })],
@@ -635,6 +732,9 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
   const path = url.replace(/^https?:\/\/[^/]+/, '').split('?')[0];
   if (!path.startsWith('/api/')) return realFetch(input, init);
+
+  const query = new URLSearchParams((url.split('?')[1] ?? ''));
+  LAST_QUERY.leadId = query.get('leadId') ?? undefined;
 
   const method = (init?.method ?? 'GET').toUpperCase();
   let body: Record<string, unknown> = {};

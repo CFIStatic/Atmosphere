@@ -111,19 +111,94 @@ export const LEAD_STAGE_LABELS: Record<LeadStage, string> = {
   lost: 'Lost',
 };
 
-/** Camelized crm_leads row — only the columns the pipeline board reads. */
+export const LEAD_SOURCES = [
+  'referral', 'insurance_carrier', 'web', 'phone', 'repeat_customer', 'marketing', 'other',
+] as const;
+export type LeadSource = (typeof LEAD_SOURCES)[number];
+
+export const ACCOUNT_TYPES = [
+  'insurance_carrier', 'property_management', 'general_contractor',
+  'referral_partner', 'vendor', 'other',
+] as const;
+export type AccountType = (typeof ACCOUNT_TYPES)[number];
+
+export const CONTACT_TYPES = [
+  'homeowner', 'tenant', 'adjuster', 'agent', 'property_manager', 'vendor', 'other',
+] as const;
+export type ContactType = (typeof CONTACT_TYPES)[number];
+
+export const ACTIVITY_KINDS = ['note', 'call', 'email', 'sms', 'meeting'] as const;
+export type ActivityKind = (typeof ACTIVITY_KINDS)[number];
+
+/** snake_case → words, for enum values shown in the UI. */
+export function humanize(value: string | null | undefined): string {
+  if (!value) return '—';
+  const s = value.replace(/_/g, ' ');
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** Camelized crm_leads row. */
 export interface CrmLead {
   id: string;
   title: string;
   status: LeadStage;
-  source?: string | null;
-  workType?: string | null;
-  lossType?: string | null;
+  source?: LeadSource | null;
+  workType?: WorkType | null;
+  lossType?: LossType | null;
   estimatedValue?: number | null;
   description?: string | null;
   lostReason?: string | null;
+  contactId?: string | null;
+  accountId?: string | null;
+  convertedJobId?: string | null;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface CrmLeadInput {
+  title: string;
+  source?: LeadSource;
+  workType?: WorkType | null;
+  lossType?: LossType | null;
+  estimatedValue?: number | null;
+  description?: string | null;
+  accountId?: string | null;
+  contactId?: string | null;
+  status?: LeadStage;
+  lostReason?: string | null;
+}
+
+/** One logged touch — a call, an email, a note — against a lead or account. */
+export interface CrmActivity {
+  id: string;
+  kind: ActivityKind;
+  subject?: string | null;
+  body?: string | null;
+  leadId?: string | null;
+  accountId?: string | null;
+  contactId?: string | null;
+  jobId?: string | null;
+  occurredAt?: string | null;
+  createdAt?: string;
+  profiles?: { email: string | null; fullName: string | null } | null;
+}
+
+export interface CrmActivityInput {
+  kind: ActivityKind;
+  subject?: string;
+  body?: string;
+  leadId?: string;
+  accountId?: string;
+  contactId?: string;
+  jobId?: string;
+}
+
+export interface CrmSummary {
+  contacts: number;
+  properties: number;
+  openLeads: number;
+  activeJobs: number;
+  completedJobs: number;
 }
 
 /** Camelized crm_contacts row. */
@@ -893,6 +968,53 @@ export const api = {
       `/api/crm/leads${search ? `?search=${encodeURIComponent(search)}` : ''}`,
       { method: 'GET' },
     ),
+
+  createLead: (input: CrmLeadInput) =>
+    request<{ item: CrmLead }>('/api/crm/leads', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  updateLead: (id: string, patch: Partial<CrmLeadInput>) =>
+    request<{ item: CrmLead }>(`/api/crm/leads/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+
+  /** Turns a won lead into a job, carrying its people and value across. */
+  convertLead: (id: string, overrides: { title?: string; workType?: WorkType } = {}) =>
+    request<{ job: Job; leadUpdated: boolean }>(`/api/crm/leads/${id}/convert`, {
+      method: 'POST',
+      body: JSON.stringify(overrides),
+    }),
+
+  createAccount: (input: { name: string; type?: AccountType; phone?: string; email?: string; city?: string; region?: string; notes?: string }) =>
+    request<{ item: CrmAccount }>('/api/crm/accounts', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  createContact: (input: { firstName?: string; lastName?: string; type?: ContactType; companyName?: string; email?: string; phone?: string; mobile?: string; accountId?: string }) =>
+    request<{ item: CrmContact }>('/api/crm/contacts', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  /** Activities, optionally narrowed to one lead / account / job. */
+  crmActivities: (filter: { leadId?: string; accountId?: string; jobId?: string } = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(filter).forEach(([k, v]) => v && qs.set(k, v));
+    const suffix = qs.toString() ? `?${qs}` : '';
+    return request<CrmList<CrmActivity>>(`/api/crm/activities${suffix}`, { method: 'GET' });
+  },
+
+  logActivity: (input: CrmActivityInput) =>
+    request<{ item: CrmActivity }>('/api/crm/activities', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  crmSummary: () => request<{ summary: CrmSummary }>('/api/crm/summary', { method: 'GET' }),
 
   crmContacts: (search = '') =>
     request<CrmList<CrmContact>>(

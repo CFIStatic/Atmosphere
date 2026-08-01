@@ -1,14 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   api,
+  humanize,
   timeAgo,
   LEAD_STAGES,
   LEAD_STAGE_LABELS,
+  type CrmAccount,
   type CrmLead,
   type LeadStage,
 } from '../lib/api';
 import { AppShell, EmptyState, ErrorNote, PageHeader, PanelSpinner } from '../components/AppShell';
+import { LeadDrawer } from '../components/sales/LeadDrawer';
+import { NewLeadDialog } from '../components/sales/NewLeadDialog';
+import { PlusIcon } from '../components/icons';
 
 /** Work in hand, not yet won — the open stages, left to right. */
 const OPEN_STAGES: LeadStage[] = ['new', 'contacted', 'qualified', 'estimate_sent'];
@@ -27,22 +32,30 @@ function dollars(amount: number): string {
  */
 export function PipelinePage() {
   const [leads, setLeads] = useState<CrmLead[] | null>(null);
+  const [accounts, setAccounts] = useState<CrmAccount[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
+  const load = useCallback(() => {
     api
       .crmLeads()
-      .then(({ items }) => !cancelled && setLeads(items))
+      .then(({ items }) => {
+        setLeads(items);
+        setError(null);
+      })
       .catch((err) => {
-        if (cancelled) return;
         setLeads([]);
         setError(err instanceof Error ? err.message : 'Could not load the pipeline.');
       });
-    return () => {
-      cancelled = true;
-    };
   }, []);
+
+  useEffect(() => {
+    load();
+    api.crmAccounts().then(({ items }) => setAccounts(items)).catch(() => setAccounts([]));
+  }, [load]);
+
+  const open = leads?.find((l) => l.id === openId) ?? null;
 
   const byStage = useMemo(() => {
     const map = new Map<LeadStage, CrmLead[]>();
@@ -67,6 +80,15 @@ export function PipelinePage() {
         eyebrow="Sales Platform"
         title="Pipeline"
         description="Every lead by the stage it sits in. The agent works this board — drafting the follow-up, flagging what has gone quiet — and you decide what it sends."
+        action={
+          <button
+            onClick={() => setCreating(true)}
+            className="flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-400"
+          >
+            <PlusIcon width={15} height={15} />
+            New lead
+          </button>
+        }
       />
 
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
@@ -117,9 +139,10 @@ export function PipelinePage() {
                       </header>
                       <div className="space-y-2 p-3">
                         {items.map((lead) => (
-                          <article
+                          <button
                             key={lead.id}
-                            className="rounded-lg border border-line bg-paper-200/60 px-3 py-2.5"
+                            onClick={() => setOpenId(lead.id)}
+                            className="w-full rounded-lg border border-line bg-paper-200/60 px-3 py-2.5 text-left transition hover:border-brand-500/50 hover:bg-paper-300/50"
                           >
                             <p className="text-[13px] font-semibold leading-snug text-ink-900">
                               {lead.title}
@@ -130,10 +153,10 @@ export function PipelinePage() {
                                   {dollars(lead.estimatedValue)}
                                 </span>
                               )}
-                              {lead.source && <span>{lead.source.replace(/_/g, ' ')}</span>}
+                              {lead.source && <span>{humanize(lead.source)}</span>}
                               {lead.updatedAt && <span>· {timeAgo(lead.updatedAt)}</span>}
                             </div>
-                          </article>
+                          </button>
                         ))}
                         {items.length === 0 && (
                           <p className="px-1 py-4 text-center text-[12px] text-ink-500">Empty</p>
@@ -155,9 +178,10 @@ export function PipelinePage() {
                 </p>
               </header>
               {[...won, ...lost].slice(0, 8).map((lead) => (
-                <div
+                <button
                   key={lead.id}
-                  className="flex items-center gap-3 border-b border-line px-5 py-3 last:border-b-0"
+                  onClick={() => setOpenId(lead.id)}
+                  className="flex w-full items-center gap-3 border-b border-line px-5 py-3 text-left transition last:border-b-0 hover:bg-paper-200/50"
                 >
                   <span
                     className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
@@ -179,7 +203,7 @@ export function PipelinePage() {
                       {dollars(lead.estimatedValue)}
                     </span>
                   )}
-                </div>
+                </button>
               ))}
               <div className="px-5 py-3">
                 <Link to="/jobs" className="text-xs font-medium text-brand-600">
@@ -189,6 +213,21 @@ export function PipelinePage() {
             </section>
           )}
         </>
+      )}
+
+      {open && (
+        <LeadDrawer
+          lead={open}
+          onClose={() => setOpenId(null)}
+          onChanged={load}
+        />
+      )}
+      {creating && (
+        <NewLeadDialog
+          accounts={accounts}
+          onClose={() => setCreating(false)}
+          onCreated={load}
+        />
       )}
     </AppShell>
   );
