@@ -404,9 +404,20 @@ async function execute(
       observations,
       directives,
       mitigationItems: derivation?.items,
+      address: match.job.address,
     });
 
     for (const warning of scope.warnings) log.add('building_scope', warning, 'warn');
+    if (scope.dependentsAdded > 0) {
+      log.add(
+        'building_scope',
+        `Knowledge base expanded ${scope.dependentsAdded} companion line(s) (assemblies, MEP resets, cleaning).`,
+      );
+    }
+    for (const note of scope.equipmentNotes) log.add('building_scope', note);
+    if (scope.jurisdiction) {
+      log.add('building_scope', `Applied local code pack: ${scope.jurisdiction}.`);
+    }
 
     if (scope.items.length === 0) {
       throw new HttpError(
@@ -429,7 +440,19 @@ async function execute(
       scope: scope.items,
       basis,
       warnings: scope.warnings,
+      derivation,
+      mitigation,
     });
+
+    if (estimate.completeness) {
+      log.add(
+        'pricing',
+        `Completeness: ${estimate.completeness.criticalCount} critical, ` +
+          `${estimate.completeness.warningCount} warning(s), ` +
+          `${estimate.completeness.unmatchedRemovals.length} unmatched mitigation removal(s).`,
+        estimate.completeness.criticalCount > 0 ? 'warn' : 'info',
+      );
+    }
 
     log.add(
       'awaiting_review',

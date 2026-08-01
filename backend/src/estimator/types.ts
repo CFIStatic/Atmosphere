@@ -278,6 +278,18 @@ export interface ConstructionEstimate {
   basis: 'scan' | 'mitigation' | 'both';
   lineItems: EstimateLineItem[];
   summary: EstimateSummary;
+  /** Thoroughness review — missing companions, unmatched removals, code gaps. */
+  completeness?: {
+    issues: {
+      severity: 'critical' | 'warning' | 'info';
+      roomName?: string;
+      code?: string;
+      message: string;
+    }[];
+    unmatchedRemovals: { description: string; roomName?: string; reason: string }[];
+    criticalCount: number;
+    warningCount: number;
+  };
   /** Anything the estimator could not decide on its own. */
   warnings: string[];
   generatedAt: string;

@@ -681,19 +681,56 @@ function RunPanel({
               tone={estimate.summary.itemsNeedingReview > 0 ? 'warn' : 'ok'}
             />
             <Stat
-              label="Built from"
+              label="Completeness"
               value={
-                estimate.basis === 'both'
-                  ? 'Photos + mitigation'
-                  : estimate.basis === 'mitigation'
-                    ? 'Mitigation estimate'
-                    : 'Scan + photos'
+                estimate.completeness
+                  ? estimate.completeness.criticalCount > 0
+                    ? `${estimate.completeness.criticalCount} gaps`
+                    : 'Complete'
+                  : estimate.basis === 'both'
+                    ? 'Photos + mitigation'
+                    : estimate.basis === 'mitigation'
+                      ? 'Mitigation estimate'
+                      : 'Scan + photos'
+              }
+              tone={
+                estimate.completeness && estimate.completeness.criticalCount > 0
+                  ? 'warn'
+                  : 'ok'
               }
             />
           </div>
 
+          {estimate.completeness &&
+            (estimate.completeness.criticalCount > 0 ||
+              estimate.completeness.warningCount > 0 ||
+              estimate.completeness.unmatchedRemovals.length > 0) && (
+              <div className="mt-4 rounded-lg border border-line bg-paper-50 p-3">
+                <h3 className="text-sm font-semibold text-ink-900">Thoroughness check</h3>
+                <p className="mt-1 text-xs text-ink-600">
+                  Missing companions, unmatched mitigation removals, and code gaps — nothing
+                  is silently dropped.
+                </p>
+                <ul className="mt-2 space-y-1.5">
+                  {estimate.completeness.issues
+                    .filter((issue) => issue.severity !== 'info')
+                    .map((issue, index) => (
+                      <li
+                        key={index}
+                        className={`flex gap-2 text-sm ${
+                          issue.severity === 'critical' ? 'text-danger-700' : 'text-caution-600'
+                        }`}
+                      >
+                        <AlertIcon className="mt-0.5 shrink-0" width={14} height={14} />
+                        <span>{issue.message}</span>
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
+
           {estimate.warnings.length > 0 && (
-            <ul className="mt-4 space-y-1.5 rounded-lg border border-caution-200 bg-caution-50 p-3">
+            <ul className="mt-4 max-h-48 space-y-1.5 overflow-y-auto rounded-lg border border-caution-200 bg-caution-50 p-3">
               {estimate.warnings.map((warning, index) => (
                 <li key={index} className="flex gap-2 text-sm text-caution-600">
                   <AlertIcon className="mt-0.5 shrink-0" width={14} height={14} />

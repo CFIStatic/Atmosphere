@@ -2899,6 +2899,17 @@ export interface ConstructionEstimate {
     itemsNeedingReview: number;
     emptyRooms: string[];
   };
+  completeness?: {
+    issues: {
+      severity: 'critical' | 'warning' | 'info';
+      roomName?: string;
+      code?: string;
+      message: string;
+    }[];
+    unmatchedRemovals: { description: string; roomName?: string; reason: string }[];
+    criticalCount: number;
+    warningCount: number;
+  };
   warnings: string[];
   generatedAt: string;
 }

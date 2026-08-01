@@ -1,6 +1,9 @@
 import { CATALOG, codeFor, type CatalogKey } from '../pricing/catalog.js';
 import { EMPTY_DIRECTIVES, type JobDirectives } from '../ai/noteAnalysis.js';
 import { similarity } from '../matching/jobMatcher.js';
+import { expandDependents } from '../knowledge/dependents.js';
+import { sizeConstructionEquipment } from '../knowledge/equipment.js';
+import { applyCodeRequirements } from '../knowledge/codes.js';
 import {
   affectedArea,
   baseboardLength,
@@ -14,6 +17,7 @@ import {
 import {
   MIN_OBSERVATION_CONFIDENCE,
   type DamageObservation,
+  type JobAddress,
   type RoomMeasurements,
   type ScopeItem,
   type Severity,
@@ -492,16 +496,35 @@ export interface ScopeInput {
   directives?: JobDirectives;
   /** Items derived from the mitigation estimate, if one was supplied. */
   mitigationItems?: ScopeItem[];
+  /** Job address — drives local code / permit packs. */
+  address?: JobAddress;
 }
 
 export interface ScopeResult {
   items: ScopeItem[];
   warnings: string[];
+  /** How many companion lines the knowledge base added. */
+  dependentsAdded: number;
+  /** Equipment sizing notes for the run log. */
+  equipmentNotes: string[];
+  /** Jurisdiction pack that fired, when codes ran. */
+  jurisdiction?: string;
 }
 
 export function buildScope(input: ScopeInput): ScopeResult {
   const directives = input.directives ?? EMPTY_DIRECTIVES;
   const warnings: string[] = [];
+
+  // Surface free-text carrier directives so a reviewer sees them even when the
+  // rule engine cannot act on every one automatically.
+  for (const directive of directives.directives) {
+    warnings.push(`Job directive: ${directive}`);
+  }
+  if (directives.waterCategory) {
+    warnings.push(
+      `Water category ${directives.waterCategory} recorded from the job notes — rebuild assumes mitigation already treated cavities appropriately.`,
+    );
+  }
 
   const roomsById = new Map(input.rooms.map((room) => [room.id, room]));
   const scopedRooms = input.rooms.filter((room) => {
@@ -534,7 +557,7 @@ export function buildScope(input: ScopeInput): ScopeResult {
     ? resolveMitigationRooms(input.mitigationItems, scopedRooms, warnings)
     : [];
 
-  const combined = expandPaintToFullSurface(
+  let combined = expandPaintToFullSurface(
     dedupe([...fromPhotos, ...fromMitigation]),
     roomsById,
   );
@@ -583,6 +606,41 @@ export function buildScope(input: ScopeInput): ScopeResult {
     });
   }
 
+  combined = dedupe([...combined, ...closeout]);
+
+  // Knowledge base: assembly companions (pad, primer, outlets, filters, …).
+  const expanded = expandDependents(combined, scopedRooms);
+  combined = dedupe(expanded.items);
+  if (expanded.added > 0) {
+    warnings.push(
+      `Construction knowledge base added ${expanded.added} companion line(s) so assemblies are complete.`,
+    );
+  }
+
+  // Construction-phase equipment sized to dusty work volume.
+  const equipment = sizeConstructionEquipment(combined, scopedRooms);
+  combined = dedupe([...combined, ...equipment.items]);
+  for (const note of equipment.notes) warnings.push(note);
+
+  // Local codes / permits from the job address.
+  let jurisdiction: string | undefined;
+  if (input.address) {
+    const codes = applyCodeRequirements(combined, {
+      address: input.address,
+      rooms: scopedRooms,
+      waterCategory: directives.waterCategory,
+      directives,
+    });
+    jurisdiction = codes.jurisdiction;
+    combined = dedupe([...combined, ...codes.items]);
+    warnings.push(...codes.warnings);
+  }
+
+  // Second pass: equipment/code lines can unlock further companions
+  // (scrubber → filters is already in equipment; final_clean → hepa_vacuum).
+  const second = expandDependents(combined, scopedRooms);
+  combined = dedupe(second.items);
+
   const emptyRooms = scopedRooms.filter((room) => !byRoom.has(room.id));
   if (emptyRooms.length > 0 && input.observations.length > 0) {
     warnings.push(
@@ -590,5 +648,11 @@ export function buildScope(input: ScopeInput): ScopeResult {
     );
   }
 
-  return { items: [...combined, ...closeout], warnings };
+  return {
+    items: combined,
+    warnings,
+    dependentsAdded: expanded.added + second.added,
+    equipmentNotes: equipment.notes,
+    jurisdiction,
+  };
 }
