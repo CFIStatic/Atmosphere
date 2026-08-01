@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Different ways crews actually use Atmosphere — the situation, what to hand the agent, and what comes back." />
+  <meta name="theme-color" content="#FBFAF7" />
+  <title>Guides & recipes · Atmosphere Docs</title>
+  <meta property="og:title" content="Guides & recipes · Atmosphere Docs" />
+  <meta property="og:description" content="Different ways crews actually use Atmosphere — the situation, what to hand the agent, and what comes back." />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Atmosphere" />
+  <meta property="og:image" content="/assets/og.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect width='22' height='2.8' fill='%23A8A29E'/%3E%3Crect y='4.8' width='22' height='2.8' fill='%2378716C'/%3E%3Crect y='9.6' width='22' height='2.8' fill='%2357534E'/%3E%3Crect y='14.4' width='22' height='2.8' fill='%23292524'/%3E%3Crect y='19.2' width='22' height='2.8' fill='%23F2670C'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="assets/site.css" />
+  <script>try{var t=localStorage.getItem('atm-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="wordmark" href="index.html" aria-label="Atmosphere home">
+      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect class="lb lb1" width="22" height="2.8"/><rect class="lb lb2" y="4.8" width="22" height="2.8"/><rect class="lb lb3" y="9.6" width="22" height="2.8"/><rect class="lb lb4" y="14.4" width="22" height="2.8"/><rect class="lb-a" y="19.2" width="22" height="2.8"/></svg>
+      Atmosphere
+    </a>
+    <div class="nav-links">
+      <div class="nav-item">
+        <a href="platform.html" data-nav="platform">Platform <span class="caret" aria-hidden="true"></span></a>
+        <div class="menu">
+          <a href="platform.html">Platform overview <span>How the four fit together</span></a>
+          <a href="sales.html">Sales Platform <span>Win the work</span></a>
+          <a href="operations.html">Operations Platform <span>Run the work</span></a>
+          <a href="field.html">Field Platform <span>Capture the job site</span></a>
+          <a href="manager.html">Manager Platform <span>Run the business</span></a>
+        </div>
+      </div>
+      <a href="pricing.html" data-nav="pricing">Pricing</a>
+      <div class="nav-item">
+        <a href="docs.html" data-nav="resources">Resources <span class="caret" aria-hidden="true"></span></a>
+        <div class="menu">
+          <a href="docs.html">Documentation <span>How every piece works</span></a>
+          <a href="doc-recipes.html">Guides &amp; recipes <span>Ways crews use Atmosphere</span></a>
+          <a href="doc-troubleshooting.html">Troubleshooting <span>Solving errors, step by step</span></a>
+          <a href="security.html">Security <span>The model, by construction</span></a>
+        </div>
+      </div>
+      <div class="nav-item">
+        <a href="about.html" data-nav="about">Company <span class="caret" aria-hidden="true"></span></a>
+        <div class="menu">
+          <a href="about.html">About <span>Why proof-first</span></a>
+          <a href="careers.html">Careers <span>Open roles</span></a>
+          <a href="investors.html">Investors <span>The data room</span></a>
+          <a href="contact.html">Contact <span>Talk to a human</span></a>
+        </div>
+      </div>
+      <a class="btn-quiet" href="signin.html">Sign in</a>
+      <a class="btn" href="signup.html">Get started</a>
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch between light and dark mode">
+        <svg class="icon-moon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        <svg class="icon-sun" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="3.2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v1.8M8 13.2V15M15 8h-1.8M2.8 8H1M12.95 3.05l-1.27 1.27M4.32 11.68l-1.27 1.27M12.95 12.95l-1.27-1.27M4.32 4.32 3.05 3.05" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      </button>
+      <button class="nav-burger" id="nav-burger" type="button" aria-label="Open menu" aria-expanded="false">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="nav-panel" id="nav-panel">
+    <div class="grp mono">Platform</div>
+    <a class="sub" href="platform.html">Platform overview</a>
+    <a class="sub" href="sales.html">Sales Platform</a>
+    <a class="sub" href="operations.html">Operations Platform</a>
+    <a class="sub" href="field.html">Field Platform</a>
+    <a class="sub" href="manager.html">Manager Platform</a>
+    <a href="pricing.html">Pricing</a>
+    <div class="grp mono">Resources</div>
+    <a class="sub" href="docs.html">Documentation</a>
+    <a class="sub" href="doc-recipes.html">Guides &amp; recipes</a>
+    <a class="sub" href="doc-troubleshooting.html">Troubleshooting</a>
+    <a class="sub" href="security.html">Security</a>
+    <div class="grp mono">Company</div>
+    <a class="sub" href="about.html">About</a>
+    <a class="sub" href="careers.html">Careers</a>
+    <a class="sub" href="investors.html">Investors</a>
+    <a class="sub" href="contact.html">Contact</a>
+    <a href="signin.html">Sign in</a>
+    <a href="signup.html">Create your organization</a>
+  </div>
+</nav>
+
+<!-- page:start -->
+<main>
+
+<div class="wrap docs-layout">
+  <aside class="docs-side" aria-label="Documentation">
+      <a class="all" href="docs.html">&larr; All resources</a>
+      <div class="grp mono">Guides</div>
+      <a href="doc-getting-started.html">Getting started</a>
+      <a class="active" href="doc-recipes.html">Guides &amp; recipes</a>
+      <a href="doc-troubleshooting.html">Troubleshooting</a>
+      <div class="grp mono">Platforms</div>
+      <a href="doc-estimators.html">The estimators</a>
+      <a href="doc-web-access.html">Web Access &amp; the Verifier</a>
+      <a href="doc-computer-use.html">Computer use</a>
+      <a href="doc-field.html">The Field Platform</a>
+      <div class="grp mono">Account</div>
+      <a href="doc-billing.html">Billing &amp; the flat rate</a>
+  </aside>
+  <article class="docs-prose">
+    <div class="eyebrow mono">Resources · Guides</div>
+    <h1>Guides &amp; recipes</h1>
+    <p class="lede">Different ways crews actually use Atmosphere — the situation, what to hand the agent, and what comes back.</p>
+
+<h2>Sales</h2>
+<h3>Revive the pipeline on a Friday afternoon</h3>
+<p>Ask the agent for every lead with no movement in ten days. It comes back with the list, what is owed to whom, and a drafted follow-up for each — you approve, it sends nothing until you do.</p>
+<h3>Walk into a callback knowing everything</h3>
+<p>Picking up a colleague's lead cold? Ask for a summary of the lead's history. You get the property, the loss, every conversation so far, and the open question the customer is actually waiting on.</p>
+<h2>Operations</h2>
+<h3>The estimate before the morning meeting</h3>
+<p>Yesterday's scan and photos are already attached to the job. Hand the Mitigation Estimator the job and by the time coffee is poured there is a priced, S500-classified Xactimate estimate — with the unbilled-work check already run.</p>
+<h3>Let the morning brief run the standup</h3>
+<p>The Operations Platform's rules watch every open job overnight — overdue readings, stalled drying, idle equipment, unstaffed starts. The morning brief lists what actually needs a decision, so standup is ten minutes, not forty.</p>
+<h3>Demobilize the day the job dries</h3>
+<p>When every area hits its dry standard, the platform says so. Sign off, pull equipment the same day, and stop losing billable units to jobs that finished last Thursday.</p>
+<h2>Roofing</h2>
+<h3>Storm week, kept straight</h3>
+<p>The night after hail, leads arrive faster than anyone can work them. Every inspection lands as a lead with its photos and measurements attached; the agent drafts the carrier-ready estimate from what was captured, and flags which claims are still waiting on an adjuster — so nothing melts away in the pile.</p>
+<h2>Field</h2>
+<h3>The two-minute walk-through</h3>
+<p>Start recording at the door. Call out readings, let the camera name the materials and damage, speak the notes you would otherwise forget. Everything lands on the job as evidence — and tomorrow's estimate reads it.</p>
+<h2>Manager</h2>
+<h3>Catch the margin while the job is open</h3>
+<p>Job costing runs against the live job: labor, equipment, materials, and subs set against what the estimate said. A job crossing its margin flags while there is still something to be done about it.</p>
+<h3>Month-end in an afternoon</h3>
+<p>Invoices build from the record — estimate, change orders, work performed — and will not go out with a blocking document missing. The margin breakdown by carrier, crew, and job type tells you which work to chase next month.</p>
+<h2>Everywhere</h2>
+<h3>Answer a dispute with a replay</h3>
+<p>A carrier questions a line item six weeks later. Open the audit trail, replay the run that priced it, and send what the agent saw, what it did, and what the Verifier confirmed.</p>
+
+    <div class="doc-pager">
+      <a class="prev" href="doc-getting-started.html"><span class="dir mono">&larr; PREVIOUS</span>Getting started</a>
+      <a class="next" href="doc-troubleshooting.html"><span class="dir mono">NEXT &rarr;</span>Troubleshooting</a>
+    </div>
+  </article>
+</div>
+
+</main>
+<!-- page:end -->
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <a class="wordmark" href="index.html" aria-label="Atmosphere home">
+          <svg width="18" height="18" viewBox="0 0 22 22" aria-hidden="true"><rect class="lb lb1" width="22" height="2.8"/><rect class="lb lb2" y="4.8" width="22" height="2.8"/><rect class="lb lb3" y="9.6" width="22" height="2.8"/><rect class="lb lb4" y="14.4" width="22" height="2.8"/><rect class="lb-a" y="19.2" width="22" height="2.8"/></svg>
+          Atmosphere
+        </a>
+      </div>
+      <div class="foot-col">
+        <h4>Product</h4>
+        <a href="platform.html">Platform overview</a>
+        <a href="sales.html">Sales Platform</a>
+        <a href="operations.html">Operations Platform</a>
+        <a href="field.html">Field Platform</a>
+        <a href="manager.html">Manager Platform</a>
+      </div>
+      <div class="foot-col">
+        <h4>Resources</h4>
+        <a href="docs.html">Documentation</a>
+        <a href="doc-recipes.html">Guides &amp; recipes</a>
+        <a href="doc-troubleshooting.html">Troubleshooting</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="security.html">Security</a>
+      </div>
+      <div class="foot-col">
+        <h4>Company</h4>
+        <a href="about.html">About</a>
+        <a href="careers.html">Careers</a>
+        <a href="investors.html">Investors</a>
+        <a href="contact.html">Contact</a>
+      </div>
+      <div class="foot-col">
+        <h4>App</h4>
+        <a href="signin.html">Sign in</a>
+        <a href="signup.html">Create an organization</a>
+      </div>
+    </div>
+    <div class="foot-note">
+      <span>© 2026 Atmosphere. · <a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a></span>
+      <span>Every run, on the record.</span>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>

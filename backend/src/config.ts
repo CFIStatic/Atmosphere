@@ -163,6 +163,33 @@ export const config = {
     defaultModel: process.env.ANTHROPIC_DEFAULT_MODEL ?? 'claude-opus-5',
   },
 
+  contact: {
+    // Where messages from the corporate site's contact form land. Falls back
+    // to the careers inbox so one configured address serves both forms.
+    toEmail:
+      process.env.CONTACT_TO_EMAIL ??
+      process.env.CAREERS_TO_EMAIL ??
+      'jackcyganiak@yahoo.com',
+  },
+
+  careers: {
+    // Where job applications from the corporate site's careers page land.
+    toEmail: process.env.CAREERS_TO_EMAIL ?? 'jackcyganiak@yahoo.com',
+    // Envelope sender for the application emails. Many SMTP providers require
+    // this to be an address the account is allowed to send as.
+    fromEmail: process.env.CAREERS_FROM_EMAIL ?? process.env.SMTP_USER ?? '',
+    // SMTP transport. Leave unset and /api/careers/apply still accepts and
+    // logs applications in development, but refuses in production so a deploy
+    // that forgot to configure mail fails loudly instead of eating applicants.
+    smtp: {
+      host: process.env.SMTP_HOST ?? '',
+      port: Number(process.env.SMTP_PORT ?? 587),
+      secure: process.env.SMTP_SECURE === 'true',
+      user: process.env.SMTP_USER ?? '',
+      pass: process.env.SMTP_PASS ?? '',
+    },
+  },
+
   billing: {
     // Whether a client may report its own token counts to /api/usage/record.
     //

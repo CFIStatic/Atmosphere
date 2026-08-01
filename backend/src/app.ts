@@ -29,6 +29,8 @@ import { computerRouter } from './routes/computer.js';
 import { estimatorRouter } from './routes/estimator.js';
 import { financeRouter } from './routes/finance.js';
 import { healthRouter } from './routes/health.js';
+import { careersRouter } from './routes/careers.js';
+import { contactRouter } from './routes/contact.js';
 import { mitigationRouter } from './routes/mitigation.js';
 import { xactimateRouter } from './routes/xactimate.js';
 import { salesRouter } from './routes/sales.js';
@@ -169,6 +171,8 @@ export function createApp(): Express {
   app.use('/api/estimator', estimatorRouter);
   app.use('/api/sales', salesRouter);
   app.use('/api/email-marketing', emailMarketingRouter);
+  app.use('/api/careers', careersRouter);
+  app.use('/api/contact', contactRouter);
 
   // 404 + error handling (must be last).
   app.use(notFound);

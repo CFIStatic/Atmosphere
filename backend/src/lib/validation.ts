@@ -850,3 +850,53 @@ export const startConnectorRunSchema = z.object({
 
 export type ConnectAppConnectorInput = z.infer<typeof connectAppConnectorSchema>;
 export type StartConnectorRunInput = z.infer<typeof startConnectorRunSchema>;
+
+/**
+ * A job application from the corporate site's careers page. `website` is a
+ * honeypot — the field is invisible in the browser, so a non-empty value means
+ * a bot filled the form; the route accepts and discards it.
+ */
+export const careersApplicationSchema = z.object({
+  name: z.string({ required_error: 'Name is required' }).trim().min(1, 'Name is required').max(200),
+  email: z
+    .string({ required_error: 'Email is required' })
+    .trim()
+    .toLowerCase()
+    .email('Enter a valid email address'),
+  role: z.string({ required_error: 'Pick a role' }).trim().min(1, 'Pick a role').max(200),
+  links: z.string().trim().max(1000).optional().default(''),
+  message: z
+    .string({ required_error: 'Tell us something about your work' })
+    .trim()
+    .min(10, 'Tell us a little more — a sentence or two is plenty')
+    .max(10_000, 'That message is longer than we can take in one go'),
+  website: z.string().max(200).optional().default(''),
+});
+
+export type CareersApplication = z.infer<typeof careersApplicationSchema>;
+
+
+/**
+ * A message from the corporate site's contact form. Same honeypot convention
+ * as the careers application: `website` is invisible in the browser, so a
+ * non-empty value means a bot filled the form.
+ */
+export const contactMessageSchema = z.object({
+  name: z.string({ required_error: 'Name is required' }).trim().min(1, 'Name is required').max(200),
+  email: z
+    .string({ required_error: 'Email is required' })
+    .trim()
+    .toLowerCase()
+    .email('Enter a valid email address'),
+  company: z.string().trim().max(200).optional().default(''),
+  teamSize: z.string().trim().max(50).optional().default(''),
+  workType: z.string().trim().max(50).optional().default(''),
+  message: z
+    .string({ required_error: 'Tell us what you need' })
+    .trim()
+    .min(10, 'Tell us a little more — a sentence or two is plenty')
+    .max(10_000, 'That message is longer than we can take in one go'),
+  website: z.string().max(200).optional().default(''),
+});
+
+export type ContactMessage = z.infer<typeof contactMessageSchema>;

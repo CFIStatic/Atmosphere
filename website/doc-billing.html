@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="The 30-day test, seat plans, and how the one flat token rate is set and metered." />
+  <meta name="theme-color" content="#FBFAF7" />
+  <title>Billing & the flat rate · Atmosphere Docs</title>
+  <meta property="og:title" content="Billing & the flat rate · Atmosphere Docs" />
+  <meta property="og:description" content="The 30-day test, seat plans, and how the one flat token rate is set and metered." />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Atmosphere" />
+  <meta property="og:image" content="/assets/og.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect width='22' height='2.8' fill='%23A8A29E'/%3E%3Crect y='4.8' width='22' height='2.8' fill='%2378716C'/%3E%3Crect y='9.6' width='22' height='2.8' fill='%2357534E'/%3E%3Crect y='14.4' width='22' height='2.8' fill='%23292524'/%3E%3Crect y='19.2' width='22' height='2.8' fill='%23F2670C'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="assets/site.css" />
+  <script>try{var t=localStorage.getItem('atm-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="wordmark" href="index.html" aria-label="Atmosphere home">
+      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect class="lb lb1" width="22" height="2.8"/><rect class="lb lb2" y="4.8" width="22" height="2.8"/><rect class="lb lb3" y="9.6" width="22" height="2.8"/><rect class="lb lb4" y="14.4" width="22" height="2.8"/><rect class="lb-a" y="19.2" width="22" height="2.8"/></svg>
+      Atmosphere
+    </a>
+    <div class="nav-links">
+      <div class="nav-item">
+        <a href="platform.html" data-nav="platform">Platform <span class="caret" aria-hidden="true"></span></a>
+        <div class="menu">
+          <a href="platform.html">Platform overview <span>How the four fit together</span></a>
+          <a href="sales.html">Sales Platform <span>Win the work</span></a>
+          <a href="operations.html">Operations Platform <span>Run the work</span></a>
+          <a href="field.html">Field Platform <span>Capture the job site</span></a>
+          <a href="manager.html">Manager Platform <span>Run the business</span></a>
+        </div>
+      </div>
+      <a href="pricing.html" data-nav="pricing">Pricing</a>
+      <div class="nav-item">
+        <a href="docs.html" data-nav="resources">Resources <span class="caret" aria-hidden="true"></span></a>
+        <div class="menu">
+          <a href="docs.html">Documentation <span>How every piece works</span></a>
+          <a href="doc-recipes.html">Guides &amp; recipes <span>Ways crews use Atmosphere</span></a>
+          <a href="doc-troubleshooting.html">Troubleshooting <span>Solving errors, step by step</span></a>
+          <a href="security.html">Security <span>The model, by construction</span></a>
+        </div>
+      </div>
+      <div class="nav-item">
+        <a href="about.html" data-nav="about">Company <span class="caret" aria-hidden="true"></span></a>
+        <div class="menu">
+          <a href="about.html">About <span>Why proof-first</span></a>
+          <a href="careers.html">Careers <span>Open roles</span></a>
+          <a href="investors.html">Investors <span>The data room</span></a>
+          <a href="contact.html">Contact <span>Talk to a human</span></a>
+        </div>
+      </div>
+      <a class="btn-quiet" href="signin.html">Sign in</a>
+      <a class="btn" href="signup.html">Get started</a>
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch between light and dark mode">
+        <svg class="icon-moon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        <svg class="icon-sun" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="3.2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v1.8M8 13.2V15M15 8h-1.8M2.8 8H1M12.95 3.05l-1.27 1.27M4.32 11.68l-1.27 1.27M12.95 12.95l-1.27-1.27M4.32 4.32 3.05 3.05" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      </button>
+      <button class="nav-burger" id="nav-burger" type="button" aria-label="Open menu" aria-expanded="false">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="nav-panel" id="nav-panel">
+    <div class="grp mono">Platform</div>
+    <a class="sub" href="platform.html">Platform overview</a>
+    <a class="sub" href="sales.html">Sales Platform</a>
+    <a class="sub" href="operations.html">Operations Platform</a>
+    <a class="sub" href="field.html">Field Platform</a>
+    <a class="sub" href="manager.html">Manager Platform</a>
+    <a href="pricing.html">Pricing</a>
+    <div class="grp mono">Resources</div>
+    <a class="sub" href="docs.html">Documentation</a>
+    <a class="sub" href="doc-recipes.html">Guides &amp; recipes</a>
+    <a class="sub" href="doc-troubleshooting.html">Troubleshooting</a>
+    <a class="sub" href="security.html">Security</a>
+    <div class="grp mono">Company</div>
+    <a class="sub" href="about.html">About</a>
+    <a class="sub" href="careers.html">Careers</a>
+    <a class="sub" href="investors.html">Investors</a>
+    <a class="sub" href="contact.html">Contact</a>
+    <a href="signin.html">Sign in</a>
+    <a href="signup.html">Create your organization</a>
+  </div>
+</nav>
+
+<!-- page:start -->
+<main>
+
+<div class="wrap docs-layout">
+  <aside class="docs-side" aria-label="Documentation">
+      <a class="all" href="docs.html">&larr; All resources</a>
+      <div class="grp mono">Guides</div>
+      <a href="doc-getting-started.html">Getting started</a>
+      <a href="doc-recipes.html">Guides &amp; recipes</a>
+      <a href="doc-troubleshooting.html">Troubleshooting</a>
+      <div class="grp mono">Platforms</div>
+      <a href="doc-estimators.html">The estimators</a>
+      <a href="doc-web-access.html">Web Access &amp; the Verifier</a>
+      <a href="doc-computer-use.html">Computer use</a>
+      <a href="doc-field.html">The Field Platform</a>
+      <div class="grp mono">Account</div>
+      <a class="active" href="doc-billing.html">Billing &amp; the flat rate</a>
+  </aside>
+  <article class="docs-prose">
+    <div class="eyebrow mono">Resources · Account</div>
+    <h1>Billing &amp; the flat rate</h1>
+    <p class="lede">The 30-day test, seat plans, and how the one flat token rate is set and metered.</p>
+
+<h2>The 30-day test</h2>
+<p>Every organization starts with thirty days of the full platform — no feature held back, one seat. Usage during the test is billed at the same flat rate as everyone else, so what you spend testing is what the thing would actually cost you. Nothing auto-upgrades when the thirty days end: you pick a plan, or you stop.</p>
+<h2>Seats</h2>
+<p>The seat price buys access and a throughput ceiling, nothing else:</p>
+<table>
+<tr><th>Plan</th><th>Monthly</th><th>Annual</th><th>Throughput</th></tr>
+<tr><td>Pro</td><td>$20 / person</td><td>$17 / person</td><td>1×</td></tr>
+<tr><td>Max 5x</td><td>$100 / person</td><td>$100 / person</td><td>5×</td></tr>
+<tr><td>Max 20x</td><td>$200 / person</td><td>$200 / person</td><td>20×</td></tr>
+<tr><td>Team</td><td>$30 / seat, 5 min</td><td>$25 / seat</td><td>5×</td></tr>
+<tr><td>Enterprise</td><td colspan="2">Annual, 25 seats minimum</td><td>Custom</td></tr>
+</table>
+<p>All four platforms — Sales, Operations, Field, Manager — are bought separately at these same tiers.</p>
+<h2>The flat rate</h2>
+<p>Usage is billed per token at one simple rate:</p>
+<pre><code>Input   $30  per million tokens
+Output  $150 per million tokens</code></pre>
+<p>Every token is billed at that rate <strong>whichever model actually ran the task</strong> — your job always goes to the model that does it best, and the bill stays two numbers you can check against the token counts in your audit trail.</p>
+<h2>Credits: prepaid, always</h2>
+<p>Usage is prepaid. You buy credits — one credit is one dollar of usage at the flat rate — and agents draw the balance down as they work. Nothing ever runs on an unpaid balance, which is also why there is never a surprise bill: what you loaded is the most you can spend.</p>
+<p>Credits come in packs from $10 to $1,000, and the larger packs carry a volume bonus ($100 buys $103 of usage; $1,000 buys $1,075).</p>
+<h2>Auto-reload or manual reload</h2>
+<p>In <strong>Settings &rarr; Billing</strong> you choose how the balance stays topped up:</p>
+<ul>
+<li><strong>Auto-reload on</strong> — set a threshold and an amount; when the balance dips below the threshold, a reload purchases itself. The defaults are a $25 reload when the balance falls under $5.</li>
+<li><strong>Auto-reload off (manual)</strong> — every purchase is one you made. When the balance reaches zero, new runs pause and resume the moment you top up; nothing in your record is lost while paused.</li>
+</ul>
+<p>Either way, an organization-level <strong>monthly spend cap</strong> is available, and no reload — automatic or manual — will carry usage past it.</p>
+<h2>How usage is counted</h2>
+<p>Token counts come from the model provider's own response, never from the browser — what you are billed is what was actually spent. Every grant, charge, and adjustment lands in an append-only ledger you can read by run, by agent, and by platform.</p>
+<h2>There is no bundled allowance</h2>
+<p>Plans include no free usage — the seat buys access and throughput, and every token comes out of credits you loaded. A quiet week costs you the seat and nothing more; unused credits just wait.</p>
+
+    <div class="doc-pager">
+      <a class="prev" href="doc-field.html"><span class="dir mono">&larr; PREVIOUS</span>The Field Platform</a>
+    </div>
+  </article>
+</div>
+
+</main>
+<!-- page:end -->
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <a class="wordmark" href="index.html" aria-label="Atmosphere home">
+          <svg width="18" height="18" viewBox="0 0 22 22" aria-hidden="true"><rect class="lb lb1" width="22" height="2.8"/><rect class="lb lb2" y="4.8" width="22" height="2.8"/><rect class="lb lb3" y="9.6" width="22" height="2.8"/><rect class="lb lb4" y="14.4" width="22" height="2.8"/><rect class="lb-a" y="19.2" width="22" height="2.8"/></svg>
+          Atmosphere
+        </a>
+      </div>
+      <div class="foot-col">
+        <h4>Product</h4>
+        <a href="platform.html">Platform overview</a>
+        <a href="sales.html">Sales Platform</a>
+        <a href="operations.html">Operations Platform</a>
+        <a href="field.html">Field Platform</a>
+        <a href="manager.html">Manager Platform</a>
+      </div>
+      <div class="foot-col">
+        <h4>Resources</h4>
+        <a href="docs.html">Documentation</a>
+        <a href="doc-recipes.html">Guides &amp; recipes</a>
+        <a href="doc-troubleshooting.html">Troubleshooting</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="security.html">Security</a>
+      </div>
+      <div class="foot-col">
+        <h4>Company</h4>
+        <a href="about.html">About</a>
+        <a href="careers.html">Careers</a>
+        <a href="investors.html">Investors</a>
+        <a href="contact.html">Contact</a>
+      </div>
+      <div class="foot-col">
+        <h4>App</h4>
+        <a href="signin.html">Sign in</a>
+        <a href="signup.html">Create an organization</a>
+      </div>
+    </div>
+    <div class="foot-note">
+      <span>© 2026 Atmosphere. · <a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a></span>
+      <span>Every run, on the record.</span>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>

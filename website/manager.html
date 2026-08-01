@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="The Atmosphere Manager Platform — live job costing, the accounting work around the books, and business insights that name the work worth taking." />
+  <meta name="theme-color" content="#FBFAF7" />
+  <title>Manager Platform · Atmosphere</title>
+  <meta property="og:title" content="Manager Platform · Atmosphere" />
+  <meta property="og:description" content="The Atmosphere Manager Platform — live job costing, the accounting work around the books, and business insights that name the work worth taking." />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Atmosphere" />
+  <meta property="og:image" content="/assets/og.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect width='22' height='2.8' fill='%23A8A29E'/%3E%3Crect y='4.8' width='22' height='2.8' fill='%2378716C'/%3E%3Crect y='9.6' width='22' height='2.8' fill='%2357534E'/%3E%3Crect y='14.4' width='22' height='2.8' fill='%23292524'/%3E%3Crect y='19.2' width='22' height='2.8' fill='%23F2670C'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="assets/site.css" />
+  <script>try{var t=localStorage.getItem('atm-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="wordmark" href="index.html" aria-label="Atmosphere home">
+      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect class="lb lb1" width="22" height="2.8"/><rect class="lb lb2" y="4.8" width="22" height="2.8"/><rect class="lb lb3" y="9.6" width="22" height="2.8"/><rect class="lb lb4" y="14.4" width="22" height="2.8"/><rect class="lb-a" y="19.2" width="22" height="2.8"/></svg>
+      Atmosphere
+    </a>
+    <div class="nav-links">
+      <div class="nav-item">
+        <a href="platform.html" data-nav="platform">Platform <span class="caret" aria-hidden="true"></span></a>
+        <div class="menu">
+          <a href="platform.html">Platform overview <span>How the four fit together</span></a>
+          <a href="sales.html">Sales Platform <span>Win the work</span></a>
+          <a href="operations.html">Operations Platform <span>Run the work</span></a>
+          <a href="field.html">Field Platform <span>Capture the job site</span></a>
+          <a href="manager.html">Manager Platform <span>Run the business</span></a>
+        </div>
+      </div>
+      <a href="pricing.html" data-nav="pricing">Pricing</a>
+      <div class="nav-item">
+        <a href="docs.html" data-nav="resources">Resources <span class="caret" aria-hidden="true"></span></a>
+        <div class="menu">
+          <a href="docs.html">Documentation <span>How every piece works</span></a>
+          <a href="doc-recipes.html">Guides &amp; recipes <span>Ways crews use Atmosphere</span></a>
+          <a href="doc-troubleshooting.html">Troubleshooting <span>Solving errors, step by step</span></a>
+          <a href="security.html">Security <span>The model, by construction</span></a>
+        </div>
+      </div>
+      <div class="nav-item">
+        <a href="about.html" data-nav="about">Company <span class="caret" aria-hidden="true"></span></a>
+        <div class="menu">
+          <a href="about.html">About <span>Why proof-first</span></a>
+          <a href="careers.html">Careers <span>Open roles</span></a>
+          <a href="investors.html">Investors <span>The data room</span></a>
+          <a href="contact.html">Contact <span>Talk to a human</span></a>
+        </div>
+      </div>
+      <a class="btn-quiet" href="signin.html">Sign in</a>
+      <a class="btn" href="signup.html">Get started</a>
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch between light and dark mode">
+        <svg class="icon-moon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        <svg class="icon-sun" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="3.2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v1.8M8 13.2V15M15 8h-1.8M2.8 8H1M12.95 3.05l-1.27 1.27M4.32 11.68l-1.27 1.27M12.95 12.95l-1.27-1.27M4.32 4.32 3.05 3.05" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      </button>
+      <button class="nav-burger" id="nav-burger" type="button" aria-label="Open menu" aria-expanded="false">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="nav-panel" id="nav-panel">
+    <div class="grp mono">Platform</div>
+    <a class="sub" href="platform.html">Platform overview</a>
+    <a class="sub" href="sales.html">Sales Platform</a>
+    <a class="sub" href="operations.html">Operations Platform</a>
+    <a class="sub" href="field.html">Field Platform</a>
+    <a class="sub" href="manager.html">Manager Platform</a>
+    <a href="pricing.html">Pricing</a>
+    <div class="grp mono">Resources</div>
+    <a class="sub" href="docs.html">Documentation</a>
+    <a class="sub" href="doc-recipes.html">Guides &amp; recipes</a>
+    <a class="sub" href="doc-troubleshooting.html">Troubleshooting</a>
+    <a class="sub" href="security.html">Security</a>
+    <div class="grp mono">Company</div>
+    <a class="sub" href="about.html">About</a>
+    <a class="sub" href="careers.html">Careers</a>
+    <a class="sub" href="investors.html">Investors</a>
+    <a class="sub" href="contact.html">Contact</a>
+    <a href="signin.html">Sign in</a>
+    <a href="signup.html">Create your organization</a>
+  </div>
+</nav>
+
+<!-- page:start -->
+<main>
+
+<header class="page-hero">
+  <div class="wrap">
+    <div class="eyebrow mono">Manager Platform</div>
+    <h1>Run the business</h1>
+    <p class="lede">Every job leaves numbers behind. The Manager Platform is where those numbers stop being a shoebox: job costing while the job is still open, the accounting work that eats an office manager's week, and the insight to see which work is actually worth taking.</p>
+  </div>
+</header>
+
+<nav class="subnav mono" aria-label="On this page">
+  <div class="subnav-inner">
+    <a href="#job-costing">JOB COSTING</a>
+    <a href="#accounting">ACCOUNTING</a>
+    <a href="#insights">BUSINESS INSIGHTS</a>
+  </div>
+</nav>
+
+<section class="section" id="job-costing">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">Job costing</div>
+      <h2>Know the margin before the job closes</h2>
+      <p>A job that lost money tells you on the day it closes, which is far too late to do anything about it. Costing runs against the live job instead.</p>
+    </div>
+    <div class="split">
+      <div>
+        <div class="tag mono">Live</div>
+        <h3>Cost against the estimate, as it happens</h3>
+        <p>Labor logged, equipment placed, materials bought, subs invoiced — set against what the estimate said they would be, while the job is still open and there is still something to be done about it.</p>
+      </div>
+      <div class="spec mono" aria-label="Cost against the estimate, as it happens specification">
+        <div class="spec-row"><span class="spec-key">Tracks</span><span class="spec-val">Labor · equipment · materials · subcontractors</span></div>
+        <div class="spec-row"><span class="spec-key">Compares</span><span class="spec-val">Actual against the estimate, per line</span></div>
+        <div class="spec-row"><span class="spec-key">Flags</span><span class="spec-val">A job crossing its margin — <em>while it is open</em></span></div>
+      </div>
+    </div>
+    <div class="split">
+      <div>
+        <div class="tag mono">Terms</div>
+        <h3>Your margin, O&amp;P, and tax assumptions</h3>
+        <p>Costing uses the same per-organization margin, overhead and profit, tax and cost-basis assumptions the estimators price from — so the estimate and the cost report are never two different opinions.</p>
+      </div>
+      <div class="spec mono" aria-label="Your margin, O&amp;P, and tax assumptions specification">
+        <div class="spec-row"><span class="spec-key">Shares</span><span class="spec-val">One set of assumptions with the estimators</span></div>
+        <div class="spec-row"><span class="spec-key">Holds</span><span class="spec-val">Margin · O&amp;P · tax · cost basis, per organization</span></div>
+        <div class="spec-row"><span class="spec-key">Means</span><span class="spec-val">The bid and the books agree</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="accounting">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">Accounting</div>
+      <h2>The week the office manager gets back</h2>
+      <p>Not a general ledger — the work that surrounds one. Getting the numbers out of the jobs, into the invoices, and into whatever system already holds your books.</p>
+    </div>
+    <div class="split">
+      <div>
+        <div class="tag mono">Billing</div>
+        <h3>Invoices built from the job, not retyped from it</h3>
+        <p>The estimate, the change orders, and what was actually performed are already in the record. An invoice is a reading of that record — and it will not go out with a blocking document still missing.</p>
+      </div>
+      <div class="spec mono" aria-label="Invoices built from the job, not retyped from it specification">
+        <div class="spec-row"><span class="spec-key">Builds</span><span class="spec-val">Invoices from estimate · change orders · work performed</span></div>
+        <div class="spec-row"><span class="spec-key">Blocks</span><span class="spec-val">Billing with required documentation outstanding</span></div>
+        <div class="spec-row"><span class="spec-key">Tracks</span><span class="spec-val">Sent · aged · paid, per job</span></div>
+      </div>
+    </div>
+    <div class="split">
+      <div>
+        <div class="tag mono">Reconcile</div>
+        <h3>The numbers, moved for you</h3>
+        <p>Agents that already sign in to carrier portals and supplier sites can do the same for the systems your books live in — pulling the numbers out, entering them in, and leaving a receipt for every step.</p>
+      </div>
+      <div class="spec mono" aria-label="The numbers, moved for you specification">
+        <div class="spec-row"><span class="spec-key">Pulls</span><span class="spec-val">From the systems already holding your data</span></div>
+        <div class="spec-row"><span class="spec-key">Enters</span><span class="spec-val">Into your accounting software, step by step</span></div>
+        <div class="spec-row"><span class="spec-key">Proves</span><span class="spec-val">Every entry — <em>in the audit trail</em></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="insights">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">Business insights</div>
+      <h2>Which work is worth taking</h2>
+      <p>A year of jobs already knows which carriers pay, which crews finish, and which kind of loss quietly loses money. The platform reads what you already have.</p>
+    </div>
+    <div class="split">
+      <div>
+        <div class="tag mono">Margin</div>
+        <h3>Where the money actually comes from</h3>
+        <p>Margin by job type, by carrier, by crew, by month. Not a dashboard for its own sake — the specific answer to which work to chase and which to stop bidding.</p>
+      </div>
+      <div class="spec mono" aria-label="Where the money actually comes from specification">
+        <div class="spec-row"><span class="spec-key">Breaks down</span><span class="spec-val">Job type · carrier · crew · period</span></div>
+        <div class="spec-row"><span class="spec-key">Surfaces</span><span class="spec-val">The work that consistently underperforms</span></div>
+        <div class="spec-row"><span class="spec-key">Ranks</span><span class="spec-val">What to bid more of</span></div>
+      </div>
+    </div>
+    <div class="split">
+      <div>
+        <div class="tag mono">Throughput</div>
+        <h3>Where jobs actually slow down</h3>
+        <p>Cycle time from loss to dry, dry to rebuild, rebuild to paid — with the stall points named. The same facts that drive the PM alerts, added up across the business.</p>
+      </div>
+      <div class="spec mono" aria-label="Where jobs actually slow down specification">
+        <div class="spec-row"><span class="spec-key">Measures</span><span class="spec-val">Loss → dry → rebuild → paid</span></div>
+        <div class="spec-row"><span class="spec-key">Names</span><span class="spec-val">The stage where jobs sit</span></div>
+        <div class="spec-row"><span class="spec-key">Uses</span><span class="spec-val">The same computed facts as the alerts</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="cta-band">
+      <div>
+        <h2>Find out what your jobs have been telling you</h2>
+        <p>The numbers are already in the record. This is where they add up.</p>
+      </div>
+      <div class="cta-actions">
+        <a class="btn btn-lg" href="signup.html">Create your organization</a>
+        <a class="btn-quiet" href="pricing.html">See pricing&nbsp;→</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+<!-- page:end -->
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <a class="wordmark" href="index.html" aria-label="Atmosphere home">
+          <svg width="18" height="18" viewBox="0 0 22 22" aria-hidden="true"><rect class="lb lb1" width="22" height="2.8"/><rect class="lb lb2" y="4.8" width="22" height="2.8"/><rect class="lb lb3" y="9.6" width="22" height="2.8"/><rect class="lb lb4" y="14.4" width="22" height="2.8"/><rect class="lb-a" y="19.2" width="22" height="2.8"/></svg>
+          Atmosphere
+        </a>
+      </div>
+      <div class="foot-col">
+        <h4>Product</h4>
+        <a href="platform.html">Platform overview</a>
+        <a href="sales.html">Sales Platform</a>
+        <a href="operations.html">Operations Platform</a>
+        <a href="field.html">Field Platform</a>
+        <a href="manager.html">Manager Platform</a>
+      </div>
+      <div class="foot-col">
+        <h4>Resources</h4>
+        <a href="docs.html">Documentation</a>
+        <a href="doc-recipes.html">Guides &amp; recipes</a>
+        <a href="doc-troubleshooting.html">Troubleshooting</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="security.html">Security</a>
+      </div>
+      <div class="foot-col">
+        <h4>Company</h4>
+        <a href="about.html">About</a>
+        <a href="careers.html">Careers</a>
+        <a href="investors.html">Investors</a>
+        <a href="contact.html">Contact</a>
+      </div>
+      <div class="foot-col">
+        <h4>App</h4>
+        <a href="signin.html">Sign in</a>
+        <a href="signup.html">Create an organization</a>
+      </div>
+    </div>
+    <div class="foot-note">
+      <span>© 2026 Atmosphere. · <a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a></span>
+      <span>Every run, on the record.</span>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>
