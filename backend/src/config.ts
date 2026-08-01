@@ -30,7 +30,7 @@ const devOnly = (value: string): string | undefined => (isProduction ? undefined
 
 const frontendOriginRaw = isProduction
   ? required('FRONTEND_ORIGIN')
-  : (process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173');
+  : (process.env.FRONTEND_ORIGIN ?? 'http://localhost:5174');
 
 // Comma-separated list of allowed browser origins for CORS.
 const frontendOrigins = frontendOriginRaw

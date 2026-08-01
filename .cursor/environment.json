@@ -1,0 +1,26 @@
+{
+  "name": "Atmosphere",
+  "install": "cd backend && npm install && cd ../frontend && npm install",
+  "ports": [
+    { "name": "website", "port": 5173 },
+    { "name": "app", "port": 5174 },
+    { "name": "api", "port": 4000 }
+  ],
+  "terminals": [
+    {
+      "name": "backend",
+      "command": "cd backend && npm run dev",
+      "description": "Express API on :4000"
+    },
+    {
+      "name": "website",
+      "command": "cd frontend && npx vite --config ../website/vite.config.ts",
+      "description": "Corporate marketing site on :5173 (open this first)"
+    },
+    {
+      "name": "app",
+      "command": "cd frontend && npm run dev",
+      "description": "React product app on :5174"
+    }
+  ]
+}

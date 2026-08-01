@@ -374,7 +374,7 @@ Atmosphere/
 
 ## Running locally
 
-Open two terminals.
+Open three terminals (or use `.cursor/environment.json` in Cloud Agents).
 
 **1. Backend** (port 4000):
 
@@ -385,16 +385,24 @@ cp .env.example .env    # optional — safe defaults are baked in
 npm run dev
 ```
 
-**2. Frontend** (port 5173):
+**2. Corporate website** (port 5173 — open this first):
 
 ```bash
 cd frontend
 npm install
+npx vite --config ../website/vite.config.ts
+```
+
+**3. Product app** (port 5174):
+
+```bash
+cd frontend
 npm run dev
 ```
 
-Then open **http://localhost:5173**. The Vite dev server proxies `/api/*` to the backend,
-so the browser talks to a single origin and the session cookies work seamlessly.
+Then open **http://localhost:5173** for the marketing site. Sign-in and
+Get started send you to the React app on **http://localhost:5174**, which
+proxies `/api/*` to the backend so session cookies work seamlessly.
 
 ## API
 
