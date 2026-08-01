@@ -771,6 +771,224 @@ const customerUpdateOverdue: Rule = {
 };
 
 /* ------------------------------------------------------------------ *
+ * Orchestration — platforms, messaging, procurement, approvals
+ * ------------------------------------------------------------------ */
+
+const approvalPending: Rule = {
+  key: 'approval_pending',
+  label: 'Approval waiting on you',
+  description:
+    'An irreversible action (platform write, bid accept, material order) is sitting in the queue. The agent never executes these alone.',
+  category: 'orchestration',
+  scope: 'org',
+  evaluate({ snapshot }) {
+    const staleHours = 4;
+    return snapshot.pendingApprovals
+      .filter((a) => a.status === 'pending')
+      .map((a) => {
+        const ageMs = snapshot.now.getTime() - new Date(a.createdAt).getTime();
+        const hours = Math.floor(ageMs / 3_600_000);
+        return {
+          ruleKey: 'approval_pending',
+          fingerprint: `approval_pending:${a.id}`,
+          projectId: a.projectId,
+          severity:
+            a.priority === 'urgent' || hours >= staleHours * 2
+              ? 'critical'
+              : hours >= staleHours || a.priority === 'high'
+                ? 'warn'
+                : 'info',
+          category: 'orchestration' as const,
+          title: `Needs your OK — ${a.title}`,
+          detail: a.detail ?? `Pending since ${a.createdAt}.`,
+          suggestedAction: 'Open Approvals, review the proposed action, and approve or reject it.',
+          entityType: 'pm_approvals',
+          entityId: a.id,
+          facts: { kind: a.kind, platform: a.platform, hoursWaiting: hours, priority: a.priority },
+        };
+      });
+  },
+};
+
+const communicationUnreviewed: Rule = {
+  key: 'communication_unreviewed',
+  label: 'Unreviewed @atmosphere message',
+  description:
+    'A vendor, customer or adjuster mentioned @atmosphere in iMessage, WhatsApp, Signal or SMS and nobody has filed it yet.',
+  category: 'communication',
+  scope: 'project',
+  evaluate({ ctx }) {
+    if (!ctx) return [];
+    return ctx.communications
+      .filter((c) => c.status === 'new')
+      .map((c) => ({
+        ruleKey: 'communication_unreviewed',
+        fingerprint: `communication_unreviewed:${c.id}`,
+        projectId: ctx.project.id,
+        severity: 'warn' as const,
+        category: 'communication' as const,
+        title: `${label(ctx)} — new ${c.channel} from ${c.counterpartyName || c.counterpartyHandle || 'unknown'}`,
+        detail: c.mentionExcerpt || c.body.slice(0, 280),
+        suggestedAction: 'Review the message, file it to the job, and approve any action it requested.',
+        entityType: 'pm_communications',
+        entityId: c.id,
+        facts: {
+          channel: c.channel,
+          counterpartyKind: c.counterpartyKind,
+          intake: c.intake,
+        },
+        task: {
+          originKey: `agent:comm_review:${c.id}`,
+          title: `Review ${c.channel} message`,
+          details: c.mentionExcerpt || c.body.slice(0, 400),
+          category: 'communication' as const,
+          priority: 'high' as const,
+          dueInHours: 8,
+        },
+      }));
+  },
+};
+
+const equipmentPlanGaps: Rule = {
+  key: 'equipment_plan_gaps',
+  label: 'Equipment still needed from the estimate',
+  description:
+    'The mitigation or construction estimate called for gear or materials that are not yet on site, ordered, or bid out.',
+  category: 'equipment',
+  scope: 'project',
+  evaluate({ ctx }) {
+    if (!ctx) return [];
+    const needed = ctx.planItems.filter((i) => i.status === 'needed');
+    if (!needed.length) return [];
+
+    const dumpster = needed.filter((i) => i.itemKind === 'dumpster');
+    const other = needed.filter((i) => i.itemKind !== 'dumpster');
+    const findings = [];
+
+    if (dumpster.length) {
+      findings.push({
+        ruleKey: 'equipment_plan_gaps',
+        fingerprint: `equipment_plan_gaps:dumpster:${ctx.project.id}`,
+        projectId: ctx.project.id,
+        severity: 'warn' as const,
+        category: 'procurement' as const,
+        title: `${label(ctx)} — dumpster required, not yet ordered`,
+        detail: 'The estimate implies tear-out / debris. Search local haulers and pick a bid for approval.',
+        suggestedAction: 'Open Procurement and run a dumpster bid search for this job.',
+        entityType: 'pm_projects',
+        entityId: ctx.project.id,
+        facts: { itemCount: dumpster.length },
+        task: {
+          originKey: `agent:dumpster_bid:${ctx.project.id}`,
+          title: 'Get dumpster bids',
+          category: 'procurement' as const,
+          priority: 'high' as const,
+          dueInHours: 24,
+        },
+      });
+    }
+
+    if (other.length) {
+      findings.push({
+        ruleKey: 'equipment_plan_gaps',
+        fingerprint: `equipment_plan_gaps:needed:${ctx.project.id}`,
+        projectId: ctx.project.id,
+        severity: 'info' as const,
+        category: 'equipment' as const,
+        title: `${label(ctx)} — ${other.length} plan item${other.length === 1 ? '' : 's'} still needed`,
+        detail: other
+          .slice(0, 6)
+          .map((i) => `${i.quantity} ${i.unit} ${i.label} (${i.fulfillment})`)
+          .join('; '),
+        suggestedAction:
+          'Reserve from inventory, open a referral order for materials, or rent what you do not own.',
+        entityType: 'pm_projects',
+        entityId: ctx.project.id,
+        facts: {
+          itemCount: other.length,
+          kinds: other.map((i) => i.itemKind),
+        },
+      });
+    }
+
+    return findings;
+  },
+};
+
+const procurementAwaiting: Rule = {
+  key: 'procurement_awaiting',
+  label: 'Procurement waiting on a decision',
+  description:
+    'A dumpster bid or material referral order is open and needs a human to pick a vendor or approve the Atmosphere referral link.',
+  category: 'procurement',
+  scope: 'project',
+  evaluate({ ctx }) {
+    if (!ctx) return [];
+    return ctx.procurement
+      .filter((p) => p.status === 'bidding' || p.status === 'awaiting_approval')
+      .map((p) => ({
+        ruleKey: 'procurement_awaiting',
+        fingerprint: `procurement_awaiting:${p.id}`,
+        projectId: ctx.project.id,
+        severity: (p.status === 'awaiting_approval' ? 'warn' : 'info') as 'warn' | 'info',
+        category: 'procurement' as const,
+        title: `${label(ctx)} — ${p.title} (${p.status.replace(/_/g, ' ')})`,
+        detail: p.description ?? undefined,
+        suggestedAction:
+          p.status === 'bidding'
+            ? 'Review collected bids and select one for approval.'
+            : 'Approve or reject the pending procurement action.',
+        entityType: 'pm_procurement_requests',
+        entityId: p.id,
+        facts: { kind: p.kind, status: p.status, referralVendorKey: p.referralVendorKey },
+      }));
+  },
+};
+
+const platformSyncStale: Rule = {
+  key: 'platform_sync_stale',
+  label: 'Platform link has gone quiet',
+  description:
+    'A Dash / XactAnalysis / Xactimate / Outlook link has not synced recently, so Atmosphere may be missing what is happening on that job elsewhere.',
+  category: 'orchestration',
+  scope: 'project',
+  evaluate({ snapshot, ctx }) {
+    if (!ctx) return [];
+    const staleMs = 3 * 86_400_000;
+    return ctx.platformLinks
+      .filter((l) => {
+        if (l.syncStatus === 'error' || l.syncStatus === 'stale') return true;
+        if (!l.lastSyncedAt) return true;
+        return snapshot.now.getTime() - new Date(l.lastSyncedAt).getTime() >= staleMs;
+      })
+      .map((l) => ({
+        ruleKey: 'platform_sync_stale',
+        fingerprint: `platform_sync_stale:${l.id}`,
+        projectId: ctx.project.id,
+        severity: (l.syncStatus === 'error' ? 'warn' : 'info') as 'warn' | 'info',
+        category: 'orchestration' as const,
+        title: `${label(ctx)} — ${l.platform} link needs a sync`,
+        detail: l.lastError || `Last synced ${l.lastSyncedAt ?? 'never'}.`,
+        suggestedAction: `Pull the latest from ${l.platform} so the board matches reality.`,
+        entityType: 'pm_platform_links',
+        entityId: l.id,
+        facts: {
+          platform: l.platform,
+          externalId: l.externalId,
+          syncStatus: l.syncStatus,
+        },
+        task: {
+          originKey: `agent:platform_sync:${l.id}`,
+          title: `Sync ${l.platform}`,
+          category: 'platform' as const,
+          priority: 'normal' as const,
+          dueInHours: 24,
+        },
+      }));
+  },
+};
+
+/* ------------------------------------------------------------------ *
  * Registry
  * ------------------------------------------------------------------ */
 
@@ -797,6 +1015,12 @@ export const RULES: Rule[] = [
   milestoneDue,
   playbookGaps,
   customerUpdateOverdue,
+  // Orchestration
+  approvalPending,
+  communicationUnreviewed,
+  equipmentPlanGaps,
+  procurementAwaiting,
+  platformSyncStale,
 ];
 
 export const RULES_BY_KEY = new Map(RULES.map((r) => [r.key, r]));

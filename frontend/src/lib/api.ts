@@ -1265,6 +1265,132 @@ export const api = {
       body: JSON.stringify(patch),
     }),
 
+  pmSituation: (projectId?: string) =>
+    request<PmSituation>(
+      `/api/pm/situation${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''}`,
+      { method: 'GET' },
+    ),
+
+  pmApprovals: (status = 'pending') =>
+    request<{ approvals: PmApproval[] }>(
+      `/api/pm/approvals?status=${encodeURIComponent(status)}`,
+      { method: 'GET' },
+    ),
+
+  pmDecideApproval: (id: string, decision: 'approved' | 'rejected', note?: string) =>
+    request<{ approval: PmApproval }>(`/api/pm/approvals/${id}/decide`, {
+      method: 'POST',
+      body: JSON.stringify(note ? { decision, note } : { decision }),
+    }),
+
+  pmCommunications: (status?: string) =>
+    request<{ communications: PmCommunication[] }>(
+      `/api/pm/communications${status ? `?status=${encodeURIComponent(status)}` : ''}`,
+      { method: 'GET' },
+    ),
+
+  pmUpdateCommunication: (id: string, patch: Record<string, unknown>) =>
+    request<{ communication: PmCommunication }>(`/api/pm/communications/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+
+  pmPlatforms: () =>
+    request<{
+      catalogue: { platform: string; label: string; description: string }[];
+      connections: PmPlatformConnection[];
+    }>('/api/pm/platforms', { method: 'GET' }),
+
+  pmConnectPlatform: (input: Record<string, unknown>) =>
+    request<{ connection: PmPlatformConnection }>('/api/pm/platforms/connect', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  pmProcurement: (projectId?: string) =>
+    request<{ requests: PmProcurementRequest[] }>(
+      `/api/pm/procurement${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''}`,
+      { method: 'GET' },
+    ),
+
+  pmProcurementBids: (id: string) =>
+    request<{ request: PmProcurementRequest; bids: PmProcurementBid[] }>(
+      `/api/pm/procurement/${id}/bids`,
+      { method: 'GET' },
+    ),
+
+  pmSelectBid: (requestId: string, bidId: string) =>
+    request<{ request: PmProcurementRequest; approvalId: string }>(
+      `/api/pm/procurement/${requestId}/select-bid`,
+      { method: 'POST', body: JSON.stringify({ bidId }) },
+    ),
+
+  pmReferrals: () =>
+    request<{ referrals: PmVendorReferral[] }>('/api/pm/procurement/referrals', {
+      method: 'GET',
+    }),
+
+  pmDeriveEquipmentPlan: (projectId: string, input: Record<string, unknown>) =>
+    request<{
+      plan: PmEquipmentPlan;
+      items: PmEquipmentPlanItem[];
+      derived: { summary: string; dumpsterRequired: boolean };
+    }>(`/api/pm/projects/${projectId}/equipment-plan`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  pmDumpsterSearch: (projectId: string, input: Record<string, unknown> = {}) =>
+    request<{ request: PmProcurementRequest; bids: PmProcurementBid[] }>(
+      `/api/pm/projects/${projectId}/procurement/dumpster`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+
+  pmMaterialReferral: (projectId: string, input: Record<string, unknown>) =>
+    request<{ request: PmProcurementRequest; approvalId: string }>(
+      `/api/pm/projects/${projectId}/procurement/materials`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+
+  pmNetwork: () => request<PmNetworkSummary>('/api/pm/network', { method: 'GET' }),
+
+  pmInvitePartner: (input: Record<string, unknown>) =>
+    request<{ invite: PmPartnerInvite; inviteUrl: string; threadId: string | null }>(
+      '/api/pm/network/invites',
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+
+  pmUpdatePartnerProfile: (patch: Record<string, unknown>) =>
+    request<{ profile: PmPartnerProfile }>('/api/pm/network/profile', {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+
+  pmThreads: (status = 'open') =>
+    request<{ threads: PmThread[] }>(
+      `/api/pm/threads?status=${encodeURIComponent(status)}`,
+      { method: 'GET' },
+    ),
+
+  pmThread: (id: string) =>
+    request<{
+      thread: PmThread;
+      messages: PmThreadMessage[];
+      participants: { id: string; userId: string | null; roleInThread: string }[];
+    }>(`/api/pm/threads/${id}`, { method: 'GET' }),
+
+  pmPostThreadMessage: (id: string, body: string) =>
+    request<{ message: PmThreadMessage }>(`/api/pm/threads/${id}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ body }),
+    }),
+
+  pmCreateThread: (input: Record<string, unknown>) =>
+    request<{ thread: PmThread }>('/api/pm/threads', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
   // ---- Web Access ----
   webAccessStatus: () =>
     request<{ enabled: boolean; capacityAvailable: boolean; maxSteps: number }>(
@@ -2628,11 +2754,198 @@ export interface PmOverview {
   role: MemberRole;
   canManage: boolean;
   writingEnabled: boolean;
-  counts: { projects: number; critical: number; warn: number; mine: number };
+  counts: {
+    projects: number;
+    critical: number;
+    warn: number;
+    mine: number;
+    pendingApprovals?: number;
+    unreviewedComms?: number;
+    openProcurement?: number;
+  };
   alerts: PmAlert[];
   projects: PmProjectSummary[];
   crew: PmCrewLoad[];
   members: { userId: string; email: string | null; fullName: string | null; role: string }[];
+}
+
+export interface PmApproval {
+  id: string;
+  projectId: string | null;
+  kind: string;
+  title: string;
+  detail: string | null;
+  platform: string | null;
+  priority: string;
+  status: string;
+  proposedAction: Record<string, unknown>;
+  createdAt: string;
+  decidedAt: string | null;
+}
+
+export interface PmCommunication {
+  id: string;
+  projectId: string | null;
+  channel: string;
+  direction: string;
+  intake: string;
+  counterpartyName: string | null;
+  counterpartyHandle: string | null;
+  counterpartyKind: string;
+  body: string;
+  mentionExcerpt: string | null;
+  status: string;
+  occurredAt: string;
+}
+
+export interface PmPlatformConnection {
+  id: string;
+  platform: string;
+  label: string | null;
+  status: string;
+  lastSyncedAt: string | null;
+  lastError: string | null;
+}
+
+export interface PmProcurementRequest {
+  id: string;
+  projectId: string;
+  kind: string;
+  title: string;
+  description: string | null;
+  status: string;
+  referralUrl: string | null;
+  referralVendorKey: string | null;
+  selectedBidId: string | null;
+  updatedAt: string;
+}
+
+export interface PmProcurementBid {
+  id: string;
+  requestId: string;
+  vendorName: string;
+  vendorUrl: string | null;
+  amountCents: number | null;
+  leadDays: number | null;
+  notes: string | null;
+  status: string;
+}
+
+export interface PmVendorReferral {
+  id: string;
+  vendorKey: string;
+  name: string;
+  category: string;
+  commissionBps: number;
+  active: boolean;
+}
+
+export interface PmEquipmentPlan {
+  id: string;
+  projectId: string;
+  source: string;
+  status: string;
+  summary: string | null;
+  dumpsterRequired: boolean;
+}
+
+export interface PmEquipmentPlanItem {
+  id: string;
+  planId: string;
+  itemKind: string;
+  label: string;
+  quantity: number;
+  unit: string;
+  fulfillment: string;
+  status: string;
+}
+
+export interface PmSituationEvent {
+  id: string;
+  kind: string;
+  projectId: string | null;
+  occurredAt: string;
+  title: string;
+  detail: string | null;
+  severity?: string;
+  status?: string;
+}
+
+export interface PmSituation {
+  events: PmSituationEvent[];
+  counts: {
+    pendingApprovals: number;
+    unreviewedComms: number;
+    openProcurement: number;
+    staleLinks: number;
+    openAlerts: number;
+    openThreads?: number;
+    pendingInvites?: number;
+    partners?: number;
+  };
+}
+
+export interface PmPartnerProfile {
+  orgId: string;
+  displayName: string;
+  kind: string;
+  blurb: string | null;
+  trades: string[];
+  serviceAreas: string[];
+  invitesSent: number;
+  invitesAccepted: number;
+  jobsCompleted: number;
+  discoverable: boolean;
+}
+
+export interface PmPartnerInvite {
+  id: string;
+  inviteeKind: string;
+  inviteeName: string;
+  inviteeEmail: string | null;
+  inviteePhone: string | null;
+  inviteeCompany: string | null;
+  status: string;
+  token: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface PmPartnership {
+  id: string;
+  partnerOrgId: string;
+  partnerKind: string;
+  status: string;
+  preferred: boolean;
+  sharedJobs: number;
+}
+
+export interface PmNetworkSummary {
+  profile: PmPartnerProfile;
+  partnerships: PmPartnership[];
+  invites: PmPartnerInvite[];
+  counts: { partners: number; pendingInvites: number; preferred: number };
+}
+
+export interface PmThread {
+  id: string;
+  projectId: string | null;
+  kind: string;
+  mode: string;
+  title: string;
+  status: string;
+  urgency: string;
+  lastMessageAt: string | null;
+  createdAt: string;
+}
+
+export interface PmThreadMessage {
+  id: string;
+  threadId: string;
+  authorUserId: string | null;
+  authorKind: string;
+  body: string;
+  createdAt: string;
 }
 
 export interface PmAreaAnalysis {

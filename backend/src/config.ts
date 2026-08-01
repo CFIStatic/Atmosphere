@@ -237,6 +237,15 @@ export const config = {
       5,
       Number(process.env.PM_SCHEDULER_INTERVAL_MINUTES ?? 30),
     ),
+
+    // Optional dumpster / supplier web-search endpoint. Template may include
+    // `{q}` and `{zip}`. Without it, dumpster procurement still opens and fills
+    // a deterministic local shortlist the PM can edit before approving.
+    webSearchUrl: process.env.PM_WEB_SEARCH_URL ?? '',
+
+    // HMAC secret for POST /api/webhooks/atmosphere-mention (iMessage / WhatsApp /
+    // Signal / SMS bridges). Without it the webhook refuses every request.
+    mentionWebhookSecret: process.env.ATMOSPHERE_MENTION_WEBHOOK_SECRET ?? '',
   },
 
   webAccess: {

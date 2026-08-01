@@ -6,10 +6,17 @@ import {
   ApiError,
   PM_PHASE_LABELS,
   type PmAlert,
+  type PmApproval,
   type PmBrief,
+  type PmCommunication,
   type PmEngineResult,
+  type PmNetworkSummary,
   type PmOverview,
+  type PmPlatformConnection,
+  type PmProcurementRequest,
   type PmProjectSummary,
+  type PmThread,
+  type PmThreadMessage,
 } from '../lib/api';
 import { Logo } from '../components/Logo';
 import { SpinnerIcon } from '../components/icons';
@@ -33,7 +40,16 @@ import {
  * meant to give back.
  */
 
-type Tab = 'alerts' | 'projects' | 'crew';
+type Tab =
+  | 'alerts'
+  | 'approvals'
+  | 'inbox'
+  | 'threads'
+  | 'network'
+  | 'procurement'
+  | 'platforms'
+  | 'projects'
+  | 'crew';
 
 export function ProjectManagerPage() {
   const { user, membership } = useAuth();
@@ -47,6 +63,25 @@ export function ProjectManagerPage() {
   const [brief, setBrief] = useState<PmBrief | null>(null);
   const [briefLoading, setBriefLoading] = useState(false);
   const [onlyMine, setOnlyMine] = useState(false);
+  const [approvals, setApprovals] = useState<PmApproval[]>([]);
+  const [communications, setCommunications] = useState<PmCommunication[]>([]);
+  const [procurement, setProcurement] = useState<PmProcurementRequest[]>([]);
+  const [platforms, setPlatforms] = useState<{
+    catalogue: { platform: string; label: string; description: string }[];
+    connections: PmPlatformConnection[];
+  } | null>(null);
+  const [network, setNetwork] = useState<PmNetworkSummary | null>(null);
+  const [threads, setThreads] = useState<PmThread[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [threadMessages, setThreadMessages] = useState<PmThreadMessage[]>([]);
+  const [threadDraft, setThreadDraft] = useState('');
+  const [inviteForm, setInviteForm] = useState({
+    inviteeKind: 'subcontractor',
+    inviteeName: '',
+    inviteeEmail: '',
+    inviteeCompany: '',
+  });
+  const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -60,6 +95,36 @@ export function ProjectManagerPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (tab === 'approvals') {
+      void api.pmApprovals().then((r) => setApprovals(r.approvals)).catch(() => undefined);
+    } else if (tab === 'inbox') {
+      void api
+        .pmCommunications('new,reviewed')
+        .then((r) => setCommunications(r.communications))
+        .catch(() => undefined);
+    } else if (tab === 'procurement') {
+      void api.pmProcurement().then((r) => setProcurement(r.requests)).catch(() => undefined);
+    } else if (tab === 'platforms') {
+      void api.pmPlatforms().then(setPlatforms).catch(() => undefined);
+    } else if (tab === 'network') {
+      void api.pmNetwork().then(setNetwork).catch(() => undefined);
+    } else if (tab === 'threads') {
+      void api.pmThreads().then((r) => setThreads(r.threads)).catch(() => undefined);
+    }
+  }, [tab]);
+
+  useEffect(() => {
+    if (!activeThreadId) {
+      setThreadMessages([]);
+      return;
+    }
+    void api
+      .pmThread(activeThreadId)
+      .then((r) => setThreadMessages(r.messages))
+      .catch(() => undefined);
+  }, [activeThreadId]);
 
   /**
    * Evaluate every rule now.
@@ -210,10 +275,15 @@ export function ProjectManagerPage() {
               />
               <StatTile label="Open projects" value={data.counts.projects} hint={`${data.counts.mine} assigned to you`} />
               <StatTile
-                label="Ready to invoice"
-                value={data.projects.filter((p) => p.documentation.invoiceReady).length}
-                tone="good"
-                hint="Paperwork complete"
+                label="Waiting on you"
+                value={
+                  (data.counts.pendingApprovals ?? 0) +
+                  (data.counts.unreviewedComms ?? 0)
+                }
+                tone={
+                  (data.counts.pendingApprovals ?? 0) > 0 ? 'warning' : 'good'
+                }
+                hint={`${data.counts.pendingApprovals ?? 0} approvals · ${data.counts.unreviewedComms ?? 0} messages`}
               />
             </div>
           )}
@@ -252,10 +322,25 @@ export function ProjectManagerPage() {
           </Card>
 
           {/* Tabs */}
-          <div className="mt-8 flex gap-1 border-b border-line">
+          <div className="mt-8 flex flex-wrap gap-1 border-b border-line">
             {(
               [
                 ['alerts', `Needs attention (${openAlerts.length})`],
+                [
+                  'approvals',
+                  `Approvals (${data?.counts.pendingApprovals ?? approvals.length})`,
+                ],
+                [
+                  'inbox',
+                  `Inbox (${data?.counts.unreviewedComms ?? communications.filter((c) => c.status === 'new').length})`,
+                ],
+                ['threads', 'Threads'],
+                ['network', 'Network'],
+                [
+                  'procurement',
+                  `Procurement (${data?.counts.openProcurement ?? procurement.length})`,
+                ],
+                ['platforms', 'Platforms'],
                 ['projects', `Projects (${data?.counts.projects ?? 0})`],
                 ['crew', `Crew (${data?.crew.length ?? 0})`],
               ] as const
@@ -288,6 +373,454 @@ export function ProjectManagerPage() {
                   <AlertRow key={alert.id} alert={alert} onAct={actOnAlert} navigate={navigate} />
                 ))
               )}
+            </div>
+          )}
+
+          {tab === 'approvals' && (
+            <div className="mt-5 space-y-3">
+              <p className="text-sm text-ink-600">
+                Irreversible actions land here first — platform writes, bid accepts, material
+                referral orders. You decide; Atmosphere executes only after that.
+              </p>
+              {approvals.length === 0 ? (
+                <Card>
+                  <EmptyState>No pending approvals.</EmptyState>
+                </Card>
+              ) : (
+                approvals.map((a) => (
+                  <Card key={a.id}>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Pill>{a.platform || a.kind}</Pill>
+                          <Pill>{a.priority}</Pill>
+                        </div>
+                        <h3 className="mt-2 text-base font-semibold text-ink-900">{a.title}</h3>
+                        {a.detail && (
+                          <p className="mt-1 whitespace-pre-wrap text-sm text-ink-600">{a.detail}</p>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs text-ink-700 hover:bg-paper-100"
+                          onClick={() =>
+                            void api
+                              .pmDecideApproval(a.id, 'rejected')
+                              .then(() => setApprovals((prev) => prev.filter((x) => x.id !== a.id)))
+                              .then(() => load())
+                          }
+                        >
+                          Reject
+                        </button>
+                        <button
+                          className="rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-medium text-ink-900 hover:bg-brand-500"
+                          onClick={() =>
+                            void api
+                              .pmDecideApproval(a.id, 'approved')
+                              .then(() => setApprovals((prev) => prev.filter((x) => x.id !== a.id)))
+                              .then(() => load())
+                          }
+                        >
+                          Approve
+                        </button>
+                      </div>
+                    </div>
+                  </Card>
+                ))
+              )}
+            </div>
+          )}
+
+          {tab === 'inbox' && (
+            <div className="mt-5 space-y-3">
+              <p className="text-sm text-ink-600">
+                Messages that mentioned <span className="font-medium text-ink-800">@atmosphere</span>{' '}
+                in iMessage, WhatsApp, Signal or SMS — filed against the job when we can match one.
+              </p>
+              {communications.length === 0 ? (
+                <Card>
+                  <EmptyState>Inbox is clear.</EmptyState>
+                </Card>
+              ) : (
+                communications.map((c) => (
+                  <Card key={c.id}>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Pill>{c.channel}</Pill>
+                          <Pill>{c.counterpartyKind}</Pill>
+                          <Pill>{c.status}</Pill>
+                        </div>
+                        <h3 className="mt-2 text-base font-semibold text-ink-900">
+                          {c.counterpartyName || c.counterpartyHandle || 'Unknown'}
+                        </h3>
+                        <p className="mt-1 whitespace-pre-wrap text-sm text-ink-700">
+                          {c.mentionExcerpt || c.body}
+                        </p>
+                        <p className="mt-2 text-xs text-ink-500">
+                          {new Date(c.occurredAt).toLocaleString()}
+                        </p>
+                      </div>
+                      {c.status === 'new' && (
+                        <button
+                          className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs text-ink-700 hover:bg-paper-100"
+                          onClick={() =>
+                            void api
+                              .pmUpdateCommunication(c.id, { status: 'filed' })
+                              .then(() =>
+                                setCommunications((prev) => prev.filter((x) => x.id !== c.id)),
+                              )
+                              .then(() => load())
+                          }
+                        >
+                          File it
+                        </button>
+                      )}
+                    </div>
+                  </Card>
+                ))
+              )}
+            </div>
+          )}
+
+          {tab === 'threads' && (
+            <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+              <div className="space-y-3">
+                <p className="text-sm text-ink-600">
+                  Adaptive internal threads — Atmosphere opens a conversation when the situation
+                  needs one (approvals, vendor traffic, procurement) and stays quiet otherwise.
+                </p>
+                {threads.length === 0 ? (
+                  <Card>
+                    <EmptyState>No open threads. They appear when something needs a talk.</EmptyState>
+                  </Card>
+                ) : (
+                  threads.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setActiveThreadId(t.id)}
+                      className={`w-full rounded-lg border px-4 py-3 text-left transition ${
+                        activeThreadId === t.id
+                          ? 'border-brand-500 bg-paper-0'
+                          : 'border-line bg-paper-0 hover:bg-paper-50'
+                      }`}
+                    >
+                      <div className="flex flex-wrap gap-2">
+                        <Pill>{t.kind.replace(/_/g, ' ')}</Pill>
+                        <Pill>{t.mode}</Pill>
+                        <Pill>{t.urgency}</Pill>
+                      </div>
+                      <p className="mt-2 text-sm font-semibold text-ink-900">{t.title}</p>
+                      <p className="mt-1 text-xs text-ink-500">
+                        {t.lastMessageAt
+                          ? `Last activity ${new Date(t.lastMessageAt).toLocaleString()}`
+                          : 'No messages yet'}
+                      </p>
+                    </button>
+                  ))
+                )}
+              </div>
+              <Card>
+                {!activeThreadId ? (
+                  <EmptyState>Select a thread to read and reply.</EmptyState>
+                ) : (
+                  <div className="flex h-[28rem] flex-col">
+                    <div className="flex-1 space-y-3 overflow-y-auto">
+                      {threadMessages.map((m) => (
+                        <div key={m.id} className="rounded-lg bg-paper-100 px-3 py-2">
+                          <p className="text-xs text-ink-500">
+                            {m.authorKind === 'atmosphere' ? 'Atmosphere' : 'You'} ·{' '}
+                            {new Date(m.createdAt).toLocaleString()}
+                          </p>
+                          <p className="mt-1 whitespace-pre-wrap text-sm text-ink-800">{m.body}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <form
+                      className="mt-3 flex gap-2 border-t border-line pt-3"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        if (!threadDraft.trim() || !activeThreadId) return;
+                        const body = threadDraft.trim();
+                        setThreadDraft('');
+                        void api
+                          .pmPostThreadMessage(activeThreadId, body)
+                          .then((r) => setThreadMessages((prev) => [...prev, r.message]));
+                      }}
+                    >
+                      <input
+                        value={threadDraft}
+                        onChange={(e) => setThreadDraft(e.target.value)}
+                        placeholder="Write a reply…"
+                        className="flex-1 rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-800"
+                      />
+                      <button
+                        type="submit"
+                        className="rounded-lg bg-brand-500 px-3 py-2 text-xs font-medium text-ink-900"
+                      >
+                        Send
+                      </button>
+                    </form>
+                  </div>
+                )}
+              </Card>
+            </div>
+          )}
+
+          {tab === 'network' && (
+            <div className="mt-5 space-y-4">
+              <p className="text-sm text-ink-600">
+                Invite vendors and subcontractors onto Atmosphere. Every accepted invite grows the
+                network — the next job prefers an on-platform partner instead of another text
+                thread.
+              </p>
+              {network && (
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <StatTile label="Partners" value={network.counts.partners} hint="Active on Atmosphere" />
+                  <StatTile
+                    label="Pending invites"
+                    value={network.counts.pendingInvites}
+                    hint={`${network.profile.invitesAccepted} accepted all-time`}
+                  />
+                  <StatTile
+                    label="Preferred"
+                    value={network.counts.preferred}
+                    hint={network.profile.displayName}
+                  />
+                </div>
+              )}
+
+              {data?.canManage && (
+                <Card title="Invite a partner">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="text-sm text-ink-700">
+                      Kind
+                      <select
+                        className="mt-1 w-full rounded-lg border border-line bg-paper-0 px-3 py-2"
+                        value={inviteForm.inviteeKind}
+                        onChange={(e) =>
+                          setInviteForm((f) => ({ ...f, inviteeKind: e.target.value }))
+                        }
+                      >
+                        <option value="subcontractor">Subcontractor</option>
+                        <option value="vendor">Vendor</option>
+                        <option value="supplier">Supplier</option>
+                        <option value="specialty">Specialty</option>
+                        <option value="general_contractor">General contractor</option>
+                      </select>
+                    </label>
+                    <label className="text-sm text-ink-700">
+                      Name
+                      <input
+                        className="mt-1 w-full rounded-lg border border-line bg-paper-0 px-3 py-2"
+                        value={inviteForm.inviteeName}
+                        onChange={(e) =>
+                          setInviteForm((f) => ({ ...f, inviteeName: e.target.value }))
+                        }
+                      />
+                    </label>
+                    <label className="text-sm text-ink-700">
+                      Company
+                      <input
+                        className="mt-1 w-full rounded-lg border border-line bg-paper-0 px-3 py-2"
+                        value={inviteForm.inviteeCompany}
+                        onChange={(e) =>
+                          setInviteForm((f) => ({ ...f, inviteeCompany: e.target.value }))
+                        }
+                      />
+                    </label>
+                    <label className="text-sm text-ink-700">
+                      Email
+                      <input
+                        type="email"
+                        className="mt-1 w-full rounded-lg border border-line bg-paper-0 px-3 py-2"
+                        value={inviteForm.inviteeEmail}
+                        onChange={(e) =>
+                          setInviteForm((f) => ({ ...f, inviteeEmail: e.target.value }))
+                        }
+                      />
+                    </label>
+                  </div>
+                  <button
+                    className="mt-4 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-ink-900"
+                    onClick={() => {
+                      if (!inviteForm.inviteeName || !inviteForm.inviteeEmail) {
+                        setError('Name and email are required to invite a partner.');
+                        return;
+                      }
+                      void api
+                        .pmInvitePartner({
+                          inviteeKind: inviteForm.inviteeKind,
+                          inviteeName: inviteForm.inviteeName,
+                          inviteeEmail: inviteForm.inviteeEmail,
+                          inviteeCompany: inviteForm.inviteeCompany || undefined,
+                        })
+                        .then((r) => {
+                          setLastInviteUrl(r.inviteUrl);
+                          setInviteForm({
+                            inviteeKind: 'subcontractor',
+                            inviteeName: '',
+                            inviteeEmail: '',
+                            inviteeCompany: '',
+                          });
+                          return api.pmNetwork();
+                        })
+                        .then(setNetwork)
+                        .catch((err) =>
+                          setError(
+                            err instanceof ApiError ? err.message : 'Could not send invite.',
+                          ),
+                        );
+                    }}
+                  >
+                    Create invite link
+                  </button>
+                  {lastInviteUrl && (
+                    <p className="mt-3 break-all text-xs text-ink-600">
+                      Share this link:{' '}
+                      <a className="text-brand-700 underline" href={lastInviteUrl}>
+                        {lastInviteUrl}
+                      </a>
+                    </p>
+                  )}
+                </Card>
+              )}
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <Card title="Partners">
+                  {(network?.partnerships ?? []).length === 0 ? (
+                    <EmptyState>No partners on Atmosphere yet. Invite the first one.</EmptyState>
+                  ) : (
+                    <ul className="space-y-2">
+                      {network!.partnerships.map((p) => (
+                        <li
+                          key={p.id}
+                          className="flex items-center justify-between rounded-lg border border-line px-3 py-2 text-sm"
+                        >
+                          <span className="text-ink-800">
+                            {p.partnerKind.replace(/_/g, ' ')}
+                            {p.preferred ? ' · preferred' : ''}
+                          </span>
+                          <span className="text-xs text-ink-500">{p.sharedJobs} shared jobs</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Card>
+                <Card title="Invites">
+                  {(network?.invites ?? []).length === 0 ? (
+                    <EmptyState>No invites yet.</EmptyState>
+                  ) : (
+                    <ul className="space-y-2">
+                      {network!.invites.map((i) => (
+                        <li
+                          key={i.id}
+                          className="rounded-lg border border-line px-3 py-2 text-sm text-ink-800"
+                        >
+                          <div className="flex flex-wrap gap-2">
+                            <Pill>{i.inviteeKind}</Pill>
+                            <Pill>{i.status}</Pill>
+                          </div>
+                          <p className="mt-1 font-medium">
+                            {i.inviteeName}
+                            {i.inviteeCompany ? ` · ${i.inviteeCompany}` : ''}
+                          </p>
+                          <p className="text-xs text-ink-500">{i.inviteeEmail || i.inviteePhone}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Card>
+              </div>
+            </div>
+          )}
+
+          {tab === 'procurement' && (
+            <div className="mt-5 space-y-3">
+              <p className="text-sm text-ink-600">
+                Dumpster bids from the web, and building-material orders through Atmosphere referral
+                links (Home Depot, Lowe&apos;s, …) so the company gets a cut.
+              </p>
+              {procurement.length === 0 ? (
+                <Card>
+                  <EmptyState>
+                    No open procurement. Derive an equipment plan from an estimate on a project to
+                    start dumpster bids or material referrals.
+                  </EmptyState>
+                </Card>
+              ) : (
+                procurement.map((p) => (
+                  <Card key={p.id}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Pill>{p.kind}</Pill>
+                      <Pill>{p.status.replace(/_/g, ' ')}</Pill>
+                    </div>
+                    <h3 className="mt-2 text-base font-semibold text-ink-900">{p.title}</h3>
+                    {p.description && (
+                      <p className="mt-1 text-sm text-ink-600">{p.description}</p>
+                    )}
+                    {p.referralUrl && (
+                      <a
+                        href={p.referralUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 inline-block text-sm text-brand-700 underline"
+                      >
+                        Open Atmosphere referral link
+                      </a>
+                    )}
+                    {p.projectId && (
+                      <button
+                        className="mt-3 text-xs text-ink-600 underline"
+                        onClick={() => navigate(`/pm/projects/${p.projectId}`)}
+                      >
+                        Open project
+                      </button>
+                    )}
+                  </Card>
+                ))
+              )}
+            </div>
+          )}
+
+          {tab === 'platforms' && (
+            <div className="mt-5 space-y-3">
+              <p className="text-sm text-ink-600">
+                Orchestrate work across Dash, XactAnalysis, Xactimate and Outlook. Atmosphere syncs
+                status in; outbound writes wait in Approvals.
+              </p>
+              {(platforms?.catalogue ?? []).map((p) => {
+                const conn = platforms?.connections.find((c) => c.platform === p.platform);
+                return (
+                  <Card key={p.platform}>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-base font-semibold text-ink-900">{p.label}</h3>
+                        <p className="mt-1 text-sm text-ink-600">{p.description}</p>
+                        <p className="mt-2 text-xs text-ink-500">
+                          {conn
+                            ? `Status: ${conn.status}${conn.lastSyncedAt ? ` · last sync ${new Date(conn.lastSyncedAt).toLocaleString()}` : ''}`
+                            : 'Not connected yet'}
+                        </p>
+                      </div>
+                      {data?.canManage && (
+                        <button
+                          className="rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-medium text-ink-900"
+                          onClick={() =>
+                            void api
+                              .pmConnectPlatform({ platform: p.platform })
+                              .then(() => api.pmPlatforms())
+                              .then(setPlatforms)
+                          }
+                        >
+                          {conn?.status === 'connected' ? 'Reconnect' : 'Connect'}
+                        </button>
+                      )}
+                    </div>
+                  </Card>
+                );
+              })}
             </div>
           )}
 

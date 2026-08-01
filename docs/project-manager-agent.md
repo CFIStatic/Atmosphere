@@ -346,3 +346,17 @@ Named so they don't get smuggled in as if they were:
 - **Lead → project conversion.** `pm_projects.source_lead_id` is deliberately not
   a foreign key, so this branch applies without the Sales one. Wiring the handoff
   is a small job once both exist.
+
+---
+
+## 13. Orchestration (platforms, messaging, procurement)
+
+See [`docs/pm-orchestration.md`](./pm-orchestration.md). In short: Dash /
+XactAnalysis / Xactimate / Outlook sync in and write out only through
+`pm_approvals`; `@atmosphere` mentions from messaging bridges are filed to
+`pm_communications`; estimates become equipment plans; dumpsters get web bids;
+material orders use Atmosphere referral links. The human PM scales because the
+agent watches and prepares — and still waits when the next step needs judgment.
+
+Partner network (invite vendors/subs onto Atmosphere) and adaptive internal
+threads: [`docs/pm-network-comms.md`](./pm-network-comms.md).
