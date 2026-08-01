@@ -1391,6 +1391,118 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
+  // ---- HomeOwner Report portal (staff) ----
+  portalProject: (projectId: string) =>
+    request<PortalStaffView>(`/api/portal/projects/${projectId}`, { method: 'GET' }),
+
+  portalCreateShare: (
+    projectId: string,
+    input: {
+      label?: string | null;
+      customerName?: string | null;
+      customerEmail?: string | null;
+      welcomeNote?: string | null;
+      expiresAt?: string | null;
+    } = {},
+  ) =>
+    request<{
+      share: PortalShare;
+      token: string;
+      path: string;
+      message: string;
+    }>(`/api/portal/projects/${projectId}/shares`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  portalRevokeShare: (projectId: string, shareId: string) =>
+    request<{ share: PortalShare }>(`/api/portal/projects/${projectId}/shares/${shareId}/revoke`, {
+      method: 'POST',
+    }),
+
+  portalUpdateVisibility: (projectId: string, patch: Partial<PortalVisibility>) =>
+    request<{ visibility: PortalVisibility }>(`/api/portal/projects/${projectId}/visibility`, {
+      method: 'PUT',
+      body: JSON.stringify(patch),
+    }),
+
+  portalStaffReply: (
+    projectId: string,
+    conversationId: string,
+    body: string,
+    as: 'staff' | 'adjuster' = 'staff',
+  ) =>
+    request<{ message: PortalMessage; conversation: PortalConversation }>(
+      `/api/portal/projects/${projectId}/messages`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ conversationId, body, as }),
+      },
+    ),
+
+  // ---- HomeOwner Report portal (guest) ----
+  portalGuestReport: (token: string) =>
+    request<{
+      report: HomeownerReport;
+      conversations: PortalConversation[];
+      assistantEnabled: boolean;
+    }>(`/api/portal/report/${encodeURIComponent(token)}`, { method: 'GET' }),
+
+  portalGuestConversationMessages: (token: string, conversationId: string) =>
+    request<{ conversation: PortalConversation; messages: PortalMessage[] }>(
+      `/api/portal/report/${encodeURIComponent(token)}/conversations/${conversationId}/messages`,
+      { method: 'GET' },
+    ),
+
+  portalGuestSendMessage: (token: string, conversationId: string, body: string, topic = 'general') =>
+    request<{ message: PortalMessage; conversation: PortalConversation }>(
+      `/api/portal/report/${encodeURIComponent(token)}/messages`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ conversationId, body, topic }),
+      },
+    ),
+
+  portalGuestPolicies: (token: string) =>
+    request<{ policies: PortalPolicyMeta[] }>(
+      `/api/portal/report/${encodeURIComponent(token)}/policies`,
+      { method: 'GET' },
+    ),
+
+  portalGuestUploadPolicy: (
+    token: string,
+    input: { fileName: string; mimeType?: string; contentText: string; byteSize?: number | null },
+  ) =>
+    request<{ policy: PortalPolicyMeta }>(
+      `/api/portal/report/${encodeURIComponent(token)}/policies`,
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+    ),
+
+  portalGuestAsk: (
+    token: string,
+    question: string,
+    history: { role: 'user' | 'assistant'; content: string }[] = [],
+    conversationId?: string,
+  ) =>
+    request<{
+      reply: string;
+      model: string | null;
+      conversationId: string;
+      message: PortalMessage;
+    }>(`/api/portal/report/${encodeURIComponent(token)}/ask`, {
+      method: 'POST',
+      body: JSON.stringify({ question, history, conversationId }),
+    }),
+
+  portalStaffConversationMessages: (projectId: string, conversationId: string) =>
+    request<{ conversation: PortalConversation; messages: PortalMessage[] }>(
+      `/api/portal/projects/${projectId}/conversations/${conversationId}/messages`,
+      { method: 'GET' },
+    ),
+
   // ---- Web Access ----
   webAccessStatus: () =>
     request<{ enabled: boolean; capacityAvailable: boolean; maxSteps: number }>(
@@ -2540,6 +2652,164 @@ export interface PmProject {
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/* ---- HomeOwner Report portal -------------------------------------- */
+
+export interface PortalShare {
+  id: string;
+  orgId: string;
+  projectId: string;
+  label: string | null;
+  customerName: string | null;
+  customerEmail: string | null;
+  status: 'active' | 'revoked' | 'expired';
+  expiresAt: string | null;
+  lastAccessedAt: string | null;
+  welcomeNote: string | null;
+  createdAt: string;
+  revokedAt: string | null;
+}
+
+export interface PortalVisibility {
+  projectId: string;
+  orgId: string;
+  showSchedule: boolean;
+  showPhaseProgress: boolean;
+  showMilestones: boolean;
+  showCustomerUpdates: boolean;
+  showDryingSummary: boolean;
+  showDocuments: boolean;
+  showClaimBasics: boolean;
+  showDeductible: boolean;
+  showOfficeContact: boolean;
+  showAdjusterContact: boolean;
+  showFieldContact: boolean;
+  allowChat: boolean;
+  allowAdjusterChat: boolean;
+  allowGroupChat: boolean;
+  allowPolicyUpload: boolean;
+  allowInsuranceQa: boolean;
+  brandName: string | null;
+  logoUrl: string | null;
+  officeName: string | null;
+  officePhone: string | null;
+  officeEmail: string | null;
+  fieldContactName: string | null;
+  fieldContactPhone: string | null;
+  customMessage: string | null;
+}
+
+export type PortalConversationKind = 'assistant' | 'company' | 'adjuster' | 'group';
+
+export interface PortalConversation {
+  id: string;
+  orgId: string;
+  projectId: string;
+  shareId: string;
+  kind: PortalConversationKind;
+  title: string;
+  includesHomeowner: boolean;
+  includesCompany: boolean;
+  includesAdjuster: boolean;
+  includesAssistant: boolean;
+  status: 'open' | 'archived';
+  lastMessageAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PortalMessage {
+  id: string;
+  orgId: string;
+  projectId: string;
+  shareId: string;
+  conversationId: string;
+  authorKind: 'homeowner' | 'staff' | 'adjuster' | 'assistant' | 'system';
+  authorUserId: string | null;
+  authorName: string | null;
+  body: string;
+  topic: string | null;
+  createdAt: string;
+}
+
+export interface PortalPolicyMeta {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  byteSize: number | null;
+  summary: string | null;
+  uploadedAt: string;
+}
+
+export interface PortalStaffView {
+  projectId: string;
+  shares: PortalShare[];
+  visibility: PortalVisibility;
+  conversations: PortalConversation[];
+  messages: PortalMessage[];
+  portalPathPrefix: string;
+}
+
+export interface HomeownerReport {
+  orgName: string | null;
+  brand: {
+    name: string;
+    logoUrl: string | null;
+  };
+  share: { id: string; welcomeNote: string | null; customerName: string | null };
+  project: {
+    projectNumber: string;
+    name: string;
+    workType: string;
+    lossType: string | null;
+    status: string;
+    phase: string | null;
+    phaseLabel: string | null;
+    address: string | null;
+    city: string | null;
+    region: string | null;
+  };
+  schedule: {
+    scheduledStartAt: string | null;
+    targetCompletionAt: string | null;
+    startedAt: string | null;
+    completedAt: string | null;
+  } | null;
+  claim: {
+    carrier: string | null;
+    claimNumber: string | null;
+    deductibleCents: number | null;
+  } | null;
+  contacts: {
+    office: { name: string | null; phone: string | null; email: string | null } | null;
+    adjuster: { name: string | null; phone: string | null; email: string | null } | null;
+    field: { name: string | null; phone: string | null } | null;
+  };
+  milestones: { label: string; dueAt: string; kind: string; completedAt: string | null }[] | null;
+  updates: { subject: string | null; body: string; sentAt: string | null; createdAt: string }[] | null;
+  drying: {
+    isDrying: boolean;
+    openAreas: number;
+    areasAtGoal: number;
+    daysDrying: number | null;
+    headline: string;
+  } | null;
+  documents: { label: string; kind: string; status: string }[] | null;
+  customMessage: string | null;
+  capabilities: {
+    chat: boolean;
+    adjusterChat: boolean;
+    groupChat: boolean;
+    policyUpload: boolean;
+    insuranceQa: boolean;
+  };
+  regulation: {
+    regionLabel: string;
+    carrierLabel: string | null;
+    bullets: string[];
+    disclaimer: string;
+  };
 }
 
 export interface PmHealth {
