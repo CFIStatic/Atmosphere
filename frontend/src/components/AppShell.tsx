@@ -1,104 +1,329 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { ROLE_LABELS } from '../lib/api';
+import { api, ROLE_LABELS } from '../lib/api';
 import { displayName, initials } from '../lib/display';
 import { usePreferences } from '../lib/preferences';
-import { Logo } from './Logo';
 import {
   AuditIcon,
+  ArtifactIcon,
   BoltIcon,
   BriefcaseIcon,
+  BuildingIcon,
   ChartIcon,
-  CreditCardIcon,
-  HistoryIcon,
-  HomeIcon,
-  MicIcon,
-  SpinnerIcon,
-  UsersIcon,
+  CheckIcon,
   ChevronDownIcon,
+  CloseIcon,
+  CreditCardIcon,
+  DecisionIcon,
+  GaugeIcon,
+  GlobeIcon,
+  HistoryIcon,
   LogOutIcon,
+  MenuIcon,
+  MicIcon,
+  MonitorIcon,
+  SearchIcon,
   SettingsIcon,
+  ShieldIcon,
+  SpinnerIcon,
+  ThoughtIcon,
+  UsersIcon,
 } from './icons';
 
-const NAV = [
-  { to: '/dashboard', label: 'Dashboard', Icon: HomeIcon },
-  { to: '/jobs', label: 'Jobs', Icon: BriefcaseIcon },
-  { to: '/memory', label: 'Memory', Icon: HistoryIcon },
-  { to: '/team', label: 'Team', Icon: UsersIcon },
-  { to: '/technician', label: 'Technician', Icon: MicIcon },
-  { to: '/computer-use', label: 'Computer', Icon: BoltIcon },
-  { to: '/usage', label: 'Usage', Icon: ChartIcon },
-  { to: '/billing', label: 'Billing', Icon: CreditCardIcon },
-  { to: '/audit', label: 'Audit', Icon: AuditIcon },
+interface NavItem {
+  to: string;
+  label: string;
+  Icon: typeof GaugeIcon;
+}
+
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+/**
+ * The console's information architecture. Groups read as verbs of the
+ * business — operate the day, deliver the work, mind the money, direct the
+ * intelligence — so a new hire can guess where a screen lives without a tour.
+ */
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: 'Operate',
+    items: [
+      { to: '/overview', label: 'Overview', Icon: GaugeIcon },
+      { to: '/my-work', label: 'My Work', Icon: CheckIcon },
+      { to: '/approvals', label: 'Approvals', Icon: ShieldIcon },
+    ],
+  },
+  {
+    label: 'Delivery',
+    items: [
+      { to: '/jobs', label: 'Jobs', Icon: BriefcaseIcon },
+      { to: '/schedule', label: 'Schedule', Icon: HistoryIcon },
+      { to: '/mitigation', label: 'Estimates', Icon: ArtifactIcon },
+      { to: '/customers', label: 'Customers', Icon: BuildingIcon },
+      { to: '/technician', label: 'Field', Icon: MicIcon },
+    ],
+  },
+  {
+    label: 'Finance',
+    items: [
+      { to: '/billing', label: 'Billing', Icon: CreditCardIcon },
+      { to: '/usage', label: 'Usage', Icon: ChartIcon },
+    ],
+  },
+  {
+    label: 'Intelligence',
+    items: [
+      { to: '/audit', label: 'Agents', Icon: BoltIcon },
+      { to: '/pm', label: 'Workflows', Icon: DecisionIcon },
+      { to: '/web-access', label: 'Web Access', Icon: GlobeIcon },
+      { to: '/computer-use', label: 'Computer', Icon: MonitorIcon },
+      { to: '/memory', label: 'Memory', Icon: ThoughtIcon },
+      { to: '/team', label: 'Team', Icon: UsersIcon },
+    ],
+  },
+  {
+    label: 'System',
+    items: [{ to: '/settings', label: 'Settings', Icon: SettingsIcon }],
+  },
+];
+
+/** Flat list for the jump palette, plus destinations that live off the sidebar. */
+const JUMP_TARGETS: NavItem[] = [
+  ...NAV_GROUPS.flatMap((g) => g.items),
+  { to: '/estimator', label: 'Reconstruction estimates', Icon: ArtifactIcon },
+  { to: '/audit', label: 'Audit trail', Icon: AuditIcon },
 ];
 
 /**
- * Shared page frame: brand, primary navigation and sign-out. Keeps the header
- * identical across screens so navigation does not shift as you move between them.
+ * The console frame: fixed sidebar, top bar with the jump palette and the
+ * approvals pill, and the page content. `rail` renders a right-hand column on
+ * wide screens — the Overview passes the Atmosphere panel through it.
  */
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({ children, rail }: { children: ReactNode; rail?: ReactNode }) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [approvalCount, setApprovalCount] = useState(0);
+  const navigate = useNavigate();
+
+  // The pill is a glance, not a live feed — one fetch per mount is enough,
+  // and a backend without the verifier configured simply shows no pill.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getEscalations()
+      .then(({ escalations }) => {
+        if (!cancelled) setApprovalCount(escalations.filter((e) => e.status === 'open').length);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
-    <div className="cx-aurora min-h-screen bg-paper-100">
-      <header className="border-b border-line">
-        <div className="flex items-center justify-between gap-4 px-6 py-4 sm:px-10">
-          <Logo />
-
-          <nav aria-label="Primary" className="hidden gap-1 lg:flex">
-            {NAV.map(({ to, label, Icon }) => (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) =>
-                  `flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition ${
-                    isActive
-                      ? 'bg-brand-50 text-brand-700'
-                      : 'text-ink-600 hover:bg-paper-100 hover:text-ink-900'
-                  }`
-                }
-              >
-                <Icon width={17} height={17} />
-                {label}
-              </NavLink>
-            ))}
-          </nav>
-
-          <AccountMenu />
+    <div className="min-h-screen bg-paper-100">
+      {/* ---- Sidebar ---- */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 w-60 transform border-r border-line bg-paper-50 transition-transform lg:translate-x-0 ${
+          mobileOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <div className="flex items-center justify-between px-5 py-5">
+          <NavLink to="/overview" className="text-[17px] font-bold tracking-tight text-ink-900">
+            Atmosphere
+          </NavLink>
+          <button
+            className="text-ink-500 lg:hidden"
+            onClick={() => setMobileOpen(false)}
+            aria-label="Close navigation"
+          >
+            <CloseIcon width={18} height={18} />
+          </button>
         </div>
 
-        {/* The same navigation, kept reachable on narrow screens. */}
-        <nav
-          aria-label="Primary"
-          className="flex gap-1 overflow-x-auto border-t border-line px-4 py-2 lg:hidden"
-        >
-          {NAV.map(({ to, label, Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                `flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition ${
-                  isActive ? 'bg-brand-50 text-brand-700' : 'text-ink-600 hover:text-ink-900'
-                }`
-              }
-            >
-              <Icon width={16} height={16} />
-              {label}
-            </NavLink>
+        <nav aria-label="Primary" className="cx-scroll h-[calc(100%-64px)] overflow-y-auto px-3 pb-6">
+          {NAV_GROUPS.map((group) => (
+            <div key={group.label} className="mt-4 first:mt-0">
+              <p className="px-2.5 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.09em] text-ink-500">
+                {group.label}
+              </p>
+              <div className="space-y-0.5">
+                {group.items.map(({ to, label, Icon }) => (
+                  <NavLink
+                    key={`${group.label}-${to}`}
+                    to={to}
+                    onClick={() => setMobileOpen(false)}
+                    className={({ isActive }) =>
+                      `flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13.5px] font-medium transition ${
+                        isActive
+                          ? 'bg-brand-50 text-brand-700'
+                          : 'text-ink-600 hover:bg-paper-200 hover:text-ink-900'
+                      }`
+                    }
+                  >
+                    <Icon width={16} height={16} />
+                    <span className="flex-1">{label}</span>
+                    {to === '/approvals' && approvalCount > 0 && (
+                      <span className="rounded-full bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700">
+                        {approvalCount}
+                      </span>
+                    )}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
-      </header>
+      </aside>
 
-      <main className="mx-auto max-w-6xl px-6 py-8 sm:px-10">{children}</main>
+      {mobileOpen && (
+        <button
+          aria-label="Close navigation"
+          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      {/* ---- Top bar + content ---- */}
+      <div className="lg:pl-60">
+        <header className="sticky top-0 z-20 border-b border-line bg-paper-100/95 backdrop-blur">
+          <div className="flex items-center gap-3 px-4 py-3 sm:px-6">
+            <button
+              className="text-ink-600 lg:hidden"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Open navigation"
+            >
+              <MenuIcon width={20} height={20} />
+            </button>
+
+            <JumpPalette />
+
+            <div className="ml-auto flex items-center gap-3">
+              {approvalCount > 0 && (
+                <button
+                  onClick={() => navigate('/approvals')}
+                  className="hidden items-center gap-1.5 rounded-full border border-caution-200 bg-caution-50 px-3 py-1.5 text-xs font-semibold text-caution-600 transition hover:border-caution-600 sm:flex"
+                >
+                  {approvalCount} awaiting approval
+                </button>
+              )}
+              <AccountMenu />
+            </div>
+          </div>
+        </header>
+
+        <div className={rail ? 'xl:flex' : undefined}>
+          <main className={`min-w-0 flex-1 px-4 py-6 sm:px-6 ${rail ? '' : 'mx-auto max-w-6xl'}`}>
+            {children}
+          </main>
+          {rail && (
+            <aside className="w-full shrink-0 border-line px-4 pb-8 sm:px-6 xl:w-[340px] xl:border-l xl:pl-5 xl:pt-6">
+              {rail}
+            </aside>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
 
 /**
- * The account block, sitting where the user's own details belong — beside their
- * name at the end of the header. It carries the two things that are about *you*
- * rather than about the work: Settings, and signing out. Keeping them here, off
- * the primary navigation, is what stops account actions from competing with the
- * screens people use all day.
+ * The jump palette: type to filter destinations, Enter goes to the first
+ * match. ⌘K / Ctrl-K focuses it from anywhere, which is the whole point —
+ * hands stay on the keys between screens.
+ */
+function JumpPalette() {
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const navigate = useNavigate();
+
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return JUMP_TARGETS;
+    return JUMP_TARGETS.filter((t) => t.label.toLowerCase().includes(q));
+  }, [query]);
+
+  const go = useCallback(
+    (to: string) => {
+      navigate(to);
+      setOpen(false);
+      setQuery('');
+      inputRef.current?.blur();
+    },
+    [navigate],
+  );
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        inputRef.current?.focus();
+        setOpen(true);
+      }
+      if (event.key === 'Escape') setOpen(false);
+    }
+    function onPointerDown(event: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', onPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onPointerDown);
+    };
+  }, []);
+
+  return (
+    <div ref={wrapRef} className="relative w-full max-w-md">
+      <div className="flex items-center gap-2 rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-500 transition focus-within:border-brand-500">
+        <SearchIcon width={15} height={15} className="shrink-0" />
+        <input
+          ref={inputRef}
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && matches[0]) go(matches[0].to);
+          }}
+          placeholder="Jump to…"
+          aria-label="Jump to a screen"
+          className="w-full bg-transparent text-ink-900 placeholder-ink-500 outline-none"
+        />
+        <kbd className="hidden rounded border border-line px-1.5 py-0.5 text-[10.5px] text-ink-500 sm:block">
+          ⌘K
+        </kbd>
+      </div>
+
+      {open && matches.length > 0 && (
+        <div className="absolute left-0 right-0 top-full z-30 mt-1.5 overflow-hidden rounded-xl border border-line bg-paper-0 shadow-lift">
+          {matches.slice(0, 7).map(({ to, label, Icon }, i) => (
+            <button
+              key={`${to}-${label}`}
+              onClick={() => go(to)}
+              className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition hover:bg-paper-200 ${
+                i === 0 ? 'text-ink-900' : 'text-ink-700'
+              }`}
+            >
+              <Icon width={15} height={15} className="text-ink-500" />
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The account block. It carries the two things that are about *you* rather
+ * than about the work: Settings, and signing out.
  */
 function AccountMenu() {
   const { user, profile, membership, logout } = useAuth();
@@ -110,8 +335,6 @@ function AccountMenu() {
 
   const name = displayName(profile?.fullName, user?.email);
 
-  // Dismiss on an outside click or Escape — a menu anchored to the corner is
-  // easy to leave open by accident.
   useEffect(() => {
     if (!open) return undefined;
     function onPointerDown(event: MouseEvent) {
@@ -145,13 +368,12 @@ function AccountMenu() {
         onClick={() => setOpen((value) => !value)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex items-center gap-2.5 rounded-lg border border-line bg-paper-0 py-1.5 pl-1.5 pr-2.5 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
+        className="flex items-center gap-2 rounded-full transition hover:opacity-90"
       >
-        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand-500 text-xs font-semibold text-white">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-500 text-xs font-semibold text-white">
           {initials(profile?.fullName, user?.email)}
         </span>
-        <span className="hidden max-w-[10rem] truncate sm:inline">{name}</span>
-        <ChevronDownIcon width={15} height={15} className="shrink-0 text-ink-500" />
+        <ChevronDownIcon width={14} height={14} className="hidden shrink-0 text-ink-500 sm:block" />
       </button>
 
       {open && (
@@ -173,7 +395,7 @@ function AccountMenu() {
               setOpen(false);
               navigate('/settings');
             }}
-            className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-ink-800 transition hover:bg-paper-100"
+            className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-ink-800 transition hover:bg-paper-200"
           >
             <SettingsIcon width={17} height={17} className="text-ink-500" />
             Settings
@@ -197,6 +419,7 @@ function AccountMenu() {
     </div>
   );
 }
+
 /** Consistent page heading with an optional action on the right. */
 export function PageHeader({
   eyebrow,
@@ -244,7 +467,7 @@ export function ErrorNote({ message }: { message: string }) {
   return (
     <p
       role="alert"
-      className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+      className="rounded-lg border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-600"
     >
       {message}
     </p>

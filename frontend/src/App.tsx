@@ -6,7 +6,11 @@ import { LoginPage } from './pages/LoginPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
-import { DashboardPage } from './pages/DashboardPage';
+import { OverviewPage } from './pages/OverviewPage';
+import { MyWorkPage } from './pages/MyWorkPage';
+import { ApprovalsPage } from './pages/ApprovalsPage';
+import { SchedulePage } from './pages/SchedulePage';
+import { CustomersPage } from './pages/CustomersPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AuditPage } from './pages/AuditPage';
 import { JobsPage } from './pages/JobsPage';
@@ -80,16 +84,24 @@ export default function App() {
             }
           />
 
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <RequireOnboarded>
-                  <DashboardPage />
-                </RequireOnboarded>
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/dashboard" element={<Navigate to="/overview" replace />} />
+          {[
+            { path: '/overview', element: <OverviewPage /> },
+            { path: '/my-work', element: <MyWorkPage /> },
+            { path: '/approvals', element: <ApprovalsPage /> },
+            { path: '/schedule', element: <SchedulePage /> },
+            { path: '/customers', element: <CustomersPage /> },
+          ].map(({ path, element }) => (
+            <Route
+              key={path}
+              path={path}
+              element={
+                <ProtectedRoute>
+                  <RequireOnboarded>{element}</RequireOnboarded>
+                </ProtectedRoute>
+              }
+            />
+          ))}
 
           <Route
             path="/audit"
@@ -238,8 +250,8 @@ export default function App() {
             }
           />
 
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/" element={<Navigate to="/overview" replace />} />
+          <Route path="*" element={<Navigate to="/overview" replace />} />
         </Routes>
       </AuthProvider>
     </Router>

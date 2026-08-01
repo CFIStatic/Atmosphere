@@ -5,59 +5,61 @@ export default {
     extend: {
       colors: {
         /**
-         * Atmosphere runs warm and light: paper surfaces, ink text, a single
-         * terracotta accent. The accent is load-bearing — it marks the one
-         * action on a screen that commits something — so it is used sparingly
-         * and never for decoration.
+         * Atmosphere's console runs dark and warm: charcoal surfaces, warm
+         * off-white ink, a single load-bearing orange accent. Token SEMANTICS
+         * are unchanged — `paper` is still surfaces page-to-card, `ink` is
+         * still text strongest-first, tint steps (50/100/200) are still
+         * backgrounds and 600+ still reads on top of them — so every screen
+         * written against the light palette reskins without edits.
          */
         brand: {
-          50: '#FDF4EE',
-          100: '#FAE5D6',
-          200: '#F4C8A9',
-          300: '#EBA475',
-          400: '#DF7B44',
-          500: '#D2500A',
-          600: '#BC4508',
-          700: '#993607',
-          800: '#772B06',
-          900: '#5B2104',
+          50: '#31190C',
+          100: '#3E1F0D',
+          200: '#54290F',
+          300: '#7C3A12',
+          400: '#B54F10',
+          500: '#E8590C',
+          600: '#F26E22',
+          700: '#F5883F',
+          800: '#F8A263',
+          900: '#FBC28E',
         },
-        /** Surfaces, lightest first. `0` is card white, `100` is the page. */
+        /** Surfaces, page first. `100` is the page, `0` is the raised panel. */
         paper: {
-          0: '#FFFFFF',
-          50: '#FBFAF7',
-          100: '#F4F1EB',
-          200: '#EDE9E1',
-          300: '#E4DFD5',
-          400: '#D8D2C5',
+          0: '#1D1B18',
+          50: '#191714',
+          100: '#141311',
+          200: '#242220',
+          300: '#2C2A27',
+          400: '#3A3733',
         },
-        /** Text, darkest first. Warm greys — pure neutral looks cold on paper. */
+        /** Text, strongest first. Warm greys — pure neutral looks dead on charcoal. */
         ink: {
-          900: '#1C1917',
-          800: '#292524',
-          700: '#44403C',
-          600: '#57534E',
-          500: '#78716C',
-          400: '#A8A29E',
+          900: '#F1EFEB',
+          800: '#E2DFD9',
+          700: '#C3BFB7',
+          600: '#A09C93',
+          500: '#807C74',
+          400: '#5C5951',
         },
         /** Hairlines. A separate token so borders tune in one place. */
         line: {
-          DEFAULT: '#E3DED4',
-          strong: '#D3CCBE',
+          DEFAULT: '#2A2825',
+          strong: '#3B3833',
         },
-        /** Status. Muted enough to sit on paper without shouting. */
-        danger: { 50: '#FDF2F0', 200: '#F3C7BF', 600: '#B4361D', 700: '#8F2A15' },
-        caution: { 50: '#FDF7EC', 200: '#EFDCAF', 600: '#946A0B' },
-        success: { 50: '#F0F7F1', 200: '#BEDCC3', 600: '#3F7D4C' },
+        /** Status. Dark tints behind bright readable tones. */
+        danger: { 50: '#301412', 200: '#54201B', 600: '#F07A62', 700: '#F49B87' },
+        caution: { 50: '#2C230E', 200: '#4E3D16', 600: '#E5B84A' },
+        success: { 50: '#12261A', 200: '#1E4229', 600: '#7CC98D' },
       },
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       boxShadow: {
-        /** The only two elevations. Soft and warm, never a hard grey drop. */
-        card: '0 1px 2px rgba(28, 25, 23, 0.04), 0 1px 3px rgba(28, 25, 23, 0.03)',
-        lift: '0 4px 12px rgba(28, 25, 23, 0.07), 0 2px 4px rgba(28, 25, 23, 0.04)',
+        /** The only two elevations. Deep and soft, never a hard grey drop. */
+        card: '0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.25)',
+        lift: '0 6px 18px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.35)',
       },
       keyframes: {
         'fade-in-up': {

@@ -76,6 +76,40 @@ export interface OrgMember {
   status: string;
 }
 
+/* ---- CRM (customers) -------------------------------------------------- */
+
+/** The CRM's generic list envelope. */
+export interface CrmList<T> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/** Camelized crm_accounts row — only the columns the UI reads are typed. */
+export interface CrmAccount {
+  id: string;
+  name: string;
+  kind?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  city?: string | null;
+  region?: string | null;
+  createdAt?: string;
+}
+
+/** Camelized crm_contacts row. */
+export interface CrmContact {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  companyName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  mobile?: string | null;
+  createdAt?: string;
+}
+
 /**
  * The credential carried by a password-recovery link. Supabase emits one of
  * three shapes depending on the email template and flow type; the backend
@@ -273,6 +307,10 @@ export interface JobSummary {
   eventCount: number;
   lastEvent: string | null;
   lastEventAt: string | null;
+  contractAmount: number | null;
+  invoicedAmount: number | null;
+  paidAmount: number | null;
+  scheduledStart: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -814,6 +852,19 @@ export const api = {
     }),
 
   getMembers: () => request<{ members: OrgMember[] }>('/api/org/members', { method: 'GET' }),
+
+  // ---- CRM (customers) ----
+  crmAccounts: (search = '') =>
+    request<CrmList<CrmAccount>>(
+      `/api/crm/accounts${search ? `?search=${encodeURIComponent(search)}` : ''}`,
+      { method: 'GET' },
+    ),
+
+  crmContacts: (search = '') =>
+    request<CrmList<CrmContact>>(
+      `/api/crm/contacts${search ? `?search=${encodeURIComponent(search)}` : ''}`,
+      { method: 'GET' },
+    ),
 
   // ---- Audit ----
   auditAgents: () => request<{ agents: AgentSummary[] }>('/api/audit/agents', { method: 'GET' }),

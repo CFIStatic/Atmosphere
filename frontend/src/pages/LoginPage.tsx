@@ -14,7 +14,7 @@ export function LoginPage() {
   const { user, loading, login, signup, unlockWithPin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const redirectTo = (location.state as { from?: string } | null)?.from ?? '/dashboard';
+  const redirectTo = (location.state as { from?: string } | null)?.from ?? '/overview';
 
   // The corporate site deep-links here (…/login?mode=signup&email=…) so its
   // "Create your organization" CTAs open the create-account form directly.
@@ -354,7 +354,7 @@ export function LoginPage() {
           </div>
 
           <p className="mt-6 text-center text-xs text-ink-400">
-            Protected by Supabase Auth · Passwords are encrypted and never stored in plain text.
+            Passwords are encrypted, never stored in plain text, and never seen by this page.
           </p>
         </div>
       </main>

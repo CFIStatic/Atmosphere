@@ -14,6 +14,7 @@
  */
 import type {
   AgentMemory,
+  Escalation,
   AgentSummary,
   AuditRun,
   AuditStats,
@@ -43,8 +44,13 @@ import type {
 
 /* ------------------------------------------------------------------ state */
 
+// A wrapper page can set `window.__DEMO_SIGNED_OUT = true` before the bundle
+// runs to start the demo at the sign-in screen — the corporate-site-to-console
+// walkthrough begins signed out, the standalone app demo begins signed in.
+const startSignedOut = Boolean((window as { __DEMO_SIGNED_OUT?: boolean }).__DEMO_SIGNED_OUT);
+
 const state = {
-  signedIn: true,
+  signedIn: !startSignedOut,
   onboarded: true,
   email: 'dana@ortizrestoration.com',
   fullName: 'Dana Ortiz' as string | null,
@@ -102,10 +108,10 @@ const MEMBERS: OrgMember[] = [
 /* ------------------------------------------------------------------- jobs */
 
 const JOBS: JobSummary[] = [
-  { jobId: 'job-1041', jobNumber: 1041, title: 'Meridian Ave — water loss, Class 3', status: 'in_progress', priority: 2, workType: 'mitigation', ownerId: 'demo-user-1', claimNumber: 'CLM-88412', taskCount: 14, tasksDone: 9, crewSize: 3, minutesLogged: 2140, eventCount: 87, lastEvent: 'Moisture reading logged — master bedroom subfloor 14.2%', lastEventAt: '2026-08-01T12:20:00Z', createdAt: '2026-07-24T15:02:00Z', updatedAt: '2026-08-01T12:20:00Z' },
-  { jobId: 'job-1038', jobNumber: 1038, title: 'Cedar Ridge — storm damage, roof tarp + rebuild', status: 'in_progress', priority: 1, workType: 'construction', ownerId: 'u-priya', claimNumber: 'CLM-88396', taskCount: 11, tasksDone: 4, crewSize: 2, minutesLogged: 1310, eventCount: 52, lastEvent: 'Supplement approved by carrier — $4,180', lastEventAt: '2026-08-01T10:05:00Z', createdAt: '2026-07-19T08:30:00Z', updatedAt: '2026-08-01T10:05:00Z' },
-  { jobId: 'job-1042', jobNumber: 1042, title: 'Harbor Point Condos — mold remediation, unit 4B', status: 'scheduled', priority: 3, workType: 'mitigation', ownerId: 'demo-user-1', claimNumber: null, taskCount: 6, tasksDone: 1, crewSize: 1, minutesLogged: 95, eventCount: 12, lastEvent: 'Containment plan drafted', lastEventAt: '2026-07-31T16:44:00Z', createdAt: '2026-07-30T11:15:00Z', updatedAt: '2026-07-31T16:44:00Z' },
-  { jobId: 'job-1035', jobNumber: 1035, title: 'Lakeview Dental — contents pack-out', status: 'completed', priority: 4, workType: 'mitigation', ownerId: 'u-tom', claimNumber: 'CLM-88371', taskCount: 8, tasksDone: 8, crewSize: 2, minutesLogged: 960, eventCount: 41, lastEvent: 'Final walkthrough signed off', lastEventAt: '2026-07-29T17:30:00Z', createdAt: '2026-07-12T09:00:00Z', updatedAt: '2026-07-29T17:30:00Z' },
+  { jobId: 'job-1041', jobNumber: 1041, title: 'Meridian Ave — water loss, Class 3', status: 'in_progress', priority: 2, workType: 'mitigation', ownerId: 'demo-user-1', claimNumber: 'CLM-88412', taskCount: 14, tasksDone: 9, crewSize: 3, minutesLogged: 2140, eventCount: 87, lastEvent: 'Moisture reading logged — master bedroom subfloor 14.2%', lastEventAt: '2026-08-01T12:20:00Z', contractAmount: 18420, invoicedAmount: 6200, paidAmount: 0, scheduledStart: '2026-08-01T13:00:00Z', createdAt: '2026-07-24T15:02:00Z', updatedAt: '2026-08-01T12:20:00Z' },
+  { jobId: 'job-1038', jobNumber: 1038, title: 'Cedar Ridge — storm damage, roof tarp + rebuild', status: 'in_progress', priority: 1, workType: 'construction', ownerId: 'u-priya', claimNumber: 'CLM-88396', taskCount: 11, tasksDone: 4, crewSize: 2, minutesLogged: 1310, eventCount: 52, lastEvent: 'Supplement approved by carrier — $4,180', lastEventAt: '2026-08-01T10:05:00Z', contractAmount: 13980, invoicedAmount: 13980, paidAmount: 9800, scheduledStart: '2026-08-01T15:30:00Z', createdAt: '2026-07-19T08:30:00Z', updatedAt: '2026-08-01T10:05:00Z' },
+  { jobId: 'job-1042', jobNumber: 1042, title: 'Harbor Point Condos — mold remediation, unit 4B', status: 'scheduled', priority: 3, workType: 'mitigation', ownerId: 'demo-user-1', claimNumber: null, taskCount: 6, tasksDone: 1, crewSize: 1, minutesLogged: 95, eventCount: 12, lastEvent: 'Containment plan drafted', lastEventAt: '2026-07-31T16:44:00Z', contractAmount: 9200, invoicedAmount: 0, paidAmount: 0, scheduledStart: '2026-08-02T14:00:00Z', createdAt: '2026-07-30T11:15:00Z', updatedAt: '2026-07-31T16:44:00Z' },
+  { jobId: 'job-1035', jobNumber: 1035, title: 'Lakeview Dental — contents pack-out', status: 'completed', priority: 4, workType: 'mitigation', ownerId: 'u-tom', claimNumber: 'CLM-88371', taskCount: 8, tasksDone: 8, crewSize: 2, minutesLogged: 960, eventCount: 41, lastEvent: 'Final walkthrough signed off', lastEventAt: '2026-07-29T17:30:00Z', contractAmount: 7600, invoicedAmount: 7600, paidAmount: 7600, scheduledStart: null, createdAt: '2026-07-12T09:00:00Z', updatedAt: '2026-07-29T17:30:00Z' },
 ];
 
 const JOB_DETAIL: JobDetail = {
@@ -385,6 +391,61 @@ const VERIFICATIONS: Verification[] = [
     startedAt: '2026-07-31T17:24:00Z', finishedAt: '2026-07-31T17:26:00Z', createdAt: '2026-07-31T17:24:00Z' },
 ];
 
+const ESCALATIONS: Escalation[] = [
+  {
+    id: 'esc-1',
+    verificationId: 'v-2',
+    runId: 'wr-3',
+    reason: 'unsafe_repair',
+    question: 'Assign inspection crew to STM-1044?',
+    context: {
+      reason: 'unsafe_repair',
+      siteLabel: 'Alliance Claims Portal',
+      runInstruction: 'Schedule the inspection for the Vance Residence storm claim.',
+      verdict: 'indeterminate',
+      verifierSummary:
+        'The job has sat unassigned for 5 days. Ken Ohara has Thursday capacity and is 12 minutes from the property.',
+      unsettled: [
+        {
+          expectation: 'An inspection visit exists on claim STM-1044',
+          verdict: 'violated',
+          evidence: 'No visit is scheduled; the claim shows three failed contact attempts.',
+          url: 'https://claims.alliancemutual.com/claims/STM-1044',
+          reasoning: 'The carrier requires an inspection within 7 days of assignment.',
+          proposedFix: 'Assign Ken Ohara as inspection crew for Thursday 9:00 AM.',
+          fixSafety: 'Writes a crew assignment — needs a person to approve.',
+        },
+      ],
+    },
+    options: [
+      {
+        id: 'assign',
+        label: 'Assign Ken Ohara — Thursday 9:00 AM',
+        detail: 'Writes the assignment and confirms the visit with the carrier.',
+        action: 'repair',
+      },
+      {
+        id: 'someone-else',
+        label: 'Hold for a different assignee',
+        detail: 'Keeps the job unassigned; the alert stays open.',
+        action: 'reject',
+      },
+      {
+        id: 'recheck',
+        label: 'Re-check the claim first',
+        detail: 'The verifier re-opens the portal read-only and reports back.',
+        action: 'recheck',
+      },
+    ],
+    status: 'open',
+    chosenOption: null,
+    resolutionNote: null,
+    resolvedBy: null,
+    resolvedAt: null,
+    createdAt: '2026-08-01T11:20:00Z',
+  },
+];
+
 const COMPUTER_STATUS: ComputerStatus = {
   enabled: true,
   credential: { connected: true, source: 'organization', hint: 'sk-…-4KQ2', updatedAt: '2026-07-12T10:00:00Z' },
@@ -496,8 +557,52 @@ const routes: Array<[string, RegExp, Handler]> = [
   ['GET', /^\/api\/web-access\/runs$/, () => ({ body: { runs: WEB_RUNS } })],
   ['GET', /^\/api\/web-access\/capabilities$/, () => ({ body: { enabled: true, capacityAvailable: true, maxSteps: 40 } })],
   ['GET', /^\/api\/verifier\/verifications$/, () => ({ body: { verifications: VERIFICATIONS } })],
-  ['GET', /^\/api\/verifier\/escalations$/, () => ({ body: { escalations: [] } })],
+  ['GET', /^\/api\/verifier\/escalations$/, () => ({ body: { escalations: ESCALATIONS } })],
+  ['POST', /^\/api\/verifier\/escalations\/([\w-]+)\/resolve$/, (m, b) => {
+    const esc = ESCALATIONS.find((e) => e.id === m[1]);
+    if (esc) {
+      esc.status = 'resolved';
+      esc.chosenOption = typeof b.optionId === 'string' ? b.optionId : null;
+      esc.resolvedAt = '2026-08-01T13:00:00Z';
+    }
+    return { body: { status: 'resolved', verificationId: esc?.verificationId ?? 'v-2' } };
+  }],
+  ['POST', /^\/api\/technician\/assist$/, (_m, b) => {
+    const q = typeof b.message === 'string' ? b.message : '';
+    return {
+      body: {
+        reply:
+          'Here is where that stands: WTR-1041 (Meridian Ave) is day 8 of drying with one stalled area — ' +
+          'adding an LGR dehumidifier is the fastest path to dry standard. The $1,840 of performed-but-unbilled ' +
+          'work the estimator found is already in the draft supplement. Ask me about a job, a balance, or a ' +
+          'schedule and I will pull it from the record.' +
+          (q ? `\n\n(You asked: "${q}" — in the live product this answer comes from your own org data.)` : ''),
+        model: 'atmosphere-core',
+      },
+    };
+  }],
 
+  ['GET', /^\/api\/crm\/accounts$/, () => ({
+    body: {
+      items: [
+        { id: 'acc-1', name: 'Alliance Mutual Insurance', kind: 'carrier', email: 'claims@alliancemutual.com', phone: '(512) 555-0184', city: 'Austin', region: 'TX' },
+        { id: 'acc-2', name: 'Camden Court HOA', kind: 'commercial', email: 'board@camdencourt.org', phone: '(512) 555-0139', city: 'Austin', region: 'TX' },
+        { id: 'acc-3', name: 'Hollis Family', kind: 'residential', email: 'j.hollis@example.com', phone: '(512) 555-0122', city: 'Round Rock', region: 'TX' },
+        { id: 'acc-4', name: 'Brightway Dental', kind: 'commercial', email: 'office@brightwaydental.com', phone: '(512) 555-0166', city: 'Austin', region: 'TX' },
+      ],
+      total: 4, limit: 50, offset: 0,
+    },
+  })],
+  ['GET', /^\/api\/crm\/contacts$/, () => ({
+    body: {
+      items: [
+        { id: 'ct-1', firstName: 'Jordan', lastName: 'Hollis', companyName: null, email: 'j.hollis@example.com', phone: '(512) 555-0122', mobile: null },
+        { id: 'ct-2', firstName: 'Rita', lastName: 'Calloway', companyName: 'Alliance Mutual', email: 'r.calloway@alliancemutual.com', phone: '(512) 555-0184', mobile: null },
+        { id: 'ct-3', firstName: 'Sam', lastName: 'Okafor', companyName: 'Camden Court HOA', email: 'sam@camdencourt.org', phone: null, mobile: '(512) 555-0171' },
+      ],
+      total: 3, limit: 50, offset: 0,
+    },
+  })],
   ['GET', /^\/api\/computer\/status$/, () => ({ body: COMPUTER_STATUS })],
   ['GET', /^\/api\/computer\/agents$/, () => ({ body: { agents: COMPUTER_STATUS.agents } })],
 
