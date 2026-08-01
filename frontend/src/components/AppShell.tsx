@@ -78,12 +78,15 @@ export function AppShell({ children, rail }: { children: ReactNode; rail?: React
   return (
     <div className="min-h-screen bg-paper-100">
       {/* ---- Sidebar ---- */}
+      {/* The rail is fixed furniture: full height, its own scroll region, and
+          no transition at desktop widths. The slide belongs to the mobile
+          drawer alone, so nothing here can move under a pointer. */}
       <aside
-        className={`glass-rail fixed inset-y-0 left-0 z-40 w-60 transform transition-transform lg:translate-x-0 ${
+        className={`glass-rail fixed inset-y-0 left-0 z-40 flex w-60 flex-col transition-transform duration-200 lg:translate-x-0 lg:transform-none lg:transition-none ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="flex items-center justify-between px-5 py-5">
+        <div className="flex shrink-0 items-center justify-between px-5 py-5">
           <NavLink to={PLATFORM_HOME[platformId]} aria-label={`Atmosphere — ${platform.name}`}>
             <Logo />
           </NavLink>
@@ -96,7 +99,7 @@ export function AppShell({ children, rail }: { children: ReactNode; rail?: React
           </button>
         </div>
 
-        <div className="px-3 pb-1">
+        <div className="shrink-0 px-3 pb-1">
           <PlatformSwitcher
             active={platformId}
             onSelect={(next) => {
@@ -107,7 +110,7 @@ export function AppShell({ children, rail }: { children: ReactNode; rail?: React
           />
         </div>
 
-        <nav aria-label="Primary" className="cx-scroll h-[calc(100%-136px)] overflow-y-auto px-3 pb-6">
+        <nav aria-label="Primary" className="cx-scroll cx-gutter min-h-0 flex-1 overflow-y-auto px-3 pb-6">
           {platform.groups.map((group) => (
             <div key={group.label} className="mt-4 first:mt-0">
               <p className="px-2.5 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.09em] text-ink-500">
@@ -120,7 +123,7 @@ export function AppShell({ children, rail }: { children: ReactNode; rail?: React
                     to={to}
                     onClick={() => setMobileOpen(false)}
                     className={({ isActive }) =>
-                      `flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13.5px] font-medium transition ${
+                      `flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13.5px] font-medium transition-colors ${
                         isActive
                           ? 'bg-brand-50 text-brand-700'
                           : 'text-ink-600 hover:bg-paper-200 hover:text-ink-900'

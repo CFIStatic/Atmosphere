@@ -299,6 +299,13 @@ body::before {
     radial-gradient(45rem 35rem at 105% -5%, rgb(var(--aurora) / 0.05), transparent 58%);
 }
 
+/* Reserve the scrollbar's gutter whether or not one is showing. Without it a
+   taller platform's navigation gains a scrollbar and every label in the rail
+   shifts sideways — the panel appearing to move when nothing was resized. */
+.cx-gutter {
+  scrollbar-gutter: stable;
+}
+
 /* Scrollbars inside panels, so a scrolling transcript doesn't punch a grey
    canyon through a warm page. */
 .cx-scroll {
