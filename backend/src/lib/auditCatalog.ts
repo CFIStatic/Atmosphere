@@ -77,6 +77,14 @@ export const AGENT_CATALOG: AgentDefinition[] = [
     accent: 'brand',
     intake: 'ledger',
   },
+  {
+    key: 'email_marketing',
+    name: 'Email Marketing',
+    blurb:
+      'Watches weather against the CRM map and sends storm alerts plus follow-up check-ins to contacts in the path.',
+    accent: 'caution',
+    intake: 'ledger',
+  },
 ];
 
 const BY_KEY = new Map(AGENT_CATALOG.map((agent) => [agent.key, agent]));

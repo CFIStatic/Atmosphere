@@ -420,6 +420,13 @@ export const config = {
   integrations: {
     enabled: (process.env.INTEGRATIONS_ENABLED ?? 'true') !== 'false',
     credentialEnvPrefix: 'ATM_INTEGRATION_',
+    // Seals CRM connection secrets entered through the UI (AES-256-GCM). Same
+    // separation as WEB_ACCESS_KEY / ESTIMATOR_CREDENTIAL_KEY: ciphertext in
+    // Postgres, key only in the environment. In development we fall back to a
+    // well-known placeholder so connect-from-UI works out of the box.
+    credentialKey:
+      process.env.INTEGRATIONS_CREDENTIAL_KEY ??
+      (isProduction ? '' : 'atmosphere-dev-integrations-key-do-not-use-in-production!!!!'),
     // Ceiling on a single sync run, so a vendor paginating forever cannot fill
     // the disk before anyone notices.
     maxRecordsPerRun: Number(process.env.INTEGRATION_MAX_RECORDS ?? 50_000),
@@ -540,6 +547,23 @@ export const config = {
     requestTimeoutMs: Number(process.env.ESTIMATOR_REQUEST_TIMEOUT_MS ?? 30_000),
     maxRetries: Number(process.env.ESTIMATOR_MAX_RETRIES ?? 3),
   },
+
+  emailMarketing: {
+    // Where storm alerts come from. 'auto' tries the National Weather Service
+    // and falls back to demo storms anchored on the org's mapped contacts —
+    // that is what makes the whole outreach + check-in flow exercisable on a
+    // quiet weather day.
+    weatherProvider: parseWeatherProvider(process.env.WEATHER_PROVIDER),
+
+    // How outreach leaves the building. 'log' (default) records the send
+    // without calling an ESP — safe for development. 'resend' requires
+    // RESEND_API_KEY and actually delivers.
+    provider: parseEmailMarketingProvider(process.env.EMAIL_MARKETING_PROVIDER),
+    resendApiKey: process.env.RESEND_API_KEY ?? '',
+    // From address / domain for Resend. Defaults to Resend's onboarding sender
+    // so a key alone is enough to try a real delivery in development.
+    fromDomain: process.env.EMAIL_MARKETING_FROM ?? 'onboarding@resend.dev',
+  },
 } as const;
 
 function parseSlaSource(value: string | undefined): 'manual' | 'portal' | 'mock' {
@@ -557,6 +581,14 @@ function parseCaptureSources(value: string | undefined): Array<'mica_dash' | 'ou
     .map((s) => s.trim())
     .filter((s): s is 'mica_dash' | 'outlook' => allowed.has(s));
   return parts.length ? parts : ['mica_dash', 'outlook'];
+}
+
+function parseWeatherProvider(value: string | undefined): 'nws' | 'demo' | 'auto' {
+  return value === 'nws' || value === 'demo' ? value : 'auto';
+}
+
+function parseEmailMarketingProvider(value: string | undefined): 'log' | 'resend' {
+  return value === 'resend' ? 'resend' : 'log';
 }
 
 /** Parse an optional JSON object env var, ignoring anything malformed. */

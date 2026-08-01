@@ -49,6 +49,16 @@ export const BACKUP_TABLES: BackupTable[] = [
   // Included so a restored database can still answer "what changed and when"
   // for the period before the snapshot.
   { name: 'crm_audit_log', cursor: 'id', orgFilter: { kind: 'org_id' } },
+
+  // ---- Email Marketing (storm outreach) --------------------------------
+  { name: 'em_settings', cursor: 'id', orgFilter: { kind: 'org_id' } },
+  { name: 'em_storms', cursor: 'id', orgFilter: { kind: 'org_id' } },
+  { name: 'em_outreach', cursor: 'id', orgFilter: { kind: 'org_id' } },
+  { name: 'em_outreach_messages', cursor: 'id', orgFilter: { kind: 'org_id' } },
+  { name: 'em_checkins', cursor: 'id', orgFilter: { kind: 'org_id' } },
+
+  // ---- CRM push ledger -------------------------------------------------
+  { name: 'crm_push_runs', cursor: 'id', orgFilter: { kind: 'org_id' } },
 ];
 
 /**

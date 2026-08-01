@@ -27,6 +27,7 @@ import { healthRouter } from './routes/health.js';
 import { mitigationRouter } from './routes/mitigation.js';
 import { xactimateRouter } from './routes/xactimate.js';
 import { salesRouter } from './routes/sales.js';
+import { emailMarketingRouter } from './routes/emailMarketing.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
 import { verificationHook, pumpVerificationQueue } from './lib/verifierRunner.js';
@@ -142,6 +143,7 @@ export function createApp(): Express {
   app.use('/api/computer', computerRouter);
   app.use('/api/estimator', estimatorRouter);
   app.use('/api/sales', salesRouter);
+  app.use('/api/email-marketing', emailMarketingRouter);
 
   // 404 + error handling (must be last).
   app.use(notFound);
