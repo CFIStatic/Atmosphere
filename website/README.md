@@ -139,8 +139,24 @@ python3 website/build-preview.py preview.html
 
 Every page carries Open Graph / Twitter meta; `assets/og.png` is the share
 card. `sitemap.xml` and `robots.txt` use the placeholder
-`https://REPLACE-WITH-YOUR-DOMAIN` — substitute the real origin at deploy (and
-absolutize the `og:image` URL then too). Pricing embeds its FAQ as JSON-LD.
+`https://REPLACE-WITH-YOUR-DOMAIN` — the deploy workflow substitutes the real
+origin (and absolutizes the `og:image` URL) at publish time, so the repo never
+hard-codes a host. Pricing embeds its FAQ as JSON-LD.
+
+## Hosting
+
+`.github/workflows/deploy-website.yml` publishes this directory to GitHub
+Pages on every push to `main` that touches `website/`. The first run enables
+Pages on the repo; if the token lacks permission for that, flip it once by
+hand (Settings → Pages → Source: **GitHub Actions**) and re-run.
+
+The static site works fully on Pages except the two backend-wired forms
+(careers, contact), which need the Express backend hosted somewhere with the
+SMTP variables below. Once it is, set the `WEBSITE_API_ORIGIN` repository
+variable (Settings → Secrets and variables → Actions → Variables) to the
+backend's https origin — the workflow stamps it into both forms' `data-api`
+on the next deploy. Until then, submitting shows a clear could-not-reach
+message rather than silently failing.
 
 ## Known gaps before production
 
@@ -149,7 +165,9 @@ absolutize the `og:image` URL then too). Pricing embeds its FAQ as JSON-LD.
 - Privacy and terms are plain-language drafts and need review by counsel.
 - The investor page is a designed surface — the data room behind it (auth +
   documents) doesn't exist yet; "Request access" routes to contact.
-- Replace the sitemap/robots/OG placeholder domain at deploy.
+- The placeholder domain is stamped automatically by the Pages workflow; on
+  any other host, substitute `https://REPLACE-WITH-YOUR-DOMAIN` in
+  `sitemap.xml`/`robots.txt` and absolutize `og:image` yourself.
 - The sign-in, sign-up, and investor pages are designed surfaces; submitting
   shows an early-access notice via `stubForm` in `site.js`. At deploy, hook
   them to the real app routes (or replace them with the frontend app) and

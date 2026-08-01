@@ -1,0 +1,64 @@
+name: Deploy website
+
+# Publishes the static corporate site (website/) to GitHub Pages. The repo
+# keeps its placeholder domain; every URL that must be absolute — sitemap,
+# robots, og:image — is stamped with the real Pages URL at deploy, so the
+# hosted copy is always self-consistent and the repo never hard-codes a host.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - '.github/workflows/deploy-website.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Deploys are serialized: a newer push supersedes an in-flight one, but a
+# deployment that already started is left to finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Stamp absolute URLs with the Pages origin
+        run: |
+          base="${{ steps.pages.outputs.base_url }}"
+          sed -i "s|https://REPLACE-WITH-YOUR-DOMAIN|${base}|g" website/sitemap.xml website/robots.txt
+          sed -i "s|content=\"/assets/og.png\"|content=\"${base}/assets/og.png\"|g" website/*.html
+
+      # The careers and contact forms post to the backend. On a static host
+      # that is a different origin — set the WEBSITE_API_ORIGIN repository
+      # variable (Settings → Secrets and variables → Actions → Variables) to
+      # the hosted backend's https origin and the forms are wired on the next
+      # deploy. Until then they degrade to a clear could-not-reach message.
+      - name: Point forms at the hosted backend
+        if: vars.WEBSITE_API_ORIGIN != ''
+        run: |
+          sed -i "s|data-api=\"\"|data-api=\"${{ vars.WEBSITE_API_ORIGIN }}\"|" \
+            website/careers.html website/contact.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
