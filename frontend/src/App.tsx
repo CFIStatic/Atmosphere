@@ -22,6 +22,7 @@ import { WebAccessPage } from './pages/WebAccessPage';
 import { ComputerUsePage } from './pages/ComputerUsePage';
 import { EstimatorPage } from './pages/EstimatorPage';
 import { MitigationEstimatorPage } from './pages/MitigationEstimatorPage';
+import { SalesAgentPage } from './pages/SalesAgentPage';
 import { SpinnerIcon } from './components/icons';
 
 function FullScreenSpinner() {
@@ -218,6 +219,27 @@ export default function App() {
               <ProtectedRoute>
                 <RequireOnboarded>
                   <MitigationEstimatorPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/sales"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <SalesAgentPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/sales/:id"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <SalesAgentPage />
                 </RequireOnboarded>
               </ProtectedRoute>
             }

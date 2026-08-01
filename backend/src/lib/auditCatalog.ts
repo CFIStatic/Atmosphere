@@ -69,6 +69,14 @@ export const AGENT_CATALOG: AgentDefinition[] = [
     accent: 'danger',
     intake: 'ledger',
   },
+  {
+    key: 'sales_agent',
+    name: 'Sales Agent',
+    blurb:
+      'Researches businesses in a territory, finds decision-makers, runs personalised outreach, and books in-person meetings.',
+    accent: 'brand',
+    intake: 'ledger',
+  },
 ];
 
 const BY_KEY = new Map(AGENT_CATALOG.map((agent) => [agent.key, agent]));

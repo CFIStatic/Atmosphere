@@ -671,6 +671,196 @@ export type RunEvent = { seq: number; at: string } & (
 /** The stream also carries periodic run summaries, which are not transcript entries. */
 export type RunStreamMessage = RunEvent | { type: 'summary'; run: ComputerRun };
 
+/* ------------------------------------------------------------------ */
+/* Sales Agent                                                         */
+/* ------------------------------------------------------------------ */
+
+export type SalesCampaignStatus =
+  | 'draft'
+  | 'researching'
+  | 'crawling'
+  | 'outreach'
+  | 'following_up'
+  | 'scheduling'
+  | 'paused'
+  | 'completed'
+  | 'failed';
+
+export interface SalesCampaign {
+  id: string;
+  orgId: string;
+  createdBy: string;
+  name: string;
+  territory: string;
+  salesFocus: string;
+  valueProp: string | null;
+  senderName: string | null;
+  senderEmail: string | null;
+  meetingDurationMin: number;
+  availability: Record<string, string[]>;
+  status: SalesCampaignStatus;
+  stageDetail: string | null;
+  error: string | null;
+  agentRunId: string | null;
+  businessesFound: number;
+  contactsFound: number;
+  emailsSent: number;
+  repliesReceived: number;
+  meetingsBooked: number;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SalesBusiness {
+  id: string;
+  campaignId: string;
+  name: string;
+  category: string | null;
+  address: string | null;
+  city: string | null;
+  websiteUrl: string | null;
+  phone: string | null;
+  source: string;
+  researchNotes: string | null;
+  status: string;
+  createdAt: string;
+}
+
+export interface SalesContact {
+  id: string;
+  campaignId: string;
+  businessId: string;
+  fullName: string;
+  title: string | null;
+  email: string | null;
+  phone: string | null;
+  isDecisionMaker: boolean;
+  researchSummary: string | null;
+  personalizationHooks: string[];
+  status: string;
+  nextFollowupAt: string | null;
+  lastTouchedAt: string | null;
+  createdAt: string;
+}
+
+export interface SalesOutreach {
+  id: string;
+  campaignId: string;
+  contactId: string;
+  businessId: string;
+  direction: 'outbound' | 'inbound';
+  channel: string;
+  subject: string | null;
+  body: string;
+  sequenceStep: number;
+  status: string;
+  intent: string | null;
+  sentAt: string | null;
+  createdAt: string;
+}
+
+export interface SalesMeeting {
+  id: string;
+  campaignId: string;
+  contactId: string;
+  businessId: string;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  location: string | null;
+  status: string;
+  bookedBy: string;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface SalesEvent {
+  id: string;
+  campaignId: string;
+  businessId: string | null;
+  contactId: string | null;
+  actorType: string;
+  eventType: string;
+  detail: string | null;
+  createdAt: string;
+}
+
+export interface SalesStatus {
+  llm: boolean;
+  email: boolean;
+  demoMode: boolean;
+  crawl: boolean;
+  scheduling: boolean;
+  peopleSearch?: boolean;
+}
+
+export interface PeopleSearchSource {
+  title: string;
+  url: string;
+  snippet: string;
+  engine?: string;
+}
+
+export interface PeopleSearchCandidate {
+  fullName: string;
+  title: string | null;
+  company: string | null;
+  location: string | null;
+  email: string | null;
+  phone: string | null;
+  linkedinUrl: string | null;
+  profileUrl: string | null;
+  confidence: number;
+  summary: string;
+  evidence: string[];
+  sources: PeopleSearchSource[];
+  matchReasons: string[];
+}
+
+export interface PeopleSearchTraceStep {
+  step: string;
+  detail: string;
+  at: string;
+}
+
+export interface PeopleSearchRecord {
+  id: string | null;
+  query: string;
+  parsed?: {
+    role?: string | null;
+    company?: string | null;
+    location?: string | null;
+    personName?: string | null;
+    searchQueries?: string[];
+  };
+  status: 'running' | 'completed' | 'partial' | 'failed';
+  summary: string | null;
+  bestMatch: PeopleSearchCandidate | null;
+  candidates: PeopleSearchCandidate[];
+  sources: PeopleSearchSource[];
+  trace: PeopleSearchTraceStep[];
+  pagesCrawled: number;
+  searchesRun: number;
+  durationMs: number | null;
+  error: string | null;
+  createdAt: string;
+  persisted?: boolean;
+}
+
+export const SALES_STATUS_LABELS: Record<SalesCampaignStatus, string> = {
+  draft: 'Draft',
+  researching: 'Researching',
+  crawling: 'Finding contacts',
+  outreach: 'Outreach',
+  following_up: 'Following up',
+  scheduling: 'Scheduling',
+  paused: 'Paused',
+  completed: 'Completed',
+  failed: 'Failed',
+};
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -1595,6 +1785,94 @@ export const api = {
   /** SSE URL for a run's transcript. `after` replays what the browser missed. */
   runEventsUrl: (runId: string, after = 0) =>
     `${API_BASE}/api/computer/runs/${encodeURIComponent(runId)}/events?after=${after}`,
+
+  // ---- Sales Agent ----
+  salesStatus: () => request<{ status: SalesStatus }>('/api/sales/status', { method: 'GET' }),
+
+  listSalesCampaigns: () =>
+    request<{ campaigns: SalesCampaign[] }>('/api/sales/campaigns', { method: 'GET' }),
+
+  createSalesCampaign: (input: {
+    name?: string;
+    territory: string;
+    salesFocus: string;
+    valueProp?: string | null;
+    senderName?: string | null;
+    senderEmail?: string | null;
+    meetingDurationMin?: number;
+    availability?: Record<string, string[]>;
+  }) =>
+    request<{ campaign: SalesCampaign }>('/api/sales/campaigns', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  getSalesCampaign: (id: string) =>
+    request<{ campaign: SalesCampaign; running: boolean }>(`/api/sales/campaigns/${id}`, {
+      method: 'GET',
+    }),
+
+  updateSalesCampaign: (id: string, input: Record<string, unknown>) =>
+    request<{ campaign: SalesCampaign }>(`/api/sales/campaigns/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+
+  startSalesCampaign: (id: string) =>
+    request<{ campaign: SalesCampaign; running: boolean }>(`/api/sales/campaigns/${id}/start`, {
+      method: 'POST',
+    }),
+
+  pauseSalesCampaign: (id: string) =>
+    request<{ campaign: SalesCampaign }>(`/api/sales/campaigns/${id}/pause`, { method: 'POST' }),
+
+  resumeSalesCampaign: (id: string) =>
+    request<{ campaign: SalesCampaign; running: boolean }>(`/api/sales/campaigns/${id}/resume`, {
+      method: 'POST',
+    }),
+
+  listSalesBusinesses: (campaignId: string) =>
+    request<{ businesses: SalesBusiness[] }>(`/api/sales/campaigns/${campaignId}/businesses`, {
+      method: 'GET',
+    }),
+
+  listSalesContacts: (campaignId: string) =>
+    request<{ contacts: SalesContact[] }>(`/api/sales/campaigns/${campaignId}/contacts`, {
+      method: 'GET',
+    }),
+
+  listSalesOutreach: (campaignId: string) =>
+    request<{ outreach: SalesOutreach[] }>(`/api/sales/campaigns/${campaignId}/outreach`, {
+      method: 'GET',
+    }),
+
+  listSalesMeetings: (campaignId: string) =>
+    request<{ meetings: SalesMeeting[] }>(`/api/sales/campaigns/${campaignId}/meetings`, {
+      method: 'GET',
+    }),
+
+  listSalesEvents: (campaignId: string) =>
+    request<{ events: SalesEvent[] }>(`/api/sales/campaigns/${campaignId}/events`, {
+      method: 'GET',
+    }),
+
+  replySalesOutreach: (outreachId: string, body: string, subject?: string) =>
+    request<{ intent: string; meetingId?: string }>(`/api/sales/outreach/${outreachId}/reply`, {
+      method: 'POST',
+      body: JSON.stringify({ body, subject }),
+    }),
+
+  searchSalesPeople: (query: string) =>
+    request<{ search: PeopleSearchRecord }>('/api/sales/people-search', {
+      method: 'POST',
+      body: JSON.stringify({ query }),
+    }),
+
+  listSalesPeopleSearches: () =>
+    request<{ searches: PeopleSearchRecord[] }>('/api/sales/people-search', { method: 'GET' }),
+
+  getSalesPeopleSearch: (id: string) =>
+    request<{ search: PeopleSearchRecord }>(`/api/sales/people-search/${id}`, { method: 'GET' }),
 };
 
 /** Labels for the run states, kept next to the other shared UI copy. */
