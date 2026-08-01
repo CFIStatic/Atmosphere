@@ -24,41 +24,41 @@
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #131416;
-    --card: #1C1E20;
-    --ink: #ECEDEE;
-    --ink-soft: #A9ADB1;
-    --ink-faint: #7C8084;
-    --line: #2A2D30;
-    --line-strong: #3C4044;
-    --accent: #E0662B;
-    --accent-hover: #E97F49;
-    --accent-ink: #1C1108;
-    --success: #7FBF8D;
-    --success-soft: #182620;
-    --danger: #E08573;
-    --danger-soft: #2C1E1D;
-    --shadow-card: 0 1px 2px rgba(0,0,0,.35), 0 1px 3px rgba(0,0,0,.28);
-    --shadow-lift: 0 4px 12px rgba(0,0,0,.5), 0 2px 4px rgba(0,0,0,.35);
+    --bg: #141311;
+    --card: #1D1B18;
+    --ink: #F1EFEB;
+    --ink-soft: #A09C93;
+    --ink-faint: #807C74;
+    --line: #2A2825;
+    --line-strong: #3B3833;
+    --accent: #E8590C;
+    --accent-hover: #F26E22;
+    --accent-ink: #FFFFFF;
+    --success: #7CC98D;
+    --success-soft: #12261A;
+    --danger: #F07A62;
+    --danger-soft: #301412;
+    --shadow-card: 0 1px 2px rgba(0,0,0,.35), 0 1px 3px rgba(0,0,0,.25);
+    --shadow-lift: 0 6px 18px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.35);
   }
 }
 :root[data-theme="dark"] {
-  --bg: #131416;
-  --card: #1C1E20;
-  --ink: #ECEDEE;
-  --ink-soft: #A9ADB1;
-  --ink-faint: #7C8084;
-  --line: #2A2D30;
-  --line-strong: #3C4044;
-  --accent: #E0662B;
-  --accent-hover: #E97F49;
-  --accent-ink: #1C1108;
-  --success: #7FBF8D;
-  --success-soft: #182620;
-  --danger: #E08573;
-  --danger-soft: #2C1E1D;
-  --shadow-card: 0 1px 2px rgba(0,0,0,.35), 0 1px 3px rgba(0,0,0,.28);
-  --shadow-lift: 0 4px 12px rgba(0,0,0,.5), 0 2px 4px rgba(0,0,0,.35);
+  --bg: #141311;
+  --card: #1D1B18;
+  --ink: #F1EFEB;
+  --ink-soft: #A09C93;
+  --ink-faint: #807C74;
+  --line: #2A2825;
+  --line-strong: #3B3833;
+  --accent: #E8590C;
+  --accent-hover: #F26E22;
+  --accent-ink: #FFFFFF;
+  --success: #7CC98D;
+  --success-soft: #12261A;
+  --danger: #F07A62;
+  --danger-soft: #301412;
+  --shadow-card: 0 1px 2px rgba(0,0,0,.35), 0 1px 3px rgba(0,0,0,.25);
+  --shadow-lift: 0 6px 18px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.35);
 }
 :root[data-theme="light"] {
   --bg: #FBFAF7;

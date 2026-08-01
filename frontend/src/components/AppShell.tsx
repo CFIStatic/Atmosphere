@@ -3,7 +3,8 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, ROLE_LABELS } from '../lib/api';
 import { displayName, initials } from '../lib/display';
-import { usePreferences } from '../lib/preferences';
+import { setPreference, usePreferences } from '../lib/preferences';
+import { Logo } from './Logo';
 import {
   AuditIcon,
   ArtifactIcon,
@@ -23,10 +24,12 @@ import {
   MenuIcon,
   MicIcon,
   MonitorIcon,
+  MoonIcon,
   SearchIcon,
   SettingsIcon,
   ShieldIcon,
   SpinnerIcon,
+  SunIcon,
   ThoughtIcon,
   UsersIcon,
 } from './icons';
@@ -131,8 +134,8 @@ export function AppShell({ children, rail }: { children: ReactNode; rail?: React
         }`}
       >
         <div className="flex items-center justify-between px-5 py-5">
-          <NavLink to="/overview" className="text-[17px] font-bold tracking-tight text-ink-900">
-            Atmosphere
+          <NavLink to="/overview" aria-label="Atmosphere — overview">
+            <Logo />
           </NavLink>
           <button
             className="text-ink-500 lg:hidden"
@@ -201,6 +204,7 @@ export function AppShell({ children, rail }: { children: ReactNode; rail?: React
             <JumpPalette />
 
             <div className="ml-auto flex items-center gap-3">
+              <ThemeToggle />
               {approvalCount > 0 && (
                 <button
                   onClick={() => navigate('/approvals')}
@@ -226,6 +230,22 @@ export function AppShell({ children, rail }: { children: ReactNode; rail?: React
         </div>
       </div>
     </div>
+  );
+}
+
+/** Dark is the default; light is one click, and the choice sticks. */
+function ThemeToggle() {
+  const { theme } = usePreferences();
+  const dark = theme === 'dark';
+  return (
+    <button
+      onClick={() => setPreference('theme', dark ? 'light' : 'dark')}
+      aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+      title={dark ? 'Light mode' : 'Dark mode'}
+      className="grid h-8 w-8 place-items-center rounded-full border border-line text-ink-600 transition hover:border-line-strong hover:text-ink-900"
+    >
+      {dark ? <SunIcon width={15} height={15} /> : <MoonIcon width={15} height={15} />}
+    </button>
   );
 }
 
