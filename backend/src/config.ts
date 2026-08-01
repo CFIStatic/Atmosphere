@@ -442,6 +442,29 @@ export const config = {
     requestTimeoutMs: Number(process.env.INTEGRATION_TIMEOUT_MS ?? 30_000),
   },
 
+  /**
+   * Cyber Defense Agent — monitors every request, blocks hostile IPs, serves
+   * honeypot decoys, and auto-patches runtime hardening. Defensive only.
+   *
+   * On by default: an agent nobody remembers to enable is an agent that is not
+   * watching when the first scanner arrives. Individual levers (deception,
+   * auto-block, auto-patch) can still be turned down per environment.
+   */
+  cyber: {
+    enabled: (process.env.CYBER_DEFENSE_ENABLED ?? 'true') !== 'false',
+    monitoring: (process.env.CYBER_MONITORING ?? 'true') !== 'false',
+    /** Fake admin/.env/git surfaces that waste attacker time. */
+    deception: (process.env.CYBER_DECEPTION ?? 'true') !== 'false',
+    /** Ban IPs that trip high-severity signatures or honeypots. */
+    autoBlock: (process.env.CYBER_AUTO_BLOCK ?? 'true') !== 'false',
+    /** Rotate decoys, expire blocks, audit weak config on a timer. */
+    autoPatch: (process.env.CYBER_AUTO_PATCH ?? 'true') !== 'false',
+    patchIntervalMinutes: Math.max(
+      1,
+      Number(process.env.CYBER_PATCH_INTERVAL_MINUTES ?? 15),
+    ),
+  },
+
   computerUse: {
     // Feature flag. Computer use hands an AI model the mouse and keyboard of a
     // real machine, so a deployment that does not want it can switch the whole

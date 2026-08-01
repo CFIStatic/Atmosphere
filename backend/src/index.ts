@@ -7,6 +7,7 @@ import {
   startCaptureAgent,
   stopCaptureAgent,
 } from './estimator/mitigation/capture/scheduler.js';
+import { startCyberScheduler, stopCyberScheduler } from './cyber/index.js';
 import { agentHub } from './computer/agentHub.js';
 
 const app = createApp();
@@ -20,6 +21,7 @@ const server = app.listen(config.port, () => {
       `  → Xactimate driver: ${config.xactimate.driver}\n` +
       `  → Computer use: ${config.computerUse.enabled ? `on (${config.computerUse.defaultModel})` : 'off'}\n` +
       `  → Capture agent: ${config.estimator.captureAgent.enabled ? `on (every ${config.estimator.captureAgent.intervalMinutes}m)` : 'off'}\n` +
+      `  → Cyber defense: ${config.cyber.enabled ? 'on' : 'off'}\n` +
       `  → Mode: ${config.isProduction ? 'production' : 'development'}`,
   );
 
@@ -34,6 +36,10 @@ const server = app.listen(config.port, () => {
 
   // Started after the listener so a backup can never delay readiness.
   startBackupScheduler();
+
+  // Rotates honeypot credentials and re-audits hardening on a timer. Safe to
+  // start without the service role — the agent keeps state in-process.
+  startCyberScheduler();
 });
 
 // Computer-use agents connect over WebSocket on the same port, so they inherit
@@ -52,6 +58,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     stopScheduler();
     stopCaptureAgent();
     stopBackupScheduler();
+    stopCyberScheduler();
     agentHub.close();
     void connections
       .closeAll()
