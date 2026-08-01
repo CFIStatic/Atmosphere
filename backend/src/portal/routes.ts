@@ -111,6 +111,10 @@ async function loadGuestReport(token: string) {
     placements,
     documents,
     milestones,
+    platformLinks: [],
+    communications: [],
+    procurement: [],
+    planItems: [],
   };
 
   // Sensible defaults — guest headline only; staff thresholds stay on the PM side.
