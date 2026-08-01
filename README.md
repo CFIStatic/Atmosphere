@@ -441,7 +441,11 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | POST   | `/api/xactimate/resume` | cookie | —                          | Re-establish a session from a stored credential |
 | GET    | `/api/xactimate/price-lists` | cookie | —                     | Price lists the account can see              |
 | POST   | `/api/xactimate/price-lists/sync` | cookie | `{ priceListId }` | Pull a price list and make it the org's     |
-| POST   | `/api/xactimate/price-lists/upload` | cookie | `{ id, name, entries }` | Upload an exported price list — no login  |
+| POST   | `/api/xactimate/price-lists/upload` | cookie | `{ id, name, entries? \| content? }` | Upload export (CSV/TSV/JSON) — no login |
+| GET    | `/api/xactimate/catalog/codes` | cookie | `?q=` | Search account price list for real selectors |
+| GET    | `/api/xactimate/catalog/reconcile` | cookie | — | Preview knowledge → account code matches |
+| PUT    | `/api/xactimate/catalog/remaps` | cookie | `{ remaps }` | Lock approved knowledge-key → account codes |
+| POST   | `/api/xactimate/catalog/override` | cookie | `{ key, code }` | Persist one code pick from the estimate UI |
 | POST   | `/api/xactimate/push` | cookie | `{ estimate, confirmedFindings }` | Write the estimate into the account   |
 | GET    | `/api/xactimate/activity` | cookie | —                        | What was done in the account, under the grant |
 | GET    | `/api/jobs`          | cookie | —                             | Job list, rolled up with its memory           |
@@ -781,19 +785,20 @@ would have to be confirmed and leaves the line off.
 The counterweight is real — the review also flags lines that should come *off*, and refuses
 to push an estimate with critical findings outstanding.
 
-### Prices are not real until you sync
+### Codes and prices come from your Xactimate account — not a seed file
 
-Xactimate selectors and prices vary by version, by region, and by carrier program. The
-catalog in `catalog/lineItems.ts` is a **seed**, and every entry ships `verified: false`.
-Reconciliation matches it against the price list on your own account — by code first, then by
-description — and until that runs, every line is flagged and the UI says so. Three ways to get
-real prices in:
+`catalog/lineItems.ts` is **domain knowledge** (tags, evidence gates, cost basis, search
+terms) — not an authority on selectors or prices. The working catalog is built from the
+**account price list** via `buildAccountCatalog()`: exact code match, human remaps, then
+fuzzy description match. Until a list is synced or uploaded, every line is
+`priceVerified: false` and push is gated. Estimators can search the live list and pick
+account codes on any line; approved remaps persist for the next build.
 
 | Route | Needs | Notes |
 | ----- | ----- | ----- |
-| **API** | A Verisk integration agreement | Best option. Supported, stable, never replays a password. |
-| **Browser** | Your Xactimate Online login | For orgs without API access. Replays a password and breaks when the UI moves. |
-| **File** | Nothing | Export the price list, upload it; download a CSV, import it by hand. Works everywhere. |
+| **API sync** | A Verisk integration agreement | Best option. Pulls the full list; never replays a password. |
+| **Browser write** | Your Xactimate Online login | Creates the estimate in XO line-by-line. Does **not** scrape the price grid. |
+| **File upload** | Nothing | Export CSV/TSV/JSON from XO and upload. Required path for web-driver orgs. |
 
 ### Connecting an Xactimate account
 
@@ -835,11 +840,10 @@ minutes): a retry loop here walks a real company's account into a lockout mid-jo
 ### Two caveats worth stating plainly
 
 **Prices.** The IICRC calculations, the scope rules and the fusion logic are implemented from
-the standards and are unit-consistent. The **selectors and placeholder prices in the seed
-catalog are not authoritative** — they follow Xactimate's conventions but have not been
-reconciled against a real price list, which is exactly why nothing is billable until a sync
-marks it verified. Have an estimator review the first few jobs against your own price list
-before anything goes to a carrier.
+the standards and are unit-consistent. **Selectors and unit prices come only from the
+connected account price list** (API sync or export upload). Knowledge profiles propose what
+to bill; they never invent a submittable code. Have an estimator lock remaps and review the
+first few jobs before anything goes to a carrier.
 
 **Citations.** Every entry in the registry currently sits at `chapter` or `convention`
 confidence, never `clause`. That is deliberate rather than incomplete: precise clause numbers

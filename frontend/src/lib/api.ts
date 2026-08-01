@@ -1202,6 +1202,99 @@ export const api = {
       { method: 'DELETE' },
     ),
 
+  appendDryingReport: (jobId: string, report: DryingReportInput) =>
+    request<{ report: DryingReportInput & { id: string }; reports: Array<DryingReportInput & { id: string }> }>(
+      `/api/mitigation/jobs/${encodeURIComponent(jobId)}/drying-reports`,
+      { method: 'POST', body: JSON.stringify(report) },
+    ),
+
+  getJobProgress: (jobId: string) =>
+    request<{
+      jobId: string;
+      reports: Array<DryingReportInput & { id: string }>;
+      dryingProgress: DryingProgress;
+      equipmentPlan: EquipmentPlan;
+    }>(`/api/mitigation/jobs/${encodeURIComponent(jobId)}/progress`, { method: 'GET' }),
+
+  rebuildEstimate: (jobId: string, input: BuildEstimateInput & { save?: boolean }) =>
+    request<{
+      estimate: MitigationEstimate;
+      saved: boolean;
+      estimateId?: string;
+      jobId?: string;
+    }>(`/api/mitigation/jobs/${encodeURIComponent(jobId)}/rebuild`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  captureStatus: () =>
+    request<CaptureStatus>('/api/mitigation/capture/status', { method: 'GET' }),
+
+  runCaptureAgent: (input?: {
+    jobId?: string;
+    claimNumber?: string;
+    docusketch?: unknown;
+    mica?: unknown;
+    photos?: PhotoManifestEntry[];
+    notes?: string;
+  }) =>
+    request<
+      | { scope: 'job'; result: CaptureSyncResult }
+      | {
+          scope: 'org';
+          pass: {
+            jobsConsidered: number;
+            jobsUpdated: number;
+            visitsImported: number;
+            estimatesSaved: number;
+            ranAt: string;
+          };
+        }
+    >('/api/mitigation/capture/agent/run', {
+      method: 'POST',
+      body: JSON.stringify(input ?? {}),
+    }),
+
+  captureSync: (
+    jobId: string,
+    input: {
+      sources?: CaptureSourceKind[];
+      claimNumber?: string;
+      since?: string;
+      autoRebuild?: boolean;
+      save?: boolean;
+      payload?: unknown;
+      payloadSource?: CaptureSourceKind;
+      docusketch?: unknown;
+      mica?: unknown;
+      photos?: PhotoManifestEntry[];
+      notes?: string;
+    },
+  ) =>
+    request<CaptureSyncResult>(`/api/mitigation/jobs/${encodeURIComponent(jobId)}/capture/sync`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  captureImport: (
+    jobId: string,
+    input: {
+      source: CaptureSourceKind;
+      payload: unknown;
+      claimNumber?: string;
+      autoRebuild?: boolean;
+      save?: boolean;
+      docusketch?: unknown;
+      mica?: unknown;
+      photos?: PhotoManifestEntry[];
+      notes?: string;
+    },
+  ) =>
+    request<CaptureSyncResult>(`/api/mitigation/jobs/${encodeURIComponent(jobId)}/capture/import`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
   getStandards: () =>
     request<{
       editions: { s500: string; s520: string };
@@ -1241,9 +1334,81 @@ export const api = {
     ),
 
   xactimateSyncPriceList: (priceListId: string) =>
-    request<{ priceListId: string; name: string; entryCount: number }>(
-      '/api/xactimate/price-lists/sync',
-      { method: 'POST', body: JSON.stringify({ priceListId }) },
+    request<{
+      priceListId: string;
+      name: string;
+      entryCount: number;
+      matched?: number;
+      unmatched?: string[];
+      remapped?: Array<{ from: string; to: string; description: string; via: string }>;
+      warnings?: string[];
+    }>('/api/xactimate/price-lists/sync', {
+      method: 'POST',
+      body: JSON.stringify({ priceListId }),
+    }),
+
+  xactimateUploadPriceList: (input: {
+    id: string;
+    name: string;
+    effectiveDate?: string;
+    content?: string;
+    format?: 'csv' | 'tsv' | 'json' | 'auto';
+    entries?: Array<{ code: string; description: string; unit: string; unitPrice: number }>;
+  }) =>
+    request<{
+      priceListId: string;
+      name?: string;
+      entryCount: number;
+      matched?: number;
+      unmatched?: string[];
+      remapped?: Array<{ from: string; to: string; description: string; via: string }>;
+      warnings?: string[];
+    }>('/api/xactimate/price-lists/upload', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  xactimateSearchCodes: (q: string, opts?: { limit?: number; preferUnit?: string; preferCategory?: string }) => {
+    const params = new URLSearchParams({ q });
+    if (opts?.limit) params.set('limit', String(opts.limit));
+    if (opts?.preferUnit) params.set('preferUnit', opts.preferUnit);
+    if (opts?.preferCategory) params.set('preferCategory', opts.preferCategory);
+    return request<{
+      hits: CodeSearchHit[];
+      priceListId: string | null;
+      entryCount?: number;
+      message?: string;
+    }>(`/api/xactimate/catalog/codes?${params.toString()}`, { method: 'GET' });
+  },
+
+  xactimateReconcileCatalog: () =>
+    request<{
+      live: boolean;
+      priceListId?: string;
+      entryCount?: number;
+      matched: number;
+      unmatched: string[];
+      remapped: Array<{ from: string; to: string; description: string; via: string }>;
+      warnings: string[];
+      remaps: Record<string, string>;
+    }>('/api/xactimate/catalog/reconcile', { method: 'GET' }),
+
+  xactimateSaveRemaps: (remaps: Record<string, string>) =>
+    request<{ remaps: Record<string, string> }>('/api/xactimate/catalog/remaps', {
+      method: 'PUT',
+      body: JSON.stringify({ remaps }),
+    }),
+
+  xactimateOverrideCode: (key: string, code: string, persist = true) =>
+    request<{ key: string; code: string; persisted: boolean; remaps?: Record<string, string> }>(
+      '/api/xactimate/catalog/override',
+      { method: 'POST', body: JSON.stringify({ key, code, persist }) },
+    ),
+
+  xactimateResume: () =>
+    request<{ status: 'connected'; profile: { username: string; displayName?: string } }>(
+      '/api/xactimate/resume',
+      { method: 'POST', body: JSON.stringify({}) },
     ),
 
   xactimateActivity: () =>
@@ -1254,7 +1419,6 @@ export const api = {
       '/api/xactimate/push',
       { method: 'POST', body: JSON.stringify({ estimate, confirmedFindings }) },
     ),
-
 
 
   // ---- Construction Estimator ----
@@ -2349,8 +2513,146 @@ export interface BuildEstimateInput {
   mica?: unknown;
   photos?: PhotoManifestEntry[];
   notes?: string;
+  /** Visit timeline — merges into the live assessment as the job progresses. */
+  dryingReports?: DryingReportInput[];
   overrides?: Record<string, unknown>;
   settings?: EstimatorSettings;
+  /** Knowledge key or scope item id → live account Xactimate code. */
+  codeOverrides?: Record<string, string>;
+}
+
+/** One drying visit / export sent with build or appended to a saved job. */
+export interface DryingReportInput {
+  id?: string;
+  takenAt: string;
+  source: 'mica' | 'manual' | 'notes' | 'photos' | 'outlook';
+  notes?: string;
+  moistureReadings?: Array<{
+    roomId: string;
+    material: string;
+    value: number;
+    dryStandard: number;
+    takenAt: string;
+    location?: string;
+  }>;
+  psychrometrics?: Array<{
+    takenAt: string;
+    zone: 'affected' | 'unaffected' | 'outside' | 'dehu_outlet';
+    temperatureF: number;
+    relativeHumidity: number;
+    gpp?: number;
+  }>;
+  equipment?: Array<{
+    kind: string;
+    quantity: number;
+    roomId?: string;
+    placedAt: string;
+    removedAt?: string;
+    days?: number;
+  }>;
+  roomsAtDryStandard?: string[];
+  roomsStillWet?: string[];
+}
+
+export type CaptureSourceKind = 'mica_dash' | 'outlook';
+
+export interface CaptureStatus {
+  mode: 'live' | 'sandbox';
+  connectors: Array<{ kind: CaptureSourceKind; name: string }>;
+  configured: { micaDash: boolean; outlook: boolean };
+  note: string;
+  agent?: {
+    enabled: boolean;
+    intervalMinutes: number;
+    lastRunAt?: string;
+    sources: CaptureSourceKind[];
+    lastPass?: {
+      jobsConsidered: number;
+      jobsUpdated: number;
+      visitsImported: number;
+      estimatesSaved: number;
+      ranAt: string;
+    };
+  };
+}
+
+export interface CaptureSyncResult {
+  jobId: string;
+  reportsImported: number;
+  reportsSkipped: number;
+  totalReports: number;
+  warnings: string[];
+  estimate?: MitigationEstimate;
+  estimateId?: string;
+  saved: boolean;
+  modified: boolean;
+  importedReports?: Array<{
+    id: string;
+    takenAt: string;
+    source: DryingReportInput['source'];
+    notes?: string;
+    roomsAtDryStandard?: string[];
+    roomsStillWet?: string[];
+  }>;
+}
+
+export interface DryingProgress {
+  reports: Array<{
+    id: string;
+    takenAt: string;
+    source: DryingReportInput['source'];
+    notes?: string;
+  }>;
+  latestAt?: string;
+  visitCount: number;
+  moistureReadingCount: number;
+  psychrometricCount: number;
+  roomsAtDryStandard: string[];
+  roomsStillWet: string[];
+  gppDifferential: number | null;
+  dryingComplete: boolean;
+  suggestedRemainingDays: number;
+  timeline: Array<{
+    takenAt: string;
+    source: DryingReportInput['source'];
+    summary: string;
+  }>;
+}
+
+export interface RoomEquipmentPlan {
+  roomId: string;
+  roomName: string;
+  cutHeightIn: number;
+  openWallSF: number;
+  wetFloorSF: number;
+  wetCeilingSF: number;
+  airMoversRequired: number;
+  injectidryRecommended: boolean;
+  floodCutRequired: boolean;
+  rationale: string;
+}
+
+export interface EquipmentPlan {
+  rooms: RoomEquipmentPlan[];
+  lines: Array<{
+    kind: string;
+    units: number;
+    days: number;
+    unitDays: number;
+    source: 'plan' | 'log' | 'merged';
+    rationale: string;
+  }>;
+  dehu: {
+    affectedCF: number;
+    requiredPintsPerDay: number;
+    unitsRequired: number;
+    factor: number;
+    dehuType: string;
+  };
+  scrubbersRequired: number;
+  airMoversRequired: number;
+  warnings: string[];
+  billingMode: 'as_logged' | 'recommended' | 'max';
 }
 
 export interface PhotoManifestEntry {
@@ -2384,6 +2686,7 @@ export interface EstimatorJob {
 
 export interface MitigationLineItem {
   id: string;
+  catalogKey?: string;
   code: string;
   category: string;
   description: string;
@@ -2561,6 +2864,31 @@ export interface LossAssessmentSummary {
   microbialGrowthPresent: boolean;
   sourcesUsed: string[];
   evidence: Array<{ id: string; kind: string; description: string; tags: string[] }>;
+  findings?: DamageFinding[];
+}
+
+export interface DamageFinding {
+  id: string;
+  kind: string;
+  summary: string;
+  roomName?: string;
+  material?: string;
+  evidenceIds: string[];
+  confidence: 'stated' | 'inferred' | 'undetermined';
+  tags: string[];
+}
+
+export interface MitigationRequirement {
+  id: string;
+  authority: 'iicrc' | 'insurance' | 'construction_code' | 'carrier_sla';
+  status: 'required' | 'recommended' | 'documentation_required' | 'undetermined';
+  title: string;
+  detail: string;
+  action: string;
+  citationId?: string;
+  sourceRef?: string;
+  findingIds: string[];
+  addressed: boolean;
 }
 
 export interface MitigationEstimate {
@@ -2575,6 +2903,12 @@ export interface MitigationEstimate {
   sla: SlaComplianceReport;
   /** Every standard cited anywhere in this estimate, resolved. */
   references: StandardReference[];
+  /** What must be mitigated / documented, by authority. */
+  requirements?: MitigationRequirement[];
+  /** S500-sized equipment plan (flood-cut open wall → air movers, class → dehu). */
+  equipmentPlan?: EquipmentPlan;
+  /** Progress from the drying-report timeline. */
+  dryingProgress?: DryingProgress;
   narrative: string;
   openQuestions: string[];
 }
@@ -2621,6 +2955,15 @@ export interface PriceListSummary {
   id: string;
   name: string;
   effectiveDate?: string;
+}
+
+export interface CodeSearchHit {
+  code: string;
+  description: string;
+  unit: string;
+  unitPrice: number;
+  score: number;
+  match: 'exact_code' | 'prefix_code' | 'description' | 'token';
 }
 
 export interface XactimateActivity {

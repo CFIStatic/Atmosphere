@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { PhotoManifestEntry } from '../../lib/api';
+import type { DryingReportInput, PhotoManifestEntry } from '../../lib/api';
 
 /**
  * Source intake.
@@ -15,6 +15,9 @@ import type { PhotoManifestEntry } from '../../lib/api';
  * pointless. Captions are editable here because they are what substantiate
  * demolition line items later — "flood cut 24in master bath" is worth more on
  * review than the photo it labels.
+ *
+ * Drying reports are the fifth input: visit-by-visit progress that updates the
+ * live assessment as the project unfolds (logged via the progress panel).
  */
 
 export interface Sources {
@@ -22,6 +25,7 @@ export interface Sources {
   mica?: unknown;
   photos: PhotoManifestEntry[];
   notes: string;
+  dryingReports?: DryingReportInput[];
 }
 
 export function SourcePanel({
@@ -72,7 +76,30 @@ export function SourcePanel({
     onChange({ ...sources, photos });
   }
 
+  function updatePhotoRoom(index: number, roomName: string) {
+    const photos = sources.photos.map((photo, i) => (i === index ? { ...photo, roomName } : photo));
+    onChange({ ...sources, photos });
+  }
+
+  function appendCaptionChip(index: number, chip: string) {
+    const current = sources.photos[index]?.caption?.trim() ?? '';
+    const next = current ? `${current} ${chip}` : chip;
+    updateCaption(index, next);
+  }
+
   const captioned = sources.photos.filter((photo) => photo.caption?.trim()).length;
+
+  const CAPTION_CHIPS = [
+    'before',
+    'after',
+    'flood cut 24in',
+    'carpet wet',
+    'carpet pad out',
+    'drywall',
+    'containment',
+    'mold',
+    'antimicrobial',
+  ];
 
   return (
     <div className="space-y-4">
@@ -130,21 +157,41 @@ export function SourcePanel({
                 </span>
               )}
             </p>
-            <ul className="mt-2 max-h-64 space-y-1.5 overflow-y-auto pr-1">
+            <ul className="mt-2 max-h-72 space-y-2 overflow-y-auto pr-1">
               {sources.photos.map((photo, index) => (
-                <li key={`${photo.filename}-${index}`} className="flex items-center gap-2">
-                  <span
-                    className="w-32 shrink-0 truncate font-mono text-[11px] text-gray-500"
-                    title={photo.filename}
-                  >
-                    {photo.filename}
-                  </span>
-                  <input
-                    value={photo.caption ?? ''}
-                    onChange={(e) => updateCaption(index, e.target.value)}
-                    placeholder="e.g. flood cut 24in — kitchen north wall"
-                    className="w-full rounded-md border border-white/10 bg-ink-900 px-2 py-1 text-xs text-gray-200 outline-none placeholder:text-gray-600 focus:border-brand-500"
-                  />
+                <li key={`${photo.filename}-${index}`} className="space-y-1 rounded-lg bg-ink-900/40 p-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="w-28 shrink-0 truncate font-mono text-[11px] text-gray-500"
+                      title={photo.filename}
+                    >
+                      {photo.filename}
+                    </span>
+                    <input
+                      value={photo.roomName ?? ''}
+                      onChange={(e) => updatePhotoRoom(index, e.target.value)}
+                      placeholder="Room"
+                      className="w-24 shrink-0 rounded-md border border-white/10 bg-ink-900 px-2 py-1 text-xs text-gray-200 outline-none placeholder:text-gray-600 focus:border-brand-500"
+                    />
+                    <input
+                      value={photo.caption ?? ''}
+                      onChange={(e) => updateCaption(index, e.target.value)}
+                      placeholder="e.g. flood cut 24in — kitchen north wall"
+                      className="w-full rounded-md border border-white/10 bg-ink-900 px-2 py-1 text-xs text-gray-200 outline-none placeholder:text-gray-600 focus:border-brand-500"
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {CAPTION_CHIPS.map((chip) => (
+                      <button
+                        key={chip}
+                        type="button"
+                        onClick={() => appendCaptionChip(index, chip)}
+                        className="rounded border border-white/10 px-1.5 py-0.5 text-[10px] text-gray-400 transition hover:border-brand-500/40 hover:text-brand-200"
+                      >
+                        {chip}
+                      </button>
+                    ))}
+                  </div>
                 </li>
               ))}
             </ul>
@@ -162,14 +209,16 @@ export function SourcePanel({
       <div className="rounded-xl border border-white/10 bg-ink-800/60 p-4">
         <p className="text-sm font-medium text-white">Field notes</p>
         <p className="mt-0.5 text-xs text-gray-500">
-          Dimensions, cut heights, equipment counts and category are read out of plain text.
-          Structured sources win where they overlap.
+          Alone with photos, notes can drive a full estimate: category, room sizes, materials,
+          cut heights, equipment counts, carrier. Structured sources win where they overlap.
         </p>
         <textarea
           value={sources.notes}
           onChange={(e) => onChange({ ...sources, notes: e.target.value })}
-          rows={7}
-          placeholder={'Cat 2 from the dishwasher supply line, ran overnight.\n\nKitchen 16x13.5 — vinyl out, cavity wet, flood cut 24in.\nSet 21 air movers, 3 LGR.'}
+          rows={8}
+          placeholder={
+            'Cat 3 sewage backup. Carrier: State Farm.\n\nKitchen 12x14 — carpet and pad out, flood cut 24in, cavity wet, mold on north wall.\n6 air movers, 2 LGR, 1 scrubber. Containment built.\nBefore and after photos taken.'
+          }
           className="mt-2 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 font-mono text-xs leading-relaxed text-gray-200 outline-none placeholder:text-gray-600 focus:border-brand-500"
         />
       </div>

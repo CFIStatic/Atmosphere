@@ -1,4 +1,5 @@
 import { floodCutSF, round } from '../lib/geometry.js';
+import { buildEquipmentPlan } from '../planning/equipmentPlan.js';
 import type {
   AffectedMaterial,
   Evidence,
@@ -47,6 +48,15 @@ export interface ScopeOptions {
   cubicYardsPerLoad: number;
   /** Content-manipulation hours per 100 SF of affected floor. */
   contentHoursPer100SF: number;
+  /**
+   * How equipment days are billed:
+   * - recommended — S500 coverage plan (smart default when no log)
+   * - as_logged — only what the equipment log recorded
+   * - max — greater of plan vs log (never under-scope a progressing job)
+   */
+  equipmentBillingMode?: 'as_logged' | 'recommended' | 'max';
+  /** Force plan cut height in inches (e.g. 24 for a standard 2-ft flood cut). */
+  planCutHeightIn?: number;
 }
 
 export const DEFAULT_SCOPE_OPTIONS: ScopeOptions = {
@@ -58,6 +68,8 @@ export const DEFAULT_SCOPE_OPTIONS: ScopeOptions = {
   techniciansOnSite: 2,
   cubicYardsPerLoad: 2.5,
   contentHoursPer100SF: 0.75,
+  equipmentBillingMode: undefined,
+  planCutHeightIn: undefined,
 };
 
 /** Debris volume per unit of demolished material, in cubic feet. */
@@ -418,12 +430,41 @@ function deriveEquipmentScope(
   const items: ScopeItem[] = [];
   const days = Math.max(1, assessment.dryingDays);
 
-  // Group placements so the estimate carries one line per equipment type
-  // rather than one per unit, which is how Xactimate expects it.
-  const totals = new Map<string, number>();
-  for (const placement of assessment.equipment) {
+  // Smart plan: movers from open wall SF after the flood cut, dehu from class/CF,
+  // scrubbers when containment, injectidry when cavity is salvageable.
+  const plan = buildEquipmentPlan(assessment, {
+    billingMode: options.equipmentBillingMode,
+    planCutHeightIn: options.planCutHeightIn,
+    preferInjectidryWhenSalvageable: assessment.category < 3,
+  });
+
+  const placements =
+    plan.billingMode === 'as_logged' && assessment.equipment.length > 0
+      ? assessment.equipment
+      : plan.placements;
+
+  const totals = new Map<string, { unitDays: number; units: number; rationale: string }>();
+  for (const placement of placements) {
     const unitDays = placement.quantity * (placement.days ?? days);
-    totals.set(placement.kind, (totals.get(placement.kind) ?? 0) + unitDays);
+    const existing = totals.get(placement.kind);
+    const planLine = plan.lines.find((l) => l.kind === placement.kind);
+    totals.set(placement.kind, {
+      unitDays: (existing?.unitDays ?? 0) + unitDays,
+      units: (existing?.units ?? 0) + placement.quantity,
+      rationale: planLine?.rationale ?? existing?.rationale ?? '',
+    });
+  }
+
+  // When a log exists, still add plan-only kinds the crew never logged.
+  if (plan.billingMode !== 'recommended') {
+    for (const line of plan.lines) {
+      if (totals.has(line.kind)) continue;
+      totals.set(line.kind, {
+        unitDays: line.unitDays,
+        units: line.units,
+        rationale: `${line.rationale} (added from S500 plan — not in the equipment log).`,
+      });
+    }
   }
 
   const EQUIPMENT_LABELS: Record<string, string> = {
@@ -439,10 +480,8 @@ function deriveEquipmentScope(
 
   let totalUnits = 0;
 
-  for (const [kind, unitDays] of totals) {
+  for (const [kind, { unitDays, units, rationale }] of totals) {
     if (unitDays <= 0) continue;
-    const placements = assessment.equipment.filter((e) => e.kind === kind);
-    const units = placements.reduce((sum, p) => sum + p.quantity, 0);
     totalUnits += units;
 
     items.push({
@@ -451,14 +490,15 @@ function deriveEquipmentScope(
       description: `${EQUIPMENT_LABELS[kind] ?? kind} — ${units} unit${units === 1 ? '' : 's'} × billed days`,
       quantity: round(unitDays),
       unit: 'DA',
-      justification: `${units} ${EQUIPMENT_LABELS[kind] ?? kind}${units === 1 ? '' : 's'} were placed on a Class ${assessment.class} loss and logged for ${round(unitDays)} unit-days total. Equipment is billed per 24-hour period; any part of a period on site is a billed period.`,
+      justification:
+        rationale ||
+        `${units} ${EQUIPMENT_LABELS[kind] ?? kind}${units === 1 ? '' : 's'} on a Class ${assessment.class} loss for ${round(unitDays)} unit-days. Equipment is billed per 24-hour period.`,
       citations: ['DEHUMIDIFICATION_SIZING', 'AIRFLOW_SIZING'],
       evidenceIds: evidenceIndex.match(undefined, [equipmentTag(kind), 'photo']),
       tags: ['equipment', kind],
     });
   }
 
-  // Setup and take-down labour, priced off the equipment actually placed.
   if (totalUnits > 0) {
     items.push({
       id: `scope-${nextId()}`,
@@ -473,9 +513,6 @@ function deriveEquipmentScope(
     });
   }
 
-  // Monitoring visits. This is where mitigation margin quietly leaks: the crew
-  // drives out daily, takes readings, photographs and documents — and the
-  // estimate carries one hour, or nothing at all.
   if (assessment.monitoringVisits > 0) {
     items.push({
       id: `scope-${nextId()}`,

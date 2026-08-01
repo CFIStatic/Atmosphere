@@ -1,12 +1,18 @@
 import { useState } from 'react';
 import {
+  api,
   usd,
+  type CodeSearchHit,
+  type DryingReportInput,
   type MitigationEstimate,
   type ProfitFinding,
   type StandardReference,
 } from '../../lib/api';
 import { CompliancePanel, formatLocation } from './CompliancePanel';
 import { SlaPanel } from './SlaPanel';
+import { CodePicker } from './CodePicker';
+import { FindingsPanel } from './FindingsPanel';
+import { DryingProgressPanel } from './DryingProgressPanel';
 
 /**
  * The finished estimate.
@@ -24,6 +30,12 @@ export function EstimateResult({
   canPush,
   jobId,
   onDeviationAccepted,
+  onCodeOverride,
+  confirmPush,
+  localDryingReports = [],
+  onAppendDryingReport,
+  onAppendSavedDryingReport,
+  busy,
 }: {
   estimate: MitigationEstimate;
   onPush?: () => void;
@@ -32,9 +44,18 @@ export function EstimateResult({
   /** The saved job id, needed before a deviation can be recorded against it. */
   jobId?: string | null;
   onDeviationAccepted?: () => void;
+  /** Called when the user picks a live account code for a line (knowledge key → code). */
+  onCodeOverride?: (catalogKey: string, code: string) => void;
+  /** When true, the push button confirms critical findings on the next click. */
+  confirmPush?: boolean;
+  localDryingReports?: DryingReportInput[];
+  onAppendDryingReport?: (report: DryingReportInput) => void;
+  onAppendSavedDryingReport?: (report: DryingReportInput) => Promise<void>;
+  busy?: boolean;
 }) {
   const { assessment, profitability, lineItems } = estimate;
   const unverified = lineItems.filter((line) => !line.priceVerified).length;
+  const criticalCount = profitability.findings.filter((f) => f.severity === 'critical').length;
 
   return (
     <div className="space-y-6">
@@ -76,6 +97,25 @@ export function EstimateResult({
           Above everything else on purpose: an estimate that breaches its
           agreement does not get paid however well it is scoped. */}
       <SlaPanel sla={estimate.sla} jobId={jobId} onDeviationAccepted={onDeviationAccepted} />
+
+      <FindingsPanel
+        findings={estimate.assessment.findings}
+        requirements={estimate.requirements}
+      />
+
+      {(estimate.equipmentPlan ||
+        estimate.dryingProgress ||
+        localDryingReports.length > 0 ||
+        onAppendDryingReport) && (
+        <DryingProgressPanel
+          estimate={estimate}
+          localReports={localDryingReports}
+          onAppendLocal={onAppendDryingReport ?? (() => undefined)}
+          onAppendSaved={onAppendSavedDryingReport}
+          jobId={jobId}
+          busy={busy}
+        />
+      )}
 
       {/* ---- Findings ---- */}
       {profitability.findings.length > 0 && (
@@ -163,7 +203,8 @@ export function EstimateResult({
           </h2>
           {unverified > 0 && (
             <p className="text-xs text-amber-300">
-              {unverified} priced from placeholders — sync a price list before submitting
+              {unverified} not on the account price list — pick a real Xactimate code before
+              submitting
             </p>
           )}
         </div>
@@ -183,7 +224,12 @@ export function EstimateResult({
               </thead>
               <tbody className="divide-y divide-white/5">
                 {lineItems.map((line) => (
-                  <LineRow key={line.id} line={line} references={estimate.references} />
+                  <LineRow
+                    key={line.id}
+                    line={line}
+                    references={estimate.references}
+                    onCodeOverride={onCodeOverride}
+                  />
                 ))}
               </tbody>
             </table>
@@ -209,24 +255,35 @@ export function EstimateResult({
       )}
 
       {onPush && (
-        <button
-          onClick={onPush}
-          disabled={pushing || !canPush || estimate.sla.blocksSubmission}
-          className="w-full rounded-lg bg-brand-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-brand-500 disabled:opacity-50"
-          title={
-            estimate.sla.blocksSubmission
-              ? 'Resolve the program breaches, or document a deviation for each'
-              : canPush
-                ? undefined
-                : 'Connect Xactimate with write permission first'
-          }
-        >
-          {pushing
-            ? 'Writing to Xactimate…'
-            : estimate.sla.blocksSubmission
-              ? 'Blocked — this estimate breaches its program terms'
-              : 'Write this estimate into Xactimate'}
-        </button>
+        <div className="space-y-2">
+          {confirmPush && criticalCount > 0 && (
+            <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+              {criticalCount} critical finding{criticalCount === 1 ? '' : 's'} still open. Pushing
+              now will write the estimate into your Xactimate account with those findings
+              acknowledged.
+            </p>
+          )}
+          <button
+            onClick={onPush}
+            disabled={pushing || !canPush || estimate.sla.blocksSubmission}
+            className="w-full rounded-lg bg-brand-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-brand-500 disabled:opacity-50"
+            title={
+              estimate.sla.blocksSubmission
+                ? 'Resolve the program breaches, or document a deviation for each'
+                : canPush
+                  ? undefined
+                  : 'Connect Xactimate with write permission first'
+            }
+          >
+            {pushing
+              ? 'Writing to Xactimate Online…'
+              : estimate.sla.blocksSubmission
+                ? 'Blocked — this estimate breaches its program terms'
+                : confirmPush
+                  ? 'Confirm findings and write into Xactimate'
+                  : 'Write this estimate into Xactimate'}
+          </button>
+        </div>
       )}
     </div>
   );
@@ -237,14 +294,27 @@ export function EstimateResult({
 function LineRow({
   line,
   references,
+  onCodeOverride,
 }: {
   line: MitigationEstimate['lineItems'][number];
   references: StandardReference[];
+  onCodeOverride?: (catalogKey: string, code: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [picking, setPicking] = useState(false);
   const cited = line.citations
     .map((id) => references.find((reference) => reference.id === id))
     .filter((reference): reference is StandardReference => Boolean(reference));
+
+  async function handlePick(hit: CodeSearchHit) {
+    const key = line.catalogKey ?? line.code;
+    if (onCodeOverride) {
+      onCodeOverride(key, hit.code);
+    } else {
+      await api.xactimateOverrideCode(key, hit.code, true);
+    }
+    setPicking(false);
+  }
 
   return (
     <>
@@ -255,7 +325,7 @@ function LineRow({
         <td className="px-3 py-2 font-mono text-xs text-brand-300">
           {line.code}
           {!line.priceVerified && (
-            <span title="Placeholder price" className="ml-1 text-amber-400">
+            <span title="Not verified against account price list" className="ml-1 text-amber-400">
               ~
             </span>
           )}
@@ -282,6 +352,31 @@ function LineRow({
           <td colSpan={6} className="px-3 py-3 text-xs leading-relaxed text-gray-400">
             <p className="text-gray-300">{line.justification}</p>
 
+            <div className="mt-2">
+              {!picking ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPicking(true);
+                  }}
+                  className="rounded-md border border-white/10 bg-ink-700/70 px-2.5 py-1 text-xs text-brand-200 transition hover:bg-ink-600"
+                >
+                  {line.priceVerified ? 'Change account code' : 'Pick account code'}
+                </button>
+              ) : (
+                <div onClick={(e) => e.stopPropagation()}>
+                  <CodePicker
+                    initialQuery={line.code}
+                    preferUnit={line.unit}
+                    preferCategory={line.category}
+                    onPick={(hit) => void handlePick(hit)}
+                    onCancel={() => setPicking(false)}
+                  />
+                </div>
+              )}
+            </div>
+
             {cited.length > 0 && (
               <ul className="mt-2 space-y-1.5">
                 {cited.map((reference) => (
@@ -301,7 +396,8 @@ function LineRow({
 
             <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-gray-500">
               <span>
-                Evidence: {line.evidenceIds.length > 0 ? `${line.evidenceIds.length} item(s)` : 'none attached'}
+                Evidence:{' '}
+                {line.evidenceIds.length > 0 ? `${line.evidenceIds.length} item(s)` : 'none attached'}
               </span>
               <span>Cost basis: {usd(line.totalCost)}</span>
             </p>

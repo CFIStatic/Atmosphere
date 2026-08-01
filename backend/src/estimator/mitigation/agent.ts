@@ -12,7 +12,16 @@ import { caveatsFor, formatCitation, referencesFor, type CitationId } from './st
 import { identifyCarrier, type IdentifyOptions } from './carrier/identify.js';
 import { applyAgreementToPricing, checkAgreement } from './carrier/sla.js';
 import type { ProgramAgreement, SlaDeviation } from './carrier/types.js';
+import { deriveRequirements } from './requirements/obligations.js';
+import { buildEquipmentPlan, type EquipmentPlan } from './planning/equipmentPlan.js';
+import {
+  mergeDryingReports,
+  type DryingProgress,
+  type DryingReport,
+} from './planning/dryingProgress.js';
 import type { LossAssessment, MitigationEstimate, ScopeItem } from './types.js';
+
+export type { DryingReport };
 
 /**
  * The Mitigation Estimator agent.
@@ -36,9 +45,18 @@ export interface EstimatorConfig {
   costBasis: CostBasis;
   /** The account's real price list, once synced. Null means placeholder pricing. */
   priceList: PriceList | null;
-  /** Reconciled catalog from a price-list sync; falls back to the seed catalog. */
+  /**
+   * Working catalog built from the account price list (selectors + prices) with
+   * knowledge profiles supplying tags and evidence gates. Falls back to unverified
+   * knowledge defaults when no list is connected.
+   */
   catalog: readonly CatalogItem[];
   lineMarginFloor: number;
+  /**
+   * Human-picked account codes, keyed by knowledge catalog key or scope item id.
+   * Always beat automatic resolution during mapping.
+   */
+  codeOverrides?: Record<string, string>;
 
   /**
    * The carrier program agreement this job falls under, when one is loaded.
@@ -65,11 +83,50 @@ export const DEFAULT_ESTIMATOR_CONFIG: EstimatorConfig = {
   deviations: [],
 };
 
+const EMPTY_DRYING_PROGRESS: DryingProgress = {
+  reports: [],
+  visitCount: 0,
+  moistureReadingCount: 0,
+  psychrometricCount: 0,
+  roomsAtDryStandard: [],
+  roomsStillWet: [],
+  gppDifferential: null,
+  dryingComplete: false,
+  suggestedRemainingDays: 0,
+  timeline: [],
+};
+
 export function buildEstimate(
   sources: EstimatorSources,
   config: EstimatorConfig = DEFAULT_ESTIMATOR_CONFIG,
 ): MitigationEstimate {
-  const assessment = normalizeSources(sources);
+  let assessment = normalizeSources(sources);
+
+  // Drying reports are merged after normalizeSources so one-shot ingestion stays
+  // pure — visit timelines overlay moisture, psychro, equipment, and days here.
+  let dryingProgress: DryingProgress = EMPTY_DRYING_PROGRESS;
+  if (sources.dryingReports?.length) {
+    const merged = mergeDryingReports(sources.dryingReports, {
+      moistureReadings: assessment.moistureReadings,
+      psychrometrics: assessment.psychrometrics,
+      equipment: assessment.equipment,
+      evidence: assessment.evidence,
+      dryingDays: assessment.dryingDays,
+      monitoringVisits: assessment.monitoringVisits,
+    });
+    assessment = {
+      ...assessment,
+      moistureReadings: merged.moistureReadings,
+      psychrometrics: merged.psychrometrics,
+      equipment: merged.equipment,
+      evidence: merged.evidence,
+      dryingDays: merged.dryingDays,
+      monitoringVisits: merged.monitoringVisits,
+      warnings: [...assessment.warnings, ...merged.warnings],
+    };
+    dryingProgress = merged.progress;
+  }
+
   const identification = identifyCarrier(assessment, config.carrier ?? {});
   const agreement = config.agreement ?? null;
 
@@ -85,6 +142,7 @@ export function buildEstimate(
     priceList: config.priceList,
     costBasis: config.costBasis,
     catalog: config.catalog,
+    codeOverrides: config.codeOverrides,
   });
 
   // A negotiated concession is a real reduction in what the carrier pays, so it
@@ -131,6 +189,19 @@ export function buildEstimate(
     ...compliance.citations,
   ];
 
+  const requirements = deriveRequirements({
+    assessment,
+    findings: assessment.findings,
+    scope,
+    sla,
+  });
+
+  const equipmentPlan = buildEquipmentPlan(assessment, {
+    billingMode: config.scope.equipmentBillingMode,
+    planCutHeightIn: config.scope.planCutHeightIn,
+    preferInjectidryWhenSalvageable: assessment.category < 3,
+  });
+
   return {
     jobId: assessment.jobId,
     generatedAt: new Date().toISOString(),
@@ -141,8 +212,22 @@ export function buildEstimate(
     compliance,
     sla,
     references: referencesFor(cited),
-    narrative: writeNarrative(assessment, lineItems.length),
-    openQuestions: collectOpenQuestions(assessment, scope, unmapped, config, compliance, cited, sla, applied.notes),
+    requirements,
+    equipmentPlan,
+    dryingProgress,
+    narrative: writeNarrative(assessment, lineItems.length, requirements, equipmentPlan, dryingProgress),
+    openQuestions: collectOpenQuestions(
+      assessment,
+      scope,
+      unmapped,
+      config,
+      compliance,
+      cited,
+      sla,
+      applied.notes,
+      requirements,
+      equipmentPlan,
+    ),
   };
 }
 
@@ -155,7 +240,13 @@ export function buildEstimate(
  * seconds. It states the classification and *why*, because a classification
  * without its reasoning is the thing that gets argued with.
  */
-function writeNarrative(assessment: LossAssessment, lineCount: number): string {
+function writeNarrative(
+  assessment: LossAssessment,
+  lineCount: number,
+  requirements: import('./requirements/obligations.js').MitigationRequirement[],
+  equipmentPlan?: EquipmentPlan,
+  dryingProgress?: DryingProgress,
+): string {
   const rooms = assessment.rooms.length;
   const totalSF = round(assessment.rooms.reduce((sum, room) => sum + room.geometry.floorSF, 0));
   const affectedSF = round(
@@ -163,10 +254,20 @@ function writeNarrative(assessment: LossAssessment, lineCount: number): string {
   );
 
   const parts: string[] = [];
+  const photosOnly =
+    assessment.sourcesUsed.includes('photos') || assessment.sourcesUsed.includes('notes');
+  const structured =
+    assessment.sourcesUsed.includes('docusketch') || assessment.sourcesUsed.includes('mica');
 
-  parts.push(
-    `${describeCause(assessment.cause)} affected ${rooms} room${rooms === 1 ? '' : 's'} totalling ${totalSF} SF, of which ${affectedSF} SF was water-affected.`,
-  );
+  if (totalSF > 0) {
+    parts.push(
+      `${describeCause(assessment.cause)} affected ${rooms} room${rooms === 1 ? '' : 's'} totalling ${totalSF} SF, of which ${affectedSF} SF was water-affected.`,
+    );
+  } else {
+    parts.push(
+      `${describeCause(assessment.cause)} was documented from field photos and notes${rooms > 0 ? ` across ${rooms} named area${rooms === 1 ? '' : 's'}` : ''}. Room dimensions are still needed before quantities can be billed.`,
+    );
+  }
 
   if (assessment.category > assessment.sourceCategory) {
     parts.push(
@@ -176,9 +277,37 @@ function writeNarrative(assessment: LossAssessment, lineCount: number): string {
     parts.push(`Water was classified as Category ${assessment.category} at the source.`);
   }
 
+  if (assessment.findings.length > 0) {
+    const top = assessment.findings
+      .filter((f) => f.kind === 'wet_material' || f.kind === 'demolition_performed' || f.kind === 'microbial_growth')
+      .slice(0, 4)
+      .map((f) => f.summary.replace(/\.$/, ''));
+    if (top.length > 0) {
+      parts.push(`Findings from the documentation: ${top.join('; ')}.`);
+    }
+  }
+
   parts.push(
     `The loss was assessed as Class ${assessment.class} — ${describeClass(assessment.class)}. ${describeDehuBasis(assessment)}`,
   );
+
+  if (equipmentPlan && equipmentPlan.airMoversRequired > 0) {
+    const floodCutRooms = equipmentPlan.rooms.filter((r) => r.floodCutRequired && r.cutHeightIn > 0);
+    if (floodCutRooms.length > 0) {
+      const sample = floodCutRooms[0];
+      parts.push(
+        `Air movers sized at ${equipmentPlan.airMoversRequired} for open wall after flood cut` +
+          (sample
+            ? ` (e.g. ${sample.roomName}: ${sample.airMoversRequired} movers for ${sample.openWallSF} SF open wall at ${sample.cutHeightIn}")`
+            : '') +
+          ` (${formatCitation('AIRFLOW_SIZING')}).`,
+      );
+    } else {
+      parts.push(
+        `Equipment plan calls for ${equipmentPlan.airMoversRequired} air mover${equipmentPlan.airMoversRequired === 1 ? '' : 's'} and ${equipmentPlan.dehu.unitsRequired} dehumidifier unit${equipmentPlan.dehu.unitsRequired === 1 ? '' : 's'} (${formatCitation('AIRFLOW_SIZING')}).`,
+      );
+    }
+  }
 
   const differential = gppDifferential(assessment.psychrometrics);
   if (differential !== null) {
@@ -191,12 +320,30 @@ function writeNarrative(assessment: LossAssessment, lineCount: number): string {
 
   if (assessment.microbialGrowthPresent) {
     parts.push(
-      'Microbial growth was documented, so demolition was performed inside containment under negative pressure with full PPE.',
+      'Microbial growth was documented, so demolition must be performed inside containment under negative pressure with full PPE.',
+    );
+  }
+
+  const unmet = requirements.filter((r) => !r.addressed && r.status !== 'recommended');
+  if (unmet.length > 0 && photosOnly && !structured) {
+    parts.push(
+      `${unmet.length} mitigation obligation${unmet.length === 1 ? '' : 's'} from IICRC, insurance documentation rules, or construction/health practice ${unmet.length === 1 ? 'is' : 'are'} not yet fully covered by the scoped lines — see Requirements.`,
+    );
+  }
+
+  if (dryingProgress && dryingProgress.visitCount > 0) {
+    parts.push(
+      dryingProgress.dryingComplete
+        ? `Drying progress across ${dryingProgress.visitCount} visit${dryingProgress.visitCount === 1 ? '' : 's'} shows all tracked rooms at dry standard.`
+        : `Drying progress across ${dryingProgress.visitCount} visit${dryingProgress.visitCount === 1 ? '' : 's'}: ${dryingProgress.roomsAtDryStandard.length} room${dryingProgress.roomsAtDryStandard.length === 1 ? '' : 's'} at dry standard, ${dryingProgress.roomsStillWet.length} still wet` +
+            (dryingProgress.suggestedRemainingDays > 0
+              ? ` (~${dryingProgress.suggestedRemainingDays} day${dryingProgress.suggestedRemainingDays === 1 ? '' : 's'} remaining).`
+              : '.'),
     );
   }
 
   parts.push(
-    `Drying ran ${assessment.dryingDays} day${assessment.dryingDays === 1 ? '' : 's'} across ${assessment.monitoringVisits} documented monitoring visit${assessment.monitoringVisits === 1 ? '' : 's'}, supported by ${assessment.moistureReadings.length} moisture readings and ${assessment.evidence.filter((e) => e.kind === 'photo').length} photographs. The estimate carries ${lineCount} line items, each tied to that documentation.`,
+    `Drying ran ${assessment.dryingDays} day${assessment.dryingDays === 1 ? '' : 's'} across ${assessment.monitoringVisits} monitoring visit${assessment.monitoringVisits === 1 ? '' : 's'}, supported by ${assessment.moistureReadings.length} moisture readings and ${assessment.evidence.filter((e) => e.kind === 'photo').length} photographs. The estimate carries ${lineCount} line items, each tied to that documentation.`,
   );
 
   return parts.join(' ');
@@ -263,6 +410,8 @@ function collectOpenQuestions(
   cited: CitationId[],
   sla: ReturnType<typeof checkAgreement>,
   pricingNotes: string[],
+  requirements: import('./requirements/obligations.js').MitigationRequirement[] = [],
+  equipmentPlan?: EquipmentPlan,
 ): string[] {
   const questions: string[] = [];
 
@@ -281,6 +430,20 @@ function collectOpenQuestions(
     questions.push(
       `${prefix} — ${check.title}: ${check.detail}${check.remedy ? ` ${check.remedy}` : ''}${check.sourceRef ? ` (${check.sourceRef})` : ''}`,
     );
+  }
+
+  // Unmet mitigation obligations from IICRC / insurance / construction practice.
+  for (const req of requirements) {
+    if (req.addressed || req.status === 'recommended') continue;
+    const label =
+      req.authority === 'iicrc'
+        ? 'IICRC'
+        : req.authority === 'insurance'
+          ? 'Insurance'
+          : req.authority === 'construction_code'
+            ? 'Code / health'
+            : 'Carrier SLA';
+    questions.push(`${label} — ${req.title}: ${req.action}`);
   }
 
   for (const proposal of sla.proposedDeviations) {
@@ -385,6 +548,26 @@ function collectOpenQuestions(
     }
   }
 
+  // Equipment plan under-equipment: surface room rationales + plan warnings so
+  // flood-cut airflow gaps are visible even when the log has no per-room ids.
+  if (equipmentPlan) {
+    for (const warning of equipmentPlan.warnings) {
+      questions.push(warning);
+    }
+    const underEquipped = equipmentPlan.warnings.some((w) => /under-equipped/i.test(w));
+    if (underEquipped || equipmentPlan.billingMode === 'as_logged') {
+      for (const room of equipmentPlan.rooms) {
+        if (room.airMoversRequired <= 0) continue;
+        const placed = assessment.equipment
+          .filter((e) => (!e.roomId || e.roomId === room.roomId) && e.kind.includes('air_mover'))
+          .reduce((sum, e) => sum + e.quantity, 0);
+        if (placed > 0 && placed < room.airMoversRequired) {
+          questions.push(`${room.roomName}: ${room.rationale}`);
+        }
+      }
+    }
+  }
+
   // A flood cut rounds up to the next framing division, so a wet line just over
   // 12 inches lands at a 48-inch cut. That is defensible and it is also a large
   // jump in both demolition and rebuild, so it gets confirmed rather than
@@ -409,7 +592,7 @@ function collectOpenQuestions(
 
   if (scope.length === 0) {
     questions.push(
-      'The sources did not describe any affected materials, so no scope could be derived. Check that the DocuSketch export includes affected-material flags.',
+      'The sources did not describe enough to derive a billable scope. For photos and notes alone, include room dimensions (e.g. "Kitchen 12x14"), materials (carpet, pad, drywall), cut heights, and equipment counts — or upload a DocuSketch / MICA export.',
     );
   }
 

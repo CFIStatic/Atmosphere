@@ -1,11 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, ApiError, type MitigationEstimate, type XactimateStatus } from '../lib/api';
+import {
+  api,
+  ApiError,
+  type DryingReportInput,
+  type MitigationEstimate,
+  type XactimateStatus,
+} from '../lib/api';
 import { Logo } from '../components/Logo';
 import { SpinnerIcon } from '../components/icons';
 import { SourcePanel, type Sources } from '../components/estimator/SourcePanel';
 import { EstimateResult } from '../components/estimator/EstimateResult';
 import { XactimateCard } from '../components/estimator/XactimateCard';
+import { CaptureSyncCard } from '../components/estimator/CaptureSyncCard';
+import type { CaptureSyncResult } from '../lib/api';
 
 /**
  * The Mitigation Estimator workspace.
@@ -20,15 +28,21 @@ import { XactimateCard } from '../components/estimator/XactimateCard';
  *     connection, an explicit write permission, and — when the review found
  *     something critical — a confirmation. Pushing a bad estimate is worse than
  *     not pushing one.
+ *
+ * Drying reports ride along with sources and also append to a saved job. Each
+ * visit rebuilds the estimate so equipment days, dry-standard progress, and
+ * under-equipment flags stay current as the project progresses.
  */
 
-const EMPTY_SOURCES: Sources = { photos: [], notes: '' };
+const EMPTY_SOURCES: Sources = { photos: [], notes: '', dryingReports: [] };
 
 export function MitigationEstimatorPage() {
   const [sources, setSources] = useState<Sources>(EMPTY_SOURCES);
   const [estimate, setEstimate] = useState<MitigationEstimate | null>(null);
   const [estimateId, setEstimateId] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
+  const [codeOverrides, setCodeOverrides] = useState<Record<string, string>>({});
+  const [confirmPush, setConfirmPush] = useState(false);
 
   const [building, setBuilding] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -63,6 +77,8 @@ export function MitigationEstimatorPage() {
       mica: sources.mica,
       photos: sources.photos.length ? sources.photos : undefined,
       notes: sources.notes.trim() || undefined,
+      dryingReports: sources.dryingReports?.length ? sources.dryingReports : undefined,
+      codeOverrides: Object.keys(codeOverrides).length ? codeOverrides : undefined,
     };
   }
 
@@ -70,6 +86,7 @@ export function MitigationEstimatorPage() {
     setBuilding(true);
     setError(null);
     setNotice(null);
+    setConfirmPush(false);
     // A saved estimate is a snapshot of one moment, so rebuilding invalidates
     // the saved one and its export links. The *job* id is kept — deviations are
     // recorded against the job and must survive a rebuild, which is the whole
@@ -95,7 +112,7 @@ export function MitigationEstimatorPage() {
       // The agent's own job id, not the database row — deviations are recorded
       // against it so they survive a rebuild.
       setJobId(result.estimate.jobId);
-      setNotice('Saved. Exports are available below.');
+      setNotice('Saved. Exports are available below. Drying visits will persist on this job.');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save the estimate.');
     } finally {
@@ -108,26 +125,111 @@ export function MitigationEstimatorPage() {
     setPushing(true);
     setError(null);
     try {
-      const result = await api.xactimatePush(estimate, false);
+      const result = await api.xactimatePush(estimate, confirmPush);
+      setConfirmPush(false);
       setNotice(
-        `Wrote ${result.lineItemsWritten} line items into Xactimate as ${result.estimateId}.`,
+        `Wrote ${result.lineItemsWritten} line items into Xactimate as ${result.estimateId}` +
+          (result.url ? `. Open: ${result.url}` : '.') +
+          (result.warnings?.length ? ` Warnings: ${result.warnings.join(' ')}` : ''),
       );
     } catch (err) {
       if (err instanceof ApiError && err.code === 'sla_blocked') {
         setError(
           'This estimate breaches its carrier program terms. Resolve them above, or accept a documented deviation for each, then rebuild.',
         );
-      } else if (err instanceof ApiError && err.status === 409) {
-        // The server refused because critical findings are outstanding. Make the
-        // user look at them rather than offering a one-click override.
+      } else if (err instanceof ApiError && (err.code === 'confirmation_required' || err.status === 409)) {
+        setConfirmPush(true);
         setError(
-          'This estimate still has critical findings. Work through the review above, rebuild, and push again.',
+          'Critical findings are outstanding. Review them above, then press the push button again to confirm and write into Xactimate.',
         );
       } else {
         setError(err instanceof ApiError ? err.message : 'Could not write to Xactimate.');
       }
     } finally {
       setPushing(false);
+    }
+  }
+
+  async function onCodeOverride(catalogKey: string, code: string) {
+    setCodeOverrides((current) => ({ ...current, [catalogKey]: code }));
+    try {
+      await api.xactimateOverrideCode(catalogKey, code, true);
+      setNotice(`Locked ${catalogKey} → ${code}. Rebuilding with the account code…`);
+      await build();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save that code pick.');
+    }
+  }
+
+  function appendLocalDryingReport(report: DryingReportInput) {
+    setSources((current) => ({
+      ...current,
+      dryingReports: [...(current.dryingReports ?? []), report],
+    }));
+    setNotice('Visit added — rebuilding with drying progress…');
+    // Rebuild after state flush via microtask so payload includes the new report.
+    queueMicrotask(() => {
+      void buildWithReports([...(sources.dryingReports ?? []), report]);
+    });
+  }
+
+  async function buildWithReports(dryingReports: DryingReportInput[]) {
+    setBuilding(true);
+    setError(null);
+    setConfirmPush(false);
+    setEstimateId(null);
+    try {
+      const { estimate: next } = await api.buildEstimate({
+        ...payload(),
+        dryingReports: dryingReports.length ? dryingReports : undefined,
+      });
+      setEstimate(next);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not build the estimate.');
+    } finally {
+      setBuilding(false);
+    }
+  }
+
+  async function appendSavedDryingReport(report: DryingReportInput) {
+    if (!jobId) {
+      appendLocalDryingReport(report);
+      return;
+    }
+    setBuilding(true);
+    setError(null);
+    try {
+      const { reports } = await api.appendDryingReport(jobId, report);
+      setSources((current) => ({
+        ...current,
+        dryingReports: reports.map((r) => ({
+          id: r.id,
+          takenAt: r.takenAt,
+          source: r.source,
+          notes: r.notes,
+          moistureReadings: r.moistureReadings,
+          psychrometrics: r.psychrometrics,
+          equipment: r.equipment,
+          roomsAtDryStandard: r.roomsAtDryStandard,
+          roomsStillWet: r.roomsStillWet,
+        })),
+      }));
+      const result = await api.rebuildEstimate(jobId, {
+        ...payload(),
+        dryingReports: undefined, // server merges stored reports
+      });
+      setEstimate(result.estimate);
+      if (result.estimateId) setEstimateId(result.estimateId);
+      setNotice(
+        `Visit ${reports.length} logged. Estimate updated with drying progress` +
+          (result.estimate.equipmentPlan
+            ? ` — plan calls for ${result.estimate.equipmentPlan.airMoversRequired} air movers.`
+            : '.'),
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save the drying report.');
+    } finally {
+      setBuilding(false);
     }
   }
 
@@ -140,6 +242,7 @@ export function MitigationEstimatorPage() {
         mica: demo.mica,
         photos: demo.photos ?? [],
         notes: demo.notes ?? '',
+        dryingReports: demo.dryingReports ?? [],
       });
       setEstimate(null);
       setEstimateId(null);
@@ -171,9 +274,10 @@ export function MitigationEstimatorPage() {
           <p className="text-sm font-medium text-brand-400">Mitigation</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-white">Estimator</h1>
           <p className="mt-2 max-w-2xl text-gray-400">
-            Give it the scan, the drying record, the photos and your notes. It classifies the loss
-            against IICRC S500, scopes the work, prices it against your Xactimate price list, and
-            tells you what documented work is not yet on the estimate.
+            Photos and field notes alone are enough: the agent identifies what is wrong, what IICRC
+            / insurance / code obliges, and sizes equipment from the loss — including how many air
+            movers a 2-foot flood cut needs. The capture agent watches MICA Dash and Outlook and
+            rewrites the estimate automatically as drying reports arrive.
           </p>
         </div>
 
@@ -202,6 +306,49 @@ export function MitigationEstimatorPage() {
               onChange={setSources}
               onLoadDemo={loadDemo}
               busy={building}
+            />
+
+            <CaptureSyncCard
+              jobId={jobId ?? estimate?.jobId}
+              claimNumber={estimate?.assessment.claimNumber}
+              baseline={{
+                docusketch: sources.docusketch,
+                mica: sources.mica,
+                photos: sources.photos.length ? sources.photos : undefined,
+                notes: sources.notes.trim() || undefined,
+              }}
+              busy={building}
+              onSynced={(result: CaptureSyncResult) => {
+                if (result.estimate) {
+                  setEstimate(result.estimate);
+                  if (result.estimateId) setEstimateId(result.estimateId);
+                  setJobId(result.estimate.jobId);
+                }
+                if (result.importedReports?.length) {
+                  setSources((current) => ({
+                    ...current,
+                    dryingReports: [
+                      ...(current.dryingReports ?? []),
+                      ...result.importedReports!.map((r) => ({
+                        id: r.id,
+                        takenAt: r.takenAt,
+                        source: r.source,
+                        notes: r.notes,
+                        roomsAtDryStandard: r.roomsAtDryStandard,
+                        roomsStillWet: r.roomsStillWet,
+                      })),
+                    ],
+                  }));
+                }
+                setNotice(
+                  result.modified
+                    ? `Capture sync updated the estimate (${result.reportsImported} new visit${result.reportsImported === 1 ? '' : 's'}).`
+                    : 'Capture sync complete — no new visits.',
+                );
+                if (result.warnings.length) {
+                  setError(result.warnings.slice(0, 3).join(' '));
+                }
+              }}
             />
 
             <div className="space-y-2">
@@ -254,9 +401,15 @@ export function MitigationEstimatorPage() {
                 pushing={pushing}
                 canPush={canPush}
                 jobId={jobId}
+                confirmPush={confirmPush}
+                onCodeOverride={(key, code) => void onCodeOverride(key, code)}
                 // Accepting a deviation changes what the terms check concludes,
                 // so the estimate is rebuilt rather than patched in place.
                 onDeviationAccepted={() => void build()}
+                localDryingReports={sources.dryingReports ?? []}
+                onAppendDryingReport={appendLocalDryingReport}
+                onAppendSavedDryingReport={appendSavedDryingReport}
+                busy={building}
               />
             ) : (
               <div className="grid h-64 place-items-center rounded-xl border border-dashed border-white/10 text-center">
