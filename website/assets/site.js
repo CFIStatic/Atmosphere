@@ -152,15 +152,57 @@
     links: 'ap-links', message: 'ap-message', website: 'ap-website'
   }, 'Application sent — a person reads every one, and replies either way.');
 
-  // Auth surfaces: in local dev the React app runs on :5174; production uses
-  // the hosted app routes. Until deploy, submitting explains the state.
-  function stubForm(formId, statusId, text, devHref) {
+  // Auth links: when an app origin is known (local dev or data-app-origin at
+  // deploy), every Sign in / Get started CTA goes straight to the React app.
+  function appOrigin() {
+    var fromHtml = document.documentElement.getAttribute('data-app-origin');
+    if (fromHtml) return fromHtml.replace(/\/$/, '');
+    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+      return 'http://localhost:5174';
+    }
+    return null;
+  }
+
+  function authUrl(kind) {
+    var origin = appOrigin();
+    if (!origin) return null;
+    return kind === 'signup' ? origin + '/login?mode=signup' : origin + '/login';
+  }
+
+  function wireAuthLinks() {
+    var signin = authUrl('signin');
+    var signup = authUrl('signup');
+    if (!signin) return;
+    document.querySelectorAll('a[href]').forEach(function (a) {
+      var href = a.getAttribute('href');
+      if (href === 'signin.html' || href === './signin.html') a.setAttribute('href', signin);
+      else if (href === 'signup.html' || href === './signup.html') a.setAttribute('href', signup);
+    });
+  }
+
+  wireAuthLinks();
+
+  // Dedicated auth pages: skip the marketing stub and open the app directly.
+  var authPage = page.replace(/^\.\//, '');
+  var signinTarget = authUrl('signin');
+  var signupTarget = authUrl('signup');
+  if (signinTarget && authPage === 'signin.html') {
+    location.replace(signinTarget);
+    return;
+  }
+  if (signupTarget && authPage === 'signup.html') {
+    location.replace(signupTarget);
+    return;
+  }
+
+  // Auth forms on signin/signup pages (shown only when no app origin is set).
+  function stubForm(formId, statusId, text, appHref) {
     var form = document.getElementById(formId);
     if (!form) return;
     form.addEventListener('submit', function (event) {
       event.preventDefault();
-      if (devHref && (location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
-        location.href = devHref;
+      if (appHref) {
+        location.href = appHref;
         return;
       }
       var status = document.getElementById(statusId);
@@ -170,10 +212,10 @@
   }
   stubForm('signin-form', 'signin-status',
     "We're onboarding organizations personally during early access — your team's workspace link gets you in.",
-    'http://localhost:5174/login');
+    signinTarget);
   stubForm('signup-form', 'signup-status',
     "We're onboarding organizations personally during early access — reach out via the contact page and yours will be ready today.",
-    'http://localhost:5174/onboarding');
+    signupTarget);
   stubForm('investors-form', 'investors-status',
     'Access keys are issued personally — use Request access and we will be in touch.');
 
