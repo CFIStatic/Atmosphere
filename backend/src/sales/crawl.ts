@@ -55,15 +55,15 @@ function demoContacts(businessName: string): DiscoveredContact[] {
   return [
     {
       fullName: `Alex Rivera`,
-      title: 'General Manager',
+      title: 'Director of Operations',
       email: `alex.rivera@${slugDomain(businessName)}.example`,
       phone: null,
       linkedinUrl: null,
       isDecisionMaker: true,
-      researchSummary: `Leads day-to-day operations at ${short}. Likely owns vendor and facilities decisions.`,
+      researchSummary: `Leads ops at ${short}. Likely evaluates estimating, field tech, and carrier-portal tooling for Atmosphere demos.`,
       personalizationHooks: [
         `Runs operations at ${short}`,
-        'Decision-maker for vendor partnerships',
+        'Decision-maker for restoration software and workflows',
       ],
     },
     {
@@ -73,8 +73,8 @@ function demoContacts(businessName: string): DiscoveredContact[] {
       phone: null,
       linkedinUrl: null,
       isDecisionMaker: true,
-      researchSummary: `Owner-operator profile for ${short}. Final say on capital and service contracts.`,
-      personalizationHooks: [`Owner of ${short}`, 'Approves new service partnerships'],
+      researchSummary: `Owner-operator at ${short}. Final say on buying Atmosphere for estimating and field teams.`,
+      personalizationHooks: [`Owner of ${short}`, 'Approves new software for the restoration shop'],
     },
   ];
 }
@@ -107,7 +107,7 @@ async function fetchPageText(url: string): Promise<string> {
     } catch {
       const res = await fetch(url, {
         headers: {
-          'User-Agent': 'AtmosphereSalesAgent/1.0',
+          'User-Agent': 'AtmosphereOutreach/1.0',
           Accept: 'text/html',
         },
         signal: AbortSignal.timeout(15_000),

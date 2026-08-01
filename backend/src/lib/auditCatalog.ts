@@ -71,9 +71,9 @@ export const AGENT_CATALOG: AgentDefinition[] = [
   },
   {
     key: 'sales_agent',
-    name: 'Sales Agent',
+    name: 'Atmosphere Outreach',
     blurb:
-      'Researches businesses in a territory, finds decision-makers, runs personalised outreach, and books in-person meetings.',
+      'Internal GTM pipeline: researches restoration/construction buyers, finds decision-makers, runs Atmosphere product outreach, and books demos so sales can close.',
     accent: 'brand',
     intake: 'ledger',
   },

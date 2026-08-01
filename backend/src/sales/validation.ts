@@ -49,7 +49,7 @@ export const peopleSearchSchema = z.object({
   query: z
     .string()
     .trim()
-    .min(3, 'Enter a search — e.g. director of facilities at ABC Supply in Milwaukee')
+    .min(3, 'Enter a search — e.g. owner of a water mitigation company in Dallas')
     .max(1000),
 });
 

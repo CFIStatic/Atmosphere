@@ -616,7 +616,7 @@ async function llmRerank(
       messages: [
         {
           role: 'user',
-          content: `You are a B2B research analyst. From the crawled pages, identify people who best match this query.
+          content: `You are a B2B research analyst helping Atmosphere's internal sales team find decision-makers at restoration and construction companies. From the crawled pages, identify people who best match this query.
 
 Query: ${query.raw}
 Role: ${query.role || 'n/a'}

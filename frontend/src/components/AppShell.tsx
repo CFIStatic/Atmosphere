@@ -28,7 +28,7 @@ type IconComp = ComponentType<SVGProps<SVGSVGElement>>;
 
 const NAV: Array<{ to: string; label: string; Icon: IconComp }> = [
   { to: '/dashboard', label: 'Dashboard', Icon: HomeIcon },
-  { to: '/sales', label: 'Sales Agent', Icon: SparkIcon },
+  { to: '/sales', label: 'Outreach', Icon: SparkIcon },
   { to: '/jobs', label: 'Jobs', Icon: BriefcaseIcon },
   { to: '/memory', label: 'Memory', Icon: HistoryIcon },
   { to: '/team', label: 'Team', Icon: UsersIcon },

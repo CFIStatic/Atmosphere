@@ -672,7 +672,7 @@ export type RunEvent = { seq: number; at: string } & (
 export type RunStreamMessage = RunEvent | { type: 'summary'; run: ComputerRun };
 
 /* ------------------------------------------------------------------ */
-/* Sales Agent                                                         */
+/* Atmosphere Outreach (internal GTM)                                   */
 /* ------------------------------------------------------------------ */
 
 export type SalesCampaignStatus =
@@ -1786,7 +1786,7 @@ export const api = {
   runEventsUrl: (runId: string, after = 0) =>
     `${API_BASE}/api/computer/runs/${encodeURIComponent(runId)}/events?after=${after}`,
 
-  // ---- Sales Agent ----
+  // ---- Atmosphere Outreach (internal) ----
   salesStatus: () => request<{ status: SalesStatus }>('/api/sales/status', { method: 'GET' }),
 
   listSalesCampaigns: () =>

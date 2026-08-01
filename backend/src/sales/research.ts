@@ -1,17 +1,24 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../config.js';
+import {
+  ATMOSPHERE_PRODUCT_BLURB,
+  ATMOSPHERE_PRODUCT_NAME,
+  DEFAULT_SALES_FOCUS,
+  ICP_BUYER_TITLES,
+} from './atmosphereProduct.js';
 import type { DiscoveredBusiness } from './types.js';
 
 /**
- * Territory research for the Sales Agent.
+ * Territory research for Atmosphere's internal outreach pipeline.
  *
- * 1. Geocode the territory with OpenStreetMap Nominatim.
- * 2. Query Overpass for amenity/shop nodes that match the sales focus.
+ * Finds restoration and construction companies (our buyers) in a territory:
+ * 1. Geocode with OpenStreetMap Nominatim.
+ * 2. Query Overpass for amenity/shop/office nodes matching the ICP focus.
  * 3. Optionally ask Claude to refine / fill gaps when an API key is present.
- * 4. Fall back to a deterministic demo set so the pipeline is always exercisable.
+ * 4. Fall back to a deterministic demo set of restoration/GC prospects.
  */
 
-const USER_AGENT = 'AtmosphereSalesAgent/1.0 (outbound research; contact support@atmosphere.app)';
+const USER_AGENT = 'AtmosphereOutreach/1.0 (internal GTM; contact support@atmosphere.app)';
 
 interface GeoPoint {
   lat: number;
@@ -30,20 +37,25 @@ function focusTokens(salesFocus: string): string[] {
     .filter((t) => t.length > 2);
 }
 
-/** Map common sales-focus phrases onto Overpass amenity/shop tags. */
+/** Map ICP / sales-focus phrases onto Overpass amenity/shop tags. */
 function overpassFilters(salesFocus: string): string[] {
   const text = salesFocus.toLowerCase();
   const filters: string[] = [];
 
   const rules: Array<[RegExp, string[]]> = [
+    // Atmosphere's primary buyers — restoration & construction
+    [
+      /restor|mitigat|water\s*damage|flood|mold|fire\s*restor|remediat|iicrc|disaster/,
+      ['"office"="construction_company"', '"craft"="carpenter"', '"shop"="trade"', '"office"'],
+    ],
+    [/construction|contractor|builder|gc\b|rebuild|remodel/, ['"office"="construction_company"', '"craft"="carpenter"']],
+    [/insurance|carrier|adjuster/, ['"office"="insurance"']],
     [/propert(?:y|ies)|apartment|condo|multifamily|landlord/, ['"building"="apartments"', '"office"="property_management"', '"office"="estate_agent"']],
     [/restaurant|food|dining|hospitality/, ['"amenity"="restaurant"', '"amenity"="cafe"', '"amenity"="fast_food"']],
     [/hotel|lodging/, ['"tourism"="hotel"', '"tourism"="motel"']],
     [/dental|dentist/, ['"amenity"="dentist"']],
     [/medical|clinic|doctor|physician|health/, ['"amenity"="clinic"', '"amenity"="doctors"', '"amenity"="hospital"']],
     [/law|attorney|legal/, ['"office"="lawyer"']],
-    [/insurance|carrier|adjuster/, ['"office"="insurance"']],
-    [/construction|contractor|builder|gc\b/, ['"office"="construction_company"', '"craft"="carpenter"']],
     [/retail|store|shop/, ['"shop"']],
     [/gym|fitness/, ['"leisure"="fitness_centre"', '"leisure"="sports_centre"']],
     [/school|education/, ['"amenity"="school"', '"amenity"="college"']],
@@ -55,8 +67,9 @@ function overpassFilters(salesFocus: string): string[] {
     if (re.test(text)) filters.push(...tags);
   }
 
+  // Default Atmosphere ICP: construction / trade offices near the territory.
   if (filters.length === 0) {
-    filters.push('"office"', '"shop"', '"amenity"="restaurant"');
+    filters.push('"office"="construction_company"', '"craft"="carpenter"', '"office"', '"shop"="trade"');
   }
 
   return [...new Set(filters)].slice(0, 6);
@@ -178,45 +191,47 @@ function normalizeUrl(raw: string): string {
 
 function demoBusinesses(territory: string, salesFocus: string): DiscoveredBusiness[] {
   const city = territory.split(',')[0]?.trim() || territory;
-  const focus = salesFocus.trim();
+  const focus = salesFocus.trim() || DEFAULT_SALES_FOCUS;
   const seeds = [
     {
-      name: `${city} Premier Properties`,
-      category: 'Property management',
-      website: `https://example.com/${slug(city)}-premier`,
-      titleHint: 'regional property groups',
+      name: `${city} Water Mitigation Pros`,
+      category: 'Water mitigation / restoration',
+      website: `https://example.com/${slug(city)}-water-mitigation`,
+      titleHint: 'mitigation owners and ops leads',
     },
     {
-      name: `${city} Harbor Hospitality Group`,
-      category: 'Hospitality',
-      website: `https://example.com/${slug(city)}-harbor`,
-      titleHint: 'multi-site operators',
+      name: `${city} Fire & Smoke Restoration`,
+      category: 'Fire restoration',
+      website: `https://example.com/${slug(city)}-fire-restoration`,
+      titleHint: 'fire restoration decision-makers',
     },
     {
-      name: `North ${city} Medical Partners`,
-      category: 'Healthcare',
-      website: `https://example.com/${slug(city)}-medical`,
-      titleHint: 'clinic networks',
+      name: `North ${city} Mold Remediation`,
+      category: 'Mold remediation',
+      website: `https://example.com/${slug(city)}-mold`,
+      titleHint: 'remediation shop owners',
     },
     {
-      name: `${city} Ridge Construction`,
-      category: 'General contractor',
-      website: `https://example.com/${slug(city)}-ridge`,
-      titleHint: 'commercial GCs',
+      name: `${city} Ridge Rebuild Construction`,
+      category: 'Rebuild general contractor',
+      website: `https://example.com/${slug(city)}-ridge-rebuild`,
+      titleHint: 'rebuild GCs after mitigation',
     },
     {
-      name: `Summit ${city} Retail Collective`,
-      category: 'Retail',
-      website: `https://example.com/${slug(city)}-summit`,
-      titleHint: 'multi-location retail',
+      name: `Summit ${city} Disaster Services`,
+      category: 'Disaster restoration',
+      website: `https://example.com/${slug(city)}-summit-disaster`,
+      titleHint: 'multi-crew restoration firms',
     },
     {
-      name: `${city} Lakeside Insurance Agency`,
-      category: 'Insurance',
-      website: `https://example.com/${slug(city)}-lakeside`,
-      titleHint: 'local agencies',
+      name: `${city} Lakeside Estimating Group`,
+      category: 'Restoration estimating',
+      website: `https://example.com/${slug(city)}-lakeside-estimating`,
+      titleHint: 'estimator managers and office leads',
     },
   ];
+
+  const buyerHint = ICP_BUYER_TITLES.slice(0, 4).join(', ');
 
   return seeds.map((seed, i) => ({
     name: seed.name,
@@ -232,7 +247,9 @@ function demoBusinesses(territory: string, salesFocus: string): DiscoveredBusine
     lng: null,
     source: 'demo' as const,
     sourceRef: `demo:${i + 1}`,
-    researchNotes: `Demo prospect for focus “${focus}” in ${territory}. Targets ${seed.titleHint}.`,
+    researchNotes:
+      `Demo Atmosphere buyer for focus “${focus}” in ${territory}. ` +
+      `Targets ${seed.titleHint} (${buyerHint}). Product: ${ATMOSPHERE_PRODUCT_NAME}.`,
   }));
 }
 
@@ -264,15 +281,19 @@ async function llmEnrich(
       messages: [
         {
           role: 'user',
-          content: `You help a B2B sales agent find real businesses to prospect.
+          content: `You help Atmosphere's internal sales team find restoration and construction companies to sell ${ATMOSPHERE_PRODUCT_NAME} to.
+
+Product we sell:
+${ATMOSPHERE_PRODUCT_BLURB}
 
 Territory: ${territory}
-Sales focus: ${salesFocus}
+ICP / sales focus: ${salesFocus}
 
 Already found:
 ${known || '(none)'}
 
-Suggest up to 8 ADDITIONAL plausible businesses in this territory matching the focus.
+Suggest up to 8 ADDITIONAL plausible restoration, mitigation, mold/fire, or rebuild GC businesses in this territory matching the focus.
+Prefer companies that would buy software for estimating, field techs, carrier portals, or ops.
 Return ONLY a JSON array of objects with keys:
 name, category, address, city, websiteUrl, researchNotes
 No markdown. websiteUrl may be null if unknown.`,

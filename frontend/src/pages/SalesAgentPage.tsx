@@ -39,10 +39,10 @@ const ACTIVE: SalesCampaignStatus[] = [
 ];
 
 const SEARCH_EXAMPLES = [
-  'director of facilities at ABC Supply in Milwaukee',
-  'CEO of ABC Supply',
-  'Fleet & Facilities at ABC Supply',
-  'property manager at Greystar in Austin',
+  'owner of a water mitigation company in Dallas',
+  'CEO of a restoration contractor in Phoenix',
+  'VP of operations at a fire restoration company in Houston',
+  'general manager at a mold remediation firm in Tampa',
 ];
 
 function errorMessage(err: unknown): string {
@@ -72,11 +72,13 @@ function confidenceTone(value: number): string {
 }
 
 /**
- * Sales Agent workspace.
+ * Atmosphere internal outreach workspace.
  *
  * Two modes share the left rail:
- *  - Find people — natural-language web research with sourced results
- *  - Campaigns — territory outbound pipeline
+ *  - Find people — natural-language web research for restoration/construction buyers
+ *  - Campaigns — territory outbound pipeline that pitches Atmosphere and books demos
+ *
+ * Built so Atmosphere salespeople automate outreach and spend the day closing.
  */
 export function SalesAgentPage() {
   const { id: routeId } = useParams<{ id?: string }>();
@@ -89,7 +91,7 @@ export function SalesAgentPage() {
 
   // People search
   const [searchQuery, setSearchQuery] = useState(
-    'find me the director of facilities at ABC Supply company in Milwaukee',
+    'owner of a water mitigation company in Dallas',
   );
   const [searchResult, setSearchResult] = useState<PeopleSearchRecord | null>(null);
   const [searchHistory, setSearchHistory] = useState<PeopleSearchRecord[]>([]);
@@ -107,9 +109,13 @@ export function SalesAgentPage() {
   const [events, setEvents] = useState<SalesEvent[]>([]);
   const [tab, setTab] = useState<Tab>('businesses');
   const [territory, setTerritory] = useState('');
-  const [salesFocus, setSalesFocus] = useState('');
-  const [valueProp, setValueProp] = useState('');
-  const [senderName, setSenderName] = useState('');
+  const [salesFocus, setSalesFocus] = useState(
+    'Restoration & construction companies — mitigation, water/fire/mold, rebuild GCs',
+  );
+  const [valueProp, setValueProp] = useState(
+    'Atmosphere helps restoration and construction teams estimate faster, operate carrier and supplier portals with AI, run field tech workflows, and keep a full audit trail — so your people spend time closing and delivering work, not fighting software.',
+  );
+  const [senderName, setSenderName] = useState('Atmosphere Sales');
   const [senderEmail, setSenderEmail] = useState('');
 
   const loadCampaigns = useCallback(async () => {
@@ -271,7 +277,7 @@ export function SalesAgentPage() {
     try {
       await api.replySalesOutreach(
         message.id,
-        `Hi — thanks for reaching out. I'd be interested in an in-person meeting next week if you have availability.`,
+        `Hi — thanks for reaching out. I'd be interested in an Atmosphere product demo next week if you have availability.`,
       );
       if (selectedId) await loadDetail(selectedId);
     } catch (err) {
@@ -286,7 +292,7 @@ export function SalesAgentPage() {
       { label: 'Businesses', value: campaign?.businessesFound ?? businesses.length, Icon: BuildingIcon },
       { label: 'Contacts', value: campaign?.contactsFound ?? contacts.length, Icon: UsersIcon },
       { label: 'Emails', value: campaign?.emailsSent ?? 0, Icon: MessageIcon },
-      { label: 'Meetings', value: campaign?.meetingsBooked ?? meetings.length, Icon: CheckIcon },
+      { label: 'Demos', value: campaign?.meetingsBooked ?? meetings.length, Icon: CheckIcon },
     ],
     [campaign, businesses.length, contacts.length, meetings.length],
   );
@@ -298,7 +304,10 @@ export function SalesAgentPage() {
           <div className="rounded-xl border border-line bg-paper-0 p-5 shadow-card animate-fade-in-up">
             <div className="mb-3 flex items-center gap-2 text-brand-700">
               <SparkIcon width={18} height={18} />
-              <h2 className="text-sm font-semibold tracking-tight">Sales Agent</h2>
+              <h2 className="text-sm font-semibold tracking-tight">Outreach</h2>
+              <span className="rounded-md border border-brand-200 bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-700">
+                Internal
+              </span>
             </div>
 
             <div className="mb-4 grid grid-cols-2 gap-1 rounded-lg bg-paper-100 p-1">
@@ -325,8 +334,8 @@ export function SalesAgentPage() {
             {mode === 'find' ? (
               <>
                 <p className="mb-3 text-sm text-ink-600">
-                  Ask in plain English. I search the live web, crawl company and profile pages, and
-                  show sourced decision-maker intel.
+                  Find owners and ops leads at restoration and construction companies. I search the
+                  live web, crawl company pages, and return sourced buyer intel for Atmosphere demos.
                 </p>
                 <form onSubmit={handlePeopleSearch} className="space-y-3">
                   <label className="block">
@@ -336,7 +345,7 @@ export function SalesAgentPage() {
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       rows={4}
-                      placeholder="director of facilities at ABC Supply in Milwaukee"
+                      placeholder="owner of a water mitigation company in Dallas"
                       className="w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none ring-brand-500 focus:ring-2"
                     />
                   </label>
@@ -370,8 +379,8 @@ export function SalesAgentPage() {
             ) : (
               <>
                 <p className="mb-4 text-sm text-ink-600">
-                  Name a territory and sales focus. I research businesses, find decision-makers,
-                  email them, and book meetings when they reply.
+                  Pick a territory. I find restoration and construction buyers, pitch Atmosphere,
+                  follow up, and book product demos so you can spend the day closing.
                 </p>
                 <form onSubmit={handleCreate} className="space-y-3">
                   <label className="block">
@@ -380,27 +389,27 @@ export function SalesAgentPage() {
                       required
                       value={territory}
                       onChange={(e) => setTerritory(e.target.value)}
-                      placeholder="Austin, TX · Downtown Dallas · 78701"
+                      placeholder="Austin, TX · Dallas metro · Houston"
                       className="w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none ring-brand-500 focus:ring-2"
                     />
                   </label>
                   <label className="block">
-                    <span className="mb-1 block text-xs font-medium text-ink-500">Sales focus</span>
+                    <span className="mb-1 block text-xs font-medium text-ink-500">Buyer ICP</span>
                     <input
                       required
                       value={salesFocus}
                       onChange={(e) => setSalesFocus(e.target.value)}
-                      placeholder="Property managers · Dental clinics · GCs"
+                      placeholder="Water mitigation · Fire restoration · Rebuild GCs"
                       className="w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none ring-brand-500 focus:ring-2"
                     />
                   </label>
                   <label className="block">
-                    <span className="mb-1 block text-xs font-medium text-ink-500">Value proposition</span>
+                    <span className="mb-1 block text-xs font-medium text-ink-500">Atmosphere pitch</span>
                     <textarea
                       value={valueProp}
                       onChange={(e) => setValueProp(e.target.value)}
-                      rows={2}
-                      placeholder="Optional — what you want them to know"
+                      rows={3}
+                      placeholder="What we tell them about Atmosphere"
                       className="w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none ring-brand-500 focus:ring-2"
                     />
                   </label>
@@ -433,7 +442,7 @@ export function SalesAgentPage() {
                     ) : (
                       <PlusIcon width={16} height={16} />
                     )}
-                    Start prospecting
+                    Start outreach
                   </button>
                 </form>
               </>
@@ -515,7 +524,7 @@ export function SalesAgentPage() {
                       >
                         <span className="block truncate text-sm font-medium">{c.name}</span>
                         <span className="mt-0.5 block truncate text-xs text-ink-500">
-                          {SALES_STATUS_LABELS[c.status]} · {c.meetingsBooked} meetings
+                          {SALES_STATUS_LABELS[c.status]} · {c.meetingsBooked} demos
                         </span>
                       </button>
                     </li>
@@ -534,13 +543,13 @@ export function SalesAgentPage() {
           ) : !campaign ? (
             <EmptyState
               title="Pick a campaign or start a new one"
-              hint="Or switch to Find people to look up a specific decision-maker on the live web."
+              hint="Or switch to Find people to look up a restoration/construction decision-maker for an Atmosphere demo."
             />
           ) : (
             <>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-medium text-brand-600">Sales Agent</p>
+                  <p className="text-sm font-medium text-brand-600">Atmosphere Outreach</p>
                   <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink-900">{campaign.name}</h1>
                   <p className="mt-1 text-sm text-ink-600">
                     {campaign.territory} · {campaign.salesFocus}
@@ -600,7 +609,7 @@ export function SalesAgentPage() {
                     ['businesses', `Businesses (${businesses.length})`],
                     ['contacts', `Contacts (${contacts.length})`],
                     ['outreach', `Outreach (${outreach.length})`],
-                    ['meetings', `Meetings (${meetings.length})`],
+                    ['meetings', `Demos (${meetings.length})`],
                     ['events', 'Activity'],
                   ] as Array<[Tab, string]>
                 ).map(([key, label]) => (
@@ -951,7 +960,7 @@ function OutreachList({
   onSimulateReply: (m: SalesOutreach) => void;
 }) {
   if (!outreach.length) {
-    return <EmptyState title="No emails yet" hint="Personalised outreach appears here as it sends." />;
+    return <EmptyState title="No emails yet" hint="Atmosphere product outreach appears here as it sends." />;
   }
   return (
     <ul className="space-y-3">
@@ -985,8 +994,8 @@ function MeetingList({ meetings }: { meetings: SalesMeeting[] }) {
   if (!meetings.length) {
     return (
       <EmptyState
-        title="No meetings booked yet"
-        hint="When a contact replies positively, the agent schedules autonomously."
+        title="No demos booked yet"
+        hint="When a buyer replies positively, the agent books an Atmosphere product demo so you can close."
       />
     );
   }
@@ -999,7 +1008,7 @@ function MeetingList({ meetings }: { meetings: SalesMeeting[] }) {
             {new Date(m.startsAt).toLocaleString()} – {new Date(m.endsAt).toLocaleTimeString()}
           </p>
           <p className="text-sm text-ink-500">
-            {m.location || 'In person'} · {m.status} · booked by {m.bookedBy}
+            {m.location || 'Video demo'} · {m.status} · booked by {m.bookedBy}
           </p>
         </li>
       ))}
