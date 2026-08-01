@@ -1,8 +1,9 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
+import { catalog } from '../ai/catalog.js';
 import { configuredProviders } from '../ai/providers/index.js';
-import { executeTask, TaskExecutionError, TaskInputError } from '../ai/executor.js';
+import { executeTask, previewRoute, TaskExecutionError, TaskInputError } from '../ai/executor.js';
 import { posteriorMean } from '../ai/policy.js';
 import { computeReward, dispositionFromEdit, editRatio as computeEditRatio } from '../ai/reward.js';
 import { getCallerOrgId, getRun, resolveRun } from '../ai/store.js';
@@ -85,6 +86,60 @@ aiRouter.get('/tasks', (_req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/ai/providers
+ * Which LLM APIs are configured right now, and the models the router can send
+ * work to. An unset API key simply drops that vendor from the pool.
+ */
+aiRouter.get('/providers', (_req: Request, res: Response) => {
+  const configured = new Set(configuredProviders());
+  res.json({
+    providers: (['openai', 'anthropic', 'google', 'xai', 'oss'] as const).map((id) => ({
+      id,
+      configured: configured.has(id),
+      models: catalog
+        .filter((entry) => entry.provider === id)
+        .map((entry) => ({
+          key: entry.key,
+          model: entry.model,
+          tier: entry.tier,
+          contextWindow: entry.contextWindow,
+        })),
+    })),
+  });
+});
+
+/**
+ * POST /api/ai/tasks/:taskType/route
+ * Assess complexity and preview which provider/model would run — without
+ * calling any LLM. Useful for operators and for clients that want to show the
+ * routing decision before spending tokens.
+ */
+aiRouter.post('/tasks/:taskType/route', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const taskType = taskTypeSchema.parse(req.params.taskType) as TaskType;
+    const { input, workType } = runSchema.parse(req.body);
+    const { supabase, orgId } = await requireOrgId(req);
+
+    const preview = await previewRoute({
+      supabase,
+      orgId,
+      userId: req.user!.id,
+      taskType,
+      input,
+      workType,
+    });
+
+    res.json(preview);
+  } catch (err) {
+    if (err instanceof TaskInputError) {
+      next(new HttpError(400, err.message, 'invalid_task_input'));
+      return;
+    }
+    next(err);
+  }
+});
+
+/**
  * POST /api/ai/tasks/:taskType/run
  * Execute a unit of work. The response carries `runId` — the client must send
  * it back with feedback, which is what closes the learning loop.
@@ -115,10 +170,12 @@ aiRouter.post('/tasks/:taskType/run', runLimiter, async (req: Request, res: Resp
         model: result.arm.model,
         promptVariant: result.arm.promptVariant,
         explored: result.explored,
+        selectionReason: result.selectionReason,
         verifierScore: Number(result.verifier.score.toFixed(3)),
         costUsd: Number(result.costUsd.toFixed(6)),
         latencyMs: result.latencyMs,
       },
+      assessment: result.assessment,
     });
   } catch (err) {
     if (err instanceof TaskInputError) {

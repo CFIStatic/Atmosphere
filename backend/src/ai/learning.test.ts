@@ -163,6 +163,22 @@ describe('policy: context hierarchy', () => {
     assert.equal(primaryContextKey({ taskType: 'draft_scope', orgId: 'o', userId: 'u' }), 'draft_scope');
   });
 
+  it('prefers complexity over size when both are present', () => {
+    const keys = contextKeys({
+      taskType: 'estimate_line_items',
+      orgId: 'o',
+      userId: 'u',
+      workType: 'construction',
+      sizeBucket: 'large',
+      complexity: 'complex',
+    });
+    assert.deepEqual(keys, [
+      'estimate_line_items:construction:complex',
+      'estimate_line_items:construction',
+      'estimate_line_items',
+    ]);
+  });
+
   it('degrades gracefully when workType is unknown', () => {
     const keys = contextKeys({ taskType: 'draft_scope', orgId: 'o', userId: 'u', sizeBucket: 'small' });
     assert.deepEqual(keys, ['draft_scope:small', 'draft_scope']);

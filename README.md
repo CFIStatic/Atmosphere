@@ -215,10 +215,11 @@ Atmosphere/
 │   │   │   ├── backup/           Archive format, storage drivers, runner, scheduler
 │   │   │   └── integrations/     Connectors + the append-only external mirror
 │   │   ├── ai/                   Learning layer — see docs/reinforcement-learning.md
+│   │   │   ├── assessor.ts       Pre-execution complexity → model-tier preference
 │   │   │   ├── policy.ts         Thompson sampling + hierarchical context backoff
 │   │   │   ├── reward.ts         The definition of "executed correctly"
 │   │   │   ├── verifiers.ts      Deterministic checks + the serving gate
-│   │   │   ├── executor.ts       route → execute → verify → record, with failover
+│   │   │   ├── executor.ts       assess → route → execute → verify → record, with failover
 │   │   │   ├── learn.ts          Promotion gate, exemplar mining, training export
 │   │   │   └── providers/        OpenAI · Anthropic · Google · xAI · open weights
 │   │   ├── middleware/
@@ -501,6 +502,8 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | GET    | `/api/verifier/escalations` | cookie | `?status=all` optional | Questions waiting on a person                |
 | POST   | `/api/verifier/escalations/:id/resolve` | cookie | `{ optionId, note? }` | Answer one              |
 | GET    | `/api/ai/tasks`      | cookie | —                             | Task catalog and how each one is judged      |
+| GET    | `/api/ai/providers`  | cookie | —                             | Configured LLM APIs and routable models      |
+| POST   | `/api/ai/tasks/:type/route` | cookie | `{ input, workType? }` | Assess complexity; preview provider/model    |
 | POST   | `/api/ai/tasks/:type/run` | cookie | `{ input, workType? }`   | Execute a task; returns `runId`              |
 | POST   | `/api/ai/runs/:id/feedback` | cookie | `{ disposition? , editedOutput? }` | Close the learning loop         |
 | GET    | `/api/ai/policy`     | cookie | —                             | Every arm, its posterior, cost and status    |
@@ -1423,6 +1426,13 @@ specialisation becomes discoverable per task type, cheap arms can win the work t
 not need a frontier model, and a price rise or deprecation is just an arm's posterior
 moving rather than a migration project. Every API key is optional: an unset key removes
 that vendor's arms and nothing else changes.
+
+**Before any model is called, the work is assessed for complexity** (`assessor.ts`).
+Simple jobs (a moisture reading, a short note summary) prefer fast/cheap models; complex
+jobs (priced estimates, long-document extraction) prefer the latest frontier models
+across OpenAI, Anthropic, Gemini and Grok. That assessment is the cold-start prior — once
+the bandit has evidence, learned posteriors take over. `POST /api/ai/tasks/:type/route`
+previews the decision without spending tokens.
 
 Quality is **monotone by construction**:
 
