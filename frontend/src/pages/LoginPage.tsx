@@ -28,7 +28,6 @@ export function LoginPage() {
   const [notice, setNotice] = useState<string | null>(null);
 
   // --- PIN unlock -----------------------------------------------------------
-  const [pinChecked, setPinChecked] = useState(false);
   const [pinEnrolled, setPinEnrolled] = useState(false);
   const [showPin, setShowPin] = useState(false);
   const [pin, setPin] = useState('');
@@ -55,9 +54,6 @@ export function LoginPage() {
       })
       .catch(() => {
         /* PIN is an optional convenience — fall back to the password form. */
-      })
-      .finally(() => {
-        if (!cancelled) setPinChecked(true);
       });
     return () => {
       cancelled = true;
@@ -156,17 +152,58 @@ export function LoginPage() {
       <main className="flex flex-1 items-center justify-center px-4 pb-16">
         <div className="w-full max-w-md animate-fade-in-up">
           <div className="rounded-2xl border border-line bg-paper-0 shadow-lift p-8 shadow-2xl shadow-lift-xl sm:p-10">
-            {!pinChecked ? (
-              <div className="grid place-items-center py-16 text-brand-600">
-                <SpinnerIcon className="animate-spin" width={26} height={26} />
-                <span className="sr-only">Loading…</span>
-              </div>
+            {showPin ? (
+              <>
+                <h1 className="text-2xl font-bold tracking-tight text-ink-900">{title}</h1>
+                <p className="mt-1.5 text-sm text-ink-600">{subtitle}</p>
+
+                {pinError && (
+                  <div
+                    role="alert"
+                    className="mt-6 rounded-lg border border-danger-200 bg-danger-50 px-3.5 py-3 text-center text-sm text-danger-700"
+                  >
+                    {pinError}
+                  </div>
+                )}
+
+                <div className="mt-8">
+                  <PinPad
+                    value={pin}
+                    onChange={setPin}
+                    onComplete={handlePinComplete}
+                    disabled={pinSubmitting}
+                    shake={pinShake}
+                    autoFocus
+                  />
+                </div>
+
+                <div className="mt-6 flex min-h-[1.5rem] items-center justify-center">
+                  {pinSubmitting && (
+                    <span className="flex items-center gap-2 text-sm text-brand-600">
+                      <SpinnerIcon className="animate-spin" width={16} height={16} />
+                      Signing in…
+                    </span>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPin(false);
+                    setPin('');
+                    setPinError(null);
+                  }}
+                  className="mt-2 w-full rounded-lg border border-line bg-paper-0 px-4 py-2.5 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
+                >
+                  Use password instead
+                </button>
+              </>
             ) : (
               <>
                 <h1 className="text-2xl font-bold tracking-tight text-ink-900">{title}</h1>
                 <p className="mt-1.5 text-sm text-ink-600">{subtitle}</p>
 
-                {notice && !showPin && (
+                {notice && (
                   <div
                     role="status"
                     className="mt-6 flex items-start gap-2 rounded-lg border border-success-200 bg-success-50 px-3.5 py-3 text-sm text-success-600"
@@ -176,61 +213,16 @@ export function LoginPage() {
                   </div>
                 )}
 
-                {showPin ? (
-                  <>
-                    {pinError && (
-                      <div
-                        role="alert"
-                        className="mt-6 rounded-lg border border-danger-200 bg-danger-50 px-3.5 py-3 text-center text-sm text-danger-700"
-                      >
-                        {pinError}
-                      </div>
-                    )}
+                {error && (
+                  <div
+                    role="alert"
+                    className="mt-6 rounded-lg border border-danger-200 bg-danger-50 px-3.5 py-3 text-sm text-danger-700"
+                  >
+                    {error}
+                  </div>
+                )}
 
-                    <div className="mt-8">
-                      <PinPad
-                        value={pin}
-                        onChange={setPin}
-                        onComplete={handlePinComplete}
-                        disabled={pinSubmitting}
-                        shake={pinShake}
-                        autoFocus
-                      />
-                    </div>
-
-                    <div className="mt-6 flex min-h-[1.5rem] items-center justify-center">
-                      {pinSubmitting && (
-                        <span className="flex items-center gap-2 text-sm text-brand-600">
-                          <SpinnerIcon className="animate-spin" width={16} height={16} />
-                          Signing in…
-                        </span>
-                      )}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowPin(false);
-                        setPin('');
-                        setPinError(null);
-                      }}
-                      className="mt-2 w-full rounded-lg border border-line bg-paper-0 px-4 py-2.5 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
-                    >
-                      Use password instead
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    {error && (
-                      <div
-                        role="alert"
-                        className="mt-6 rounded-lg border border-danger-200 bg-danger-50 px-3.5 py-3 text-sm text-danger-700"
-                      >
-                        {error}
-                      </div>
-                    )}
-
-                    <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-4">
+                <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-4">
                       <div>
                         <label
                           htmlFor="email"
@@ -343,8 +335,6 @@ export function LoginPage() {
                         {isLogin ? 'Create one' : 'Sign in'}
                       </button>
                     </p>
-                  </>
-                )}
               </>
             )}
           </div>

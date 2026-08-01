@@ -1,39 +1,92 @@
+import { lazy, Suspense, type ReactNode } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import type { ReactNode } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { LoginPage } from './pages/LoginPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
-import { DashboardPage } from './pages/DashboardPage';
-import {
-  InternalAnalyticsRoute,
-  InvestorAnalyticsRoute,
-} from './pages/analytics/AnalyticsRoutes';
-import { SettingsPage } from './pages/SettingsPage';
-import { AuditPage } from './pages/AuditPage';
-import { JobsPage } from './pages/JobsPage';
-import { JobDetailPage } from './pages/JobDetailPage';
-import { MemoryPage } from './pages/MemoryPage';
-import { TeamMemoryPage } from './pages/TeamMemoryPage';
-import { TechnicianPage } from './pages/TechnicianPage';
-import { BillingPage } from './pages/BillingPage';
-import { UsagePage } from './pages/UsagePage';
-import { ProjectManagerPage } from './pages/ProjectManagerPage';
-import { PmProjectPage } from './pages/PmProjectPage';
-import { FinancePage } from './pages/FinancePage';
-import { FinanceSharePage } from './pages/FinanceSharePage';
-import { WebAccessPage } from './pages/WebAccessPage';
-import { ConnectorsPage } from './pages/ConnectorsPage';
-import { ComputerUsePage } from './pages/ComputerUsePage';
-import { EstimatorPage } from './pages/EstimatorPage';
-import { MitigationEstimatorPage } from './pages/MitigationEstimatorPage';
-import { SalesAgentPage } from './pages/SalesAgentPage';
-import { EmailMarketingPage } from './pages/EmailMarketingPage';
-import { IntegrationsPage } from './pages/IntegrationsPage';
-import { HomeownerReportPage } from './pages/HomeownerReportPage';
 import { SpinnerIcon } from './components/icons';
+
+// Auth and onboarding stay eager so /login is fast. Everything else loads on demand —
+// dev mode otherwise pulls in every page on the first visit.
+const DashboardPage = lazy(() =>
+  import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })),
+);
+const InternalAnalyticsRoute = lazy(() =>
+  import('./pages/analytics/AnalyticsRoutes').then((m) => ({
+    default: m.InternalAnalyticsRoute,
+  })),
+);
+const InvestorAnalyticsRoute = lazy(() =>
+  import('./pages/analytics/AnalyticsRoutes').then((m) => ({
+    default: m.InvestorAnalyticsRoute,
+  })),
+);
+const SettingsPage = lazy(() =>
+  import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })),
+);
+const AuditPage = lazy(() =>
+  import('./pages/AuditPage').then((m) => ({ default: m.AuditPage })),
+);
+const JobsPage = lazy(() => import('./pages/JobsPage').then((m) => ({ default: m.JobsPage })));
+const JobDetailPage = lazy(() =>
+  import('./pages/JobDetailPage').then((m) => ({ default: m.JobDetailPage })),
+);
+const MemoryPage = lazy(() =>
+  import('./pages/MemoryPage').then((m) => ({ default: m.MemoryPage })),
+);
+const TeamMemoryPage = lazy(() =>
+  import('./pages/TeamMemoryPage').then((m) => ({ default: m.TeamMemoryPage })),
+);
+const TechnicianPage = lazy(() =>
+  import('./pages/TechnicianPage').then((m) => ({ default: m.TechnicianPage })),
+);
+const BillingPage = lazy(() =>
+  import('./pages/BillingPage').then((m) => ({ default: m.BillingPage })),
+);
+const UsagePage = lazy(() => import('./pages/UsagePage').then((m) => ({ default: m.UsagePage })));
+const ProjectManagerPage = lazy(() =>
+  import('./pages/ProjectManagerPage').then((m) => ({ default: m.ProjectManagerPage })),
+);
+const PmProjectPage = lazy(() =>
+  import('./pages/PmProjectPage').then((m) => ({ default: m.PmProjectPage })),
+);
+const FinancePage = lazy(() =>
+  import('./pages/FinancePage').then((m) => ({ default: m.FinancePage })),
+);
+const FinanceSharePage = lazy(() =>
+  import('./pages/FinanceSharePage').then((m) => ({ default: m.FinanceSharePage })),
+);
+const WebAccessPage = lazy(() =>
+  import('./pages/WebAccessPage').then((m) => ({ default: m.WebAccessPage })),
+);
+const ConnectorsPage = lazy(() =>
+  import('./pages/ConnectorsPage').then((m) => ({ default: m.ConnectorsPage })),
+);
+const ComputerUsePage = lazy(() =>
+  import('./pages/ComputerUsePage').then((m) => ({ default: m.ComputerUsePage })),
+);
+const EstimatorPage = lazy(() =>
+  import('./pages/EstimatorPage').then((m) => ({ default: m.EstimatorPage })),
+);
+const MitigationEstimatorPage = lazy(() =>
+  import('./pages/MitigationEstimatorPage').then((m) => ({
+    default: m.MitigationEstimatorPage,
+  })),
+);
+const SalesAgentPage = lazy(() =>
+  import('./pages/SalesAgentPage').then((m) => ({ default: m.SalesAgentPage })),
+);
+const EmailMarketingPage = lazy(() =>
+  import('./pages/EmailMarketingPage').then((m) => ({ default: m.EmailMarketingPage })),
+);
+const IntegrationsPage = lazy(() =>
+  import('./pages/IntegrationsPage').then((m) => ({ default: m.IntegrationsPage })),
+);
+const HomeownerReportPage = lazy(() =>
+  import('./pages/HomeownerReportPage').then((m) => ({ default: m.HomeownerReportPage })),
+);
 
 function FullScreenSpinner() {
   return (
@@ -68,7 +121,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
+        <Suspense fallback={<FullScreenSpinner />}>
+          <Routes>
           <Route path="/login" element={<LoginPage />} />
 
           {/* Recovery routes stay outside ProtectedRoute: a locked-out user has
@@ -342,7 +396,8 @@ export default function App() {
 
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
+          </Routes>
+        </Suspense>
       </AuthProvider>
     </BrowserRouter>
   );
