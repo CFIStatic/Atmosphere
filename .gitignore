@@ -1,5 +1,5 @@
-# Dependencies
-node_modules/
+# Vite cache (website dev server)
+website/.vite/
 .pnp
 .pnp.js
 
