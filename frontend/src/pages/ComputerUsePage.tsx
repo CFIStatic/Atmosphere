@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import {
   ApiError,
   PLATFORM_LABELS,
@@ -12,7 +11,7 @@ import {
   type RunEvent,
   type RunStreamMessage,
 } from '../lib/api';
-import { Logo } from '../components/Logo';
+import { AppShell } from '../components/AppShell';
 import { CheckIcon, SpinnerIcon } from '../components/icons';
 
 /**
@@ -246,23 +245,8 @@ export function ComputerUsePage() {
     credentialConnected && !!selectedAgent && !selectedAgent.busy && instruction.trim().length > 0 && !isRunning;
 
   return (
-    <div className="cx-aurora min-h-screen bg-paper-100">
-      <header className="flex items-center justify-between border-b border-line px-6 py-4 sm:px-10">
-        <div className="flex items-center gap-4">
-          <Logo />
-          <span className="hidden rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700 sm:inline">
-            Computer Use
-          </span>
-        </div>
-        <Link
-          to="/dashboard"
-          className="rounded-lg glass-card px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
-        >
-          Back to dashboard
-        </Link>
-      </header>
-
-      <main className="mx-auto max-w-7xl px-6 py-8 sm:px-10">
+    <AppShell>
+      <main className="mx-auto max-w-7xl">
         {loadError && <Banner tone="error">{loadError}</Banner>}
 
         {status && !credentialConnected && (
@@ -339,7 +323,7 @@ export function ComputerUsePage() {
           </aside>
         </div>
       </main>
-    </div>
+    </AppShell>
   );
 }
 

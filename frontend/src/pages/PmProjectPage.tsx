@@ -8,7 +8,7 @@ import {
   type PmProjectDetail,
   type PmTask,
 } from '../lib/api';
-import { Logo } from '../components/Logo';
+import { AppShell, ErrorNote, PanelSpinner } from '../components/AppShell';
 import { SpinnerIcon, CheckIcon } from '../components/icons';
 import {
   Card,
@@ -95,9 +95,9 @@ export function PmProjectPage() {
 
   if (!data) {
     return (
-      <div className="cx-aurora grid min-h-screen place-items-center bg-paper-100 text-brand-600">
-        {error ? <p className="text-sm text-ink-600">{error}</p> : <SpinnerIcon className="animate-spin" width={28} height={28} />}
-      </div>
+      <AppShell>
+        {error ? <ErrorNote message={error} /> : <PanelSpinner label="Loading the project" />}
+      </AppShell>
     );
   }
 
@@ -106,25 +106,23 @@ export function PmProjectPage() {
   const doneTasks = data.tasks.filter((t) => t.status === 'done');
 
   return (
-    <div className="cx-aurora min-h-screen bg-paper-100">
-      <header className="flex items-center justify-between border-b border-line px-6 py-4 sm:px-10">
-        <div className="flex items-center gap-4">
-          <Logo />
-          <Link to="/pm" className="text-sm text-ink-600 transition hover:text-ink-900">
-            ← Board
-          </Link>
-        </div>
+    <AppShell>
+      {/* Back to the board, and the one action this screen owns. */}
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <Link to="/pm" className="text-sm text-ink-600 transition hover:text-ink-900">
+          ← Project board
+        </Link>
         <button
           onClick={() => void recheck()}
           disabled={busy}
-          className="flex items-center gap-2 rounded-lg glass-card px-3 py-2 text-sm text-ink-700 transition hover:bg-paper-100 disabled:opacity-60"
+          className="flex items-center gap-2 rounded-lg glass-card px-3 py-2 text-sm text-ink-700 transition hover:text-ink-900 disabled:opacity-60"
         >
           {busy && <SpinnerIcon className="animate-spin" width={16} height={16} />}
           Re-check
         </button>
-      </header>
+      </div>
 
-      <main className="mx-auto max-w-5xl px-6 py-8 sm:px-10">
+      <main className="mx-auto max-w-5xl">
         {error && (
           <div className="mb-6 rounded-lg glass-card px-4 py-3 text-sm text-ink-800">
             {error}
@@ -517,7 +515,7 @@ export function PmProjectPage() {
           )}
         </div>
       </main>
-    </div>
+    </AppShell>
   );
 }
 

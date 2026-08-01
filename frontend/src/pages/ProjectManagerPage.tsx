@@ -11,7 +11,7 @@ import {
   type PmOverview,
   type PmProjectSummary,
 } from '../lib/api';
-import { Logo } from '../components/Logo';
+import { AppShell, PanelSpinner } from '../components/AppShell';
 import { SpinnerIcon } from '../components/icons';
 import {
   Card,
@@ -133,38 +133,28 @@ export function ProjectManagerPage() {
 
   if (!data && !error) {
     return (
-      <div className="cx-aurora grid min-h-screen place-items-center bg-paper-100 text-brand-600">
-        <SpinnerIcon className="animate-spin" width={28} height={28} />
-      </div>
+      <AppShell>
+        <PanelSpinner label="Loading the project board" />
+      </AppShell>
     );
   }
 
   return (
-    <div className="cx-aurora min-h-screen bg-paper-100">
-      <header className="flex items-center justify-between border-b border-line px-6 py-4 sm:px-10">
-        <div className="flex items-center gap-4">
-          <Logo />
-          <span className="hidden text-sm text-ink-500 sm:inline">Project Manager</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link
-            to="/dashboard"
-            className="rounded-lg glass-card px-3 py-2 text-sm text-ink-700 transition hover:bg-paper-100"
-          >
-            Dashboard
-          </Link>
-          <button
-            onClick={() => void runEngine()}
-            disabled={running}
-            className="flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-ink-900 transition hover:bg-brand-500 disabled:opacity-60"
-          >
-            {running && <SpinnerIcon className="animate-spin" width={16} height={16} />}
-            {running ? 'Checking…' : 'Re-check everything'}
-          </button>
-        </div>
-      </header>
+    <AppShell>
+      {/* The one action that belongs to this screen keeps its place at the
+          top right; navigation belongs to the rail, not to a page header. */}
+      <div className="mb-2 flex justify-end">
+        <button
+          onClick={() => void runEngine()}
+          disabled={running}
+          className="flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-400 disabled:opacity-60"
+        >
+          {running && <SpinnerIcon className="animate-spin" width={16} height={16} />}
+          {running ? 'Checking…' : 'Re-check everything'}
+        </button>
+      </div>
 
-      <main className="mx-auto max-w-6xl px-6 py-8 sm:px-10">
+      <main className="mx-auto max-w-6xl">
         {error && (
           <div className="mb-6 rounded-lg glass-card px-4 py-3 text-sm text-ink-800">
             {error}
@@ -361,7 +351,7 @@ export function ProjectManagerPage() {
           )}
         </div>
       </main>
-    </div>
+    </AppShell>
   );
 }
 

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
 import {
   api,
   ApiError,
@@ -8,7 +7,7 @@ import {
   type WebRun,
   type WebRunKind,
 } from '../lib/api';
-import { Logo } from '../components/Logo';
+import { AppShell } from '../components/AppShell';
 import { VerificationPanel } from '../components/VerificationPanel';
 import { SpinnerIcon, CheckIcon } from '../components/icons';
 
@@ -500,18 +499,8 @@ export function WebAccessPage() {
     connections?.find((connection) => connection.id === id)?.label ?? 'Removed connection';
 
   return (
-    <div className="cx-aurora min-h-screen bg-paper-100">
-      <header className="flex items-center justify-between border-b border-line px-6 py-4 sm:px-10">
-        <Logo />
-        <Link
-          to="/dashboard"
-          className="rounded-lg glass-card px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
-        >
-          Back to dashboard
-        </Link>
-      </header>
-
-      <main className="mx-auto max-w-4xl px-6 py-10 sm:px-10">
+    <AppShell>
+      <main className="mx-auto max-w-4xl">
         <div className="animate-fade-in-up">
           <p className="text-sm font-medium text-brand-600">Web Access</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-ink-900">
@@ -741,6 +730,6 @@ export function WebAccessPage() {
           )}
         </div>
       </main>
-    </div>
+    </AppShell>
   );
 }
