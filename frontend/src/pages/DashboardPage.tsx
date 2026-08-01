@@ -336,6 +336,20 @@ export function DashboardPage() {
             </p>
           </Link>
 
+          <Link
+            to="/finance"
+            className="mt-4 block rounded-xl border border-line bg-paper-0 p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50"
+          >
+            <p className="text-xs font-medium uppercase tracking-wide text-brand-600">
+              Financial Agent
+            </p>
+            <p className="mt-1.5 text-lg font-semibold text-ink-900">Cash, AR, and job cost</p>
+            <p className="mt-1 max-w-lg text-sm text-ink-600">
+              A CFO desk for the CEO, CFO, and accountants — read-only into the bank and
+              QuickBooks, with job costing and the aging that needs a call today.
+            </p>
+          </Link>
+
           {/* The places you can go and work. Same card shape throughout, so none
               of them reads as the more important one. */}
           <div className="mt-4 grid gap-4 sm:grid-cols-2">

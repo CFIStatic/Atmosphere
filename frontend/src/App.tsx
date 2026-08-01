@@ -22,6 +22,8 @@ import { BillingPage } from './pages/BillingPage';
 import { UsagePage } from './pages/UsagePage';
 import { ProjectManagerPage } from './pages/ProjectManagerPage';
 import { PmProjectPage } from './pages/PmProjectPage';
+import { FinancePage } from './pages/FinancePage';
+import { FinanceSharePage } from './pages/FinanceSharePage';
 import { WebAccessPage } from './pages/WebAccessPage';
 import { ComputerUsePage } from './pages/ComputerUsePage';
 import { EstimatorPage } from './pages/EstimatorPage';
@@ -75,6 +77,8 @@ export default function App() {
 
           {/* Tokenized HomeOwner Report — no staff session required. */}
           <Route path="/report/:token" element={<HomeownerReportPage />} />
+          {/* Third-party financial dataroom — token in the URL is the credential. */}
+          <Route path="/share/finance/:token" element={<FinanceSharePage />} />
 
           <Route
             path="/onboarding"
@@ -184,6 +188,19 @@ export default function App() {
               <ProtectedRoute>
                 <RequireOnboarded>
                   <PmProjectPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Financial Agent — CEO / CFO / accountant cockpit. RLS decides who
+              may change connections and cost codes; every member can read. */}
+          <Route
+            path="/finance"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <FinancePage />
                 </RequireOnboarded>
               </ProtectedRoute>
             }

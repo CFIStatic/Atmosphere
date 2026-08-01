@@ -26,6 +26,7 @@ import { backupRouter } from './routes/backups.js';
 import { integrationsRouter } from './routes/integrations.js';
 import { computerRouter } from './routes/computer.js';
 import { estimatorRouter } from './routes/estimator.js';
+import { financeRouter } from './routes/finance.js';
 import { healthRouter } from './routes/health.js';
 import { mitigationRouter } from './routes/mitigation.js';
 import { xactimateRouter } from './routes/xactimate.js';
@@ -156,6 +157,7 @@ export function createApp(): Express {
   app.use('/api/pm', pmRouter);
   // HomeOwner Report: staff management + tokenized guest access.
   app.use('/api/portal', portalRouter);
+  app.use('/api/finance', financeRouter);
   app.use('/api/web-access', webAccessRouter);
   app.use('/api/verifier', verifierRouter);
   app.use('/api/crm', crmRouter);

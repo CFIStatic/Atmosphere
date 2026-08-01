@@ -40,6 +40,7 @@ export type UsageIntent =
   | 'web_access'
   | 'field_work'
   | 'billing'
+  | 'financial'
   | 'exploring';
 
 export interface Org {
@@ -1391,7 +1392,98 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
-  // ---- HomeOwner Report portal (staff) ----
+  // ---- Financial Agent ----
+  financeOverview: () => request<FinanceOverview>('/api/finance/overview', { method: 'GET' }),
+
+  financeRun: (jobId?: string) =>
+    request<{ result: FinanceEngineResult }>('/api/finance/run', {
+      method: 'POST',
+      body: JSON.stringify(jobId ? { jobId } : {}),
+    }),
+
+  financeBrief: (refresh = false) =>
+    request<{ brief: FinanceBrief }>(`/api/finance/brief?refresh=${refresh ? 'true' : 'false'}`, {
+      method: 'GET',
+    }),
+
+  financeAlertAction: (id: string, status: string, snoozeHours?: number) =>
+    request<{ alert: FinanceAlert }>(`/api/finance/alerts/${id}`, {
+      method: 'POST',
+      body: JSON.stringify(snoozeHours ? { status, snoozeHours } : { status }),
+    }),
+
+  financeCreateConnection: (input: Record<string, unknown>) =>
+    request<{ connection: FinanceConnection }>('/api/finance/connections', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  financeSyncConnection: (id: string) =>
+    request<{
+      connection: FinanceConnection;
+      records: number;
+      accountsUpdated: number;
+    }>(`/api/finance/connections/${id}/sync`, { method: 'POST' }),
+
+  financeCreateJobCost: (input: Record<string, unknown>) =>
+    request<{ cost: FinanceJobCost }>('/api/finance/job-costs', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  financeCostCodes: () =>
+    request<{ costCodes: FinanceCostCode[]; canManage: boolean }>('/api/finance/cost-codes', {
+      method: 'GET',
+    }),
+
+  financeCreateAccount: (input: Record<string, unknown>) =>
+    request<{ account: FinanceAccount }>('/api/finance/accounts', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  financeShares: () =>
+    request<{ packages: FinanceSharePackage[]; canManage: boolean }>('/api/finance/shares', {
+      method: 'GET',
+    }),
+
+  financeCreateShare: (input: Record<string, unknown>) =>
+    request<{ package: FinanceSharePackage; link: FinanceShareLink | null }>('/api/finance/shares', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  financeShare: (id: string) =>
+    request<{
+      package: FinanceSharePackage;
+      documents: FinanceShareDocument[];
+      links: FinanceShareLink[];
+      canManage: boolean;
+    }>(`/api/finance/shares/${id}`, { method: 'GET' }),
+
+  financePublishShare: (id: string, input: Record<string, unknown> = {}) =>
+    request<{ package: FinanceSharePackage; link: FinanceShareLink }>(
+      `/api/finance/shares/${id}/publish`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+
+  financeRevokeShare: (id: string) =>
+    request<{ package: FinanceSharePackage }>(`/api/finance/shares/${id}/revoke`, {
+      method: 'POST',
+    }),
+
+  financeAddShareDocument: (id: string, input: Record<string, unknown>) =>
+    request<{ document: FinanceShareDocument }>(`/api/finance/shares/${id}/documents`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  financeOpenPublicShare: (token: string) =>
+    request<{ share: FinancePublicShare }>(`/api/finance/public/shares/${encodeURIComponent(token)}`, {
+      method: 'GET',
+    }),
+
+// ---- HomeOwner Report portal (staff) ----
   portalProject: (projectId: string) =>
     request<PortalStaffView>(`/api/portal/projects/${projectId}`, { method: 'GET' }),
 
@@ -3320,6 +3412,261 @@ export interface PmEngineResult {
   warnings: string[];
 }
 
+/* ------------------------------------------------------------------ *
+ * Financial Agent
+ * ------------------------------------------------------------------ */
+
+export interface FinanceAlert {
+  id: string;
+  ruleKey: string;
+  severity: 'info' | 'warn' | 'critical';
+  category: string;
+  title: string;
+  detail: string | null;
+  suggestedAction: string | null;
+  status: 'open' | 'acknowledged' | 'snoozed' | 'resolved' | 'dismissed';
+  jobId: string | null;
+  connectionId: string | null;
+  occurrences: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  facts: Record<string, unknown>;
+}
+
+export interface FinanceJobRollup {
+  jobId: string;
+  title: string;
+  jobNumber: number | null;
+  contractCents: number | null;
+  invoicedCents: number;
+  paidCents: number;
+  openArCents: number;
+  costCents: number;
+  laborCents: number;
+  materialsCents: number;
+  equipmentCents: number;
+  subcontractCents: number;
+  otherCents: number;
+  marginCents: number | null;
+  marginPct: number | null;
+  agingDays: number | null;
+}
+
+export interface FinanceConnection {
+  id: string;
+  label: string;
+  kind: 'bank' | 'accounting';
+  provider: string;
+  accessPath: string;
+  accessMode: 'read_only' | 'draft_writes';
+  enabled: boolean;
+  status: string;
+  statusDetail: string | null;
+  lastSyncAt: string | null;
+  lastError: string | null;
+  credentialConfigured: boolean;
+}
+
+export interface FinanceAccount {
+  id: string;
+  name: string;
+  accountType: string;
+  currency: string;
+  balanceCents: number | null;
+  balanceAsOf: string | null;
+  connectionId: string | null;
+  isActive: boolean;
+}
+
+export interface FinanceBrief {
+  id: string;
+  forDate: string;
+  kind: string;
+  headline: string | null;
+  body: string;
+  modelId: string | null;
+  facts: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface FinanceCostCode {
+  id: string;
+  code: string;
+  label: string;
+  category: string;
+  isActive: boolean;
+}
+
+export interface FinanceJobCost {
+  id: string;
+  jobId: string | null;
+  category: string;
+  description: string | null;
+  quantity: number;
+  unit: string;
+  unitCostCents: number;
+  amountCents: number;
+  incurredOn: string;
+  status: string;
+  origin: string;
+}
+
+export interface FinanceEngineResult {
+  ranAt: string;
+  durationMs: number;
+  jobsEvaluated: number;
+  rulesEvaluated: number;
+  findings: number;
+  alertsOpened: number;
+  alertsUpdated: number;
+  alertsCleared: number;
+  rulesSkipped: string[];
+  warnings: string[];
+  cashCents: number;
+  openArCents: number;
+  totalCostCents: number;
+}
+
+export interface FinanceOverview {
+  settings: {
+    enabled: boolean;
+    timezone: string;
+    arWarnDays: number;
+    arCriticalDays: number;
+    marginFloorPct: number;
+    cashFloorCents: number;
+  };
+  role: MemberRole;
+  canManage: boolean;
+  writingEnabled: boolean;
+  providers: Record<string, string>;
+  health: {
+    cashCents: number;
+    cashFloorCents: number;
+    openArCents: number;
+    totalCostCents: number;
+    totalContractCents: number;
+    marginPct: number | null;
+  };
+  counts: {
+    jobs: number;
+    connections: number;
+    accounts: number;
+    critical: number;
+    warn: number;
+  };
+  alerts: FinanceAlert[];
+  jobs: FinanceJobRollup[];
+  connections: FinanceConnection[];
+  accounts: FinanceAccount[];
+}
+
+export function formatMoneyCents(cents: number | null | undefined): string {
+  if (cents === null || cents === undefined) return '—';
+  const sign = cents < 0 ? '-' : '';
+  const abs = Math.abs(cents);
+  return `${sign}$${(abs / 100).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+export interface FinanceSharePackage {
+  id: string;
+  title: string;
+  purpose: string;
+  recipientName: string | null;
+  recipientOrg: string | null;
+  recipientEmail: string | null;
+  coverNote: string | null;
+  status: string;
+  publishedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+  documentCount?: number;
+  linkCount?: number;
+  report?: Record<string, unknown>;
+  companyProfile?: Record<string, unknown>;
+}
+
+export interface FinanceShareDocument {
+  id: string;
+  packageId: string;
+  title: string;
+  kind: string;
+  description: string | null;
+  externalRef: string | null;
+  periodLabel: string | null;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface FinanceShareLink {
+  id: string;
+  packageId: string;
+  tokenPrefix: string;
+  label: string | null;
+  expiresAt: string;
+  maxViews: number | null;
+  viewCount: number;
+  lastViewedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+  token?: string;
+  url?: string;
+}
+
+export interface FinancePublicShare {
+  packageId: string;
+  title: string;
+  purpose: string;
+  recipientName: string | null;
+  recipientOrg: string | null;
+  coverNote: string | null;
+  sections: Record<string, boolean>;
+  report: Record<string, unknown>;
+  companyProfile: Record<string, unknown>;
+  documents: {
+    id: string;
+    title: string;
+    kind: string;
+    description: string | null;
+    externalRef: string | null;
+    periodLabel: string | null;
+    sortOrder: number;
+  }[];
+  orgName: string;
+  publishedAt: string | null;
+  expiresAt: string;
+  viewCount: number;
+}
+
+export const FINANCE_SHARE_PURPOSE_LABELS: Record<string, string> = {
+  loan: 'Bank / loan underwriting',
+  insurance: 'Insurance / bonding',
+  investor: 'Investor',
+  auditor: 'Auditor',
+  partner: 'Partner / GC',
+  other: 'Other',
+};
+
+export const FINANCE_DOC_KIND_LABELS: Record<string, string> = {
+  articles_of_incorporation: 'Articles of incorporation',
+  operating_agreement: 'Operating agreement',
+  ein_letter: 'EIN letter',
+  business_license: 'Business license',
+  contractor_license: 'Contractor license',
+  insurance_coi: 'Insurance certificate (COI)',
+  tax_return: 'Tax return',
+  financial_statement: 'Financial statement',
+  bank_statement: 'Bank statement',
+  ar_aging: 'AR aging',
+  job_cost_summary: 'Job cost summary',
+  org_chart: 'Org chart',
+  resume_key_person: 'Key-person resume',
+  other: 'Other',
+};
+
 /** Human-readable phase labels, shared by the PM screens. */
 export const PM_PHASE_LABELS: Record<PmPhase, string> = {
   intake: 'Intake',
@@ -3566,6 +3913,7 @@ export const USAGE_INTENT_LABELS: Record<UsageIntent, string> = {
   web_access: 'AI access to other systems',
   field_work: 'Field / technician work',
   billing: 'Billing and credits',
+  financial: 'Financial / books & job cost',
   exploring: 'Still exploring',
 };
 

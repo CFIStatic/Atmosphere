@@ -93,6 +93,22 @@ export const AGENT_CATALOG: AgentDefinition[] = [
     accent: 'danger',
     intake: 'ledger',
   },
+  {
+    key: 'financial_agent',
+    name: 'Financial Agent',
+    blurb:
+      'Monitors cash, receivables, and job cost for the CEO, CFO, and accountants — read-only into bank accounts and QuickBooks / online books.',
+    accent: 'success',
+    intake: 'ledger',
+  },
+  {
+    key: 'project_manager',
+    name: 'Project Manager',
+    blurb:
+      'Watches every open job for missed readings, stalled dry-outs, overdue work, and paperwork that would block the invoice.',
+    accent: 'brand',
+    intake: 'ledger',
+  },
 ];
 
 const BY_KEY = new Map(AGENT_CATALOG.map((agent) => [agent.key, agent]));

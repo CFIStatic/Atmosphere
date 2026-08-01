@@ -141,6 +141,7 @@ export const USAGE_INTENTS = [
   'web_access',
   'field_work',
   'billing',
+  'financial',
   'exploring',
 ] as const;
 

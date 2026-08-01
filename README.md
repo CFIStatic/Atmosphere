@@ -1413,6 +1413,25 @@ Partner network + adaptive internal threads:
 [`docs/pm-network-comms.md`](docs/pm-network-comms.md)
 (`supabase/migrations/20260728150000_pm_network_and_comms.sql`).
 
+## Financial Agent
+
+The books side of Atmosphere for the **CEO, CFO, and accountants**: cash position,
+AR aging, job costing, and read-only connections into bank accounts and online
+accounting software (QuickBooks / Intuit, Xero, Wave, and config-driven REST for
+anything else).
+
+Same three-layer shape as the Project Manager Agent — data, deterministic rules,
+optional CFO brief — so the model never invents a balance. Connections default to
+**observe-only**; the agent reports what is happening and drafts work for a human
+to approve. Full design: [`docs/financial-agent.md`](docs/financial-agent.md).
+
+UI: `/finance`. API: `/api/finance/*`. Schema:
+`supabase/migrations/20260728160000_financial_agent.sql` and
+`supabase/migrations/20260728170000_financial_share_dataroom.sql`.
+
+Third parties open a time-limited dataroom at `/share/finance/:token` (no login)
+when an accountant publishes a bank / loan / investor package.
+
 ## Learning layer
 
 Full architecture: **[docs/reinforcement-learning.md](docs/reinforcement-learning.md)**.

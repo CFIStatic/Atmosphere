@@ -22,7 +22,7 @@ type OrgMode = 'create' | 'join';
 const ROLE_OPTIONS: { value: MemberRole; blurb: string }[] = [
   { value: 'project_manager', blurb: 'Runs jobs end to end and coordinates the crew.' },
   { value: 'field_technician', blurb: 'On-site work: mitigation, demo, and repairs.' },
-  { value: 'accountant', blurb: 'Invoicing, payments, and the books.' },
+  { value: 'accountant', blurb: 'Invoicing, payments, job cost, and the books.' },
   { value: 'office_manager', blurb: 'Scheduling, dispatch, and back office.' },
   { value: 'sales', blurb: 'Estimates, bids, and winning new work.' },
 ];
@@ -50,6 +50,7 @@ const USAGE_OPTIONS: { value: UsageIntent; blurb: string }[] = [
   { value: 'web_access', blurb: 'Have AI sign into carrier and vendor portals for you.' },
   { value: 'field_work', blurb: 'Support technicians on site.' },
   { value: 'billing', blurb: 'Manage plans, seats, and usage credits.' },
+  { value: 'financial', blurb: 'Monitor cash, AR, job cost, and the books.' },
   { value: 'exploring', blurb: 'Not sure yet — just getting set up.' },
 ];
 
