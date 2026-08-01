@@ -390,7 +390,7 @@ npm run dev
 ```bash
 cd frontend
 npm install
-npx vite --config ../website/vite.config.ts
+npx vite --config website.vite.config.ts
 ```
 
 **3. Product app** (port 5174):

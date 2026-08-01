@@ -9,7 +9,7 @@ import { defineConfig } from 'vite';
  * The React app runs separately on 5174 — sign-in links redirect there.
  */
 export default defineConfig({
-  root: path.resolve(__dirname),
+  root: path.resolve(__dirname, '../website'),
   server: {
     port: 5173,
     strictPort: true,

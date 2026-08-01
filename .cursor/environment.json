@@ -14,7 +14,7 @@
     },
     {
       "name": "website",
-      "command": "cd frontend && npx vite --config ../website/vite.config.ts",
+      "command": "cd frontend && npx vite --config website.vite.config.ts",
       "description": "Corporate marketing site on :5173 (open this first)"
     },
     {
