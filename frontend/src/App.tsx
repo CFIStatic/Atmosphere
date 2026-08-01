@@ -6,7 +6,7 @@ import { LoginPage } from './pages/LoginPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
-import { OverviewPage } from './pages/OverviewPage';
+import { PlatformHomePage } from './pages/PlatformHomePage';
 import { MyWorkPage } from './pages/MyWorkPage';
 import { ApprovalsPage } from './pages/ApprovalsPage';
 import { SchedulePage } from './pages/SchedulePage';
@@ -27,6 +27,8 @@ import { ComputerUsePage } from './pages/ComputerUsePage';
 import { EstimatorPage } from './pages/EstimatorPage';
 import { MitigationEstimatorPage } from './pages/MitigationEstimatorPage';
 import { SpinnerIcon } from './components/icons';
+import { PLATFORM_HOME } from './lib/platforms';
+import { getPlatform } from './lib/usePlatform';
 
 function FullScreenSpinner() {
   return (
@@ -57,6 +59,11 @@ function RequireNotOnboarded({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/** Sends bare/legacy paths to whichever platform this device last used. */
+function PlatformRedirect() {
+  return <Navigate to={PLATFORM_HOME[getPlatform()]} replace />;
+}
+
 // Demo builds run in sandboxed frames where history-API navigation is not
 // available, so they route in memory; real builds keep clean URLs.
 const Router = import.meta.env.VITE_DEMO ? MemoryRouter : BrowserRouter;
@@ -84,9 +91,16 @@ export default function App() {
             }
           />
 
-          <Route path="/dashboard" element={<Navigate to="/overview" replace />} />
+          {/* The four products share one console: same shell, same layout,
+              different work. /overview and /dashboard keep older links alive
+              by landing on the platform the person last used. */}
+          <Route path="/dashboard" element={<PlatformRedirect />} />
+          <Route path="/overview" element={<PlatformRedirect />} />
           {[
-            { path: '/overview', element: <OverviewPage /> },
+            { path: '/sales', element: <PlatformHomePage platform="sales" /> },
+            { path: '/operations', element: <PlatformHomePage platform="operations" /> },
+            { path: '/field', element: <PlatformHomePage platform="field" /> },
+            { path: '/manager', element: <PlatformHomePage platform="manager" /> },
             { path: '/my-work', element: <MyWorkPage /> },
             { path: '/approvals', element: <ApprovalsPage /> },
             { path: '/schedule', element: <SchedulePage /> },
@@ -250,8 +264,8 @@ export default function App() {
             }
           />
 
-          <Route path="/" element={<Navigate to="/overview" replace />} />
-          <Route path="*" element={<Navigate to="/overview" replace />} />
+          <Route path="/" element={<PlatformRedirect />} />
+          <Route path="*" element={<PlatformRedirect />} />
         </Routes>
       </AuthProvider>
     </Router>

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import {
   ApiError,
   PROVIDER_LABELS,
@@ -15,7 +14,7 @@ import {
   type EstimatorRunStage,
   type ScanProjectSummary,
 } from '../lib/api';
-import { Logo } from '../components/Logo';
+import { AppShell } from '../components/AppShell';
 import { AlertIcon, CheckIcon, DownloadIcon, SpinnerIcon } from '../components/icons';
 
 /**
@@ -512,7 +511,7 @@ function JobReview({
                             signal.score > 0.7
                               ? 'text-success-600'
                               : signal.score > 0.3
-                                ? 'text-amber-400'
+                                ? 'text-caution-600'
                                 : 'text-ink-400'
                           }
                         >
@@ -880,18 +879,8 @@ export function EstimatorPage() {
   }, [activeRun, upsertRun]);
 
   return (
-    <div className="cx-aurora min-h-screen bg-paper-100">
-      <header className="flex items-center justify-between border-b border-line px-6 py-4 sm:px-10">
-        <Logo />
-        <Link
-          to="/dashboard"
-          className="rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
-        >
-          Back to dashboard
-        </Link>
-      </header>
-
-      <main className="mx-auto max-w-5xl space-y-6 px-6 py-10 sm:px-10">
+    <AppShell>
+      <main className="mx-auto max-w-5xl space-y-6">
         <div className="animate-fade-in-up">
           <p className="text-sm font-medium text-brand-600">Construction Estimator</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-ink-900">
@@ -944,6 +933,6 @@ export function EstimatorPage() {
           </section>
         )}
       </main>
-    </div>
+    </AppShell>
   );
 }

@@ -161,7 +161,7 @@ export function VideoCapturePanel({ onSaved, onDetections }: Props) {
 
       {/* The stage stays dark: footage reads better against it than against
           paper, and it makes the boxes legible in daylight. */}
-      <div className="relative aspect-video w-full overflow-hidden bg-ink-900">
+      <div className="relative aspect-video w-full overflow-hidden bg-paper-100">
         <video ref={videoRef} className="h-full w-full object-contain" muted playsInline autoPlay />
         <canvas
           ref={canvasRef}
@@ -227,7 +227,7 @@ export function VideoCapturePanel({ onSaved, onDetections }: Props) {
             {recorderSupported() && (
               <button
                 onClick={handleRecord}
-                className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-card transition ${
+                className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-ink-900 shadow-card transition ${
                   recording ? 'bg-danger-600 hover:bg-danger-700' : 'bg-brand-500 hover:bg-brand-600'
                 }`}
               >

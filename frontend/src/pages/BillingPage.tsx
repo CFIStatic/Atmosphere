@@ -574,7 +574,7 @@ function PaymentStatus({ status, reason }: { status: Payment['status']; reason: 
     succeeded: 'bg-success-50 text-success-600',
     pending: 'bg-caution-50 text-caution-600',
     failed: 'bg-danger-50 text-danger-700',
-    refunded: 'bg-gray-500/20 text-ink-700',
+    refunded: 'bg-paper-300 text-ink-700',
   };
   return (
     <span className="inline-flex flex-col items-start">

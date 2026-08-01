@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, ApiError } from '../lib/api';
+import { PLATFORM_HOME } from '../lib/platforms';
+import { getPlatform } from '../lib/usePlatform';
 import { Logo } from '../components/Logo';
 import { PinPad } from '../components/PinPad';
 import { EyeIcon, EyeOffIcon, SpinnerIcon, CheckIcon } from '../components/icons';
@@ -14,7 +16,7 @@ export function LoginPage() {
   const { user, loading, login, signup, unlockWithPin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const redirectTo = (location.state as { from?: string } | null)?.from ?? '/overview';
+  const redirectTo = (location.state as { from?: string } | null)?.from ?? PLATFORM_HOME[getPlatform()];
 
   // The corporate site deep-links here (…/login?mode=signup&email=…) so its
   // "Create your organization" CTAs open the create-account form directly.

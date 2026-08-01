@@ -177,7 +177,7 @@ function PrimaryButton({
     <button
       {...props}
       disabled={props.disabled || busy}
-      className="flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-card transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+      className="flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-ink-900 shadow-card transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
     >
       {busy && <SpinnerIcon className="animate-spin" width={16} height={16} />}
       {children}
@@ -230,7 +230,7 @@ function Toggle({
         }`}
       >
         <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${
+          className={`absolute top-0.5 h-5 w-5 rounded-full bg-paper-0 transition-all ${
             checked ? 'left-[1.375rem]' : 'left-0.5'
           }`}
         />

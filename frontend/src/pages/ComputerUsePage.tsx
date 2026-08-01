@@ -464,7 +464,7 @@ function ScreenPanel({
         )}
       </div>
 
-      <div className="relative grid aspect-video place-items-center bg-ink-900">
+      <div className="relative grid aspect-video place-items-center bg-paper-100">
         {screenshot ? (
           <img
             src={screenshot}

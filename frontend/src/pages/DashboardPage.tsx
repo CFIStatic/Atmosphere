@@ -128,12 +128,12 @@ export function DashboardPage() {
             ].map((stat) => (
               <div
                 key={stat.label}
-                className="rounded-xl border border-white/10 bg-ink-800/60 px-4 py-3.5 backdrop-blur"
+                className="rounded-xl border border-line bg-paper-0 px-4 py-3.5 backdrop-blur"
               >
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                <p className="text-xs font-medium uppercase tracking-wide text-ink-500">
                   {stat.label}
                 </p>
-                <p className="mt-1 text-2xl font-semibold text-white">{stat.value}</p>
+                <p className="mt-1 text-2xl font-semibold text-ink-900">{stat.value}</p>
               </div>
             ))}
           </div>
@@ -141,7 +141,7 @@ export function DashboardPage() {
           {/* Active jobs */}
           <section className="mt-8">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-white">Active jobs</h2>
+              <h2 className="text-lg font-semibold text-ink-900">Active jobs</h2>
               <Link
                 to="/jobs"
                 className="text-sm font-medium text-brand-300 transition hover:text-brand-200"
@@ -154,8 +154,8 @@ export function DashboardPage() {
               {jobs === null ? (
                 <PanelSpinner label="Loading jobs" />
               ) : jobs.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-white/10 px-6 py-10 text-center">
-                  <p className="text-sm text-gray-400">No open jobs yet.</p>
+                <div className="rounded-xl border border-dashed border-line px-6 py-10 text-center">
+                  <p className="text-sm text-ink-600">No open jobs yet.</p>
                   <Link
                     to="/jobs"
                     className="mt-3 inline-block rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-500"
@@ -164,16 +164,16 @@ export function DashboardPage() {
                   </Link>
                 </div>
               ) : (
-                <ul className="divide-y divide-white/10 overflow-hidden rounded-xl border border-white/10">
+                <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line">
                   {jobs.slice(0, 6).map((job) => (
-                    <li key={job.jobId} className="bg-ink-800/40">
+                    <li key={job.jobId} className="bg-paper-0">
                       <Link
                         to={`/jobs/${job.jobId}`}
-                        className="flex items-center justify-between gap-4 px-5 py-3.5 transition hover:bg-ink-700/40"
+                        className="flex items-center justify-between gap-4 px-5 py-3.5 transition hover:bg-paper-200"
                       >
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-white">{job.title}</p>
-                          <p className="mt-0.5 text-xs text-gray-500">
+                          <p className="truncate text-sm font-medium text-ink-900">{job.title}</p>
+                          <p className="mt-0.5 text-xs text-ink-500">
                             <span className="font-mono text-brand-300/80">#{job.jobNumber}</span> ·{' '}
                             {job.tasksDone}/{job.taskCount} tasks · {job.crewSize} on crew
                           </p>
@@ -277,8 +277,8 @@ export function DashboardPage() {
                 <p className="text-xs font-medium uppercase tracking-wide text-brand-300">
                   Mitigation
                 </p>
-                <p className="mt-1 text-lg font-semibold text-white">Build an estimate</p>
-                <p className="mt-1 text-sm text-gray-400">
+                <p className="mt-1 text-lg font-semibold text-ink-900">Build an estimate</p>
+                <p className="mt-1 text-sm text-ink-600">
                   DocuSketch, MICA, photos and notes in — a priced, documented Xactimate scope out.
                 </p>
               </div>
@@ -376,7 +376,7 @@ export function DashboardPage() {
           {/* Latest activity from the record */}
           <section className="mt-8">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-white">Latest activity</h2>
+              <h2 className="text-lg font-semibold text-ink-900">Latest activity</h2>
               <Link
                 to="/memory"
                 className="text-sm font-medium text-brand-300 transition hover:text-brand-200"
@@ -384,7 +384,7 @@ export function DashboardPage() {
                 Full memory →
               </Link>
             </div>
-            <p className="mt-1 text-sm text-gray-400">
+            <p className="mt-1 text-sm text-ink-600">
               {stats
                 ? `${stats.totalEvents.toLocaleString()} entries recorded, last one ${timeAgo(events?.[0]?.occurredAt)}.`
                 : 'Everything anyone does is recorded here.'}

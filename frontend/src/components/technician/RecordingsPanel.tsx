@@ -130,7 +130,7 @@ export function RecordingsPanel({ recordings, transcriptionAvailable, onDelete, 
 
             {url &&
               (isVideo ? (
-                <video src={url} controls playsInline className="mt-3 w-full rounded-lg bg-ink-900" />
+                <video src={url} controls playsInline className="mt-3 w-full rounded-lg bg-paper-100" />
               ) : (
                 <audio src={url} controls className="mt-3 w-full" />
               ))}

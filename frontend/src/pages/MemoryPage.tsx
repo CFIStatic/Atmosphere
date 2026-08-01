@@ -29,14 +29,14 @@ const FAMILIES = [
 ];
 
 const inputClass =
-  'w-full rounded-lg border border-white/10 bg-ink-900/70 px-3 py-2 text-sm text-white placeholder:text-gray-600 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400';
+  'w-full rounded-lg border border-line bg-paper-50 px-3 py-2 text-sm text-ink-900 placeholder:text-ink-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400';
 
 function StatTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-ink-800/50 px-4 py-3.5">
-      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</p>
-      <p className="mt-1 text-2xl font-semibold text-white">{value}</p>
-      {hint && <p className="mt-0.5 text-xs text-gray-500">{hint}</p>}
+    <div className="rounded-xl border border-line bg-paper-0 px-4 py-3.5">
+      <p className="text-xs font-medium uppercase tracking-wide text-ink-500">{label}</p>
+      <p className="mt-1 text-2xl font-semibold text-ink-900">{value}</p>
+      {hint && <p className="mt-0.5 text-xs text-ink-500">{hint}</p>}
     </div>
   );
 }
@@ -111,7 +111,7 @@ export function MemoryPage() {
         action={
           <a
             href={api.memoryExportUrl()}
-            className="flex items-center gap-2 rounded-lg border border-white/10 bg-ink-700/70 px-4 py-2 text-sm font-medium text-gray-200 transition hover:bg-ink-600"
+            className="flex items-center gap-2 rounded-lg border border-line bg-paper-200 px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-300"
           >
             <DownloadIcon width={17} height={17} />
             Export
@@ -146,8 +146,8 @@ export function MemoryPage() {
               }}
               className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
                 family === f.value
-                  ? 'bg-brand-600 text-white'
-                  : 'border border-white/10 text-gray-400 hover:bg-ink-700 hover:text-gray-200'
+                  ? 'bg-brand-600 text-ink-900'
+                  : 'border border-line text-ink-600 hover:bg-paper-200 hover:text-ink-800'
               }`}
             >
               {f.label}
@@ -205,7 +205,7 @@ export function MemoryPage() {
               <button
                 onClick={loadMore}
                 disabled={loadingMore}
-                className="flex items-center gap-2 rounded-lg border border-white/10 bg-ink-800/60 px-5 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-ink-700 disabled:opacity-60"
+                className="flex items-center gap-2 rounded-lg border border-line bg-paper-0 px-5 py-2.5 text-sm font-medium text-ink-800 transition hover:bg-paper-200 disabled:opacity-60"
               >
                 {loadingMore && <SpinnerIcon className="animate-spin" width={16} height={16} />}
                 {loadingMore ? 'Loading…' : 'Load earlier'}

@@ -26,16 +26,16 @@ import { MemoryFeed } from '../components/MemoryFeed';
 import { SpinnerIcon, PlusIcon, ChevronLeftIcon, CheckIcon } from '../components/icons';
 
 const inputClass =
-  'w-full rounded-lg border border-white/10 bg-ink-900/70 px-3 py-2 text-sm text-white placeholder:text-gray-600 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400';
+  'w-full rounded-lg border border-line bg-paper-50 px-3 py-2 text-sm text-ink-900 placeholder:text-ink-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400';
 
 const TABS = ['Work', 'Crew', 'History'] as const;
 type Tab = (typeof TABS)[number];
 
 function Card({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border border-white/10 bg-ink-800/50 p-5">
+    <section className="rounded-xl border border-line bg-paper-0 p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-white">{title}</h2>
+        <h2 className="text-base font-semibold text-ink-900">{title}</h2>
         {action}
       </div>
       {children}
@@ -76,18 +76,18 @@ function TaskRow({
         aria-label={done ? `Reopen ${task.title}` : `Complete ${task.title}`}
         className={`grid h-5 w-5 shrink-0 place-items-center rounded border transition disabled:opacity-50 ${
           done
-            ? 'border-emerald-400/50 bg-emerald-500/20 text-emerald-300'
-            : 'border-white/20 text-transparent hover:border-brand-400'
+            ? 'border-success-200 bg-success-50 text-success-600'
+            : 'border-line-strong text-transparent hover:border-brand-400'
         }`}
       >
         <CheckIcon width={13} height={13} />
       </button>
 
       <div className="min-w-0 flex-1">
-        <p className={`text-sm ${done ? 'text-gray-500 line-through' : 'text-gray-100'}`}>
+        <p className={`text-sm ${done ? 'text-ink-500 line-through' : 'text-ink-800'}`}>
           {task.title}
         </p>
-        <p className="mt-0.5 text-xs text-gray-500">
+        <p className="mt-0.5 text-xs text-ink-500">
           {TASK_STATUS_LABELS[task.status]}
           {task.dueAt && ` · due ${new Date(task.dueAt).toLocaleDateString()}`}
           {task.completedAt && ` · completed ${timeAgo(task.completedAt)}`}
@@ -99,7 +99,7 @@ function TaskRow({
         onChange={(e) => run({ assignedTo: e.target.value || null })}
         disabled={busy}
         aria-label={`Assign ${task.title}`}
-        className="rounded-lg border border-white/10 bg-ink-900/70 px-2 py-1.5 text-xs text-gray-300 focus:border-brand-400 focus:outline-none disabled:opacity-50"
+        className="rounded-lg border border-line bg-paper-50 px-2 py-1.5 text-xs text-ink-700 focus:border-brand-400 focus:outline-none disabled:opacity-50"
       >
         <option value="">Unassigned</option>
         {members.map((m) => (
@@ -189,7 +189,7 @@ export function JobDetailPage() {
     <AppShell>
       <Link
         to="/jobs"
-        className="mb-4 inline-flex items-center gap-1 text-sm text-gray-400 transition hover:text-gray-200"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-ink-600 transition hover:text-ink-800"
       >
         <ChevronLeftIcon width={16} height={16} />
         All jobs
@@ -199,8 +199,8 @@ export function JobDetailPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="font-mono text-sm tracking-wider text-brand-300">Job #{job.jobNumber}</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">{job.title}</h1>
-          <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-sm text-gray-400">
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">{job.title}</h1>
+          <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-sm text-ink-600">
             <span>{WORK_TYPE_LABELS[job.workType]}</span>
             {job.lossType && <span>· {LOSS_TYPE_LABELS[job.lossType]}</span>}
             <span>· {JOB_PRIORITY_LABELS[job.priority]} priority</span>
@@ -219,7 +219,7 @@ export function JobDetailPage() {
             value={job.status}
             onChange={(e) => mutate(() => api.updateJob(job.id, { status: e.target.value as JobStatus }))}
             aria-label="Change job status"
-            className="rounded-lg border border-white/10 bg-ink-900/70 px-3 py-1.5 text-xs text-gray-300 focus:border-brand-400 focus:outline-none"
+            className="rounded-lg border border-line bg-paper-50 px-3 py-1.5 text-xs text-ink-700 focus:border-brand-400 focus:outline-none"
           >
             {(Object.keys(JOB_STATUS_LABELS) as JobStatus[]).map((s) => (
               <option key={s} value={s}>
@@ -238,9 +238,9 @@ export function JobDetailPage() {
           { label: 'Logged', value: formatMinutes(totalMinutes) },
           { label: 'Recorded', value: String(memory.length) },
         ].map((stat) => (
-          <div key={stat.label} className="rounded-xl border border-white/10 bg-ink-800/50 px-4 py-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{stat.label}</p>
-            <p className="mt-1 text-xl font-semibold text-white">{stat.value}</p>
+          <div key={stat.label} className="rounded-xl border border-line bg-paper-0 px-4 py-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-ink-500">{stat.label}</p>
+            <p className="mt-1 text-xl font-semibold text-ink-900">{stat.value}</p>
           </div>
         ))}
       </div>
@@ -252,7 +252,7 @@ export function JobDetailPage() {
       )}
 
       {/* Tabs */}
-      <div className="mt-6 flex gap-1 border-b border-white/10" role="tablist">
+      <div className="mt-6 flex gap-1 border-b border-line" role="tablist">
         {TABS.map((t) => (
           <button
             key={t}
@@ -261,8 +261,8 @@ export function JobDetailPage() {
             onClick={() => setTab(t)}
             className={`border-b-2 px-4 py-2.5 text-sm font-medium transition ${
               tab === t
-                ? 'border-brand-400 text-white'
-                : 'border-transparent text-gray-400 hover:text-gray-200'
+                ? 'border-brand-400 text-ink-900'
+                : 'border-transparent text-ink-600 hover:text-ink-800'
             }`}
           >
             {t}
@@ -309,7 +309,7 @@ export function JobDetailPage() {
               {tasks.length === 0 ? (
                 <EmptyState title="No tasks yet." />
               ) : (
-                <ul className="divide-y divide-white/10 overflow-hidden rounded-lg border border-white/10">
+                <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line">
                   {tasks.map((task) => (
                     <TaskRow
                       key={task.id}
@@ -388,17 +388,17 @@ export function JobDetailPage() {
               ) : (
                 <ul className="space-y-3">
                   {workLogs.map((log) => (
-                    <li key={log.id} className="rounded-lg border border-white/10 bg-ink-900/50 p-4">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500">
-                        <span className="font-medium text-gray-300">{displayName(log.author)}</span>
+                    <li key={log.id} className="rounded-lg border border-line bg-paper-100/50 p-4">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-500">
+                        <span className="font-medium text-ink-700">{displayName(log.author)}</span>
                         <span>· {WORK_LOG_KIND_LABELS[log.kind]}</span>
                         {log.minutes != null && <span>· {formatMinutes(log.minutes)}</span>}
                         <span title={new Date(log.occurredAt).toLocaleString()}>
                           · {timeAgo(log.occurredAt)}
                         </span>
-                        {log.edited && <span className="text-amber-400/70">· edited</span>}
+                        {log.edited && <span className="text-caution-600">· edited</span>}
                       </div>
-                      <p className="mt-2 whitespace-pre-wrap text-sm text-gray-200">{log.body}</p>
+                      <p className="mt-2 whitespace-pre-wrap text-sm text-ink-800">{log.body}</p>
                     </li>
                   ))}
                 </ul>
@@ -443,17 +443,17 @@ export function JobDetailPage() {
             {crew.length === 0 ? (
               <EmptyState title="Nobody assigned yet." />
             ) : (
-              <ul className="divide-y divide-white/10 overflow-hidden rounded-lg border border-white/10">
+              <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line">
                 {crew.map((c) => (
                   <li key={c.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                     <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-600/30 text-xs font-semibold uppercase text-brand-200">
                       {displayName(c.agent, '?').slice(0, 2)}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className={`text-sm ${c.active ? 'text-white' : 'text-gray-500'}`}>
+                      <p className={`text-sm ${c.active ? 'text-ink-900' : 'text-ink-500'}`}>
                         {displayName(c.agent)}
                       </p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-ink-500">
                         {ASSIGNMENT_ROLE_LABELS[c.roleOnJob]} · joined {timeAgo(c.assignedAt)}
                         {c.releasedAt && ` · released ${timeAgo(c.releasedAt)}`}
                       </p>
@@ -461,12 +461,12 @@ export function JobDetailPage() {
                     {c.active ? (
                       <button
                         onClick={() => mutate(() => api.releaseAgent(job.id, c.id))}
-                        className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-gray-300 transition hover:bg-ink-700"
+                        className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink-700 transition hover:bg-paper-200"
                       >
                         Release
                       </button>
                     ) : (
-                      <span className="rounded-full border border-white/10 px-2.5 py-1 text-xs text-gray-500">
+                      <span className="rounded-full border border-line px-2.5 py-1 text-xs text-ink-500">
                         Released
                       </span>
                     )}
@@ -474,7 +474,7 @@ export function JobDetailPage() {
                 ))}
               </ul>
             )}
-            <p className="mt-3 text-xs text-gray-500">
+            <p className="mt-3 text-xs text-ink-500">
               Released crew stay on this list. Who was on the job during any past week is part of
               the record.
             </p>
@@ -489,7 +489,7 @@ export function JobDetailPage() {
               emptyLabel="Nothing recorded for this job yet."
             />
             {memory.length >= 100 && (
-              <p className="mt-3 text-xs text-gray-500">
+              <p className="mt-3 text-xs text-ink-500">
                 Showing the 100 most recent entries. The full history is in the memory export.
               </p>
             )}

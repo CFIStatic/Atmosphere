@@ -77,11 +77,11 @@ export function SourcePanel({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-white">Sources</h2>
+        <h2 className="text-lg font-semibold text-ink-900">Sources</h2>
         <button
           onClick={onLoadDemo}
           disabled={busy}
-          className="rounded-lg border border-white/10 bg-ink-700/70 px-3 py-1.5 text-xs text-gray-200 transition hover:bg-ink-600 disabled:opacity-60"
+          className="rounded-lg border border-line bg-paper-200 px-3 py-1.5 text-xs text-ink-800 transition hover:bg-paper-300 disabled:opacity-60"
         >
           Load a demo job
         </button>
@@ -108,11 +108,11 @@ export function SourcePanel({
       />
 
       {/* ---- Photos ---- */}
-      <div className="rounded-xl border border-white/10 bg-ink-800/60 p-4">
+      <div className="rounded-xl border border-line bg-paper-0 p-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <p className="text-sm font-medium text-white">Photos</p>
-            <p className="mt-0.5 text-xs text-gray-500">
+            <p className="text-sm font-medium text-ink-900">Photos</p>
+            <p className="mt-0.5 text-xs text-ink-500">
               Read for filename and timestamp only — the images stay on this device.
             </p>
           </div>
@@ -121,11 +121,11 @@ export function SourcePanel({
 
         {sources.photos.length > 0 && (
           <>
-            <p className="mt-3 text-xs text-gray-500">
+            <p className="mt-3 text-xs text-ink-500">
               {sources.photos.length} photo{sources.photos.length === 1 ? '' : 's'} · {captioned}{' '}
               captioned.{' '}
               {captioned < sources.photos.length && (
-                <span className="text-amber-300">
+                <span className="text-caution-600">
                   Uncaptioned photos cannot substantiate a line item.
                 </span>
               )}
@@ -134,7 +134,7 @@ export function SourcePanel({
               {sources.photos.map((photo, index) => (
                 <li key={`${photo.filename}-${index}`} className="flex items-center gap-2">
                   <span
-                    className="w-32 shrink-0 truncate font-mono text-[11px] text-gray-500"
+                    className="w-32 shrink-0 truncate font-mono text-[11px] text-ink-500"
                     title={photo.filename}
                   >
                     {photo.filename}
@@ -143,14 +143,14 @@ export function SourcePanel({
                     value={photo.caption ?? ''}
                     onChange={(e) => updateCaption(index, e.target.value)}
                     placeholder="e.g. flood cut 24in — kitchen north wall"
-                    className="w-full rounded-md border border-white/10 bg-ink-900 px-2 py-1 text-xs text-gray-200 outline-none placeholder:text-gray-600 focus:border-brand-500"
+                    className="w-full rounded-md border border-line bg-paper-100 px-2 py-1 text-xs text-ink-800 outline-none placeholder:text-ink-500 focus:border-brand-500"
                   />
                 </li>
               ))}
             </ul>
             <button
               onClick={() => onChange({ ...sources, photos: [] })}
-              className="mt-2 text-xs text-gray-500 transition hover:text-gray-300"
+              className="mt-2 text-xs text-ink-500 transition hover:text-ink-700"
             >
               Clear photos
             </button>
@@ -159,9 +159,9 @@ export function SourcePanel({
       </div>
 
       {/* ---- Notes ---- */}
-      <div className="rounded-xl border border-white/10 bg-ink-800/60 p-4">
-        <p className="text-sm font-medium text-white">Field notes</p>
-        <p className="mt-0.5 text-xs text-gray-500">
+      <div className="rounded-xl border border-line bg-paper-0 p-4">
+        <p className="text-sm font-medium text-ink-900">Field notes</p>
+        <p className="mt-0.5 text-xs text-ink-500">
           Dimensions, cut heights, equipment counts and category are read out of plain text.
           Structured sources win where they overlap.
         </p>
@@ -170,7 +170,7 @@ export function SourcePanel({
           onChange={(e) => onChange({ ...sources, notes: e.target.value })}
           rows={7}
           placeholder={'Cat 2 from the dishwasher supply line, ran overnight.\n\nKitchen 16x13.5 — vinyl out, cavity wet, flood cut 24in.\nSet 21 air movers, 3 LGR.'}
-          className="mt-2 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 font-mono text-xs leading-relaxed text-gray-200 outline-none placeholder:text-gray-600 focus:border-brand-500"
+          className="mt-2 w-full rounded-lg border border-line bg-paper-100 px-3 py-2 font-mono text-xs leading-relaxed text-ink-800 outline-none placeholder:text-ink-500 focus:border-brand-500"
         />
       </div>
     </div>
@@ -199,27 +199,27 @@ function FileCard({
   const inputRef = useRef<HTMLInputElement>(null);
 
   return (
-    <div className="rounded-xl border border-white/10 bg-ink-800/60 p-4">
+    <div className="rounded-xl border border-line bg-paper-0 p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="text-sm font-medium text-white">
+          <p className="text-sm font-medium text-ink-900">
             {label}
-            {loaded && <span className="ml-2 text-xs text-emerald-400">loaded</span>}
+            {loaded && <span className="ml-2 text-xs text-success-600">loaded</span>}
           </p>
-          <p className="mt-0.5 text-xs text-gray-500">{hint}</p>
+          <p className="mt-0.5 text-xs text-ink-500">{hint}</p>
         </div>
         <div className="flex gap-2">
           {loaded && (
             <button
               onClick={onClear}
-              className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-400 transition hover:text-gray-200"
+              className="rounded-lg border border-line px-3 py-1.5 text-xs text-ink-600 transition hover:text-ink-800"
             >
               Remove
             </button>
           )}
           <button
             onClick={() => inputRef.current?.click()}
-            className="rounded-lg border border-white/10 bg-ink-700/70 px-3 py-1.5 text-xs text-gray-200 transition hover:bg-ink-600"
+            className="rounded-lg border border-line bg-paper-200 px-3 py-1.5 text-xs text-ink-800 transition hover:bg-paper-300"
           >
             Choose file
           </button>
@@ -236,7 +236,7 @@ function FileCard({
           e.target.value = '';
         }}
       />
-      {error && <p className="mt-2 text-xs text-red-300">{error}</p>}
+      {error && <p className="mt-2 text-xs text-danger-600">{error}</p>}
     </div>
   );
 }
@@ -247,7 +247,7 @@ function PhotoPicker({ onFiles }: { onFiles: (files: FileList) => void }) {
     <>
       <button
         onClick={() => inputRef.current?.click()}
-        className="rounded-lg border border-white/10 bg-ink-700/70 px-3 py-1.5 text-xs text-gray-200 transition hover:bg-ink-600"
+        className="rounded-lg border border-line bg-paper-200 px-3 py-1.5 text-xs text-ink-800 transition hover:bg-paper-300"
       >
         Add photos
       </button>

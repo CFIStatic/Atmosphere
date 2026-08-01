@@ -19,10 +19,10 @@ import type {
  */
 
 const STATUS_STYLES = {
-  met: { chip: 'bg-emerald-500/15 text-emerald-300', card: 'border-white/10 bg-ink-800/60', mark: '✓' },
-  unmet: { chip: 'bg-red-500/15 text-red-300', card: 'border-red-500/25 bg-red-500/5', mark: '✕' },
-  undetermined: { chip: 'bg-amber-500/15 text-amber-300', card: 'border-amber-500/25 bg-amber-500/5', mark: '?' },
-  not_applicable: { chip: 'bg-white/5 text-gray-500', card: 'border-white/5 bg-ink-800/30', mark: '–' },
+  met: { chip: 'bg-success-50 text-success-600', card: 'border-line bg-paper-0', mark: '✓' },
+  unmet: { chip: 'bg-danger-50 text-danger-600', card: 'border-danger-200 bg-danger-50', mark: '✕' },
+  undetermined: { chip: 'bg-caution-50 text-caution-600', card: 'border-caution-200 bg-caution-50', mark: '?' },
+  not_applicable: { chip: 'bg-paper-200 text-ink-500', card: 'border-line bg-paper-0', mark: '–' },
 } as const;
 
 export function CompliancePanel({
@@ -47,8 +47,8 @@ export function CompliancePanel({
   return (
     <section>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-lg font-semibold text-white">Standards review</h2>
-        <p className="text-sm text-gray-400">{compliance.summary}</p>
+        <h2 className="text-lg font-semibold text-ink-900">Standards review</h2>
+        <p className="text-sm text-ink-600">{compliance.summary}</p>
       </div>
 
       <ul className="mt-3 space-y-2">
@@ -61,7 +61,7 @@ export function CompliancePanel({
         <>
           <button
             onClick={() => setShowNotApplicable((value) => !value)}
-            className="mt-3 text-xs text-gray-500 transition hover:text-gray-300"
+            className="mt-3 text-xs text-ink-500 transition hover:text-ink-700"
           >
             {showNotApplicable ? 'Hide' : 'Show'} {notApplicable.length} requirement
             {notApplicable.length === 1 ? '' : 's'} that don't apply to this loss
@@ -71,9 +71,9 @@ export function CompliancePanel({
               {notApplicable.map((check) => (
                 <li
                   key={check.id}
-                  className="rounded-lg border border-white/5 bg-ink-800/30 px-3 py-2 text-xs text-gray-500"
+                  className="rounded-lg border border-line bg-paper-0 px-3 py-2 text-xs text-ink-500"
                 >
-                  <span className="text-gray-400">{check.title}</span> — {check.detail}
+                  <span className="text-ink-600">{check.title}</span> — {check.detail}
                 </li>
               ))}
             </ul>
@@ -84,17 +84,17 @@ export function CompliancePanel({
       {/* Caveats: where the industry says "the standard requires" about something
           the standard leaves to judgement. Worth knowing before an adjuster asks. */}
       {caveats.length > 0 && (
-        <div className="mt-4 rounded-xl border border-white/10 bg-ink-800/40 p-4">
-          <p className="text-sm font-medium text-white">What this estimate does not claim</p>
-          <p className="mt-1 text-xs text-gray-500">
+        <div className="mt-4 rounded-xl border border-line bg-paper-0 p-4">
+          <p className="text-sm font-medium text-ink-900">What this estimate does not claim</p>
+          <p className="mt-1 text-xs text-ink-500">
             These are places where common practice is often described as an S500 requirement.
             Knowing which of your citations is a clause and which is custom is what keeps the
             rest of them credible.
           </p>
           <ul className="mt-2.5 space-y-2">
             {caveats.map((reference) => (
-              <li key={reference.id} className="text-xs leading-relaxed text-gray-400">
-                <span className="text-gray-300">{reference.title}</span> — {reference.caveat}
+              <li key={reference.id} className="text-xs leading-relaxed text-ink-600">
+                <span className="text-ink-700">{reference.title}</span> — {reference.caveat}
               </li>
             ))}
           </ul>
@@ -106,13 +106,13 @@ export function CompliancePanel({
         <div className="mt-4">
           <button
             onClick={() => setShowReferences((value) => !value)}
-            className="text-xs text-gray-500 transition hover:text-gray-300"
+            className="text-xs text-ink-500 transition hover:text-ink-700"
           >
             {showReferences ? 'Hide' : 'Show'} the {references.length} standards this estimate cites
           </button>
           {showReferences && (
             <div className="mt-2 space-y-2">
-              <p className="text-xs leading-relaxed text-gray-600">
+              <p className="text-xs leading-relaxed text-ink-500">
                 The ANSI/IICRC S500 and S520 are copyrighted publications of the IICRC and are
                 not reproduced here. Each requirement below is paraphrased; the location is
                 given so a reader with their own copy can turn to it.
@@ -120,16 +120,16 @@ export function CompliancePanel({
               {references.map((reference) => (
                 <div
                   key={reference.id}
-                  className="rounded-lg border border-white/10 bg-ink-800/40 p-3"
+                  className="rounded-lg border border-line bg-paper-0 p-3"
                 >
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <p className="text-sm font-medium text-gray-200">{reference.title}</p>
+                    <p className="text-sm font-medium text-ink-800">{reference.title}</p>
                     <ConfidenceChip reference={reference} />
                   </div>
-                  <p className="mt-1 text-xs leading-relaxed text-gray-400">
+                  <p className="mt-1 text-xs leading-relaxed text-ink-600">
                     {reference.requirement}
                   </p>
-                  <p className="mt-1 text-xs text-gray-600">{formatLocation(reference)}</p>
+                  <p className="mt-1 text-xs text-ink-500">{formatLocation(reference)}</p>
                 </div>
               ))}
             </div>
@@ -152,21 +152,21 @@ function CheckRow({
   return (
     <li className={`rounded-xl border p-4 ${style.card}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="flex items-center gap-2 font-medium text-white">
+        <p className="flex items-center gap-2 font-medium text-ink-900">
           <span className={`grid h-5 w-5 shrink-0 place-items-center rounded text-xs ${style.chip}`}>
             {style.mark}
           </span>
           {check.title}
         </p>
         {check.affectsEstimate && check.status !== 'met' && (
-          <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] text-amber-300">
+          <span className="rounded bg-caution-50 px-1.5 py-0.5 text-[11px] text-caution-600">
             also unbilled work
           </span>
         )}
       </div>
-      <p className="mt-1.5 text-sm leading-relaxed text-gray-400">{check.detail}</p>
+      <p className="mt-1.5 text-sm leading-relaxed text-ink-600">{check.detail}</p>
       {check.remedy && <p className="mt-1.5 text-sm text-brand-300">→ {check.remedy}</p>}
-      {reference && <p className="mt-1.5 text-xs text-gray-600">{formatLocation(reference)}</p>}
+      {reference && <p className="mt-1.5 text-xs text-ink-500">{formatLocation(reference)}</p>}
     </li>
   );
 }
@@ -174,13 +174,13 @@ function CheckRow({
 function ConfidenceChip({ reference }: { reference: StandardReference }) {
   if (reference.confidence === 'convention') {
     return (
-      <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] text-amber-300">
+      <span className="rounded bg-caution-50 px-1.5 py-0.5 text-[11px] text-caution-600">
         industry practice
       </span>
     );
   }
   return (
-    <span className="rounded bg-white/5 px-1.5 py-0.5 text-[11px] text-gray-500">
+    <span className="rounded bg-paper-200 px-1.5 py-0.5 text-[11px] text-ink-500">
       {reference.standard}
     </span>
   );

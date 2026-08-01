@@ -1,104 +1,42 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, ROLE_LABELS } from '../lib/api';
 import { displayName, initials } from '../lib/display';
 import { setPreference, usePreferences } from '../lib/preferences';
+import { PLATFORMS, PLATFORM_HOME, PLATFORM_IDS, platformOfPath } from '../lib/platforms';
+import { usePlatform } from '../lib/usePlatform';
 import { Logo } from './Logo';
 import {
   AuditIcon,
-  ArtifactIcon,
-  BoltIcon,
-  BriefcaseIcon,
-  BuildingIcon,
-  ChartIcon,
-  CheckIcon,
   ChevronDownIcon,
   CloseIcon,
-  CreditCardIcon,
-  DecisionIcon,
   GaugeIcon,
-  GlobeIcon,
-  HistoryIcon,
   LogOutIcon,
   MenuIcon,
   MicIcon,
-  MonitorIcon,
   MoonIcon,
   SearchIcon,
   SettingsIcon,
-  ShieldIcon,
   SpinnerIcon,
   SunIcon,
-  ThoughtIcon,
-  UsersIcon,
 } from './icons';
 
-interface NavItem {
-  to: string;
-  label: string;
-  Icon: typeof GaugeIcon;
-}
-
-interface NavGroup {
-  label: string;
-  items: NavItem[];
-}
-
-/**
- * The console's information architecture. Groups read as verbs of the
- * business — operate the day, deliver the work, mind the money, direct the
- * intelligence — so a new hire can guess where a screen lives without a tour.
- */
-const NAV_GROUPS: NavGroup[] = [
-  {
-    label: 'Operate',
-    items: [
-      { to: '/overview', label: 'Overview', Icon: GaugeIcon },
-      { to: '/my-work', label: 'My Work', Icon: CheckIcon },
-      { to: '/approvals', label: 'Approvals', Icon: ShieldIcon },
-    ],
-  },
-  {
-    label: 'Delivery',
-    items: [
-      { to: '/jobs', label: 'Jobs', Icon: BriefcaseIcon },
-      { to: '/schedule', label: 'Schedule', Icon: HistoryIcon },
-      { to: '/mitigation', label: 'Estimates', Icon: ArtifactIcon },
-      { to: '/customers', label: 'Customers', Icon: BuildingIcon },
-      { to: '/technician', label: 'Field', Icon: MicIcon },
-    ],
-  },
-  {
-    label: 'Finance',
-    items: [
-      { to: '/billing', label: 'Billing', Icon: CreditCardIcon },
-      { to: '/usage', label: 'Usage', Icon: ChartIcon },
-    ],
-  },
-  {
-    label: 'Intelligence',
-    items: [
-      { to: '/audit', label: 'Agents', Icon: BoltIcon },
-      { to: '/pm', label: 'Workflows', Icon: DecisionIcon },
-      { to: '/web-access', label: 'Web Access', Icon: GlobeIcon },
-      { to: '/computer-use', label: 'Computer', Icon: MonitorIcon },
-      { to: '/memory', label: 'Memory', Icon: ThoughtIcon },
-      { to: '/team', label: 'Team', Icon: UsersIcon },
-    ],
-  },
-  {
-    label: 'System',
-    items: [{ to: '/settings', label: 'Settings', Icon: SettingsIcon }],
-  },
-];
-
-/** Flat list for the jump palette, plus destinations that live off the sidebar. */
-const JUMP_TARGETS: NavItem[] = [
-  ...NAV_GROUPS.flatMap((g) => g.items),
-  { to: '/estimator', label: 'Reconstruction estimates', Icon: ArtifactIcon },
-  { to: '/audit', label: 'Audit trail', Icon: AuditIcon },
-];
+/** Every destination the jump palette can reach, across all four platforms. */
+const JUMP_TARGETS = (() => {
+  const seen = new Map<string, { to: string; label: string; Icon: typeof GaugeIcon }>();
+  for (const id of PLATFORM_IDS) {
+    for (const group of PLATFORMS[id].groups) {
+      for (const item of group.items) {
+        const key = `${item.to}:${item.label}`;
+        if (!seen.has(key)) seen.set(key, item);
+      }
+    }
+  }
+  seen.set('/audit:Audit trail', { to: '/audit', label: 'Audit trail', Icon: AuditIcon });
+  seen.set('/technician:Field capture', { to: '/technician', label: 'Field capture', Icon: MicIcon });
+  return [...seen.values()];
+})();
 
 /**
  * The console frame: fixed sidebar, top bar with the jump palette and the
@@ -108,7 +46,19 @@ const JUMP_TARGETS: NavItem[] = [
 export function AppShell({ children, rail }: { children: ReactNode; rail?: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [approvalCount, setApprovalCount] = useState(0);
+  const [platformId, setPlatformId] = usePlatform();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Landing on a platform's home makes it the active one; shared screens
+  // (Jobs, Billing, Settings) leave the choice alone, so opening a job from
+  // Sales does not throw you into Operations.
+  useEffect(() => {
+    const fromPath = platformOfPath(location.pathname);
+    if (fromPath && fromPath !== platformId) setPlatformId(fromPath);
+  }, [location.pathname, platformId, setPlatformId]);
+
+  const platform = PLATFORMS[platformId];
 
   // The pill is a glance, not a live feed — one fetch per mount is enough,
   // and a backend without the verifier configured simply shows no pill.
@@ -134,7 +84,7 @@ export function AppShell({ children, rail }: { children: ReactNode; rail?: React
         }`}
       >
         <div className="flex items-center justify-between px-5 py-5">
-          <NavLink to="/overview" aria-label="Atmosphere — overview">
+          <NavLink to={PLATFORM_HOME[platformId]} aria-label={`Atmosphere — ${platform.name}`}>
             <Logo />
           </NavLink>
           <button
@@ -146,8 +96,19 @@ export function AppShell({ children, rail }: { children: ReactNode; rail?: React
           </button>
         </div>
 
-        <nav aria-label="Primary" className="cx-scroll h-[calc(100%-64px)] overflow-y-auto px-3 pb-6">
-          {NAV_GROUPS.map((group) => (
+        <div className="px-3 pb-1">
+          <PlatformSwitcher
+            active={platformId}
+            onSelect={(next) => {
+              setPlatformId(next);
+              setMobileOpen(false);
+              navigate(PLATFORM_HOME[next]);
+            }}
+          />
+        </div>
+
+        <nav aria-label="Primary" className="cx-scroll h-[calc(100%-136px)] overflow-y-auto px-3 pb-6">
+          {platform.groups.map((group) => (
             <div key={group.label} className="mt-4 first:mt-0">
               <p className="px-2.5 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.09em] text-ink-500">
                 {group.label}
@@ -229,6 +190,104 @@ export function AppShell({ children, rail }: { children: ReactNode; rail?: React
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The platform switcher. Four products, one console — this is the only
+ * control that changes what the sidebar contains, and it names the platform
+ * you are in so that is never ambiguous.
+ */
+function PlatformSwitcher({
+  active,
+  onSelect,
+}: {
+  active: keyof typeof PLATFORMS;
+  onSelect: (next: keyof typeof PLATFORMS) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const platform = PLATFORMS[active];
+
+  useEffect(() => {
+    if (!open) return undefined;
+    function onPointerDown(event: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(event.target as Node)) setOpen(false);
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        onClick={() => setOpen((value) => !value)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="flex w-full items-center gap-2.5 rounded-lg border border-line bg-paper-0 px-2.5 py-2 text-left transition hover:border-line-strong"
+      >
+        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-brand-50 text-brand-700">
+          <platform.Icon width={14} height={14} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] font-semibold text-ink-900">
+            {platform.name}
+          </span>
+          <span className="block truncate text-[11px] text-ink-500">{platform.tagline}</span>
+        </span>
+        <ChevronDownIcon width={14} height={14} className="shrink-0 text-ink-500" />
+      </button>
+
+      {open && (
+        <div
+          role="listbox"
+          className="absolute left-0 right-0 top-full z-40 mt-1.5 overflow-hidden rounded-xl border border-line bg-paper-0 shadow-lift"
+        >
+          {PLATFORM_IDS.map((id) => {
+            const p = PLATFORMS[id];
+            return (
+              <button
+                key={id}
+                role="option"
+                aria-selected={id === active}
+                onClick={() => {
+                  onSelect(id);
+                  setOpen(false);
+                }}
+                className={`flex w-full items-center gap-2.5 px-2.5 py-2.5 text-left transition hover:bg-paper-200 ${
+                  id === active ? 'bg-brand-50' : ''
+                }`}
+              >
+                <span
+                  className={`grid h-6 w-6 shrink-0 place-items-center rounded-md ${
+                    id === active ? 'bg-brand-500 text-white' : 'bg-paper-200 text-ink-600'
+                  }`}
+                >
+                  <p.Icon width={14} height={14} />
+                </span>
+                <span className="min-w-0">
+                  <span
+                    className={`block truncate text-[13px] font-semibold ${
+                      id === active ? 'text-brand-700' : 'text-ink-900'
+                    }`}
+                  >
+                    {p.name}
+                  </span>
+                  <span className="block truncate text-[11px] text-ink-500">{p.tagline}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

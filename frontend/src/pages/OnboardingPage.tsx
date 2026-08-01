@@ -14,6 +14,8 @@ import {
   type WorkType,
 } from '../lib/api';
 import { Logo } from '../components/Logo';
+import { PLATFORM_HOME } from '../lib/platforms';
+import { getPlatform } from '../lib/usePlatform';
 import { SpinnerIcon, CheckIcon } from '../components/icons';
 
 type OrgMode = 'create' | 'join';
@@ -129,7 +131,7 @@ export function OnboardingPage() {
         await api.joinOrg(joinCode.trim().toUpperCase(), role, workType, usageIntents);
       }
       await refreshMembership();
-      navigate('/dashboard', { replace: true });
+      navigate(PLATFORM_HOME[getPlatform()], { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
       // Send the user back to the org step if the join code was the problem.

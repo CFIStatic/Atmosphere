@@ -39,7 +39,7 @@ export function EstimateResult({
   return (
     <div className="space-y-6">
       {/* ---- Classification ---- */}
-      <section className="rounded-xl border border-white/10 bg-ink-800/60 p-5 backdrop-blur">
+      <section className="rounded-xl border border-line bg-paper-0 p-5 backdrop-blur">
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone={assessment.category === 3 ? 'danger' : assessment.category === 2 ? 'warn' : 'ok'}>
             Category {assessment.category}
@@ -49,12 +49,12 @@ export function EstimateResult({
             <Badge tone="warn">Degraded from Cat {assessment.sourceCategory}</Badge>
           )}
           {assessment.microbialGrowthPresent && <Badge tone="danger">Microbial growth</Badge>}
-          <span className="ml-auto text-xs text-gray-500">
+          <span className="ml-auto text-xs text-ink-500">
             {assessment.sourcesUsed.join(' · ') || 'no sources'}
           </span>
         </div>
 
-        <p className="mt-3 text-sm leading-relaxed text-gray-300">{estimate.narrative}</p>
+        <p className="mt-3 text-sm leading-relaxed text-ink-700">{estimate.narrative}</p>
 
         <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Stat label="Rooms" value={String(assessment.rooms.length)} />
@@ -81,12 +81,12 @@ export function EstimateResult({
       {profitability.findings.length > 0 && (
         <section>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-lg font-semibold text-white">
+            <h2 className="text-lg font-semibold text-ink-900">
               Review — {profitability.findings.length} finding
               {profitability.findings.length === 1 ? '' : 's'}
             </h2>
             {profitability.recoverableRevenue > 0 && (
-              <p className="text-sm text-emerald-400">
+              <p className="text-sm text-success-600">
                 {usd(profitability.recoverableRevenue)} of documented work is not yet billed
               </p>
             )}
@@ -104,18 +104,18 @@ export function EstimateResult({
 
       {/* ---- Money ---- */}
       <section className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-xl border border-white/10 bg-ink-800/60 p-5">
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Estimate</p>
+        <div className="rounded-xl border border-line bg-paper-0 p-5">
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-500">Estimate</p>
           <table className="mt-2 w-full text-sm">
-            <tbody className="text-gray-300">
+            <tbody className="text-ink-700">
               <Row label="Subtotal" value={usd(profitability.subtotal)} />
               <Row label="Overhead &amp; profit" value={usd(profitability.overheadAndProfit)} />
               <Row label="Tax" value={usd(profitability.tax)} />
             </tbody>
             <tfoot>
-              <tr className="border-t border-white/10">
-                <td className="pt-2 font-semibold text-white">Total</td>
-                <td className="pt-2 text-right font-semibold text-white">
+              <tr className="border-t border-line">
+                <td className="pt-2 font-semibold text-ink-900">Total</td>
+                <td className="pt-2 text-right font-semibold text-ink-900">
                   {usd(profitability.total)}
                 </td>
               </tr>
@@ -123,24 +123,24 @@ export function EstimateResult({
           </table>
         </div>
 
-        <div className="rounded-xl border border-white/10 bg-ink-800/60 p-5">
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Profitability</p>
+        <div className="rounded-xl border border-line bg-paper-0 p-5">
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-500">Profitability</p>
           <div className="mt-2 flex items-baseline gap-2">
             <span
               className={`text-3xl font-bold ${
                 profitability.grossMargin >= profitability.targetMargin
-                  ? 'text-emerald-400'
-                  : 'text-amber-400'
+                  ? 'text-success-600'
+                  : 'text-caution-600'
               }`}
             >
               {(profitability.grossMargin * 100).toFixed(1)}%
             </span>
-            <span className="text-sm text-gray-500">
+            <span className="text-sm text-ink-500">
               gross margin · target {(profitability.targetMargin * 100).toFixed(0)}%
             </span>
           </div>
           <table className="mt-3 w-full text-sm">
-            <tbody className="text-gray-300">
+            <tbody className="text-ink-700">
               <Row label="Cost basis" value={usd(profitability.totalCost)} />
               <Row label="Gross profit" value={usd(profitability.grossProfit)} />
               {profitability.marginGap > 0 && (
@@ -158,20 +158,20 @@ export function EstimateResult({
       {/* ---- Line items ---- */}
       <section>
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-lg font-semibold text-white">
+          <h2 className="text-lg font-semibold text-ink-900">
             Line items ({lineItems.length})
           </h2>
           {unverified > 0 && (
-            <p className="text-xs text-amber-300">
+            <p className="text-xs text-caution-600">
               {unverified} priced from placeholders — sync a price list before submitting
             </p>
           )}
         </div>
 
-        <div className="mt-3 overflow-hidden rounded-xl border border-white/10">
+        <div className="mt-3 overflow-hidden rounded-xl border border-line">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[52rem] text-sm">
-              <thead className="bg-ink-700/60 text-left text-xs uppercase tracking-wide text-gray-500">
+              <thead className="bg-paper-200/60 text-left text-xs uppercase tracking-wide text-ink-500">
                 <tr>
                   <th className="px-3 py-2 font-medium">Code</th>
                   <th className="px-3 py-2 font-medium">Room</th>
@@ -181,7 +181,7 @@ export function EstimateResult({
                   <th className="px-3 py-2 text-right font-medium">Total</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5">
+              <tbody className="divide-y divide-line">
                 {lineItems.map((line) => (
                   <LineRow key={line.id} line={line} references={estimate.references} />
                 ))}
@@ -193,12 +193,12 @@ export function EstimateResult({
 
       {/* ---- Open questions ---- */}
       {estimate.openQuestions.length > 0 && (
-        <section className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-5">
-          <h2 className="text-sm font-semibold text-amber-200">Before you submit this</h2>
-          <ul className="mt-2 space-y-1.5 text-sm text-amber-100/80">
+        <section className="rounded-xl border border-caution-200 bg-caution-50 p-5">
+          <h2 className="text-sm font-semibold text-caution-600">Before you submit this</h2>
+          <ul className="mt-2 space-y-1.5 text-sm text-caution-600">
             {estimate.openQuestions.map((question) => (
               <li key={question} className="flex gap-2">
-                <span aria-hidden className="text-amber-400">
+                <span aria-hidden className="text-caution-600">
                   •
                 </span>
                 <span>{question}</span>
@@ -250,56 +250,56 @@ function LineRow({
     <>
       <tr
         onClick={() => setOpen((value) => !value)}
-        className="cursor-pointer bg-ink-800/40 transition hover:bg-ink-700/40"
+        className="cursor-pointer bg-paper-0 transition hover:bg-paper-200"
       >
         <td className="px-3 py-2 font-mono text-xs text-brand-300">
           {line.code}
           {!line.priceVerified && (
-            <span title="Placeholder price" className="ml-1 text-amber-400">
+            <span title="Placeholder price" className="ml-1 text-caution-600">
               ~
             </span>
           )}
         </td>
-        <td className="px-3 py-2 text-gray-400">{line.roomName ?? 'Job-wide'}</td>
-        <td className="px-3 py-2 text-gray-300">
+        <td className="px-3 py-2 text-ink-600">{line.roomName ?? 'Job-wide'}</td>
+        <td className="px-3 py-2 text-ink-700">
           {line.description}
           {line.evidenceGap && (
-            <span className="ml-2 rounded bg-red-500/15 px-1.5 py-0.5 text-[11px] text-red-300">
+            <span className="ml-2 rounded bg-danger-50 px-1.5 py-0.5 text-[11px] text-danger-600">
               {line.evidenceGap}
             </span>
           )}
         </td>
-        <td className="px-3 py-2 text-right tabular-nums text-gray-300">
+        <td className="px-3 py-2 text-right tabular-nums text-ink-700">
           {line.quantity} {line.unit}
         </td>
-        <td className="px-3 py-2 text-right tabular-nums text-gray-400">{usd(line.unitPrice)}</td>
-        <td className="px-3 py-2 text-right tabular-nums font-medium text-white">
+        <td className="px-3 py-2 text-right tabular-nums text-ink-600">{usd(line.unitPrice)}</td>
+        <td className="px-3 py-2 text-right tabular-nums font-medium text-ink-900">
           {usd(line.rcv)}
         </td>
       </tr>
       {open && (
-        <tr className="bg-ink-900/60">
-          <td colSpan={6} className="px-3 py-3 text-xs leading-relaxed text-gray-400">
-            <p className="text-gray-300">{line.justification}</p>
+        <tr className="bg-paper-100/60">
+          <td colSpan={6} className="px-3 py-3 text-xs leading-relaxed text-ink-600">
+            <p className="text-ink-700">{line.justification}</p>
 
             {cited.length > 0 && (
               <ul className="mt-2 space-y-1.5">
                 {cited.map((reference) => (
                   <li key={reference.id} className="border-l-2 border-brand-500/30 pl-2.5">
-                    <p className="text-gray-300">
+                    <p className="text-ink-700">
                       {reference.title}
                       {reference.confidence === 'convention' && (
-                        <span className="ml-1.5 text-amber-300">(industry practice)</span>
+                        <span className="ml-1.5 text-caution-600">(industry practice)</span>
                       )}
                     </p>
-                    <p className="text-gray-500">{reference.requirement}</p>
-                    <p className="text-gray-600">{formatLocation(reference)}</p>
+                    <p className="text-ink-500">{reference.requirement}</p>
+                    <p className="text-ink-500">{formatLocation(reference)}</p>
                   </li>
                 ))}
               </ul>
             )}
 
-            <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-gray-500">
+            <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-ink-500">
               <span>
                 Evidence: {line.evidenceIds.length > 0 ? `${line.evidenceIds.length} item(s)` : 'none attached'}
               </span>
@@ -315,19 +315,19 @@ function LineRow({
 function FindingRow({ finding }: { finding: ProfitFinding }) {
   const tone =
     finding.severity === 'critical'
-      ? 'border-red-500/25 bg-red-500/5'
+      ? 'border-danger-200 bg-danger-50'
       : finding.severity === 'warning'
-        ? 'border-amber-500/25 bg-amber-500/5'
-        : 'border-white/10 bg-ink-800/60';
+        ? 'border-caution-200 bg-caution-50'
+        : 'border-line bg-paper-0';
 
   return (
     <li className={`rounded-xl border p-4 ${tone}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="font-medium text-white">{finding.title}</p>
+        <p className="font-medium text-ink-900">{finding.title}</p>
         {finding.revenueImpact !== 0 && (
           <span
             className={`text-sm font-medium ${
-              finding.revenueImpact > 0 ? 'text-emerald-400' : 'text-red-400'
+              finding.revenueImpact > 0 ? 'text-success-600' : 'text-danger-600'
             }`}
           >
             {finding.revenueImpact > 0 ? '+' : ''}
@@ -335,7 +335,7 @@ function FindingRow({ finding }: { finding: ProfitFinding }) {
           </span>
         )}
       </div>
-      <p className="mt-1 text-sm leading-relaxed text-gray-400">{finding.detail}</p>
+      <p className="mt-1 text-sm leading-relaxed text-ink-600">{finding.detail}</p>
       {finding.actionRequired && (
         <p className="mt-2 text-sm text-brand-300">→ {finding.actionRequired}</p>
       )}
@@ -346,8 +346,8 @@ function FindingRow({ finding }: { finding: ProfitFinding }) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs uppercase tracking-wide text-gray-500">{label}</dt>
-      <dd className="mt-0.5 text-lg font-semibold text-white">{value}</dd>
+      <dt className="text-xs uppercase tracking-wide text-ink-500">{label}</dt>
+      <dd className="mt-0.5 text-lg font-semibold text-ink-900">{value}</dd>
     </div>
   );
 }
@@ -356,7 +356,7 @@ function Row({ label, value, tone }: { label: string; value: string; tone?: 'war
   return (
     <tr>
       <td className="py-0.5">{label}</td>
-      <td className={`py-0.5 text-right tabular-nums ${tone === 'warn' ? 'text-amber-400' : ''}`}>
+      <td className={`py-0.5 text-right tabular-nums ${tone === 'warn' ? 'text-caution-600' : ''}`}>
         {value}
       </td>
     </tr>
@@ -371,10 +371,10 @@ function Badge({
   tone: 'ok' | 'warn' | 'danger' | 'neutral';
 }) {
   const tones = {
-    ok: 'bg-emerald-500/15 text-emerald-300',
-    warn: 'bg-amber-500/15 text-amber-300',
-    danger: 'bg-red-500/15 text-red-300',
-    neutral: 'bg-white/10 text-gray-300',
+    ok: 'bg-success-50 text-success-600',
+    warn: 'bg-caution-50 text-caution-600',
+    danger: 'bg-danger-50 text-danger-600',
+    neutral: 'bg-paper-300 text-ink-700',
   } as const;
   return (
     <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${tones[tone]}`}>{children}</span>

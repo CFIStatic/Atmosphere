@@ -153,21 +153,21 @@ export function XactimateCard({ onPriceListSynced }: { onPriceListSynced?: () =>
 
   if (!status) {
     return (
-      <div className="rounded-xl border border-white/10 bg-ink-800/60 p-5">
+      <div className="rounded-xl border border-line bg-paper-0 p-5">
         <SpinnerIcon className="animate-spin text-brand-300" width={18} height={18} />
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-ink-800/60 p-5 backdrop-blur">
+    <div className="rounded-xl border border-line bg-paper-0 p-5 backdrop-blur">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Xactimate</p>
-          <p className="mt-1 flex items-center gap-2 text-lg font-semibold text-white">
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-500">Xactimate</p>
+          <p className="mt-1 flex items-center gap-2 text-lg font-semibold text-ink-900">
             {status.connected ? (
               <>
-                <CheckIcon className="text-emerald-400" width={18} height={18} />
+                <CheckIcon className="text-success-600" width={18} height={18} />
                 {status.username}
               </>
             ) : (
@@ -175,7 +175,7 @@ export function XactimateCard({ onPriceListSynced }: { onPriceListSynced?: () =>
             )}
           </p>
           {status.connected && status.expiresAt && (
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-ink-500">
               Permission expires {new Date(status.expiresAt).toLocaleDateString()} ·{' '}
               {status.storageMode === 'session'
                 ? 'password not stored'
@@ -190,7 +190,7 @@ export function XactimateCard({ onPriceListSynced }: { onPriceListSynced?: () =>
             <button
               onClick={disconnect}
               disabled={busy}
-              className="rounded-lg border border-white/10 bg-ink-700/70 px-3 py-1.5 text-sm text-gray-200 transition hover:bg-ink-600 disabled:opacity-60"
+              className="rounded-lg border border-line bg-paper-200 px-3 py-1.5 text-sm text-ink-800 transition hover:bg-paper-300 disabled:opacity-60"
             >
               Disconnect
             </button>
@@ -206,7 +206,7 @@ export function XactimateCard({ onPriceListSynced }: { onPriceListSynced?: () =>
       </div>
 
       {status.driver === 'mock' && (
-        <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+        <p className="mt-3 rounded-lg border border-caution-200 bg-caution-50 px-3 py-2 text-xs text-caution-600">
           This server is running the <strong>demo driver</strong> — it does not reach Xactimate at
           all. Any username and password will "connect", and the price list is synthetic. Set{' '}
           <code className="font-mono">XACTIMATE_DRIVER</code> to <code className="font-mono">api</code>{' '}
@@ -215,23 +215,23 @@ export function XactimateCard({ onPriceListSynced }: { onPriceListSynced?: () =>
       )}
 
       {error && (
-        <p className="mt-3 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+        <p className="mt-3 rounded-lg border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-600">
           {error}
         </p>
       )}
       {notice && !error && (
-        <p className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
+        <p className="mt-3 rounded-lg border border-success-200 bg-success-50 px-3 py-2 text-sm text-success-600">
           {notice}
         </p>
       )}
 
       {/* ---- Price list ---- */}
       {status.connected && (
-        <div className="mt-4 border-t border-white/10 pt-4">
+        <div className="mt-4 border-t border-line pt-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-sm font-medium text-white">Price list</p>
-              <p className="text-xs text-gray-500">
+              <p className="text-sm font-medium text-ink-900">Price list</p>
+              <p className="text-xs text-ink-500">
                 {status.priceListId
                   ? `Estimating against ${status.priceListId}.`
                   : 'No price list synced — every price is a placeholder until one is.'}
@@ -240,7 +240,7 @@ export function XactimateCard({ onPriceListSynced }: { onPriceListSynced?: () =>
             <button
               onClick={loadPriceLists}
               disabled={busy}
-              className="rounded-lg border border-white/10 bg-ink-700/70 px-3 py-1.5 text-xs text-gray-200 transition hover:bg-ink-600 disabled:opacity-60"
+              className="rounded-lg border border-line bg-paper-200 px-3 py-1.5 text-xs text-ink-800 transition hover:bg-paper-300 disabled:opacity-60"
             >
               {priceLists ? 'Refresh' : 'Show available'}
             </button>
@@ -251,12 +251,12 @@ export function XactimateCard({ onPriceListSynced }: { onPriceListSynced?: () =>
               {priceLists.map((list) => (
                 <li
                   key={list.id}
-                  className="flex items-center justify-between gap-3 rounded-lg bg-ink-700/50 px-3 py-2"
+                  className="flex items-center justify-between gap-3 rounded-lg bg-paper-200/50 px-3 py-2"
                 >
-                  <span className="text-sm text-gray-200">
+                  <span className="text-sm text-ink-800">
                     {list.name}
                     {list.effectiveDate && (
-                      <span className="ml-2 text-xs text-gray-500">
+                      <span className="ml-2 text-xs text-ink-500">
                         effective {list.effectiveDate}
                       </span>
                     )}
@@ -273,7 +273,7 @@ export function XactimateCard({ onPriceListSynced }: { onPriceListSynced?: () =>
             </ul>
           )}
           {priceLists?.length === 0 && (
-            <p className="mt-2 text-xs text-gray-500">
+            <p className="mt-2 text-xs text-ink-500">
               No price lists came back. If this account uses browser access, export the price list
               from Xactimate and upload it instead — scraping a paginated price grid would mis-price
               the estimate.
@@ -284,9 +284,9 @@ export function XactimateCard({ onPriceListSynced }: { onPriceListSynced?: () =>
 
       {/* ---- Connect form ---- */}
       {expanded && !status.connected && (
-        <form onSubmit={connect} className="mt-4 space-y-4 border-t border-white/10 pt-4">
-          <div className="rounded-lg border border-white/10 bg-ink-900/50 p-3 text-xs leading-relaxed text-gray-400">
-            <p className="font-medium text-gray-300">What happens when you connect</p>
+        <form onSubmit={connect} className="mt-4 space-y-4 border-t border-line pt-4">
+          <div className="rounded-lg border border-line bg-paper-100/50 p-3 text-xs leading-relaxed text-ink-600">
+            <p className="font-medium text-ink-700">What happens when you connect</p>
             <ul className="mt-1.5 list-disc space-y-1 pl-4">
               <li>
                 Atmosphere signs in to <strong>your</strong> Xactimate account and acts as you, only
@@ -312,44 +312,44 @@ export function XactimateCard({ onPriceListSynced }: { onPriceListSynced?: () =>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
-              <span className="text-xs font-medium text-gray-400">Xactimate username</span>
+              <span className="text-xs font-medium text-ink-600">Xactimate username</span>
               <input
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 autoComplete="off"
                 required
-                className="mt-1 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-brand-500"
+                className="mt-1 w-full rounded-lg border border-line bg-paper-100 px-3 py-2 text-sm text-ink-900 outline-none focus:border-brand-500"
               />
             </label>
             <label className="block">
-              <span className="text-xs font-medium text-gray-400">Password</span>
+              <span className="text-xs font-medium text-ink-600">Password</span>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="off"
                 required
-                className="mt-1 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-brand-500"
+                className="mt-1 w-full rounded-lg border border-line bg-paper-100 px-3 py-2 text-sm text-ink-900 outline-none focus:border-brand-500"
               />
             </label>
           </div>
 
           {mfaRequired && (
             <label className="block">
-              <span className="text-xs font-medium text-gray-400">Verification code</span>
+              <span className="text-xs font-medium text-ink-600">Verification code</span>
               <input
                 type="text"
                 inputMode="numeric"
                 value={mfaCode}
                 onChange={(e) => setMfaCode(e.target.value)}
-                className="mt-1 w-40 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 font-mono text-sm tracking-widest text-white outline-none focus:border-brand-500"
+                className="mt-1 w-40 rounded-lg border border-line bg-paper-100 px-3 py-2 font-mono text-sm tracking-widest text-ink-900 outline-none focus:border-brand-500"
               />
             </label>
           )}
 
           <fieldset>
-            <legend className="text-xs font-medium text-gray-400">
+            <legend className="text-xs font-medium text-ink-600">
               What Atmosphere may do in your account
             </legend>
             <div className="mt-2 space-y-1.5">
@@ -361,19 +361,19 @@ export function XactimateCard({ onPriceListSynced }: { onPriceListSynced?: () =>
                   <label
                     key={scope}
                     className={`flex cursor-pointer items-start gap-2.5 rounded-lg px-2.5 py-2 transition ${
-                      isWrite ? 'bg-amber-500/5 ring-1 ring-inset ring-amber-500/20' : 'bg-ink-700/40'
+                      isWrite ? 'bg-caution-50 ring-1 ring-inset ring-caution-200' : 'bg-paper-200'
                     }`}
                   >
                     <input
                       type="checkbox"
                       checked={scopes.includes(scope)}
                       onChange={() => toggleScope(scope)}
-                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-white/20 bg-ink-900 accent-brand-500"
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-line-strong bg-paper-100 accent-brand-500"
                     />
-                    <span className="text-sm text-gray-300">
+                    <span className="text-sm text-ink-700">
                       {meta.description}
                       {isWrite && (
-                        <span className="ml-1.5 text-xs text-amber-300">— changes your account</span>
+                        <span className="ml-1.5 text-xs text-caution-600">— changes your account</span>
                       )}
                     </span>
                   </label>
@@ -383,24 +383,24 @@ export function XactimateCard({ onPriceListSynced }: { onPriceListSynced?: () =>
           </fieldset>
 
           <fieldset>
-            <legend className="text-xs font-medium text-gray-400">Your password</legend>
+            <legend className="text-xs font-medium text-ink-600">Your password</legend>
             <div className="mt-2 space-y-1.5">
-              <label className="flex cursor-pointer items-start gap-2.5 rounded-lg bg-ink-700/40 px-2.5 py-2">
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-lg bg-paper-200 px-2.5 py-2">
                 <input
                   type="radio"
                   checked={storageMode === 'session'}
                   onChange={() => setStorageMode('session')}
                   className="mt-0.5 h-4 w-4 shrink-0 accent-brand-500"
                 />
-                <span className="text-sm text-gray-300">
-                  Don't store it <span className="text-emerald-400">— recommended</span>
-                  <span className="block text-xs text-gray-500">
+                <span className="text-sm text-ink-700">
+                  Don't store it <span className="text-success-600">— recommended</span>
+                  <span className="block text-xs text-ink-500">
                     Used for this sign-in only. You'll re-enter it next session.
                   </span>
                 </span>
               </label>
               <label
-                className={`flex items-start gap-2.5 rounded-lg bg-ink-700/40 px-2.5 py-2 ${
+                className={`flex items-start gap-2.5 rounded-lg bg-paper-200 px-2.5 py-2 ${
                   status.storageAvailable ? 'cursor-pointer' : 'opacity-50'
                 }`}
               >
@@ -411,9 +411,9 @@ export function XactimateCard({ onPriceListSynced }: { onPriceListSynced?: () =>
                   onChange={() => setStorageMode('stored')}
                   className="mt-0.5 h-4 w-4 shrink-0 accent-brand-500"
                 />
-                <span className="text-sm text-gray-300">
+                <span className="text-sm text-ink-700">
                   Store it encrypted
-                  <span className="block text-xs text-gray-500">
+                  <span className="block text-xs text-ink-500">
                     {status.storageAvailable
                       ? 'Needed only for unattended work like a nightly price sync.'
                       : 'Unavailable — this server has no encryption key configured.'}
@@ -428,9 +428,9 @@ export function XactimateCard({ onPriceListSynced }: { onPriceListSynced?: () =>
               type="checkbox"
               checked={acknowledged}
               onChange={(e) => setAcknowledged(e.target.checked)}
-              className="mt-0.5 h-4 w-4 shrink-0 rounded border-white/20 bg-ink-900 accent-brand-500"
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-line-strong bg-paper-100 accent-brand-500"
             />
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-ink-600">
               I've read the above, this is my own Xactimate account, and I'm authorising Atmosphere
               to use it on my behalf.
             </span>

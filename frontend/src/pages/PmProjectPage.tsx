@@ -163,7 +163,7 @@ export function PmProjectPage() {
               <ul className="space-y-1.5">
                 {analysis.health.reasons.map((r) => (
                   <li key={r.text} className="flex items-start gap-2 text-sm text-ink-700">
-                    <span aria-hidden="true" className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-gray-600" />
+                    <span aria-hidden="true" className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-paper-400" />
                     {r.text}
                   </li>
                 ))}
