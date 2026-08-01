@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
-import { api, type CrmAccount, type CrmContact } from '../lib/api';
+import { useCallback, useEffect, useState } from 'react';
+import { api, humanize, type CrmAccount, type CrmContact } from '../lib/api';
 import { AppShell, EmptyState, ErrorNote, PageHeader, PanelSpinner } from '../components/AppShell';
+import { NewCustomerDialog } from '../components/sales/NewCustomerDialog';
+import { PlusIcon } from '../components/icons';
 
 type Tab = 'accounts' | 'contacts';
 
@@ -15,6 +17,10 @@ export function CustomersPage() {
   const [accounts, setAccounts] = useState<CrmAccount[] | null>(null);
   const [contacts, setContacts] = useState<CrmContact[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const reload = useCallback(() => setReloadKey((k) => k + 1), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,7 +52,7 @@ export function CustomersPage() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [tab, search]);
+  }, [tab, search, reloadKey]);
 
   const list = tab === 'accounts' ? accounts : contacts;
 
@@ -56,6 +62,15 @@ export function CustomersPage() {
         eyebrow="Delivery"
         title="Customers"
         description="Accounts and the people on them — the same records the sales agent reads and writes."
+        action={
+          <button
+            onClick={() => setCreating(true)}
+            className="flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-400"
+          >
+            <PlusIcon width={15} height={15} />
+            {tab === 'accounts' ? 'New account' : 'New contact'}
+          </button>
+        }
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -106,7 +121,7 @@ export function CustomersPage() {
                 {accounts.map((a) => (
                   <tr key={a.id} className="border-b border-line last:border-b-0 hover:bg-paper-200">
                     <Td strong>{a.name}</Td>
-                    <Td>{a.kind ?? '—'}</Td>
+                    <Td>{humanize(a.kind)}</Td>
                     <Td>{a.phone ?? '—'}</Td>
                     <Td>{a.email ?? '—'}</Td>
                     <Td>{[a.city, a.region].filter(Boolean).join(', ') || '—'}</Td>
@@ -148,6 +163,14 @@ export function CustomersPage() {
             </table>
           </div>
         )
+      )}
+      {creating && (
+        <NewCustomerDialog
+          mode={tab}
+          accounts={accounts ?? []}
+          onClose={() => setCreating(false)}
+          onCreated={reload}
+        />
       )}
     </AppShell>
   );

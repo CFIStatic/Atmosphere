@@ -8,6 +8,7 @@ import {
   type AuditStats,
   type BillingOverview,
   type CrmAccount,
+  type CrmLead,
   type Escalation,
   type JobSummary,
   type PmOverview,
@@ -16,6 +17,7 @@ import { AppShell } from '../components/AppShell';
 import { AtmosphereRail } from '../components/AtmosphereRail';
 import { displayName } from '../lib/display';
 import { formatUsd } from '../lib/money';
+import { LEAD_STAGE_LABELS, humanize } from '../lib/api';
 import { METRIC_LABELS, PLATFORMS, type MetricKey, type PlatformId } from '../lib/platforms';
 import { AlertIcon } from '../components/icons';
 
@@ -60,6 +62,7 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
   const [escalations, setEscalations] = useState<Escalation[] | null>(null);
   const [billing, setBilling] = useState<BillingOverview | null>(null);
   const [accounts, setAccounts] = useState<CrmAccount[] | null>(null);
+  const [leads, setLeads] = useState<CrmLead[] | null>(null);
 
   const loadEscalations = useCallback(() => {
     api
@@ -86,6 +89,11 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
     if (platform.metrics.some((m) => m === 'creditBalance' || m === 'usageThisPeriod')) {
       api.getBillingOverview().then((o) => !cancelled && setBilling(o)).catch(() => !cancelled && setBilling(null));
     }
+    // Sales ranks leads that have gone quiet, not jobs — the pipeline is the
+    // work on that platform.
+    if (platformId === 'sales') {
+      api.crmLeads().then(({ items }) => !cancelled && setLeads(items)).catch(() => !cancelled && setLeads([]));
+    }
     if (platform.metrics.includes('accounts')) {
       api.crmAccounts().then(({ items }) => !cancelled && setAccounts(items)).catch(() => !cancelled && setAccounts([]));
     }
@@ -93,9 +101,19 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
     return () => {
       cancelled = true;
     };
-  }, [loadEscalations, platform.metrics]);
+  }, [loadEscalations, platform.metrics, platformId]);
 
   const firstName = displayName(profile?.fullName, user?.email).split(/[\s@]/)[0];
+
+  /** Open leads, quietest first — what the sales agent chases. */
+  const quietLeads = useMemo(
+    () =>
+      (leads ?? [])
+        .filter((l) => l.status !== 'won' && l.status !== 'lost')
+        .sort((a, b) => Date.parse(a.updatedAt ?? '') - Date.parse(b.updatedAt ?? ''))
+        .slice(0, 5),
+    [leads],
+  );
   const open = useMemo(() => (jobs ?? []).filter((j) => OPEN_STATUSES.has(j.status)), [jobs]);
 
   const metricValue = (key: MetricKey): { value: string; sub: string } => {
@@ -239,6 +257,51 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-5">
+        {platformId === 'sales' && (
+          <section className="rounded-xl glass-card lg:col-span-3">
+            <header className="flex items-baseline justify-between border-b border-line px-5 py-4">
+              <div>
+                <h2 className="text-[15px] font-semibold text-ink-900">Going quiet</h2>
+                <p className="mt-0.5 text-xs text-ink-500">
+                  Open leads, longest untouched first — the follow-up nobody has made yet
+                </p>
+              </div>
+              <Link to="/pipeline" className="text-xs font-medium text-brand-600 hover:text-brand-700">
+                Pipeline
+              </Link>
+            </header>
+            <div>
+              {quietLeads.map((lead) => (
+                <Link
+                  key={lead.id}
+                  to="/pipeline"
+                  className="flex items-center gap-3 border-b border-line px-5 py-3.5 transition last:border-b-0 hover:bg-paper-200/50"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-ink-900">{lead.title}</p>
+                    <p className="mt-0.5 text-xs text-ink-500">
+                      {LEAD_STAGE_LABELS[lead.status]}
+                      {lead.source ? ` · ${humanize(lead.source)}` : ''}
+                      {lead.updatedAt ? ` · last touched ${timeAgo(lead.updatedAt)}` : ''}
+                    </p>
+                  </div>
+                  {lead.estimatedValue != null && (
+                    <span className="shrink-0 text-sm font-semibold tabular-nums text-ink-900">
+                      {dollars(lead.estimatedValue)}
+                    </span>
+                  )}
+                </Link>
+              ))}
+              {leads !== null && quietLeads.length === 0 && (
+                <p className="px-5 py-8 text-sm text-ink-500">
+                  Every open lead has been touched recently. Good.
+                </p>
+              )}
+            </div>
+          </section>
+        )}
+
+        {platformId !== 'sales' && (
         <section className="rounded-xl glass-card lg:col-span-3">
           <header className="flex items-baseline justify-between border-b border-line px-5 py-4">
             <div>
@@ -260,6 +323,7 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
             )}
           </div>
         </section>
+        )}
 
         <section className="rounded-xl glass-card lg:col-span-2">
           <header className="flex items-baseline justify-between border-b border-line px-5 py-4">
