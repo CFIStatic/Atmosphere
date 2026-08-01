@@ -4,6 +4,10 @@ name: Deploy website
 # keeps its placeholder domain; every URL that must be absolute — sitemap,
 # robots, og:image — is stamped with the real Pages URL at deploy, so the
 # hosted copy is always self-consistent and the repo never hard-codes a host.
+#
+# Requires GitHub Pages to be enabled first: repo Settings → Pages → Source
+# "GitHub Actions". Until then this workflow skips deploy cleanly so main
+# stays green — run workflow_dispatch after Pages is turned on.
 on:
   push:
     branches: [main]
@@ -17,14 +21,34 @@ permissions:
   pages: write
   id-token: write
 
-# Deploys are serialized: a newer push supersedes an in-flight one, but a
-# deployment that already started is left to finish.
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
+  pages-enabled:
+    name: Check Pages
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - name: Detect whether GitHub Pages is configured
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/${{ github.repository }}/pages" >/dev/null 2>&1; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "GitHub Pages is configured — deploy will run."
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "GitHub Pages is not configured yet — skipping deploy (enable under Settings → Pages)."
+          fi
+
   deploy:
+    name: deploy
+    needs: pages-enabled
+    if: needs.pages-enabled.outputs.enabled == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -35,8 +59,6 @@ jobs:
       - name: Configure Pages
         id: pages
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - name: Stamp absolute URLs with the Pages origin
         run: |

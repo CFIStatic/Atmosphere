@@ -1255,7 +1255,7 @@ saves Estimator credentials.
 
 ```bash
 psql "$SUPABASE_DB_URL" -f db/app_connectors.sql   # after web_access.sql
-# or apply supabase/migrations/20260728160000_app_connectors.sql
+# or apply supabase/migrations/20260728160100_app_connectors.sql
 ```
 
 ### Verifier

@@ -42,7 +42,7 @@ require `SUPABASE_SERVICE_ROLE_KEY` on the server.
 
 ## 3. Schema
 
-Migration: `supabase/migrations/20260728143000_homeowner_portal.sql`
+Migration: `supabase/migrations/20260728143100_homeowner_portal.sql`
 
 | Table | Role |
 |---|---|

@@ -20,7 +20,7 @@ function fail(error: { code?: string; message: string }, action: string): never 
   if (error.code && MISSING_TABLE_CODES.has(error.code)) {
     throw new HttpError(
       503,
-      'The HomeOwner Report tables are not set up yet. Apply supabase/migrations/20260728143000_homeowner_portal.sql, then try again.',
+      'The HomeOwner Report tables are not set up yet. Apply supabase/migrations/20260728143100_homeowner_portal.sql, then try again.',
       'portal_schema_missing',
     );
   }
