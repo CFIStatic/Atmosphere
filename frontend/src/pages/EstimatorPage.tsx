@@ -17,6 +17,7 @@ import {
 } from '../lib/api';
 import { Logo } from '../components/Logo';
 import { AlertIcon, CheckIcon, DownloadIcon, SpinnerIcon } from '../components/icons';
+import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 /**
  * Construction Estimator.
@@ -851,6 +852,7 @@ function Stat({
 /* ------------------------------------------------------------------ */
 
 export function EstimatorPage() {
+  useFeatureTimer('construction_estimator');
   const [status, setStatus] = useState<EstimatorStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [runs, setRuns] = useState<EstimatorRun[]>([]);

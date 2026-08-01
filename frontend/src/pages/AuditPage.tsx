@@ -17,6 +17,7 @@ import {
   formatRelative,
 } from '../components/audit/shared';
 import { ChevronRightIcon, RefreshIcon, SearchIcon, SpinnerIcon } from '../components/icons';
+import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 /**
  * The Audit tab: everything every agent has done for this organization.
@@ -152,6 +153,7 @@ function RunRow({
 }
 
 export function AuditPage() {
+  useFeatureTimer('agent_console');
   const [agents, setAgents] = useState<AgentSummary[] | null>(null);
   const [stats, setStats] = useState<AuditStats | null>(null);
 

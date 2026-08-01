@@ -14,6 +14,7 @@ import { EstimateResult } from '../components/estimator/EstimateResult';
 import { XactimateCard } from '../components/estimator/XactimateCard';
 import { CaptureSyncCard } from '../components/estimator/CaptureSyncCard';
 import type { CaptureSyncResult } from '../lib/api';
+import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 /**
  * The Mitigation Estimator workspace.
@@ -37,6 +38,7 @@ import type { CaptureSyncResult } from '../lib/api';
 const EMPTY_SOURCES: Sources = { photos: [], notes: '', dryingReports: [] };
 
 export function MitigationEstimatorPage() {
+  useFeatureTimer('mitigation_estimator');
   const [sources, setSources] = useState<Sources>(EMPTY_SOURCES);
   const [estimate, setEstimate] = useState<MitigationEstimate | null>(null);
   const [estimateId, setEstimateId] = useState<string | null>(null);

@@ -14,6 +14,7 @@ import {
 } from '../lib/api';
 import { Logo } from '../components/Logo';
 import { CheckIcon, SpinnerIcon } from '../components/icons';
+import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 /**
  * The Computer Use console.
@@ -36,6 +37,7 @@ type TranscriptItem =
   | { kind: 'status'; id: number; message: string };
 
 export function ComputerUsePage() {
+  useFeatureTimer('computer_use');
   const [status, setStatus] = useState<ComputerStatus | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 

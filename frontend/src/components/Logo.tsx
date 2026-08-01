@@ -7,7 +7,7 @@ interface Props {
 /** Atmosphere wordmark + glyph (a sphere ringed by its atmosphere). */
 export function Logo({ className = '', compact = false }: Props) {
   return (
-    <div className={`flex items-center gap-2.5 ${className}`}>
+    <div className={`flex items-center gap-2.5 text-ink-900 ${className}`}>
       <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-500 shadow-card">
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <circle cx="12" cy="12" r="5" fill="white" fillOpacity="0.95" />
@@ -23,7 +23,7 @@ export function Logo({ className = '', compact = false }: Props) {
         </svg>
       </span>
       {!compact && (
-        <span className="text-lg font-extrabold tracking-tight text-ink-900">
+        <span className="text-lg font-extrabold tracking-tight">
           Atmo<span className="text-brand-500">sphere</span>
         </span>
       )}

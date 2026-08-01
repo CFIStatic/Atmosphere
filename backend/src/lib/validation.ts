@@ -196,6 +196,68 @@ export type CreateOrgInput = z.infer<typeof createOrgSchema>;
 export type JoinOrgInput = z.infer<typeof joinOrgSchema>;
 export type UpdateOrgProfileInput = z.infer<typeof updateOrgProfileSchema>;
 
+/* ---------------------------------------------------------------------------
+ * Growth analytics
+ * ------------------------------------------------------------------------ */
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const isoDate = z
+  .string()
+  .trim()
+  .refine((value) => !Number.isNaN(Date.parse(value)), 'Enter a valid date')
+  .transform((value) => new Date(value));
+
+/**
+ * The reporting window. Defaults to the last 30 days; the range is clamped so a
+ * hand-edited URL cannot ask the database for a decade of rows, and an inverted
+ * range is rejected rather than silently returning nothing.
+ */
+export const analyticsRangeSchema = z
+  .object({
+    from: isoDate.optional(),
+    to: isoDate.optional(),
+    months: z.coerce.number().int().min(1).max(60).default(24),
+  })
+  .transform(({ from, to, months }) => {
+    const end = to ?? new Date();
+    const start = from ?? new Date(end.getTime() - 30 * DAY_MS);
+    return { from: start, to: end, months };
+  })
+  .refine(({ from, to }) => from < to, {
+    message: 'The start of the range must come before the end',
+    path: ['from'],
+  })
+  .refine(({ from, to }) => to.getTime() - from.getTime() <= 3660 * DAY_MS, {
+    message: 'Ranges longer than ten years are not supported',
+    path: ['to'],
+  });
+
+export const analyticsDatasetSchema = z.enum([
+  'all',
+  'summary',
+  'monthly',
+  'features',
+  'plans',
+  'retention',
+  'accounts',
+]);
+
+/**
+ * A single feature heartbeat. `deltaMs` is additionally clamped in the database,
+ * which is the boundary that actually matters — this only rejects nonsense early.
+ */
+export const featureHeartbeatSchema = z.object({
+  featureKey: z
+    .string({ required_error: 'featureKey is required' })
+    .trim()
+    .regex(/^[a-z][a-z0-9_]{1,48}$/, 'Unknown feature'),
+  sessionId: z.string().trim().uuid().optional().nullable(),
+  deltaMs: z.coerce.number().int().min(0).max(300000).default(0),
+  interactions: z.coerce.number().int().min(0).max(1000).default(0),
+  client: z.enum(['web', 'mobile', 'desktop', 'api']).default('web'),
+});
+
 /* -------------------------------------------------------------------------
  * Audit ledger
  *

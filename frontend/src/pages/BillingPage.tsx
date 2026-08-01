@@ -14,8 +14,10 @@ import {
   type Plan,
 } from '../lib/api';
 import { formatCents, formatDate, formatRate, formatUsd, usedPct } from '../lib/money';
+import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 export function BillingPage() {
+  useFeatureTimer('billing_console');
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [overview, setOverview] = useState<BillingOverview | null>(null);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);

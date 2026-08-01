@@ -10,6 +10,7 @@ import {
 import { AppShell, PageHeader, PanelSpinner, ErrorNote } from '../components/AppShell';
 import { MemoryFeed } from '../components/MemoryFeed';
 import { SpinnerIcon, DownloadIcon } from '../components/icons';
+import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 /**
  * The organization's running memory.
@@ -42,6 +43,7 @@ function StatTile({ label, value, hint }: { label: string; value: string; hint?:
 }
 
 export function MemoryPage() {
+  useFeatureTimer('memory');
   const [events, setEvents] = useState<MemoryEvent[] | null>(null);
   const [cursor, setCursor] = useState<number | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);

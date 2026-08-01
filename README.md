@@ -42,55 +42,43 @@ replay step by step.
    server so no Supabase token is ever exposed to page JavaScript.
 5. **PIN sign-in** — an optional 4-digit PIN for fast repeat sign-in, bound to a single
    device (see below).
-6. **Mitigation Estimator** — reads a DocuSketch scan, a MICA report, iPhone photos and field
+6. **Growth analytics** — two internal dashboards (one for the team, one for investors)
+   covering user growth, seats, MRR/ARR, average spend, growth rates and which parts of the
+   product are actually used, measured by time spent. Every figure downloads as Excel.
+7. **Mitigation Estimator** — reads a DocuSketch scan, a MICA report, iPhone photos and field
    notes, and builds a priced, documented Xactimate estimate from them: classified against
    IICRC S500, written to the carrier's program terms, and reviewed for work that was
    performed but never billed (see below).
-7. **Computer use** — connect an Anthropic API key, run the agent on any computer, and
-6. **Web Access** — connect an outside website (a carrier portal, a supplier site) once,
+8. **Web Access** — connect an outside website (a carrier portal, a supplier site) once,
    then ask Atmosphere to sign in and **pull data out of it** or **enter data into it**. Every
    step the AI takes is recorded, so a finished run reads back like a receipt.
-7. **Verifier** — a second agent that goes back and checks the first one actually did the work.
+9. **Verifier** — a second agent that goes back and checks the first one actually did the work.
    It re-opens the site in a browser that cannot change anything, confirms the work against the
    task as it was originally written, corrects what is safe to correct, and asks you about
    anything it is unsure of.
-8. **Computer use** — connect an Anthropic API key, run the agent on any computer, and
-6. **Technician app** (`/technician`) — the field tool: record audio and video, hold a
+10. **Technician app** (`/technician`) — the field tool: record audio and video, hold a
    spoken conversation with an assistant, and have the camera name what it sees (see
    below).
-7. **Computer use** — connect an Anthropic API key, run the agent on any computer, and
+11. **Computer use** — connect an Anthropic API key, run the agent on any computer, and
    Claude can see its screen and operate it. The whole setup is one key and one command.
-8. **CRM backend** — customers, properties, leads, jobs, and their timeline, plus our own
+12. **CRM backend** — customers, properties, leads, jobs, and their timeline, plus our own
    backups and a verbatim copy of the data that currently lives only inside other
    companies' software. Backend infrastructure only, no UI yet — see
    **[docs/CRM.md](docs/CRM.md)**.
-9. **Executes work, and learns from it** — drafts scopes, builds estimates, extracts
-10. **Web Access** — connect an outside website (a carrier portal, a supplier site) once,
-   then ask Atmosphere to sign in and **pull data out of it** or **enter data into it**. Every
-   step the AI takes is recorded, so a finished run reads back like a receipt.
-11. **Verifier** — a second agent that goes back and checks the first one actually did the work.
-   It re-opens the site in a browser that cannot change anything, confirms the work against the
-   task as it was originally written, corrects what is safe to correct, and asks you about
-   anything it is unsure of.
-12. **Computer use** — connect an Anthropic API key, run the agent on any computer, and
-   Claude can see its screen and operate it. The whole setup is one key and one command.
-13. **CRM backend** — customers, properties, leads, jobs, and their timeline, plus our own
-   backups and a verbatim copy of the data that currently lives only inside other
-   companies' software. Backend infrastructure only, no UI yet — see
-   **[docs/CRM.md](docs/CRM.md)**.
-14. **Agent Memory** — the operational layer over CRM jobs: the tasks under a job, the crew
+13. **Agent Memory** — the operational layer over CRM jobs: the tasks under a job, the crew
    on it, and the work people log against it — with a complete, append-only record of
    everything that happens to any of it (see below).
-15. **Executes work, and learns from it** — drafts scopes, builds estimates, extracts
+14. **Executes work, and learns from it** — drafts scopes, builds estimates, extracts
    document fields, writes customer updates. Every run is scored, and the routing policy
    improves from those scores. See [Learning layer](#learning-layer) below.
-11. **Construction Estimator** — an agent that signs in to DocuSketch, reads the scan and
-16. **Construction Estimator** — an agent that signs in to DocuSketch, reads the scan and
+15. **Construction Estimator** — an agent that signs in to DocuSketch, reads the scan and
    the field photos, identifies the matching job in a CRM (Dash), reads the mitigation
    estimate, and builds the construction/rebuild estimate for Xactimate (see below).
-10. **Settings** — reached from the account menu under your own name in the header: display
+16. **Project Manager** — the daily driver that checks every open job against the drying log,
+   the schedule, the crew board and the paperwork (see below).
+17. **Settings** — reached from the account menu under your own name in the header: display
    name, password, PIN sign-in, role, and per-device preferences (see below).
-12. **Audit** — every unit of work every agent performed for the organization, replayable
+18. **Audit** — every unit of work every agent performed for the organization, replayable
    step by step (see below).
 
 ## Why this shape?
@@ -116,6 +104,11 @@ JWT:
 | `orgs`         | An organization; owns a unique `join_code` and `contractor_type`.    |
 | `org_members`  | Links a user to an org with their `role`, `work_type`, and `usage_intents`. |
 | `device_credentials` | One row per PIN-enrolled device. Holds only hashes — no secret and no session token. |
+| `analytics_staff` | Allow-list for the growth dashboards, with an `investor` / `internal` scope. |
+| `feature_catalog` | Every instrumented tool. The denominator that makes "least used" answerable. |
+| `feature_usage_sessions` | Foreground time per user, per tool. Written only by `feature_heartbeat`. |
+| `feature_usage_daily` | Per-day rollup of the above, maintained by trigger. |
+| `org_billing_events` | Append-only subscription history, so past months' MRR is real rather than back-projected. |
 | `estimator_jobs` / `estimator_estimates` | Estimating jobs and immutable estimate snapshots. |
 | `estimator_settings` | Per-org margin, O&P, tax and cost-basis assumptions.           |
 | `xactimate_connections` | One row per user: consent grant + optional encrypted credential. |
@@ -546,6 +539,13 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | POST   | `/api/estimator/runs/:id/job` | cookie | `{ jobId }`          | Answer the matcher and resume the run        |
 | POST   | `/api/estimator/runs/:id/approve` | cookie | —                | Approve the estimate and write it to Xactimate |
 | GET    | `/api/estimator/runs/:id/export` | cookie | `?format=csv\|xml` | Download the estimate without sending it    |
+| POST   | `/api/telemetry/feature` | cookie | `{ featureKey, sessionId, deltaMs }` | Record foreground time in a tool  |
+| GET    | `/api/analytics/access`  | cookie | —                         | Caller's analytics scope, or `null`          |
+| GET    | `/api/analytics/overview` | scope | `?from&to&months`          | Everything both dashboards render            |
+| GET    | `/api/analytics/summary` \| `/monthly` \| `/features` \| `/plan-mix` \| `/retention` | scope | `?from&to&months` | Individual reports |
+| GET    | `/api/analytics/accounts` | internal | `?from&to`               | Per-customer detail                          |
+| GET    | `/api/analytics/export`   | scope | `?dataset&from&to`         | `.xlsx` download of any of the above         |
+
 Agents also hold a WebSocket open at `/api/computer/agent-socket`, authenticated with the
 token from pairing rather than a session cookie.
 
@@ -1728,6 +1728,86 @@ login forms and megabytes of screenshot PNG, neither of which belongs in a table
 of the org can read forever. `lib/auditLog.ts` redacts secret-shaped keys, replaces image bytes
 with a descriptor, and caps payload size — at the last point before Postgres, so it is not each
 agent's job to remember.
+
+## Growth analytics
+
+Two dashboards, same numbers, different surface:
+
+| Route | Who | What it adds |
+| ----- | --- | ------------ |
+| `/analytics` | Atmosphere team (`internal` scope) | **Product intelligence** (where time goes, hottest/coldest tools, cut / invest / stickiness advice), plus named accounts, unit economics, seat utilisation and churn |
+| `/analytics/investor` | Investors (`investor` scope) and the team | ARR, MRR, growth rates, seats, plan mix, retention cohorts and feature engagement — **aggregate only** |
+
+The internal dashboard leads with product usage: which areas of Atmosphere people actually
+work in, which tools to bury or double down on, and concrete stickiness plays. Revenue and
+account tables sit below that. Investor scope never receives the advice payload.
+
+Both cover user growth, seat counts, average monthly spend, MRR, ARR, ARR on annual
+contracts, month-over-month growth rates, and which tools are used most and least by **time
+spent**. Every table and chart is downloadable as `.xlsx`, with a definitions sheet in every
+file.
+
+### Granting access
+
+Nobody sees company-wide revenue by default. `analytics_staff` has no INSERT policy, so the
+only way in is a server-side script holding the service-role key:
+
+```bash
+cd backend
+npm run analytics:grant -- someone@atmosphere.app internal   # full dashboard
+npm run analytics:grant -- partner@fund.com      investor    # aggregate only
+npm run analytics:grant -- someone@atmosphere.app revoke
+```
+
+The separation is enforced in three places, not one: the UI hides what the scope may not
+see, the API refuses the route, and the `SECURITY DEFINER` reporting functions re-check
+`auth.uid()` before returning a row. An investor-scope session cannot obtain per-customer
+data by editing a URL — the payload behind that page never contains it.
+
+### How "time spent" is measured
+
+The browser sends a heartbeat every 30 seconds for the tool on screen, carrying the
+milliseconds since the last one. That number is never trusted:
+
+- only the **foreground** counts — a backgrounded tab stops accumulating immediately;
+- **idle time is not usage** — after five minutes without a pointer, key or scroll event the
+  timer pauses and resumes on the next interaction;
+- each delta is **clamped to five minutes** in the API and again in the database, so a laptop
+  that wakes from sleep contributes one interval rather than the whole gap.
+
+Tools with **no** recorded time still appear in the reports. That is deliberate: a feature
+that vanishes when nobody opens it cannot show up as least-used.
+
+### Where the money numbers come from
+
+- **MRR** — each active or past-due subscription at its plan price, times seats on per-seat
+  plans. Annual plans use `billing_plans.annual_price_cents`, which is the per-month rate
+  when billed annually (matching `billing_overview()`). Trials are excluded and reported
+  separately as pipeline.
+- **ARR** — MRR × 12. A run-rate, not trailing revenue; trailing 12-month cash is reported
+  alongside it so the two are never confused.
+- **Average monthly spend** — cash collected in the range, normalised to a 30-day month,
+  divided by paying accounts (or seats), so changing the date filter does not change what the
+  metric means.
+- **Historical months** — reconstructed from `org_billing_events`, an append-only log written
+  by trigger on every plan, seat or status change. Months before that log existed show the
+  state captured at its backfill.
+
+### Seeing it with data
+
+A new project has no customers, so the dashboards render zeros. To review them with a
+plausible 18-month history:
+
+```bash
+cd backend
+npm run analytics:seed            # demo customers, revenue and usage
+npm run analytics:seed -- --wipe  # remove every trace of it
+```
+
+Demo organizations are named `Demo · …` and their users live on the reserved
+`atmosphere.invalid` domain, which is how `--wipe` finds them. The script refuses to run if
+the project already holds organizations it did not create, so demo figures cannot quietly mix
+into real aggregates.
 
 ## Configuration
 

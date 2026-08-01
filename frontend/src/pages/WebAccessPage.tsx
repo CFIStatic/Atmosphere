@@ -11,6 +11,7 @@ import {
 import { Logo } from '../components/Logo';
 import { VerificationPanel } from '../components/VerificationPanel';
 import { SpinnerIcon, CheckIcon } from '../components/icons';
+import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 /**
  * Web Access — the organization's connected websites, and the tasks the AI
@@ -349,6 +350,7 @@ function RunDetail({ run }: { run: WebRun }) {
 }
 
 export function WebAccessPage() {
+  useFeatureTimer('web_connections');
   const [connections, setConnections] = useState<WebConnection[] | null>(null);
   const [runs, setRuns] = useState<WebRun[]>([]);
   const [enabled, setEnabled] = useState<boolean | null>(null);

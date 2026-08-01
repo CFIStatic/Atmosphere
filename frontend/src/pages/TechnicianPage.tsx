@@ -14,6 +14,7 @@ import { VoiceAssistantPanel } from '../components/technician/VoiceAssistantPane
 import { VideoCapturePanel } from '../components/technician/VideoCapturePanel';
 import { RecordingsPanel } from '../components/technician/RecordingsPanel';
 import { GaugeIcon, ScanIcon, SparkIcon, VideoIcon } from '../components/icons';
+import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 type View = 'capture' | 'recordings' | 'assistant';
 
@@ -37,6 +38,7 @@ const DETECTION_FRESHNESS_MS = 2 * 60 * 1000;
  * transcription.
  */
 export function TechnicianPage() {
+  useFeatureTimer('technician');
   const { user, membership, logout } = useAuth();
   const [view, setView] = useState<View>('capture');
   const [capabilities, setCapabilities] = useState<TechnicianCapabilities | null>(null);

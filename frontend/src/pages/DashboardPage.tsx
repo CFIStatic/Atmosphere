@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useFeatureTimer } from '../hooks/useFeatureTimer';
+import { useAnalyticsAccess } from '../hooks/useAnalytics';
 import {
   api,
   ROLE_LABELS,
@@ -30,6 +32,9 @@ export function DashboardPage() {
   const [events, setEvents] = useState<MemoryEvent[] | null>(null);
   const [stats, setStats] = useState<MemoryStats | null>(null);
   const [copied, setCopied] = useState(false);
+  // Feeds the "time spent per tool" measurement behind the growth dashboards.
+  useFeatureTimer('dashboard');
+  const { access } = useAnalyticsAccess();
 
   const org = membership?.org;
 
@@ -266,6 +271,33 @@ export function DashboardPage() {
           {/* Anything the verifier could not settle on its own. Renders nothing
               when the queue is empty, so it only appears when it matters. */}
           <EscalationQueue />
+
+          {/* Growth analytics — only rendered for staff with dashboard access. */}
+          {access?.scope && (
+            <Link
+              to={access.scope === 'internal' ? '/analytics' : '/analytics/investor'}
+              className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-line bg-paper-0 p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50"
+            >
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-brand-600">
+                  Growth analytics
+                </p>
+                <p className="mt-1.5 text-lg font-semibold text-ink-900">
+                  {access.scope === 'internal'
+                    ? 'Where the product is used — and what to cut'
+                    : 'Investor dashboard'}
+                </p>
+                <p className="mt-1 text-sm text-ink-600">
+                  {access.scope === 'internal'
+                    ? 'Hottest features, dead weight to bury, and stickiness plays for the Atmosphere team.'
+                    : 'User growth, seats, MRR/ARR, and aggregate product engagement.'}
+                </p>
+              </div>
+              <span aria-hidden="true" className="shrink-0 text-2xl text-brand-600">
+                →
+              </span>
+            </Link>
+          )}
 
           {/* Mitigation estimator — only meaningful for mitigation crews. */}
           {membership?.workType === 'mitigation' && (

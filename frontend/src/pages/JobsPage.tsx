@@ -19,6 +19,7 @@ import {
 } from '../lib/api';
 import { AppShell, PageHeader, PanelSpinner, EmptyState, ErrorNote } from '../components/AppShell';
 import { SpinnerIcon, PlusIcon } from '../components/icons';
+import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 const FILTERS: { value: string; label: string }[] = [
   { value: 'open', label: 'Open' },
@@ -238,6 +239,7 @@ function JobCard({ job }: { job: JobSummary }) {
 }
 
 export function JobsPage() {
+  useFeatureTimer('jobs');
   const [jobs, setJobs] = useState<JobSummary[] | null>(null);
   const [status, setStatus] = useState('open');
   const [search, setSearch] = useState('');

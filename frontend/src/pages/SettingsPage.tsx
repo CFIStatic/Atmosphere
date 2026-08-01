@@ -35,6 +35,7 @@ import {
   SpinnerIcon,
   UserIcon,
 } from '../components/icons';
+import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 type SectionId = 'profile' | 'security' | 'organization' | 'preferences';
 
@@ -60,6 +61,7 @@ function isSectionId(value: string | null): value is SectionId {
 }
 
 export function SettingsPage() {
+  useFeatureTimer('settings');
   // The section lives in the URL so a settings link can point at one directly
   // and the browser's back button steps between them.
   const [params, setParams] = useSearchParams();

@@ -5,6 +5,8 @@ import cookieParser from 'cookie-parser';
 import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
+import { analyticsRouter } from './routes/analytics.js';
+import { telemetryRouter } from './routes/telemetry.js';
 import { profileRouter } from './routes/profile.js';
 import { auditRouter } from './routes/audit.js';
 import { jobsRouter } from './routes/jobs.js';
@@ -131,6 +133,8 @@ export function createApp(): Express {
   app.use('/api/cyber', cyberRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
+  app.use('/api/analytics', analyticsRouter);
+  app.use('/api/telemetry', telemetryRouter);
   app.use('/api/profile', profileRouter);
   app.use('/api/audit', auditRouter);
   app.use('/api/mitigation', mitigationRouter);

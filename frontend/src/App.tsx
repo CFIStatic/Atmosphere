@@ -7,6 +7,10 @@ import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { DashboardPage } from './pages/DashboardPage';
+import {
+  InternalAnalyticsRoute,
+  InvestorAnalyticsRoute,
+} from './pages/analytics/AnalyticsRoutes';
 import { SettingsPage } from './pages/SettingsPage';
 import { AuditPage } from './pages/AuditPage';
 import { JobsPage } from './pages/JobsPage';
@@ -89,6 +93,29 @@ export default function App() {
               <ProtectedRoute>
                 <RequireOnboarded>
                   <DashboardPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Growth analytics. Onboarding is required — every figure is scoped to
+              a signed-in staff member, and the guards inside re-check access. */}
+          <Route
+            path="/analytics"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <InternalAnalyticsRoute />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/analytics/investor"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <InvestorAnalyticsRoute />
                 </RequireOnboarded>
               </ProtectedRoute>
             }
