@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, MemoryRouter, Navigate, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -53,9 +53,13 @@ function RequireNotOnboarded({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+// Demo builds run in sandboxed frames where history-API navigation is not
+// available, so they route in memory; real builds keep clean URLs.
+const Router = import.meta.env.VITE_DEMO ? MemoryRouter : BrowserRouter;
+
 export default function App() {
   return (
-    <BrowserRouter>
+    <Router>
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
@@ -238,6 +242,6 @@ export default function App() {
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </AuthProvider>
-    </BrowserRouter>
+    </Router>
   );
 }

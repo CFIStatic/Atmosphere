@@ -8,11 +8,19 @@ import './index.css';
 // animation they asked us to suppress.
 initPreferences();
 
-const rootEl = document.getElementById('root');
-if (!rootEl) throw new Error('Root element #root not found');
+async function boot() {
+  // Demo builds answer every /api call in-page; the interceptor must be
+  // installed before anything renders and fires its first request.
+  if (import.meta.env.VITE_DEMO) await import('./demo/mock');
 
-createRoot(rootEl).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+  const rootEl = document.getElementById('root');
+  if (!rootEl) throw new Error('Root element #root not found');
+
+  createRoot(rootEl).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+}
+
+void boot();
