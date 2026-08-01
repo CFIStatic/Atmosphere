@@ -750,7 +750,12 @@ function OrganizationSection() {
  * Preferences
  * -------------------------------------------------------------------------- */
 
-const TOGGLES: { key: keyof Preferences; label: string; description: string }[] = [
+/** The on/off preferences. Theme is a choice, not a switch, and rides below. */
+type BooleanPreference = {
+  [K in keyof Preferences]: Preferences[K] extends boolean ? K : never;
+}[keyof Preferences];
+
+const TOGGLES: { key: BooleanPreference; label: string; description: string }[] = [
   {
     key: 'reduceMotion',
     label: 'Reduce motion',
@@ -781,6 +786,32 @@ function PreferencesSection() {
             description={toggle.description}
           />
         ))}
+
+        <div className="flex items-center justify-between gap-4 py-4">
+          <div>
+            <p className="text-sm font-medium text-ink-900">Appearance</p>
+            <p className="mt-0.5 text-sm text-ink-600">
+              Dark is the console's home; light is here when the sun wins.
+            </p>
+          </div>
+          <div className="flex rounded-lg border border-line bg-paper-0 p-1">
+            {(['dark', 'light'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setPreference('theme', mode)}
+                aria-pressed={preferences.theme === mode}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium capitalize transition ${
+                  preferences.theme === mode
+                    ? 'bg-brand-50 text-brand-700'
+                    : 'text-ink-600 hover:text-ink-900'
+                }`}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     </Card>
   );
