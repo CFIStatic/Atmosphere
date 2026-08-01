@@ -66,7 +66,7 @@ export function SchedulePage() {
             <h2 className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.09em] text-ink-500">
               {day}
             </h2>
-            <div className="rounded-xl border border-line bg-paper-0 shadow-card">
+            <div className="rounded-xl glass-card">
               {dayJobs.map((job) => (
                 <ScheduleRow key={job.jobId} job={job} />
               ))}

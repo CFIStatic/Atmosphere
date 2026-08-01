@@ -26,7 +26,7 @@ function AgentCard({ agent, onOpen }: { agent: AgentMemory; onOpen: () => void }
   return (
     <button
       onClick={onOpen}
-      className="rounded-xl border border-line bg-paper-0 p-5 text-left transition hover:border-brand-400/40 hover:bg-paper-200"
+      className="rounded-xl glass-card p-5 text-left transition hover:border-brand-400/40 hover:bg-paper-200"
     >
       <div className="flex items-center gap-3">
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-600/30 text-sm font-semibold uppercase text-brand-200">
@@ -134,7 +134,7 @@ function AgentDetail({ userId, onBack }: { userId: string; onBack: () => void })
               ['Tasks done', String(agent.tasksCompleted)],
               ['Work logged', formatMinutes(agent.minutesLogged)],
             ].map(([label, value]) => (
-              <div key={label} className="rounded-xl border border-line bg-paper-0 px-4 py-3">
+              <div key={label} className="rounded-xl glass-card px-4 py-3">
                 <p className="text-xs font-medium uppercase tracking-wide text-ink-500">{label}</p>
                 <p className="mt-1 text-xl font-semibold text-ink-900">{value}</p>
               </div>
@@ -153,7 +153,7 @@ function AgentDetail({ userId, onBack }: { userId: string; onBack: () => void })
               <button
                 onClick={loadMore}
                 disabled={loadingMore}
-                className="flex items-center gap-2 rounded-lg border border-line bg-paper-0 px-5 py-2.5 text-sm font-medium text-ink-800 transition hover:bg-paper-200 disabled:opacity-60"
+                className="flex items-center gap-2 rounded-lg glass-card px-5 py-2.5 text-sm font-medium text-ink-800 transition hover:bg-paper-200 disabled:opacity-60"
               >
                 {loadingMore && <SpinnerIcon className="animate-spin" width={16} height={16} />}
                 {loadingMore ? 'Loading…' : 'Load earlier'}

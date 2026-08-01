@@ -61,7 +61,7 @@ export function AtmosphereRail({
   }
 
   return (
-    <div className="sticky top-[73px] rounded-xl border border-line bg-paper-50 shadow-card">
+    <div className="sticky top-[73px] rounded-2xl glass-card overflow-hidden">
       <header className="flex items-center gap-2.5 border-b border-line px-4 py-3.5">
         <span className="grid h-7 w-7 place-items-center rounded-lg bg-brand-500 text-white">
           <SparkIcon width={15} height={15} />
@@ -78,7 +78,7 @@ export function AtmosphereRail({
         </p>
         <div className="mt-2 space-y-2.5">
           {alerts.slice(0, 4).map((alert) => (
-            <div key={alert.id} className="rounded-lg border border-line bg-paper-0 p-3">
+            <div key={alert.id} className="rounded-lg glass-card p-3">
               <div className="flex items-start justify-between gap-2">
                 <p className="text-[13px] font-semibold leading-snug text-ink-900">{alert.title}</p>
                 <span
@@ -148,7 +148,7 @@ export function AtmosphereRail({
         </div>
 
         {reply && (
-          <div className="mt-5 rounded-lg border border-line bg-paper-0 p-3">
+          <div className="mt-5 rounded-lg glass-card p-3">
             <p className="text-[10.5px] font-semibold uppercase tracking-[0.09em] text-brand-600">
               Atmosphere
             </p>
@@ -160,7 +160,7 @@ export function AtmosphereRail({
       </div>
 
       <div className="border-t border-line p-3">
-        <div className="flex items-end gap-2 rounded-lg border border-line bg-paper-0 p-2 focus-within:border-brand-500">
+        <div className="flex items-end gap-2 rounded-lg glass-card p-2 focus-within:border-brand-500">
           <textarea
             value={question}
             onChange={(e) => setQuestion(e.target.value)}

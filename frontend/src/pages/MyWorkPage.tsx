@@ -79,7 +79,7 @@ export function MyWorkPage() {
             </Link>
           )}
 
-          <section className="rounded-xl border border-line bg-paper-0 shadow-card">
+          <section className="rounded-xl glass-card">
             <header className="flex items-baseline justify-between border-b border-line px-5 py-4">
               <h2 className="text-[15px] font-semibold text-ink-900">Your jobs</h2>
               <span className="text-xs text-ink-500">{myOpenJobs.length} open</span>
@@ -111,7 +111,7 @@ export function MyWorkPage() {
             )}
           </section>
 
-          <section className="rounded-xl border border-line bg-paper-0 shadow-card">
+          <section className="rounded-xl glass-card">
             <header className="flex items-baseline justify-between border-b border-line px-5 py-4">
               <h2 className="text-[15px] font-semibold text-ink-900">Alerts on your projects</h2>
               <Link to="/pm" className="text-xs font-medium text-brand-600">

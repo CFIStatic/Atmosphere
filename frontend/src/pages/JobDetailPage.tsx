@@ -33,7 +33,7 @@ type Tab = (typeof TABS)[number];
 
 function Card({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border border-line bg-paper-0 p-5">
+    <section className="rounded-xl glass-card p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="text-base font-semibold text-ink-900">{title}</h2>
         {action}
@@ -238,7 +238,7 @@ export function JobDetailPage() {
           { label: 'Logged', value: formatMinutes(totalMinutes) },
           { label: 'Recorded', value: String(memory.length) },
         ].map((stat) => (
-          <div key={stat.label} className="rounded-xl border border-line bg-paper-0 px-4 py-3">
+          <div key={stat.label} className="rounded-xl glass-card px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-ink-500">{stat.label}</p>
             <p className="mt-1 text-xl font-semibold text-ink-900">{stat.value}</p>
           </div>

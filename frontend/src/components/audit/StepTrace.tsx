@@ -167,7 +167,7 @@ export function StepTrace({ steps, live = false }: Props) {
         <div
           role="tablist"
           aria-label="Trace view"
-          className="flex rounded-lg border border-line bg-paper-0 p-0.5 text-xs"
+          className="flex rounded-lg glass-card p-0.5 text-xs"
         >
           {(['timeline', 'stepper'] as const).map((value) => (
             <button
@@ -192,7 +192,7 @@ export function StepTrace({ steps, live = false }: Props) {
               <span className="absolute -left-[2.4rem] top-0">
                 <StepGlyph step={step} />
               </span>
-              <div className="rounded-lg border border-line bg-paper-0 px-3.5 py-2.5">
+              <div className="rounded-lg glass-card px-3.5 py-2.5">
                 <StepHeading step={step} />
                 <StepBody step={step} expanded />
               </div>

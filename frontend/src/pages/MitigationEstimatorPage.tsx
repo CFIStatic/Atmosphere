@@ -225,7 +225,7 @@ export function MitigationEstimatorPage() {
                     <a
                       key={format}
                       href={api.estimateExportUrl(estimateId, format)}
-                      className="flex-1 rounded-lg border border-line bg-paper-0 px-2 py-2 text-center text-xs text-ink-700 transition hover:bg-paper-200"
+                      className="flex-1 rounded-lg glass-card px-2 py-2 text-center text-xs text-ink-700 transition hover:bg-paper-200"
                     >
                       {label}
                     </a>

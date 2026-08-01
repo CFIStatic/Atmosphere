@@ -71,7 +71,7 @@ export function CompliancePanel({
               {notApplicable.map((check) => (
                 <li
                   key={check.id}
-                  className="rounded-lg border border-line bg-paper-0 px-3 py-2 text-xs text-ink-500"
+                  className="rounded-lg glass-card px-3 py-2 text-xs text-ink-500"
                 >
                   <span className="text-ink-600">{check.title}</span> — {check.detail}
                 </li>
@@ -84,7 +84,7 @@ export function CompliancePanel({
       {/* Caveats: where the industry says "the standard requires" about something
           the standard leaves to judgement. Worth knowing before an adjuster asks. */}
       {caveats.length > 0 && (
-        <div className="mt-4 rounded-xl border border-line bg-paper-0 p-4">
+        <div className="mt-4 rounded-xl glass-card p-4">
           <p className="text-sm font-medium text-ink-900">What this estimate does not claim</p>
           <p className="mt-1 text-xs text-ink-500">
             These are places where common practice is often described as an S500 requirement.
@@ -120,7 +120,7 @@ export function CompliancePanel({
               {references.map((reference) => (
                 <div
                   key={reference.id}
-                  className="rounded-lg border border-line bg-paper-0 p-3"
+                  className="rounded-lg glass-card p-3"
                 >
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <p className="text-sm font-medium text-ink-800">{reference.title}</p>

@@ -148,7 +148,7 @@ function Card({
 }
 
 const INPUT_CLASS =
-  'w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 text-sm text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:opacity-60';
+  'w-full rounded-lg glass-card px-3.5 py-2.5 text-sm text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:opacity-60';
 
 function Field({
   label,
@@ -794,7 +794,7 @@ function PreferencesSection() {
               Dark is the console's home; light is here when the sun wins.
             </p>
           </div>
-          <div className="flex rounded-lg border border-line bg-paper-0 p-1">
+          <div className="flex rounded-lg glass-card p-1">
             {(['dark', 'light'] as const).map((mode) => (
               <button
                 key={mode}

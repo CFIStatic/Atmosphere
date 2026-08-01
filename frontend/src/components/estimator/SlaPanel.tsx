@@ -78,7 +78,7 @@ export function SlaPanel({
       </div>
 
       {/* ---- Who this is for ---- */}
-      <div className="mt-3 rounded-xl border border-line bg-paper-0 p-4">
+      <div className="mt-3 rounded-xl glass-card p-4">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <p className="text-base font-semibold text-ink-900">
             {id.carrierName ?? 'Carrier not identified'}

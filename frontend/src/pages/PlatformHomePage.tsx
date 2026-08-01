@@ -231,7 +231,7 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
         )}
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-6">
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
         {platform.metrics.map((key) => {
           const { value, sub } = metricValue(key);
           return <Kpi key={key} label={METRIC_LABELS[key].label} value={value} sub={sub} />;
@@ -239,7 +239,7 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-5">
-        <section className="rounded-xl border border-line bg-paper-0 shadow-card lg:col-span-3">
+        <section className="rounded-xl glass-card lg:col-span-3">
           <header className="flex items-baseline justify-between border-b border-line px-5 py-4">
             <div>
               <h2 className="text-[15px] font-semibold text-ink-900">{ATTENTION_TITLE[platformId]}</h2>
@@ -261,7 +261,7 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
           </div>
         </section>
 
-        <section className="rounded-xl border border-line bg-paper-0 shadow-card lg:col-span-2">
+        <section className="rounded-xl glass-card lg:col-span-2">
           <header className="flex items-baseline justify-between border-b border-line px-5 py-4">
             <div>
               <h2 className="text-[15px] font-semibold text-ink-900">Agent activity</h2>
@@ -289,7 +289,7 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
 
 function Kpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-xl border border-line bg-paper-0 px-4 py-3.5 shadow-card">
+    <div className="rounded-xl glass-card px-4 py-3.5 shadow-card">
       <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-ink-500">{label}</p>
       <p className="mt-1.5 text-2xl font-bold tabular-nums tracking-tight text-ink-900">{value}</p>
       {sub && <p className="mt-1 truncate text-xs text-ink-500">{sub}</p>}

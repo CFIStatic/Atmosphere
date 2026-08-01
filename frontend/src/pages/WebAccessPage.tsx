@@ -23,7 +23,7 @@ import { SpinnerIcon, CheckIcon } from '../components/icons';
  */
 
 const inputClass =
-  'w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200';
+  'w-full rounded-lg glass-card px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200';
 const labelClass = 'mb-1.5 block text-sm font-medium text-ink-700';
 
 const STATUS_STYLES: Record<WebConnection['status'], string> = {
@@ -105,7 +105,7 @@ function ConnectForm({ onConnected }: { onConnected: (connection: WebConnection)
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-xl border border-line bg-paper-0 p-5"
+      className="rounded-xl glass-card p-5"
     >
       <h3 className="text-base font-semibold text-ink-900">Connect a site</h3>
       <p className="mt-1 text-sm text-ink-600">
@@ -214,7 +214,7 @@ function ConnectForm({ onConnected }: { onConnected: (connection: WebConnection)
             reset();
             setOpen(false);
           }}
-          className="rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
+          className="rounded-lg glass-card px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
         >
           Cancel
         </button>
@@ -284,7 +284,7 @@ function ConnectionRow({
           <button
             onClick={verify}
             disabled={busy !== null}
-            className="flex items-center gap-1.5 rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs font-medium text-ink-800 transition hover:bg-paper-100 disabled:opacity-60"
+            className="flex items-center gap-1.5 rounded-lg glass-card px-3 py-1.5 text-xs font-medium text-ink-800 transition hover:bg-paper-100 disabled:opacity-60"
           >
             {busy === 'verify' && <SpinnerIcon className="animate-spin" width={12} height={12} />}
             Test sign-in
@@ -292,7 +292,7 @@ function ConnectionRow({
           <button
             onClick={remove}
             disabled={busy !== null}
-            className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs font-medium text-ink-600 transition hover:bg-danger-50 hover:text-danger-700 disabled:opacity-60"
+            className="rounded-lg glass-card px-3 py-1.5 text-xs font-medium text-ink-600 transition hover:bg-danger-50 hover:text-danger-700 disabled:opacity-60"
           >
             Remove
           </button>
@@ -505,7 +505,7 @@ export function WebAccessPage() {
         <Logo />
         <Link
           to="/dashboard"
-          className="rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
+          className="rounded-lg glass-card px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
         >
           Back to dashboard
         </Link>
@@ -595,7 +595,7 @@ export function WebAccessPage() {
               <h2 className="text-lg font-semibold text-ink-900">Run a task</h2>
               <form
                 onSubmit={startRun}
-                className="mt-4 rounded-xl border border-line bg-paper-0 p-5"
+                className="mt-4 rounded-xl glass-card p-5"
               >
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
@@ -698,7 +698,7 @@ export function WebAccessPage() {
                   return (
                     <li
                       key={run.id}
-                      className="rounded-xl border border-line bg-paper-0 px-5 py-4"
+                      className="rounded-xl glass-card px-5 py-4"
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0">

@@ -41,8 +41,8 @@
   --ink-500: 128 124 116;
   --ink-400: 92 89 81;
 
-  --line: 42 40 37;
-  --line-strong: 59 56 51;
+  --line: 36 34 31;
+  --line-strong: 52 49 45;
 
   --danger-50: 48 20 18;
   --danger-200: 84 32 27;
@@ -57,6 +57,22 @@
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.25);
   --shadow-lift: 0 6px 18px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.35);
+
+  /* Glass. Surfaces are translucent and blurred rather than filled, edges are
+     a hairline of light rather than a drawn line, and a single inset highlight
+     along the top gives the pane its thickness. */
+  --glass-tint: 29 27 24;
+  --glass-alpha: 0.55;
+  --glass-edge: 255 255 255;
+  --glass-edge-alpha: 0.075;
+  --glass-edge-strong: 0.14;
+  --glass-gloss: 255 255 255;
+  --glass-sheen: 0.06;
+  --glass-rake: 0.028;
+  --glass-blur: 20px;
+  --wash-a: 0.16;
+  --wash-b: 0.10;
+  --wash-c: 0.08;
 
   /* PM status: good / needs-attention / wrong, never decorative. Info sits
      outside the brand ramp so it reads as neither severity nor accent. */
@@ -113,6 +129,21 @@
   --shadow-card: 0 1px 2px rgba(28, 25, 23, 0.04), 0 1px 3px rgba(28, 25, 23, 0.03);
   --shadow-lift: 0 4px 12px rgba(28, 25, 23, 0.07), 0 2px 4px rgba(28, 25, 23, 0.04);
 
+  /* On paper the pane is lighter than its ground, and the edge is a soft
+     shadow rather than a highlight — otherwise glass reads as fog. */
+  --glass-tint: 255 255 255;
+  --glass-alpha: 0.72;
+  --glass-edge: 28 25 23;
+  --glass-edge-alpha: 0.08;
+  --glass-edge-strong: 0.14;
+  --glass-gloss: 255 255 255;
+  --glass-sheen: 0.75;
+  --glass-rake: 0.5;
+  --glass-blur: 18px;
+  --wash-a: 0.09;
+  --wash-b: 0.06;
+  --wash-c: 0.05;
+
   --pm-good: #3f7d4c;
   --pm-warning: #946a0b;
   --pm-critical: #b4361d;
@@ -134,6 +165,99 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background-color: rgb(var(--paper-100));
   color: rgb(var(--ink-900));
+}
+
+/* Two slow washes of accent behind everything. They are barely visible on
+   their own; their job is to give the glass something to refract, so panes
+   read as translucent rather than merely grey. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(58rem 44rem at 6% -12%, rgb(var(--aurora) / var(--wash-a)), transparent 58%),
+    radial-gradient(48rem 38rem at 102% 2%, rgb(var(--aurora) / var(--wash-b)), transparent 54%),
+    radial-gradient(52rem 42rem at 58% 112%, rgb(var(--aurora) / var(--wash-c)), transparent 58%);
+}
+
+/* ---------- Glass surfaces ----------
+   One recipe, three weights. `glass-card` is the ordinary pane, `glass-panel`
+   the raised one (menus, popovers), `glass-bar` the chrome that content
+   scrolls under. Every one of them is a background — never a text colour — so
+   contrast is unaffected. */
+.glass-card,
+.glass-panel,
+.glass-bar {
+  background-color: rgb(var(--glass-tint) / var(--glass-alpha));
+  border: 1px solid rgb(var(--glass-edge) / var(--glass-edge-alpha));
+  box-shadow:
+    inset 0 1px 0 0 rgb(var(--glass-gloss) / var(--glass-sheen)),
+    var(--shadow-card);
+}
+
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .glass-card,
+  .glass-panel,
+  .glass-bar {
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+    backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  }
+}
+
+/* The rake: a hint of light down the pane's face, strongest at the top edge.
+   It is what separates glass from a plain translucent fill. */
+.glass-card::before,
+.glass-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    158deg,
+    rgb(var(--glass-gloss) / var(--glass-rake)) 0%,
+    transparent 42%
+  );
+}
+.glass-card,
+.glass-panel { position: relative; }
+/* Content sits above the rake. */
+.glass-card > *,
+.glass-panel > * { position: relative; }
+
+.glass-panel {
+  background-color: rgb(var(--glass-tint) / calc(var(--glass-alpha) + 0.28));
+  border-color: rgb(var(--glass-edge) / var(--glass-edge-strong));
+  box-shadow:
+    inset 0 1px 0 0 rgb(var(--glass-gloss) / var(--glass-sheen)),
+    var(--shadow-lift);
+}
+
+.glass-bar {
+  border: 0;
+  border-bottom: 1px solid rgb(var(--glass-edge) / var(--glass-edge-alpha));
+  box-shadow: inset 0 -1px 0 0 rgb(var(--glass-gloss) / calc(var(--glass-sheen) * 0.25));
+}
+
+/* The sidebar is a vertical pane of the same material. */
+.glass-rail {
+  background-color: rgb(var(--glass-tint) / calc(var(--glass-alpha) - 0.12));
+  border-right: 1px solid rgb(var(--glass-edge) / var(--glass-edge-alpha));
+}
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .glass-rail {
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+    backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  }
+}
+
+/* Dividers inside a pane: light, not a drawn rule. */
+.glass-card .border-line,
+.glass-panel .border-line,
+.glass-card.divide-line > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgb(var(--glass-edge) / var(--glass-edge-alpha));
 }
 
 .pm-good {

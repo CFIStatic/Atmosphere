@@ -143,7 +143,7 @@ export function MemoryFeed({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-line bg-paper-0">
+    <div className="overflow-hidden rounded-xl glass-card">
       <ul className="divide-y divide-line">
         {events.map((event) => (
           <EventRow key={event.id} event={event} showJob={showJob} />

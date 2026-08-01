@@ -59,7 +59,7 @@ export function CustomersPage() {
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="flex rounded-lg border border-line bg-paper-0 p-1">
+        <div className="flex rounded-lg glass-card p-1">
           {(['accounts', 'contacts'] as Tab[]).map((t) => (
             <button
               key={t}
@@ -77,7 +77,7 @@ export function CustomersPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={`Search ${tab}…`}
-          className="w-full max-w-xs rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 placeholder-ink-500 outline-none transition focus:border-brand-500"
+          className="w-full max-w-xs rounded-lg glass-card px-3 py-2 text-sm text-ink-900 placeholder-ink-500 outline-none transition focus:border-brand-500"
         />
       </div>
 
@@ -91,7 +91,7 @@ export function CustomersPage() {
             hint={search ? 'Try a shorter search.' : 'Accounts land here as leads convert and jobs open.'}
           />
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-line bg-paper-0 shadow-card">
+          <div className="overflow-x-auto rounded-xl glass-card">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-line text-left">
@@ -125,7 +125,7 @@ export function CustomersPage() {
             hint={search ? 'Try a shorter search.' : 'People attach here as accounts and jobs come in.'}
           />
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-line bg-paper-0 shadow-card">
+          <div className="overflow-x-auto rounded-xl glass-card">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-line text-left">

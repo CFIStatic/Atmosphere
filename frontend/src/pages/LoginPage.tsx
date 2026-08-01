@@ -161,7 +161,7 @@ export function LoginPage() {
 
       <main className="flex flex-1 items-center justify-center px-4 pb-16">
         <div className="w-full max-w-md animate-fade-in-up">
-          <div className="rounded-2xl border border-line bg-paper-0 shadow-lift p-8 shadow-2xl shadow-lift-xl sm:p-10">
+          <div className="rounded-2xl glass-panel p-8 shadow-2xl shadow-lift-xl sm:p-10">
             {!pinChecked ? (
               <div className="grid place-items-center py-16 text-brand-600">
                 <SpinnerIcon className="animate-spin" width={26} height={26} />
@@ -220,7 +220,7 @@ export function LoginPage() {
                         setPin('');
                         setPinError(null);
                       }}
-                      className="mt-2 w-full rounded-lg border border-line bg-paper-0 px-4 py-2.5 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
+                      className="mt-2 w-full rounded-lg glass-card px-4 py-2.5 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
                     >
                       Use password instead
                     </button>
@@ -254,7 +254,7 @@ export function LoginPage() {
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           placeholder="you@company.com"
-                          className="w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
+                          className="w-full rounded-lg glass-card px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
                         />
                       </div>
 
@@ -292,7 +292,7 @@ export function LoginPage() {
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             placeholder="••••••••"
-                            className="w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 pr-11 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
+                            className="w-full rounded-lg glass-card px-3.5 py-2.5 pr-11 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
                           />
                           <button
                             type="button"
@@ -333,7 +333,7 @@ export function LoginPage() {
                           setShowPin(true);
                           setPinError(null);
                         }}
-                        className="mt-3 w-full rounded-lg border border-line bg-paper-0 px-4 py-2.5 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
+                        className="mt-3 w-full rounded-lg glass-card px-4 py-2.5 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
                       >
                         Use your PIN instead
                       </button>

@@ -98,7 +98,7 @@ export function ResetPasswordPage() {
 
       <main className="flex flex-1 items-center justify-center px-4 pb-16">
         <div className="w-full max-w-md animate-fade-in-up">
-          <div className="rounded-2xl border border-line bg-paper-0 shadow-lift p-8 shadow-2xl shadow-lift-xl sm:p-10">
+          <div className="rounded-2xl glass-panel p-8 shadow-2xl shadow-lift-xl sm:p-10">
             <h1 className="text-2xl font-bold tracking-tight text-ink-900">Choose a new password</h1>
 
             {unusable ? (
@@ -151,7 +151,7 @@ export function ResetPasswordPage() {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="••••••••"
-                        className="w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 pr-11 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
+                        className="w-full rounded-lg glass-card px-3.5 py-2.5 pr-11 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
                       />
                       <button
                         type="button"
@@ -183,7 +183,7 @@ export function ResetPasswordPage() {
                       value={confirm}
                       onChange={(e) => setConfirm(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
+                      className="w-full rounded-lg glass-card px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
                     />
                     {confirm.length > 0 && !matches && (
                       <p className="mt-1.5 text-xs text-caution-600">
@@ -192,7 +192,7 @@ export function ResetPasswordPage() {
                     )}
                   </div>
 
-                  <div className="rounded-lg border border-line bg-paper-0 px-3.5 py-3 text-xs leading-relaxed text-ink-600">
+                  <div className="rounded-lg glass-card px-3.5 py-3 text-xs leading-relaxed text-ink-600">
                     For your security, saving a new password signs you out everywhere else and
                     turns off PIN sign-in on any device where you set one up.
                   </div>

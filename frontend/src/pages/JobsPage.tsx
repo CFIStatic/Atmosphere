@@ -63,7 +63,7 @@ function NewJobForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: 
   return (
     <form
       onSubmit={submit}
-      className="mb-6 animate-fade-in-up rounded-xl border border-line bg-paper-0 p-5 backdrop-blur"
+      className="mb-6 animate-fade-in-up rounded-xl glass-card p-5 backdrop-blur"
     >
       <h2 className="text-base font-semibold text-ink-900">Open a job</h2>
       <p className="mt-1 text-sm text-ink-600">
@@ -187,7 +187,7 @@ function JobCard({ job }: { job: JobSummary }) {
   return (
     <Link
       to={`/jobs/${job.jobId}`}
-      className="block rounded-xl border border-line bg-paper-0 p-5 transition hover:border-brand-400/40 hover:bg-paper-200"
+      className="block rounded-xl glass-card p-5 transition hover:border-brand-400/40 hover:bg-paper-200"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">

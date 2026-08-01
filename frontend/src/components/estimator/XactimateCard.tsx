@@ -153,14 +153,14 @@ export function XactimateCard({ onPriceListSynced }: { onPriceListSynced?: () =>
 
   if (!status) {
     return (
-      <div className="rounded-xl border border-line bg-paper-0 p-5">
+      <div className="rounded-xl glass-card p-5">
         <SpinnerIcon className="animate-spin text-brand-300" width={18} height={18} />
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-line bg-paper-0 p-5 backdrop-blur">
+    <div className="rounded-xl glass-card p-5 backdrop-blur">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-ink-500">Xactimate</p>

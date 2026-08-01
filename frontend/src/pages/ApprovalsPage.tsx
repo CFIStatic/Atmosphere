@@ -79,7 +79,7 @@ export function ApprovalsPage() {
         {open.map((escalation) => (
           <section
             key={escalation.id}
-            className="rounded-xl border border-line bg-paper-0 shadow-card"
+            className="rounded-xl glass-card"
           >
             <header className="flex items-start gap-3 border-b border-line px-5 py-4">
               <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-caution-50 text-caution-600">
@@ -165,7 +165,7 @@ export function ApprovalsPage() {
             <h2 className="mb-2 mt-8 text-[10.5px] font-semibold uppercase tracking-[0.09em] text-ink-500">
               Settled
             </h2>
-            <div className="rounded-xl border border-line bg-paper-0 shadow-card">
+            <div className="rounded-xl glass-card">
               {settled.map((escalation) => (
                 <div
                   key={escalation.id}

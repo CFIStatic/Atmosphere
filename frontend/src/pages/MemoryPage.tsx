@@ -33,7 +33,7 @@ const inputClass =
 
 function StatTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded-xl border border-line bg-paper-0 px-4 py-3.5">
+    <div className="rounded-xl glass-card px-4 py-3.5">
       <p className="text-xs font-medium uppercase tracking-wide text-ink-500">{label}</p>
       <p className="mt-1 text-2xl font-semibold text-ink-900">{value}</p>
       {hint && <p className="mt-0.5 text-xs text-ink-500">{hint}</p>}
@@ -205,7 +205,7 @@ export function MemoryPage() {
               <button
                 onClick={loadMore}
                 disabled={loadingMore}
-                className="flex items-center gap-2 rounded-lg border border-line bg-paper-0 px-5 py-2.5 text-sm font-medium text-ink-800 transition hover:bg-paper-200 disabled:opacity-60"
+                className="flex items-center gap-2 rounded-lg glass-card px-5 py-2.5 text-sm font-medium text-ink-800 transition hover:bg-paper-200 disabled:opacity-60"
               >
                 {loadingMore && <SpinnerIcon className="animate-spin" width={16} height={16} />}
                 {loadingMore ? 'Loading…' : 'Load earlier'}

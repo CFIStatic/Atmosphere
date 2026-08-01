@@ -219,7 +219,7 @@ export function VoiceAssistantPanel({
               className={`max-w-[90%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
                 turn.role === 'user'
                   ? 'rounded-br-sm bg-brand-500 text-white'
-                  : 'rounded-bl-sm border border-line bg-paper-0 text-ink-800 shadow-card'
+                  : 'rounded-bl-sm glass-card text-ink-800 shadow-card'
               }`}
             >
               {turn.content}
@@ -238,7 +238,7 @@ export function VoiceAssistantPanel({
 
         {sending && (
           <div className="flex justify-start">
-            <span className="flex items-center gap-2 rounded-2xl rounded-bl-sm border border-line bg-paper-0 px-3.5 py-2.5 text-sm text-ink-500 shadow-card">
+            <span className="flex items-center gap-2 rounded-2xl rounded-bl-sm glass-card px-3.5 py-2.5 text-sm text-ink-500 shadow-card">
               <SpinnerIcon className="animate-spin text-brand-500" width={15} height={15} />
               Thinking…
             </span>

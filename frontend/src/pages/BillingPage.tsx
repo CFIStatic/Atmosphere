@@ -200,7 +200,7 @@ export function BillingPage() {
           </div>
         )}
         {!canManage && (
-          <p className="mt-6 rounded-xl border border-line bg-paper-0 px-4 py-3 text-sm text-ink-600">
+          <p className="mt-6 rounded-xl glass-card px-4 py-3 text-sm text-ink-600">
             You can view billing, but only an accountant, office manager or project manager can
             change the plan or buy credits.
           </p>
@@ -208,7 +208,7 @@ export function BillingPage() {
 
         {/* ---- Balance + current plan ---- */}
         <div className="mt-8 grid gap-4 lg:grid-cols-3">
-          <div className="rounded-xl border border-line bg-paper-0 p-5 lg:col-span-2">
+          <div className="rounded-xl glass-card p-5 lg:col-span-2">
             <p className="text-xs font-medium uppercase tracking-wide text-ink-500">Credit balance</p>
             <p className="mt-1 text-4xl font-bold tracking-tight text-ink-900">
               {formatUsd(balance?.totalNanos ?? 0)}
@@ -261,7 +261,7 @@ export function BillingPage() {
             )}
           </div>
 
-          <div className="rounded-xl border border-line bg-paper-0 p-5">
+          <div className="rounded-xl glass-card p-5">
             <p className="text-xs font-medium uppercase tracking-wide text-ink-500">Current plan</p>
             <p className="mt-1 text-2xl font-bold text-ink-900">{sub?.planName}</p>
             <p className="mt-1 text-sm text-ink-600">
@@ -294,7 +294,7 @@ export function BillingPage() {
                 key={pack.code}
                 onClick={() => buyPack(pack.code, pack.name)}
                 disabled={!canManage || busy !== null}
-                className="group rounded-xl border border-line bg-paper-0 p-4 text-left transition hover:border-brand-200 hover:bg-paper-0 disabled:cursor-not-allowed disabled:opacity-50"
+                className="group rounded-xl glass-card p-4 text-left transition hover:border-brand-200 hover:bg-paper-0 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <p className="text-lg font-semibold text-ink-900">{formatCents(pack.priceCents)}</p>
                 <p className="mt-0.5 text-sm text-ink-600">
@@ -355,7 +355,7 @@ export function BillingPage() {
         <section className="mt-12">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-semibold text-ink-900">Plans</h2>
-            <div className="flex rounded-lg border border-line bg-paper-0 p-1 text-sm">
+            <div className="flex rounded-lg glass-card p-1 text-sm">
               {(['monthly', 'annual'] as BillingInterval[]).map((i) => (
                 <button
                   key={i}
@@ -452,7 +452,7 @@ export function BillingPage() {
               <button
                 onClick={openPortal}
                 disabled={busy !== null}
-                className="flex items-center gap-2 rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100 disabled:opacity-50"
+                className="flex items-center gap-2 rounded-lg glass-card px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100 disabled:opacity-50"
               >
                 {busy === 'portal' && <SpinnerIcon className="animate-spin" width={15} height={15} />}
                 Manage payment methods
@@ -656,7 +656,7 @@ function PlanCard({
         disabled={disabled || isCurrent || plan.isContactSales}
         className={`mt-5 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
           isCurrent
-            ? 'border border-line bg-paper-0 text-ink-600'
+            ? 'glass-card text-ink-600'
             : 'bg-brand-500 text-ink-900 hover:bg-brand-500'
         }`}
       >
@@ -697,7 +697,7 @@ function SpendControls({
 
   return (
     <section className="mt-12 grid gap-4 md:grid-cols-2">
-      <div className="rounded-xl border border-line bg-paper-0 p-5">
+      <div className="rounded-xl glass-card p-5">
         <h3 className="font-semibold text-ink-900">Reload</h3>
         <p className="mt-1 text-sm text-ink-600">
           How the credit balance tops back up — every purchase on your say-so, or
@@ -761,14 +761,14 @@ function SpendControls({
               )
             }
             disabled={!canManage || busy !== null || !reloadAmount}
-            className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-sm text-ink-800 transition hover:bg-paper-100 disabled:opacity-50"
+            className="rounded-lg glass-card px-3 py-1.5 text-sm text-ink-800 transition hover:bg-paper-100 disabled:opacity-50"
           >
             Save
           </button>
         </div>
       </div>
 
-      <div className="rounded-xl border border-line bg-paper-0 p-5">
+      <div className="rounded-xl glass-card p-5">
         <h3 className="font-semibold text-ink-900">Monthly spend limit</h3>
         <p className="mt-1 text-sm text-ink-600">
           Requests are refused once usage in a billing period reaches this cap. Leave blank for no
@@ -802,7 +802,7 @@ function SpendControls({
               )
             }
             disabled={!canManage || busy !== null}
-            className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-sm text-ink-800 transition hover:bg-paper-100 disabled:opacity-50"
+            className="rounded-lg glass-card px-3 py-1.5 text-sm text-ink-800 transition hover:bg-paper-100 disabled:opacity-50"
           >
             Save
           </button>

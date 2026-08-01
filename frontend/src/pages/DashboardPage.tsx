@@ -128,7 +128,7 @@ export function DashboardPage() {
             ].map((stat) => (
               <div
                 key={stat.label}
-                className="rounded-xl border border-line bg-paper-0 px-4 py-3.5 backdrop-blur"
+                className="rounded-xl glass-card px-4 py-3.5 backdrop-blur"
               >
                 <p className="text-xs font-medium uppercase tracking-wide text-ink-500">
                   {stat.label}
@@ -193,14 +193,14 @@ export function DashboardPage() {
 
           {/* Org + invite */}
           <div className="mt-8 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-xl border border-line bg-paper-0 shadow-card p-5">
+            <div className="rounded-xl glass-card p-5">
               <p className="text-xs font-medium uppercase tracking-wide text-ink-500">
                 Organization
               </p>
               <p className="mt-1.5 text-lg font-semibold text-ink-900">{org?.name ?? '—'}</p>
             </div>
 
-            <div className="rounded-xl border border-line bg-paper-0 shadow-card p-5">
+            <div className="rounded-xl glass-card p-5">
               <p className="text-xs font-medium uppercase tracking-wide text-ink-500">
                 Invite code
               </p>
@@ -233,7 +233,7 @@ export function DashboardPage() {
           {billing && (
             <Link
               to="/billing"
-              className="mt-4 block rounded-xl border border-line bg-paper-0 shadow-card p-5 transition hover:border-brand-300 hover:bg-brand-50"
+              className="mt-4 block rounded-xl glass-card p-5 transition hover:border-brand-300 hover:bg-brand-50"
             >
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <p className="text-xs font-medium uppercase tracking-wide text-ink-500">
@@ -292,7 +292,7 @@ export function DashboardPage() {
               not a destination you pick. */}
           <Link
             to="/pm"
-            className="mt-4 block rounded-xl border border-line bg-paper-0 p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50"
+            className="mt-4 block rounded-xl glass-card p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50"
           >
             <p className="text-xs font-medium uppercase tracking-wide text-brand-600">
               Project Manager
@@ -307,7 +307,7 @@ export function DashboardPage() {
           {/* The places you can go and work. Same card shape throughout, so none
               of them reads as the more important one. */}
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <Link to="/technician" className="flex items-start gap-3 rounded-xl border border-line bg-paper-0 p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50">
+            <Link to="/technician" className="flex items-start gap-3 rounded-xl glass-card p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50">
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-500 text-white shadow-card">
                 <MicIcon width={20} height={20} />
               </span>
@@ -319,7 +319,7 @@ export function DashboardPage() {
               </div>
             </Link>
 
-            <Link to="/web-access" className="flex items-start gap-3 rounded-xl border border-line bg-paper-0 p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50">
+            <Link to="/web-access" className="flex items-start gap-3 rounded-xl glass-card p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50">
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-500 text-white shadow-card">
                 <GlobeIcon width={20} height={20} />
               </span>
@@ -332,7 +332,7 @@ export function DashboardPage() {
               </div>
             </Link>
 
-            <Link to="/computer-use" className="flex items-start gap-3 rounded-xl border border-line bg-paper-0 p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50">
+            <Link to="/computer-use" className="flex items-start gap-3 rounded-xl glass-card p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50">
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-500 text-white shadow-card">
                 <MonitorIcon width={20} height={20} />
               </span>
@@ -349,7 +349,7 @@ export function DashboardPage() {
           {/* Construction Estimator */}
           <Link
             to="/estimator"
-            className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-line bg-paper-0 shadow-card p-5 transition hover:border-brand-300 hover:bg-brand-50"
+            className="mt-4 flex items-center justify-between gap-4 rounded-xl glass-card p-5 transition hover:border-brand-300 hover:bg-brand-50"
           >
             <div>
               <p className="text-xs font-medium uppercase tracking-wide text-brand-600">
@@ -434,7 +434,7 @@ export function DashboardPage() {
                             <p className="text-xs text-ink-500">{WORK_TYPE_LABELS[m.workType]}</p>
                           </div>
                         </div>
-                        <span className="rounded-full border border-line bg-paper-0 px-3 py-1 text-xs font-medium text-ink-700">
+                        <span className="rounded-full glass-card px-3 py-1 text-xs font-medium text-ink-700">
                           {ROLE_LABELS[m.role]}
                         </span>
                       </li>

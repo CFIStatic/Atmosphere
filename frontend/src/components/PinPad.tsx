@@ -111,7 +111,7 @@ export function PinPad({
             type="button"
             disabled={disabled}
             onClick={() => push(k)}
-            className="h-16 rounded-xl border border-line bg-paper-0 shadow-card text-xl font-semibold text-ink-900 transition hover:bg-paper-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+            className="h-16 rounded-xl glass-card text-xl font-semibold text-ink-900 transition hover:bg-paper-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {k}
           </button>
@@ -123,7 +123,7 @@ export function PinPad({
           type="button"
           disabled={disabled}
           onClick={() => push('0')}
-          className="h-16 rounded-xl border border-line bg-paper-0 shadow-card text-xl font-semibold text-ink-900 transition hover:bg-paper-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+          className="h-16 rounded-xl glass-card text-xl font-semibold text-ink-900 transition hover:bg-paper-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
         >
           0
         </button>
@@ -133,7 +133,7 @@ export function PinPad({
           disabled={disabled || value.length === 0}
           onClick={pop}
           aria-label="Delete last digit"
-          className="grid h-16 place-items-center rounded-xl border border-line bg-paper-0 shadow-card text-ink-700 transition hover:bg-paper-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+          className="grid h-16 place-items-center rounded-xl glass-card text-ink-700 transition hover:bg-paper-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
         >
           <BackspaceIcon />
         </button>

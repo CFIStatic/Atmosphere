@@ -65,6 +65,8 @@ export type MetricKey =
 export interface Platform {
   id: PlatformId;
   name: string;
+  /** Fits the sidebar; the full name shows in the switcher's menu. */
+  short: string;
   /** The one-line promise, lifted from the platform's page on the website. */
   tagline: string;
   /** What the home screen says under the greeting. */
@@ -112,6 +114,7 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
   sales: {
     id: 'sales',
     name: 'Sales Platform',
+    short: 'Sales',
     tagline: 'Win the work',
     homeBlurb:
       'The pipeline, and the agent that keeps it moving — leads, accounts, and the estimates that turn them into jobs.',
@@ -135,6 +138,7 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
   operations: {
     id: 'operations',
     name: 'Operations Platform',
+    short: 'Operations',
     tagline: 'Run the work',
     homeBlurb:
       'Project management, estimating, and assistance — nineteen rules watching every open job so nothing waits on someone remembering.',
@@ -160,6 +164,7 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
   field: {
     id: 'field',
     name: 'Field Platform',
+    short: 'Field',
     tagline: 'Capture the job site',
     homeBlurb:
       'Recording, a spoken assistant, and a camera that names what it sees — built for gloved hands and a phone in the rain.',
@@ -183,6 +188,7 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
   manager: {
     id: 'manager',
     name: 'Manager Platform',
+    short: 'Manager',
     tagline: 'Run the business',
     homeBlurb:
       'Live job costing, the accounting work around your books, and insight into which work actually pays.',

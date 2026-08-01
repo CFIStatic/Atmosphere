@@ -43,7 +43,7 @@ export function ForgotPasswordPage() {
 
       <main className="flex flex-1 items-center justify-center px-4 pb-16">
         <div className="w-full max-w-md animate-fade-in-up">
-          <div className="rounded-2xl border border-line bg-paper-0 shadow-lift p-8 shadow-2xl shadow-lift-xl sm:p-10">
+          <div className="rounded-2xl glass-panel p-8 shadow-2xl shadow-lift-xl sm:p-10">
             {sent ? (
               <>
                 <div className="grid h-12 w-12 place-items-center rounded-full bg-success-50 text-success-600">
@@ -99,7 +99,7 @@ export function ForgotPasswordPage() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="you@company.com"
-                      className="w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
+                      className="w-full rounded-lg glass-card px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
                     />
                   </div>
 

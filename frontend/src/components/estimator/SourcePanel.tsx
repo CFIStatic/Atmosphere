@@ -108,7 +108,7 @@ export function SourcePanel({
       />
 
       {/* ---- Photos ---- */}
-      <div className="rounded-xl border border-line bg-paper-0 p-4">
+      <div className="rounded-xl glass-card p-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <p className="text-sm font-medium text-ink-900">Photos</p>
@@ -159,7 +159,7 @@ export function SourcePanel({
       </div>
 
       {/* ---- Notes ---- */}
-      <div className="rounded-xl border border-line bg-paper-0 p-4">
+      <div className="rounded-xl glass-card p-4">
         <p className="text-sm font-medium text-ink-900">Field notes</p>
         <p className="mt-0.5 text-xs text-ink-500">
           Dimensions, cut heights, equipment counts and category are read out of plain text.
@@ -199,7 +199,7 @@ function FileCard({
   const inputRef = useRef<HTMLInputElement>(null);
 
   return (
-    <div className="rounded-xl border border-line bg-paper-0 p-4">
+    <div className="rounded-xl glass-card p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="text-sm font-medium text-ink-900">

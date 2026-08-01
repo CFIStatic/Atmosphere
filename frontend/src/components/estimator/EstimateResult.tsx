@@ -39,7 +39,7 @@ export function EstimateResult({
   return (
     <div className="space-y-6">
       {/* ---- Classification ---- */}
-      <section className="rounded-xl border border-line bg-paper-0 p-5 backdrop-blur">
+      <section className="rounded-xl glass-card p-5 backdrop-blur">
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone={assessment.category === 3 ? 'danger' : assessment.category === 2 ? 'warn' : 'ok'}>
             Category {assessment.category}
@@ -104,7 +104,7 @@ export function EstimateResult({
 
       {/* ---- Money ---- */}
       <section className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-xl border border-line bg-paper-0 p-5">
+        <div className="rounded-xl glass-card p-5">
           <p className="text-xs font-medium uppercase tracking-wide text-ink-500">Estimate</p>
           <table className="mt-2 w-full text-sm">
             <tbody className="text-ink-700">
@@ -123,7 +123,7 @@ export function EstimateResult({
           </table>
         </div>
 
-        <div className="rounded-xl border border-line bg-paper-0 p-5">
+        <div className="rounded-xl glass-card p-5">
           <p className="text-xs font-medium uppercase tracking-wide text-ink-500">Profitability</p>
           <div className="mt-2 flex items-baseline gap-2">
             <span

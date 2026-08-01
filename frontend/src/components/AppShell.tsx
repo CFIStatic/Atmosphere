@@ -79,7 +79,7 @@ export function AppShell({ children, rail }: { children: ReactNode; rail?: React
     <div className="min-h-screen bg-paper-100">
       {/* ---- Sidebar ---- */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-60 transform border-r border-line bg-paper-50 transition-transform lg:translate-x-0 ${
+        className={`glass-rail fixed inset-y-0 left-0 z-40 w-60 transform transition-transform lg:translate-x-0 ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -152,7 +152,7 @@ export function AppShell({ children, rail }: { children: ReactNode; rail?: React
 
       {/* ---- Top bar + content ---- */}
       <div className="lg:pl-60">
-        <header className="sticky top-0 z-20 border-b border-line bg-paper-100/95 backdrop-blur">
+        <header className="glass-bar sticky top-0 z-20">
           <div className="flex items-center gap-3 px-4 py-3 sm:px-6">
             <button
               className="text-ink-600 lg:hidden"
@@ -184,7 +184,7 @@ export function AppShell({ children, rail }: { children: ReactNode; rail?: React
             {children}
           </main>
           {rail && (
-            <aside className="w-full shrink-0 border-line px-4 pb-8 sm:px-6 xl:w-[340px] xl:border-l xl:pl-5 xl:pt-6">
+            <aside className="w-full shrink-0 px-4 pb-8 sm:px-6 xl:w-[352px] xl:pl-2 xl:pt-6">
               {rail}
             </aside>
           )}
@@ -232,14 +232,14 @@ function PlatformSwitcher({
         onClick={() => setOpen((value) => !value)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="flex w-full items-center gap-2.5 rounded-lg border border-line bg-paper-0 px-2.5 py-2 text-left transition hover:border-line-strong"
+        className="flex w-full items-center gap-2.5 rounded-lg glass-card px-2.5 py-2 text-left transition hover:border-line-strong"
       >
         <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-brand-50 text-brand-700">
           <platform.Icon width={14} height={14} />
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-semibold text-ink-900">
-            {platform.name}
+            {platform.short}
           </span>
           <span className="block truncate text-[11px] text-ink-500">{platform.tagline}</span>
         </span>
@@ -249,7 +249,7 @@ function PlatformSwitcher({
       {open && (
         <div
           role="listbox"
-          className="absolute left-0 right-0 top-full z-40 mt-1.5 overflow-hidden rounded-xl border border-line bg-paper-0 shadow-lift"
+          className="absolute left-0 right-0 top-full z-40 mt-1.5 overflow-hidden rounded-xl glass-panel"
         >
           {PLATFORM_IDS.map((id) => {
             const p = PLATFORMS[id];
@@ -358,7 +358,7 @@ function JumpPalette() {
 
   return (
     <div ref={wrapRef} className="relative w-full max-w-md">
-      <div className="flex items-center gap-2 rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-500 transition focus-within:border-brand-500">
+      <div className="flex items-center gap-2 rounded-lg glass-card px-3 py-2 text-sm text-ink-500 transition focus-within:border-brand-500">
         <SearchIcon width={15} height={15} className="shrink-0" />
         <input
           ref={inputRef}
@@ -381,7 +381,7 @@ function JumpPalette() {
       </div>
 
       {open && matches.length > 0 && (
-        <div className="absolute left-0 right-0 top-full z-30 mt-1.5 overflow-hidden rounded-xl border border-line bg-paper-0 shadow-lift">
+        <div className="absolute left-0 right-0 top-full z-30 mt-1.5 overflow-hidden rounded-xl glass-panel">
           {matches.slice(0, 7).map(({ to, label, Icon }, i) => (
             <button
               key={`${to}-${label}`}
@@ -458,7 +458,7 @@ function AccountMenu() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-40 mt-2 w-64 overflow-hidden rounded-xl border border-line bg-paper-0 shadow-lift"
+          className="absolute right-0 z-40 mt-2 w-64 overflow-hidden rounded-xl glass-panel"
         >
           <div className="border-b border-line px-4 py-3">
             <p className="truncate text-sm font-medium text-ink-900">{name}</p>
