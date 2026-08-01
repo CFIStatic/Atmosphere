@@ -55,6 +55,16 @@ jobs:
           sed -i "s|data-api=\"\"|data-api=\"${{ vars.WEBSITE_API_ORIGIN }}\"|" \
             website/careers.html website/contact.html
 
+      # The bridge from marketing to product. Set the WEBSITE_APP_ORIGIN
+      # repository variable to the hosted app's https origin and every
+      # sign-in / get-started CTA on the site routes into the real app
+      # (site.js reads the stamp and rewrites the auth surfaces).
+      - name: Connect auth surfaces to the hosted app
+        if: vars.WEBSITE_APP_ORIGIN != ''
+        run: |
+          sed -i "s|<html lang=\"en\">|<html lang=\"en\" data-app-origin=\"${{ vars.WEBSITE_APP_ORIGIN }}\">|" \
+            website/*.html
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: website

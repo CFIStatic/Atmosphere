@@ -16,8 +16,13 @@ export function LoginPage() {
   const location = useLocation();
   const redirectTo = (location.state as { from?: string } | null)?.from ?? '/dashboard';
 
-  const [mode, setMode] = useState<Mode>('login');
-  const [email, setEmail] = useState('');
+  // The corporate site deep-links here (…/login?mode=signup&email=…) so its
+  // "Create your organization" CTAs open the create-account form directly.
+  const params = new URLSearchParams(location.search);
+  const wantsSignup = params.get('mode') === 'signup';
+
+  const [mode, setMode] = useState<Mode>(wantsSignup ? 'signup' : 'login');
+  const [email, setEmail] = useState(params.get('email') ?? '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -45,7 +50,9 @@ export function LoginPage() {
         if (cancelled) return;
         setPinEnrolled(status.enrolled);
         const locked = status.lockedUntil ? new Date(status.lockedUntil) > new Date() : false;
-        setShowPin(status.enrolled && !locked);
+        // An explicit signup link beats the device PIN — a new teammate may be
+        // creating their account from a machine someone else enrolled.
+        setShowPin(status.enrolled && !locked && !wantsSignup);
         if (locked) {
           setPinError('Too many incorrect PINs. Sign in with your password to continue.');
         }
@@ -59,7 +66,7 @@ export function LoginPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [wantsSignup]);
 
   useEffect(() => () => window.clearTimeout(shakeTimer.current), []);
 

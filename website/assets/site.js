@@ -1,5 +1,20 @@
 // Shared behavior for the Atmosphere corporate site.
 (function () {
+  // The bridge to the product. The deploy workflow stamps the hosted app's
+  // origin onto <html data-app-origin> (from the WEBSITE_APP_ORIGIN repo
+  // variable); when present, every sign-in / get-started CTA routes into the
+  // real app and the early-access stubs below stand down. Unstamped — local
+  // dev, or the app not hosted yet — the site keeps its designed surfaces.
+  var APP_ORIGIN = (document.documentElement.getAttribute('data-app-origin') || '')
+    .replace(/\/+$/, '');
+  if (APP_ORIGIN) {
+    document.querySelectorAll('a[href$="signin.html"], a[href$="signup.html"]')
+      .forEach(function (a) {
+        var toSignup = a.getAttribute('href').indexOf('signup') !== -1;
+        a.setAttribute('href', APP_ORIGIN + (toSignup ? '/login?mode=signup' : '/login'));
+      });
+  }
+
   // Highlight the nav group for the page being read. Platform-family pages
   // light the Platform menu; company-family pages light Company.
   var page = location.pathname.split('/').pop() || 'index.html';
@@ -152,22 +167,33 @@
     links: 'ap-links', message: 'ap-message', website: 'ap-website'
   }, 'Application sent — a person reads every one, and replies either way.');
 
-  // Auth surfaces: the live app takes these routes over at deploy. Until
-  // then, submitting explains the state instead of dead-reloading the page.
-  function stubForm(formId, statusId, text) {
+  // Auth surfaces. With the app origin stamped, submitting hands off to the
+  // real app — carrying the typed email so nobody types it twice, and never
+  // the password. Without it, submitting explains the early-access state
+  // instead of dead-reloading the page.
+  function stubForm(formId, statusId, text, appPath) {
     var form = document.getElementById(formId);
     if (!form) return;
     form.addEventListener('submit', function (event) {
       event.preventDefault();
+      if (APP_ORIGIN && appPath) {
+        var emailInput = form.querySelector('input[type="email"]');
+        var email = emailInput && emailInput.value.trim();
+        location.href = APP_ORIGIN + appPath +
+          (email ? (appPath.indexOf('?') !== -1 ? '&' : '?') + 'email=' + encodeURIComponent(email) : '');
+        return;
+      }
       var status = document.getElementById(statusId);
       status.className = 'form-status ok';
       status.textContent = text;
     });
   }
   stubForm('signin-form', 'signin-status',
-    "We're onboarding organizations personally during early access — your team's workspace link gets you in.");
+    "We're onboarding organizations personally during early access — your team's workspace link gets you in.",
+    '/login');
   stubForm('signup-form', 'signup-status',
-    "We're onboarding organizations personally during early access — reach out via the contact page and yours will be ready today.");
+    "We're onboarding organizations personally during early access — reach out via the contact page and yours will be ready today.",
+    '/login?mode=signup');
   stubForm('investors-form', 'investors-status',
     'Access keys are issued personally — use Request access and we will be in touch.');
 
