@@ -776,50 +776,61 @@ a { color: inherit; }
 .job-list details .btn-outline { margin-bottom: 22px; }
 
 /* ---------- Unbilled-math calculator ---------- */
-.calc {
-  display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
-  gap: 52px; align-items: center;
+.recovery {
+  display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, .85fr);
+  gap: 44px; align-items: stretch;
 }
-@media (max-width: 860px) { .calc { grid-template-columns: 1fr; } }
-.calc-controls { display: grid; gap: 30px; }
-.calc-row label {
-  display: flex; justify-content: space-between; align-items: baseline; gap: 16px;
-  font-size: 14.5px; font-weight: 600; margin-bottom: 12px;
-}
-.calc-row label .val { font-size: 15px; color: var(--ink); font-variant-numeric: tabular-nums; }
-.slider {
-  -webkit-appearance: none; appearance: none;
-  width: 100%; height: 4px; border-radius: 999px;
-  background: var(--line-strong); outline: none; margin: 0;
-}
-.slider::-webkit-slider-thumb {
-  -webkit-appearance: none; appearance: none;
-  width: 22px; height: 22px; border-radius: 50%;
-  background: var(--accent); border: 3px solid var(--card);
-  box-shadow: var(--shadow-lift); cursor: pointer;
-}
-.slider::-moz-range-thumb {
-  width: 16px; height: 16px; border-radius: 50%;
-  background: var(--accent); border: 3px solid var(--card);
-  box-shadow: var(--shadow-lift); cursor: pointer;
-}
-.slider:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; }
-.calc-note { margin: 0; font-size: 13px; color: var(--ink-faint); max-width: 34em; }
-.calc-result {
+@media (max-width: 900px) { .recovery { grid-template-columns: 1fr; gap: 28px; } }
+
+.recovery-main {
   background: var(--card); border: 1px solid var(--line); border-radius: 16px;
-  padding: 36px 38px; box-shadow: var(--shadow-lift);
+  padding: 38px 40px; box-shadow: var(--shadow-lift);
 }
-.calc-result .big {
-  font-size: clamp(2.6rem, 4.5vw, 3.6rem); font-weight: 800; letter-spacing: -0.03em;
-  line-height: 1; margin: 12px 0 4px; font-variant-numeric: tabular-nums;
-}
-.calc-result .per { font-size: 12px; letter-spacing: .1em; color: var(--ink-faint); }
-.calc-result .year {
-  margin: 18px 0 0; font-size: 15px; color: var(--ink-soft);
+@media (max-width: 560px) { .recovery-main { padding: 28px 24px; } }
+
+.odometer {
+  font-size: clamp(3rem, 7vw, 5rem); font-weight: 800; letter-spacing: -0.035em;
+  line-height: 1; margin: 14px 0 0; color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
-.calc-result .year strong { color: var(--ink); }
-.calc-result .btn { margin-top: 26px; }
+.recovery-unset .odometer {
+  font-size: clamp(1.5rem, 2.6vw, 2rem); color: var(--ink-faint);
+  letter-spacing: -0.01em;
+}
+.recovery-sub {
+  margin: 16px 0 0; font-size: 15px; color: var(--ink-soft); max-width: 46em;
+}
+.recovery-asof { display: block; margin-top: 6px; font-size: 12px; color: var(--ink-faint); }
+
+.recovery-stats {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px; margin-top: 30px;
+  background: var(--line); border: 1px solid var(--line); border-radius: 12px;
+  overflow: hidden;
+}
+@media (max-width: 560px) { .recovery-stats { grid-template-columns: 1fr; } }
+.rstat { background: var(--card); padding: 16px 18px; }
+.rstat-n {
+  font-size: 22px; font-weight: 700; color: var(--ink);
+  font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
+}
+.rstat-l {
+  margin-top: 4px; font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: .09em; color: var(--ink-faint);
+}
+
+.recovery-cta {
+  display: flex; flex-direction: column; align-items: flex-start;
+  justify-content: center;
+  border: 1px solid var(--line); border-radius: 16px; padding: 34px 32px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 7%, var(--card)),
+    var(--card)
+  );
+}
+.recovery-pitch { margin: 12px 0 24px; font-size: 15.5px; color: var(--ink-soft); }
+.recovery-fine { margin: 16px 0 0; font-size: 11.5px; color: var(--ink-faint); }
 
 /* ---------- Statement band ---------- */
 .statement { text-align: center; padding: 110px 0; }

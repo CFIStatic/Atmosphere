@@ -85,6 +85,31 @@ Doc content is customer-facing prose grounded in `../README.md` and
 `../docs/*.md` — the internal engineering plans themselves are deliberately not
 published.
 
+## The recovery counter
+
+The home page's `#unbilled` section publishes one number: **money recovered
+for customers** — work that was performed, never billed, and put back on an
+invoice because the Estimator read the job back against its own record.
+
+It is a factual public claim, so it is wired to exactly four attributes on
+`<div class="recovery">` in `index.html` and nothing else:
+
+| Attribute         | Meaning                                              |
+| ----------------- | ---------------------------------------------------- |
+| `data-recovered`  | Total recovered, whole dollars                       |
+| `data-jobs`       | Jobs read back (the denominator for the average)     |
+| `data-largest`    | Largest single find                                  |
+| `data-asof`       | Human date the totals were taken, e.g. `August 2026` |
+
+Fill them from the audit ledger's recovery findings — the same figures a
+customer can replay run by run — and never round them up. The average is
+derived, not entered, so it can't drift from the other two.
+
+**While `data-recovered` is `0` the section renders "Not published yet"
+instead of a total**, so an unfilled counter can never read as a claim of
+zero. That is the state it ships in today: set the real numbers before
+launch, and re-check the as-of date whenever they move.
+
 ## Forms (frontend + backend)
 
 Both site forms are wired end to end through one JS helper in `assets/site.js`:
