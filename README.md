@@ -45,40 +45,43 @@ replay step by step.
 6. **Growth analytics** — two internal dashboards (one for the team, one for investors)
    covering user growth, seats, MRR/ARR, average spend, growth rates and which parts of the
    product are actually used, measured by time spent. Every figure downloads as Excel.
-7. **Mitigation Estimator** — reads a DocuSketch scan, a MICA report, iPhone photos and field
+7. **Connectors** — curated tabs for third-party apps restoration, roofing, and contractor
+   teams already use (ServiceTitan, AccuLynx, Xactimate, carrier portals, …). Each app
+   connects through Web Access, a Computer Use agent, or an Estimator API adapter.
+8. **Mitigation Estimator** — reads a DocuSketch scan, a MICA report, iPhone photos and field
    notes, and builds a priced, documented Xactimate estimate from them: classified against
    IICRC S500, written to the carrier's program terms, and reviewed for work that was
    performed but never billed (see below).
-8. **Web Access** — connect an outside website (a carrier portal, a supplier site) once,
+9. **Web Access** — connect an outside website (a carrier portal, a supplier site) once,
    then ask Atmosphere to sign in and **pull data out of it** or **enter data into it**. Every
    step the AI takes is recorded, so a finished run reads back like a receipt.
-9. **Verifier** — a second agent that goes back and checks the first one actually did the work.
+10. **Verifier** — a second agent that goes back and checks the first one actually did the work.
    It re-opens the site in a browser that cannot change anything, confirms the work against the
    task as it was originally written, corrects what is safe to correct, and asks you about
    anything it is unsure of.
-10. **Technician app** (`/technician`) — the field tool: record audio and video, hold a
+11. **Technician app** (`/technician`) — the field tool: record audio and video, hold a
    spoken conversation with an assistant, and have the camera name what it sees (see
    below).
-11. **Computer use** — connect an Anthropic API key, run the agent on any computer, and
+12. **Computer use** — connect an Anthropic API key, run the agent on any computer, and
    Claude can see its screen and operate it. The whole setup is one key and one command.
-12. **CRM backend** — customers, properties, leads, jobs, and their timeline, plus our own
+13. **CRM backend** — customers, properties, leads, jobs, and their timeline, plus our own
    backups and a verbatim copy of the data that currently lives only inside other
    companies' software. Backend infrastructure only, no UI yet — see
    **[docs/CRM.md](docs/CRM.md)**.
-13. **Agent Memory** — the operational layer over CRM jobs: the tasks under a job, the crew
+14. **Agent Memory** — the operational layer over CRM jobs: the tasks under a job, the crew
    on it, and the work people log against it — with a complete, append-only record of
    everything that happens to any of it (see below).
-14. **Executes work, and learns from it** — drafts scopes, builds estimates, extracts
+15. **Executes work, and learns from it** — drafts scopes, builds estimates, extracts
    document fields, writes customer updates. Every run is scored, and the routing policy
    improves from those scores. See [Learning layer](#learning-layer) below.
-15. **Construction Estimator** — an agent that signs in to DocuSketch, reads the scan and
+16. **Construction Estimator** — an agent that signs in to DocuSketch, reads the scan and
    the field photos, identifies the matching job in a CRM (Dash), reads the mitigation
    estimate, and builds the construction/rebuild estimate for Xactimate (see below).
-16. **Project Manager** — the daily driver that checks every open job against the drying log,
+17. **Project Manager** — the daily driver that checks every open job against the drying log,
    the schedule, the crew board and the paperwork (see below).
-17. **Settings** — reached from the account menu under your own name in the header: display
+18. **Settings** — reached from the account menu under your own name in the header: display
    name, password, PIN sign-in, role, and per-device preferences (see below).
-18. **Audit** — every unit of work every agent performed for the organization, replayable
+19. **Audit** — every unit of work every agent performed for the organization, replayable
    step by step (see below).
 
 ## Why this shape?
@@ -496,6 +499,12 @@ so the browser talks to a single origin and the session cookies work seamlessly.
 | POST   | `/api/web-access/runs` | cookie | `{ connectionId, kind, instruction, data? }` | Start a task (returns 202)  |
 | GET    | `/api/web-access/runs` | cookie | —                           | The org's 25 most recent runs                |
 | GET    | `/api/web-access/runs/:id` | cookie | —                       | One run, with its full step trace            |
+| GET    | `/api/connectors/catalog` | cookie | `?all=1` optional        | Curated third-party apps (filtered by industry) |
+| GET    | `/api/connectors/connections` | cookie | —                    | Apps this org has connected                  |
+| POST   | `/api/connectors/connections` | cookie | `{ connectorKey, accessMode, …creds }` | Connect an app (web / computer / api) |
+| PATCH  | `/api/connectors/connections/:id` | cookie | `{ label?, notes?, status? }` | Rename or annotate a connection |
+| DELETE | `/api/connectors/connections/:id` | cookie | `?purge=true`      | Disconnect (optionally tear down credentials) |
+| POST   | `/api/connectors/connections/:id/run` | cookie | `{ templateId?, instruction? }` | Start a Web Access task for a connected app |
 | GET    | `/api/verifier/status` | cookie | —                           | Whether checks run here, and how they are set |
 | GET    | `/api/verifier/verifications` | cookie | `?runId=` optional   | Recent checks, or the checks for one run     |
 | GET    | `/api/verifier/verifications/:id` | cookie | —                | One check: expectations, findings, evidence  |
@@ -1227,6 +1236,19 @@ ever exposed).
 navigates by clicking. A site behind SSO with a hardware key, or one that demands a fresh
 one-time code on every sign-in, is out of reach by design — there is no second factor to
 supply.
+
+### Connectors
+
+`/connectors` is the curated catalog on top of Web Access, Computer Use, and Estimator API
+adapters. Restoration, roofing, and contractor apps (ServiceTitan, AccuLynx, Jobber,
+Xactimate, carrier portals, …) appear as industry tabs. Connecting an app stores an
+`app_connectors` row and either creates a Web Access login, marks a Computer Use target, or
+saves Estimator credentials.
+
+```bash
+psql "$SUPABASE_DB_URL" -f db/app_connectors.sql   # after web_access.sql
+# or apply supabase/migrations/20260728160000_app_connectors.sql
+```
 
 ### Verifier
 

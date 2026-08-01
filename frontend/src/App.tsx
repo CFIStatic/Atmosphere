@@ -25,6 +25,7 @@ import { PmProjectPage } from './pages/PmProjectPage';
 import { FinancePage } from './pages/FinancePage';
 import { FinanceSharePage } from './pages/FinanceSharePage';
 import { WebAccessPage } from './pages/WebAccessPage';
+import { ConnectorsPage } from './pages/ConnectorsPage';
 import { ComputerUsePage } from './pages/ComputerUsePage';
 import { EstimatorPage } from './pages/EstimatorPage';
 import { MitigationEstimatorPage } from './pages/MitigationEstimatorPage';
@@ -214,6 +215,17 @@ export default function App() {
               <ProtectedRoute>
                 <RequireOnboarded>
                   <WebAccessPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/connectors"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <ConnectorsPage />
                 </RequireOnboarded>
               </ProtectedRoute>
             }

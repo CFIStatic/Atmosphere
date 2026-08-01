@@ -21,7 +21,7 @@ import { AppShell, PanelSpinner } from '../components/AppShell';
 import { MemoryFeed } from '../components/MemoryFeed';
 import { PinSetupCard } from '../components/PinSetupCard';
 import { EscalationQueue } from '../components/EscalationQueue';
-import { SpinnerIcon, CheckIcon, MicIcon, MonitorIcon, GlobeIcon } from '../components/icons';
+import { SpinnerIcon, CheckIcon, MicIcon, MonitorIcon, GlobeIcon, PlugIcon } from '../components/icons';
 import { formatUsd, usedPct } from '../lib/money';
 
 export function DashboardPage() {
@@ -353,6 +353,19 @@ export function DashboardPage() {
           {/* The places you can go and work. Same card shape throughout, so none
               of them reads as the more important one. */}
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <Link to="/connectors" className="flex items-start gap-3 rounded-xl border border-line bg-paper-0 p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50 sm:col-span-2">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-500 text-white shadow-card">
+                <PlugIcon width={20} height={20} />
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-ink-900">Connectors</p>
+                <p className="mt-0.5 text-sm text-ink-600">
+                  Connect ServiceTitan, AccuLynx, Xactimate, carrier portals, and more — through
+                  web access or a computer-use agent.
+                </p>
+              </div>
+            </Link>
+
             <Link to="/technician" className="flex items-start gap-3 rounded-xl border border-line bg-paper-0 p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50">
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-500 text-white shadow-card">
                 <MicIcon width={20} height={20} />
