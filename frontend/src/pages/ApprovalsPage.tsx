@@ -140,7 +140,7 @@ export function ApprovalsPage() {
                     className={`rounded-lg border px-3.5 py-2.5 text-left transition disabled:opacity-50 ${
                       option.action === 'repair'
                         ? 'border-brand-500 bg-brand-50 hover:bg-brand-100'
-                        : 'border-line bg-paper-0 hover:border-line-strong'
+                        : 'glass-card hover:border-line-strong'
                     }`}
                   >
                     <p className="text-sm font-semibold text-ink-900">
@@ -154,7 +154,7 @@ export function ApprovalsPage() {
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="Optional note for the record…"
-                className="mt-3 w-full rounded-lg border border-line bg-paper-50 px-3 py-2 text-sm text-ink-900 placeholder-ink-500 outline-none transition focus:border-brand-500"
+                className="mt-3 w-full rounded-lg border border-line glass-field px-3 py-2 text-sm text-ink-900 placeholder-ink-500 outline-none transition focus:border-brand-500"
               />
             </div>
           </section>

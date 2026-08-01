@@ -11,6 +11,8 @@ import { MyWorkPage } from './pages/MyWorkPage';
 import { ApprovalsPage } from './pages/ApprovalsPage';
 import { SchedulePage } from './pages/SchedulePage';
 import { CustomersPage } from './pages/CustomersPage';
+import { PipelinePage } from './pages/PipelinePage';
+import { JobCostingPage } from './pages/JobCostingPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AuditPage } from './pages/AuditPage';
 import { JobsPage } from './pages/JobsPage';
@@ -105,6 +107,8 @@ export default function App() {
             { path: '/approvals', element: <ApprovalsPage /> },
             { path: '/schedule', element: <SchedulePage /> },
             { path: '/customers', element: <CustomersPage /> },
+            { path: '/pipeline', element: <PipelinePage /> },
+            { path: '/costing', element: <JobCostingPage /> },
           ].map(({ path, element }) => (
             <Route
               key={path}

@@ -137,7 +137,7 @@ function ConnectionCard({
         {PROVIDERS.map((provider) => {
           const credential = stored.get(provider);
           return (
-            <li key={provider} className="bg-paper-0 px-4 py-3">
+            <li key={provider} className="bg-paper-200/50 px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium text-ink-900">{PROVIDER_LABELS[provider]}</p>
@@ -287,7 +287,7 @@ function CredentialField({
         placeholder={placeholder}
         autoComplete="off"
         onChange={(event) => onChange(event.target.value)}
-        className="mt-1 w-full rounded-lg border border-line bg-paper-50 px-3 py-2 text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none"
+        className="mt-1 w-full rounded-lg border border-line glass-field px-3 py-2 text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none"
       />
     </label>
   );
@@ -362,7 +362,7 @@ function StartRunCard({ onStarted }: { onStarted: (run: EstimatorRun) => void })
           <select
             value={selected}
             onChange={(event) => setSelected(event.target.value)}
-            className="mt-1 w-full rounded-lg border border-line bg-paper-50 px-3 py-2 text-sm text-ink-900 focus:border-brand-500 focus:outline-none"
+            className="mt-1 w-full rounded-lg border border-line glass-field px-3 py-2 text-sm text-ink-900 focus:border-brand-500 focus:outline-none"
           >
             {projects.map((project) => (
               <option key={project.id} value={project.id}>
@@ -388,7 +388,7 @@ function StartRunCard({ onStarted }: { onStarted: (run: EstimatorRun) => void })
           rows={4}
           spellCheck={false}
           placeholder={'Room,Code,Description,Quantity,Unit\nMaster Bedroom,DMO CRPT,"Remove carpet",224.00,SF'}
-          className="mt-2 w-full rounded-lg border border-line bg-paper-50 px-3 py-2 font-mono text-xs text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none"
+          className="mt-2 w-full rounded-lg border border-line glass-field px-3 py-2 font-mono text-xs text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none"
         />
       </label>
 
@@ -431,7 +431,7 @@ function StageRail({ run }: { run: EstimatorRun }) {
                   ? 'bg-brand-50 text-brand-700'
                   : done
                     ? 'bg-success-50 text-success-600'
-                    : 'bg-paper-0 text-ink-500'
+                    : 'bg-paper-200/50 text-ink-500'
             }`}
           >
             {ESTIMATOR_STAGE_LABELS[stage]}
@@ -523,7 +523,7 @@ function JobReview({
                   </ul>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-2">
-                  <span className="rounded-full bg-paper-0 px-2.5 py-1 text-xs text-ink-700">
+                  <span className="rounded-full bg-paper-200/50 px-2.5 py-1 text-xs text-ink-700">
                     {candidate.score}/100
                   </span>
                   <button
@@ -563,13 +563,13 @@ function EstimateTable({ estimate }: { estimate: ConstructionEstimate }) {
     <div className="mt-4 space-y-4">
       {byRoom.map(([roomName, lines]) => (
         <div key={roomName} className="overflow-hidden rounded-lg border border-line">
-          <div className="flex items-center justify-between bg-paper-0 px-4 py-2">
+          <div className="flex items-center justify-between bg-paper-200/50 px-4 py-2">
             <h4 className="text-sm font-semibold text-ink-900">{roomName}</h4>
             <span className="text-xs text-ink-500">{lines.length} line items</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[36rem] text-left text-sm">
-              <thead className="bg-paper-0 text-xs uppercase tracking-wide text-ink-500">
+              <thead className="bg-paper-200/50 text-xs uppercase tracking-wide text-ink-500">
                 <tr>
                   <th className="px-4 py-2 font-medium">Code</th>
                   <th className="px-4 py-2 font-medium">Description</th>
@@ -579,7 +579,7 @@ function EstimateTable({ estimate }: { estimate: ConstructionEstimate }) {
               </thead>
               <tbody className="divide-y divide-line">
                 {lines.map((line, index) => (
-                  <tr key={`${line.code}-${index}`} className="bg-paper-0 align-top">
+                  <tr key={`${line.code}-${index}`} className="bg-paper-200/50 align-top">
                     <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-brand-600">
                       {line.code}
                     </td>
@@ -775,7 +775,7 @@ function StatusBadge({ run }: { run: EstimatorRun }) {
     awaiting_review: { text: 'Needs your review', className: 'bg-caution-50 text-caution-600' },
     complete: { text: 'Sent to Xactimate', className: 'bg-success-50 text-success-600' },
     failed: { text: 'Failed', className: 'bg-danger-50 text-danger-700' },
-    cancelled: { text: 'Cancelled', className: 'bg-paper-0 text-ink-600' },
+    cancelled: { text: 'Cancelled', className: 'bg-paper-200/50 text-ink-600' },
   };
   const badge = map[run.status];
 
@@ -799,7 +799,7 @@ function Stat({
   tone?: 'ok' | 'warn';
 }) {
   return (
-    <div className="rounded-lg border border-line bg-paper-50 px-3 py-2">
+    <div className="rounded-lg border border-line glass-field px-3 py-2">
       <p className="text-xs uppercase tracking-wide text-ink-500">{label}</p>
       <p className={`mt-0.5 text-sm font-semibold ${tone === 'warn' ? 'text-caution-600' : 'text-ink-900'}`}>
         {value}
@@ -913,7 +913,7 @@ export function EstimatorPage() {
                   <button
                     onClick={() => setActiveRunId(run.id)}
                     className={`flex w-full flex-wrap items-center justify-between gap-3 px-4 py-3 text-left transition ${
-                      run.id === activeRunId ? 'bg-paper-0' : 'bg-paper-0 hover:bg-paper-0'
+                      run.id === activeRunId ? 'bg-paper-0' : 'bg-paper-200/50 hover:bg-paper-0'
                     }`}
                   >
                     <div>

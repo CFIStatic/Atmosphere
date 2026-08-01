@@ -212,7 +212,7 @@ export function Meter({
         <span className="text-sm font-semibold tabular-nums text-ink-900">{clamped}%</span>
       </div>
       <div
-        className="mt-1.5 h-2 overflow-hidden rounded-full bg-paper-0"
+        className="mt-1.5 h-2 overflow-hidden rounded-full bg-paper-200/50"
         role="progressbar"
         aria-valuenow={clamped}
         aria-valuemin={0}

@@ -136,7 +136,7 @@ export function RecordingsPanel({ recordings, transcriptionAvailable, onDelete, 
               ))}
 
             {recording.note ? (
-              <p className="mt-3 rounded-lg border border-line bg-paper-50 px-3 py-2 text-sm leading-relaxed text-ink-700">
+              <p className="mt-3 rounded-lg border border-line glass-field px-3 py-2 text-sm leading-relaxed text-ink-700">
                 {recording.note}
               </p>
             ) : (

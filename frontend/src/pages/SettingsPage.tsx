@@ -95,7 +95,7 @@ export function SettingsPage() {
                       className={`flex w-full items-center gap-3 rounded-lg px-3.5 py-2.5 text-sm font-medium transition ${
                         isActive
                           ? 'bg-brand-50 text-brand-700'
-                          : 'text-ink-600 hover:bg-paper-0 hover:text-ink-900'
+                          : 'text-ink-600 hover:bg-paper-200/50 hover:text-ink-900'
                       }`}
                     >
                       <section.icon width={18} height={18} />
@@ -137,7 +137,7 @@ function Card({
   return (
     <section
       className={`rounded-xl border p-5 sm:p-6 ${
-        tone === 'danger' ? 'border-danger-200 bg-danger-50' : 'border-line bg-paper-0 shadow-card'
+        tone === 'danger' ? 'border-danger-200 bg-danger-50' : 'glass-card'
       }`}
     >
       <h2 className="text-base font-semibold text-ink-900">{title}</h2>
@@ -230,7 +230,7 @@ function Toggle({
         }`}
       >
         <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-paper-0 transition-all ${
+          className={`absolute top-0.5 h-5 w-5 rounded-full bg-paper-200/50 transition-all ${
             checked ? 'left-[1.375rem]' : 'left-0.5'
           }`}
         />
@@ -650,11 +650,11 @@ function OrganizationSection() {
               }
               className={`mt-2 ${INPUT_CLASS}`}
             >
-              <option value="" className="bg-paper-0">
+              <option value="" className="bg-paper-200/50">
                 Select a company type
               </option>
               {CONTRACTOR_ORDER.map((value) => (
-                <option key={value} value={value} className="bg-paper-0">
+                <option key={value} value={value} className="bg-paper-200/50">
                   {CONTRACTOR_TYPE_LABELS[value]}
                 </option>
               ))}
@@ -680,7 +680,7 @@ function OrganizationSection() {
               className={`mt-2 ${INPUT_CLASS}`}
             >
               {ROLE_ORDER.map((value) => (
-                <option key={value} value={value} className="bg-paper-0">
+                <option key={value} value={value} className="bg-paper-200/50">
                   {ROLE_LABELS[value]}
                 </option>
               ))}
@@ -694,7 +694,7 @@ function OrganizationSection() {
               className={`mt-2 ${INPUT_CLASS}`}
             >
               {WORK_ORDER.map((value) => (
-                <option key={value} value={value} className="bg-paper-0">
+                <option key={value} value={value} className="bg-paper-200/50">
                   {WORK_TYPE_LABELS[value]}
                 </option>
               ))}
@@ -711,7 +711,7 @@ function OrganizationSection() {
                     className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-2.5 transition ${
                       checked
                         ? 'border-brand-400 bg-brand-50'
-                        : 'border-line bg-paper-0 hover:bg-paper-100'
+                        : 'glass-card hover:bg-paper-100'
                     }`}
                   >
                     <input

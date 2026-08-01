@@ -253,6 +253,24 @@ body::before {
   }
 }
 
+/* Form fields: the same material, recessed rather than raised — no gloss, a
+   slightly darker fill, and the edge brightening on focus. */
+.glass-field {
+  background-color: rgb(var(--glass-tint) / calc(var(--glass-alpha) - 0.2));
+  border: 1px solid rgb(var(--glass-edge) / var(--glass-edge-alpha));
+}
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .glass-field {
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+  }
+}
+.glass-field:focus,
+.glass-field:focus-within {
+  border-color: rgb(var(--brand-500) / 0.7);
+  outline: none;
+}
+
 /* Dividers inside a pane: light, not a drawn rule. */
 .glass-card .border-line,
 .glass-panel .border-line,

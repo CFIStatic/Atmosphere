@@ -266,7 +266,7 @@ export function VideoCapturePanel({ onSaved, onDetections }: Props) {
               className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium transition ${
                 detecting
                   ? 'border-brand-200 bg-brand-50 text-brand-700'
-                  : 'border-line bg-paper-0 text-ink-700 hover:bg-paper-100'
+                  : 'glass-card text-ink-700 hover:bg-paper-100'
               }`}
             >
               <ScanIcon width={18} height={18} />

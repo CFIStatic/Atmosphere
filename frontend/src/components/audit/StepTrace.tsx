@@ -204,7 +204,7 @@ export function StepTrace({ steps, live = false }: Props) {
           {/* Focused step */}
           <div
             ref={focusRef}
-            className="rounded-xl border border-brand-300 bg-paper-0 p-4 ring-1 ring-inset ring-brand-200"
+            className="rounded-xl border border-brand-300 bg-paper-200/50 p-4 ring-1 ring-inset ring-brand-200"
           >
             <div className="flex items-start gap-3">
               <StepGlyph step={current} />

@@ -79,7 +79,7 @@ export function SchedulePage() {
             <h2 className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.09em] text-caution-600">
               Unscheduled — {unscheduled.length}
             </h2>
-            <div className="rounded-xl border border-dashed border-line bg-paper-0">
+            <div className="rounded-xl border border-dashed glass-card">
               {unscheduled.map((job) => (
                 <ScheduleRow key={job.jobId} job={job} />
               ))}

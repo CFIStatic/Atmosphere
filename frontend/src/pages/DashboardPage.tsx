@@ -166,7 +166,7 @@ export function DashboardPage() {
               ) : (
                 <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line">
                   {jobs.slice(0, 6).map((job) => (
-                    <li key={job.jobId} className="bg-paper-0">
+                    <li key={job.jobId} className="bg-paper-200/50">
                       <Link
                         to={`/jobs/${job.jobId}`}
                         className="flex items-center justify-between gap-4 px-5 py-3.5 transition hover:bg-paper-200"
@@ -420,7 +420,7 @@ export function DashboardPage() {
                     return (
                       <li
                         key={m.userId}
-                        className="flex items-center justify-between gap-4 bg-paper-0 px-5 py-3.5"
+                        className="flex items-center justify-between gap-4 bg-paper-200/50 px-5 py-3.5"
                       >
                         <div className="flex items-center gap-3">
                           <span className="grid h-9 w-9 place-items-center rounded-full bg-brand-50 text-sm font-semibold uppercase text-brand-700">

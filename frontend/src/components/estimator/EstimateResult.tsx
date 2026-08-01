@@ -250,7 +250,7 @@ function LineRow({
     <>
       <tr
         onClick={() => setOpen((value) => !value)}
-        className="cursor-pointer bg-paper-0 transition hover:bg-paper-200"
+        className="cursor-pointer bg-paper-200/50 transition hover:bg-paper-200"
       >
         <td className="px-3 py-2 font-mono text-xs text-brand-300">
           {line.code}
@@ -318,7 +318,7 @@ function FindingRow({ finding }: { finding: ProfitFinding }) {
       ? 'border-danger-200 bg-danger-50'
       : finding.severity === 'warning'
         ? 'border-caution-200 bg-caution-50'
-        : 'border-line bg-paper-0';
+        : 'glass-card';
 
   return (
     <li className={`rounded-xl border p-4 ${tone}`}>

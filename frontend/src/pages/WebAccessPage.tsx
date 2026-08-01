@@ -29,7 +29,7 @@ const labelClass = 'mb-1.5 block text-sm font-medium text-ink-700';
 const STATUS_STYLES: Record<WebConnection['status'], string> = {
   verified: 'border-success-200 bg-success-50 text-success-600',
   failed: 'border-danger-200 bg-danger-50 text-danger-700',
-  unverified: 'border-line bg-paper-0 text-ink-700',
+  unverified: 'glass-card text-ink-700',
 };
 
 const STATUS_LABELS: Record<WebConnection['status'], string> = {
@@ -39,7 +39,7 @@ const STATUS_LABELS: Record<WebConnection['status'], string> = {
 };
 
 const RUN_STATUS_STYLES: Record<WebRun['status'], string> = {
-  queued: 'border-line bg-paper-0 text-ink-700',
+  queued: 'glass-card text-ink-700',
   running: 'border-brand-200 bg-brand-500/10 text-brand-700',
   succeeded: 'border-success-200 bg-success-50 text-success-600',
   failed: 'border-danger-200 bg-danger-50 text-danger-700',
@@ -267,7 +267,7 @@ function ConnectionRow({
   }
 
   return (
-    <li className="bg-paper-0 px-5 py-4">
+    <li className="bg-paper-200/50 px-5 py-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium text-ink-900">{connection.label}</p>
@@ -529,9 +529,9 @@ export function WebAccessPage() {
               className="mt-6 rounded-lg border border-caution-200 bg-caution-50 px-3.5 py-3 text-sm text-caution-600"
             >
               Web Access is not configured on this server yet. An administrator needs to set
-              <code className="mx-1 rounded bg-paper-0 px-1.5 py-0.5 font-mono text-xs">WEB_ACCESS_KEY</code>
+              <code className="mx-1 rounded bg-paper-200/50 px-1.5 py-0.5 font-mono text-xs">WEB_ACCESS_KEY</code>
               and
-              <code className="mx-1 rounded bg-paper-0 px-1.5 py-0.5 font-mono text-xs">ANTHROPIC_API_KEY</code>
+              <code className="mx-1 rounded bg-paper-200/50 px-1.5 py-0.5 font-mono text-xs">ANTHROPIC_API_KEY</code>
               before connections can be used.
             </div>
           )}

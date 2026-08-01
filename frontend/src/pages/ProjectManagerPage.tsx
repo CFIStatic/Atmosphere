@@ -298,7 +298,7 @@ export function ProjectManagerPage() {
                   type="checkbox"
                   checked={onlyMine}
                   onChange={(e) => setOnlyMine(e.target.checked)}
-                  className="h-4 w-4 rounded border-line bg-paper-0"
+                  className="h-4 w-4 rounded glass-card"
                 />
                 Only projects assigned to me
               </label>

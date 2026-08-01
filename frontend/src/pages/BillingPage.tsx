@@ -215,7 +215,7 @@ export function BillingPage() {
             </p>
 
             <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-lg bg-paper-0 px-3 py-2">
+              <div className="rounded-lg bg-paper-200/50 px-3 py-2">
                 <dt className="text-xs text-ink-500">Plan credits</dt>
                 <dd className="mt-0.5 font-semibold text-ink-800">
                   {formatUsd(balance?.planNanos ?? 0)}
@@ -224,7 +224,7 @@ export function BillingPage() {
                   {balance?.nextExpiry ? `Expires ${formatDate(balance.nextExpiry)}` : 'No expiry'}
                 </dd>
               </div>
-              <div className="rounded-lg bg-paper-0 px-3 py-2">
+              <div className="rounded-lg bg-paper-200/50 px-3 py-2">
                 <dt className="text-xs text-ink-500">Purchased credits</dt>
                 <dd className="mt-0.5 font-semibold text-ink-800">
                   {formatUsd(balance?.purchasedNanos ?? 0)}
@@ -242,7 +242,7 @@ export function BillingPage() {
                   </span>
                 </div>
                 <div
-                  className="mt-2 h-2 overflow-hidden rounded-full bg-paper-0"
+                  className="mt-2 h-2 overflow-hidden rounded-full bg-paper-200/50"
                   role="progressbar"
                   aria-valuenow={Math.round(usedPct(usage.priceNanos, sub.includedCreditsNanos))}
                   aria-valuemin={0}
@@ -294,7 +294,7 @@ export function BillingPage() {
                 key={pack.code}
                 onClick={() => buyPack(pack.code, pack.name)}
                 disabled={!canManage || busy !== null}
-                className="group rounded-xl glass-card p-4 text-left transition hover:border-brand-200 hover:bg-paper-0 disabled:cursor-not-allowed disabled:opacity-50"
+                className="group rounded-xl glass-card p-4 text-left transition hover:border-brand-200 hover:disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <p className="text-lg font-semibold text-ink-900">{formatCents(pack.priceCents)}</p>
                 <p className="mt-0.5 text-sm text-ink-600">
@@ -311,7 +311,7 @@ export function BillingPage() {
               </button>
             ))}
 
-            <div className="rounded-xl border border-dashed border-line bg-paper-0 p-4">
+            <div className="rounded-xl border border-dashed glass-card p-4">
               <label htmlFor="custom-amount" className="text-sm font-medium text-ink-700">
                 Custom amount
               </label>
@@ -406,7 +406,7 @@ export function BillingPage() {
 
           <div className="mt-4 overflow-x-auto rounded-xl border border-line">
             <table className="w-full min-w-[46rem] text-sm">
-              <thead className="bg-paper-0 text-left text-xs uppercase tracking-wide text-ink-600">
+              <thead className="bg-paper-200/50 text-left text-xs uppercase tracking-wide text-ink-600">
                 <tr>
                   <th scope="col" className="px-4 py-3 font-medium">Model</th>
                   <th scope="col" className="px-4 py-3 text-right font-medium">Input</th>
@@ -418,7 +418,7 @@ export function BillingPage() {
               </thead>
               <tbody className="divide-y divide-line">
                 {catalog?.rateCard.map((rate) => (
-                  <tr key={rate.modelId} className="bg-paper-0">
+                  <tr key={rate.modelId} className="bg-paper-200/50">
                     <td className="px-4 py-3">
                       <p className="font-medium text-ink-900">{rate.displayName}</p>
                       <p className="text-xs text-ink-500">
@@ -468,7 +468,7 @@ export function BillingPage() {
               </p>
             ) : (
               <table className="w-full min-w-[42rem] text-sm">
-                <thead className="bg-paper-0 text-left text-xs uppercase tracking-wide text-ink-600">
+                <thead className="bg-paper-200/50 text-left text-xs uppercase tracking-wide text-ink-600">
                   <tr>
                     <th scope="col" className="px-4 py-3 font-medium">Date</th>
                     <th scope="col" className="px-4 py-3 font-medium">Description</th>
@@ -480,7 +480,7 @@ export function BillingPage() {
                 </thead>
                 <tbody className="divide-y divide-line">
                   {payments.map((p) => (
-                    <tr key={p.id} className="bg-paper-0">
+                    <tr key={p.id} className="bg-paper-200/50">
                       <td className="px-4 py-2.5 text-ink-600">{formatDate(p.createdAt)}</td>
                       <td className="px-4 py-2.5">
                         <p className="font-medium text-ink-900">
@@ -539,7 +539,7 @@ export function BillingPage() {
                 {ledger.map((entry) => (
                   <li
                     key={entry.id}
-                    className="flex items-center justify-between gap-4 bg-paper-0 px-5 py-3"
+                    className="flex items-center justify-between gap-4 bg-paper-200/50 px-5 py-3"
                   >
                     <div>
                       <p className="text-sm font-medium text-ink-900">
@@ -613,7 +613,7 @@ function PlanCard({
       className={`flex flex-col rounded-xl border p-5 transition ${
         isCurrent
           ? 'border-brand-200 bg-brand-50'
-          : 'border-line bg-paper-0 hover:border-line-strong'
+          : 'glass-card hover:border-line-strong'
       }`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -712,7 +712,7 @@ function SpendControls({
             className={`rounded-lg border px-3 py-2 text-left text-sm transition disabled:opacity-50 ${
               !settings.autoReloadEnabled
                 ? 'border-brand-500 bg-brand-50 text-ink-900'
-                : 'border-line bg-paper-0 text-ink-600 hover:bg-paper-100'
+                : 'glass-card text-ink-600 hover:bg-paper-100'
             }`}
           >
             Manual reload
@@ -727,7 +727,7 @@ function SpendControls({
             className={`rounded-lg border px-3 py-2 text-left text-sm transition disabled:opacity-50 ${
               settings.autoReloadEnabled
                 ? 'border-brand-500 bg-brand-50 text-ink-900'
-                : 'border-line bg-paper-0 text-ink-600 hover:bg-paper-100'
+                : 'glass-card text-ink-600 hover:bg-paper-100'
             }`}
           >
             Auto-reload

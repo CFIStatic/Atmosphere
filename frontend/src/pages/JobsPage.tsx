@@ -30,7 +30,7 @@ const FILTERS: { value: string; label: string }[] = [
 ];
 
 const inputClass =
-  'w-full rounded-lg border border-line bg-paper-50 px-3 py-2 text-sm text-ink-900 placeholder:text-ink-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400';
+  'w-full rounded-lg border border-line glass-field px-3 py-2 text-sm text-ink-900 placeholder:text-ink-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400';
 const labelClass = 'block text-xs font-medium uppercase tracking-wide text-ink-500';
 
 function NewJobForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: () => void }) {

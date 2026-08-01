@@ -1,5 +1,7 @@
 import {
   ArtifactIcon,
+  ChartIcon as LedgerIcon,
+  ChartIcon as TrendIcon,
   BoltIcon,
   BriefcaseIcon,
   BuildingIcon,
@@ -78,31 +80,21 @@ export interface Platform {
   groups: NavGroup[];
 }
 
-/** Every platform carries these — the money and the machine are shared. */
-const SHARED_GROUPS: NavGroup[] = [
-  {
-    label: 'Finance',
-    items: [
-      { to: '/billing', label: 'Billing', Icon: CreditCardIcon },
-      { to: '/usage', label: 'Usage', Icon: ChartIcon },
-    ],
-  },
-  {
-    label: 'Intelligence',
-    items: [
-      { to: '/audit', label: 'Agents', Icon: BoltIcon },
-      { to: '/memory', label: 'Memory', Icon: ThoughtIcon },
-      { to: '/team', label: 'Team', Icon: UsersIcon },
-    ],
-  },
-  {
-    label: 'System',
-    items: [{ to: '/settings', label: 'Settings', Icon: SettingsIcon }],
-  },
-];
+/**
+ * Only Settings is common to all four — it is about the person and the
+ * device, not the work. Everything else in a platform's panel is chosen for
+ * that platform, including which shared screen belongs in it and what it is
+ * called there: "Portals" in Sales is the same route as "Web Access" in
+ * Operations, because a salesperson and a coordinator do not mean the same
+ * thing by it.
+ */
+const SYSTEM: NavGroup = {
+  label: 'System',
+  items: [{ to: '/settings', label: 'Settings', Icon: SettingsIcon }],
+};
 
-const OPERATE = (home: string): NavGroup => ({
-  label: 'Operate',
+const OPERATE = (home: string, label: string): NavGroup => ({
+  label,
   items: [
     { to: home, label: 'Overview', Icon: GaugeIcon },
     { to: '/my-work', label: 'My Work', Icon: CheckIcon },
@@ -121,17 +113,25 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
     Icon: BuildingIcon,
     metrics: ['accounts', 'openJobs', 'revenueInProgress', 'awaitingApproval', 'agentActions24h', 'verifierPassRate'],
     groups: [
-      OPERATE('/sales'),
+      OPERATE('/sales', 'Sell'),
       {
         label: 'Pipeline',
         items: [
-          { to: '/customers', label: 'Customers', Icon: BuildingIcon },
-          { to: '/jobs', label: 'Jobs', Icon: BriefcaseIcon },
-          { to: '/estimator', label: 'Bids & estimates', Icon: ArtifactIcon },
-          { to: '/web-access', label: 'Portals', Icon: GlobeIcon },
+          { to: '/pipeline', label: 'Leads', Icon: TrendIcon },
+          { to: '/customers', label: 'Accounts & contacts', Icon: BuildingIcon },
+          { to: '/estimator', label: 'Bids', Icon: ArtifactIcon },
+          { to: '/jobs', label: 'Won work', Icon: BriefcaseIcon },
         ],
       },
-      ...SHARED_GROUPS,
+      {
+        label: 'Reach',
+        items: [
+          { to: '/web-access', label: 'Carrier portals', Icon: GlobeIcon },
+          { to: '/audit', label: 'Sales agent', Icon: BoltIcon },
+          { to: '/memory', label: 'Account history', Icon: ThoughtIcon },
+        ],
+      },
+      SYSTEM,
     ],
   },
 
@@ -145,19 +145,26 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
     Icon: DecisionIcon,
     metrics: ['openJobs', 'blockedJobs', 'atRiskProjects', 'avgDaysDrying', 'awaitingApproval', 'agentActions24h'],
     groups: [
-      OPERATE('/operations'),
+      OPERATE('/operations', 'Run the day'),
       {
         label: 'Delivery',
         items: [
           { to: '/jobs', label: 'Jobs', Icon: BriefcaseIcon },
-          { to: '/pm', label: 'Workflows', Icon: DecisionIcon },
+          { to: '/pm', label: 'Project board', Icon: DecisionIcon },
           { to: '/schedule', label: 'Schedule', Icon: HistoryIcon },
-          { to: '/mitigation', label: 'Estimates', Icon: ArtifactIcon },
-          { to: '/web-access', label: 'Web Access', Icon: GlobeIcon },
-          { to: '/computer-use', label: 'Computer', Icon: MonitorIcon },
+          { to: '/mitigation', label: 'Estimating', Icon: ArtifactIcon },
         ],
       },
-      ...SHARED_GROUPS,
+      {
+        label: 'Automation',
+        items: [
+          { to: '/web-access', label: 'Web access', Icon: GlobeIcon },
+          { to: '/computer-use', label: 'Computer use', Icon: MonitorIcon },
+          { to: '/audit', label: 'Agent runs', Icon: BoltIcon },
+          { to: '/team', label: 'Crew', Icon: UsersIcon },
+        ],
+      },
+      SYSTEM,
     ],
   },
 
@@ -171,17 +178,23 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
     Icon: MicIcon,
     metrics: ['scheduledToday', 'crewOnJobs', 'openJobs', 'unscheduled', 'avgDaysDrying', 'agentActions24h'],
     groups: [
-      OPERATE('/field'),
+      OPERATE('/field', 'Today'),
       {
         label: 'On site',
         items: [
           { to: '/technician', label: 'Capture', Icon: MicIcon },
-          { to: '/schedule', label: 'Schedule', Icon: HistoryIcon },
-          { to: '/jobs', label: 'Jobs', Icon: BriefcaseIcon },
-          { to: '/mitigation', label: 'Estimates', Icon: ArtifactIcon },
+          { to: '/schedule', label: 'Route', Icon: HistoryIcon },
+          { to: '/jobs', label: 'My jobs', Icon: BriefcaseIcon },
         ],
       },
-      ...SHARED_GROUPS,
+      {
+        label: 'Hand off',
+        items: [
+          { to: '/mitigation', label: 'Readings to estimate', Icon: ArtifactIcon },
+          { to: '/memory', label: 'What I logged', Icon: ThoughtIcon },
+        ],
+      },
+      SYSTEM,
     ],
   },
 
@@ -195,28 +208,25 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
     Icon: ChartIcon,
     metrics: ['revenueInProgress', 'receivablesOpen', 'collectedThisPeriod', 'creditBalance', 'usageThisPeriod', 'openJobs'],
     groups: [
-      OPERATE('/manager'),
+      OPERATE('/manager', 'Oversee'),
       {
-        label: 'Business',
+        label: 'The books',
         items: [
-          { to: '/billing', label: 'Billing', Icon: CreditCardIcon },
-          { to: '/usage', label: 'Usage', Icon: ChartIcon },
-          { to: '/jobs', label: 'Job costing', Icon: BriefcaseIcon },
-          { to: '/customers', label: 'Customers', Icon: BuildingIcon },
+          { to: '/costing', label: 'Job costing', Icon: LedgerIcon },
+          { to: '/billing', label: 'Plan & credits', Icon: CreditCardIcon },
+          { to: '/usage', label: 'Spend', Icon: ChartIcon },
+          { to: '/customers', label: 'Accounts', Icon: BuildingIcon },
         ],
       },
       {
-        label: 'Intelligence',
+        label: 'Insight',
         items: [
-          { to: '/audit', label: 'Agents', Icon: BoltIcon },
-          { to: '/memory', label: 'Memory', Icon: ThoughtIcon },
-          { to: '/team', label: 'Team', Icon: UsersIcon },
+          { to: '/audit', label: 'What agents did', Icon: BoltIcon },
+          { to: '/team', label: 'People', Icon: UsersIcon },
+          { to: '/memory', label: 'The record', Icon: ThoughtIcon },
         ],
       },
-      {
-        label: 'System',
-        items: [{ to: '/settings', label: 'Settings', Icon: SettingsIcon }],
-      },
+      SYSTEM,
     ],
   },
 };

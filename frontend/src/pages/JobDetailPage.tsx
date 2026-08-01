@@ -26,7 +26,7 @@ import { MemoryFeed } from '../components/MemoryFeed';
 import { SpinnerIcon, PlusIcon, ChevronLeftIcon, CheckIcon } from '../components/icons';
 
 const inputClass =
-  'w-full rounded-lg border border-line bg-paper-50 px-3 py-2 text-sm text-ink-900 placeholder:text-ink-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400';
+  'w-full rounded-lg border border-line glass-field px-3 py-2 text-sm text-ink-900 placeholder:text-ink-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400';
 
 const TABS = ['Work', 'Crew', 'History'] as const;
 type Tab = (typeof TABS)[number];

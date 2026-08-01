@@ -29,7 +29,7 @@ const FAMILIES = [
 ];
 
 const inputClass =
-  'w-full rounded-lg border border-line bg-paper-50 px-3 py-2 text-sm text-ink-900 placeholder:text-ink-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400';
+  'w-full rounded-lg border border-line glass-field px-3 py-2 text-sm text-ink-900 placeholder:text-ink-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400';
 
 function StatTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (

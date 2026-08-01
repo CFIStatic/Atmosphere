@@ -19,10 +19,10 @@ import type {
  */
 
 const STATUS_STYLES = {
-  met: { chip: 'bg-success-50 text-success-600', card: 'border-line bg-paper-0', mark: '✓' },
+  met: { chip: 'bg-success-50 text-success-600', card: 'glass-card', mark: '✓' },
   unmet: { chip: 'bg-danger-50 text-danger-600', card: 'border-danger-200 bg-danger-50', mark: '✕' },
   undetermined: { chip: 'bg-caution-50 text-caution-600', card: 'border-caution-200 bg-caution-50', mark: '?' },
-  not_applicable: { chip: 'bg-paper-200 text-ink-500', card: 'border-line bg-paper-0', mark: '–' },
+  not_applicable: { chip: 'bg-paper-200 text-ink-500', card: 'glass-card', mark: '–' },
 } as const;
 
 export function CompliancePanel({

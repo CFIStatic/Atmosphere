@@ -120,7 +120,7 @@ export function AtmosphereRail({
         </div>
         <div className="mt-2">
           {first ? (
-            <div className="rounded-lg border border-brand-300 bg-paper-0 p-3">
+            <div className="rounded-lg border border-brand-300 bg-paper-200/50 p-3">
               <p className="text-[13px] font-semibold leading-snug text-ink-900">{first.question}</p>
               {first.context.verifierSummary && (
                 <p className="mt-1 text-xs leading-relaxed text-ink-600">

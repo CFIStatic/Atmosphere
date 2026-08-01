@@ -593,6 +593,22 @@ const routes: Array<[string, RegExp, Handler]> = [
       total: 4, limit: 50, offset: 0,
     },
   })],
+  ['GET', /^\/api\/crm\/leads$/, () => ({
+    body: {
+      items: [
+        { id: 'ld-1', title: 'Westlake townhomes — burst riser, 6 units', status: 'estimate_sent', source: 'insurance_carrier', workType: 'mitigation', estimatedValue: 48200, updatedAt: '2026-08-01T09:10:00Z' },
+        { id: 'ld-2', title: 'Verano Apartments — roof hail claim', status: 'qualified', source: 'referral', workType: 'construction', estimatedValue: 96500, updatedAt: '2026-07-31T14:40:00Z' },
+        { id: 'ld-3', title: 'Delgado residence — kitchen supply line', status: 'contacted', source: 'web', workType: 'mitigation', estimatedValue: 12400, updatedAt: '2026-08-01T11:05:00Z' },
+        { id: 'ld-4', title: 'Riverbend Church — sanctuary water damage', status: 'new', source: 'phone', workType: 'mitigation', estimatedValue: 31000, updatedAt: '2026-08-01T12:30:00Z' },
+        { id: 'ld-5', title: 'Nguyen residence — storm siding', status: 'new', source: 'referral', workType: 'construction', estimatedValue: 8700, updatedAt: '2026-07-30T16:20:00Z' },
+        { id: 'ld-6', title: 'Foster Dental — sprinkler discharge', status: 'qualified', source: 'insurance_carrier', workType: 'mitigation', estimatedValue: 27300, updatedAt: '2026-07-29T10:15:00Z' },
+        { id: 'ld-7', title: 'Cedar Ridge — storm damage', status: 'won', source: 'referral', estimatedValue: 13980, updatedAt: '2026-07-19T08:30:00Z' },
+        { id: 'ld-8', title: 'Meridian Ave — water loss', status: 'won', source: 'insurance_carrier', estimatedValue: 18420, updatedAt: '2026-07-24T15:02:00Z' },
+        { id: 'ld-9', title: 'Alder Court — mold survey', status: 'lost', source: 'web', estimatedValue: 6400, lostReason: 'Went with the carrier preferred vendor', updatedAt: '2026-07-22T09:00:00Z' },
+      ],
+      total: 9, limit: 50, offset: 0,
+    },
+  })],
   ['GET', /^\/api\/crm\/contacts$/, () => ({
     body: {
       items: [

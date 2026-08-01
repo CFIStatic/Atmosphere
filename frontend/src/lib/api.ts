@@ -98,6 +98,34 @@ export interface CrmAccount {
   createdAt?: string;
 }
 
+/** The stages a lead moves through, in pipeline order. */
+export const LEAD_STAGES = ['new', 'contacted', 'qualified', 'estimate_sent', 'won', 'lost'] as const;
+export type LeadStage = (typeof LEAD_STAGES)[number];
+
+export const LEAD_STAGE_LABELS: Record<LeadStage, string> = {
+  new: 'New',
+  contacted: 'Contacted',
+  qualified: 'Qualified',
+  estimate_sent: 'Estimate sent',
+  won: 'Won',
+  lost: 'Lost',
+};
+
+/** Camelized crm_leads row — only the columns the pipeline board reads. */
+export interface CrmLead {
+  id: string;
+  title: string;
+  status: LeadStage;
+  source?: string | null;
+  workType?: string | null;
+  lossType?: string | null;
+  estimatedValue?: number | null;
+  description?: string | null;
+  lostReason?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 /** Camelized crm_contacts row. */
 export interface CrmContact {
   id: string;
@@ -857,6 +885,12 @@ export const api = {
   crmAccounts: (search = '') =>
     request<CrmList<CrmAccount>>(
       `/api/crm/accounts${search ? `?search=${encodeURIComponent(search)}` : ''}`,
+      { method: 'GET' },
+    ),
+
+  crmLeads: (search = '') =>
+    request<CrmList<CrmLead>>(
+      `/api/crm/leads${search ? `?search=${encodeURIComponent(search)}` : ''}`,
       { method: 'GET' },
     ),
 

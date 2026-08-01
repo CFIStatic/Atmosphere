@@ -659,7 +659,7 @@ function ComputersPanel({
           <p className="text-xs text-ink-600">
             On the computer you want to add, install Node 18+ and run:
           </p>
-          <code className="mt-2 block break-all rounded-lg bg-paper-0 px-3 py-2 font-mono text-xs text-brand-700">
+          <code className="mt-2 block break-all rounded-lg bg-paper-200/50 px-3 py-2 font-mono text-xs text-brand-700">
             {command}
           </code>
           <div className="mt-3 flex items-center justify-between gap-2">

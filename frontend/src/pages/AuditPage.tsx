@@ -81,7 +81,7 @@ function AgentCard({
       className={`rounded-xl border p-3.5 text-left transition ${
         selected
           ? 'border-brand-400 bg-brand-50'
-          : 'border-line bg-paper-0 hover:border-line-strong hover:bg-paper-0'
+          : 'glass-card hover:border-line-strong hover:bg-paper-0'
       }`}
     >
       <div className="flex items-center justify-between gap-2">

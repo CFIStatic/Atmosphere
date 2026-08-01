@@ -164,7 +164,7 @@ export function TechnicianPage() {
               <Icon width={17} height={17} />
               <span className="flex-1 text-left">{label}</span>
               {badge ? (
-                <span className="rounded-full bg-paper-0 px-1.5 py-0.5 text-[11px] font-semibold text-ink-500">
+                <span className="rounded-full bg-paper-200/50 px-1.5 py-0.5 text-[11px] font-semibold text-ink-500">
                   {badge}
                 </span>
               ) : null}
@@ -226,7 +226,7 @@ export function TechnicianPage() {
               className={`hidden rounded-full border px-2.5 py-1 text-xs font-medium sm:inline ${
                 capabilities?.assistant
                   ? 'border-brand-200 bg-brand-50 text-brand-700'
-                  : 'border-line bg-paper-0 text-ink-500'
+                  : 'glass-card text-ink-500'
               }`}
             >
               {capabilities === null

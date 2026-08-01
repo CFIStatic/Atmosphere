@@ -218,7 +218,7 @@ export function UsagePage() {
                       {formatUsd(m.priceNanos, { precise: true })}
                     </span>
                   </div>
-                  <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-paper-0">
+                  <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-paper-200/50">
                     <div
                       className="h-full rounded-full"
                       style={{
@@ -245,7 +245,7 @@ export function UsagePage() {
               <p className="px-5 py-8 text-center text-sm text-ink-500">No requests yet.</p>
             ) : (
               <table className="w-full min-w-[38rem] text-sm">
-                <thead className="bg-paper-0 text-left text-xs uppercase tracking-wide text-ink-600">
+                <thead className="bg-paper-200/50 text-left text-xs uppercase tracking-wide text-ink-600">
                   <tr>
                     <th scope="col" className="px-4 py-3 font-medium">Model</th>
                     <th scope="col" className="px-4 py-3 font-medium">Feature</th>
@@ -258,7 +258,7 @@ export function UsagePage() {
                 </thead>
                 <tbody className="divide-y divide-line">
                   {events.map((e) => (
-                    <tr key={e.id} className="bg-paper-0">
+                    <tr key={e.id} className="bg-paper-200/50">
                       <td className="px-4 py-2.5 font-medium text-ink-900">{e.modelId}</td>
                       <td className="px-4 py-2.5 text-ink-600">{e.feature ?? '—'}</td>
                       <td className="px-4 py-2.5 text-right text-ink-700">{formatTokens(e.inputTokens)}</td>

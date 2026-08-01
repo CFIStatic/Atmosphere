@@ -425,7 +425,7 @@ function OptionCard({
       className={`flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition ${
         selected
           ? 'border-brand-400 bg-brand-50 ring-1 ring-brand-200'
-          : 'border-line bg-paper-0 hover:border-line hover:bg-paper-100'
+          : 'glass-card hover:border-line hover:bg-paper-100'
       }`}
     >
       <span
