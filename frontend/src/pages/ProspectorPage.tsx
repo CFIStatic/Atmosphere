@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   api,
   ApiError,
+  type EmailVerification,
   type Prospect,
   type ProspectMatch,
   type ProspectingStatus,
@@ -48,6 +49,9 @@ export function ProspectorPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<Record<string, Prospect>>({});
+  const [proof, setProof] = useState<
+    Record<string, { source?: string; verification?: EmailVerification | null }>
+  >({});
 
   useEffect(() => {
     api.prospectingStatus().then(setStatus).catch(() => setStatus(null));
@@ -80,11 +84,12 @@ export function ProspectorPage() {
     setError(null);
     setNotice(null);
     try {
-      const { prospect, charged } = await api.prospectReveal(
+      const { prospect, charged, source, verification } = await api.prospectReveal(
         match.providerPersonId,
         newRequestId(match.providerPersonId),
       );
       setRevealed((prev) => ({ ...prev, [match.providerPersonId]: prospect }));
+      setProof((prev) => ({ ...prev, [match.providerPersonId]: { source, verification } }));
       setNotice(
         charged
           ? `Revealed ${prospect.fullName} — ${formatUsd(prospect.revealCostNanos)} charged.`
@@ -268,10 +273,22 @@ export function ProspectorPage() {
                       </td>
                       <td className="px-4 py-3">
                         {got ? (
-                          <div className="space-y-0.5">
-                            {got.email && <p className="text-ink-900">{got.email}</p>}
+                          <div className="space-y-1">
+                            {got.email && (
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="text-ink-900">{got.email}</span>
+                                <VerdictBadge
+                                  verification={proof[match.providerPersonId]?.verification ?? null}
+                                />
+                              </div>
+                            )}
                             {(got.mobile || got.phone) && (
                               <p className="tabular-nums text-ink-700">{got.mobile ?? got.phone}</p>
+                            )}
+                            {proof[match.providerPersonId]?.source && (
+                              <p className="text-[11px] text-ink-500">
+                                via {proof[match.providerPersonId]?.source}
+                              </p>
                             )}
                           </div>
                         ) : (
@@ -316,9 +333,10 @@ export function ProspectorPage() {
           </div>
 
           <p className="mt-3 max-w-3xl text-xs leading-relaxed text-ink-500">
-            You are only charged for a reveal. People already in your CRM, already revealed, or on
-            your do-not-contact list are never billed again — and a provider that turns out to hold
-            nothing costs you nothing.
+            Every address is checked against the receiving mail server before you are charged: a
+            mailbox that does not exist is never sold. People already in your CRM, already
+            revealed, or on your do-not-contact list are never billed again, and a search that
+            finds nothing costs nothing.
           </p>
         </>
       )}
@@ -332,6 +350,38 @@ export function ProspectorPage() {
         </div>
       )}
     </AppShell>
+  );
+}
+
+/**
+ * What verification actually concluded, never rounded up. A catch-all domain
+ * accepts every address, so "the server said yes" means nothing there — and
+ * saying "verified" anyway is how a customer's sending reputation dies.
+ */
+function VerdictBadge({ verification }: { verification: EmailVerification | null }) {
+  if (!verification) return null;
+  const { verdict, catchAll, reason } = verification;
+
+  const style =
+    verdict === 'valid'
+      ? 'bg-success-50 text-success-600'
+      : verdict === 'invalid'
+        ? 'bg-danger-50 text-danger-600'
+        : 'bg-caution-50 text-caution-600';
+
+  const label =
+    verdict === 'valid'
+      ? 'Verified'
+      : catchAll
+        ? 'Catch-all domain'
+        : verdict === 'invalid'
+          ? 'Undeliverable'
+          : 'Unconfirmed';
+
+  return (
+    <span title={reason} className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${style}`}>
+      {label}
+    </span>
   );
 }
 

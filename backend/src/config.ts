@@ -523,6 +523,27 @@ export const config = {
     revealCostNanos: Number(process.env.PROSPECTING_REVEAL_COST_NANOS ?? 20_000_000),
 
     requestTimeoutMs: Number(process.env.PROSPECTING_TIMEOUT_MS ?? 15_000),
+
+    // Verification. An unverified address is a guess, and selling guesses
+    // burns the customer's sending reputation — so nothing is returned until
+    // the ladder in verification.ts has had its say.
+    //
+    // The SMTP probe opens a connection to the recipient's mail exchanger and
+    // asks whether a mailbox exists (RCPT TO, then QUIT — no message is ever
+    // sent). Some hosts block outbound port 25; turn this off there and every
+    // address falls back to a DNS-only 'unknown'.
+    smtpProbeEnabled: (process.env.PROSPECTING_SMTP_PROBE ?? 'true') !== 'false',
+    verifyTimeoutMs: Number(process.env.PROSPECTING_VERIFY_TIMEOUT_MS ?? 6_000),
+    // The envelope sender used when probing. Must be an address at a domain we
+    // control: mail servers check it, and a forged one gets us blocklisted.
+    verifyFromAddress: process.env.PROSPECTING_VERIFY_FROM ?? 'verify@atmosphere.invalid',
+    verifyHeloDomain: process.env.PROSPECTING_VERIFY_HELO ?? 'atmosphere.invalid',
+
+    // Pattern inference finds the people no vendor has: learn a company's
+    // convention from addresses the org already holds, apply it, verify it.
+    // Nothing is sold unless a mail server confirms the mailbox.
+    patternInferenceEnabled: (process.env.PROSPECTING_PATTERNS ?? 'true') !== 'false',
+    maxPatternCandidates: Number(process.env.PROSPECTING_MAX_CANDIDATES ?? 5),
   },
 
   estimator: {

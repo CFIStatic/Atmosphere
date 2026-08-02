@@ -6,7 +6,9 @@ import { requireOrgContext } from '../lib/orgContext.js';
 import { HttpError } from '../lib/errors.js';
 import { billingError } from '../lib/billing.js';
 import { config } from '../config.js';
-import { buildContactProvider, ProviderError } from '../prospecting/index.js';
+import { buildContactProvider, buildProviderChain, ProviderError } from '../prospecting/index.js';
+import { runWaterfall } from '../prospecting/waterfall.js';
+import type { KnownAddress } from '../prospecting/patterns.js';
 
 /**
  * Prospecting — finding the people who hand out restoration work.
@@ -84,6 +86,39 @@ function camel(row: Record<string, any> | null): Record<string, any> | null {
   const out: Record<string, any> = {};
   for (const [key, value] of Object.entries(row)) {
     out[key.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase())] = value;
+  }
+  return out;
+}
+
+/**
+ * Addresses this org already holds at any domain, which is what pattern
+ * inference learns a company's convention from. It is their own data teaching
+ * the tool about their own customers — nothing crosses an org boundary,
+ * because RLS would not permit it even if the query tried.
+ */
+async function loadKnownAddresses(supabase: any, orgId: string): Promise<KnownAddress[]> {
+  const [contacts, prospects] = await Promise.all([
+    supabase
+      .from('crm_contacts')
+      .select('first_name, last_name, email')
+      .eq('org_id', orgId)
+      .not('email', 'is', null)
+      .limit(500),
+    supabase
+      .from('crm_prospects')
+      .select('full_name, email')
+      .eq('org_id', orgId)
+      .not('email', 'is', null)
+      .limit(500),
+  ]);
+
+  const out: KnownAddress[] = [];
+  for (const c of contacts.data ?? []) {
+    const name = [c.first_name, c.last_name].filter(Boolean).join(' ');
+    if (name && c.email) out.push({ email: c.email, fullName: name });
+  }
+  for (const p of prospects.data ?? []) {
+    if (p.full_name && p.email) out.push({ email: p.email, fullName: p.full_name });
   }
   return out;
 }
@@ -244,11 +279,21 @@ prospectingRouter.post(
         );
       }
 
-      const contact = await provider.reveal(providerPersonId);
+      // The waterfall: every configured vendor in turn, then pattern
+      // inference against the company domain, everything verified before it
+      // is returned. A run that finds nothing charges nothing.
+      const knownAddresses = await loadKnownAddresses(supabase, orgId);
+      const contact = await runWaterfall(buildProviderChain(), {
+        providerPersonId,
+        fullName: match?.fullName ?? existing?.full_name ?? '',
+        companyDomain: match?.companyDomain ?? existing?.company_domain ?? null,
+        knownAddresses,
+      });
+
       if (!contact) {
         throw new HttpError(
           404,
-          'The provider holds no contact details for that person — nothing was charged.',
+          'No working contact details found for that person — nothing was charged.',
           'no_contact_data',
         );
       }
@@ -288,7 +333,7 @@ prospectingRouter.post(
         email: contact.email,
         phone: contact.phone,
         mobile: contact.mobile,
-        provider: provider.name,
+        provider: contact.source,
         provider_person_id: providerPersonId,
         confidence: contact.confidence,
         status: 'saved' as const,
@@ -308,6 +353,17 @@ prospectingRouter.post(
         prospect: camel(saved.data),
         charged: true,
         receipt: receipt ?? null,
+        // How it was found and how sure we are — the customer is entitled to
+        // know whether they are looking at a vendor match or a verified guess.
+        source: contact.source,
+        verification: contact.verification
+          ? {
+              verdict: contact.verification.verdict,
+              score: contact.verification.score,
+              reason: contact.verification.reason,
+              catchAll: contact.verification.catchAll,
+            }
+          : null,
       });
     } catch (err) {
       next(err);

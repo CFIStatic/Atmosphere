@@ -237,6 +237,15 @@ export interface Prospect {
   createdAt?: string;
 }
 
+/** What verification concluded about an address. */
+export interface EmailVerification {
+  verdict: 'valid' | 'risky' | 'invalid' | 'unknown';
+  score: number;
+  reason: string;
+  /** The domain accepts everything, so no address can be confirmed. */
+  catchAll: boolean;
+}
+
 export interface ProspectingStatus {
   provider: string;
   /** True when the people are invented. The UI must say so. */
@@ -1105,7 +1114,14 @@ export const api = {
    * bill twice, so it is generated once per person per attempt.
    */
   prospectReveal: (providerPersonId: string, requestId: string) =>
-    request<{ prospect: Prospect; charged: boolean; reason?: string }>(
+    request<{
+      prospect: Prospect;
+      charged: boolean;
+      reason?: string;
+      /** 'People Data Labs', 'Pattern + verification', … */
+      source?: string;
+      verification?: EmailVerification | null;
+    }>(
       '/api/prospecting/reveal',
       { method: 'POST', body: JSON.stringify({ providerPersonId, requestId }) },
     ),
