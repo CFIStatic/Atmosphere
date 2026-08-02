@@ -12,6 +12,7 @@ import { ApprovalsPage } from './pages/ApprovalsPage';
 import { SchedulePage } from './pages/SchedulePage';
 import { CustomersPage } from './pages/CustomersPage';
 import { PipelinePage } from './pages/PipelinePage';
+import { ProspectorPage } from './pages/ProspectorPage';
 import { JobCostingPage } from './pages/JobCostingPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AuditPage } from './pages/AuditPage';
@@ -108,6 +109,7 @@ export default function App() {
             { path: '/schedule', element: <SchedulePage /> },
             { path: '/customers', element: <CustomersPage /> },
             { path: '/pipeline', element: <PipelinePage /> },
+            { path: '/prospector', element: <ProspectorPage /> },
             { path: '/costing', element: <JobCostingPage /> },
           ].map(({ path, element }) => (
             <Route

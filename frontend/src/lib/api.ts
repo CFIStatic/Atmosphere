@@ -193,6 +193,79 @@ export interface CrmActivityInput {
   jobId?: string;
 }
 
+/* ---- Prospecting -------------------------------------------------------- */
+
+/** A person a search turned up. Never carries contact details. */
+export interface ProspectMatch {
+  providerPersonId: string;
+  fullName: string;
+  title: string | null;
+  companyName: string | null;
+  companyDomain: string | null;
+  location: string | null;
+  linkedinUrl: string | null;
+  confidence: number | null;
+  hasEmail: boolean;
+  hasPhone: boolean;
+  /** Already a contact in the CRM — revealing would buy back our own data. */
+  knownContactId: string | null;
+  /** Already saved as a prospect. */
+  prospectId: string | null;
+  revealed: boolean;
+  suppressed: boolean;
+}
+
+/** A saved prospect. Contact columns are null until a reveal is paid for. */
+export interface Prospect {
+  id: string;
+  fullName: string;
+  title: string | null;
+  companyName: string | null;
+  companyDomain: string | null;
+  location: string | null;
+  email: string | null;
+  phone: string | null;
+  mobile: string | null;
+  provider: string;
+  providerPersonId: string | null;
+  confidence: number | null;
+  status: 'new' | 'saved' | 'contacted' | 'converted' | 'discarded';
+  revealedAt: string | null;
+  revealCostNanos: number;
+  contactId: string | null;
+  leadId: string | null;
+  createdAt?: string;
+}
+
+export interface ProspectingStatus {
+  provider: string;
+  /** True when the people are invented. The UI must say so. */
+  sandbox: boolean;
+  revealPriceNanos: number;
+}
+
+export interface ProspectSearchResponse extends ProspectingStatus {
+  matches: ProspectMatch[];
+  total: number | null;
+}
+
+export interface ProspectQuery {
+  q?: string;
+  location?: string;
+  companyDomain?: string;
+  industry?: string;
+  titles?: string[];
+  limit?: number;
+}
+
+export interface Suppression {
+  id: string;
+  kind: 'email' | 'phone' | 'domain';
+  value: string;
+  reason: string | null;
+  createdAt?: string;
+}
+
 export interface CrmSummary {
   contacts: number;
   properties: number;
@@ -1015,6 +1088,48 @@ export const api = {
     }),
 
   crmSummary: () => request<{ summary: CrmSummary }>('/api/crm/summary', { method: 'GET' }),
+
+  // ---- Prospecting (find contact details) ----
+  prospectingStatus: () =>
+    request<ProspectingStatus>('/api/prospecting/status', { method: 'GET' }),
+
+  /** Free: people without their contact details. */
+  prospectSearch: (query: ProspectQuery) =>
+    request<ProspectSearchResponse>('/api/prospecting/search', {
+      method: 'POST',
+      body: JSON.stringify(query),
+    }),
+
+  /**
+   * The metered call. `requestId` is the idempotency key — a retry must never
+   * bill twice, so it is generated once per person per attempt.
+   */
+  prospectReveal: (providerPersonId: string, requestId: string) =>
+    request<{ prospect: Prospect; charged: boolean; reason?: string }>(
+      '/api/prospecting/reveal',
+      { method: 'POST', body: JSON.stringify({ providerPersonId, requestId }) },
+    ),
+
+  prospects: () => request<{ items: Prospect[] }>('/api/prospecting/prospects', { method: 'GET' }),
+
+  /** Turns a revealed prospect into a contact and a lead. */
+  prospectImport: (prospectId: string, overrides: { title?: string; estimatedValue?: number | null } = {}) =>
+    request<{ contact: CrmContact; lead: CrmLead }>('/api/prospecting/import', {
+      method: 'POST',
+      body: JSON.stringify({ prospectId, ...overrides }),
+    }),
+
+  suppressions: () =>
+    request<{ items: Suppression[] }>('/api/prospecting/suppressions', { method: 'GET' }),
+
+  addSuppression: (input: { kind: Suppression['kind']; value: string; reason?: string }) =>
+    request<{ item: Suppression }>('/api/prospecting/suppressions', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  removeSuppression: (id: string) =>
+    request<{ ok: boolean }>(`/api/prospecting/suppressions/${id}`, { method: 'DELETE' }),
 
   crmContacts: (search = '') =>
     request<CrmList<CrmContact>>(

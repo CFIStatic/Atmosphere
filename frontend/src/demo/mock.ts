@@ -479,6 +479,30 @@ const ACTIVITIES: Array<Record<string, any>> = [
   { id: 'act-3', kind: 'note', body: 'Homeowner prefers texts. Gate code 4417.', leadId: 'ld-3', occurredAt: '2026-08-01T11:05:00Z' },
 ];
 
+/* ----------------------------------------------------------- prospecting */
+
+/** The sandbox cast, mirroring backend/src/prospecting/sandbox.ts. */
+const PEOPLE: Array<Record<string, any>> = [
+  { providerPersonId: 'sbx-1', fullName: 'Marcia Delgado', title: 'Regional Property Manager', companyName: 'Vantage Residential', companyDomain: 'vantageresidential.example', location: 'Austin, TX', linkedinUrl: null, confidence: 0.94, hasEmail: true, hasPhone: true, email: 'm.delgado@vantageresidential.example', phone: '(512) 555-0110', mobile: '(512) 555-0111', industry: 'property management' },
+  { providerPersonId: 'sbx-2', fullName: 'Ray Calloway', title: 'Senior Field Adjuster', companyName: 'Alliance Mutual', companyDomain: 'alliancemutual.example', location: 'Austin, TX', linkedinUrl: null, confidence: 0.88, hasEmail: true, hasPhone: false, email: 'r.calloway@alliancemutual.example', phone: null, mobile: null, industry: 'insurance' },
+  { providerPersonId: 'sbx-3', fullName: 'Tomas Bergeron', title: 'Facilities Director', companyName: 'Northgate Medical Group', companyDomain: 'northgatemed.example', location: 'Round Rock, TX', linkedinUrl: null, confidence: 0.91, hasEmail: true, hasPhone: true, email: 't.bergeron@northgatemed.example', phone: '(512) 555-0148', mobile: null, industry: 'healthcare' },
+  { providerPersonId: 'sbx-4', fullName: 'Priscilla Nunes', title: 'Owner', companyName: 'Nunes General Contracting', companyDomain: 'nunesgc.example', location: 'Austin, TX', linkedinUrl: null, confidence: 0.79, hasEmail: false, hasPhone: true, email: null, phone: '(512) 555-0173', mobile: '(512) 555-0174', industry: 'construction' },
+  { providerPersonId: 'sbx-5', fullName: 'Devon Ashby', title: 'Director of Operations', companyName: 'Camden Court HOA', companyDomain: 'camdencourt.example', location: 'Austin, TX', linkedinUrl: null, confidence: 0.86, hasEmail: true, hasPhone: true, email: 'd.ashby@camdencourt.example', phone: '(512) 555-0139', mobile: null, industry: 'property management' },
+  { providerPersonId: 'sbx-6', fullName: 'Karen Whitfield', title: 'Claims Team Lead', companyName: 'Lone Star Casualty', companyDomain: 'lonestarcasualty.example', location: 'San Antonio, TX', linkedinUrl: null, confidence: 0.83, hasEmail: true, hasPhone: true, email: 'k.whitfield@lonestarcasualty.example', phone: '(210) 555-0192', mobile: '(210) 555-0193', industry: 'insurance' },
+  { providerPersonId: 'sbx-7', fullName: 'Andre Sokolov', title: 'Portfolio Manager', companyName: 'Hillcrest Commercial Realty', companyDomain: 'hillcrestcre.example', location: 'Austin, TX', linkedinUrl: null, confidence: 0.72, hasEmail: false, hasPhone: false, email: null, phone: null, mobile: null, industry: 'real estate' },
+  { providerPersonId: 'sbx-8', fullName: 'Lena Ortiz-Park', title: 'Facilities Manager', companyName: 'Brightway Dental Partners', companyDomain: 'brightwaydental.example', location: 'Austin, TX', linkedinUrl: null, confidence: 0.9, hasEmail: true, hasPhone: true, email: 'l.ortizpark@brightwaydental.example', phone: '(512) 555-0166', mobile: null, industry: 'healthcare' },
+  { providerPersonId: 'sbx-9', fullName: 'Grant Feasley', title: 'VP Construction', companyName: 'Sundial Property Group', companyDomain: 'sundialpg.example', location: 'Dallas, TX', linkedinUrl: null, confidence: 0.81, hasEmail: true, hasPhone: false, email: 'g.feasley@sundialpg.example', phone: null, mobile: null, industry: 'property management' },
+  { providerPersonId: 'sbx-10', fullName: 'Nadia Brennan', title: 'Independent Adjuster', companyName: 'Brennan Claims Services', companyDomain: 'brennanclaims.example', location: 'Round Rock, TX', linkedinUrl: null, confidence: 0.77, hasEmail: true, hasPhone: true, email: 'nadia@brennanclaims.example', phone: '(512) 555-0155', mobile: '(512) 555-0156', industry: 'insurance' },
+];
+
+const PROSPECTS: Array<Record<string, any>> = [];
+const SUPPRESSIONS: Array<Record<string, any>> = [
+  { id: 'sup-1', kind: 'domain', value: 'sundialpg.example', reason: 'Asked us to stop contacting their staff' },
+];
+const REVEAL_PRICE_NANOS = 250_000_000;
+/** Charges already made, so a retried reveal bills once — as the RPC does. */
+const CHARGED = new Set<string>();
+
 /** The activities handler needs the query it was called with. */
 const LAST_QUERY: { leadId?: string } = {};
 
@@ -618,6 +642,126 @@ const routes: Array<[string, RegExp, Handler]> = [
     };
   }],
 
+  ['GET', /^\/api\/prospecting\/status$/, () => ({
+    body: { provider: 'Sandbox', sandbox: true, revealPriceNanos: REVEAL_PRICE_NANOS },
+  })],
+  ['POST', /^\/api\/prospecting\/search$/, (_m, b) => {
+    const q = String(b.q ?? '').toLowerCase();
+    const loc = String(b.location ?? '').toLowerCase();
+    const titles = Array.isArray(b.titles) ? (b.titles as string[]).map((s) => s.toLowerCase()) : [];
+    const suppressedDomains = new Set(
+      SUPPRESSIONS.filter((s) => s.kind === 'domain').map((s) => String(s.value).toLowerCase()),
+    );
+    const hits = PEOPLE.filter((p) => {
+      const hay = [p.fullName, p.title, p.companyName, p.industry].join(' ').toLowerCase();
+      if (q && !hay.includes(q)) return false;
+      if (loc && !String(p.location ?? '').toLowerCase().includes(loc)) return false;
+      if (titles.length && !titles.some((t) => String(p.title ?? '').toLowerCase().includes(t))) return false;
+      return true;
+    });
+    const knownNames = new Set(
+      CONTACTS.map((c) => [c.firstName, c.lastName].filter(Boolean).join(' ').toLowerCase()),
+    );
+    const matches = hits.slice(0, Number(b.limit ?? 25)).map((p) => {
+      const saved = PROSPECTS.find((s) => s.providerPersonId === p.providerPersonId) ?? null;
+      return {
+        providerPersonId: p.providerPersonId, fullName: p.fullName, title: p.title,
+        companyName: p.companyName, companyDomain: p.companyDomain, location: p.location,
+        linkedinUrl: p.linkedinUrl, confidence: p.confidence,
+        hasEmail: p.hasEmail, hasPhone: p.hasPhone,
+        knownContactId: knownNames.has(String(p.fullName).toLowerCase()) ? 'ct-known' : null,
+        prospectId: saved?.id ?? null,
+        revealed: Boolean(saved?.revealedAt),
+        suppressed: suppressedDomains.has(String(p.companyDomain ?? '').toLowerCase()),
+      };
+    });
+    return {
+      body: { matches, total: hits.length, provider: 'Sandbox', sandbox: true, revealPriceNanos: REVEAL_PRICE_NANOS },
+    };
+  }],
+  ['POST', /^\/api\/prospecting\/reveal$/, (_m, b) => {
+    const id = String(b.providerPersonId ?? '');
+    const person = PEOPLE.find((p) => p.providerPersonId === id);
+    if (!person) {
+      return { status: 404, body: { error: 'No such person.', code: 'not_found' } };
+    }
+    const existing = PROSPECTS.find((p) => p.providerPersonId === id);
+    if (existing?.revealedAt) {
+      return { body: { prospect: existing, charged: false, reason: 'already_revealed' } };
+    }
+    const suppressedDomains = new Set(
+      SUPPRESSIONS.filter((s) => s.kind === 'domain').map((s) => String(s.value).toLowerCase()),
+    );
+    if (suppressedDomains.has(String(person.companyDomain ?? '').toLowerCase())) {
+      return { status: 409, body: { error: 'That company is on your do-not-contact list.', code: 'suppressed' } };
+    }
+    if (!person.email && !person.phone && !person.mobile) {
+      return {
+        status: 404,
+        body: {
+          error: 'The provider holds no contact details for that person — nothing was charged.',
+          code: 'no_contact_data',
+        },
+      };
+    }
+    const requestId = String(b.requestId ?? '');
+    const duplicate = CHARGED.has(requestId);
+    if (!duplicate) CHARGED.add(requestId);
+    const prospect = {
+      id: `pr-${PROSPECTS.length + 1}`,
+      fullName: person.fullName, title: person.title, companyName: person.companyName,
+      companyDomain: person.companyDomain, location: person.location,
+      email: person.email, phone: person.phone, mobile: person.mobile,
+      provider: 'Sandbox', providerPersonId: id, confidence: person.confidence,
+      status: 'saved', revealedAt: '2026-08-02T12:00:00Z',
+      revealCostNanos: REVEAL_PRICE_NANOS, contactId: null, leadId: null,
+      createdAt: '2026-08-02T12:00:00Z',
+    };
+    PROSPECTS.unshift(prospect);
+    return { status: 201, body: { prospect, charged: !duplicate } };
+  }],
+  ['GET', /^\/api\/prospecting\/prospects$/, () => ({ body: { items: PROSPECTS } })],
+  ['POST', /^\/api\/prospecting\/import$/, (_m, b) => {
+    const prospect = PROSPECTS.find((p) => p.id === b.prospectId);
+    if (!prospect) return { status: 404, body: { error: 'Prospect not found.', code: 'not_found' } };
+    if (prospect.leadId) {
+      return { status: 409, body: { error: 'That prospect is already on the pipeline.', code: 'already_imported' } };
+    }
+    const [first, ...rest] = String(prospect.fullName).split(' ');
+    const contact = {
+      id: `ct-${CONTACTS.length + 1}`, firstName: first, lastName: rest.join(' '),
+      companyName: prospect.companyName, email: prospect.email, phone: prospect.phone,
+      mobile: prospect.mobile,
+    };
+    CONTACTS.unshift(contact);
+    const lead = {
+      id: `ld-${LEADS.length + 100}`,
+      title: `${prospect.fullName} — ${prospect.companyName ?? 'new prospect'}`,
+      status: 'new', source: 'marketing', workType: null, lossType: null,
+      estimatedValue: null,
+      description: prospect.title ? `${prospect.title} at ${prospect.companyName}.` : null,
+      updatedAt: '2026-08-02T12:05:00Z', createdAt: '2026-08-02T12:05:00Z',
+    };
+    LEADS.unshift(lead);
+    prospect.contactId = contact.id;
+    prospect.leadId = lead.id;
+    prospect.status = 'converted';
+    return { status: 201, body: { contact, lead } };
+  }],
+  ['GET', /^\/api\/prospecting\/suppressions$/, () => ({ body: { items: SUPPRESSIONS } })],
+  ['POST', /^\/api\/prospecting\/suppressions$/, (_m, b) => {
+    const item = {
+      id: `sup-${SUPPRESSIONS.length + 1}`, kind: String(b.kind), 
+      value: String(b.value ?? '').toLowerCase(), reason: (b.reason as string) ?? null,
+    };
+    SUPPRESSIONS.unshift(item);
+    return { status: 201, body: { item } };
+  }],
+  ['DELETE', /^\/api\/prospecting\/suppressions\/([\w-]+)$/, (m) => {
+    const i = SUPPRESSIONS.findIndex((s) => s.id === m[1]);
+    if (i >= 0) SUPPRESSIONS.splice(i, 1);
+    return { body: { ok: true } };
+  }],
   ['GET', /^\/api\/crm\/accounts$/, () => ({
     body: { items: ACCOUNTS, total: ACCOUNTS.length, limit: 50, offset: 0 },
   })],

@@ -495,6 +495,36 @@ export const config = {
     actionTimeoutMs: Number(process.env.COMPUTER_USE_ACTION_TIMEOUT_MS ?? 45 * 1000),
     maxTokens: Number(process.env.COMPUTER_USE_MAX_TOKENS ?? 16000),
   },
+  prospecting: {
+    // Finding contact details is a licensed-data problem: the records are
+    // bought from a vendor per match, not computed. 'sandbox' serves invented
+    // people so the whole feature works before a data contract exists;
+    // 'live' talks to the configured vendor. Production still falls back to
+    // sandbox when no key is present, because billing a customer for a
+    // provider we cannot call would be worse than showing obvious fixtures.
+    mode: (process.env.PROSPECTING_MODE ?? (isProduction ? 'live' : 'sandbox')) as
+      | 'live'
+      | 'sandbox',
+
+    provider: (process.env.PROSPECTING_PROVIDER ?? 'people_data_labs') as
+      | 'people_data_labs',
+
+    peopleDataLabsApiKey: process.env.PEOPLE_DATA_LABS_API_KEY ?? '',
+    peopleDataLabsBaseUrl:
+      process.env.PEOPLE_DATA_LABS_BASE_URL ?? 'https://api.peopledatalabs.com',
+
+    // What one revealed contact costs the customer, in nanodollars.
+    // 1 credit = 1 USD = 1_000_000_000 nanos, so this default is $0.25 a
+    // reveal. It is charged through the same credit lots as token usage.
+    revealPriceNanos: Number(process.env.PROSPECTING_REVEAL_PRICE_NANOS ?? 250_000_000),
+
+    // What the vendor charges us per match, recorded against the usage event
+    // so the margin on a reveal is as visible as the margin on a model call.
+    revealCostNanos: Number(process.env.PROSPECTING_REVEAL_COST_NANOS ?? 20_000_000),
+
+    requestTimeoutMs: Number(process.env.PROSPECTING_TIMEOUT_MS ?? 15_000),
+  },
+
   estimator: {
     // Server-only key that encrypts third-party credentials (DocuSketch, Dash,
     // Xactimate) before they are written to Postgres. Deliberately NOT in the
