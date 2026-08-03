@@ -4,6 +4,24 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { HttpError } from '../lib/errors.js';
 import rateLimit from 'express-rate-limit';
+import { randomBytes } from 'node:crypto';
+import { config } from '../config.js';
+import { requireOrgRole } from '../lib/orgContext.js';
+import { createAdminClient } from '../lib/supabase.js';
+import { listGrants, saveGrant, deleteGrant } from '../lib/integrations/oauthVault.js';
+import {
+  buildMailSender,
+  exchangeMailCode,
+  mailAuthorizeUrl,
+  finaliseBody,
+  screenRecipients,
+  subjectProblems,
+  validatePolicy,
+  GmailSender,
+  MicrosoftSender,
+  MAIL_PROVIDERS,
+  type MailSystem,
+} from '../campaigns/mail/index.js';
 import { findPlaces, PLACE_CATEGORIES, PLACE_ATTRIBUTION } from '../campaigns/places.js';
 import {
   activeAlerts,
@@ -23,6 +41,15 @@ import {
 // government-run. Staying well inside their limits is a condition of being
 // allowed to use them at all, so the ceiling lives here rather than in
 // everyone's good intentions.
+// Sending is the most consequential thing in this router by a wide margin.
+const sendLimiter = rateLimit({
+  windowMs: 60 * 60_000,
+  limit: 12,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many sends this hour.', code: 'rate_limited' },
+});
+
 const placeLimiter = rateLimit({
   windowMs: 60_000,
   limit: 15,
@@ -768,6 +795,400 @@ campaignsRouter.post(
       res.json({
         subject: renderTemplate(campaign.message_subject ?? '', vars),
         body: renderTemplate(campaign.message_body ?? '', vars),
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/* ---- Connecting a mailbox, and sending from it --------------------------- */
+
+const mailStates = new Map<string, { orgId: string; userId: string; expiresAt: number }>();
+
+function newMailState(orgId: string, userId: string): string {
+  const now = Date.now();
+  for (const [k, v] of mailStates) if (v.expiresAt < now) mailStates.delete(k);
+  const state = randomBytes(24).toString('base64url');
+  mailStates.set(state, { orgId, userId, expiresAt: now + 10 * 60_000 });
+  return state;
+}
+
+function mailRedirectUri(): string {
+  return `${config.frontendOrigins[0]}/settings?section=sending`;
+}
+
+/** GET /api/sales/mail — which mailbox is connected, and what it can do. */
+campaignsRouter.get('/mail', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { orgId, supabase } = await requireOrgContext(req);
+
+    const connected = config.integrations.oauthKey
+      ? (await listGrants(orgId)).filter((g) => g.system.endsWith('_mail'))
+      : [];
+
+    const { data: policy } = await supabase
+      .from('crm_send_policy')
+      .select('*')
+      .eq('org_id', orgId)
+      .maybeSingle();
+
+    // How many went out today, so the UI can show the headroom rather than
+    // letting somebody discover the ceiling half way through a campaign.
+    const since = new Date();
+    since.setHours(0, 0, 0, 0);
+    const { count } = await supabase
+      .from('crm_sends')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .eq('state', 'sent')
+      .gte('sent_at', since.toISOString());
+
+    res.json({
+      providers: MAIL_PROVIDERS,
+      connected,
+      policy: policy ? camel(policy) : null,
+      sentToday: count ?? 0,
+      vaultConfigured: Boolean(config.integrations.oauthKey),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** POST /api/sales/mail/:system/connect */
+campaignsRouter.post('/mail/:system/connect', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { orgId, userId } = await requireOrgRole(req, ['owner', 'admin']);
+    const system = req.params.system as MailSystem;
+    if (system !== 'google_mail' && system !== 'microsoft_mail') {
+      throw new HttpError(400, 'Unknown mail provider.', 'unknown_provider');
+    }
+    if (!config.integrations.oauthKey) {
+      throw new HttpError(
+        503,
+        'Connecting a mailbox needs INTEGRATIONS_OAUTH_KEY so the grant can be encrypted at rest.',
+        'vault_not_configured',
+      );
+    }
+    const configured =
+      system === 'google_mail' ? config.campaigns.googleClientId : config.campaigns.microsoftClientId;
+    if (!configured) {
+      throw new HttpError(503, 'That provider is not configured on this deployment.', 'not_configured');
+    }
+
+    res.json({ url: mailAuthorizeUrl(system, newMailState(orgId, userId), mailRedirectUri()) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** POST /api/sales/mail/:system/callback */
+campaignsRouter.post('/mail/:system/callback', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await requireOrgRole(req, ['owner', 'admin']);
+    const system = req.params.system as MailSystem;
+    const { code, state } = z
+      .object({ code: z.string().min(1), state: z.string().min(1) })
+      .parse(req.body ?? {});
+
+    const pending = mailStates.get(state);
+    mailStates.delete(state);
+    if (!pending || pending.expiresAt < Date.now()) {
+      throw new HttpError(400, 'That authorization has expired. Start again.', 'state_expired');
+    }
+
+    const { refreshToken, accessToken } = await exchangeMailCode(system, code, mailRedirectUri());
+
+    // Ask who this actually is before storing anything, so the UI can show the
+    // address that mail will come from rather than "connected".
+    const sender =
+      system === 'google_mail' ? new GmailSender(accessToken) : new MicrosoftSender(accessToken);
+    const identity = await sender.identity();
+
+    await saveGrant(pending.orgId, pending.userId, {
+      system,
+      refreshToken,
+      instanceUrl: '',
+      accountLabel: identity.address,
+    });
+
+    res.json({ connected: true, address: identity.address, provider: identity.provider });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** DELETE /api/sales/mail/:system */
+campaignsRouter.delete('/mail/:system', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { orgId } = await requireOrgRole(req, ['owner', 'admin']);
+    await deleteGrant(orgId, req.params.system);
+    res.json({ disconnected: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** PUT /api/sales/send-policy — the address and caps every send needs. */
+campaignsRouter.put('/send-policy', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { orgId, userId, supabase } = await requireOrgRole(req, ['owner', 'admin']);
+    const input = z
+      .object({
+        postalAddress: z.string().trim().max(300).nullable().optional(),
+        replyTo: z.string().trim().email().max(200).nullable().optional(),
+        maxRecipients: z.number().int().min(1).max(5000).optional(),
+        dailyCeiling: z.number().int().min(1).max(10000).optional(),
+      })
+      .parse(req.body ?? {});
+
+    const { data, error } = await supabase
+      .from('crm_send_policy')
+      .upsert(
+        {
+          org_id: orgId,
+          postal_address: input.postalAddress ?? null,
+          reply_to: input.replyTo ?? null,
+          ...(input.maxRecipients !== undefined ? { max_recipients: input.maxRecipients } : {}),
+          ...(input.dailyCeiling !== undefined ? { daily_ceiling: input.dailyCeiling } : {}),
+          updated_by: userId,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'org_id' },
+      )
+      .select('*')
+      .single();
+    if (error) throw new HttpError(400, error.message, 'policy_save_failed');
+    res.json({ policy: camel(data) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/sales/campaigns/:id/send
+ *
+ * Dry run unless `confirm: true`. That default is the point: a weather
+ * campaign's audience is a rule rather than a list, so the only way to know
+ * who it reaches today is to ask — and finding out by sending is not a plan.
+ *
+ * The screening is identical either way. A preview that used different logic
+ * from the send would be worse than no preview at all.
+ */
+campaignsRouter.post(
+  '/campaigns/:id/send',
+  sendLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { orgId, supabase } = await requireOrgRole(req, ['owner', 'admin']);
+      const { confirm, event, area } = z
+        .object({
+          confirm: z.boolean().optional(),
+          event: z.string().max(80).optional(),
+          area: z.string().max(160).optional(),
+        })
+        .parse(req.body ?? {});
+
+      const { data: campaign } = await supabase
+        .from('crm_campaigns')
+        .select('*')
+        .eq('org_id', orgId)
+        .eq('id', req.params.id)
+        .maybeSingle();
+      if (!campaign) throw new HttpError(404, 'Campaign not found.', 'not_found');
+      if (!campaign.message_subject || !campaign.message_body) {
+        throw new HttpError(400, 'Write the message before sending it.', 'no_message');
+      }
+
+      const { data: policyRow } = await supabase
+        .from('crm_send_policy')
+        .select('*')
+        .eq('org_id', orgId)
+        .maybeSingle();
+
+      const policy = {
+        postalAddress: policyRow?.postal_address ?? '',
+        unsubscribeUrl: `${config.frontendOrigins[0]}/unsubscribe`,
+        maxRecipients: policyRow?.max_recipients ?? 200,
+        dailyCeiling: policyRow?.daily_ceiling ?? 300,
+      };
+
+      // Refuse before the first message rather than discovering it after four
+      // hundred: a campaign missing its postal address has already committed
+      // the violation four hundred times by then.
+      const problems = [...validatePolicy(policy), ...subjectProblems(campaign.message_subject)];
+      const blocking = validatePolicy(policy);
+      if (blocking.length) {
+        throw new HttpError(400, blocking.join(' '), 'policy_incomplete');
+      }
+
+      // Audience from the same builder the preview endpoint uses.
+      const audienceCfg = (campaign.audience_config ?? {}) as AudienceConfig;
+      const territoryId = audienceCfg.territoryId ?? campaign.territory_id ?? null;
+      const [contactsRes, placesRes, territoryRes] = await Promise.all([
+        audienceCfg.includeContacts
+          ? supabase
+              .from('crm_contacts')
+              .select('id, first_name, last_name, email, title, company_name')
+              .eq('org_id', orgId)
+              .not('email', 'is', null)
+              .limit(2000)
+          : Promise.resolve({ data: [] as any[] }),
+        supabase.from('crm_places').select('*').eq('org_id', orgId).limit(2000),
+        territoryId
+          ? supabase.from('crm_territories').select('*').eq('id', territoryId).maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
+
+      const members = buildAudience({
+        audience: { ...audienceCfg, territoryId },
+        contacts: (contactsRes.data ?? []) as any[],
+        places: (placesRes.data ?? []) as any[],
+        territory: (territoryRes as any).data ?? null,
+      });
+
+      // Everything the gate needs, loaded once.
+      const since = new Date();
+      since.setHours(0, 0, 0, 0);
+      const [supp, unsub, priorSends, todayCount] = await Promise.all([
+        supabase.from('crm_suppressions').select('kind, value').eq('org_id', orgId),
+        supabase.from('crm_unsubscribes').select('email').eq('org_id', orgId),
+        supabase.from('crm_sends').select('email, state').eq('org_id', orgId).eq('campaign_id', req.params.id),
+        supabase
+          .from('crm_sends')
+          .select('id', { count: 'exact', head: true })
+          .eq('org_id', orgId)
+          .eq('state', 'sent')
+          .gte('sent_at', since.toISOString()),
+      ]);
+
+      // Global erasure tombstones, read once. They outrank every other list
+      // and they cross org boundaries — somebody who asked to be forgotten
+      // stays forgotten regardless of which customer holds their address.
+      const admin = createAdminClient();
+      const erasedEmails = new Set<string>();
+      if (admin) {
+        const { data: erased } = await admin.from('network_erasures').select('email');
+        for (const row of (erased ?? []) as any[]) {
+          erasedEmails.add(String(row.email).toLowerCase());
+        }
+      }
+
+      const suppressedEmails = new Set<string>();
+      const suppressedDomains = new Set<string>();
+      for (const row of (supp.data ?? []) as any[]) {
+        const v = String(row.value ?? '').toLowerCase();
+        if (row.kind === 'email') suppressedEmails.add(v);
+        if (row.kind === 'domain') suppressedDomains.add(v);
+      }
+
+      const screened = screenRecipients({
+        recipients: members
+          .filter((m) => m.email)
+          .map((m) => ({ email: m.email as string, name: m.name, company: m.company })),
+        suppressedEmails,
+        suppressedDomains,
+        erasedEmails,
+        unsubscribed: new Set(((unsub.data ?? []) as any[]).map((r) => String(r.email).toLowerCase())),
+        alreadySent: new Set(
+          ((priorSends.data ?? []) as any[])
+            .filter((r) => r.state === 'sent')
+            .map((r) => String(r.email).toLowerCase()),
+        ),
+        hardBounced: new Set(
+          ((priorSends.data ?? []) as any[])
+            .filter((r) => r.state === 'bounced')
+            .map((r) => String(r.email).toLowerCase()),
+        ),
+        policy,
+        sentToday: todayCount.count ?? 0,
+      });
+
+      if (!confirm) {
+        // The dry run. Same screening, nothing sent, and the blocked list with
+        // reasons is the useful half.
+        res.json({
+          dryRun: true,
+          wouldSend: screened.send.length,
+          blocked: screened.blocked,
+          warnings: problems,
+          from: null,
+          sample: renderTemplate(campaign.message_body, {
+            firstName: screened.send[0]?.name?.split(' ')[0] ?? null,
+            company: screened.send[0]?.company ?? null,
+            event: event ?? null,
+            area: area ?? null,
+          }),
+        });
+        return;
+      }
+
+      const sender = await buildMailSender(orgId);
+      if (!sender) {
+        throw new HttpError(400, 'Connect a mailbox before sending.', 'no_mailbox');
+      }
+      const identity = await sender.identity();
+
+      let sent = 0;
+      const failures: Array<{ email: string; error: string }> = [];
+
+      for (const recipient of screened.send) {
+        // The row is written first so the unique index on (fire_id, email) is
+        // what prevents a double send, rather than hoping the loop runs once.
+        const { data: row, error: rowError } = await supabase
+          .from('crm_sends')
+          .insert({
+            org_id: orgId,
+            campaign_id: req.params.id,
+            email: recipient.email,
+            subject: campaign.message_subject,
+            state: 'queued',
+          })
+          .select('id, unsubscribe_token')
+          .single();
+        if (rowError || !row) continue;
+
+        const body = finaliseBody(
+          renderTemplate(campaign.message_body, {
+            firstName: recipient.name?.split(' ')[0] ?? null,
+            company: recipient.company ?? null,
+            event: event ?? null,
+            area: area ?? null,
+            senderName: identity.displayName,
+          }),
+          policy,
+          row.unsubscribe_token,
+        );
+
+        const result = await sender.send({
+          to: recipient.email,
+          toName: recipient.name ?? null,
+          subject: renderTemplate(campaign.message_subject, { event: event ?? null, area: area ?? null }),
+          text: body,
+          replyTo: policyRow?.reply_to ?? null,
+        });
+
+        await supabase
+          .from('crm_sends')
+          .update({
+            state: result.ok ? 'sent' : 'failed',
+            provider_message_id: result.messageId,
+            error: result.error ?? null,
+            sent_at: result.ok ? new Date().toISOString() : null,
+          })
+          .eq('id', row.id);
+
+        if (result.ok) sent += 1;
+        else failures.push({ email: recipient.email, error: result.error ?? 'unknown' });
+      }
+
+      res.json({
+        dryRun: false,
+        sent,
+        blocked: screened.blocked,
+        failures,
+        from: identity.address,
       });
     } catch (err) {
       next(err);

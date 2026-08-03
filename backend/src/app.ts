@@ -21,6 +21,7 @@ import { webhookRouter } from './routes/webhooks.js';
 import { crmRouter } from './routes/crm.js';
 import { prospectingRouter } from './routes/prospecting.js';
 import { campaignsRouter } from './routes/campaigns.js';
+import { unsubscribeRouter } from './routes/unsubscribe.js';
 import { backupRouter } from './routes/backups.js';
 import { integrationsRouter } from './routes/integrations.js';
 import { computerRouter } from './routes/computer.js';
@@ -144,6 +145,10 @@ export function createApp(): Express {
   // Campaigns and territories share a router: a campaign is usually worked one
   // territory at a time, and splitting them would put one join across two files.
   app.use('/api/sales', campaignsRouter);
+  // Deliberately outside every auth middleware: the person clicking is a
+  // recipient who never had an account, and an unsubscribe link that requires
+  // signing in is not one.
+  app.use('/api/unsubscribe', unsubscribeRouter);
   app.use('/api/backups', backupRouter);
   app.use('/api/integrations', integrationsRouter);
   app.use('/api/computer', computerRouter);

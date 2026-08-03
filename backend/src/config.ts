@@ -535,6 +535,33 @@ export const config = {
     // the alerts that drive the warnings on the radio.
     weatherBaseUrl: process.env.WEATHER_BASE_URL ?? 'https://api.weather.gov',
 
+    // Forecasts, behind a port so any vendor drops in. NWS is the default and
+    // works with nothing configured.
+    forecastProvider: (process.env.FORECAST_PROVIDER ?? 'auto') as 'auto' | 'nws' | 'openweather',
+    openWeatherApiKey: process.env.OPENWEATHER_API_KEY ?? '',
+    openWeatherBaseUrl: process.env.OPENWEATHER_BASE_URL ?? 'https://api.openweathermap.org',
+
+    // Sending as the customer, from their own mailbox.
+    //
+    // Both scopes are send-only: gmail.send and Mail.Send grant no ability to
+    // read anything. Worth knowing before launch — Google treats gmail.send as
+    // a restricted scope, so past ~100 users the app needs verification plus an
+    // annual security assessment, and many Microsoft tenants require an admin
+    // to consent rather than the individual user.
+    googleClientId: process.env.GOOGLE_CLIENT_ID ?? '',
+    googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+    gmailBaseUrl: process.env.GMAIL_BASE_URL ?? 'https://gmail.googleapis.com',
+    googleAuthUrl: process.env.GOOGLE_AUTH_URL ?? 'https://accounts.google.com/o/oauth2/v2/auth',
+    googleTokenUrl: process.env.GOOGLE_TOKEN_URL ?? 'https://oauth2.googleapis.com/token',
+
+    microsoftClientId: process.env.MICROSOFT_CLIENT_ID ?? '',
+    microsoftClientSecret: process.env.MICROSOFT_CLIENT_SECRET ?? '',
+    graphBaseUrl: process.env.GRAPH_BASE_URL ?? 'https://graph.microsoft.com',
+    microsoftAuthUrl:
+      process.env.MICROSOFT_AUTH_URL ?? 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
+    microsoftTokenUrl:
+      process.env.MICROSOFT_TOKEN_URL ?? 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+
     countryCode: process.env.CAMPAIGNS_COUNTRY ?? 'us',
     requestTimeoutMs: Number(process.env.CAMPAIGNS_TIMEOUT_MS ?? 25_000),
   },
