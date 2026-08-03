@@ -809,12 +809,24 @@ const routes: Array<[string, RegExp, Handler]> = [
       companyDomain: person.companyDomain, location: person.location,
       email: person.email, phone: person.phone, mobile: person.mobile,
       provider: 'Sandbox', providerPersonId: id, confidence: person.confidence,
+      // Labelled the way the real waterfall labels them: a vendor's work field
+      // is a work line, and a mobile with no business provenance is treated as
+      // private. valid:null throughout, because no carrier lookup is
+      // configured in the walkthrough and claiming otherwise would be a lie.
+      phones: [
+        person.phone
+          ? { number: person.phone, kind: 'work', lineType: null, carrier: null, valid: null, verifier: null, source: 'Sandbox' }
+          : null,
+        person.mobile
+          ? { number: person.mobile, kind: 'mobile', lineType: null, carrier: null, valid: null, verifier: null, source: 'Sandbox' }
+          : null,
+      ].filter(Boolean),
       status: 'saved', revealedAt: '2026-08-02T12:00:00Z',
       revealCostNanos: REVEAL_PRICE_NANOS, contactId: null, leadId: null,
       createdAt: '2026-08-02T12:00:00Z',
     };
     PROSPECTS.unshift(prospect);
-    return { status: 201, body: { prospect, charged: !duplicate } };
+    return { status: 201, body: { prospect, charged: !duplicate, phones: prospect.phones } };
   }],
   ['GET', /^\/api\/prospecting\/prospects$/, () => ({ body: { items: PROSPECTS } })],
   ['POST', /^\/api\/prospecting\/import$/, (_m, b) => {

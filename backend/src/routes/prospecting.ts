@@ -164,14 +164,21 @@ async function loadSuppressions(supabase: any, orgId: string) {
   for (const row of data ?? []) {
     const value = String(row.value ?? '').toLowerCase();
     if (row.kind === 'email') emails.add(value);
-    else if (row.kind === 'phone') phones.add(value.replace(/\D/g, ''));
+    else if (row.kind === 'phone') phones.add(digits(value));
     else domains.add(value);
   }
   return { emails, phones, domains };
 }
 
-/** Digits only, so (512) 555-0110 and 5125550110 are the same number. */
-const digits = (value: string) => value.replace(/\D/g, '');
+/**
+ * The last ten digits, which is what makes two writings of one number equal.
+ *
+ * Plain digit-stripping was not enough once numbers started being normalised
+ * to E.164: '(512) 555-0110' becomes '5125550110' and '+15125550110' becomes
+ * '15125550110', and comparing those as strings meant a suppressed number
+ * stored in one form silently failed to block the same number in the other.
+ */
+const digits = (value: string) => value.replace(/\D/g, '').slice(-10);
 
 /**
  * Is any part of this contact on the list? Checked against email, landline
@@ -564,6 +571,10 @@ prospectingRouter.post(
         email: contact.email,
         phone: contact.phone,
         mobile: contact.mobile,
+        // The labelled record. The two flat columns above stay in step for
+        // anything already reading them, but this is what says which number
+        // is a desk line and which is somebody's private cell.
+        phones: contact.phones,
         provider: contact.source,
         provider_person_id: providerPersonId,
         confidence: contact.confidence,
@@ -599,6 +610,7 @@ prospectingRouter.post(
         // How it was found and how sure we are — the customer is entitled to
         // know whether they are looking at a vendor match or a verified guess.
         source: contact.source,
+        phones: contact.phones,
         verification: contact.verification
           ? {
               verdict: contact.verification.verdict,

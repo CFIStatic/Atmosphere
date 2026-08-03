@@ -6,6 +6,7 @@ import {
   type EmailVerification,
   type Prospect,
   type ProspectMatch,
+  type LabelledPhone,
   type ProspectingStatus,
 } from '../lib/api';
 import { AppShell, EmptyState, ErrorNote, PageHeader, PanelSpinner } from '../components/AppShell';
@@ -49,7 +50,10 @@ export function ProspectorPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<Record<string, Prospect>>({});
   const [proof, setProof] = useState<
-    Record<string, { source?: string; verification?: EmailVerification | null }>
+    Record<
+      string,
+      { source?: string; verification?: EmailVerification | null; phones?: LabelledPhone[] }
+    >
   >({});
 
   useEffect(() => {
@@ -104,11 +108,14 @@ export function ProspectorPage() {
     setError(null);
     setNotice(null);
     try {
-      const { prospect, charged, source, verification } = await api.prospectReveal(
+      const { prospect, charged, source, verification, phones } = await api.prospectReveal(
         match.providerPersonId,
       );
       setRevealed((prev) => ({ ...prev, [match.providerPersonId]: prospect }));
-      setProof((prev) => ({ ...prev, [match.providerPersonId]: { source, verification } }));
+      setProof((prev) => ({
+        ...prev,
+        [match.providerPersonId]: { source, verification, phones },
+      }));
       setNotice(
         charged
           ? `Revealed ${prospect.fullName} — ${formatUsd(prospect.revealCostNanos)} charged.`
@@ -302,9 +309,12 @@ export function ProspectorPage() {
                                 />
                               </div>
                             )}
-                            {(got.mobile || got.phone) && (
-                              <p className="tabular-nums text-ink-700">{got.mobile ?? got.phone}</p>
-                            )}
+                            <PhoneList
+                              phones={
+                                proof[match.providerPersonId]?.phones ?? got.phones ?? null
+                              }
+                              fallback={got.mobile ?? got.phone}
+                            />
                             {proof[match.providerPersonId]?.source && (
                               <p className="text-[11px] text-ink-500">
                                 via {proof[match.providerPersonId]?.source}
@@ -433,6 +443,86 @@ function VerdictBadge({ verification }: { verification: EmailVerification | null
     <span title={title} className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${style}`}>
       {label}
       {verdict === 'valid' && verifier ? ` · ${verifier}` : ''}
+    </span>
+  );
+}
+
+/**
+ * A person's numbers, each saying which one it is.
+ *
+ * "Personal" is the label that earns this component. A private cell and a desk
+ * line were both printed as a bare string before, which left whoever was about
+ * to dial with no way to know they were about to ring somebody's family phone.
+ */
+function PhoneList({
+  phones,
+  fallback,
+}: {
+  phones: LabelledPhone[] | null;
+  fallback: string | null;
+}) {
+  // Nothing labelled — an older row saved before numbers carried labels. Show
+  // the number rather than hiding it, but do not invent a label for it.
+  if (!phones?.length) {
+    return fallback ? <p className="tabular-nums text-ink-700">{fallback}</p> : null;
+  }
+
+  // Work first, then work mobiles, then private numbers: the order somebody
+  // should try them in, and the order that puts the most sensitive last.
+  const order = { work: 0, mobile: 1, unknown: 2, personal: 3 } as const;
+  const sorted = [...phones].sort((a, b) => order[a.kind] - order[b.kind]);
+
+  return (
+    <div className="space-y-1">
+      {sorted.map((phone) => (
+        <div key={phone.number} className="flex items-center gap-1.5">
+          <span className="tabular-nums text-ink-700">{phone.number}</span>
+          <PhoneKindBadge phone={phone} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PhoneKindBadge({ phone }: { phone: LabelledPhone }) {
+  const { kind, lineType, carrier, valid, verifier } = phone;
+
+  const style =
+    kind === 'personal'
+      ? 'bg-caution-50 text-caution-600'
+      : kind === 'unknown'
+        ? 'bg-paper-200/60 text-ink-500'
+        : 'bg-success-50 text-success-600';
+
+  const label =
+    kind === 'work' ? 'work' : kind === 'mobile' ? 'work mobile' : kind === 'personal' ? 'personal' : 'unconfirmed';
+
+  // A number nothing checked must not read as a working one. Spelling that out
+  // in the tooltip is the difference between "we confirmed this" and "a vendor
+  // told us this and nobody looked".
+  const checked =
+    valid === true
+      ? `Confirmed assigned${verifier ? ` by ${verifier}` : ''}.`
+      : valid === false
+        ? 'Carrier says this number is not assigned.'
+        : 'Not checked — no carrier lookup is configured.';
+
+  const title = [
+    kind === 'personal' ? 'A private cell, not a published business line.' : null,
+    lineType ? `Line type: ${lineType}.` : null,
+    carrier ? `Carrier: ${carrier}.` : null,
+    checked,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return (
+    <span
+      title={title}
+      className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${style}`}
+    >
+      {label}
+      {valid === false ? ' · dead' : ''}
     </span>
   );
 }

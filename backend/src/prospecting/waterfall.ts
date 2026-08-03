@@ -1,5 +1,6 @@
 import { candidateEmails, type KnownAddress } from './patterns.js';
 import type { ContactSource } from './sources/ports.js';
+import { labelPhones, type LabelledPhone, type RawPhone } from './phone/index.js';
 import { verifyEmail, type VerificationResult } from './verification.js';
 import { config } from '../config.js';
 import type { ContactDataProvider, RevealedContact } from './ports.js';
@@ -61,6 +62,13 @@ export interface WaterfallResult extends RevealedContact {
   verification: VerificationResult | null;
   /** Every address tried and what came back — the audit trail for a reveal. */
   attempts: Array<{ email: string; verdict: string; source: string }>;
+  /**
+   * Every number, normalised, carrier-checked and labelled work / mobile /
+   * personal. The flat `phone` and `mobile` fields above are kept in step for
+   * anything already reading them, but this is the honest version: it says
+   * which number is which and whether anybody confirmed it.
+   */
+  phones: LabelledPhone[];
 }
 
 /** Verdicts we are willing to hand a customer and charge for. */
@@ -79,10 +87,48 @@ function sellable(result: VerificationResult): boolean {
   return false;
 }
 
+/** Everything except the labelled numbers, which are added on the way out. */
+type ResolvedContact = Omit<WaterfallResult, 'phones'>;
+
+/**
+ * Where a number came from, which is what carrier data cannot tell us.
+ *
+ * A lookup says "mobile"; it cannot say whether that mobile is the one on the
+ * company's contact page or the one the person gives their family. The source
+ * that produced the number is the only evidence we have for that, so it is
+ * what decides the label.
+ */
+function provenanceFor(source: string, field: 'work' | 'mobile'): RawPhone['provenance'] {
+  // Published by the company itself, for the express purpose of being called.
+  if (source === 'Company website' || source === 'Common Crawl') return 'published';
+  if (source === 'Shared network') return 'network';
+  return field === 'mobile' ? 'vendor_mobile' : 'vendor_work';
+}
+
 export async function runWaterfall(
   providers: ContactDataProvider[],
   input: WaterfallInput,
 ): Promise<WaterfallResult | null> {
+  const found = await resolveContact(providers, input);
+  if (!found) return null;
+
+  // Labelling happens once, here, rather than at each of the half-dozen places
+  // a contact can be returned from — so a new source cannot forget to do it.
+  const raw: RawPhone[] = [];
+  if (found.phone) {
+    raw.push({ number: found.phone, provenance: provenanceFor(found.source, 'work'), source: found.source });
+  }
+  if (found.mobile) {
+    raw.push({ number: found.mobile, provenance: provenanceFor(found.source, 'mobile'), source: found.source });
+  }
+
+  return { ...found, phones: await labelPhones(raw) };
+}
+
+async function resolveContact(
+  providers: ContactDataProvider[],
+  input: WaterfallInput,
+): Promise<ResolvedContact | null> {
   const attempts: WaterfallResult['attempts'] = [];
   const domain = input.companyDomain?.trim().toLowerCase() ?? '';
 

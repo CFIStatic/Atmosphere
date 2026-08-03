@@ -551,6 +551,17 @@ export const config = {
       !/\.invalid$/.test(process.env.PROSPECTING_VERIFY_FROM ?? ''),
     verifyTimeoutMs: Number(process.env.PROSPECTING_VERIFY_TIMEOUT_MS ?? 6_000),
 
+    // Phone verification. Carrier lookup is the only authority on whether a
+    // number is assigned and what kind of line it rings — and since number
+    // portability, an area code tells you where a number was issued and
+    // nothing about whether it reaches a desk or a pocket.
+    twilioAccountSid: process.env.TWILIO_ACCOUNT_SID ?? '',
+    twilioAuthToken: process.env.TWILIO_AUTH_TOKEN ?? '',
+    twilioLookupBaseUrl: process.env.TWILIO_LOOKUP_BASE_URL ?? 'https://lookups.twilio.com',
+    numverifyApiKey: process.env.NUMVERIFY_API_KEY ?? '',
+    numverifyBaseUrl: process.env.NUMVERIFY_BASE_URL ?? 'https://apilayer.net/api',
+    phoneTimeoutMs: Number(process.env.PROSPECTING_PHONE_TIMEOUT_MS ?? 6_000),
+
     // Which verifier answers "does this mailbox exist?".
     //
     // 'auto' takes the best configured option: a paid HTTPS verifier first,

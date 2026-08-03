@@ -215,6 +215,18 @@ export interface ProspectMatch {
   suppressed: boolean;
 }
 
+/** One number, labelled. `valid: null` means unchecked, never "does not work". */
+export interface LabelledPhone {
+  number: string;
+  /** work = a published or desk line · mobile = a work cell · personal = private */
+  kind: 'work' | 'mobile' | 'personal' | 'unknown';
+  lineType: 'landline' | 'mobile' | 'voip' | 'tollfree' | 'other' | null;
+  carrier: string | null;
+  valid: boolean | null;
+  verifier: string | null;
+  source: string;
+}
+
 /** A saved prospect. Contact columns are null until a reveal is paid for. */
 export interface Prospect {
   id: string;
@@ -232,6 +244,8 @@ export interface Prospect {
   status: 'new' | 'saved' | 'contacted' | 'converted' | 'discarded';
   revealedAt: string | null;
   revealCostNanos: number;
+  /** Every number, labelled. The flat phone/mobile fields are the summary. */
+  phones?: LabelledPhone[];
   contactId: string | null;
   leadId: string | null;
   createdAt?: string;
@@ -1147,6 +1161,7 @@ export const api = {
       reason?: string;
       /** 'People Data Labs', 'Pattern + verification', … */
       source?: string;
+      phones?: LabelledPhone[];
       verification?: EmailVerification | null;
     }>(
       '/api/prospecting/reveal',
