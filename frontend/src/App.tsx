@@ -1,5 +1,5 @@
-import { BrowserRouter, MemoryRouter, Navigate, Route, Routes } from 'react-router-dom';
-import type { ReactNode } from 'react';
+import { BrowserRouter, MemoryRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
+import { useEffect, type ReactNode } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { LoginPage } from './pages/LoginPage';
@@ -101,9 +101,34 @@ function routerProps(): Record<string, unknown> {
   return {};
 }
 
+/**
+ * Demo only: a way in from outside React.
+ *
+ * The published artifact has its own view switcher, which is plain DOM sitting
+ * beside the app rather than inside it — a memory router has no URL for it to
+ * change. This listens for the one event that switcher fires, so switching to
+ * the subcontractor's screen is a navigation rather than a full reload of a
+ * three-megabyte page.
+ *
+ * Inside the Router by necessity: useNavigate only exists there.
+ */
+function DemoRouteBridge() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const go = (event: Event) => {
+      const to = (event as CustomEvent<string>).detail;
+      if (typeof to === 'string' && to.startsWith('/')) navigate(to);
+    };
+    window.addEventListener('atmosphere:navigate', go);
+    return () => window.removeEventListener('atmosphere:navigate', go);
+  }, [navigate]);
+  return null;
+}
+
 export default function App() {
   return (
     <Router {...routerProps()}>
+      {import.meta.env.VITE_DEMO ? <DemoRouteBridge /> : null}
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
