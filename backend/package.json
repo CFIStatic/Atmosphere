@@ -1,7 +1,7 @@
 {
   "name": "atmosphere-backend",
   "version": "1.0.0",
-  "description": "Atmosphere backend — BFF that mediates Supabase Auth and org onboarding",
+  "description": "Atmosphere backend \u2014 BFF that mediates Supabase Auth and org onboarding",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -11,10 +11,13 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "analytics:grant": "tsx src/scripts/grantAnalyticsAccess.ts",
     "analytics:seed": "tsx src/scripts/seedAnalyticsDemo.ts",
+    "lint": "eslint .",
+    "test": "node --import tsx --test $(find src test -name '*.test.ts' | sort)",
+    "verify": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "verify:supabase": "node scripts/verify-supabase.mjs",
     "mitigation:demo": "tsx src/estimator/mitigation/demo.ts",
     "browser:install": "playwright install chromium",
     "check:verifier": "tsx src/scripts/checkVerifier.ts",
-    "test": "node --import tsx --test $(find src test -name '*.test.ts' | sort)",
     "learn": "tsx src/scripts/learn.ts",
     "backup": "tsx src/scripts/backup.ts snapshot",
     "backup:list": "tsx src/scripts/backup.ts list",
@@ -23,7 +26,8 @@
     "backup:retention": "tsx src/scripts/backup.ts retention",
     "check": "npm run typecheck && npm test && npm run check:backup && npm run check:csv",
     "check:backup": "tsx src/scripts/checkBackupArchive.ts",
-    "check:csv": "tsx src/scripts/checkCsvImport.ts"
+    "check:csv": "tsx src/scripts/checkCsvImport.ts",
+    "test:vitest": "vitest run --passWithNoTests"
   },
   "engines": {
     "node": ">=18"
@@ -45,13 +49,18 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/cookie-parser": "^1.4.7",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^22.5.4",
     "@types/nodemailer": "^8.0.1",
     "@types/ws": "^8.18.1",
+    "eslint": "^10.8.0",
+    "globals": "^17.7.0",
     "tsx": "^4.19.1",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "typescript-eslint": "^8.65.0",
+    "vitest": "^4.1.10"
   }
 }

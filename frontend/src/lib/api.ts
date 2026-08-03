@@ -18,11 +18,7 @@ export interface AuthUser {
 }
 
 export type MemberRole =
-  | 'project_manager'
-  | 'field_technician'
-  | 'accountant'
-  | 'office_manager'
-  | 'sales';
+  'project_manager' | 'field_technician' | 'accountant' | 'office_manager' | 'sales';
 
 export type WorkType = 'mitigation' | 'construction';
 

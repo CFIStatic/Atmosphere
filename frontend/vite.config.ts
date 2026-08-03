@@ -1,9 +1,16 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const srcDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'src');
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: { '@': srcDir },
+  },
   server: {
     port: 5174,
     strictPort: true,
@@ -18,6 +25,18 @@ export default defineConfig({
         // origin they are looking at, which in development is this dev server.
         ws: true,
       },
+    },
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.ts'],
+    include: ['src/**/*.test.{ts,tsx}'],
+    coverage: {
+      provider: 'v8',
+      // Coverage targets the layers that carry real logic; presentational
+      // components are covered by behaviour tests, not line counting.
+      include: ['src/domain/**', 'src/data/**'],
     },
   },
 });

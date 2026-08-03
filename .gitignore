@@ -44,6 +44,9 @@ frontend/dist-ssr/
 recovery/
 *backup*.json
 
+# Playwright smoke-test screenshots
+frontend/.smoke/
+
 # Backup archives. Encrypted at rest when a key is configured, but they still
 # hold every customer record we have — they never belong in version control.
 backups/

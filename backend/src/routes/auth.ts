@@ -17,7 +17,8 @@ import {
   pinSchema,
   pinUnlockSchema,
 } from '../lib/validation.js';
-import { badRequest, unauthorized, HttpError } from '../lib/errors.js';
+import { badRequest, unauthorized, serviceUnavailable, HttpError } from '../lib/errors.js';
+import { isTransient } from '../lib/upstream.js';
 import {
   newDeviceSecret,
   newPinSalt,
@@ -72,10 +73,17 @@ authRouter.post('/signup', authLimiter, async (req: Request, res: Response, next
     const supabase = createAnonClient();
 
     const { data, error } = await supabase.auth.signUp({ email, password });
+
+    // Same distinction as login: an unreachable auth service is an outage, not
+    // a problem with what the user typed.
+    if (error && isTransient(error)) {
+      console.warn('[signup] upstream failure:', error.status, error.message);
+      throw serviceUnavailable();
+    }
+
     if (error) {
       // Log the real cause server-side, but return a generic message so we do
       // not reveal whether the email is already registered (account enumeration).
-      // eslint-disable-next-line no-console
       console.warn('[signup] supabase error:', error.status, error.message);
       const status = error.status === 429 ? 429 : 400;
       throw new HttpError(
@@ -89,7 +97,9 @@ authRouter.post('/signup', authLimiter, async (req: Request, res: Response, next
 
     if (data.session) {
       setSessionCookies(res, data.session);
-      res.status(201).json({ user: data.user ? publicUser(data.user) : null, needsEmailConfirmation: false });
+      res
+        .status(201)
+        .json({ user: data.user ? publicUser(data.user) : null, needsEmailConfirmation: false });
       return;
     }
 
@@ -114,8 +124,17 @@ authRouter.post('/login', authLimiter, async (req: Request, res: Response, next:
     const supabase = createAnonClient();
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+    // An unreachable or failing auth service is NOT a credential problem. Saying
+    // "invalid email or password" during an outage sends users off resetting a
+    // password that was never wrong, and buries the real incident.
+    if (error && isTransient(error)) {
+      console.warn('[login] upstream failure:', error.status, error.message);
+      throw serviceUnavailable();
+    }
+
     if (error || !data.session || !data.user) {
-      // Do not reveal whether the email exists — generic message.
+      // Genuine rejection. Do not reveal whether the email exists.
       throw unauthorized('Invalid email or password', 'invalid_credentials');
     }
 
@@ -249,7 +268,7 @@ authRouter.post(
 
       if (error) {
         // Logged for operators, never surfaced to the caller.
-        // eslint-disable-next-line no-console
+
         console.warn('[forgot-password] supabase error:', error.status, error.message);
       }
 
@@ -491,11 +510,7 @@ function deviceLabel(userAgent: string | undefined): string {
 async function mintSessionForUser(userId: string) {
   const admin = createAdminClient();
   if (!admin) {
-    throw new HttpError(
-      503,
-      'PIN sign-in is not configured on this server.',
-      'pin_unavailable',
-    );
+    throw new HttpError(503, 'PIN sign-in is not configured on this server.', 'pin_unavailable');
   }
 
   const { data: found, error: lookupError } = await admin.auth.admin.getUserById(userId);
@@ -509,7 +524,11 @@ async function mintSessionForUser(userId: string) {
   });
   const hashedToken = link?.properties?.hashed_token;
   if (linkError || !hashedToken) {
-    throw new HttpError(503, 'Could not complete PIN sign-in. Please try again.', 'pin_mint_failed');
+    throw new HttpError(
+      503,
+      'Could not complete PIN sign-in. Please try again.',
+      'pin_mint_failed',
+    );
   }
 
   const anon = createAnonClient();
@@ -518,7 +537,11 @@ async function mintSessionForUser(userId: string) {
     token_hash: hashedToken,
   });
   if (redeemError || !redeemed.session || !redeemed.user) {
-    throw new HttpError(503, 'Could not complete PIN sign-in. Please try again.', 'pin_mint_failed');
+    throw new HttpError(
+      503,
+      'Could not complete PIN sign-in. Please try again.',
+      'pin_mint_failed',
+    );
   }
 
   return { session: redeemed.session, user: redeemed.user };
@@ -618,78 +641,84 @@ authRouter.post(
  * POST /api/auth/pin/unlock
  * Exchanges a correct PIN on an enrolled device for a full session.
  */
-authRouter.post('/pin/unlock', pinLimiter, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { pin } = pinUnlockSchema.parse(req.body);
+authRouter.post(
+  '/pin/unlock',
+  pinLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { pin } = pinUnlockSchema.parse(req.body);
 
-    const parsed = parseDeviceCookie(req.cookies?.[config.device.cookieName] as string | undefined);
-    if (!parsed) {
-      throw unauthorized('This device is not set up for PIN sign-in.', 'pin_not_enrolled');
-    }
-
-    const supabase = createAnonClient();
-    const secretHash = hashDeviceSecret(parsed.secret);
-
-    // Fetch the per-device salt so the PIN can be hashed the same way it was
-    // stored. This returns nothing unless the device secret already matches.
-    const { data: lookupData, error: lookupError } = await supabase.rpc('device_lookup', {
-      p_device_id: parsed.deviceId,
-      p_secret_hash: secretHash,
-    });
-    const lookup = firstRow<DeviceLookupRow>(lookupData);
-    if (lookupError || !lookup) {
-      clearDeviceCookie(res);
-      throw unauthorized('This device is not set up for PIN sign-in.', 'pin_not_enrolled');
-    }
-
-    const { data: verifyData, error: verifyError } = await supabase.rpc('device_verify_pin', {
-      p_device_id: parsed.deviceId,
-      p_secret_hash: secretHash,
-      p_pin_hash: hashPin(pin, lookup.pin_salt),
-    });
-    if (verifyError) {
-      throw new HttpError(503, 'Could not verify your PIN. Please try again.', 'pin_unavailable');
-    }
-
-    const verify = firstRow<DeviceVerifyRow>(verifyData);
-
-    if (!verify?.ok) {
-      if (verify?.locked_until) {
-        throw new HttpError(
-          429,
-          'Too many incorrect PINs. This device is locked for 15 minutes — sign in with your password instead.',
-          'pin_locked',
-        );
-      }
-      if (verify && verify.attempts_left > 0) {
-        const left = verify.attempts_left;
-        throw unauthorized(
-          `Incorrect PIN. ${left} ${left === 1 ? 'attempt' : 'attempts'} remaining.`,
-          'pin_invalid',
-        );
-      }
-      // Repeated lockouts removed the enrollment entirely.
-      clearDeviceCookie(res);
-      throw unauthorized(
-        'PIN sign-in has been disabled on this device. Please sign in with your password.',
-        'pin_revoked',
+      const parsed = parseDeviceCookie(
+        req.cookies?.[config.device.cookieName] as string | undefined,
       );
+      if (!parsed) {
+        throw unauthorized('This device is not set up for PIN sign-in.', 'pin_not_enrolled');
+      }
+
+      const supabase = createAnonClient();
+      const secretHash = hashDeviceSecret(parsed.secret);
+
+      // Fetch the per-device salt so the PIN can be hashed the same way it was
+      // stored. This returns nothing unless the device secret already matches.
+      const { data: lookupData, error: lookupError } = await supabase.rpc('device_lookup', {
+        p_device_id: parsed.deviceId,
+        p_secret_hash: secretHash,
+      });
+      const lookup = firstRow<DeviceLookupRow>(lookupData);
+      if (lookupError || !lookup) {
+        clearDeviceCookie(res);
+        throw unauthorized('This device is not set up for PIN sign-in.', 'pin_not_enrolled');
+      }
+
+      const { data: verifyData, error: verifyError } = await supabase.rpc('device_verify_pin', {
+        p_device_id: parsed.deviceId,
+        p_secret_hash: secretHash,
+        p_pin_hash: hashPin(pin, lookup.pin_salt),
+      });
+      if (verifyError) {
+        throw new HttpError(503, 'Could not verify your PIN. Please try again.', 'pin_unavailable');
+      }
+
+      const verify = firstRow<DeviceVerifyRow>(verifyData);
+
+      if (!verify?.ok) {
+        if (verify?.locked_until) {
+          throw new HttpError(
+            429,
+            'Too many incorrect PINs. This device is locked for 15 minutes — sign in with your password instead.',
+            'pin_locked',
+          );
+        }
+        if (verify && verify.attempts_left > 0) {
+          const left = verify.attempts_left;
+          throw unauthorized(
+            `Incorrect PIN. ${left} ${left === 1 ? 'attempt' : 'attempts'} remaining.`,
+            'pin_invalid',
+          );
+        }
+        // Repeated lockouts removed the enrollment entirely.
+        clearDeviceCookie(res);
+        throw unauthorized(
+          'PIN sign-in has been disabled on this device. Please sign in with your password.',
+          'pin_revoked',
+        );
+      }
+
+      const { session, user } = await mintSessionForUser(verify.user_id!);
+      setSessionCookies(res, session);
+
+      await recordEvent(createUserClient(session.access_token), {
+        type: 'auth.pin_unlocked',
+        summary: 'signed in with a device PIN',
+        entityId: user.id,
+      });
+
+      res.json({ user: publicUser(user) });
+    } catch (err) {
+      next(err);
     }
-
-    const { session, user } = await mintSessionForUser(verify.user_id!);
-    setSessionCookies(res, session);
-
-    await recordEvent(createUserClient(session.access_token), {
-      type: 'auth.pin_unlocked',
-      summary: 'signed in with a device PIN',
-      entityId: user.id,
-    });
-
-    res.json({ user: publicUser(user) });
-  } catch (err) {
-    next(err);
-  }
-});
+  },
+);
 
 /**
  * POST /api/auth/pin/disable
@@ -703,7 +732,11 @@ authRouter.post(
       const supabase = createUserClient(req.accessToken!);
       const { error } = await supabase.rpc('revoke_my_devices');
       if (error) {
-        throw new HttpError(500, 'Could not turn off PIN sign-in. Please try again.', 'pin_disable_failed');
+        throw new HttpError(
+          500,
+          'Could not turn off PIN sign-in. Please try again.',
+          'pin_disable_failed',
+        );
       }
       clearDeviceCookie(res);
 
