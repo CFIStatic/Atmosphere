@@ -588,6 +588,75 @@ const ACCOUNTS: Array<Record<string, any>> = [
   { id: 'acc-2', name: 'Camden Court HOA', kind: 'property_management', email: 'board@camdencourt.org', phone: '(512) 555-0139', city: 'Austin', region: 'TX' },
   { id: 'acc-3', name: 'Hollis Family', kind: 'other', email: 'j.hollis@example.com', phone: '(512) 555-0122', city: 'Round Rock', region: 'TX' },
   { id: 'acc-4', name: 'Brightway Dental', kind: 'property_management', email: 'office@brightwaydental.com', phone: '(512) 555-0166', city: 'Austin', region: 'TX' },
+  { id: 'acc-5', name: 'Vantage Property Management', kind: 'property_management', email: 'ops@vantagepm.com', phone: '(512) 555-0101', city: 'Austin', region: 'TX' },
+  // The duplicate. Same customer, arrived from a carrier portal with the
+  // punctuation the adjuster typed.
+  { id: 'acc-6', name: 'Camden Court H.O.A.', kind: 'property_management', email: 'board@camdencourt.org', phone: null, city: 'Austin', region: 'TX' },
+];
+
+/**
+ * Account structure. Vantage manages two associations; Alliance insures one of
+ * them; a facilities director sits on both boards. None of that is expressible
+ * in a flat list, which is the point.
+ */
+const ACCOUNT_STRUCTURE: Record<string, any> = {
+  'acc-5': {
+    account: { id: 'acc-5', name: 'Vantage Property Management', type: 'property_management', parentAccountId: null, mergedIntoId: null, city: 'Austin', region: 'TX' },
+    ancestors: [],
+    children: [
+      { id: 'acc-2', name: 'Camden Court HOA', type: 'property_management' },
+      { id: 'acc-4', name: 'Brightway Dental', type: 'property_management' },
+    ],
+    subtreeSize: 3,
+    links: [
+      { id: 'ln-1', otherId: 'acc-1', otherName: 'Alliance Mutual Insurance', kind: 'insures', direction: 'to', reads: 'is insured by Alliance Mutual Insurance', note: 'Master policy across the managed portfolio', startedOn: '2025-01-01', endedOn: null },
+    ],
+    people: [
+      { id: 'r-1', contactId: 'ct-2', accountId: 'acc-5', name: 'Marcia Ellery', title: 'Director of Facilities', email: 'm.ellery@vantagepm.com', role: 'facilities director', isPrimary: true, endedOn: null },
+      { id: 'r-2', contactId: 'ct-2', accountId: 'acc-2', name: 'Marcia Ellery', title: 'Director of Facilities', email: 'm.ellery@vantagepm.com', role: 'board contact', isPrimary: false, endedOn: null },
+    ],
+    // Nothing booked directly, everything underneath — the shape a flat list
+    // reported as a zero.
+    rollup: { accounts: 3, jobs: 6, openJobs: 2, contractTotal: 148_600, invoicedTotal: 96_200, paidTotal: 71_400, ownJobs: 0 },
+    mergedIn: [],
+  },
+  'acc-2': {
+    account: { id: 'acc-2', name: 'Camden Court HOA', type: 'property_management', parentAccountId: 'acc-5', mergedIntoId: null, city: 'Austin', region: 'TX' },
+    ancestors: [{ id: 'acc-5', name: 'Vantage Property Management' }],
+    children: [],
+    subtreeSize: 1,
+    links: [
+      { id: 'ln-2', otherId: 'acc-1', otherName: 'Alliance Mutual Insurance', kind: 'insures', direction: 'to', reads: 'is insured by Alliance Mutual Insurance', note: null, startedOn: '2025-01-01', endedOn: null },
+    ],
+    people: [
+      { id: 'r-2', contactId: 'ct-2', accountId: 'acc-2', name: 'Marcia Ellery', title: 'Director of Facilities', email: 'm.ellery@vantagepm.com', role: 'board contact', isPrimary: false, endedOn: null },
+    ],
+    rollup: { accounts: 1, jobs: 4, openJobs: 1, contractTotal: 96_500, invoicedTotal: 62_000, paidTotal: 44_000, ownJobs: 4 },
+    mergedIn: [],
+  },
+  'acc-1': {
+    account: { id: 'acc-1', name: 'Alliance Mutual Insurance', type: 'insurance_carrier', parentAccountId: null, mergedIntoId: null, city: 'Austin', region: 'TX' },
+    ancestors: [],
+    children: [],
+    subtreeSize: 1,
+    links: [
+      { id: 'ln-1', otherId: 'acc-5', otherName: 'Vantage Property Management', kind: 'insures', direction: 'from', reads: 'insures Vantage Property Management', note: 'Master policy across the managed portfolio', startedOn: '2025-01-01', endedOn: null },
+      { id: 'ln-3', otherId: 'acc-3', otherName: 'Hollis Family', kind: 'insures', direction: 'from', reads: 'insures Hollis Family', note: null, startedOn: '2024-06-01', endedOn: '2026-06-01' },
+    ],
+    people: [],
+    // A carrier is a party to the work, not a customer buying it.
+    rollup: { accounts: 1, jobs: 0, openJobs: 0, contractTotal: 0, invoicedTotal: 0, paidTotal: 0, ownJobs: 0 },
+    mergedIn: [],
+  },
+};
+
+const DUPLICATE_PAIRS = [
+  {
+    score: 100,
+    suggestedWinner: 'acc-2',
+    a: { id: 'acc-2', name: 'Camden Court HOA', attached: 11 },
+    b: { id: 'acc-6', name: 'Camden Court H.O.A.', attached: 2 },
+  },
 ];
 
 const CONTACTS: Array<Record<string, any>> = [
@@ -1621,6 +1690,34 @@ const routes: Array<[string, RegExp, Handler]> = [
       occurred_at: new Date().toISOString(),
     });
     return { body: { ok: true } };
+  }],
+
+  /* ------------------------------------------- account structure */
+  ['GET', /^\/api\/crm\/accounts\/duplicates$/, () => ({ body: { pairs: DUPLICATE_PAIRS } })],
+  ['GET', /^\/api\/crm\/accounts\/([\w-]+)\/structure$/, (m) => {
+    const found = ACCOUNT_STRUCTURE[m[1]];
+    if (found) return { body: found };
+    // Anything without a fixture still answers honestly: a top-level account
+    // with nothing attached, which is what most of them are.
+    const account = ACCOUNTS.find((a) => a.id === m[1]);
+    return {
+      body: {
+        account: { id: m[1], name: account?.name ?? 'Account', type: account?.kind ?? null, parentAccountId: null, mergedIntoId: null, city: account?.city ?? null, region: account?.region ?? null },
+        ancestors: [], children: [], subtreeSize: 1, links: [], people: [],
+        rollup: { accounts: 1, jobs: 0, openJobs: 0, contractTotal: 0, invoicedTotal: 0, paidTotal: 0, ownJobs: 0 },
+        mergedIn: [],
+      },
+    };
+  }],
+  ['POST', /^\/api\/crm\/accounts\/merge$/, (_m, b) => {
+    const moved = { contacts: 2, jobs: 0, leads: 1, properties: 0, activities: 3, childAccounts: 0 };
+    const total = Object.values(moved).reduce((x, y) => x + y, 0);
+    if (!b.confirm) return { body: { dryRun: true, moved, total } };
+    // The loser becomes a tombstone rather than disappearing.
+    const loser = ACCOUNTS.findIndex((a) => a.id === b.loserId);
+    if (loser >= 0) ACCOUNTS.splice(loser, 1);
+    DUPLICATE_PAIRS.length = 0;
+    return { body: { dryRun: false, moved, total } };
   }],
 
   /* ------------------------------------------- shared job record */

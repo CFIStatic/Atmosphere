@@ -23,6 +23,7 @@ import { prospectingRouter } from './routes/prospecting.js';
 import { campaignsRouter } from './routes/campaigns.js';
 import { salesWorkRouter } from './routes/salesWork.js';
 import { sharedJobsRouter, jobShareRouter } from './routes/sharedJobs.js';
+import { crmAccountsRouter } from './routes/crmAccounts.js';
 import { unsubscribeRouter } from './routes/unsubscribe.js';
 import { locationsRouter } from './routes/locations.js';
 import { backupRouter } from './routes/backups.js';
@@ -148,6 +149,11 @@ export function createApp(): Express {
   app.use('/api/job-share', jobShareRouter);
   app.use('/api/web-access', webAccessRouter);
   app.use('/api/verifier', verifierRouter);
+  // Before crmRouter, not after. crmRouter registers a generic GET
+  // /accounts/:id, so mounted second this router would never be reached —
+  // /accounts/duplicates would be read as an account whose id is "duplicates".
+  // Express falls through to crmRouter for anything this one does not handle.
+  app.use('/api/crm/accounts', crmAccountsRouter);
   app.use('/api/crm', crmRouter);
   app.use('/api/prospecting', prospectingRouter);
   // Campaigns and territories share a router: a campaign is usually worked one

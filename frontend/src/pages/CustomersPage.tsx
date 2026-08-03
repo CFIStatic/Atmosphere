@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import { api, humanize, type CrmAccount, type CrmContact } from '../lib/api';
 import { AppShell, EmptyState, ErrorNote, PageHeader, PanelSpinner } from '../components/AppShell';
 import { NewCustomerDialog } from '../components/sales/NewCustomerDialog';
+import { AccountStructure, DuplicateAccounts } from '../components/crm/AccountStructure';
 import { PlusIcon } from '../components/icons';
 
 type Tab = 'accounts' | 'contacts';
@@ -19,6 +20,10 @@ export function CustomersPage() {
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  // A row click opens the structure rather than navigating: comparing two
+  // accounts is the reason somebody is on this page, and a page transition per
+  // account makes that a chore.
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
 
@@ -96,6 +101,12 @@ export function CustomersPage() {
         />
       </div>
 
+      {tab === 'accounts' && (
+        <div className="mb-4">
+          <DuplicateAccounts onMerged={reload} />
+        </div>
+      )}
+
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
       {list === null && <PanelSpinner label="Loading customers" />}
 
@@ -119,13 +130,27 @@ export function CustomersPage() {
               </thead>
               <tbody>
                 {accounts.map((a) => (
-                  <tr key={a.id} className="border-b border-line last:border-b-0 hover:bg-paper-200">
-                    <Td strong>{a.name}</Td>
-                    <Td>{humanize(a.kind)}</Td>
-                    <Td>{a.phone ?? '—'}</Td>
-                    <Td>{a.email ?? '—'}</Td>
-                    <Td>{[a.city, a.region].filter(Boolean).join(', ') || '—'}</Td>
-                  </tr>
+                  <Fragment key={a.id}>
+                    <tr
+                      onClick={() => setOpenId(openId === a.id ? null : a.id)}
+                      className={`cursor-pointer border-b border-line last:border-b-0 transition ${
+                        openId === a.id ? 'bg-brand-600/10' : 'hover:bg-paper-200'
+                      }`}
+                    >
+                      <Td strong>{a.name}</Td>
+                      <Td>{humanize(a.kind)}</Td>
+                      <Td>{a.phone ?? '—'}</Td>
+                      <Td>{a.email ?? '—'}</Td>
+                      <Td>{[a.city, a.region].filter(Boolean).join(', ') || '—'}</Td>
+                    </tr>
+                    {openId === a.id && (
+                      <tr>
+                        <td colSpan={5} className="border-b border-line bg-paper-50/40 p-4">
+                          <AccountStructure accountId={a.id} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

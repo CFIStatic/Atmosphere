@@ -787,6 +787,72 @@ export interface CustodyEntry {
   occurred_at: string;
 }
 
+/* ---- Account structure --------------------------------------------------- */
+
+export interface AccountStructure {
+  account: {
+    id: string;
+    name: string;
+    type: string | null;
+    parentAccountId: string | null;
+    /** Set when this record was folded into another. Kept so old links resolve. */
+    mergedIntoId: string | null;
+    city: string | null;
+    region: string | null;
+  };
+  /** Nearest first, so it reads as a breadcrumb without reversing. */
+  ancestors: Array<{ id: string; name: string }>;
+  children: Array<{ id: string; name: string; type?: string | null }>;
+  subtreeSize: number;
+  links: Array<{
+    id: string;
+    otherId: string;
+    otherName: string;
+    kind: string;
+    direction: 'from' | 'to';
+    /** Already phrased from this account's side. */
+    reads: string;
+    note: string | null;
+    startedOn: string | null;
+    endedOn: string | null;
+  }>;
+  people: Array<{
+    id: string;
+    contactId: string;
+    accountId: string;
+    name: string;
+    title: string | null;
+    email: string | null;
+    role: string;
+    isPrimary: boolean;
+    endedOn: string | null;
+  }>;
+  rollup: {
+    accounts: number;
+    jobs: number;
+    openJobs: number;
+    contractTotal: number;
+    invoicedTotal: number;
+    paidTotal: number;
+    /** Jobs booked directly here, as opposed to anywhere in the tree. */
+    ownJobs: number;
+  };
+  mergedIn: Array<{
+    id: string;
+    loserId: string;
+    loserName: string;
+    moved: Record<string, number>;
+    mergedAt: string;
+  }>;
+}
+
+export interface DuplicatePair {
+  score: number;
+  suggestedWinner: string;
+  a: { id: string; name: string; attached: number };
+  b: { id: string; name: string; attached: number };
+}
+
 export type CampaignStatus = 'draft' | 'active' | 'paused' | 'finished';
 export type CampaignChannel = 'email' | 'call' | 'mixed';
 
@@ -2045,6 +2111,50 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+
+  // ---- Account structure ----
+  accountStructure: (accountId: string) =>
+    request<AccountStructure>(`/api/crm/accounts/${accountId}/structure`, { method: 'GET' }),
+
+  setAccountParent: (accountId: string, parentAccountId: string | null) =>
+    request<{ ok: boolean }>(`/api/crm/accounts/${accountId}/parent`, {
+      method: 'PATCH',
+      body: JSON.stringify({ parentAccountId }),
+    }),
+
+  linkAccounts: (
+    accountId: string,
+    input: { toAccountId: string; kind: string; note?: string | null; startedOn?: string | null },
+  ) =>
+    request<{ id: string }>(`/api/crm/accounts/${accountId}/links`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  endAccountLink: (linkId: string) =>
+    request<{ ok: boolean }>(`/api/crm/accounts/links/${linkId}/end`, { method: 'POST' }),
+
+  addAccountPerson: (
+    accountId: string,
+    input: { contactId: string; role?: string; isPrimary?: boolean },
+  ) =>
+    request<{ ok: boolean }>(`/api/crm/accounts/${accountId}/people`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  duplicateAccounts: () =>
+    request<{ pairs: DuplicatePair[] }>('/api/crm/accounts/duplicates', { method: 'GET' }),
+
+  /** Without `confirm` this changes nothing and reports what would move. */
+  mergeAccounts: (input: { winnerId: string; loserId: string; confirm?: boolean }) =>
+    request<{
+      dryRun: boolean;
+      moved: Record<string, number>;
+      total: number;
+      winner?: { id: string; name: string };
+      loser?: { id: string; name: string };
+    }>('/api/crm/accounts/merge', { method: 'POST', body: JSON.stringify(input) }),
 
   // ---- Proof of work ----
   jobProofs: (jobId: string) =>
