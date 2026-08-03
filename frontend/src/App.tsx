@@ -35,6 +35,7 @@ import { RequirePlatform } from './components/RequirePlatform';
 import { CampaignsPage } from './pages/CampaignsPage';
 import { ProfilerPage } from './pages/ProfilerPage';
 import { TerritoriesPage } from './pages/TerritoriesPage';
+import { SalesWorkPage } from './pages/SalesWorkPage';
 import { getPlatform } from './lib/usePlatform';
 
 function FullScreenSpinner() {
@@ -146,6 +147,14 @@ export default function App() {
               element: (
                 <RequirePlatform platform="sales">
                   <TerritoriesPage />
+                </RequirePlatform>
+              ),
+            },
+            {
+              path: '/work',
+              element: (
+                <RequirePlatform platform="sales">
+                  <SalesWorkPage />
                 </RequirePlatform>
               ),
             },

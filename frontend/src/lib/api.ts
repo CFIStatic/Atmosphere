@@ -464,6 +464,62 @@ export interface TerritoryMapResponse {
   territories: TerritoryMapEntry[];
 }
 
+/* ---- What the company is doing on the work you sold ---------------------- */
+
+export type WorkTone = 'progress' | 'money' | 'crew' | 'attention' | 'other';
+
+export interface SalesWorkJob {
+  id: string;
+  jobNumber: number | null;
+  title: string;
+  /** Account name, or the contact's if the job has no account. */
+  customer: string | null;
+  status: string;
+  statusLabel: string;
+  /** Still being delivered, as opposed to closed out. */
+  open: boolean;
+  scheduledStart: string | null;
+  contractAmount: number | null;
+  invoicedAmount: number | null;
+  lastEventAt: string | null;
+  lastEventText: string | null;
+  daysQuiet: number | null;
+  /** An open job that has gone longer than its status allows without news. */
+  quiet: boolean;
+}
+
+export interface SalesWorkEvent {
+  id: string;
+  seq: number;
+  jobId: string | null;
+  jobNumber: number | null;
+  jobTitle: string | null;
+  customer: string | null;
+  text: string;
+  tone: WorkTone;
+  by: string | null;
+  at: string;
+}
+
+export interface SalesWorkResponse {
+  scope: 'mine' | 'all';
+  jobs: SalesWorkJob[];
+  latest: SalesWorkEvent[];
+  counts: { open: number; onSite: number; quiet: number; awaitingPayment: number };
+}
+
+export interface SalesWorkDetail {
+  job: SalesWorkJob & {
+    workType: string | null;
+    scheduledEnd: string | null;
+    actualStart: string | null;
+    actualEnd: string | null;
+    paidAmount: number | null;
+  };
+  crew: Array<{ userId: string; name: string; role: string; since: string }>;
+  timeline: Array<{ id: string; seq: number; text: string; tone: WorkTone; by: string | null; at: string }>;
+}
+
 export type CampaignStatus = 'draft' | 'active' | 'paused' | 'finished';
 export type CampaignChannel = 'email' | 'call' | 'mixed';
 
@@ -1632,6 +1688,13 @@ export const api = {
       `/api/sales/campaigns/${id}/audience`,
       { method: 'GET' },
     ),
+
+  // ---- Delivery, seen from Sales ----
+  salesWork: (scope: 'mine' | 'all' = 'mine') =>
+    request<SalesWorkResponse>(`/api/sales/work?scope=${scope}`, { method: 'GET' }),
+
+  salesWorkJob: (jobId: string) =>
+    request<SalesWorkDetail>(`/api/sales/work/${jobId}`, { method: 'GET' }),
 
   // ---- Territories ----
   territories: () => request<{ items: Territory[] }>('/api/sales/territories', { method: 'GET' }),

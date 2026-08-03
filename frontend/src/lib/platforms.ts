@@ -18,6 +18,7 @@ import {
   SettingsIcon,
   ShieldIcon,
   ThoughtIcon,
+  ToolIcon,
   UsersIcon,
 } from '../components/icons';
 
@@ -135,7 +136,10 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
           { to: '/campaigns', label: 'Campaigns', Icon: BoltIcon },
           { to: '/territories', label: 'Territories', Icon: GlobeIcon },
           { to: '/web-access', label: 'Carrier portals', Icon: GlobeIcon },
-          { to: '/audit', label: 'Sales agent', Icon: BoltIcon },
+          // Was pointed at the agent audit trail, which is an operations
+          // concern wearing a sales label. Delivery visibility is what somebody
+          // selling actually needs from this slot.
+          { to: '/work', label: "What's happening", Icon: ToolIcon },
           { to: '/memory', label: 'Account history', Icon: ThoughtIcon },
         ],
       },

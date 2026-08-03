@@ -114,6 +114,83 @@ const JOBS: JobSummary[] = [
   { jobId: 'job-1035', jobNumber: 1035, title: 'Lakeview Dental — contents pack-out', status: 'completed', priority: 4, workType: 'mitigation', ownerId: 'u-tom', claimNumber: 'CLM-88371', taskCount: 8, tasksDone: 8, crewSize: 2, minutesLogged: 960, eventCount: 41, lastEvent: 'Final walkthrough signed off', lastEventAt: '2026-07-29T17:30:00Z', contractAmount: 7600, invoicedAmount: 7600, paidAmount: 7600, scheduledStart: null, createdAt: '2026-07-12T09:00:00Z', updatedAt: '2026-07-29T17:30:00Z' },
 ];
 
+/**
+ * Delivery, seen from Sales.
+ *
+ * Built from the same jobs as everything else in this file so the demo stays
+ * coherent — #1041 is the same job on the Sales page as on the Operations
+ * board. One of them has deliberately gone quiet, because the flag is the
+ * point of the page and a demo where everything is fine does not show it.
+ */
+const SALES_WORK_JOBS = [
+  {
+    id: 'job-1038', jobNumber: 1038, title: 'Storm damage — roof tarp and rebuild',
+    customer: 'Cedar Ridge HOA', status: 'in_progress', statusLabel: 'On site', open: true,
+    scheduledStart: '2026-08-01T15:30:00Z', contractAmount: 13980, invoicedAmount: 13980,
+    lastEventAt: '2026-07-26T10:05:00Z',
+    lastEventText: 'Supplement approved by carrier — $4,180',
+    daysQuiet: 8, quiet: true,
+  },
+  {
+    id: 'job-1041', jobNumber: 1041, title: 'Water loss, Class 3',
+    customer: 'Meridian Ave — Elena Nguyen', status: 'in_progress', statusLabel: 'On site', open: true,
+    scheduledStart: '2026-08-01T13:00:00Z', contractAmount: 18420, invoicedAmount: 6200,
+    lastEventAt: '2026-08-03T09:20:00Z',
+    lastEventText: '0.8h logged — Repositioned two air movers to the master bedroom closet; subfloor down to 14.2% from 16.8%',
+    daysQuiet: 0, quiet: false,
+  },
+  {
+    id: 'job-1042', jobNumber: 1042, title: 'Mould remediation, unit 4B',
+    customer: 'Harbor Point Condos', status: 'scheduled', statusLabel: 'Scheduled', open: true,
+    scheduledStart: '2026-08-05T14:00:00Z', contractAmount: 9200, invoicedAmount: 0,
+    lastEventAt: '2026-08-02T16:44:00Z', lastEventText: 'Scheduled',
+    daysQuiet: 1, quiet: false,
+  },
+  {
+    id: 'job-1035', jobNumber: 1035, title: 'Contents pack-out',
+    customer: 'Lakeview Dental', status: 'invoiced', statusLabel: 'Invoiced', open: false,
+    scheduledStart: null, contractAmount: 7600, invoicedAmount: 7600,
+    lastEventAt: '2026-07-29T17:30:00Z', lastEventText: 'Invoice sent',
+    daysQuiet: 5, quiet: false,
+  },
+];
+
+const SALES_WORK_LATEST = [
+  { id: 'ev-1', seq: 910, jobId: 'job-1041', jobNumber: 1041, jobTitle: 'Water loss, Class 3', customer: 'Meridian Ave — Elena Nguyen', text: '0.8h logged — Repositioned two air movers to the master bedroom closet; subfloor down to 14.2% from 16.8%', tone: 'progress', by: 'marcus@ortizrestoration.com', at: '2026-08-03T09:20:00Z' },
+  { id: 'ev-2', seq: 908, jobId: 'job-1041', jobNumber: 1041, jobTitle: 'Water loss, Class 3', customer: 'Meridian Ave — Elena Nguyen', text: 'Finished: Day 8 moisture readings', tone: 'progress', by: 'marcus@ortizrestoration.com', at: '2026-08-03T08:05:00Z' },
+  { id: 'ev-3', seq: 902, jobId: 'job-1042', jobNumber: 1042, jobTitle: 'Mould remediation, unit 4B', customer: 'Harbor Point Condos', text: 'Scheduled', tone: 'progress', by: 'priya@ortizrestoration.com', at: '2026-08-02T16:44:00Z' },
+  { id: 'ev-4', seq: 899, jobId: 'job-1042', jobNumber: 1042, jobTitle: 'Mould remediation, unit 4B', customer: 'Harbor Point Condos', text: 'Crew assigned', tone: 'crew', by: 'priya@ortizrestoration.com', at: '2026-08-02T16:40:00Z' },
+  { id: 'ev-5', seq: 880, jobId: 'job-1041', jobNumber: 1041, jobTitle: 'Water loss, Class 3', customer: 'Meridian Ave — Elena Nguyen', text: '0.3h logged — Adjuster confirmed supplement path for cabinet uppers; send photos with the day-8 update', tone: 'progress', by: 'dana@ortizrestoration.com', at: '2026-08-01T15:00:00Z' },
+  { id: 'ev-6', seq: 861, jobId: 'job-1035', jobNumber: 1035, jobTitle: 'Contents pack-out', customer: 'Lakeview Dental', text: 'Invoice sent', tone: 'money', by: 'dana@ortizrestoration.com', at: '2026-07-29T17:30:00Z' },
+  { id: 'ev-7', seq: 840, jobId: 'job-1038', jobNumber: 1038, jobTitle: 'Storm damage — roof tarp and rebuild', customer: 'Cedar Ridge HOA', text: 'Supplement approved by carrier — $4,180', tone: 'money', by: 'priya@ortizrestoration.com', at: '2026-07-26T10:05:00Z' },
+];
+
+const SALES_WORK_TIMELINES: Record<string, any> = {
+  'job-1041': {
+    crew: [
+      { userId: 'u-marcus', name: 'Marcus Webb', role: 'lead', since: '2026-07-24T15:05:00Z' },
+      { userId: 'u-tom', name: 'Tom Reyes', role: 'crew', since: '2026-07-25T08:00:00Z' },
+    ],
+    timeline: [
+      { id: 'ev-1', seq: 910, text: '0.8h logged — Repositioned two air movers to the master bedroom closet; subfloor down to 14.2% from 16.8%', tone: 'progress', by: 'marcus@ortizrestoration.com', at: '2026-08-03T09:20:00Z' },
+      { id: 'ev-2', seq: 908, text: 'Finished: Day 8 moisture readings', tone: 'progress', by: 'marcus@ortizrestoration.com', at: '2026-08-03T08:05:00Z' },
+      { id: 'ev-5', seq: 880, text: '0.3h logged — Adjuster confirmed supplement path for cabinet uppers; send photos with the day-8 update', tone: 'progress', by: 'dana@ortizrestoration.com', at: '2026-08-01T15:00:00Z' },
+      { id: 'ev-8', seq: 800, text: 'Crew started on site', tone: 'progress', by: 'marcus@ortizrestoration.com', at: '2026-07-24T13:20:00Z' },
+      { id: 'ev-9', seq: 799, text: 'Job opened', tone: 'other', by: 'dana@ortizrestoration.com', at: '2026-07-24T15:02:00Z' },
+    ],
+    scheduledEnd: '2026-08-08T00:00:00Z',
+  },
+  'job-1038': {
+    crew: [{ userId: 'u-priya', name: 'Priya Shah', role: 'supervisor', since: '2026-07-19T09:00:00Z' }],
+    timeline: [
+      { id: 'ev-7', seq: 840, text: 'Supplement approved by carrier — $4,180', tone: 'money', by: 'priya@ortizrestoration.com', at: '2026-07-26T10:05:00Z' },
+      { id: 'ev-10', seq: 812, text: 'Crew started on site', tone: 'progress', by: 'priya@ortizrestoration.com', at: '2026-07-21T14:00:00Z' },
+      { id: 'ev-11', seq: 805, text: 'Job opened', tone: 'other', by: 'dana@ortizrestoration.com', at: '2026-07-19T08:30:00Z' },
+    ],
+    scheduledEnd: '2026-08-14T00:00:00Z',
+  },
+};
+
 const JOB_DETAIL: JobDetail = {
   job: {
     id: 'job-1041', jobNumber: 1041, title: 'Meridian Ave — water loss, Class 3',
@@ -607,8 +684,8 @@ const CAMPAIGN_MEMBERS: Record<string, Array<Record<string, any>>> = {
   ],
 };
 
-/** The activities handler needs the query it was called with. */
-const LAST_QUERY: { leadId?: string } = {};
+/** Handlers that need the query string get it here, since Handler takes only the path match. */
+const LAST_QUERY: { leadId?: string; scope?: string } = {};
 
 const COMPUTER_STATUS: ComputerStatus = {
   enabled: true,
@@ -1015,6 +1092,40 @@ const routes: Array<[string, RegExp, Handler]> = [
       { kind: 'place', id: 'pl-5', name: 'Oakwood Assisted Living', email: null, company: 'Oakwood Assisted Living', title: null, why: 'senior living in this area — no contact yet' },
     ];
     return { body: { members, total: members.length, contacts: 1, places: 5 } };
+  }],
+
+  ['GET', /^\/api\/sales\/work$/, () => {
+    const scope = LAST_QUERY.scope === 'all' ? 'all' : 'mine';
+    // "Mine" is Dana's book; "Everyone" adds the jobs another rep owns.
+    const jobs = scope === 'all'
+      ? SALES_WORK_JOBS
+      : SALES_WORK_JOBS.filter((j) => j.id !== 'job-1038');
+    const ids = new Set(jobs.map((j) => j.id));
+    return {
+      body: {
+        scope,
+        jobs,
+        latest: SALES_WORK_LATEST.filter((e) => ids.has(e.jobId)),
+        counts: {
+          open: jobs.filter((j) => j.open).length,
+          onSite: jobs.filter((j) => j.status === 'in_progress').length,
+          quiet: jobs.filter((j) => j.quiet).length,
+          awaitingPayment: jobs.filter((j) => j.status === 'invoiced').length,
+        },
+      },
+    };
+  }],
+  ['GET', /^\/api\/sales\/work\/([\w-]+)$/, (m) => {
+    const job = SALES_WORK_JOBS.find((j) => j.id === m[1]);
+    if (!job) return { status: 404, body: { error: 'job_not_found' } };
+    const extra = SALES_WORK_TIMELINES[job.id] ?? { crew: [], timeline: [], scheduledEnd: null };
+    return {
+      body: {
+        job: { ...job, workType: 'restoration', scheduledEnd: extra.scheduledEnd, actualStart: null, actualEnd: null, paidAmount: 0 },
+        crew: extra.crew,
+        timeline: extra.timeline,
+      },
+    };
   }],
 
   /* ------------------------------------------- campaigns & territories */
@@ -1435,6 +1546,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
 
   const query = new URLSearchParams((url.split('?')[1] ?? ''));
   LAST_QUERY.leadId = query.get('leadId') ?? undefined;
+  LAST_QUERY.scope = query.get('scope') ?? undefined;
 
   const method = (init?.method ?? 'GET').toUpperCase();
   let body: Record<string, unknown> = {};
