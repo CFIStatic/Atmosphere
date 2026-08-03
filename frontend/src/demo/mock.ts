@@ -1112,6 +1112,111 @@ const ORG_INVITES: Array<Record<string, any>> = [
   { id: 'inv-3', email: 'wrong.address@example.com', role: 'sales', note: null, status: 'revoked', createdAt: '2026-07-20T14:00:00Z', joinedAt: null, revokedAt: '2026-07-20T14:05:00Z' },
 ];
 
+/* ---- Purchasing ----------------------------------------------------------
+ * One placed order (the record it leaves behind) and one draft awaiting
+ * approval (the gate itself). Both stores read as not connected because the
+ * store APIs are pending — the demo shows the honest path: approve, order at
+ * the pro desk, record the number.
+ */
+
+const PURCHASING_SOURCES: Array<Record<string, any>> = [
+  { estimateId: 'est-1041', jobName: 'Meridian Ave — water loss, Class 3', claimNumber: 'CLM-88412', total: 18420, createdAt: '2026-07-30T16:20:00Z' },
+  { estimateId: 'est-1042', jobName: 'Harbor Point Condos — mold remediation, unit 4B', claimNumber: null, total: 9200, createdAt: '2026-07-31T11:05:00Z' },
+];
+
+const TAKEOFF_LINES: Record<string, Array<Record<string, any>>> = {
+  'est-1041': [
+    { materialKey: 'drywall_half', description: 'Drywall, 1/2 in', detail: '4 × 8 ft sheet (32 SF)', orderUnit: 'sheet', quantity: 6, estUnitPrice: 16.5, estTotal: 99, sourceSummary: '164 SF — Tear out wet drywall — flood cut (Master bedroom, Hallway)', sourceLineIds: ['li-1', 'li-2'] },
+    { materialKey: 'joint_compound', description: 'Joint compound, all-purpose', detail: '4.5 gal bucket (~450 SF)', orderUnit: 'bucket', quantity: 1, estUnitPrice: 18.5, estTotal: 18.5, sourceSummary: '164 SF of drywall going back', sourceLineIds: ['li-1', 'li-2'] },
+    { materialKey: 'drywall_tape', description: 'Drywall joint tape', detail: '500 ft roll (~400 SF)', orderUnit: 'roll', quantity: 1, estUnitPrice: 9, estTotal: 9, sourceSummary: '164 SF of drywall going back', sourceLineIds: ['li-1', 'li-2'] },
+    { materialKey: 'drywall_screws', description: 'Drywall screws, 1-1/4 in', detail: '1 lb box (~250 SF)', orderUnit: 'box', quantity: 1, estUnitPrice: 9.5, estTotal: 9.5, sourceSummary: '164 SF of drywall going back', sourceLineIds: ['li-1', 'li-2'] },
+    { materialKey: 'insulation_r13', description: 'Wall insulation, R-13 kraft-faced', detail: 'batt bag (~40 SF)', orderUnit: 'bag', quantity: 3, estUnitPrice: 28, estTotal: 84, sourceSummary: '96 SF — Tear out wet insulation (Master bedroom)', sourceLineIds: ['li-3'] },
+    { materialKey: 'baseboard_mdf', description: 'Baseboard, primed MDF 3-1/4 in', detail: '8 ft length', orderUnit: 'stick', quantity: 9, estUnitPrice: 11, estTotal: 99, sourceSummary: '62 LF — Tear out wet baseboard (Master bedroom, Hallway)', sourceLineIds: ['li-4', 'li-5'] },
+    { materialKey: 'paintable_caulk', description: 'Paintable latex caulk', detail: '10 oz tube (~100 LF)', orderUnit: 'tube', quantity: 1, estUnitPrice: 4, estTotal: 4, sourceSummary: '62 LF of baseboard going back', sourceLineIds: ['li-4', 'li-5'] },
+    { materialKey: 'poly_6mil', description: 'Poly sheeting, 6 mil', detail: '10 × 100 ft roll (1000 SF)', orderUnit: 'roll', quantity: 1, estUnitPrice: 95, estTotal: 95, sourceSummary: '240 SF — Containment barrier / zipper wall (Hallway)', sourceLineIds: ['li-6'] },
+    { materialKey: 'zipper_door', description: 'Containment zipper door kit', detail: 'two heavy-duty zippers per kit', orderUnit: 'kit', quantity: 1, estUnitPrice: 22, estTotal: 22, sourceSummary: '240 SF — Containment barrier / zipper wall (Hallway)', sourceLineIds: ['li-6'] },
+    { materialKey: 'contractor_bags', description: 'Contractor bags, 42 gal 3 mil', detail: '20-count box', orderUnit: 'box', quantity: 1, estUnitPrice: 23, estTotal: 23, sourceSummary: '424 SF of tear-out debris across four trades', sourceLineIds: ['li-1', 'li-2', 'li-3', 'li-4'] },
+    { materialKey: 'ppe_day_kit', description: 'PPE — suit, gloves, respirator cartridges', detail: 'per technician-day', orderUnit: 'kit', quantity: 6, estUnitPrice: 24, estTotal: 144, sourceSummary: '6 DA — Personal protective equipment (Cat 3 water)', sourceLineIds: ['li-7'] },
+  ],
+  'est-1042': [
+    { materialKey: 'poly_6mil', description: 'Poly sheeting, 6 mil', detail: '10 × 100 ft roll (1000 SF)', orderUnit: 'roll', quantity: 2, estUnitPrice: 95, estTotal: 190, sourceSummary: '1520 SF — Containment barrier / zipper wall (unit 4B, corridor)', sourceLineIds: ['li-20'] },
+    { materialKey: 'zipper_door', description: 'Containment zipper door kit', detail: 'two heavy-duty zippers per kit', orderUnit: 'kit', quantity: 4, estUnitPrice: 22, estTotal: 88, sourceSummary: '1520 SF — Containment barrier / zipper wall (unit 4B, corridor)', sourceLineIds: ['li-20'] },
+    { materialKey: 'floor_film', description: 'Floor protection film, self-adhesive', detail: '24 in × 200 ft roll (400 SF)', orderUnit: 'roll', quantity: 1, estUnitPrice: 47, estTotal: 47, sourceSummary: '380 SF — Floor protection (corridor route)', sourceLineIds: ['li-21'] },
+    { materialKey: 'contractor_bags', description: 'Contractor bags, 42 gal 3 mil', detail: '20-count box', orderUnit: 'box', quantity: 1, estUnitPrice: 23, estTotal: 23, sourceSummary: '310 SF of tear-out debris', sourceLineIds: ['li-22'] },
+    { materialKey: 'ppe_day_kit', description: 'PPE — suit, gloves, respirator cartridges', detail: 'per technician-day', orderUnit: 'kit', quantity: 8, estUnitPrice: 24, estTotal: 192, sourceSummary: '8 DA — Personal protective equipment (microbial)', sourceLineIds: ['li-23'] },
+  ],
+};
+
+const TAKEOFFS: Record<string, Record<string, any>> = {
+  'est-1041': {
+    lines: TAKEOFF_LINES['est-1041'],
+    noMaterials: [
+      { catalogKey: 'WTRDHMLGR', description: 'Dehumidifier — large (per 24 hour period)', reason: 'drying equipment, billed by the day' },
+      { catalogKey: 'WTRAMH', description: 'Air mover (per 24 hour period)', reason: 'drying equipment, billed by the day' },
+      { catalogKey: 'WTRXTRC', description: 'Water extraction from carpeted floor', reason: 'extraction — equipment and labour' },
+      { catalogKey: 'WTRDRY', description: 'Daily monitoring visit', reason: 'monitoring labour' },
+    ],
+    unmapped: [],
+    zeroQuantity: 0,
+    estTotal: 607.5,
+  },
+  'est-1042': {
+    lines: TAKEOFF_LINES['est-1042'],
+    noMaterials: [
+      { catalogKey: 'CLNHEPAV', description: 'HEPA vacuuming', reason: 'equipment and labour' },
+      { catalogKey: 'CLNAM', description: 'Air scrubber (per 24 hour period)', reason: 'equipment, billed by the day' },
+      { catalogKey: 'DMONEGP', description: 'Negative pressure setup and monitoring', reason: 'equipment setup' },
+    ],
+    unmapped: [
+      { catalogKey: 'CLNANTIMIC', description: 'Apply antimicrobial agent', quantity: 480, unit: 'SF' },
+    ],
+    zeroQuantity: 0,
+    estTotal: 540,
+  },
+};
+
+const takeoffToPoLines = (estimateId: string, poId: string): Array<Record<string, any>> =>
+  (TAKEOFF_LINES[estimateId] ?? []).map((l, i) => ({
+    id: `pol-${poId}-${i}`,
+    materialKey: l.materialKey,
+    description: l.description,
+    detail: l.detail,
+    quantity: l.quantity,
+    unit: l.orderUnit,
+    unitPrice: l.estUnitPrice,
+    priceBasis: 'estimate',
+    sourceSummary: l.sourceSummary,
+  }));
+
+const PURCHASE_ORDERS: Array<Record<string, any>> = [
+  { id: 'po-2', estimateId: 'est-1042', jobName: 'Harbor Point Condos — mold remediation, unit 4B', claimNumber: null, supplier: 'lowes', vendorAccountId: null, status: 'draft', approvedBy: null, approvedAt: null, placedAt: null, externalRef: null, note: null, createdAt: '2026-08-02T08:30:00Z', updatedAt: '2026-08-02T08:30:00Z' },
+  { id: 'po-1', estimateId: 'est-1041', jobName: 'Meridian Ave — water loss, Class 3', claimNumber: 'CLM-88412', supplier: 'home_depot', vendorAccountId: null, status: 'placed', approvedBy: 'demo-user-1', approvedAt: '2026-07-31T09:12:00Z', placedAt: '2026-07-31T09:40:00Z', externalRef: 'HD-7203-4415', note: 'Pickup — Burnet Rd pro desk, 7am', createdAt: '2026-07-30T17:01:00Z', updatedAt: '2026-07-31T09:40:00Z' },
+];
+
+const PO_LINES: Record<string, Array<Record<string, any>>> = {
+  'po-1': takeoffToPoLines('est-1041', 'po-1'),
+  'po-2': takeoffToPoLines('est-1042', 'po-2'),
+};
+
+const PO_EVENTS: Record<string, Array<Record<string, any>>> = {
+  'po-1': [
+    { id: 'poe-1', actorName: 'Tom Reyes', action: 'created', detail: '11 lines, estimated $607.00, from Meridian Ave — water loss, Class 3', at: '2026-07-30T17:01:00Z' },
+    { id: 'poe-2', actorName: 'Dana Ortiz', action: 'approved', detail: 'estimated $607.00', at: '2026-07-31T09:12:00Z' },
+    { id: 'poe-3', actorName: 'Dana Ortiz', action: 'placed', detail: 'recorded — ordered outside Atmosphere, ref HD-7203-4415', at: '2026-07-31T09:40:00Z' },
+  ],
+  'po-2': [
+    { id: 'poe-4', actorName: 'Dana Ortiz', action: 'created', detail: '5 lines, estimated $540.00, from Harbor Point Condos — mold remediation, unit 4B', at: '2026-08-02T08:30:00Z' },
+  ],
+};
+
+const SUPPLIER_STATUS: Array<Record<string, any>> = [
+  { id: 'home_depot', label: 'The Home Depot', connected: false, accountLabel: null, connectedAt: null },
+  { id: 'lowes', label: "Lowe's", connected: false, accountLabel: null, connectedAt: null },
+];
+
+const poTotal = (lines: Array<Record<string, any>>) =>
+  Math.round(lines.reduce((sum, l) => sum + l.quantity * (l.unitPrice ?? 0), 0) * 100) / 100;
+
 const CAMPAIGNS: Array<Record<string, any>> = [
   {
     id: 'camp-1', name: 'Q3 property managers — North Austin',
@@ -1859,6 +1964,131 @@ const routes: Array<[string, RegExp, Handler]> = [
     const record = PROOF_DAYS[m[1]];
     const day = record?.days?.find((d: any) => d.workDate === m[2] && d.partyId === b.partyId);
     return { body: { summary: day?.aiSummary ?? null, findings: day?.aiFindings ?? null, model: 'claude' } };
+  }],
+
+  /* ------------------------------------------- purchasing */
+  ['GET', /^\/api\/purchasing\/sources$/, () => ({ body: { sources: PURCHASING_SOURCES } })],
+  ['GET', /^\/api\/purchasing\/suppliers$/, () => ({ body: { suppliers: SUPPLIER_STATUS } })],
+  ['POST', /^\/api\/purchasing\/takeoff$/, (_m, b) => {
+    const source = PURCHASING_SOURCES.find((s) => s.estimateId === b.estimateId);
+    const takeoff = TAKEOFFS[String(b.estimateId)];
+    if (!source || !takeoff) {
+      return { status: 404, body: { error: 'That estimate was not found.', code: 'estimate_not_found' } };
+    }
+    return { body: { source, takeoff } };
+  }],
+  ['GET', /^\/api\/purchasing\/orders\/([\w-]+)$/, (m) => {
+    const order = PURCHASE_ORDERS.find((o) => o.id === m[1]);
+    if (!order) return { status: 404, body: { error: 'No such purchase order.', code: 'po_not_found' } };
+    const lines = PO_LINES[order.id] ?? [];
+    return { body: { order, lines, estTotal: poTotal(lines), events: PO_EVENTS[order.id] ?? [] } };
+  }],
+  ['GET', /^\/api\/purchasing\/orders$/, () => ({
+    body: {
+      orders: PURCHASE_ORDERS.map((o) => ({
+        ...o,
+        lineCount: (PO_LINES[o.id] ?? []).length,
+        estTotal: poTotal(PO_LINES[o.id] ?? []),
+      })),
+    },
+  })],
+  ['POST', /^\/api\/purchasing\/orders\/([\w-]+)\/approve$/, (m) => {
+    const order = PURCHASE_ORDERS.find((o) => o.id === m[1]);
+    if (!order) return { status: 404, body: { error: 'No such purchase order.', code: 'po_not_found' } };
+    if (order.status !== 'draft') {
+      return { status: 409, body: { error: `This order is ${order.status}, not a draft.`, code: 'not_draft' } };
+    }
+    order.status = 'approved';
+    order.approvedBy = 'demo-user-1';
+    order.approvedAt = new Date().toISOString();
+    (PO_EVENTS[order.id] ??= []).push({
+      id: `poe-${Date.now()}`, actorName: 'Dana Ortiz', action: 'approved',
+      detail: `estimated $${poTotal(PO_LINES[order.id] ?? []).toFixed(2)}`, at: new Date().toISOString(),
+    });
+    return { body: { order } };
+  }],
+  ['POST', /^\/api\/purchasing\/orders\/([\w-]+)\/reopen$/, (m) => {
+    const order = PURCHASE_ORDERS.find((o) => o.id === m[1]);
+    if (!order) return { status: 404, body: { error: 'No such purchase order.', code: 'po_not_found' } };
+    if (order.status !== 'approved') {
+      return { status: 409, body: { error: 'Only an approved order can be reopened.', code: 'not_approved' } };
+    }
+    order.status = 'draft';
+    order.approvedBy = null;
+    order.approvedAt = null;
+    (PO_EVENTS[order.id] ??= []).push({
+      id: `poe-${Date.now()}`, actorName: 'Dana Ortiz', action: 'reopened', detail: '', at: new Date().toISOString(),
+    });
+    return { body: { order } };
+  }],
+  ['POST', /^\/api\/purchasing\/orders\/([\w-]+)\/place$/, (m, b) => {
+    const order = PURCHASE_ORDERS.find((o) => o.id === m[1]);
+    if (!order) return { status: 404, body: { error: 'No such purchase order.', code: 'po_not_found' } };
+    if (order.status !== 'approved') {
+      return { status: 409, body: { error: 'An order is placed only after it is approved.', code: 'not_approved' } };
+    }
+    const reference = typeof b.reference === 'string' ? b.reference.trim() : '';
+    if (!reference && order.supplier !== 'manual') {
+      const label = order.supplier === 'home_depot' ? 'The Home Depot' : "Lowe's";
+      return {
+        status: 409,
+        body: {
+          error: `${label} is not connected. Connect it in Purchase orders → Suppliers, or place the order there yourself and record the order number here.`,
+          code: 'supplier_not_connected',
+        },
+      };
+    }
+    order.status = 'placed';
+    order.placedAt = new Date().toISOString();
+    order.externalRef = reference || null;
+    (PO_EVENTS[order.id] ??= []).push({
+      id: `poe-${Date.now()}`, actorName: 'Dana Ortiz', action: 'placed',
+      detail: reference ? `recorded — ordered outside Atmosphere, ref ${reference}` : 'recorded — ordered outside Atmosphere',
+      at: new Date().toISOString(),
+    });
+    return { body: { order } };
+  }],
+  ['POST', /^\/api\/purchasing\/orders\/([\w-]+)\/cancel$/, (m) => {
+    const order = PURCHASE_ORDERS.find((o) => o.id === m[1]);
+    if (!order) return { status: 404, body: { error: 'No such purchase order.', code: 'po_not_found' } };
+    if (order.status === 'placed') {
+      return { status: 409, body: { error: 'A placed order is a record of money spent — cancel it with the store, then note the outcome on the job.', code: 'already_placed' } };
+    }
+    order.status = 'cancelled';
+    (PO_EVENTS[order.id] ??= []).push({
+      id: `poe-${Date.now()}`, actorName: 'Dana Ortiz', action: 'cancelled', detail: '', at: new Date().toISOString(),
+    });
+    return { body: { order } };
+  }],
+  ['POST', /^\/api\/purchasing\/orders$/, (_m, b) => {
+    const id = `po-new-${PURCHASE_ORDERS.length + 1}`;
+    const now = new Date().toISOString();
+    const lines = Array.isArray(b.lines) ? (b.lines as Array<Record<string, any>>) : [];
+    const order = {
+      id,
+      estimateId: b.estimateId ?? null,
+      jobName: String(b.jobName ?? 'Untitled job'),
+      claimNumber: b.claimNumber ?? null,
+      supplier: b.supplier ?? 'manual',
+      vendorAccountId: null,
+      status: 'draft',
+      approvedBy: null, approvedAt: null, placedAt: null, externalRef: null,
+      note: b.note ?? null,
+      createdAt: now, updatedAt: now,
+    };
+    PURCHASE_ORDERS.unshift(order);
+    PO_LINES[id] = lines.map((l, i) => ({
+      id: `pol-${id}-${i}`,
+      materialKey: l.materialKey, description: l.description, detail: l.detail ?? null,
+      quantity: l.quantity, unit: l.unit, unitPrice: l.unitPrice ?? null,
+      priceBasis: 'estimate', sourceSummary: l.sourceSummary ?? null,
+    }));
+    PO_EVENTS[id] = [{
+      id: `poe-${id}`, actorName: 'Dana Ortiz', action: 'created',
+      detail: `${lines.length} lines, estimated $${poTotal(PO_LINES[id]).toFixed(2)}, from ${order.jobName}`,
+      at: now,
+    }];
+    return { status: 201, body: { order } };
   }],
 
   /* ------------------------------------------- campaigns & territories */

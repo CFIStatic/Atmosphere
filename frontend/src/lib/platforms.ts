@@ -168,6 +168,9 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
           { to: '/shared', label: 'Shared Dashboard', Icon: UsersIcon },
           { to: '/schedule', label: 'Schedule', Icon: HistoryIcon },
           { to: '/mitigation', label: 'Estimating', Icon: ArtifactIcon },
+          // Directly below Estimating because that is where its numbers come
+          // from: the estimate's quantities become the shopping list.
+          { to: '/purchase-orders', label: 'Purchase orders', Icon: CreditCardIcon },
         ],
       },
       {

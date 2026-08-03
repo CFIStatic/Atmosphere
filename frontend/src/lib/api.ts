@@ -877,6 +877,89 @@ export interface OrgInvite {
   revokedAt?: string | null;
 }
 
+/* ---- Purchasing ---------------------------------------------------------- */
+
+export type PurchaseOrderStatus = 'draft' | 'approved' | 'placed' | 'cancelled';
+export type SupplierId = 'home_depot' | 'lowes' | 'manual';
+
+export interface PurchaseOrder {
+  id: string;
+  estimateId: string | null;
+  jobName: string;
+  claimNumber: string | null;
+  supplier: SupplierId;
+  vendorAccountId: string | null;
+  status: PurchaseOrderStatus;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  placedAt: string | null;
+  externalRef: string | null;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** List view only. */
+  lineCount?: number;
+  estTotal?: number;
+}
+
+export interface PurchaseOrderLine {
+  id: string;
+  materialKey: string;
+  description: string;
+  detail: string | null;
+  quantity: number;
+  unit: string;
+  unitPrice: number | null;
+  /** 'estimate' until a supplier has actually quoted it. */
+  priceBasis: 'estimate' | 'quoted';
+  sourceSummary: string | null;
+}
+
+export interface PurchaseOrderEvent {
+  id: string;
+  actorName: string;
+  action: 'created' | 'edited' | 'approved' | 'reopened' | 'placed' | 'cancelled';
+  detail: string;
+  at: string;
+}
+
+export interface TakeoffLine {
+  materialKey: string;
+  description: string;
+  detail: string;
+  orderUnit: string;
+  quantity: number;
+  estUnitPrice: number;
+  estTotal: number;
+  sourceSummary: string;
+  sourceLineIds: string[];
+  note?: string;
+}
+
+export interface TakeoffResult {
+  lines: TakeoffLine[];
+  noMaterials: Array<{ catalogKey: string; description: string; reason: string }>;
+  unmapped: Array<{ catalogKey: string; description: string; quantity: number; unit: string }>;
+  zeroQuantity: number;
+  estTotal: number;
+}
+
+export interface TakeoffSource {
+  estimateId: string;
+  jobName: string;
+  claimNumber: string | null;
+  total?: number;
+  createdAt: string;
+}
+
+export interface SupplierStatus {
+  id: 'home_depot' | 'lowes';
+  label: string;
+  connected: boolean;
+  accountLabel: string | null;
+  connectedAt: string | null;
+}
+
 export type CampaignStatus = 'draft' | 'active' | 'paused' | 'finished';
 export type CampaignChannel = 'email' | 'call' | 'mixed';
 
@@ -2147,6 +2230,75 @@ export const api = {
 
   revokeOrgInvite: (id: string) =>
     request<{ ok: boolean }>(`/api/org/invites/${id}/revoke`, { method: 'POST' }),
+
+  // ---- Purchasing ----
+  purchasingSources: () =>
+    request<{ sources: TakeoffSource[] }>('/api/purchasing/sources', { method: 'GET' }),
+
+  purchasingTakeoff: (estimateId: string) =>
+    request<{ source: TakeoffSource; takeoff: TakeoffResult }>('/api/purchasing/takeoff', {
+      method: 'POST',
+      body: JSON.stringify({ estimateId }),
+    }),
+
+  purchaseOrders: () =>
+    request<{ orders: PurchaseOrder[] }>('/api/purchasing/orders', { method: 'GET' }),
+
+  purchaseOrder: (id: string) =>
+    request<{
+      order: PurchaseOrder;
+      lines: PurchaseOrderLine[];
+      estTotal: number;
+      events: PurchaseOrderEvent[];
+    }>(`/api/purchasing/orders/${id}`, { method: 'GET' }),
+
+  createPurchaseOrder: (input: {
+    estimateId?: string | null;
+    jobName: string;
+    claimNumber?: string | null;
+    supplier: SupplierId;
+    note?: string | null;
+    lines: Array<{
+      materialKey: string;
+      description: string;
+      detail?: string | null;
+      quantity: number;
+      unit: string;
+      unitPrice?: number | null;
+      sourceSummary?: string | null;
+    }>;
+  }) =>
+    request<{ order: PurchaseOrder }>('/api/purchasing/orders', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  approvePurchaseOrder: (id: string) =>
+    request<{ order: PurchaseOrder }>(`/api/purchasing/orders/${id}/approve`, { method: 'POST' }),
+
+  reopenPurchaseOrder: (id: string) =>
+    request<{ order: PurchaseOrder }>(`/api/purchasing/orders/${id}/reopen`, { method: 'POST' }),
+
+  placePurchaseOrder: (id: string, reference?: string) =>
+    request<{ order: PurchaseOrder }>(`/api/purchasing/orders/${id}/place`, {
+      method: 'POST',
+      body: JSON.stringify({ reference: reference || undefined }),
+    }),
+
+  cancelPurchaseOrder: (id: string) =>
+    request<{ order: PurchaseOrder }>(`/api/purchasing/orders/${id}/cancel`, { method: 'POST' }),
+
+  purchasingSuppliers: () =>
+    request<{ suppliers: SupplierStatus[] }>('/api/purchasing/suppliers', { method: 'GET' }),
+
+  connectSupplier: (id: 'home_depot' | 'lowes', fields: Record<string, string>, accountLabel?: string) =>
+    request<{ ok: boolean }>(`/api/purchasing/suppliers/${id}/connect`, {
+      method: 'POST',
+      body: JSON.stringify({ fields, accountLabel }),
+    }),
+
+  disconnectSupplier: (id: 'home_depot' | 'lowes') =>
+    request<{ ok: boolean }>(`/api/purchasing/suppliers/${id}`, { method: 'DELETE' }),
 
   // ---- Account structure ----
   accountStructure: (accountId: string) =>

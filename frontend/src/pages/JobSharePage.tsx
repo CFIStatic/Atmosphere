@@ -316,9 +316,49 @@ export function JobSharePage() {
               </ol>
             </section>
           )}
+
+          <AtmospherePitch company={view.you.company} />
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * The lure.
+ *
+ * A sub lands on this page because a GC sent them here, and everything above
+ * quietly demonstrates the product: a scope that cannot be argued about, a
+ * record that pays. This is the one place the page speaks for itself — after
+ * the work is done, at the bottom, in the sub's own terms. Their pain is that
+ * every builder runs a different system and their history resets with each
+ * one; the pitch is that the record they just added to could be theirs.
+ *
+ * Deliberately not a banner, not a popup, and never between the crew and the
+ * upload button. A lure that gets in the way of the day's work would cost the
+ * GC's trust — and the GC is who brought us here.
+ */
+function AtmospherePitch({ company }: { company: string }) {
+  return (
+    <footer className="mt-8 rounded-xl border border-brand-200 bg-brand-600/5 p-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-brand-600">
+        Powered by Atmosphere
+      </p>
+      <p className="mt-1.5 text-sm font-semibold text-ink-900">
+        This record works for {company} too.
+      </p>
+      <p className="mt-1 text-xs text-ink-600">
+        Every video you file and every scope you sign lives in a builder's account today. With your
+        own Atmosphere account, your proof-of-work follows you — every job, every builder, one
+        history that shows how you work. Free for subcontractors.
+      </p>
+      <a
+        href="/login?mode=signup&src=job-share"
+        className="mt-3 inline-block rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900 transition hover:bg-brand-700"
+      >
+        Get your own record
+      </a>
+    </footer>
   );
 }
 
@@ -486,6 +526,19 @@ function ProofSection({
       {done && (
         <p className="mt-3 rounded-lg border border-success-200 bg-success-50 px-3 py-2 text-xs text-success-600">
           {done}
+        </p>
+      )}
+
+      {/* The moment the day's proof exists is the one moment the pitch is
+          about something real that just happened — so it appears here, once,
+          and only after the work is filed. */}
+      {done?.startsWith('After') && (
+        <p className="mt-2 text-[11px] text-ink-500">
+          That video is your record as much as the job's.{' '}
+          <a href="/login?mode=signup&src=proof-filed" className="font-medium text-brand-600 hover:underline">
+            Keep every day's proof in your own Atmosphere account
+          </a>
+          {' '}— free for subs.
         </p>
       )}
 
