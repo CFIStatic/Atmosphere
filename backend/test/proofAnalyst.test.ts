@@ -153,3 +153,59 @@ test('no verdicts at all is valid — the camera may not have covered anything',
   assert.ok(parsed);
   assert.deepEqual(parsed.scopeVerdicts, []);
 });
+
+/* ---- Material change ----------------------------------------------------- */
+
+test('the material-change verdict parses, with its grounding', () => {
+  const parsed = parseAnalysis(
+    JSON.stringify({
+      summary: 'Roof work on the north slope.',
+      materialChange: 'significant',
+      materialBecause: 'Bare deck in the before; underlayment and shingles across two thirds in the after.',
+      changes: ['Underlayment laid', 'Shingles to the ridge line'],
+    }),
+  );
+  assert.ok(parsed);
+  assert.equal(parsed.materialChange, 'significant');
+  assert.match(parsed.materialBecause, /underlayment/i);
+});
+
+test('a change-claim with nothing behind it is downgraded, not trusted', () => {
+  // The exact shape of output that releases a payment for work the frames do
+  // not show: "significant", and an empty changes list.
+  const parsed = parseAnalysis(
+    JSON.stringify({
+      summary: 'Lots of progress.',
+      materialChange: 'significant',
+      materialBecause: 'It seems like a full day of work.',
+      changes: [],
+    }),
+  );
+  assert.ok(parsed);
+  assert.equal(parsed.materialChange, 'unclear');
+  assert.match(parsed.materialBecause, /cited nothing visible/);
+});
+
+test('"none" needs no cited changes — that is what none means', () => {
+  const parsed = parseAnalysis(
+    JSON.stringify({
+      summary: 'The frames look substantially the same.',
+      materialChange: 'none',
+      materialBecause: 'Same bare studs, same debris, same equipment positions.',
+      changes: [],
+    }),
+  );
+  assert.ok(parsed);
+  assert.equal(parsed.materialChange, 'none');
+});
+
+test('a missing or invented verdict word reads as unclear, never as a pass', () => {
+  const missing = parseAnalysis(JSON.stringify({ summary: 'Something happened.' }));
+  assert.equal(missing?.materialChange, 'unclear');
+  assert.match(missing!.materialBecause, /did not say/);
+
+  const invented = parseAnalysis(
+    JSON.stringify({ summary: 'Something happened.', materialChange: 'substantial-ish' }),
+  );
+  assert.equal(invented?.materialChange, 'unclear');
+});

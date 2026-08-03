@@ -31,6 +31,18 @@ import { SpinnerIcon } from '../icons';
  * job on this day. A beautiful summary of the wrong house is worse than none.
  */
 
+/**
+ * The verdict, worn on the day row. 'none' is deliberately the loud one:
+ * a crew claimed a day and the footage shows nothing changed, which is the
+ * sentence this feature exists to put in front of a project manager.
+ */
+const MATERIAL_CHIP: Record<string, { word: string; style: string }> = {
+  significant: { word: 'work changed', style: 'bg-success-50 text-success-600' },
+  minor: { word: 'small change', style: 'bg-paper-200/60 text-ink-600' },
+  none: { word: 'no visible change', style: 'bg-caution-50 text-caution-600' },
+  unclear: { word: 'could not compare', style: 'bg-paper-200/60 text-ink-500' },
+};
+
 const VERDICT_DOT: Record<string, string> = {
   pass: 'bg-success-600',
   fail: 'bg-danger-600',
@@ -192,6 +204,13 @@ export function ProofOfWork({ jobId }: { jobId: string }) {
                       <span className="mt-0.5 block text-xs text-ink-600">{day.summary}</span>
                     </span>
                     <span className="flex shrink-0 items-center gap-1.5">
+                      {day.materialChange && MATERIAL_CHIP[day.materialChange] && (
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${MATERIAL_CHIP[day.materialChange].style}`}
+                        >
+                          {MATERIAL_CHIP[day.materialChange].word}
+                        </span>
+                      )}
                       {/* Two badges, never merged. "Before + after are here" and
                           "this is safe to pay against" are different claims. */}
                       <span
@@ -231,6 +250,25 @@ export function ProofOfWork({ jobId }: { jobId: string }) {
                 {on && (
                   <div className="border-t border-line/60 px-3 py-3">
                     <p className="text-[11px] font-medium text-ink-700">{day.payableBecause}</p>
+                    {/* The states the old pipeline hid. A failed read is a
+                        breakage with a retry, not a silence; a skipped one
+                        says what was missing. */}
+                    {day.analysisStatus === 'failed' && (
+                      <p className="mt-1 rounded-lg border border-danger-200 bg-danger-50 px-2.5 py-1.5 text-[11px] text-danger-600">
+                        The assistant could not read this day
+                        {day.analysisError ? ` — ${day.analysisError}` : ''}. Try it again below.
+                      </p>
+                    )}
+                    {day.analysisStatus === 'skipped' && day.analysisError && (
+                      <p className="mt-1 rounded-lg border border-line px-2.5 py-1.5 text-[11px] text-ink-500">
+                        Not analysed: {day.analysisError}
+                      </p>
+                    )}
+                    {(day.analysisStatus === 'queued' || day.analysisStatus === 'running') && (
+                      <p className="mt-1 text-[11px] text-ink-500">
+                        The assistant is reading this day now — check back in a minute.
+                      </p>
+                    )}
 
                     <ul className="mt-2 grid gap-1 sm:grid-cols-2">
                       {day.checks.map((check) => (
@@ -257,6 +295,12 @@ export function ProofOfWork({ jobId }: { jobId: string }) {
                           What the footage shows
                         </p>
                         <p className="mt-1 text-xs text-ink-800">{day.aiSummary}</p>
+                        {day.aiFindings?.materialBecause && (
+                          <p className="mt-1 text-[11px] text-ink-600">
+                            <span className="text-ink-500">Why: </span>
+                            {day.aiFindings.materialBecause}
+                          </p>
+                        )}
                         {day.aiFindings?.changes?.length ? (
                           <ul className="mt-1.5 space-y-0.5">
                             {day.aiFindings.changes.map((c) => (
@@ -340,7 +384,11 @@ export function ProofOfWork({ jobId }: { jobId: string }) {
                         {busy === `${day.partyId}|${day.workDate}` && (
                           <SpinnerIcon className="animate-spin" width={11} height={11} />
                         )}
-                        {day.aiSummary ? 'Watch it again' : 'Have the AI watch it'}
+                        {day.analysisStatus === 'failed'
+                          ? 'Try the AI again'
+                          : day.aiSummary
+                            ? 'Watch it again'
+                            : 'Have the AI watch it'}
                       </button>
                       {!day.accepted && (
                         <>

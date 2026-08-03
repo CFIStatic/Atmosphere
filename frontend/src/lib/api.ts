@@ -715,7 +715,17 @@ export interface ProofDay {
   accepted: boolean;
   rejected: boolean;
   aiSummary: string | null;
+  /**
+   * Did the work area visibly change between the two videos. 'none' is an
+   * answer, not a failure — a claimed day with no visible change is exactly
+   * what this surfaces.
+   */
+  materialChange?: 'significant' | 'minor' | 'none' | 'unclear' | null;
+  /** Lifecycle of the model read: queued, running, done, skipped, failed. */
+  analysisStatus?: string | null;
+  analysisError?: string | null;
   aiFindings: {
+    materialBecause?: string;
     changes?: string[];
     cannotTell?: string[];
     scopeTouched?: string[];

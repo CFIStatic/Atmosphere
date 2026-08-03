@@ -50,9 +50,24 @@ export interface ScopeVerdict {
   because: string;
 }
 
+/**
+ * Did the work area visibly change between the two videos?
+ *
+ * The verdict the general contractor actually opens the page for, stated
+ * rather than left implied by the summary. 'none' is not a failure mode — "you
+ * claimed a day and the footage shows nothing changed" is exactly the sentence
+ * this feature exists to produce. 'unclear' is for footage that does not allow
+ * the comparison, which is a different claim from "nothing changed" and must
+ * never collapse into it.
+ */
+export type MaterialChange = 'significant' | 'minor' | 'none' | 'unclear';
+
 export interface ProofAnalysis {
   /** Two or three sentences a project manager can read at a glance. */
   summary: string;
+  materialChange: MaterialChange;
+  /** What in the frames supports the verdict, so it can be checked. */
+  materialBecause: string;
   /** Concrete, visible differences between before and after. */
   changes: string[];
   /** Things the frames genuinely do not settle. Empty is suspicious, not good. */
@@ -77,9 +92,10 @@ Your output is read by a project manager deciding whether to pay for that day. T
 5. Under concerns, note anything visible that looks like damage, a hazard, or work outside the listed scope. Nothing else.
 6. Never mention money, hours, or whether the work seems worth paying for. You are not being asked.
 7. Give a verdict for every scope line you are shown, using its exact title. Use "appears_complete" only when the after frames show the finished state of that line. Use "in_progress" when work on it is visible but unfinished. Use "not_visible" when the frames simply do not cover it — that is the correct answer far more often than the other two, and choosing it costs nothing. Never mark a line complete because the other lines are.
+8. State whether the work area materially changed between the two videos. Use "significant" only when the after frames show the area in a clearly different state AND you have listed those differences under changes. Use "minor" for small visible differences. Use "none" when the frames look substantially the same — say it plainly; it is an important answer, not a failure. Use "unclear" when lighting, framing or coverage make the comparison unreliable. Never infer change from hours elapsed, from the scope, or from what a trade would normally have done.
 
 Reply with JSON only, no prose around it:
-{"summary": string, "changes": string[], "cannotTell": string[], "scopeTouched": string[], "scopeVerdicts": [{"title": string, "verdict": "appears_complete" | "in_progress" | "not_visible", "because": string}], "concerns": string[]}`;
+{"summary": string, "materialChange": "significant" | "minor" | "none" | "unclear", "materialBecause": string, "changes": string[], "cannotTell": string[], "scopeTouched": string[], "scopeVerdicts": [{"title": string, "verdict": "appears_complete" | "in_progress" | "not_visible", "because": string}], "concerns": string[]}`;
 
 /** Frames get expensive fast; this is enough to see a room change. */
 const MAX_FRAMES_PER_VIDEO = 6;
@@ -149,9 +165,32 @@ export function parseAnalysis(text: string): Omit<ProofAnalysis, 'model'> | null
         .slice(0, 20)
     : [];
 
+  const changes = list(parsed.changes);
+
+  // The verdict is only as good as its grounding. A "significant" with an
+  // empty changes list is a claim with nothing behind it — and it is the exact
+  // shape of output that releases a payment for work the frames do not show.
+  // Downgraded to 'unclear' rather than discarded, because the summary and the
+  // scope verdicts may still be sound.
+  const changeWords = new Set<MaterialChange>(['significant', 'minor', 'none', 'unclear']);
+  let materialChange: MaterialChange = changeWords.has(parsed.materialChange)
+    ? parsed.materialChange
+    : 'unclear';
+  let materialBecause =
+    typeof parsed.materialBecause === 'string' ? parsed.materialBecause.trim().slice(0, 500) : '';
+  if ((materialChange === 'significant' || materialChange === 'minor') && changes.length === 0) {
+    materialChange = 'unclear';
+    materialBecause = 'The analysis claimed a change but cited nothing visible to support it.';
+  }
+  if (!materialBecause && materialChange === 'unclear') {
+    materialBecause = 'The analysis did not say whether the work area changed.';
+  }
+
   return {
     summary: parsed.summary.trim().slice(0, 2000),
-    changes: list(parsed.changes),
+    materialChange,
+    materialBecause,
+    changes,
     cannotTell: list(parsed.cannotTell),
     scopeTouched: list(parsed.scopeTouched),
     scopeVerdicts,

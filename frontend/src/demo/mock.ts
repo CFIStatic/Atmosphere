@@ -894,6 +894,7 @@ const PROOF_DAYS: Record<string, any> = {
         summary: 'Before and after both check out.',
         payable: true, payableBecause: 'Before and after both check out on every count.',
         accepted: false, rejected: false,
+        materialChange: 'significant', analysisStatus: 'done', analysisError: null,
         checks: [
           { key: 'before.on_site', verdict: 'pass', detail: 'Filmed at the site.' },
           { key: 'before.same_day', verdict: 'pass', detail: 'Filmed on 2026-08-05.' },
@@ -909,6 +910,7 @@ const PROOF_DAYS: Record<string, any> = {
         ],
         aiSummary: 'The north slope is stripped to the deck in the before frames and fully dried-in with underlayment and new shingles across roughly two thirds of it in the after. Six sheets of new decking are visible in the valley where the before shows dark, delaminated sheathing.',
         aiFindings: {
+          materialBecause: 'The before shows bare stripped deck; the after shows underlayment and shingles across two thirds of the slope, with new decking in the valley.',
           changes: [
             'North valley: dark delaminated decking replaced with new sheets',
             'Underlayment laid across the full north slope',
@@ -931,6 +933,7 @@ const PROOF_DAYS: Record<string, any> = {
         summary: '1 check failed. Do not pay against this without asking.',
         payable: false, payableBecause: 'Filmed 2.14 miles from the site — outside the 0.25-mile radius.',
         accepted: false, rejected: false,
+        materialChange: 'unclear', analysisStatus: 'done', analysisError: null,
         checks: [
           { key: 'before.on_site', verdict: 'pass', detail: 'Filmed 0.03 miles from the site.' },
           { key: 'before.same_day', verdict: 'pass', detail: 'Filmed on 2026-08-04.' },
@@ -946,6 +949,7 @@ const PROOF_DAYS: Record<string, any> = {
         ],
         aiSummary: 'The after frames show a different roof pitch and a different street elevation from the before. Both show roofing work in progress.',
         aiFindings: {
+          materialBecause: 'The two videos do not appear to show the same building, so no before-and-after comparison is possible.',
           changes: [],
           cannotTell: ['The two videos do not appear to show the same building'],
           scopeTouched: [],
@@ -959,6 +963,7 @@ const PROOF_DAYS: Record<string, any> = {
         summary: 'Started but not finished: no after video yet.',
         payable: false, payableBecause: 'A day needs both a before and an after.',
         accepted: false, rejected: false,
+        materialChange: null, analysisStatus: 'skipped', analysisError: 'The day does not have both videos yet.',
         checks: [
           { key: 'before.on_site', verdict: 'unknown', detail: 'The video carries no location. Ask them to allow location in the app.' },
           { key: 'before.same_day', verdict: 'pass', detail: 'Filmed on 2026-08-05.' },
@@ -975,6 +980,7 @@ const PROOF_DAYS: Record<string, any> = {
         summary: 'Nothing contradicts it, but 2 things could not be checked.',
         payable: false, payableBecause: '2 things could not be checked — The video carries no location. Ask them to allow location in the app.',
         accepted: true, rejected: false,
+        materialChange: 'significant', analysisStatus: 'done', analysisError: null,
         checks: [
           { key: 'before.on_site', verdict: 'unknown', detail: 'The video carries no location. Ask them to allow location in the app.' },
           { key: 'before.same_day', verdict: 'pass', detail: 'Filmed on 2026-08-01.' },

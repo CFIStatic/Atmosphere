@@ -181,7 +181,7 @@ export function SharedDashboardPage() {
             ))}
           </div>
 
-          <div className="mt-4 grid gap-4 lg:grid-cols-[20rem_minmax(0,1fr)] lg:items-start">
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[20rem_minmax(0,1fr)] lg:items-start">
             {/* The jobs, worst first. This page is checked, not browsed. */}
             <ul className="rounded-xl glass-card lg:sticky lg:top-6">
               {list.map((job) => {
@@ -222,7 +222,7 @@ export function SharedDashboardPage() {
               })}
             </ul>
 
-            <div className="space-y-4">
+            <div className="min-w-0 space-y-4">
               {loading && !record ? (
                 <p className="text-sm text-ink-600">Opening…</p>
               ) : !record ? (

@@ -9,7 +9,14 @@ import {
   payable,
   type ProofUpload,
 } from '../shared/proofVerifier.js';
-import { analyseProofDay, answerFromProofs, type ProofFrame } from '../shared/proofAnalyst.js';
+import {
+  analyseProofDay,
+  answerFromProofs,
+  type MaterialChange,
+  type ProofFrame,
+} from '../shared/proofAnalyst.js';
+import { RetryQueue } from '../shared/retryQueue.js';
+import { isModelProviderConfigured } from '../lib/anthropic.js';
 
 /**
  * Proof of work: the endpoints.
@@ -32,7 +39,8 @@ export const PROOF_BUCKET = 'job-proofs';
 const PROOF_SELECT =
   'id, party_id, work_date, phase, storage_path, byte_size, duration_seconds, content_hash, ' +
   'captured_at, received_at, lat, lon, accuracy_m, state, checks, ai_summary, ai_findings, ' +
-  'ai_model, decided_at, decided_note, created_at';
+  'ai_model, ai_material_change, analysis_status, analysis_error, analysed_at, ' +
+  'decided_at, decided_note, created_at';
 
 /** The row shape the verifier wants. */
 function asUpload(row: any): ProofUpload {
@@ -219,16 +227,12 @@ export async function recordProof(party: any, admin: any, body: unknown) {
     }
   }
 
-  // Analysis runs when the day is complete, because the whole question is what
-  // changed between the two. Failures here are swallowed: a missing analysis is
-  // an honest gap, and a failed upload because the model was down is not.
-  if (input.phase === 'after') {
-    try {
-      await analyseDay(admin, party, input.workDate);
-    } catch {
-      /* the day stays 'checked'; the dashboard says it has not been read yet */
-    }
-  }
+  // Analysis is queued, not awaited. A twenty-second vision call does not
+  // belong inside a phone's POST on a truck's signal — the upload records and
+  // returns, and the queue reads the day in the background. Queued on either
+  // phase, because refilming the before invalidates an analysis just as surely
+  // as filing the after completes one.
+  const analysis = await queueDayAnalysis(admin, party, input.workDate);
 
   await recordAccess(admin, {
     orgId: party.org_id,
@@ -244,6 +248,7 @@ export async function recordProof(party: any, admin: any, body: unknown) {
   return {
     proof,
     checks,
+    analysis,
     // Said back immediately, in the app, while the crew is still on site. A
     // problem told to somebody on Friday about Tuesday's video is not
     // actionable; the same problem told at 4pm is.
@@ -251,8 +256,19 @@ export async function recordProof(party: any, admin: any, body: unknown) {
   };
 }
 
-/** Load a day's frames and run the model over them. */
-export async function analyseDay(admin: any, party: any, workDate: string) {
+type DayAnalysisResult =
+  | { outcome: 'done'; materialChange: MaterialChange; summary: string }
+  | { outcome: 'skipped'; reason: string };
+
+/**
+ * Load a day's frames and run the model over them.
+ *
+ * Three ways out, and keeping them apart is the point of the refactor:
+ * 'done' wrote findings; 'skipped' means there was nothing to run against and
+ * says why; a throw means the model flaked and the attempt is worth retrying.
+ * The old version collapsed all three into a silent return.
+ */
+async function runDayAnalysis(admin: any, party: any, workDate: string): Promise<DayAnalysisResult> {
   const { data: proofs } = await admin
     .from('job_proofs')
     .select('id, phase')
@@ -262,7 +278,12 @@ export async function analyseDay(admin: any, party: any, workDate: string) {
   const rows = (proofs ?? []) as any[];
   const before = rows.find((r) => r.phase === 'before');
   const after = rows.find((r) => r.phase === 'after');
-  if (!before || !after) return;
+  if (!before || !after) {
+    return { outcome: 'skipped', reason: 'The day does not have both videos yet.' };
+  }
+  if (!isModelProviderConfigured()) {
+    return { outcome: 'skipped', reason: 'Model access is not configured on this server.' };
+  }
 
   const framesFor = async (proofId: string): Promise<ProofFrame[]> => {
     const { data } = await admin
@@ -284,7 +305,12 @@ export async function analyseDay(admin: any, party: any, workDate: string) {
     framesFor(before.id),
     framesFor(after.id),
   ]);
-  if (!beforeFrames.length || !afterFrames.length) return;
+  if (!beforeFrames.length || !afterFrames.length) {
+    return {
+      outcome: 'skipped',
+      reason: `The ${!beforeFrames.length ? 'before' : 'after'} video carries no frames — the phone could not read the file when it uploaded.`,
+    };
+  }
 
   const { data: scope } = await admin
     .from('job_scope_items')
@@ -303,7 +329,9 @@ export async function analyseDay(admin: any, party: any, workDate: string) {
     workDate,
     trade: party.trade,
   });
-  if (!analysis) return;
+  // Configured but unusable: the model answered with something that failed
+  // validation. That is a flake worth retrying, not a gap worth recording.
+  if (!analysis) throw new Error('The model reply was not usable.');
 
   // Written to the after row: it is the one that carries the day's outcome.
   await admin
@@ -311,7 +339,9 @@ export async function analyseDay(admin: any, party: any, workDate: string) {
     .update({
       state: 'analysed',
       ai_summary: analysis.summary,
+      ai_material_change: analysis.materialChange,
       ai_findings: {
+        materialBecause: analysis.materialBecause,
         changes: analysis.changes,
         cannotTell: analysis.cannotTell,
         scopeTouched: analysis.scopeTouched,
@@ -321,6 +351,127 @@ export async function analyseDay(admin: any, party: any, workDate: string) {
       ai_model: analysis.model,
     })
     .eq('id', after.id);
+
+  return { outcome: 'done', materialChange: analysis.materialChange, summary: analysis.summary };
+}
+
+/** The verdict, in the words the custody log keeps. */
+function materialChangeWords(change: MaterialChange): string {
+  const words: Record<MaterialChange, string> = {
+    significant: 'work materially changed',
+    minor: 'a small visible change',
+    none: 'no visible change between the videos',
+    unclear: 'the footage did not allow a comparison',
+  };
+  return words[change];
+}
+
+interface AnalysisJob {
+  key: string;
+  orgId: string;
+  jobId: string;
+  partyId: string;
+  workDate: string;
+  trade: string | null;
+  afterId: string;
+}
+
+/**
+ * One attempt, with its bookkeeping. Shared by the queue and the retry button
+ * so there is exactly one account of what an attempt does — two versions of
+ * this choreography is how a status column starts lying.
+ */
+async function performAnalysis(admin: any, job: AnalysisJob, attempt: number): Promise<DayAnalysisResult> {
+  await admin
+    .from('job_proofs')
+    .update({ analysis_status: 'running', analysis_attempts: attempt })
+    .eq('id', job.afterId);
+
+  const result = await runDayAnalysis(
+    admin,
+    { id: job.partyId, org_id: job.orgId, job_id: job.jobId, trade: job.trade },
+    job.workDate,
+  );
+
+  if (result.outcome === 'skipped') {
+    // Recorded, because "why has this day never been read" is a question the
+    // dashboard has to answer without somebody grepping server logs.
+    await admin
+      .from('job_proofs')
+      .update({ analysis_status: 'skipped', analysis_error: result.reason })
+      .eq('id', job.afterId);
+    return result;
+  }
+
+  await admin
+    .from('job_proofs')
+    .update({ analysis_status: 'done', analysis_error: null, analysed_at: new Date().toISOString() })
+    .eq('id', job.afterId);
+
+  // The read goes into the chain of custody like any other access — the model
+  // looked at the evidence, and that is a fact about the evidence.
+  await recordAccess(admin, {
+    orgId: job.orgId,
+    jobId: job.jobId,
+    proofId: job.afterId,
+    action: 'analysed',
+    actorLabel: 'Atmosphere',
+    detail: `${job.workDate} — ${materialChangeWords(result.materialChange)}`,
+  });
+
+  return result;
+}
+
+const analysisQueue = new RetryQueue<AnalysisJob>({
+  run: async (job, attempt) => {
+    const admin = createAdminClient();
+    if (!admin) throw new Error('Storage is not configured.');
+    await performAnalysis(admin, job, attempt);
+  },
+  onGaveUp: async (job, error) => {
+    // The write the old code never made. 'failed' is retryable and visible;
+    // swallowing it made "the model was down" indistinguishable from "nobody
+    // asked".
+    const admin = createAdminClient();
+    if (!admin) return;
+    await admin
+      .from('job_proofs')
+      .update({
+        analysis_status: 'failed',
+        analysis_error: error instanceof Error ? error.message : 'Analysis failed.',
+      })
+      .eq('id', job.afterId);
+  },
+});
+
+/**
+ * Queue a day for analysis if its pair is complete.
+ *
+ * Returns what the upload response tells the sub: 'queued' when the model will
+ * read the day, 'waiting' when the other half has not arrived yet.
+ */
+async function queueDayAnalysis(admin: any, party: any, workDate: string): Promise<'queued' | 'waiting'> {
+  const { data } = await admin
+    .from('job_proofs')
+    .select('id, phase')
+    .eq('party_id', party.id)
+    .eq('work_date', workDate);
+
+  const rows = (data ?? []) as any[];
+  const after = rows.find((r) => r.phase === 'after');
+  if (!after || !rows.some((r) => r.phase === 'before')) return 'waiting';
+
+  await admin.from('job_proofs').update({ analysis_status: 'queued' }).eq('id', after.id);
+  analysisQueue.enqueue({
+    key: `${party.id}|${workDate}`,
+    orgId: party.org_id,
+    jobId: party.job_id,
+    partyId: party.id,
+    workDate,
+    trade: party.trade ?? null,
+    afterId: after.id,
+  });
+  return 'queued';
 }
 
 /** GET /api/job-share/:token/proof — what this sub has filed. */
@@ -426,6 +577,11 @@ export async function jobProofs(req: Request, res: Response, next: NextFunction)
         rejected: list.some((r) => r.state === 'rejected'),
         aiSummary: after?.ai_summary ?? null,
         aiFindings: after?.ai_findings ?? null,
+        // The verdict and the lifecycle, told apart. "No visible change" is an
+        // answer; "failed" is a breakage with a retry; "skipped" says why.
+        materialChange: after?.ai_material_change ?? null,
+        analysisStatus: after?.analysis_status ?? null,
+        analysisError: after?.analysis_error ?? null,
         proofIds: list.map((r) => r.id),
       };
     });
@@ -631,22 +787,64 @@ export async function reanalyseProofDay(req: Request, res: Response, next: NextF
     const admin = createAdminClient();
     if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');
 
-    await analyseDay(admin, party, req.params.workDate);
-
-    const { data: after } = await supabase
+    const { data: afterRow } = await admin
       .from('job_proofs')
-      .select('ai_summary, ai_findings, ai_model')
-      .eq('org_id', orgId)
+      .select('id')
       .eq('party_id', input.partyId)
       .eq('work_date', req.params.workDate)
       .eq('phase', 'after')
       .maybeSingle();
+    if (!afterRow) {
+      throw new HttpError(409, 'Nothing to compare yet — the after video has not been filed.', 'no_after');
+    }
+
+    const job = {
+      key: `${input.partyId}|${req.params.workDate}`,
+      orgId,
+      jobId: (party as any).job_id,
+      partyId: input.partyId,
+      workDate: req.params.workDate,
+      trade: (party as any).trade ?? null,
+      afterId: (afterRow as any).id,
+    };
+
+    // Synchronous through the same choreography the queue uses — the button is
+    // somebody standing at the screen waiting, and two implementations of one
+    // attempt is how a status column starts lying. One attempt, no backoff: a
+    // person retries by pressing again.
+    let result;
+    try {
+      result = await performAnalysis(admin, job, 1);
+    } catch (error) {
+      await admin
+        .from('job_proofs')
+        .update({
+          analysis_status: 'failed',
+          analysis_error: error instanceof Error ? error.message : 'Analysis failed.',
+        })
+        .eq('id', job.afterId);
+      throw new HttpError(
+        502,
+        'The assistant could not read this day. It is recorded as failed — try again in a minute.',
+        'analysis_failed',
+      );
+    }
+
+    const { data: after } = await supabase
+      .from('job_proofs')
+      .select('ai_summary, ai_findings, ai_model, ai_material_change, analysis_status, analysis_error')
+      .eq('org_id', orgId)
+      .eq('id', job.afterId)
+      .maybeSingle();
 
     res.json({
+      outcome: result.outcome,
+      // Present when the run was skipped, so the button can say why rather
+      // than appearing to do nothing.
+      skippedBecause: result.outcome === 'skipped' ? result.reason : null,
       summary: (after as any)?.ai_summary ?? null,
+      materialChange: (after as any)?.ai_material_change ?? null,
       findings: (after as any)?.ai_findings ?? null,
-      // Null rather than an apology. A day that could not be read stays
-      // unread, and the dashboard says so.
       model: (after as any)?.ai_model ?? null,
     });
   } catch (err) {

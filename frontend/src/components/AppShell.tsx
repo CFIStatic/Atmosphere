@@ -82,7 +82,7 @@ export function AppShell({ children, rail }: { children: ReactNode; rail?: React
           no transition at desktop widths. The slide belongs to the mobile
           drawer alone, so nothing here can move under a pointer. */}
       <aside
-        className={`glass-rail fixed inset-y-0 left-0 z-40 flex w-60 flex-col transition-transform duration-200 lg:translate-x-0 lg:transform-none lg:transition-none ${
+        className={`glass-rail fixed inset-y-0 left-0 z-40 flex w-60 flex-col transition-transform duration-200 md:translate-x-0 md:transform-none md:transition-none ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -91,7 +91,7 @@ export function AppShell({ children, rail }: { children: ReactNode; rail?: React
             <Logo />
           </NavLink>
           <button
-            className="text-ink-500 lg:hidden"
+            className="text-ink-500 md:hidden"
             onClick={() => setMobileOpen(false)}
             aria-label="Close navigation"
           >
@@ -148,17 +148,17 @@ export function AppShell({ children, rail }: { children: ReactNode; rail?: React
       {mobileOpen && (
         <button
           aria-label="Close navigation"
-          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          className="fixed inset-0 z-30 bg-black/50 md:hidden"
           onClick={() => setMobileOpen(false)}
         />
       )}
 
       {/* ---- Top bar + content ---- */}
-      <div className="lg:pl-60">
+      <div className="md:pl-60">
         <header className="glass-bar sticky top-0 z-20">
           <div className="flex items-center gap-3 px-4 py-3 sm:px-6">
             <button
-              className="text-ink-600 lg:hidden"
+              className="text-ink-600 md:hidden"
               onClick={() => setMobileOpen(true)}
               aria-label="Open navigation"
             >
@@ -183,7 +183,7 @@ export function AppShell({ children, rail }: { children: ReactNode; rail?: React
         </header>
 
         <div className={rail ? 'xl:flex' : undefined}>
-          <main className={`min-w-0 flex-1 px-4 py-6 sm:px-6 ${rail ? '' : 'mx-auto max-w-6xl'}`}>
+          <main className={`min-w-0 flex-1 px-4 py-6 sm:px-6 ${rail ? '' : 'max-w-6xl'}`}>
             {children}
           </main>
           {rail && (
