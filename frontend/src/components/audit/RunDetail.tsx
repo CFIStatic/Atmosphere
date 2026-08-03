@@ -192,7 +192,7 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose?: () => v
         </p>
       )}
 
-      <div className="mt-4 grid grid-cols-2 gap-4 rounded-xl border border-line bg-paper-0 p-4 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="mt-4 grid grid-cols-2 gap-4 rounded-xl glass-card p-4 sm:grid-cols-3 lg:grid-cols-4">
         <Field label="Started by">{actor}</Field>
         <Field label="Started">{formatDateTime(run.startedAt ?? run.createdAt)}</Field>
         <Field label="Finished">{formatDateTime(run.finishedAt)}</Field>
@@ -224,7 +224,7 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose?: () => v
           <button
             onClick={loadMore}
             disabled={loadingMore}
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm text-ink-700 transition hover:bg-paper-200 disabled:opacity-60"
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg glass-card px-4 py-2 text-sm text-ink-700 transition hover:bg-paper-200 disabled:opacity-60"
           >
             {loadingMore && <SpinnerIcon className="animate-spin" width={15} height={15} />}
             Load more steps

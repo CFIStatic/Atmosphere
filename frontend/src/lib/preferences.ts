@@ -13,11 +13,14 @@ export interface Preferences {
   reduceMotion: boolean;
   /** Ask for confirmation before signing out. */
   confirmSignOut: boolean;
+  /** The console is dark by default; light is a choice, not an accident. */
+  theme: 'dark' | 'light';
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
   reduceMotion: false,
   confirmSignOut: false,
+  theme: 'dark',
 };
 
 const STORAGE_KEY = 'atmosphere.preferences';
@@ -45,6 +48,9 @@ function read(): Preferences {
 function applyDocumentPreferences(prefs: Preferences) {
   if (typeof document === 'undefined') return;
   document.documentElement.classList.toggle('reduce-motion', prefs.reduceMotion);
+  // The tokens in index.css key off this attribute; setting it before React
+  // renders (initPreferences) is what prevents a flash of the wrong theme.
+  document.documentElement.setAttribute('data-theme', prefs.theme);
 }
 
 /** Called once at startup, before React renders, to avoid a flash of animation. */

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import {
   ApiError,
   PROVIDER_LABELS,
@@ -15,7 +14,7 @@ import {
   type EstimatorRunStage,
   type ScanProjectSummary,
 } from '../lib/api';
-import { Logo } from '../components/Logo';
+import { AppShell } from '../components/AppShell';
 import { AlertIcon, CheckIcon, DownloadIcon, SpinnerIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
@@ -114,7 +113,7 @@ function ConnectionCard({
   }
 
   return (
-    <section className="rounded-xl border border-line bg-paper-0 p-5">
+    <section className="rounded-xl glass-card p-5">
       <h2 className="text-lg font-semibold text-ink-900">Connections</h2>
       <p className="mt-1 text-sm text-ink-600">
         The estimator signs in to these on your organization's behalf. Credentials are encrypted
@@ -139,7 +138,7 @@ function ConnectionCard({
         {PROVIDERS.map((provider) => {
           const credential = stored.get(provider);
           return (
-            <li key={provider} className="bg-paper-0 px-4 py-3">
+            <li key={provider} className="bg-paper-200/50 px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium text-ink-900">{PROVIDER_LABELS[provider]}</p>
@@ -168,7 +167,7 @@ function ConnectionCard({
                           setOpen(open === provider ? null : provider);
                           setForm({});
                         }}
-                        className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs text-ink-800 transition hover:bg-paper-100"
+                        className="rounded-lg glass-card px-3 py-1.5 text-xs text-ink-800 transition hover:bg-paper-100"
                       >
                         {credential ? 'Replace' : 'Connect'}
                       </button>
@@ -289,7 +288,7 @@ function CredentialField({
         placeholder={placeholder}
         autoComplete="off"
         onChange={(event) => onChange(event.target.value)}
-        className="mt-1 w-full rounded-lg border border-line bg-paper-50 px-3 py-2 text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none"
+        className="mt-1 w-full rounded-lg border border-line glass-field px-3 py-2 text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none"
       />
     </label>
   );
@@ -342,7 +341,7 @@ function StartRunCard({ onStarted }: { onStarted: (run: EstimatorRun) => void })
   }
 
   return (
-    <section className="rounded-xl border border-line bg-paper-0 p-5">
+    <section className="rounded-xl glass-card p-5">
       <h2 className="text-lg font-semibold text-ink-900">Build an estimate</h2>
       <p className="mt-1 text-sm text-ink-600">
         Pick a DocuSketch scan. The estimator finds the matching job in Dash, reads the photos and
@@ -364,7 +363,7 @@ function StartRunCard({ onStarted }: { onStarted: (run: EstimatorRun) => void })
           <select
             value={selected}
             onChange={(event) => setSelected(event.target.value)}
-            className="mt-1 w-full rounded-lg border border-line bg-paper-50 px-3 py-2 text-sm text-ink-900 focus:border-brand-500 focus:outline-none"
+            className="mt-1 w-full rounded-lg border border-line glass-field px-3 py-2 text-sm text-ink-900 focus:border-brand-500 focus:outline-none"
           >
             {projects.map((project) => (
               <option key={project.id} value={project.id}>
@@ -390,7 +389,7 @@ function StartRunCard({ onStarted }: { onStarted: (run: EstimatorRun) => void })
           rows={4}
           spellCheck={false}
           placeholder={'Room,Code,Description,Quantity,Unit\nMaster Bedroom,DMO CRPT,"Remove carpet",224.00,SF'}
-          className="mt-2 w-full rounded-lg border border-line bg-paper-50 px-3 py-2 font-mono text-xs text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none"
+          className="mt-2 w-full rounded-lg border border-line glass-field px-3 py-2 font-mono text-xs text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none"
         />
       </label>
 
@@ -433,7 +432,7 @@ function StageRail({ run }: { run: EstimatorRun }) {
                   ? 'bg-brand-50 text-brand-700'
                   : done
                     ? 'bg-success-50 text-success-600'
-                    : 'bg-paper-0 text-ink-500'
+                    : 'bg-paper-200/50 text-ink-500'
             }`}
           >
             {ESTIMATOR_STAGE_LABELS[stage]}
@@ -513,7 +512,7 @@ function JobReview({
                             signal.score > 0.7
                               ? 'text-success-600'
                               : signal.score > 0.3
-                                ? 'text-amber-400'
+                                ? 'text-caution-600'
                                 : 'text-ink-400'
                           }
                         >
@@ -525,7 +524,7 @@ function JobReview({
                   </ul>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-2">
-                  <span className="rounded-full bg-paper-0 px-2.5 py-1 text-xs text-ink-700">
+                  <span className="rounded-full bg-paper-200/50 px-2.5 py-1 text-xs text-ink-700">
                     {candidate.score}/100
                   </span>
                   <button
@@ -565,13 +564,13 @@ function EstimateTable({ estimate }: { estimate: ConstructionEstimate }) {
     <div className="mt-4 space-y-4">
       {byRoom.map(([roomName, lines]) => (
         <div key={roomName} className="overflow-hidden rounded-lg border border-line">
-          <div className="flex items-center justify-between bg-paper-0 px-4 py-2">
+          <div className="flex items-center justify-between bg-paper-200/50 px-4 py-2">
             <h4 className="text-sm font-semibold text-ink-900">{roomName}</h4>
             <span className="text-xs text-ink-500">{lines.length} line items</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[36rem] text-left text-sm">
-              <thead className="bg-paper-0 text-xs uppercase tracking-wide text-ink-500">
+              <thead className="bg-paper-200/50 text-xs uppercase tracking-wide text-ink-500">
                 <tr>
                   <th className="px-4 py-2 font-medium">Code</th>
                   <th className="px-4 py-2 font-medium">Description</th>
@@ -581,7 +580,7 @@ function EstimateTable({ estimate }: { estimate: ConstructionEstimate }) {
               </thead>
               <tbody className="divide-y divide-line">
                 {lines.map((line, index) => (
-                  <tr key={`${line.code}-${index}`} className="bg-paper-0 align-top">
+                  <tr key={`${line.code}-${index}`} className="bg-paper-200/50 align-top">
                     <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-brand-600">
                       {line.code}
                     </td>
@@ -641,7 +640,7 @@ function RunPanel({
   const readyToApprove = run.status === 'awaiting_review' && estimate !== null;
 
   return (
-    <section className="rounded-xl border border-line bg-paper-0 p-5">
+    <section className="rounded-xl glass-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-ink-900">
@@ -746,13 +745,13 @@ function RunPanel({
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <a
               href={api.estimatorExportUrl(run.id, 'csv')}
-              className="flex items-center gap-2 rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm text-ink-800 transition hover:bg-paper-100"
+              className="flex items-center gap-2 rounded-lg glass-card px-4 py-2 text-sm text-ink-800 transition hover:bg-paper-100"
             >
               <DownloadIcon width={16} height={16} /> CSV
             </a>
             <a
               href={api.estimatorExportUrl(run.id, 'xml')}
-              className="flex items-center gap-2 rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm text-ink-800 transition hover:bg-paper-100"
+              className="flex items-center gap-2 rounded-lg glass-card px-4 py-2 text-sm text-ink-800 transition hover:bg-paper-100"
             >
               <DownloadIcon width={16} height={16} /> Xactimate XML
             </a>
@@ -814,7 +813,7 @@ function StatusBadge({ run }: { run: EstimatorRun }) {
     awaiting_review: { text: 'Needs your review', className: 'bg-caution-50 text-caution-600' },
     complete: { text: 'Sent to Xactimate', className: 'bg-success-50 text-success-600' },
     failed: { text: 'Failed', className: 'bg-danger-50 text-danger-700' },
-    cancelled: { text: 'Cancelled', className: 'bg-paper-0 text-ink-600' },
+    cancelled: { text: 'Cancelled', className: 'bg-paper-200/50 text-ink-600' },
   };
   const badge = map[run.status];
 
@@ -838,7 +837,7 @@ function Stat({
   tone?: 'ok' | 'warn';
 }) {
   return (
-    <div className="rounded-lg border border-line bg-paper-50 px-3 py-2">
+    <div className="rounded-lg border border-line glass-field px-3 py-2">
       <p className="text-xs uppercase tracking-wide text-ink-500">{label}</p>
       <p className={`mt-0.5 text-sm font-semibold ${tone === 'warn' ? 'text-caution-600' : 'text-ink-900'}`}>
         {value}
@@ -919,18 +918,8 @@ export function EstimatorPage() {
   }, [activeRun, upsertRun]);
 
   return (
-    <div className="cx-aurora min-h-screen bg-paper-100">
-      <header className="flex items-center justify-between border-b border-line px-6 py-4 sm:px-10">
-        <Logo />
-        <Link
-          to="/dashboard"
-          className="rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
-        >
-          Back to dashboard
-        </Link>
-      </header>
-
-      <main className="mx-auto max-w-5xl space-y-6 px-6 py-10 sm:px-10">
+    <AppShell>
+      <main className="mx-auto max-w-5xl space-y-6">
         <div className="animate-fade-in-up">
           <p className="text-sm font-medium text-brand-600">Construction Estimator</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-ink-900">
@@ -955,7 +944,7 @@ export function EstimatorPage() {
         {activeRun && <RunPanel run={activeRun} onUpdated={upsertRun} />}
 
         {runs.length > 1 && (
-          <section className="rounded-xl border border-line bg-paper-0 p-5">
+          <section className="rounded-xl glass-card p-5">
             <h2 className="text-lg font-semibold text-ink-900">Recent runs</h2>
             <ul className="mt-3 divide-y divide-line overflow-hidden rounded-lg border border-line">
               {runs.map((run) => (
@@ -963,7 +952,7 @@ export function EstimatorPage() {
                   <button
                     onClick={() => setActiveRunId(run.id)}
                     className={`flex w-full flex-wrap items-center justify-between gap-3 px-4 py-3 text-left transition ${
-                      run.id === activeRunId ? 'bg-paper-0' : 'bg-paper-0 hover:bg-paper-0'
+                      run.id === activeRunId ? 'bg-paper-0' : 'bg-paper-200/50 hover:bg-paper-0'
                     }`}
                   >
                     <div>
@@ -983,6 +972,6 @@ export function EstimatorPage() {
           </section>
         )}
       </main>
-    </div>
+    </AppShell>
   );
 }

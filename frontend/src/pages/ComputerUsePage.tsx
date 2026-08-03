@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import {
   ApiError,
   PLATFORM_LABELS,
@@ -12,7 +11,7 @@ import {
   type RunEvent,
   type RunStreamMessage,
 } from '../lib/api';
-import { Logo } from '../components/Logo';
+import { AppShell } from '../components/AppShell';
 import { CheckIcon, SpinnerIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
@@ -248,23 +247,8 @@ export function ComputerUsePage() {
     credentialConnected && !!selectedAgent && !selectedAgent.busy && instruction.trim().length > 0 && !isRunning;
 
   return (
-    <div className="cx-aurora min-h-screen bg-paper-100">
-      <header className="flex items-center justify-between border-b border-line px-6 py-4 sm:px-10">
-        <div className="flex items-center gap-4">
-          <Logo />
-          <span className="hidden rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700 sm:inline">
-            Computer Use
-          </span>
-        </div>
-        <Link
-          to="/dashboard"
-          className="rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
-        >
-          Back to dashboard
-        </Link>
-      </header>
-
-      <main className="mx-auto max-w-7xl px-6 py-8 sm:px-10">
+    <AppShell>
+      <main className="mx-auto max-w-7xl">
         {loadError && <Banner tone="error">{loadError}</Banner>}
 
         {status && !credentialConnected && (
@@ -282,7 +266,7 @@ export function ComputerUsePage() {
               onStop={handleStop}
             />
 
-            <div className="rounded-2xl border border-line bg-paper-0 p-5">
+            <div className="rounded-2xl glass-card p-5">
               <label htmlFor="instruction" className="text-sm font-medium text-ink-800">
                 What should Claude do on {selectedAgent ? selectedAgent.name : 'this computer'}?
               </label>
@@ -296,7 +280,7 @@ export function ComputerUsePage() {
                 rows={3}
                 disabled={isRunning}
                 placeholder="Open the invoices folder, and tell me which files are older than 30 days."
-                className="mt-2 w-full resize-y rounded-xl border border-line bg-paper-0 px-4 py-3 text-sm text-ink-900 placeholder:text-ink-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-200 disabled:opacity-60"
+                className="mt-2 w-full resize-y rounded-xl glass-card px-4 py-3 text-sm text-ink-900 placeholder:text-ink-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-200 disabled:opacity-60"
               />
 
               {startError && <p className="mt-2 text-sm text-danger-700">{startError}</p>}
@@ -341,7 +325,7 @@ export function ComputerUsePage() {
           </aside>
         </div>
       </main>
-    </div>
+    </AppShell>
   );
 }
 
@@ -402,7 +386,7 @@ function ApiKeyCard({ onConnected }: { onConnected: () => Promise<void> }) {
           placeholder="sk-ant-…"
           autoComplete="off"
           spellCheck={false}
-          className="flex-1 rounded-xl border border-line bg-paper-0 px-4 py-3 font-mono text-sm text-ink-900 placeholder:text-ink-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-200"
+          className="flex-1 rounded-xl glass-card px-4 py-3 font-mono text-sm text-ink-900 placeholder:text-ink-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-200"
         />
         <button
           onClick={() => void connect()}
@@ -434,7 +418,7 @@ function ScreenPanel({
   const isRunning = run !== null && (run.status === 'starting' || run.status === 'running');
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-line bg-paper-0">
+    <section className="overflow-hidden rounded-2xl glass-card">
       <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3">
         <div className="flex min-w-0 items-center gap-3">
           <span
@@ -466,7 +450,7 @@ function ScreenPanel({
         )}
       </div>
 
-      <div className="relative grid aspect-video place-items-center bg-ink-900">
+      <div className="relative grid aspect-video place-items-center bg-paper-100">
         {screenshot ? (
           <img
             src={screenshot}
@@ -501,7 +485,7 @@ function Transcript({
   if (!run && items.length === 0) return null;
 
   return (
-    <section className="rounded-2xl border border-line bg-paper-0">
+    <section className="rounded-2xl glass-card">
       <div className="flex items-center justify-between border-b border-line px-5 py-3">
         <h2 className="text-sm font-medium text-ink-800">Activity</h2>
         {run && (
@@ -615,7 +599,7 @@ function ComputersPanel({
   );
 
   return (
-    <section className="rounded-2xl border border-line bg-paper-0 p-5">
+    <section className="rounded-2xl glass-card p-5">
       <h2 className="text-sm font-medium text-ink-800">Computers</h2>
 
       {agents.length === 0 ? (
@@ -661,7 +645,7 @@ function ComputersPanel({
           <p className="text-xs text-ink-600">
             On the computer you want to add, install Node 18+ and run:
           </p>
-          <code className="mt-2 block break-all rounded-lg bg-paper-0 px-3 py-2 font-mono text-xs text-brand-700">
+          <code className="mt-2 block break-all rounded-lg bg-paper-200/50 px-3 py-2 font-mono text-xs text-brand-700">
             {command}
           </code>
           <div className="mt-3 flex items-center justify-between gap-2">
@@ -675,7 +659,7 @@ function ComputersPanel({
                   setTimeout(() => setCopied(false), 1500);
                 });
               }}
-              className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs font-medium text-ink-800 transition hover:bg-paper-100"
+              className="rounded-lg glass-card px-3 py-1.5 text-xs font-medium text-ink-800 transition hover:bg-paper-100"
             >
               {copied ? 'Copied' : 'Copy command'}
             </button>
@@ -685,7 +669,7 @@ function ComputersPanel({
         <button
           onClick={() => void mint()}
           disabled={minting}
-          className="mt-4 w-full rounded-xl border border-line bg-paper-0 px-4 py-2.5 text-sm font-medium text-ink-800 transition hover:bg-paper-100 disabled:opacity-50"
+          className="mt-4 w-full rounded-xl glass-card px-4 py-2.5 text-sm font-medium text-ink-800 transition hover:bg-paper-100 disabled:opacity-50"
         >
           {minting ? 'Generating…' : 'Add a computer'}
         </button>
@@ -715,7 +699,7 @@ function SettingsPanel({
   const { credential } = status;
 
   return (
-    <section className="space-y-4 rounded-2xl border border-line bg-paper-0 p-5">
+    <section className="space-y-4 rounded-2xl glass-card p-5">
       <h2 className="text-sm font-medium text-ink-800">Settings</h2>
 
       <div>
@@ -726,7 +710,7 @@ function SettingsPanel({
           id="model"
           value={model}
           onChange={(e) => onModel(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 focus:border-brand-400 focus:outline-none"
+          className="mt-1 w-full rounded-lg glass-card px-3 py-2 text-sm text-ink-900 focus:border-brand-400 focus:outline-none"
         >
           {status.models.map((m) => (
             <option key={m.id} value={m.id}>
@@ -744,7 +728,7 @@ function SettingsPanel({
           id="quality"
           value={quality}
           onChange={(e) => onQuality(e.target.value as CaptureQuality)}
-          className="mt-1 w-full rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 focus:border-brand-400 focus:outline-none"
+          className="mt-1 w-full rounded-lg glass-card px-3 py-2 text-sm text-ink-900 focus:border-brand-400 focus:outline-none"
         >
           {(Object.keys(QUALITY_LABELS) as CaptureQuality[]).map((key) => (
             <option key={key} value={key}>

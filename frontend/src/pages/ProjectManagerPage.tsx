@@ -18,7 +18,7 @@ import {
   type PmThread,
   type PmThreadMessage,
 } from '../lib/api';
-import { Logo } from '../components/Logo';
+import { AppShell, PanelSpinner } from '../components/AppShell';
 import { SpinnerIcon } from '../components/icons';
 import {
   Card,
@@ -200,40 +200,30 @@ export function ProjectManagerPage() {
 
   if (!data && !error) {
     return (
-      <div className="cx-aurora grid min-h-screen place-items-center bg-paper-100 text-brand-600">
-        <SpinnerIcon className="animate-spin" width={28} height={28} />
-      </div>
+      <AppShell>
+        <PanelSpinner label="Loading the project board" />
+      </AppShell>
     );
   }
 
   return (
-    <div className="cx-aurora min-h-screen bg-paper-100">
-      <header className="flex items-center justify-between border-b border-line px-6 py-4 sm:px-10">
-        <div className="flex items-center gap-4">
-          <Logo />
-          <span className="hidden text-sm text-ink-500 sm:inline">Project Manager</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link
-            to="/dashboard"
-            className="rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-700 transition hover:bg-paper-100"
-          >
-            Dashboard
-          </Link>
-          <button
-            onClick={() => void runEngine()}
-            disabled={running}
-            className="flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-ink-900 transition hover:bg-brand-500 disabled:opacity-60"
-          >
-            {running && <SpinnerIcon className="animate-spin" width={16} height={16} />}
-            {running ? 'Checking…' : 'Re-check everything'}
-          </button>
-        </div>
-      </header>
+    <AppShell>
+      {/* The one action that belongs to this screen keeps its place at the
+          top right; navigation belongs to the rail, not to a page header. */}
+      <div className="mb-2 flex justify-end">
+        <button
+          onClick={() => void runEngine()}
+          disabled={running}
+          className="flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-400 disabled:opacity-60"
+        >
+          {running && <SpinnerIcon className="animate-spin" width={16} height={16} />}
+          {running ? 'Checking…' : 'Re-check everything'}
+        </button>
+      </div>
 
-      <main className="mx-auto max-w-6xl px-6 py-8 sm:px-10">
+      <main className="mx-auto max-w-6xl">
         {error && (
-          <div className="mb-6 rounded-lg border border-line bg-paper-0 px-4 py-3 text-sm text-ink-800">
+          <div className="mb-6 rounded-lg glass-card px-4 py-3 text-sm text-ink-800">
             {error}
           </div>
         )}
@@ -298,7 +288,7 @@ export function ProjectManagerPage() {
               <button
                 onClick={() => void loadBrief(Boolean(brief))}
                 disabled={briefLoading}
-                className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs text-ink-700 transition hover:bg-paper-100 disabled:opacity-60"
+                className="rounded-lg glass-card px-3 py-1.5 text-xs text-ink-700 transition hover:bg-paper-100 disabled:opacity-60"
               >
                 {briefLoading ? 'Writing…' : brief ? 'Rewrite' : 'Write it'}
               </button>
@@ -833,7 +823,7 @@ export function ProjectManagerPage() {
                   type="checkbox"
                   checked={onlyMine}
                   onChange={(e) => setOnlyMine(e.target.checked)}
-                  className="h-4 w-4 rounded border-line bg-paper-0"
+                  className="h-4 w-4 rounded glass-card"
                 />
                 Only projects assigned to me
               </label>
@@ -896,7 +886,7 @@ export function ProjectManagerPage() {
           )}
         </div>
       </main>
-    </div>
+    </AppShell>
   );
 }
 
@@ -914,7 +904,7 @@ function AlertRow({
   navigate: ReturnType<typeof useNavigate>;
 }) {
   return (
-    <article className="rounded-xl border border-line bg-paper-0 p-4">
+    <article className="rounded-xl glass-card p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-3">
@@ -940,20 +930,20 @@ function AlertRow({
         <div className="flex shrink-0 gap-1.5">
           <button
             onClick={() => onAct(alert, 'acknowledged')}
-            className="rounded-lg border border-line bg-paper-0 px-2.5 py-1.5 text-xs text-ink-700 transition hover:bg-paper-100"
+            className="rounded-lg glass-card px-2.5 py-1.5 text-xs text-ink-700 transition hover:bg-paper-100"
             title="Keep it on the list, stop it shouting"
           >
             Seen
           </button>
           <button
             onClick={() => onAct(alert, 'snoozed', 24)}
-            className="rounded-lg border border-line bg-paper-0 px-2.5 py-1.5 text-xs text-ink-700 transition hover:bg-paper-100"
+            className="rounded-lg glass-card px-2.5 py-1.5 text-xs text-ink-700 transition hover:bg-paper-100"
           >
             Tomorrow
           </button>
           <button
             onClick={() => onAct(alert, 'resolved')}
-            className="rounded-lg border border-line bg-paper-0 px-2.5 py-1.5 text-xs text-ink-700 transition hover:bg-paper-100"
+            className="rounded-lg glass-card px-2.5 py-1.5 text-xs text-ink-700 transition hover:bg-paper-100"
             title="I have handled this"
           >
             Done
@@ -969,7 +959,7 @@ function ProjectRow({ summary }: { summary: PmProjectSummary }) {
   return (
     <Link
       to={`/pm/projects/${p.id}`}
-      className="block rounded-xl border border-line bg-paper-0 p-4 transition hover:border-line-strong hover:bg-paper-100"
+      className="block rounded-xl glass-card p-4 transition hover:border-line-strong hover:bg-paper-100"
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">

@@ -60,7 +60,7 @@ export function RecordingsPanel({ recordings, transcriptionAvailable, onDelete, 
 
   if (recordings === null) {
     return (
-      <div className="grid place-items-center rounded-xl border border-line bg-paper-0 py-16 text-brand-500 shadow-card">
+      <div className="grid place-items-center rounded-xl glass-card py-16 text-brand-500 shadow-card">
         <SpinnerIcon className="animate-spin" width={22} height={22} />
         <span className="sr-only">Loading recordings…</span>
       </div>
@@ -69,7 +69,7 @@ export function RecordingsPanel({ recordings, transcriptionAvailable, onDelete, 
 
   if (recordings.length === 0) {
     return (
-      <div className="rounded-xl border border-line bg-paper-0 px-6 py-14 text-center shadow-card">
+      <div className="rounded-xl glass-card px-6 py-14 text-center shadow-card">
         <p className="text-sm font-medium text-ink-800">Nothing captured yet.</p>
         <p className="mt-1 text-xs text-ink-500">
           Recordings stay on this device until you download them.
@@ -91,7 +91,7 @@ export function RecordingsPanel({ recordings, transcriptionAvailable, onDelete, 
         const isVideo = recording.kind === 'video';
 
         return (
-          <article key={recording.id} className="rounded-xl border border-line bg-paper-0 p-4 shadow-card">
+          <article key={recording.id} className="rounded-xl glass-card p-4 shadow-card">
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-600">
@@ -130,13 +130,13 @@ export function RecordingsPanel({ recordings, transcriptionAvailable, onDelete, 
 
             {url &&
               (isVideo ? (
-                <video src={url} controls playsInline className="mt-3 w-full rounded-lg bg-ink-900" />
+                <video src={url} controls playsInline className="mt-3 w-full rounded-lg bg-paper-100" />
               ) : (
                 <audio src={url} controls className="mt-3 w-full" />
               ))}
 
             {recording.note ? (
-              <p className="mt-3 rounded-lg border border-line bg-paper-50 px-3 py-2 text-sm leading-relaxed text-ink-700">
+              <p className="mt-3 rounded-lg border border-line glass-field px-3 py-2 text-sm leading-relaxed text-ink-700">
                 {recording.note}
               </p>
             ) : (
@@ -145,7 +145,7 @@ export function RecordingsPanel({ recordings, transcriptionAvailable, onDelete, 
                 <button
                   onClick={() => void handleTranscribe(recording)}
                   disabled={transcribing === recording.id}
-                  className="mt-3 flex items-center gap-2 rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs font-medium text-ink-700 transition hover:bg-paper-100 disabled:opacity-60"
+                  className="mt-3 flex items-center gap-2 rounded-lg glass-card px-3 py-1.5 text-xs font-medium text-ink-700 transition hover:bg-paper-100 disabled:opacity-60"
                 >
                   {transcribing === recording.id && (
                     <SpinnerIcon className="animate-spin text-brand-500" width={14} height={14} />

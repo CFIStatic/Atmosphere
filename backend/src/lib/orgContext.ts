@@ -18,6 +18,7 @@ import { HttpError } from './errors.js';
 export interface OrgContext {
   orgId: string;
   userId: string;
+  role: string;
   supabase: SupabaseClient;
 }
 
@@ -41,7 +42,7 @@ export async function requireOrgContext(req: Request): Promise<OrgContext> {
 
   const { data, error } = await supabase
     .from('org_members')
-    .select('org_id')
+    .select('org_id, role')
     .eq('user_id', userId)
     .order('created_at', { ascending: true })
     .limit(1);
@@ -56,7 +57,28 @@ export async function requireOrgContext(req: Request): Promise<OrgContext> {
     throw new HttpError(403, 'Join or create an organization first.', 'no_organization');
   }
 
-  const ctx: OrgContext = { orgId, userId, supabase };
+  const role = String(data?.[0]?.role ?? 'member');
+  const ctx: OrgContext = { orgId, userId, role, supabase };
   (req as CachedRequest)[CACHE_KEY] = ctx;
+  return ctx;
+}
+
+/**
+ * The same context, refused unless the caller holds one of these roles.
+ *
+ * Kept separate from requireOrgContext so the common path stays a single
+ * lookup and callers opt into the stricter check explicitly. Used for actions
+ * that reach outside the tenant — spending against a vendor credential,
+ * testing one — where "any member of the org" is the wrong bar.
+ */
+export async function requireOrgRole(req: Request, roles: string[]): Promise<OrgContext> {
+  const ctx = await requireOrgContext(req);
+  if (!roles.includes(ctx.role)) {
+    throw new HttpError(
+      403,
+      'That needs an owner or admin on this organization.',
+      'insufficient_role',
+    );
+  }
   return ctx;
 }

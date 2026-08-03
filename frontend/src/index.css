@@ -2,8 +2,162 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Theme tokens.
+ *
+ * Every color in tailwind.config.js resolves to one of these variables, stored
+ * as `R G B` triplets so Tailwind's opacity modifiers keep working. The
+ * console is dark by default; `data-theme="light"` on <html> swaps the whole
+ * set (set from the theme toggle, persisted in preferences). Semantics are
+ * identical in both sets — paper is surfaces page-to-card, ink is text
+ * strongest-first, tint steps (50/100/200) are backgrounds and 600+ reads on
+ * top of them — so screens never branch on the theme.
+ */
 :root {
+  color-scheme: dark;
+
+  --brand-50: 49 25 12;
+  --brand-100: 62 31 13;
+  --brand-200: 84 41 15;
+  --brand-300: 124 58 18;
+  --brand-400: 181 79 16;
+  --brand-500: 232 89 12;
+  --brand-600: 242 110 34;
+  --brand-700: 245 136 63;
+  --brand-800: 248 162 99;
+  --brand-900: 251 194 142;
+
+  --paper-0: 29 27 24;
+  --paper-50: 25 23 20;
+  --paper-100: 20 19 17;
+  --paper-200: 36 34 32;
+  --paper-300: 44 42 39;
+  --paper-400: 58 55 51;
+
+  --ink-900: 241 239 235;
+  --ink-800: 226 223 217;
+  --ink-700: 195 191 183;
+  --ink-600: 160 156 147;
+  --ink-500: 128 124 116;
+  --ink-400: 92 89 81;
+
+  --line: 36 34 31;
+  --line-strong: 52 49 45;
+
+  /* How strongly the territory map tints a state you have ZIP codes in.
+     Theme-dependent because the same alpha over near-black reads twice as
+     loud as it does over paper, and this wash has to stay a hint — anything
+     bolder claims the whole state as covered, which it is not. */
+  --map-tint: 0.06;
+
+  --danger-50: 48 20 18;
+  --danger-200: 84 32 27;
+  --danger-600: 240 122 98;
+  --danger-700: 244 155 135;
+  --caution-50: 44 35 14;
+  --caution-200: 78 61 22;
+  --caution-600: 229 184 74;
+  --success-50: 18 38 26;
+  --success-200: 30 66 41;
+  --success-600: 124 201 141;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.25);
+  --shadow-lift: 0 6px 18px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.35);
+
+  /* Glass. Surfaces are translucent and blurred rather than filled, edges are
+     a hairline of light rather than a drawn line, and a single inset highlight
+     along the top gives the pane its thickness. */
+  --glass-tint: 29 27 24;
+  --glass-alpha: 0.55;
+  --glass-edge: 255 255 255;
+  --glass-edge-alpha: 0.075;
+  --glass-edge-strong: 0.14;
+  --glass-gloss: 255 255 255;
+  --glass-sheen: 0.06;
+  --glass-rake: 0.028;
+  --glass-blur: 20px;
+  --wash-a: 0.16;
+  --wash-b: 0.10;
+  --wash-c: 0.08;
+
+  /* PM status: good / needs-attention / wrong, never decorative. Info sits
+     outside the brand ramp so it reads as neither severity nor accent. */
+  --pm-good: #7cc98d;
+  --pm-warning: #e5b84a;
+  --pm-critical: #f07a62;
+  --pm-info: #6fb3d2;
+
+  --aurora: 232 89 12;
+}
+
+:root[data-theme='light'] {
   color-scheme: light;
+
+  --brand-50: 253 244 238;
+  --brand-100: 250 229 214;
+  --brand-200: 244 200 169;
+  --brand-300: 235 164 117;
+  --brand-400: 223 123 68;
+  --brand-500: 210 80 10;
+  --brand-600: 188 69 8;
+  --brand-700: 153 54 7;
+  --brand-800: 119 43 6;
+  --brand-900: 91 33 4;
+
+  --paper-0: 255 255 255;
+  --paper-50: 251 250 247;
+  --paper-100: 244 241 235;
+
+  --map-tint: 0.15;
+  --paper-200: 237 233 225;
+  --paper-300: 228 223 213;
+  --paper-400: 216 210 197;
+
+  --ink-900: 28 25 23;
+  --ink-800: 41 37 36;
+  --ink-700: 68 64 60;
+  --ink-600: 87 83 78;
+  --ink-500: 120 113 108;
+  --ink-400: 168 162 158;
+
+  --line: 227 222 212;
+  --line-strong: 211 204 190;
+
+  --danger-50: 253 242 240;
+  --danger-200: 243 199 191;
+  --danger-600: 180 54 29;
+  --danger-700: 143 42 21;
+  --caution-50: 253 247 236;
+  --caution-200: 239 220 175;
+  --caution-600: 148 106 11;
+  --success-50: 240 247 241;
+  --success-200: 190 220 195;
+  --success-600: 63 125 76;
+
+  --shadow-card: 0 1px 2px rgba(28, 25, 23, 0.04), 0 1px 3px rgba(28, 25, 23, 0.03);
+  --shadow-lift: 0 4px 12px rgba(28, 25, 23, 0.07), 0 2px 4px rgba(28, 25, 23, 0.04);
+
+  /* On paper the pane is lighter than its ground, and the edge is a soft
+     shadow rather than a highlight — otherwise glass reads as fog. */
+  --glass-tint: 255 255 255;
+  --glass-alpha: 0.72;
+  --glass-edge: 28 25 23;
+  --glass-edge-alpha: 0.08;
+  --glass-edge-strong: 0.14;
+  --glass-gloss: 255 255 255;
+  --glass-sheen: 0.75;
+  --glass-rake: 0.5;
+  --glass-blur: 18px;
+  --wash-a: 0.09;
+  --wash-b: 0.06;
+  --wash-c: 0.05;
+
+  --pm-good: #3f7d4c;
+  --pm-warning: #946a0b;
+  --pm-critical: #b4361d;
+  --pm-info: #2e6e8e;
+
+  --aurora: 210 80 10;
 }
 
 html,
@@ -17,29 +171,119 @@ body {
   font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #f4f1eb;
-  color: #1c1917;
+  background-color: rgb(var(--paper-100));
+  color: rgb(var(--ink-900));
 }
 
-/*
- * Status palette for the Project Manager screens.
- *
- * These are reserved: they mean good / needs-attention / wrong, and are never
- * reused as decorative or series colors. The values match the `success`,
- * `caution` and `danger` tokens in tailwind.config.js, so status reads the same
- * whether it is drawn by a chart or by a component.
- *
- * A status colour never carries meaning on its own anywhere in the UI: every
- * place one appears it is paired with an icon and a word, because roughly one
- * man in twelve cannot rely on the hue.
- */
-:root {
-  --pm-good: #3f7d4c;
-  --pm-warning: #946a0b;
-  --pm-critical: #b4361d;
-  /* Informational, not an alarm. Deliberately outside the brand ramp so it
-     never reads as either a severity or the accent. */
-  --pm-info: #2e6e8e;
+/* Two slow washes of accent behind everything. They are barely visible on
+   their own; their job is to give the glass something to refract, so panes
+   read as translucent rather than merely grey. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(58rem 44rem at 6% -12%, rgb(var(--aurora) / var(--wash-a)), transparent 58%),
+    radial-gradient(48rem 38rem at 102% 2%, rgb(var(--aurora) / var(--wash-b)), transparent 54%),
+    radial-gradient(52rem 42rem at 58% 112%, rgb(var(--aurora) / var(--wash-c)), transparent 58%);
+}
+
+/* ---------- Glass surfaces ----------
+   One recipe, three weights. `glass-card` is the ordinary pane, `glass-panel`
+   the raised one (menus, popovers), `glass-bar` the chrome that content
+   scrolls under. Every one of them is a background — never a text colour — so
+   contrast is unaffected. */
+.glass-card,
+.glass-panel,
+.glass-bar {
+  background-color: rgb(var(--glass-tint) / var(--glass-alpha));
+  border: 1px solid rgb(var(--glass-edge) / var(--glass-edge-alpha));
+  box-shadow:
+    inset 0 1px 0 0 rgb(var(--glass-gloss) / var(--glass-sheen)),
+    var(--shadow-card);
+}
+
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .glass-card,
+  .glass-panel,
+  .glass-bar {
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+    backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  }
+}
+
+/* The rake: a hint of light down the pane's face, strongest at the top edge.
+   It is what separates glass from a plain translucent fill. */
+.glass-card::before,
+.glass-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    158deg,
+    rgb(var(--glass-gloss) / var(--glass-rake)) 0%,
+    transparent 42%
+  );
+}
+.glass-card,
+.glass-panel { position: relative; }
+/* Content sits above the rake. */
+.glass-card > *,
+.glass-panel > * { position: relative; }
+
+.glass-panel {
+  background-color: rgb(var(--glass-tint) / calc(var(--glass-alpha) + 0.28));
+  border-color: rgb(var(--glass-edge) / var(--glass-edge-strong));
+  box-shadow:
+    inset 0 1px 0 0 rgb(var(--glass-gloss) / var(--glass-sheen)),
+    var(--shadow-lift);
+}
+
+.glass-bar {
+  border: 0;
+  border-bottom: 1px solid rgb(var(--glass-edge) / var(--glass-edge-alpha));
+  box-shadow: inset 0 -1px 0 0 rgb(var(--glass-gloss) / calc(var(--glass-sheen) * 0.25));
+}
+
+/* The sidebar is a vertical pane of the same material. */
+.glass-rail {
+  background-color: rgb(var(--glass-tint) / calc(var(--glass-alpha) - 0.12));
+  border-right: 1px solid rgb(var(--glass-edge) / var(--glass-edge-alpha));
+}
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .glass-rail {
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+    backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  }
+}
+
+/* Form fields: the same material, recessed rather than raised — no gloss, a
+   slightly darker fill, and the edge brightening on focus. */
+.glass-field {
+  background-color: rgb(var(--glass-tint) / calc(var(--glass-alpha) - 0.2));
+  border: 1px solid rgb(var(--glass-edge) / var(--glass-edge-alpha));
+}
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .glass-field {
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+  }
+}
+.glass-field:focus,
+.glass-field:focus-within {
+  border-color: rgb(var(--brand-500) / 0.7);
+  outline: none;
+}
+
+/* Dividers inside a pane: light, not a drawn rule. */
+.glass-card .border-line,
+.glass-panel .border-line,
+.glass-card.divide-line > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgb(var(--glass-edge) / var(--glass-edge-alpha));
 }
 
 .pm-good {
@@ -55,36 +299,40 @@ body {
   color: var(--pm-info);
 }
 
-/* Warm wash behind the auth screens — a hint of terracotta bleeding in from
+/* Warm wash behind the auth screens — a hint of the accent bleeding in from
    the top corners, not a gradient anyone should consciously notice. */
 .cx-aurora {
   background:
-    radial-gradient(55rem 40rem at 12% -15%, rgba(210, 80, 10, 0.07), transparent 62%),
-    radial-gradient(45rem 35rem at 105% -5%, rgba(210, 80, 10, 0.05), transparent 58%);
+    radial-gradient(55rem 40rem at 12% -15%, rgb(var(--aurora) / 0.08), transparent 62%),
+    radial-gradient(45rem 35rem at 105% -5%, rgb(var(--aurora) / 0.05), transparent 58%);
+}
+
+/* Reserve the scrollbar's gutter whether or not one is showing. Without it a
+   taller platform's navigation gains a scrollbar and every label in the rail
+   shifts sideways — the panel appearing to move when nothing was resized. */
+.cx-gutter {
+  scrollbar-gutter: stable;
 }
 
 /* Scrollbars inside panels, so a scrolling transcript doesn't punch a grey
    canyon through a warm page. */
 .cx-scroll {
   scrollbar-width: thin;
-  scrollbar-color: #d8d2c5 transparent;
+  scrollbar-color: rgb(var(--paper-400)) transparent;
 }
 .cx-scroll::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 .cx-scroll::-webkit-scrollbar-thumb {
-  background-color: #d8d2c5;
+  background-color: rgb(var(--paper-400));
   border-radius: 999px;
 }
 .cx-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
 
-/* Native media controls default to a dark chrome that fights the page. */
-audio {
-  color-scheme: light;
-}
+/* Native media controls follow the active theme via color-scheme on :root. */
 
 /* Set from Settings › Appearance, and honoured for anyone whose system already
    asks for less motion. One rule covers the whole app, including the entrance

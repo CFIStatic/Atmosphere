@@ -8,7 +8,7 @@ import {
   type PmProjectDetail,
   type PmTask,
 } from '../lib/api';
-import { Logo } from '../components/Logo';
+import { AppShell, ErrorNote, PanelSpinner } from '../components/AppShell';
 import { SpinnerIcon, CheckIcon } from '../components/icons';
 import {
   Card,
@@ -98,9 +98,9 @@ export function PmProjectPage() {
 
   if (!data) {
     return (
-      <div className="cx-aurora grid min-h-screen place-items-center bg-paper-100 text-brand-600">
-        {error ? <p className="text-sm text-ink-600">{error}</p> : <SpinnerIcon className="animate-spin" width={28} height={28} />}
-      </div>
+      <AppShell>
+        {error ? <ErrorNote message={error} /> : <PanelSpinner label="Loading the project" />}
+      </AppShell>
     );
   }
 
@@ -109,27 +109,25 @@ export function PmProjectPage() {
   const doneTasks = data.tasks.filter((t) => t.status === 'done');
 
   return (
-    <div className="cx-aurora min-h-screen bg-paper-100">
-      <header className="flex items-center justify-between border-b border-line px-6 py-4 sm:px-10">
-        <div className="flex items-center gap-4">
-          <Logo />
-          <Link to="/pm" className="text-sm text-ink-600 transition hover:text-ink-900">
-            ← Board
-          </Link>
-        </div>
+    <AppShell>
+      {/* Back to the board, and the one action this screen owns. */}
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <Link to="/pm" className="text-sm text-ink-600 transition hover:text-ink-900">
+          ← Project board
+        </Link>
         <button
           onClick={() => void recheck()}
           disabled={busy}
-          className="flex items-center gap-2 rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-700 transition hover:bg-paper-100 disabled:opacity-60"
+          className="flex items-center gap-2 rounded-lg glass-card px-3 py-2 text-sm text-ink-700 transition hover:text-ink-900 disabled:opacity-60"
         >
           {busy && <SpinnerIcon className="animate-spin" width={16} height={16} />}
           Re-check
         </button>
-      </header>
+      </div>
 
-      <main className="mx-auto max-w-5xl px-6 py-8 sm:px-10">
+      <main className="mx-auto max-w-5xl">
         {error && (
-          <div className="mb-6 rounded-lg border border-line bg-paper-0 px-4 py-3 text-sm text-ink-800">
+          <div className="mb-6 rounded-lg glass-card px-4 py-3 text-sm text-ink-800">
             {error}
           </div>
         )}
@@ -166,7 +164,7 @@ export function PmProjectPage() {
               <ul className="space-y-1.5">
                 {analysis.health.reasons.map((r) => (
                   <li key={r.text} className="flex items-start gap-2 text-sm text-ink-700">
-                    <span aria-hidden="true" className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-gray-600" />
+                    <span aria-hidden="true" className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-paper-400" />
                     {r.text}
                   </li>
                 ))}
@@ -242,7 +240,7 @@ export function PmProjectPage() {
               }
             >
               {analysis.drying.equipment.sufficient === false && (
-                <p className="mb-4 rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-700">
+                <p className="mb-4 rounded-lg glass-card px-3 py-2 text-sm text-ink-700">
                   <span className="pm-warning font-medium">Under-equipped.</span>{' '}
                   {analysis.drying.equipment.shortfallNote}
                 </p>
@@ -256,7 +254,7 @@ export function PmProjectPage() {
               ) : (
                 <div className="grid gap-5 sm:grid-cols-2">
                   {analysis.drying.areas.map((area) => (
-                    <div key={area.areaId} className="rounded-lg border border-line bg-paper-0 p-4">
+                    <div key={area.areaId} className="rounded-lg glass-card p-4">
                       <div className="flex items-baseline justify-between gap-2">
                         <h3 className="text-sm font-medium text-ink-900">{area.label}</h3>
                         <span className="text-xs text-ink-500">{area.material}</span>
@@ -325,7 +323,7 @@ export function PmProjectPage() {
                     <button
                       onClick={() => void toggleTask(task)}
                       aria-label={`Mark “${task.title}” done`}
-                      className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded border border-line bg-paper-0 transition hover:border-brand-300"
+                      className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded glass-card transition hover:border-brand-300"
                     />
                     <div className="min-w-0 flex-1">
                       <p className="text-sm text-ink-800">{task.title}</p>
@@ -385,7 +383,7 @@ export function PmProjectPage() {
                     {doc.status === 'missing' && (
                       <button
                         onClick={() => void setDocument(doc, 'provided')}
-                        className="rounded-lg border border-line bg-paper-0 px-2.5 py-1 text-xs text-ink-700 transition hover:bg-paper-100"
+                        className="rounded-lg glass-card px-2.5 py-1 text-xs text-ink-700 transition hover:bg-paper-100"
                       >
                         Have it
                       </button>
@@ -437,7 +435,7 @@ export function PmProjectPage() {
                     key={a}
                     onClick={() => void draft(a)}
                     disabled={busy}
-                    className="rounded-lg border border-line bg-paper-0 px-2.5 py-1 text-xs text-ink-700 transition hover:bg-paper-100 disabled:opacity-60"
+                    className="rounded-lg glass-card px-2.5 py-1 text-xs text-ink-700 transition hover:bg-paper-100 disabled:opacity-60"
                   >
                     Draft for {a}
                   </button>
@@ -453,7 +451,7 @@ export function PmProjectPage() {
             ) : (
               <ul className="space-y-3">
                 {data.updates.map((u) => (
-                  <li key={u.id} className="rounded-lg border border-line bg-paper-0 p-3">
+                  <li key={u.id} className="rounded-lg glass-card p-3">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs font-medium uppercase tracking-wide text-ink-500">
                         {u.audience} · {u.status}
@@ -461,7 +459,7 @@ export function PmProjectPage() {
                       {u.status === 'draft' && (
                         <button
                           onClick={() => void api.pmUpdateDraft(u.id, 'approved').then(load)}
-                          className="rounded-lg border border-line bg-paper-0 px-2.5 py-1 text-xs text-ink-700 transition hover:bg-paper-100"
+                          className="rounded-lg glass-card px-2.5 py-1 text-xs text-ink-700 transition hover:bg-paper-100"
                         >
                           Approve
                         </button>
@@ -522,7 +520,7 @@ export function PmProjectPage() {
           )}
         </div>
       </main>
-    </div>
+    </AppShell>
   );
 }
 

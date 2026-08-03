@@ -14,6 +14,8 @@ import {
   type WorkType,
 } from '../lib/api';
 import { Logo } from '../components/Logo';
+import { PLATFORM_HOME } from '../lib/platforms';
+import { getPlatform } from '../lib/usePlatform';
 import { SpinnerIcon, CheckIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
@@ -134,7 +136,7 @@ export function OnboardingPage() {
         await api.joinOrg(joinCode.trim().toUpperCase(), role, workType, usageIntents);
       }
       await refreshMembership();
-      navigate('/dashboard', { replace: true });
+      navigate(PLATFORM_HOME[getPlatform()], { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
       // Send the user back to the org step if the join code was the problem.
@@ -189,7 +191,7 @@ export function OnboardingPage() {
             ))}
           </ol>
 
-          <div className="rounded-2xl border border-line bg-paper-0 shadow-lift p-7 shadow-2xl shadow-lift-xl sm:p-9">
+          <div className="rounded-2xl glass-panel p-7 shadow-2xl shadow-lift-xl sm:p-9">
             {error && (
               <div
                 role="alert"
@@ -208,7 +210,7 @@ export function OnboardingPage() {
                   see each other's linked accounts.
                 </p>
 
-                <div className="mt-5 grid grid-cols-2 gap-2 rounded-lg border border-line bg-paper-0 p-1">
+                <div className="mt-5 grid grid-cols-2 gap-2 rounded-lg glass-card p-1">
                   <ModeTab active={mode === 'create'} onClick={() => switchMode('create')}>
                     Create new
                   </ModeTab>
@@ -228,7 +230,7 @@ export function OnboardingPage() {
                       onChange={(e) => setOrgName(e.target.value)}
                       placeholder="Acme Restoration"
                       autoFocus
-                      className="w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
+                      className="w-full rounded-lg glass-card px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
                     />
                     <p className="mt-2 text-xs text-ink-500">
                       You'll get a join code to invite the rest of your team.
@@ -246,7 +248,7 @@ export function OnboardingPage() {
                       placeholder="e.g. 8F3A9C2B"
                       autoFocus
                       autoCapitalize="characters"
-                      className="w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 font-mono tracking-widest text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
+                      className="w-full rounded-lg glass-card px-3.5 py-2.5 font-mono tracking-widest text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
                     />
                     <p className="mt-2 text-xs text-ink-500">
                       Ask an admin in your organization for the code.
@@ -428,7 +430,7 @@ function OptionCard({
       className={`flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition ${
         selected
           ? 'border-brand-400 bg-brand-50 ring-1 ring-brand-200'
-          : 'border-line bg-paper-0 hover:border-line hover:bg-paper-100'
+          : 'glass-card hover:border-line hover:bg-paper-100'
       }`}
     >
       <span

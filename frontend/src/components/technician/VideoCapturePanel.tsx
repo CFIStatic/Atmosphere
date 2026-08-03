@@ -137,7 +137,7 @@ export function VideoCapturePanel({ onSaved, onDetections }: Props) {
   const problem = streamError ?? recorder.error ?? detector.error;
 
   return (
-    <section className="overflow-hidden rounded-xl border border-line bg-paper-0 shadow-card">
+    <section className="overflow-hidden rounded-xl glass-card">
       <header className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
         <div>
           <h2 className="text-sm font-semibold text-ink-900">Camera</h2>
@@ -161,7 +161,7 @@ export function VideoCapturePanel({ onSaved, onDetections }: Props) {
 
       {/* The stage stays dark: footage reads better against it than against
           paper, and it makes the boxes legible in daylight. */}
-      <div className="relative aspect-video w-full overflow-hidden bg-ink-900">
+      <div className="relative aspect-video w-full overflow-hidden bg-paper-100">
         <video ref={videoRef} className="h-full w-full object-contain" muted playsInline autoPlay />
         <canvas
           ref={canvasRef}
@@ -227,7 +227,7 @@ export function VideoCapturePanel({ onSaved, onDetections }: Props) {
             {recorderSupported() && (
               <button
                 onClick={handleRecord}
-                className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-card transition ${
+                className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-ink-900 shadow-card transition ${
                   recording ? 'bg-danger-600 hover:bg-danger-700' : 'bg-brand-500 hover:bg-brand-600'
                 }`}
               >
@@ -246,7 +246,7 @@ export function VideoCapturePanel({ onSaved, onDetections }: Props) {
             {recording && (
               <button
                 onClick={recorder.state === 'recording' ? recorder.pause : recorder.resume}
-                className="flex items-center gap-2 rounded-lg border border-line bg-paper-0 px-4 py-2.5 text-sm font-medium text-ink-700 transition hover:bg-paper-100"
+                className="flex items-center gap-2 rounded-lg glass-card px-4 py-2.5 text-sm font-medium text-ink-700 transition hover:bg-paper-100"
               >
                 {recorder.state === 'recording' ? (
                   <>
@@ -266,7 +266,7 @@ export function VideoCapturePanel({ onSaved, onDetections }: Props) {
               className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium transition ${
                 detecting
                   ? 'border-brand-200 bg-brand-50 text-brand-700'
-                  : 'border-line bg-paper-0 text-ink-700 hover:bg-paper-100'
+                  : 'glass-card text-ink-700 hover:bg-paper-100'
               }`}
             >
               <ScanIcon width={18} height={18} />
@@ -275,7 +275,7 @@ export function VideoCapturePanel({ onSaved, onDetections }: Props) {
 
             <button
               onClick={handleStopCamera}
-              className="rounded-lg border border-line bg-paper-0 px-4 py-2.5 text-sm font-medium text-ink-600 transition hover:bg-paper-100"
+              className="rounded-lg glass-card px-4 py-2.5 text-sm font-medium text-ink-600 transition hover:bg-paper-100"
             >
               Turn off
             </button>

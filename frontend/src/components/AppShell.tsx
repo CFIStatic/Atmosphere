@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode, type ComponentType, type SVGProps } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { ROLE_LABELS } from '../lib/api';
+import { api, ROLE_LABELS } from '../lib/api';
 import { displayName, initials } from '../lib/display';
-import { usePreferences } from '../lib/preferences';
+import { setPreference, usePreferences } from '../lib/preferences';
+import { PLATFORMS, PLATFORM_HOME, PLATFORM_IDS, platformOfPath } from '../lib/platforms';
+import { usePlatform } from '../lib/usePlatform';
 import { Logo } from './Logo';
 import {
   AuditIcon,
@@ -21,7 +23,13 @@ import {
   SpinnerIcon,
   UsersIcon,
   ChevronDownIcon,
+  CloseIcon,
+  GaugeIcon,
   LogOutIcon,
+  MenuIcon,
+  MicIcon,
+  MoonIcon,
+  SearchIcon,
   SettingsIcon,
   SparkIcon,
 } from './icons';
@@ -164,19 +172,18 @@ function AccountMenu() {
         onClick={() => setOpen((value) => !value)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex items-center gap-2.5 rounded-lg border border-line bg-paper-0 py-1.5 pl-1.5 pr-2.5 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
+        className="flex items-center gap-2 rounded-full transition hover:opacity-90"
       >
-        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand-500 text-xs font-semibold text-white">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-500 text-xs font-semibold text-white">
           {initials(profile?.fullName, user?.email)}
         </span>
-        <span className="hidden max-w-[10rem] truncate sm:inline">{name}</span>
-        <ChevronDownIcon width={15} height={15} className="shrink-0 text-ink-500" />
+        <ChevronDownIcon width={14} height={14} className="hidden shrink-0 text-ink-500 sm:block" />
       </button>
 
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-40 mt-2 w-64 overflow-hidden rounded-xl border border-line bg-paper-0 shadow-lift"
+          className="absolute right-0 z-40 mt-2 w-64 overflow-hidden rounded-xl glass-panel"
         >
           <div className="border-b border-line px-4 py-3">
             <p className="truncate text-sm font-medium text-ink-900">{name}</p>
@@ -192,7 +199,7 @@ function AccountMenu() {
               setOpen(false);
               navigate('/settings');
             }}
-            className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-ink-800 transition hover:bg-paper-100"
+            className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-ink-800 transition hover:bg-paper-200"
           >
             <SettingsIcon width={17} height={17} className="text-ink-500" />
             Settings
@@ -264,7 +271,7 @@ export function ErrorNote({ message }: { message: string }) {
   return (
     <p
       role="alert"
-      className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+      className="rounded-lg border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-600"
     >
       {message}
     </p>

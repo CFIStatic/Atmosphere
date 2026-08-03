@@ -37,7 +37,7 @@ function OptionButton({
       ? 'border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100'
       : option.action === 'reject'
         ? 'border-danger-200 bg-danger-50 text-danger-700 hover:bg-danger-50'
-        : 'border-line bg-paper-0 text-ink-800 hover:bg-paper-100';
+        : 'glass-card text-ink-800 hover:bg-paper-100';
 
   return (
     <button
@@ -141,7 +141,7 @@ function EscalationCard({
         onChange={(event) => setNote(event.target.value)}
         placeholder="Add a note (optional)"
         maxLength={2000}
-        className="mt-3 w-full rounded-lg border border-line bg-paper-50 px-3 py-2 text-xs text-ink-800 placeholder-ink-400 outline-none transition focus:border-brand-400"
+        className="mt-3 w-full rounded-lg border border-line glass-field px-3 py-2 text-xs text-ink-800 placeholder-ink-400 outline-none transition focus:border-brand-400"
       />
 
       <div className="mt-3 flex flex-wrap items-center gap-2">

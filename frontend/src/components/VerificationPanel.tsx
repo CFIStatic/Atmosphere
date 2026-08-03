@@ -22,14 +22,14 @@ import { SpinnerIcon, CheckIcon } from './icons';
  */
 
 const STATUS_STYLES: Record<VerificationStatus, string> = {
-  queued: 'border-line bg-paper-0 text-ink-700',
+  queued: 'glass-card text-ink-700',
   running: 'border-brand-200 bg-brand-50 text-brand-700',
   verified: 'border-success-200 bg-success-50 text-success-600',
   repaired: 'border-success-200 bg-success-50 text-success-600',
   escalated: 'border-caution-200 bg-caution-50 text-caution-600',
   rejected: 'border-danger-200 bg-danger-50 text-danger-700',
-  failed: 'border-line bg-paper-0 text-ink-600',
-  cancelled: 'border-line bg-paper-0 text-ink-500',
+  failed: 'glass-card text-ink-600',
+  cancelled: 'glass-card text-ink-500',
 };
 
 const VERDICT_STYLES: Record<Verdict, string> = {

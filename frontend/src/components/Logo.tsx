@@ -1,10 +1,15 @@
 interface Props {
   className?: string;
-  /** Glyph only — for narrow bars where the wordmark would crowd the row. */
+  /** Mark only — for narrow bars where the wordmark would crowd the row. */
   compact?: boolean;
 }
 
-/** Atmosphere wordmark + glyph (a sphere ringed by its atmosphere). */
+/**
+ * The official Atmosphere mark: five bars settling from faint to solid onto
+ * an orange base — the atmosphere over the ground. The greys ride the ink
+ * token so the mark reads correctly on both themes; the base is always the
+ * brand orange.
+ */
 export function Logo({ className = '', compact = false }: Props) {
   return (
     <div className={`flex items-center gap-2.5 text-ink-900 ${className}`}>

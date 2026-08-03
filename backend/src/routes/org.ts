@@ -1,6 +1,12 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
+import { z } from 'zod';
+import { config } from '../config.js';
+import { createAdminClient } from '../lib/supabase.js';
+import { buildMailSender } from '../campaigns/mail/index.js';
+import { invitesAnsweredBy, inviteEmail } from '../org/invites.js';
+import { MEMBER_ROLES } from '../lib/validation.js';
 import {
   createOrgSchema,
   joinOrgSchema,
@@ -309,6 +315,204 @@ orgRouter.get('/members', async (req: Request, res: Response, next: NextFunction
     if (result.error) throw new HttpError(500, result.error.message, 'members_failed');
 
     res.json({ members: (result.data ?? []).map(serializeMember) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* ---- Invitations ---------------------------------------------------------- */
+
+/** The caller's org, with the fields inviting needs. */
+async function orgForInvites(supabase: any, userId: string) {
+  const { data } = await supabase
+    .from('org_members')
+    .select('org_id, orgs(id, name, join_code)')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true })
+    .limit(1);
+  const row = (data ?? [])[0] as any;
+  if (!row?.org_id) throw new HttpError(404, 'You are not in an organization yet.', 'no_org');
+  return { orgId: row.org_id as string, name: row.orgs?.name as string, joinCode: row.orgs?.join_code as string };
+}
+
+/**
+ * GET /api/org/invites
+ * Who has been asked, and where each invitation stands.
+ *
+ * Reconciliation happens here, lazily. Joining goes through the code and the
+ * join flow has no idea an invite row exists, so pending invites whose address
+ * now belongs to a member are marked joined on read. Lazy because this list is
+ * read from exactly one screen, and a trigger on org_members would couple the
+ * join path to a bookkeeping table it should not know about.
+ */
+orgRouter.get('/invites', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const supabase = createUserClient(req.accessToken!);
+    const { orgId } = await orgForInvites(supabase, req.user!.id);
+
+    const [{ data: inviteRows }, { data: memberRows }] = await Promise.all([
+      supabase
+        .from('org_invites')
+        .select('id, email, role, note, status, created_at, joined_at, revoked_at, invited_by')
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: false })
+        .limit(200),
+      supabase.from('org_members').select('user_id, profiles(email)').eq('org_id', orgId),
+    ]);
+
+    const invites = (inviteRows ?? []) as any[];
+    const memberEmails = ((memberRows ?? []) as any[])
+      .map((m) => m.profiles?.email)
+      .filter(Boolean) as string[];
+
+    const answered = invitesAnsweredBy(invites, memberEmails);
+    if (answered.length) {
+      await supabase
+        .from('org_invites')
+        .update({ status: 'joined', joined_at: new Date().toISOString() })
+        .in('id', answered);
+      for (const invite of invites) {
+        if (answered.includes(invite.id)) invite.status = 'joined';
+      }
+    }
+
+    res.json({
+      invites: invites.map((invite) => ({
+        id: invite.id,
+        email: invite.email,
+        role: invite.role,
+        note: invite.note,
+        status: invite.status,
+        createdAt: invite.created_at,
+        joinedAt: invite.joined_at,
+        revokedAt: invite.revoked_at,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const createInviteSchema = z.object({
+  email: z.string().email().max(200),
+  role: z.enum(MEMBER_ROLES).optional(),
+  note: z.string().trim().max(500).optional(),
+});
+
+/**
+ * POST /api/org/invites
+ * Ask somebody to join, and email them the code if a mailbox is connected.
+ *
+ * Any member may invite, deliberately: the join code is already visible to
+ * every member in settings, so an invite grants nothing the inviter could not
+ * hand over by reading their own screen. Gating it would be theatre.
+ *
+ * The email is best-effort. No connected mailbox is the common case on day
+ * one, and the response says so plainly so the UI can hand over the code to
+ * send some other way — a failed invite email must not read as a failed
+ * invite.
+ */
+orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = createInviteSchema.parse(req.body ?? {});
+    const supabase = createUserClient(req.accessToken!);
+    const { orgId, name, joinCode } = await orgForInvites(supabase, req.user!.id);
+    const email = input.email.trim().toLowerCase();
+
+    const { data: invite, error } = await supabase
+      .from('org_invites')
+      .insert({
+        org_id: orgId,
+        email,
+        role: input.role ?? 'field_technician',
+        note: input.note ?? null,
+        invited_by: req.user!.id,
+      })
+      .select('id, email, role, status, created_at')
+      .single();
+    if (error) {
+      if (error.code === '23505') {
+        throw new HttpError(409, 'That address already has a live invitation.', 'duplicate_invite');
+      }
+      throw new HttpError(400, error.message, 'invite_failed');
+    }
+
+    // Global erasure tombstones outrank a workplace invitation like they
+    // outrank everything else: somebody who asked to be forgotten does not get
+    // email from this platform, full stop. The invite itself stands — the code
+    // can be handed over in person — and the reason is kept generic on purpose,
+    // because "this address is on an erasure list" is itself a disclosure.
+    let emailed = false;
+    const admin = createAdminClient();
+    let erased = false;
+    if (admin) {
+      const { data } = await admin.from('network_erasures').select('email').eq('email', email).maybeSingle();
+      erased = Boolean(data);
+    }
+
+    if (!erased) {
+      try {
+        const sender = await buildMailSender(orgId);
+        if (sender) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name, email')
+            .eq('id', req.user!.id)
+            .maybeSingle();
+          const mail = inviteEmail({
+            orgName: name,
+            inviterName: (profile as any)?.full_name ?? (profile as any)?.email ?? null,
+            joinCode,
+            origin: config.frontendOrigins?.[0] ?? null,
+            note: input.note ?? null,
+          });
+          const result = await sender.send({ to: email, subject: mail.subject, text: mail.text });
+          emailed = result.ok;
+        }
+      } catch {
+        // The invite stands; only the delivery failed, and the response's
+        // emailed:false is the honest report of that.
+      }
+    }
+
+    res.status(201).json({
+      invite: {
+        id: (invite as any).id,
+        email: (invite as any).email,
+        role: (invite as any).role,
+        status: (invite as any).status,
+        createdAt: (invite as any).created_at,
+      },
+      emailed,
+      // Handed back so the screen can offer "copy the code" the moment the
+      // email could not go — not as a fallback the person has to hunt for.
+      joinCode,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** POST /api/org/invites/:id/revoke — withdraw a pending invitation. */
+orgRouter.post('/invites/:id/revoke', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const supabase = createUserClient(req.accessToken!);
+    const { orgId } = await orgForInvites(supabase, req.user!.id);
+
+    const { data, error } = await supabase
+      .from('org_invites')
+      .update({ status: 'revoked', revoked_at: new Date().toISOString() })
+      .eq('org_id', orgId)
+      .eq('id', req.params.id)
+      .eq('status', 'pending')
+      .select('id')
+      .maybeSingle();
+    if (error) throw new HttpError(400, error.message, 'revoke_failed');
+    if (!data) {
+      throw new HttpError(409, 'That invitation is not pending — it was already answered or withdrawn.', 'not_pending');
+    }
+
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

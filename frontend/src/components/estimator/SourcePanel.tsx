@@ -104,11 +104,11 @@ export function SourcePanel({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-white">Sources</h2>
+        <h2 className="text-lg font-semibold text-ink-900">Sources</h2>
         <button
           onClick={onLoadDemo}
           disabled={busy}
-          className="rounded-lg border border-white/10 bg-ink-700/70 px-3 py-1.5 text-xs text-gray-200 transition hover:bg-ink-600 disabled:opacity-60"
+          className="rounded-lg border border-line bg-paper-200 px-3 py-1.5 text-xs text-ink-800 transition hover:bg-paper-300 disabled:opacity-60"
         >
           Load a demo job
         </button>
@@ -135,11 +135,11 @@ export function SourcePanel({
       />
 
       {/* ---- Photos ---- */}
-      <div className="rounded-xl border border-white/10 bg-ink-800/60 p-4">
+      <div className="rounded-xl glass-card p-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <p className="text-sm font-medium text-white">Photos</p>
-            <p className="mt-0.5 text-xs text-gray-500">
+            <p className="text-sm font-medium text-ink-900">Photos</p>
+            <p className="mt-0.5 text-xs text-ink-500">
               Read for filename and timestamp only — the images stay on this device.
             </p>
           </div>
@@ -148,11 +148,11 @@ export function SourcePanel({
 
         {sources.photos.length > 0 && (
           <>
-            <p className="mt-3 text-xs text-gray-500">
+            <p className="mt-3 text-xs text-ink-500">
               {sources.photos.length} photo{sources.photos.length === 1 ? '' : 's'} · {captioned}{' '}
               captioned.{' '}
               {captioned < sources.photos.length && (
-                <span className="text-amber-300">
+                <span className="text-caution-600">
                   Uncaptioned photos cannot substantiate a line item.
                 </span>
               )}
@@ -197,7 +197,7 @@ export function SourcePanel({
             </ul>
             <button
               onClick={() => onChange({ ...sources, photos: [] })}
-              className="mt-2 text-xs text-gray-500 transition hover:text-gray-300"
+              className="mt-2 text-xs text-ink-500 transition hover:text-ink-700"
             >
               Clear photos
             </button>
@@ -248,27 +248,27 @@ function FileCard({
   const inputRef = useRef<HTMLInputElement>(null);
 
   return (
-    <div className="rounded-xl border border-white/10 bg-ink-800/60 p-4">
+    <div className="rounded-xl glass-card p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="text-sm font-medium text-white">
+          <p className="text-sm font-medium text-ink-900">
             {label}
-            {loaded && <span className="ml-2 text-xs text-emerald-400">loaded</span>}
+            {loaded && <span className="ml-2 text-xs text-success-600">loaded</span>}
           </p>
-          <p className="mt-0.5 text-xs text-gray-500">{hint}</p>
+          <p className="mt-0.5 text-xs text-ink-500">{hint}</p>
         </div>
         <div className="flex gap-2">
           {loaded && (
             <button
               onClick={onClear}
-              className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-400 transition hover:text-gray-200"
+              className="rounded-lg border border-line px-3 py-1.5 text-xs text-ink-600 transition hover:text-ink-800"
             >
               Remove
             </button>
           )}
           <button
             onClick={() => inputRef.current?.click()}
-            className="rounded-lg border border-white/10 bg-ink-700/70 px-3 py-1.5 text-xs text-gray-200 transition hover:bg-ink-600"
+            className="rounded-lg border border-line bg-paper-200 px-3 py-1.5 text-xs text-ink-800 transition hover:bg-paper-300"
           >
             Choose file
           </button>
@@ -285,7 +285,7 @@ function FileCard({
           e.target.value = '';
         }}
       />
-      {error && <p className="mt-2 text-xs text-red-300">{error}</p>}
+      {error && <p className="mt-2 text-xs text-danger-600">{error}</p>}
     </div>
   );
 }
@@ -296,7 +296,7 @@ function PhotoPicker({ onFiles }: { onFiles: (files: FileList) => void }) {
     <>
       <button
         onClick={() => inputRef.current?.click()}
-        className="rounded-lg border border-white/10 bg-ink-700/70 px-3 py-1.5 text-xs text-gray-200 transition hover:bg-ink-600"
+        className="rounded-lg border border-line bg-paper-200 px-3 py-1.5 text-xs text-ink-800 transition hover:bg-paper-300"
       >
         Add photos
       </button>

@@ -7,6 +7,16 @@ import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { SpinnerIcon } from './components/icons';
+import { PLATFORM_HOME } from './lib/platforms';
+import { RequirePlatform } from './components/RequirePlatform';
+import { CampaignsPage } from './pages/CampaignsPage';
+import { ProfilerPage } from './pages/ProfilerPage';
+import { TerritoriesPage } from './pages/TerritoriesPage';
+import { SalesWorkPage } from './pages/SalesWorkPage';
+import { SharedDashboardPage } from './pages/SharedDashboardPage';
+import { PurchaseOrdersPage } from './pages/PurchaseOrdersPage';
+import { JobSharePage } from './pages/JobSharePage';
+import { getPlatform } from './lib/usePlatform';
 
 // Auth and onboarding stay eager so /login is fast. Everything else loads on demand —
 // dev mode otherwise pulls in every page on the first visit.
@@ -117,13 +127,76 @@ function RequireNotOnboarded({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/** Sends bare/legacy paths to whichever platform this device last used. */
+function PlatformRedirect() {
+  return <Navigate to={PLATFORM_HOME[getPlatform()]} replace />;
+}
+
+// Demo builds run in sandboxed frames where history-API navigation is not
+// available, so they route in memory; real builds keep clean URLs.
+const Router = import.meta.env.VITE_DEMO ? MemoryRouter : BrowserRouter;
+
+/**
+ * A memory router has no URL to read, so a demo cannot be opened on a
+ * particular screen the way a real build can. This carries the entry point in
+ * localStorage instead — the only way to reach a page that is deliberately
+ * outside the console, like the subcontractor's job link.
+ */
+function routerProps(): Record<string, unknown> {
+  if (!import.meta.env.VITE_DEMO) return {};
+  try {
+    const entry = localStorage.getItem('atmosphere.route');
+    if (entry) {
+      // Consumed, not remembered. Leaving it set would send every reload back
+      // to the same screen however far somebody had navigated, which reads as
+      // the app refusing to move.
+      localStorage.removeItem('atmosphere.route');
+      return { initialEntries: [entry] };
+    }
+  } catch {
+    /* storage denied — fall through to the default entry */
+  }
+  return {};
+}
+
+/**
+ * Demo only: a way in from outside React.
+ *
+ * The published artifact has its own view switcher, which is plain DOM sitting
+ * beside the app rather than inside it — a memory router has no URL for it to
+ * change. This listens for the one event that switcher fires, so switching to
+ * the subcontractor's screen is a navigation rather than a full reload of a
+ * three-megabyte page.
+ *
+ * Inside the Router by necessity: useNavigate only exists there.
+ */
+function DemoRouteBridge() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const go = (event: Event) => {
+      const to = (event as CustomEvent<string>).detail;
+      if (typeof to === 'string' && to.startsWith('/')) navigate(to);
+    };
+    window.addEventListener('atmosphere:navigate', go);
+    return () => window.removeEventListener('atmosphere:navigate', go);
+  }, [navigate]);
+  return null;
+}
+
 export default function App() {
   return (
-    <BrowserRouter>
+    <Router {...routerProps()}>
+      {import.meta.env.VITE_DEMO ? <DemoRouteBridge /> : null}
       <AuthProvider>
         <Suspense fallback={<FullScreenSpinner />}>
           <Routes>
           <Route path="/login" element={<LoginPage />} />
+
+          {/* The subcontractor's screen. Outside every guard by construction:
+              they work for six general contractors and have an account with
+              none of them, and a shared job record that requires signing in is
+              not shared. The token in the path is the whole credential. */}
+          <Route path="/shared/:token" element={<JobSharePage />} />
 
           {/* Recovery routes stay outside ProtectedRoute: a locked-out user has
               no session, and the reset link must work in a fresh browser. */}
@@ -146,16 +219,93 @@ export default function App() {
             }
           />
 
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <RequireOnboarded>
-                  <DashboardPage />
-                </RequireOnboarded>
-              </ProtectedRoute>
-            }
-          />
+          {/* The four products share one console: same shell, same layout,
+              different work. /overview and /dashboard keep older links alive
+              by landing on the platform the person last used. */}
+          <Route path="/dashboard" element={<PlatformRedirect />} />
+          <Route path="/overview" element={<PlatformRedirect />} />
+          {[
+            { path: '/sales', element: <PlatformHomePage platform="sales" /> },
+            { path: '/operations', element: <PlatformHomePage platform="operations" /> },
+            { path: '/field', element: <PlatformHomePage platform="field" /> },
+            { path: '/manager', element: <PlatformHomePage platform="manager" /> },
+            { path: '/my-work', element: <MyWorkPage /> },
+            { path: '/approvals', element: <ApprovalsPage /> },
+            { path: '/schedule', element: <SchedulePage /> },
+            { path: '/customers', element: <CustomersPage /> },
+            { path: '/pipeline', element: <PipelinePage /> },
+            // Prospecting is Sales' alone. Landing here from another platform
+            // switches into Sales rather than framing a sales tool with
+            // somebody else's navigation.
+            {
+              path: '/prospector',
+              element: (
+                <RequirePlatform platform="sales">
+                  <ProspectorPage />
+                </RequirePlatform>
+              ),
+            },
+            {
+              path: '/profiler',
+              element: (
+                <RequirePlatform platform="sales">
+                  <ProfilerPage />
+                </RequirePlatform>
+              ),
+            },
+            // Campaigns and Territories are Sales' alone, same as prospecting.
+            {
+              path: '/campaigns',
+              element: (
+                <RequirePlatform platform="sales">
+                  <CampaignsPage />
+                </RequirePlatform>
+              ),
+            },
+            {
+              path: '/territories',
+              element: (
+                <RequirePlatform platform="sales">
+                  <TerritoriesPage />
+                </RequirePlatform>
+              ),
+            },
+            {
+              path: '/work',
+              element: (
+                <RequirePlatform platform="sales">
+                  <SalesWorkPage />
+                </RequirePlatform>
+              ),
+            },
+            {
+              path: '/shared',
+              element: (
+                <RequirePlatform platform="operations">
+                  <SharedDashboardPage />
+                </RequirePlatform>
+              ),
+            },
+            {
+              path: '/purchase-orders',
+              element: (
+                <RequirePlatform platform="operations">
+                  <PurchaseOrdersPage />
+                </RequirePlatform>
+              ),
+            },
+            { path: '/costing', element: <JobCostingPage /> },
+          ].map(({ path, element }) => (
+            <Route
+              key={path}
+              path={path}
+              element={
+                <ProtectedRoute>
+                  <RequireOnboarded>{element}</RequireOnboarded>
+                </ProtectedRoute>
+              }
+            />
+          ))}
 
           {/* Growth analytics. Onboarding is required — every figure is scoped to
               a signed-in staff member, and the guards inside re-check access. */}
@@ -399,6 +549,6 @@ export default function App() {
           </Routes>
         </Suspense>
       </AuthProvider>
-    </BrowserRouter>
+    </Router>
   );
 }

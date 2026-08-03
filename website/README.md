@@ -85,6 +85,31 @@ Doc content is customer-facing prose grounded in `../README.md` and
 `../docs/*.md` — the internal engineering plans themselves are deliberately not
 published.
 
+## The recovery counter
+
+The home page's `#unbilled` section publishes one number: **money recovered
+for customers** — work that was performed, never billed, and put back on an
+invoice because the Estimator read the job back against its own record.
+
+It is a factual public claim, so it is wired to exactly four attributes on
+`<div class="recovery">` in `index.html` and nothing else:
+
+| Attribute         | Meaning                                              |
+| ----------------- | ---------------------------------------------------- |
+| `data-recovered`  | Total recovered, whole dollars                       |
+| `data-jobs`       | Jobs read back (the denominator for the average)     |
+| `data-largest`    | Largest single find                                  |
+| `data-asof`       | Human date the totals were taken, e.g. `August 2026` |
+
+Fill them from the audit ledger's recovery findings — the same figures a
+customer can replay run by run — and never round them up. The average is
+derived, not entered, so it can't drift from the other two.
+
+**While `data-recovered` is `0` the section renders "Not published yet"
+instead of a total**, so an unfilled counter can never read as a claim of
+zero. That is the state it ships in today: set the real numbers before
+launch, and re-check the as-of date whenever they move.
+
 ## Forms (frontend + backend)
 
 Both site forms are wired end to end through one JS helper in `assets/site.js`:
@@ -158,6 +183,23 @@ backend's https origin — the workflow stamps it into both forms' `data-api`
 on the next deploy. Until then, submitting shows a clear could-not-reach
 message rather than silently failing.
 
+### Connecting the site to the product
+
+The marketing → account creation → product chain is wired but dormant until
+the app is hosted. Set the `WEBSITE_APP_ORIGIN` repository variable to the
+app's https origin (e.g. `https://app.example.com`) and the next deploy
+stamps it onto every page as `<html data-app-origin>`; `site.js` then:
+
+- rewrites every **Sign in** CTA to `{origin}/login` and every **Get
+  started / Create your organization** CTA to `{origin}/login?mode=signup`
+  (the app's login page opens the create-account form for that deep link);
+- turns the sign-in and sign-up pages' forms into a handoff — submitting
+  forwards to the app with the typed email prefilled (never the password).
+
+Downstream is already live in the app: a new account routes to onboarding,
+which creates the organization or joins one by code, then lands on the
+dashboard. Unset, the site keeps its designed early-access surfaces.
+
 ## Known gaps before production
 
 - The careers listings and benefits are placeholders, and the on-site roles
@@ -168,7 +210,7 @@ message rather than silently failing.
 - The placeholder domain is stamped automatically by the Pages workflow; on
   any other host, substitute `https://REPLACE-WITH-YOUR-DOMAIN` in
   `sitemap.xml`/`robots.txt` and absolutize `og:image` yourself.
-- The sign-in, sign-up, and investor pages are designed surfaces; submitting
-  shows an early-access notice via `stubForm` in `site.js`. At deploy, hook
-  them to the real app routes (or replace them with the frontend app) and
-  remove the stubs.
+- The sign-in and sign-up pages are designed surfaces until
+  `WEBSITE_APP_ORIGIN` is set (see "Connecting the site to the product") —
+  then they hand off to the real app automatically. The investor form always
+  keeps its notice; there is no investor surface in the app yet.

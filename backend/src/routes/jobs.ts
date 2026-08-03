@@ -119,7 +119,31 @@ jobsRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
     const { data, error } = await query.order('updated_at', { ascending: false }).limit(200);
     if (error) throw dbError(error, 'Could not load jobs.');
 
-    res.json({ jobs: (data ?? []).map(serializeJobMemory) });
+    // The job_memory view carries the rollups but not the money or the
+    // schedule; the Overview's revenue and receivables tiles need both, so
+    // they are merged in from crm_jobs rather than widening the view.
+    const rows = data ?? [];
+    const financials = new Map<string, any>();
+    if (rows.length) {
+      const { data: jobRows } = await supabase
+        .from('crm_jobs')
+        .select('id, contract_amount, invoiced_amount, paid_amount, scheduled_start')
+        .in('id', rows.map((r: any) => r.job_id));
+      for (const j of jobRows ?? []) financials.set(j.id, j);
+    }
+
+    res.json({
+      jobs: rows.map((r: any) => {
+        const f = financials.get(r.job_id);
+        return {
+          ...serializeJobMemory(r),
+          contractAmount: f?.contract_amount ?? null,
+          invoicedAmount: f?.invoiced_amount ?? null,
+          paidAmount: f?.paid_amount ?? null,
+          scheduledStart: f?.scheduled_start ?? null,
+        };
+      }),
+    });
   } catch (err) {
     next(err);
   }

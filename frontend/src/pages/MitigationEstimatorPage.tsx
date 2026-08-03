@@ -260,18 +260,8 @@ export function MitigationEstimatorPage() {
   );
 
   return (
-    <div className="min-h-screen bg-ink-900">
-      <header className="flex items-center justify-between border-b border-white/10 px-6 py-4 sm:px-10">
-        <Logo />
-        <Link
-          to="/dashboard"
-          className="rounded-lg border border-white/10 bg-ink-700/70 px-4 py-2 text-sm text-gray-200 transition hover:bg-ink-600"
-        >
-          Back to dashboard
-        </Link>
-      </header>
-
-      <main className="mx-auto max-w-7xl px-6 py-8 sm:px-10">
+    <AppShell>
+      <main className="mx-auto max-w-7xl">
         <div className="animate-fade-in-up">
           <p className="text-sm font-medium text-brand-400">Mitigation</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-white">Estimator</h1>
@@ -284,12 +274,12 @@ export function MitigationEstimatorPage() {
         </div>
 
         {error && (
-          <p className="mt-6 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          <p className="mt-6 rounded-lg border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-600">
             {error}
           </p>
         )}
         {notice && !error && (
-          <p className="mt-6 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+          <p className="mt-6 rounded-lg border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-600">
             {notice}
           </p>
         )}
@@ -367,7 +357,7 @@ export function MitigationEstimatorPage() {
                 <button
                   onClick={save}
                   disabled={saving}
-                  className="w-full rounded-lg border border-white/10 bg-ink-700/70 px-4 py-2.5 text-sm text-gray-200 transition hover:bg-ink-600 disabled:opacity-60"
+                  className="w-full rounded-lg border border-line bg-paper-200 px-4 py-2.5 text-sm text-ink-800 transition hover:bg-paper-300 disabled:opacity-60"
                 >
                   {saving ? 'Saving…' : 'Save this estimate'}
                 </button>
@@ -385,7 +375,7 @@ export function MitigationEstimatorPage() {
                     <a
                       key={format}
                       href={api.estimateExportUrl(estimateId, format)}
-                      className="flex-1 rounded-lg border border-white/10 bg-ink-800/60 px-2 py-2 text-center text-xs text-gray-300 transition hover:bg-ink-700"
+                      className="flex-1 rounded-lg glass-card px-2 py-2 text-center text-xs text-ink-700 transition hover:bg-paper-200"
                     >
                       {label}
                     </a>
@@ -414,10 +404,10 @@ export function MitigationEstimatorPage() {
                 busy={building}
               />
             ) : (
-              <div className="grid h-64 place-items-center rounded-xl border border-dashed border-white/10 text-center">
+              <div className="grid h-64 place-items-center rounded-xl border border-dashed border-line text-center">
                 <div>
-                  <p className="text-gray-400">No estimate yet.</p>
-                  <p className="mt-1 text-sm text-gray-600">
+                  <p className="text-ink-600">No estimate yet.</p>
+                  <p className="mt-1 text-sm text-ink-500">
                     Add a source and build, or load the demo job to see what it produces.
                   </p>
                 </div>
@@ -426,6 +416,6 @@ export function MitigationEstimatorPage() {
           </div>
         </div>
       </main>
-    </div>
+    </AppShell>
   );
 }

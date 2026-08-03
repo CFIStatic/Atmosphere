@@ -31,8 +31,8 @@ const FILTERS: { value: string; label: string }[] = [
 ];
 
 const inputClass =
-  'w-full rounded-lg border border-white/10 bg-ink-900/70 px-3 py-2 text-sm text-white placeholder:text-gray-600 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400';
-const labelClass = 'block text-xs font-medium uppercase tracking-wide text-gray-500';
+  'w-full rounded-lg border border-line glass-field px-3 py-2 text-sm text-ink-900 placeholder:text-ink-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400';
+const labelClass = 'block text-xs font-medium uppercase tracking-wide text-ink-500';
 
 function NewJobForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: () => void }) {
   const [form, setForm] = useState<CreateJobInput>({ title: '', workType: 'mitigation' });
@@ -64,10 +64,10 @@ function NewJobForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: 
   return (
     <form
       onSubmit={submit}
-      className="mb-6 animate-fade-in-up rounded-xl border border-white/10 bg-ink-800/60 p-5 backdrop-blur"
+      className="mb-6 animate-fade-in-up rounded-xl glass-card p-5 backdrop-blur"
     >
-      <h2 className="text-base font-semibold text-white">Open a job</h2>
-      <p className="mt-1 text-sm text-gray-400">
+      <h2 className="text-base font-semibold text-ink-900">Open a job</h2>
+      <p className="mt-1 text-sm text-ink-600">
         The job number is assigned automatically, and everything from here on is recorded.
       </p>
 
@@ -173,7 +173,7 @@ function NewJobForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: 
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg border border-white/10 px-4 py-2 text-sm font-medium text-gray-300 transition hover:bg-ink-700"
+          className="rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink-700 transition hover:bg-paper-200"
         >
           Cancel
         </button>
@@ -188,12 +188,12 @@ function JobCard({ job }: { job: JobSummary }) {
   return (
     <Link
       to={`/jobs/${job.jobId}`}
-      className="block rounded-xl border border-white/10 bg-ink-800/50 p-5 transition hover:border-brand-400/40 hover:bg-ink-800/80"
+      className="block rounded-xl glass-card p-5 transition hover:border-brand-400/40 hover:bg-paper-200"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-mono text-xs tracking-wider text-brand-300">#{job.jobNumber}</p>
-          <h3 className="mt-0.5 truncate text-base font-semibold text-white">{job.title}</h3>
+          <h3 className="mt-0.5 truncate text-base font-semibold text-ink-900">{job.title}</h3>
         </div>
         <span
           className={`rounded-full border px-2.5 py-1 text-xs font-medium ${JOB_STATUS_STYLES[job.status]}`}
@@ -202,7 +202,7 @@ function JobCard({ job }: { job: JobSummary }) {
         </span>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-gray-500">
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-ink-500">
         <span>{WORK_TYPE_LABELS[job.workType]}</span>
         <span className={JOB_PRIORITY_STYLES[job.priority]}>{JOB_PRIORITY_LABELS[job.priority]}</span>
         <span>
@@ -217,7 +217,7 @@ function JobCard({ job }: { job: JobSummary }) {
 
       {job.taskCount > 0 && (
         <div
-          className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10"
+          className="mt-3 h-1.5 overflow-hidden rounded-full bg-paper-300"
           role="progressbar"
           aria-valuenow={progress}
           aria-valuemin={0}
@@ -229,9 +229,9 @@ function JobCard({ job }: { job: JobSummary }) {
       )}
 
       {job.lastEvent && (
-        <p className="mt-3 truncate text-xs text-gray-400">
-          <span className="text-gray-600">Last:</span> {job.lastEvent}{' '}
-          <span className="text-gray-600">· {timeAgo(job.lastEventAt)}</span>
+        <p className="mt-3 truncate text-xs text-ink-600">
+          <span className="text-ink-500">Last:</span> {job.lastEvent}{' '}
+          <span className="text-ink-500">· {timeAgo(job.lastEventAt)}</span>
         </p>
       )}
     </Link>
@@ -303,8 +303,8 @@ export function JobsPage() {
               }}
               className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
                 status === f.value
-                  ? 'bg-brand-600 text-white'
-                  : 'border border-white/10 text-gray-400 hover:bg-ink-700 hover:text-gray-200'
+                  ? 'bg-brand-600 text-ink-900'
+                  : 'border border-line text-ink-600 hover:bg-paper-200 hover:text-ink-800'
               }`}
             >
               {f.label}

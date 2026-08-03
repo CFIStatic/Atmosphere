@@ -94,7 +94,7 @@ export function UsagePage() {
             </p>
           </div>
 
-          <div className="flex rounded-lg border border-line bg-paper-0 p-1 text-sm">
+          <div className="flex rounded-lg glass-card p-1 text-sm">
             {RANGES.map((r) => (
               <button
                 key={r.days}
@@ -139,7 +139,7 @@ export function UsagePage() {
         </div>
 
         {/* ---- Daily spend: one series, so no legend — the heading names it. ---- */}
-        <section className="mt-10 rounded-xl border border-line bg-paper-0 p-5">
+        <section className="mt-10 rounded-xl glass-card p-5">
           <h2 className="text-lg font-semibold text-ink-900">Daily spend</h2>
           <p className="mt-1 text-sm text-ink-600">Last {days} days · hover a bar for detail</p>
 
@@ -197,7 +197,7 @@ export function UsagePage() {
 
         {/* ---- Per model: each bar is directly labelled, so identity never
                 depends on colour alone. ---- */}
-        <section className="mt-8 rounded-xl border border-line bg-paper-0 p-5">
+        <section className="mt-8 rounded-xl glass-card p-5">
           <h2 className="text-lg font-semibold text-ink-900">Spend by model</h2>
           <p className="mt-1 text-sm text-ink-600">This billing period</p>
 
@@ -220,7 +220,7 @@ export function UsagePage() {
                       {formatUsd(m.priceNanos, { precise: true })}
                     </span>
                   </div>
-                  <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-paper-0">
+                  <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-paper-200/50">
                     <div
                       className="h-full rounded-full"
                       style={{
@@ -247,7 +247,7 @@ export function UsagePage() {
               <p className="px-5 py-8 text-center text-sm text-ink-500">No requests yet.</p>
             ) : (
               <table className="w-full min-w-[38rem] text-sm">
-                <thead className="bg-paper-0 text-left text-xs uppercase tracking-wide text-ink-600">
+                <thead className="bg-paper-200/50 text-left text-xs uppercase tracking-wide text-ink-600">
                   <tr>
                     <th scope="col" className="px-4 py-3 font-medium">Model</th>
                     <th scope="col" className="px-4 py-3 font-medium">Feature</th>
@@ -260,7 +260,7 @@ export function UsagePage() {
                 </thead>
                 <tbody className="divide-y divide-line">
                   {events.map((e) => (
-                    <tr key={e.id} className="bg-paper-0">
+                    <tr key={e.id} className="bg-paper-200/50">
                       <td className="px-4 py-2.5 font-medium text-ink-900">{e.modelId}</td>
                       <td className="px-4 py-2.5 text-ink-600">{e.feature ?? '—'}</td>
                       <td className="px-4 py-2.5 text-right text-ink-700">{formatTokens(e.inputTokens)}</td>
@@ -284,7 +284,7 @@ export function UsagePage() {
 
 function StatTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded-xl border border-line bg-paper-0 p-5">
+    <div className="rounded-xl glass-card p-5">
       <p className="text-xs font-medium uppercase tracking-wide text-ink-500">{label}</p>
       <p className="mt-1.5 text-2xl font-bold tracking-tight text-ink-900">{value}</p>
       {hint && <p className="mt-0.5 text-xs text-ink-500">{hint}</p>}

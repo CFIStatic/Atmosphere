@@ -108,7 +108,7 @@ export function PinSetupCard() {
   const busy = stage === 'saving';
 
   return (
-    <div className="rounded-xl border border-line bg-paper-0 shadow-card p-5">
+    <div className="rounded-xl glass-card p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-ink-500">
@@ -158,7 +158,7 @@ export function PinSetupCard() {
           <div className="mt-4 flex flex-wrap gap-2">
             <button
               onClick={beginSetup}
-              className="rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
+              className="rounded-lg glass-card px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
             >
               Change PIN
             </button>
@@ -207,7 +207,7 @@ export function PinSetupCard() {
                 setError(null);
                 setStage((s) => (s === 'confirm' ? 'enter' : enrolled ? 'on' : 'off'));
               }}
-              className="mt-5 w-full rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm font-medium text-ink-700 transition hover:bg-paper-100"
+              className="mt-5 w-full rounded-lg glass-card px-4 py-2 text-sm font-medium text-ink-700 transition hover:bg-paper-100"
             >
               Cancel
             </button>

@@ -475,6 +475,28 @@ export const config = {
     // the disk before anyone notices.
     maxRecordsPerRun: Number(process.env.INTEGRATION_MAX_RECORDS ?? 50_000),
     requestTimeoutMs: Number(process.env.INTEGRATION_TIMEOUT_MS ?? 30_000),
+
+    // Sealing key for OAuth grants against customers' own CRMs. Absent from
+    // the database on purpose: a database leak alone must not yield a usable
+    // refresh token, which is the same separation the device pepper relies on.
+    oauthKey: process.env.INTEGRATIONS_OAUTH_KEY ?? '',
+
+    salesforce: {
+      // A Connected App in Salesforce. Without these the connector refuses to
+      // run rather than falling back to asking for a password — the fallback
+      // is the thing OAuth exists to avoid.
+      clientId: process.env.SALESFORCE_CLIENT_ID ?? '',
+      clientSecret: process.env.SALESFORCE_CLIENT_SECRET ?? '',
+      // Sandboxes live at test.salesforce.com; this is how a customer points
+      // us at one without a code change.
+      loginUrl: process.env.SALESFORCE_LOGIN_URL ?? 'https://login.salesforce.com',
+      apiVersion: process.env.SALESFORCE_API_VERSION ?? 'v60.0',
+    },
+
+    // Reading a CRM through a signed-in browser. Off unless switched on: it
+    // necessarily involves holding a customer's password, and that should take
+    // a deliberate act rather than being available by default.
+    browserCrmEnabled: process.env.INTEGRATIONS_BROWSER_CRM === 'true',
   },
 
   /**
@@ -542,6 +564,235 @@ export const config = {
     actionTimeoutMs: Number(process.env.COMPUTER_USE_ACTION_TIMEOUT_MS ?? 45 * 1000),
     maxTokens: Number(process.env.COMPUTER_USE_MAX_TOKENS ?? 16000),
   },
+  campaigns: {
+    // Public map and weather data. Both are free and open, and both ask for a
+    // contactable User-Agent as a condition of use rather than a suggestion —
+    // getting blocked would break the feature for every customer at once.
+    userAgent: process.env.CAMPAIGNS_USER_AGENT ?? 'AtmosphereBot/1.0 (+https://atmosphere.build/bot)',
+
+    // OpenStreetMap. Chosen over Google Places deliberately: Places charges per
+    // call and forbids storing results, which makes building a territory list
+    // out of it both expensive and against the terms. OSM is ODbL — free to
+    // query, free to cache, attribution the only obligation.
+    nominatimBaseUrl: process.env.NOMINATIM_BASE_URL ?? 'https://nominatim.openstreetmap.org',
+    overpassBaseUrl: process.env.OVERPASS_BASE_URL ?? 'https://overpass-api.de/api/interpreter',
+    maxPlacesPerSearch: Number(process.env.CAMPAIGNS_MAX_PLACES ?? 300),
+
+    // The National Weather Service. Free, no key, and authoritative — these are
+    // the alerts that drive the warnings on the radio.
+    weatherBaseUrl: process.env.WEATHER_BASE_URL ?? 'https://api.weather.gov',
+
+    // Forecasts, behind a port so any vendor drops in. NWS is the default and
+    // works with nothing configured.
+    forecastProvider: (process.env.FORECAST_PROVIDER ?? 'auto') as 'auto' | 'nws' | 'openweather',
+    openWeatherApiKey: process.env.OPENWEATHER_API_KEY ?? '',
+    openWeatherBaseUrl: process.env.OPENWEATHER_BASE_URL ?? 'https://api.openweathermap.org',
+
+    // Sending as the customer, from their own mailbox.
+    //
+    // Sending is send-only where it can be. gmail.send and Mail.Send grant no
+    // ability to read mail; the extra scopes alongside them exist only to learn
+    // which account is connected, because neither send scope can answer that:
+    //
+    //   Google      + openid email profile   (non-sensitive)
+    //   Microsoft   + User.Read              (required for /v1.0/me)
+    //
+    // Without those the OAuth callback 403s and the connection appears to
+    // succeed while nothing ever sends.
+    //
+    // Before launch: gmail.send needs Google app verification past ~100 users,
+    // and that 100 is a lifetime cap rather than a concurrent one. Sources
+    // disagree on whether it is "sensitive" (verification only) or "restricted"
+    // (verification plus a paid annual security assessment) — confirm against
+    // Google's OAuth API Verification FAQ before committing a budget.
+    //
+    // Not ambiguous, and it decides the schedule: while the consent screen is
+    // in Testing, Google expires every refresh token after seven days. A
+    // campaign that fires next month has nothing to refresh with, so
+    // verification blocks scheduled sending rather than following it.
+    googleClientId: process.env.GOOGLE_CLIENT_ID ?? '',
+    googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+    gmailBaseUrl: process.env.GMAIL_BASE_URL ?? 'https://gmail.googleapis.com',
+    googleAuthUrl: process.env.GOOGLE_AUTH_URL ?? 'https://accounts.google.com/o/oauth2/v2/auth',
+    googleTokenUrl: process.env.GOOGLE_TOKEN_URL ?? 'https://oauth2.googleapis.com/token',
+    // Identity comes from here, not from Gmail: gmail.send grants no read
+    // access, so the Gmail profile endpoint cannot be relied on to answer.
+    googleUserinfoUrl:
+      process.env.GOOGLE_USERINFO_URL ?? 'https://openidconnect.googleapis.com/v1/userinfo',
+
+    microsoftClientId: process.env.MICROSOFT_CLIENT_ID ?? '',
+    microsoftClientSecret: process.env.MICROSOFT_CLIENT_SECRET ?? '',
+    graphBaseUrl: process.env.GRAPH_BASE_URL ?? 'https://graph.microsoft.com',
+    microsoftAuthUrl:
+      process.env.MICROSOFT_AUTH_URL ?? 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
+    microsoftTokenUrl:
+      process.env.MICROSOFT_TOKEN_URL ?? 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+
+    // Where the unsubscribe link in every email points.
+    //
+    // This must resolve to the BACKEND handler, not the app. The link is
+    // clicked from a mail client by somebody who has no account and never
+    // will, and the first version of this pointed at the SPA — which has no
+    // such route, so every message shipped carried an opt-out that went
+    // nowhere. That is a CAN-SPAM violation per message, not a broken link.
+    //
+    // Defaulted from the API's own public origin so a deployment that sets
+    // nothing still produces a working link.
+    unsubscribeBaseUrl:
+      process.env.UNSUBSCRIBE_BASE_URL ??
+      `${process.env.PUBLIC_API_ORIGIN ?? `http://localhost:${process.env.PORT ?? 4000}`}/api/unsubscribe`,
+
+    // Gap between messages in a send run. Exchange Online hard-caps a mailbox
+    // at 30 a minute and will not raise it; two seconds sits comfortably
+    // inside that and inside Gmail's far looser limit.
+    sendSpacingMs: Number(process.env.CAMPAIGNS_SEND_SPACING_MS ?? 2_000),
+
+    countryCode: process.env.CAMPAIGNS_COUNTRY ?? 'us',
+    requestTimeoutMs: Number(process.env.CAMPAIGNS_TIMEOUT_MS ?? 25_000),
+  },
+
+  prospecting: {
+    // Finding contact details is a licensed-data problem: the records are
+    // bought from a vendor per match, not computed. 'sandbox' serves invented
+    // people so the whole feature works before a data contract exists;
+    // 'live' talks to the configured vendor. Production still falls back to
+    // sandbox when no key is present, because billing a customer for a
+    // provider we cannot call would be worse than showing obvious fixtures.
+    mode: (process.env.PROSPECTING_MODE ?? (isProduction ? 'live' : 'sandbox')) as
+      | 'live'
+      | 'sandbox',
+
+    provider: (process.env.PROSPECTING_PROVIDER ?? 'people_data_labs') as
+      | 'people_data_labs'
+      | 'hunter',
+
+    peopleDataLabsApiKey: process.env.PEOPLE_DATA_LABS_API_KEY ?? '',
+    peopleDataLabsBaseUrl:
+      process.env.PEOPLE_DATA_LABS_BASE_URL ?? 'https://api.peopledatalabs.com',
+
+    // Hunter sits second in the waterfall. It is a domain crawler rather than
+    // a people database, so it holds the small-company people PDL has never
+    // heard of — and its domain search is what supplies pattern-inference
+    // evidence to an org whose own CRM is still empty.
+    hunterApiKey: process.env.HUNTER_API_KEY ?? '',
+    hunterBaseUrl: process.env.HUNTER_BASE_URL ?? 'https://api.hunter.io',
+    hunterCostNanos: Number(process.env.PROSPECTING_HUNTER_COST_NANOS ?? 10_000_000),
+
+    // What one revealed contact costs the customer, in nanodollars.
+    // 1 credit = 1 USD = 1_000_000_000 nanos, so this default is $0.25 a
+    // reveal. It is charged through the same credit lots as token usage.
+    revealPriceNanos: Number(process.env.PROSPECTING_REVEAL_PRICE_NANOS ?? 250_000_000),
+
+    // What the vendor charges us per match, recorded against the usage event
+    // so the margin on a reveal is as visible as the margin on a model call.
+    revealCostNanos: Number(process.env.PROSPECTING_REVEAL_COST_NANOS ?? 20_000_000),
+
+    requestTimeoutMs: Number(process.env.PROSPECTING_TIMEOUT_MS ?? 15_000),
+
+    // Verification. An unverified address is a guess, and selling guesses
+    // burns the customer's sending reputation — so nothing is returned until
+    // the ladder in verification.ts has had its say.
+    //
+    // The SMTP probe opens a connection to the recipient's mail exchanger and
+    // asks whether a mailbox exists (RCPT TO, then QUIT — no message is ever
+    // sent). Some hosts block outbound port 25; turn this off there and every
+    // address falls back to a DNS-only 'unknown'.
+    // OFF unless explicitly enabled. Probing opens connections to strangers'
+    // mail servers from your IP; done with a forged envelope sender, or from a
+    // host whose reputation you have not thought about, it is a fast way onto
+    // a blocklist. Turn it on deliberately, with a real sending domain below.
+    smtpProbeEnabled:
+      process.env.PROSPECTING_SMTP_PROBE === 'true' &&
+      Boolean(process.env.PROSPECTING_VERIFY_FROM) &&
+      !/\.invalid$/.test(process.env.PROSPECTING_VERIFY_FROM ?? ''),
+    verifyTimeoutMs: Number(process.env.PROSPECTING_VERIFY_TIMEOUT_MS ?? 6_000),
+
+    // Phone verification. Carrier lookup is the only authority on whether a
+    // number is assigned and what kind of line it rings — and since number
+    // portability, an area code tells you where a number was issued and
+    // nothing about whether it reaches a desk or a pocket.
+    twilioAccountSid: process.env.TWILIO_ACCOUNT_SID ?? '',
+    twilioAuthToken: process.env.TWILIO_AUTH_TOKEN ?? '',
+    twilioLookupBaseUrl: process.env.TWILIO_LOOKUP_BASE_URL ?? 'https://lookups.twilio.com',
+    numverifyApiKey: process.env.NUMVERIFY_API_KEY ?? '',
+    numverifyBaseUrl: process.env.NUMVERIFY_BASE_URL ?? 'https://apilayer.net/api',
+    phoneTimeoutMs: Number(process.env.PROSPECTING_PHONE_TIMEOUT_MS ?? 6_000),
+
+    // Which verifier answers "does this mailbox exist?".
+    //
+    // 'auto' takes the best configured option: a paid HTTPS verifier first,
+    // then our own SMTP probe. Pin a specific one when an operator wants a
+    // particular vendor despite another key being present in the environment.
+    verifier: (process.env.PROSPECTING_VERIFIER ?? 'auto') as
+      | 'auto'
+      | 'zerobounce'
+      | 'neverbounce'
+      | 'smtp',
+
+    // HTTPS verification vendors. These are what make the feature accurate on
+    // a host with port 25 blocked — which is AWS, GCP, Azure and most PaaS by
+    // default. Roughly half a cent a check against a $0.25 reveal.
+    zeroBounceApiKey: process.env.ZEROBOUNCE_API_KEY ?? '',
+    zeroBounceBaseUrl: process.env.ZEROBOUNCE_BASE_URL ?? 'https://api.zerobounce.net',
+    neverBounceApiKey: process.env.NEVERBOUNCE_API_KEY ?? '',
+    neverBounceBaseUrl: process.env.NEVERBOUNCE_BASE_URL ?? 'https://api.neverbounce.com',
+
+    // May an address nothing could confirm still be sold?
+    //
+    // This defaults to false, and the default is the point. With no verifier
+    // configured every address comes back 'unknown', and the permissive
+    // reading of that — "well, the domain has an MX record" — means billing a
+    // customer for a string a vendor asserted and nobody checked. That is
+    // precisely the product this feature is not supposed to be.
+    //
+    // Set true only for a deployment that has deliberately accepted vendor
+    // data at face value. The UI says which mode it is in either way.
+    sellUnverified: process.env.PROSPECTING_SELL_UNVERIFIED === 'true',
+    // The envelope sender used when probing. Must be an address at a domain we
+    // control: mail servers check it, and a forged one gets us blocklisted.
+    verifyFromAddress: process.env.PROSPECTING_VERIFY_FROM ?? 'verify@atmosphere.invalid',
+    verifyHeloDomain: process.env.PROSPECTING_VERIFY_HELO ?? 'atmosphere.invalid',
+
+    // Free sources, asked before any vendor is billed.
+    //
+    // A free answer and a paid answer are worth the same to the customer and
+    // very different to us, so the waterfall spends nothing until these have
+    // had their turn. They also feed pattern inference the domain evidence it
+    // refuses to guess without — which is what makes the engine work for a
+    // customer whose own CRM is still empty.
+    webCrawlEnabled: (process.env.PROSPECTING_WEB_CRAWL ?? 'true') !== 'false',
+    crawlTimeoutMs: Number(process.env.PROSPECTING_CRAWL_TIMEOUT_MS ?? 6_000),
+    crawlMaxPages: Number(process.env.PROSPECTING_CRAWL_MAX_PAGES ?? 4),
+
+    commonCrawlEnabled: (process.env.PROSPECTING_COMMON_CRAWL ?? 'true') !== 'false',
+    commonCrawlBaseUrl: process.env.COMMON_CRAWL_BASE_URL ?? 'https://index.commoncrawl.org',
+    commonCrawlDataUrl: process.env.COMMON_CRAWL_DATA_URL ?? 'https://data.commoncrawl.org',
+    // Pinned rather than discovered: listing available crawls is itself a
+    // network call, and a stale-but-working index beats a reveal that fails
+    // because discovery timed out.
+    commonCrawlIndex: process.env.COMMON_CRAWL_INDEX ?? 'CC-MAIN-2026-22',
+    commonCrawlLimit: Number(process.env.COMMON_CRAWL_LIMIT ?? 60),
+    commonCrawlMaxRecords: Number(process.env.COMMON_CRAWL_MAX_RECORDS ?? 3),
+
+    // The Profiler reads a company's own public pages for professional
+    // context before a sales call. Capped tightly: this is a handful of pages
+    // once, not a spider.
+    profilerEnabled: (process.env.PROSPECTING_PROFILER ?? 'true') !== 'false',
+    profilerMaxPages: Number(process.env.PROSPECTING_PROFILER_MAX_PAGES ?? 6),
+
+    // The contributory network. Reading the pool is on by default; writing to
+    // it is per-org opt-in and enforced in SQL, not here.
+    networkEnabled: (process.env.PROSPECTING_NETWORK ?? 'true') !== 'false',
+
+    // Pattern inference finds the people no vendor has: learn a company's
+    // convention from addresses the org already holds, apply it, verify it.
+    // Nothing is sold unless a mail server confirms the mailbox.
+    // Inference only produces candidates; verification decides. With probing
+    // off there is nothing to confirm a guess, so this follows it.
+    patternInferenceEnabled: (process.env.PROSPECTING_PATTERNS ?? 'true') !== 'false',
+    maxPatternCandidates: Number(process.env.PROSPECTING_MAX_CANDIDATES ?? 5),
+  },
+
   estimator: {
     // Server-only key that encrypts third-party credentials (DocuSketch, Dash,
     // Xactimate) before they are written to Postgres. Deliberately NOT in the

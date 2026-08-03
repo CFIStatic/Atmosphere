@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
 import {
   api,
   ApiError,
@@ -8,7 +7,7 @@ import {
   type WebRun,
   type WebRunKind,
 } from '../lib/api';
-import { Logo } from '../components/Logo';
+import { AppShell } from '../components/AppShell';
 import { VerificationPanel } from '../components/VerificationPanel';
 import { SpinnerIcon, CheckIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
@@ -24,13 +23,13 @@ import { useFeatureTimer } from '../hooks/useFeatureTimer';
  */
 
 const inputClass =
-  'w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200';
+  'w-full rounded-lg glass-card px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200';
 const labelClass = 'mb-1.5 block text-sm font-medium text-ink-700';
 
 const STATUS_STYLES: Record<WebConnection['status'], string> = {
   verified: 'border-success-200 bg-success-50 text-success-600',
   failed: 'border-danger-200 bg-danger-50 text-danger-700',
-  unverified: 'border-line bg-paper-0 text-ink-700',
+  unverified: 'glass-card text-ink-700',
 };
 
 const STATUS_LABELS: Record<WebConnection['status'], string> = {
@@ -40,7 +39,7 @@ const STATUS_LABELS: Record<WebConnection['status'], string> = {
 };
 
 const RUN_STATUS_STYLES: Record<WebRun['status'], string> = {
-  queued: 'border-line bg-paper-0 text-ink-700',
+  queued: 'glass-card text-ink-700',
   running: 'border-brand-200 bg-brand-500/10 text-brand-700',
   succeeded: 'border-success-200 bg-success-50 text-success-600',
   failed: 'border-danger-200 bg-danger-50 text-danger-700',
@@ -106,7 +105,7 @@ function ConnectForm({ onConnected }: { onConnected: (connection: WebConnection)
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-xl border border-line bg-paper-0 p-5"
+      className="rounded-xl glass-card p-5"
     >
       <h3 className="text-base font-semibold text-ink-900">Connect a site</h3>
       <p className="mt-1 text-sm text-ink-600">
@@ -215,7 +214,7 @@ function ConnectForm({ onConnected }: { onConnected: (connection: WebConnection)
             reset();
             setOpen(false);
           }}
-          className="rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
+          className="rounded-lg glass-card px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
         >
           Cancel
         </button>
@@ -268,7 +267,7 @@ function ConnectionRow({
   }
 
   return (
-    <li className="bg-paper-0 px-5 py-4">
+    <li className="bg-paper-200/50 px-5 py-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium text-ink-900">{connection.label}</p>
@@ -285,7 +284,7 @@ function ConnectionRow({
           <button
             onClick={verify}
             disabled={busy !== null}
-            className="flex items-center gap-1.5 rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs font-medium text-ink-800 transition hover:bg-paper-100 disabled:opacity-60"
+            className="flex items-center gap-1.5 rounded-lg glass-card px-3 py-1.5 text-xs font-medium text-ink-800 transition hover:bg-paper-100 disabled:opacity-60"
           >
             {busy === 'verify' && <SpinnerIcon className="animate-spin" width={12} height={12} />}
             Test sign-in
@@ -293,7 +292,7 @@ function ConnectionRow({
           <button
             onClick={remove}
             disabled={busy !== null}
-            className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-xs font-medium text-ink-600 transition hover:bg-danger-50 hover:text-danger-700 disabled:opacity-60"
+            className="rounded-lg glass-card px-3 py-1.5 text-xs font-medium text-ink-600 transition hover:bg-danger-50 hover:text-danger-700 disabled:opacity-60"
           >
             Remove
           </button>
@@ -502,18 +501,8 @@ export function WebAccessPage() {
     connections?.find((connection) => connection.id === id)?.label ?? 'Removed connection';
 
   return (
-    <div className="cx-aurora min-h-screen bg-paper-100">
-      <header className="flex items-center justify-between border-b border-line px-6 py-4 sm:px-10">
-        <Logo />
-        <Link
-          to="/dashboard"
-          className="rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
-        >
-          Back to dashboard
-        </Link>
-      </header>
-
-      <main className="mx-auto max-w-4xl px-6 py-10 sm:px-10">
+    <AppShell>
+      <main className="mx-auto max-w-4xl">
         <div className="animate-fade-in-up">
           <p className="text-sm font-medium text-brand-600">Web Access</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-ink-900">
@@ -531,9 +520,9 @@ export function WebAccessPage() {
               className="mt-6 rounded-lg border border-caution-200 bg-caution-50 px-3.5 py-3 text-sm text-caution-600"
             >
               Web Access is not configured on this server yet. An administrator needs to set
-              <code className="mx-1 rounded bg-paper-0 px-1.5 py-0.5 font-mono text-xs">WEB_ACCESS_KEY</code>
+              <code className="mx-1 rounded bg-paper-200/50 px-1.5 py-0.5 font-mono text-xs">WEB_ACCESS_KEY</code>
               and
-              <code className="mx-1 rounded bg-paper-0 px-1.5 py-0.5 font-mono text-xs">ANTHROPIC_API_KEY</code>
+              <code className="mx-1 rounded bg-paper-200/50 px-1.5 py-0.5 font-mono text-xs">ANTHROPIC_API_KEY</code>
               before connections can be used.
             </div>
           )}
@@ -597,7 +586,7 @@ export function WebAccessPage() {
               <h2 className="text-lg font-semibold text-ink-900">Run a task</h2>
               <form
                 onSubmit={startRun}
-                className="mt-4 rounded-xl border border-line bg-paper-0 p-5"
+                className="mt-4 rounded-xl glass-card p-5"
               >
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
@@ -700,7 +689,7 @@ export function WebAccessPage() {
                   return (
                     <li
                       key={run.id}
-                      className="rounded-xl border border-line bg-paper-0 px-5 py-4"
+                      className="rounded-xl glass-card px-5 py-4"
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -743,6 +732,6 @@ export function WebAccessPage() {
           )}
         </div>
       </main>
-    </div>
+    </AppShell>
   );
 }

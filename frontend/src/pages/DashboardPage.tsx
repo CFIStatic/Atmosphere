@@ -133,12 +133,12 @@ export function DashboardPage() {
             ].map((stat) => (
               <div
                 key={stat.label}
-                className="rounded-xl border border-white/10 bg-ink-800/60 px-4 py-3.5 backdrop-blur"
+                className="rounded-xl glass-card px-4 py-3.5 backdrop-blur"
               >
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                <p className="text-xs font-medium uppercase tracking-wide text-ink-500">
                   {stat.label}
                 </p>
-                <p className="mt-1 text-2xl font-semibold text-white">{stat.value}</p>
+                <p className="mt-1 text-2xl font-semibold text-ink-900">{stat.value}</p>
               </div>
             ))}
           </div>
@@ -146,7 +146,7 @@ export function DashboardPage() {
           {/* Active jobs */}
           <section className="mt-8">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-white">Active jobs</h2>
+              <h2 className="text-lg font-semibold text-ink-900">Active jobs</h2>
               <Link
                 to="/jobs"
                 className="text-sm font-medium text-brand-300 transition hover:text-brand-200"
@@ -159,8 +159,8 @@ export function DashboardPage() {
               {jobs === null ? (
                 <PanelSpinner label="Loading jobs" />
               ) : jobs.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-white/10 px-6 py-10 text-center">
-                  <p className="text-sm text-gray-400">No open jobs yet.</p>
+                <div className="rounded-xl border border-dashed border-line px-6 py-10 text-center">
+                  <p className="text-sm text-ink-600">No open jobs yet.</p>
                   <Link
                     to="/jobs"
                     className="mt-3 inline-block rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-500"
@@ -169,16 +169,16 @@ export function DashboardPage() {
                   </Link>
                 </div>
               ) : (
-                <ul className="divide-y divide-white/10 overflow-hidden rounded-xl border border-white/10">
+                <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line">
                   {jobs.slice(0, 6).map((job) => (
-                    <li key={job.jobId} className="bg-ink-800/40">
+                    <li key={job.jobId} className="bg-paper-200/50">
                       <Link
                         to={`/jobs/${job.jobId}`}
-                        className="flex items-center justify-between gap-4 px-5 py-3.5 transition hover:bg-ink-700/40"
+                        className="flex items-center justify-between gap-4 px-5 py-3.5 transition hover:bg-paper-200"
                       >
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-white">{job.title}</p>
-                          <p className="mt-0.5 text-xs text-gray-500">
+                          <p className="truncate text-sm font-medium text-ink-900">{job.title}</p>
+                          <p className="mt-0.5 text-xs text-ink-500">
                             <span className="font-mono text-brand-300/80">#{job.jobNumber}</span> ·{' '}
                             {job.tasksDone}/{job.taskCount} tasks · {job.crewSize} on crew
                           </p>
@@ -198,14 +198,14 @@ export function DashboardPage() {
 
           {/* Org + invite */}
           <div className="mt-8 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-xl border border-line bg-paper-0 shadow-card p-5">
+            <div className="rounded-xl glass-card p-5">
               <p className="text-xs font-medium uppercase tracking-wide text-ink-500">
                 Organization
               </p>
               <p className="mt-1.5 text-lg font-semibold text-ink-900">{org?.name ?? '—'}</p>
             </div>
 
-            <div className="rounded-xl border border-line bg-paper-0 shadow-card p-5">
+            <div className="rounded-xl glass-card p-5">
               <p className="text-xs font-medium uppercase tracking-wide text-ink-500">
                 Invite code
               </p>
@@ -238,7 +238,7 @@ export function DashboardPage() {
           {billing && (
             <Link
               to="/billing"
-              className="mt-4 block rounded-xl border border-line bg-paper-0 shadow-card p-5 transition hover:border-brand-300 hover:bg-brand-50"
+              className="mt-4 block rounded-xl glass-card p-5 transition hover:border-brand-300 hover:bg-brand-50"
             >
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <p className="text-xs font-medium uppercase tracking-wide text-ink-500">
@@ -309,8 +309,8 @@ export function DashboardPage() {
                 <p className="text-xs font-medium uppercase tracking-wide text-brand-300">
                   Mitigation
                 </p>
-                <p className="mt-1 text-lg font-semibold text-white">Build an estimate</p>
-                <p className="mt-1 text-sm text-gray-400">
+                <p className="mt-1 text-lg font-semibold text-ink-900">Build an estimate</p>
+                <p className="mt-1 text-sm text-ink-600">
                   DocuSketch, MICA, photos and notes in — a priced, documented Xactimate scope out.
                 </p>
               </div>
@@ -324,7 +324,7 @@ export function DashboardPage() {
               not a destination you pick. */}
           <Link
             to="/pm"
-            className="mt-4 block rounded-xl border border-line bg-paper-0 p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50"
+            className="mt-4 block rounded-xl glass-card p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50"
           >
             <p className="text-xs font-medium uppercase tracking-wide text-brand-600">
               Project Manager
@@ -378,7 +378,7 @@ export function DashboardPage() {
               </div>
             </Link>
 
-            <Link to="/web-access" className="flex items-start gap-3 rounded-xl border border-line bg-paper-0 p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50">
+            <Link to="/web-access" className="flex items-start gap-3 rounded-xl glass-card p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50">
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-500 text-white shadow-card">
                 <GlobeIcon width={20} height={20} />
               </span>
@@ -391,7 +391,7 @@ export function DashboardPage() {
               </div>
             </Link>
 
-            <Link to="/computer-use" className="flex items-start gap-3 rounded-xl border border-line bg-paper-0 p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50">
+            <Link to="/computer-use" className="flex items-start gap-3 rounded-xl glass-card p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50">
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-500 text-white shadow-card">
                 <MonitorIcon width={20} height={20} />
               </span>
@@ -408,7 +408,7 @@ export function DashboardPage() {
           {/* Construction Estimator */}
           <Link
             to="/estimator"
-            className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-line bg-paper-0 shadow-card p-5 transition hover:border-brand-300 hover:bg-brand-50"
+            className="mt-4 flex items-center justify-between gap-4 rounded-xl glass-card p-5 transition hover:border-brand-300 hover:bg-brand-50"
           >
             <div>
               <p className="text-xs font-medium uppercase tracking-wide text-brand-600">
@@ -435,7 +435,7 @@ export function DashboardPage() {
           {/* Latest activity from the record */}
           <section className="mt-8">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-white">Latest activity</h2>
+              <h2 className="text-lg font-semibold text-ink-900">Latest activity</h2>
               <Link
                 to="/memory"
                 className="text-sm font-medium text-brand-300 transition hover:text-brand-200"
@@ -443,7 +443,7 @@ export function DashboardPage() {
                 Full memory →
               </Link>
             </div>
-            <p className="mt-1 text-sm text-gray-400">
+            <p className="mt-1 text-sm text-ink-600">
               {stats
                 ? `${stats.totalEvents.toLocaleString()} entries recorded, last one ${timeAgo(events?.[0]?.occurredAt)}.`
                 : 'Everything anyone does is recorded here.'}
@@ -479,7 +479,7 @@ export function DashboardPage() {
                     return (
                       <li
                         key={m.userId}
-                        className="flex items-center justify-between gap-4 bg-paper-0 px-5 py-3.5"
+                        className="flex items-center justify-between gap-4 bg-paper-200/50 px-5 py-3.5"
                       >
                         <div className="flex items-center gap-3">
                           <span className="grid h-9 w-9 place-items-center rounded-full bg-brand-50 text-sm font-semibold uppercase text-brand-700">
@@ -493,7 +493,7 @@ export function DashboardPage() {
                             <p className="text-xs text-ink-500">{WORK_TYPE_LABELS[m.workType]}</p>
                           </div>
                         </div>
-                        <span className="rounded-full border border-line bg-paper-0 px-3 py-1 text-xs font-medium text-ink-700">
+                        <span className="rounded-full glass-card px-3 py-1 text-xs font-medium text-ink-700">
                           {ROLE_LABELS[m.role]}
                         </span>
                       </li>

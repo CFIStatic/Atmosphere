@@ -1,5 +1,20 @@
 // Shared behavior for the Atmosphere corporate site.
 (function () {
+  // The bridge to the product. The deploy workflow stamps the hosted app's
+  // origin onto <html data-app-origin> (from the WEBSITE_APP_ORIGIN repo
+  // variable); when present, every sign-in / get-started CTA routes into the
+  // real app and the early-access stubs below stand down. Unstamped — local
+  // dev, or the app not hosted yet — the site keeps its designed surfaces.
+  var APP_ORIGIN = (document.documentElement.getAttribute('data-app-origin') || '')
+    .replace(/\/+$/, '');
+  if (APP_ORIGIN) {
+    document.querySelectorAll('a[href$="signin.html"], a[href$="signup.html"]')
+      .forEach(function (a) {
+        var toSignup = a.getAttribute('href').indexOf('signup') !== -1;
+        a.setAttribute('href', APP_ORIGIN + (toSignup ? '/login?mode=signup' : '/login'));
+      });
+  }
+
   // Highlight the nav group for the page being read. Platform-family pages
   // light the Platform menu; company-family pages light Company.
   var page = location.pathname.split('/').pop() || 'index.html';

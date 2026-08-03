@@ -20,12 +20,12 @@ import { api, ApiError, usd, type SlaCheck, type SlaComplianceReport, type SlaDe
  */
 
 const STATUS = {
-  met: { chip: 'bg-emerald-500/15 text-emerald-300', card: 'border-white/10 bg-ink-800/60', mark: '✓' },
-  violated: { chip: 'bg-red-500/15 text-red-300', card: 'border-red-500/30 bg-red-500/5', mark: '✕' },
-  deviation_documented: { chip: 'bg-sky-500/15 text-sky-300', card: 'border-sky-500/25 bg-sky-500/5', mark: '≠' },
-  approval_required: { chip: 'bg-amber-500/15 text-amber-300', card: 'border-amber-500/25 bg-amber-500/5', mark: '!' },
-  undetermined: { chip: 'bg-amber-500/15 text-amber-300', card: 'border-amber-500/20 bg-amber-500/5', mark: '?' },
-  not_applicable: { chip: 'bg-white/5 text-gray-500', card: 'border-white/5 bg-ink-800/30', mark: '–' },
+  met: { chip: 'bg-success-50 text-success-600', card: 'glass-card', mark: '✓' },
+  violated: { chip: 'bg-danger-50 text-danger-600', card: 'border-danger-200 bg-danger-50', mark: '✕' },
+  deviation_documented: { chip: 'bg-paper-200 text-[color:var(--pm-info)]', card: 'border-line-strong bg-paper-200', mark: '≠' },
+  approval_required: { chip: 'bg-caution-50 text-caution-600', card: 'border-caution-200 bg-caution-50', mark: '!' },
+  undetermined: { chip: 'bg-caution-50 text-caution-600', card: 'border-caution-200 bg-caution-50', mark: '?' },
+  not_applicable: { chip: 'bg-paper-200 text-ink-500', card: 'glass-card', mark: '–' },
 } as const;
 
 export function SlaPanel({
@@ -69,28 +69,28 @@ export function SlaPanel({
   return (
     <section>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-lg font-semibold text-white">Carrier program</h2>
+        <h2 className="text-lg font-semibold text-ink-900">Carrier program</h2>
         {sla.blocksSubmission && (
-          <span className="rounded-md bg-red-500/15 px-2 py-0.5 text-xs font-medium text-red-300">
+          <span className="rounded-md bg-danger-50 px-2 py-0.5 text-xs font-medium text-danger-600">
             submission blocked
           </span>
         )}
       </div>
 
       {/* ---- Who this is for ---- */}
-      <div className="mt-3 rounded-xl border border-white/10 bg-ink-800/60 p-4">
+      <div className="mt-3 rounded-xl glass-card p-4">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <p className="text-base font-semibold text-white">
+          <p className="text-base font-semibold text-ink-900">
             {id.carrierName ?? 'Carrier not identified'}
           </p>
-          {id.programName && <span className="text-sm text-gray-400">via {id.programName}</span>}
+          {id.programName && <span className="text-sm text-ink-600">via {id.programName}</span>}
           <span
             className={`rounded px-1.5 py-0.5 text-[11px] ${
               id.confidence === 'stated'
-                ? 'bg-emerald-500/15 text-emerald-300'
+                ? 'bg-success-50 text-success-600'
                 : id.confidence === 'inferred'
-                  ? 'bg-amber-500/15 text-amber-300'
-                  : 'bg-red-500/15 text-red-300'
+                  ? 'bg-caution-50 text-caution-600'
+                  : 'bg-danger-50 text-danger-600'
             }`}
           >
             {id.confidence}
@@ -98,25 +98,25 @@ export function SlaPanel({
         </div>
 
         {id.basis.length > 0 && (
-          <p className="mt-1 text-xs text-gray-500">{id.basis.join(' · ')}</p>
+          <p className="mt-1 text-xs text-ink-500">{id.basis.join(' · ')}</p>
         )}
 
         {id.confidence === 'inferred' && (
-          <p className="mt-2 text-xs text-amber-300">
+          <p className="mt-2 text-xs text-caution-600">
             Read out of the sources rather than stated. Confirm it — the carrier selects the price
             list and the terms for the whole job.
           </p>
         )}
         {id.alternatives.length > 0 && (
-          <p className="mt-1 text-xs text-amber-300">
+          <p className="mt-1 text-xs text-caution-600">
             Also mentioned: {id.alternatives.map((a) => a.carrierName).join(', ')}.
           </p>
         )}
 
-        <p className="mt-2 text-sm text-gray-400">{sla.summary}</p>
+        <p className="mt-2 text-sm text-ink-600">{sla.summary}</p>
 
         {agreement && (
-          <p className="mt-1 text-xs text-gray-600">
+          <p className="mt-1 text-xs text-ink-500">
             {agreement.programName} · agreement {agreement.version} · terms{' '}
             {agreement.source.kind === 'manual' ? 'entered by hand' : `from ${agreement.source.kind}`}
           </p>
@@ -124,7 +124,7 @@ export function SlaPanel({
       </div>
 
       {error && (
-        <p className="mt-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+        <p className="mt-2 rounded-lg border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-600">
           {error}
         </p>
       )}
@@ -140,31 +140,31 @@ export function SlaPanel({
 
       {/* ---- Deviations the agent found grounds for ---- */}
       {sla.proposedDeviations.length > 0 && (
-        <div className="mt-4 rounded-xl border border-sky-500/25 bg-sky-500/5 p-4">
-          <p className="text-sm font-medium text-sky-200">
+        <div className="mt-4 rounded-xl border border-line-strong bg-paper-200 p-4">
+          <p className="text-sm font-medium text-[color:var(--pm-info)]">
             {sla.proposedDeviations.length} documented deviation
             {sla.proposedDeviations.length === 1 ? '' : 's'} available
           </p>
-          <p className="mt-1 text-xs text-gray-400">
+          <p className="mt-1 text-xs text-ink-600">
             The job's own documentation supports exceeding these terms. Accepting one puts the
             reasoning and its evidence on the estimate that goes to the carrier — the agent will
             not agree to exceed a carrier's terms on your behalf.
           </p>
           <ul className="mt-3 space-y-3">
             {sla.proposedDeviations.map((proposal) => (
-              <li key={proposal.ruleId} className="rounded-lg bg-ink-900/50 p-3">
-                <p className="text-xs font-medium text-gray-300">
+              <li key={proposal.ruleId} className="rounded-lg bg-paper-100/50 p-3">
+                <p className="text-xs font-medium text-ink-700">
                   {sla.agreement?.rules.find((r) => r.id === proposal.ruleId)?.title ?? proposal.ruleId}
                 </p>
-                <p className="mt-1 text-xs leading-relaxed text-gray-400">{proposal.reason}</p>
-                <p className="mt-1 text-[11px] text-gray-600">
+                <p className="mt-1 text-xs leading-relaxed text-ink-600">{proposal.reason}</p>
+                <p className="mt-1 text-[11px] text-ink-500">
                   Evidence: {proposal.evidenceIds.join(', ')}
                 </p>
                 <button
                   onClick={() => accept(proposal)}
                   disabled={busy === proposal.ruleId || !jobId}
                   title={jobId ? undefined : 'Save the estimate first'}
-                  className="mt-2 rounded-md bg-sky-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-sky-500 disabled:opacity-50"
+                  className="mt-2 rounded-md bg-[color:var(--pm-info)] px-2.5 py-1 text-xs font-medium text-white transition hover:bg-[color:var(--pm-info)] disabled:opacity-50"
                 >
                   {busy === proposal.ruleId ? 'Recording…' : 'Accept and document'}
                 </button>
@@ -175,7 +175,7 @@ export function SlaPanel({
       )}
 
       {!agreement && (
-        <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
+        <p className="mt-3 rounded-lg border border-caution-200 bg-caution-50 px-3 py-2 text-xs text-caution-600">
           No program agreement is loaded, so this estimate follows your own settings rather than the
           carrier's. If this came through a national account, load the terms before submitting.
         </p>
@@ -190,30 +190,30 @@ function CheckRow({ check }: { check: SlaCheck }) {
   return (
     <li className={`rounded-xl border p-4 ${style.card}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="flex items-center gap-2 font-medium text-white">
+        <p className="flex items-center gap-2 font-medium text-ink-900">
           <span className={`grid h-5 w-5 shrink-0 place-items-center rounded text-xs ${style.chip}`}>
             {style.mark}
           </span>
           {check.title}
           {check.severity === 'soft' && (
-            <span className="text-[11px] font-normal text-gray-500">advisory</span>
+            <span className="text-[11px] font-normal text-ink-500">advisory</span>
           )}
         </p>
         {typeof check.revenueImpact === 'number' && check.revenueImpact !== 0 && (
-          <span className={check.revenueImpact < 0 ? 'text-sm text-red-400' : 'text-sm text-emerald-400'}>
+          <span className={check.revenueImpact < 0 ? 'text-sm text-danger-600' : 'text-sm text-success-600'}>
             {usd(check.revenueImpact)}
           </span>
         )}
       </div>
-      <p className="mt-1.5 text-sm leading-relaxed text-gray-400">{check.detail}</p>
+      <p className="mt-1.5 text-sm leading-relaxed text-ink-600">{check.detail}</p>
       {check.remedy && <p className="mt-1.5 text-sm text-brand-300">→ {check.remedy}</p>}
       {check.deviation && (
-        <p className="mt-1.5 text-xs text-sky-300">
+        <p className="mt-1.5 text-xs text-[color:var(--pm-info)]">
           Authorised by {check.deviation.authorizedBy ?? 'unrecorded'} ·{' '}
           {check.deviation.evidenceIds.length} piece(s) of evidence
         </p>
       )}
-      {check.sourceRef && <p className="mt-1.5 text-xs text-gray-600">{check.sourceRef}</p>}
+      {check.sourceRef && <p className="mt-1.5 text-xs text-ink-500">{check.sourceRef}</p>}
     </li>
   );
 }

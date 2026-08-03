@@ -5,59 +5,38 @@ export default {
     extend: {
       colors: {
         /**
-         * Atmosphere runs warm and light: paper surfaces, ink text, a single
-         * terracotta accent. The accent is load-bearing — it marks the one
-         * action on a screen that commits something — so it is used sparingly
-         * and never for decoration.
+         * All values live in src/index.css as CSS variables (R G B triplets):
+         * dark set on :root, light set under [data-theme="light"]. Semantics
+         * never change between themes — paper is surfaces page-to-card, ink
+         * is text strongest-first, tints (50/100/200) are backgrounds and
+         * 600+ reads on top of them — so screens never branch on the theme.
          */
         brand: {
-          50: '#FDF4EE',
-          100: '#FAE5D6',
-          200: '#F4C8A9',
-          300: '#EBA475',
-          400: '#DF7B44',
-          500: '#D2500A',
-          600: '#BC4508',
-          700: '#993607',
-          800: '#772B06',
-          900: '#5B2104',
+          50: 'rgb(var(--brand-50) / <alpha-value>)', 100: 'rgb(var(--brand-100) / <alpha-value>)', 200: 'rgb(var(--brand-200) / <alpha-value>)', 300: 'rgb(var(--brand-300) / <alpha-value>)', 400: 'rgb(var(--brand-400) / <alpha-value>)',
+          500: 'rgb(var(--brand-500) / <alpha-value>)', 600: 'rgb(var(--brand-600) / <alpha-value>)', 700: 'rgb(var(--brand-700) / <alpha-value>)', 800: 'rgb(var(--brand-800) / <alpha-value>)', 900: 'rgb(var(--brand-900) / <alpha-value>)',
         },
-        /** Surfaces, lightest first. `0` is card white, `100` is the page. */
         paper: {
-          0: '#FFFFFF',
-          50: '#FBFAF7',
-          100: '#F4F1EB',
-          200: '#EDE9E1',
-          300: '#E4DFD5',
-          400: '#D8D2C5',
+          0: 'rgb(var(--paper-0) / <alpha-value>)', 50: 'rgb(var(--paper-50) / <alpha-value>)', 100: 'rgb(var(--paper-100) / <alpha-value>)', 200: 'rgb(var(--paper-200) / <alpha-value>)', 300: 'rgb(var(--paper-300) / <alpha-value>)', 400: 'rgb(var(--paper-400) / <alpha-value>)',
         },
-        /** Text, darkest first. Warm greys — pure neutral looks cold on paper. */
         ink: {
-          900: '#1C1917',
-          800: '#292524',
-          700: '#44403C',
-          600: '#57534E',
-          500: '#78716C',
-          400: '#A8A29E',
+          900: 'rgb(var(--ink-900) / <alpha-value>)', 800: 'rgb(var(--ink-800) / <alpha-value>)', 700: 'rgb(var(--ink-700) / <alpha-value>)', 600: 'rgb(var(--ink-600) / <alpha-value>)', 500: 'rgb(var(--ink-500) / <alpha-value>)', 400: 'rgb(var(--ink-400) / <alpha-value>)',
         },
-        /** Hairlines. A separate token so borders tune in one place. */
         line: {
-          DEFAULT: '#E3DED4',
-          strong: '#D3CCBE',
+          DEFAULT: 'rgb(var(--line) / <alpha-value>)',
+          strong: 'rgb(var(--line-strong) / <alpha-value>)',
         },
-        /** Status. Muted enough to sit on paper without shouting. */
-        danger: { 50: '#FDF2F0', 200: '#F3C7BF', 600: '#B4361D', 700: '#8F2A15' },
-        caution: { 50: '#FDF7EC', 200: '#EFDCAF', 600: '#946A0B' },
-        success: { 50: '#F0F7F1', 200: '#BEDCC3', 600: '#3F7D4C' },
+        danger: { 50: 'rgb(var(--danger-50) / <alpha-value>)', 200: 'rgb(var(--danger-200) / <alpha-value>)', 600: 'rgb(var(--danger-600) / <alpha-value>)', 700: 'rgb(var(--danger-700) / <alpha-value>)' },
+        caution: { 50: 'rgb(var(--caution-50) / <alpha-value>)', 200: 'rgb(var(--caution-200) / <alpha-value>)', 600: 'rgb(var(--caution-600) / <alpha-value>)' },
+        success: { 50: 'rgb(var(--success-50) / <alpha-value>)', 200: 'rgb(var(--success-200) / <alpha-value>)', 600: 'rgb(var(--success-600) / <alpha-value>)' },
       },
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       boxShadow: {
-        /** The only two elevations. Soft and warm, never a hard grey drop. */
-        card: '0 1px 2px rgba(28, 25, 23, 0.04), 0 1px 3px rgba(28, 25, 23, 0.03)',
-        lift: '0 4px 12px rgba(28, 25, 23, 0.07), 0 2px 4px rgba(28, 25, 23, 0.04)',
+        /** The only two elevations, themed in index.css with the tokens. */
+        card: 'var(--shadow-card)',
+        lift: 'var(--shadow-lift)',
       },
       keyframes: {
         'fade-in-up': {

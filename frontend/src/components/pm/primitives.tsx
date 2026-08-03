@@ -93,7 +93,7 @@ export function HealthPill({ health }: { health: PmHealth }) {
   const band = BAND[health.band];
   return (
     <span
-      className="inline-flex items-center gap-2 rounded-full border border-line bg-paper-0 px-2.5 py-1 text-xs"
+      className="inline-flex items-center gap-2 rounded-full glass-card px-2.5 py-1 text-xs"
       title={health.reasons.map((r) => r.text).join(' · ') || 'Nothing flagged'}
     >
       <span aria-hidden="true" className={`h-2 w-2 rounded-full ${band.className}`} style={{ backgroundColor: 'currentColor' }} />
@@ -120,7 +120,7 @@ export function Card({
 }) {
   return (
     <section
-      className={`rounded-xl border border-line bg-paper-0 p-5 ${className}`}
+      className={`rounded-xl glass-card p-5 ${className}`}
     >
       {(title || action) && (
         <header className="mb-4 flex items-start justify-between gap-3">
@@ -164,7 +164,7 @@ export function StatTile({
           ? 'pm-critical'
           : 'text-ink-400';
   return (
-    <div className="rounded-xl border border-line bg-paper-0 p-4">
+    <div className="rounded-xl glass-card p-4">
       <div className="flex items-center gap-2">
         <span
           aria-hidden="true"
@@ -212,7 +212,7 @@ export function Meter({
         <span className="text-sm font-semibold tabular-nums text-ink-900">{clamped}%</span>
       </div>
       <div
-        className="mt-1.5 h-2 overflow-hidden rounded-full bg-paper-0"
+        className="mt-1.5 h-2 overflow-hidden rounded-full bg-paper-200/50"
         role="progressbar"
         aria-valuenow={clamped}
         aria-valuemin={0}
@@ -236,7 +236,7 @@ export function EmptyState({ children }: { children: ReactNode }) {
 export function Pill({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full border border-line bg-paper-0 px-2.5 py-1 text-xs font-medium text-ink-700 ${className}`}
+      className={`inline-flex items-center rounded-full glass-card px-2.5 py-1 text-xs font-medium text-ink-700 ${className}`}
     >
       {children}
     </span>

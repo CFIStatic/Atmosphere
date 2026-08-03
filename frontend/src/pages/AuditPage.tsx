@@ -56,7 +56,7 @@ function StatTile({
   const valueTone =
     tone === 'active' ? 'text-brand-600' : tone === 'bad' ? 'text-danger-600' : 'text-ink-900';
   return (
-    <div className="rounded-xl border border-line bg-paper-0 px-4 py-3">
+    <div className="rounded-xl glass-card px-4 py-3">
       <p className="text-xs font-medium uppercase tracking-wide text-ink-500">{label}</p>
       <p className={`mt-1 text-2xl font-semibold tabular-nums ${valueTone}`}>{value}</p>
       {hint && <p className="mt-0.5 text-xs text-ink-500">{hint}</p>}
@@ -82,7 +82,7 @@ function AgentCard({
       className={`rounded-xl border p-3.5 text-left transition ${
         selected
           ? 'border-brand-400 bg-brand-50'
-          : 'border-line bg-paper-0 hover:border-line-strong hover:bg-paper-0'
+          : 'glass-card hover:border-line-strong hover:bg-paper-0'
       }`}
     >
       <div className="flex items-center justify-between gap-2">
@@ -300,7 +300,7 @@ export function AuditPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-700">
+            <label className="flex cursor-pointer items-center gap-2 rounded-lg glass-card px-3 py-2 text-sm text-ink-700">
               <input
                 type="checkbox"
                 checked={live}
@@ -312,7 +312,7 @@ export function AuditPage() {
             <button
               onClick={() => void refresh()}
               disabled={refreshing}
-              className="flex items-center gap-2 rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-700 transition hover:bg-paper-200 disabled:opacity-60"
+              className="flex items-center gap-2 rounded-lg glass-card px-3 py-2 text-sm text-ink-700 transition hover:bg-paper-200 disabled:opacity-60"
             >
               <RefreshIcon
                 width={16}
@@ -397,14 +397,14 @@ export function AuditPage() {
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search what an agent was asked to do…"
               aria-label="Search runs"
-              className="w-full rounded-lg border border-line bg-paper-0 py-2 pl-9 pr-3 text-sm text-ink-800 placeholder:text-ink-400 focus:border-brand-400 focus:outline-none"
+              className="w-full rounded-lg glass-card py-2 pl-9 pr-3 text-sm text-ink-800 placeholder:text-ink-400 focus:border-brand-400 focus:outline-none"
             />
           </div>
           <select
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value as AgentRunStatus | '')}
             aria-label="Filter by status"
-            className="rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-800 focus:border-brand-400 focus:outline-none"
+            className="rounded-lg glass-card px-3 py-2 text-sm text-ink-800 focus:border-brand-400 focus:outline-none"
           >
             <option value="">Any status</option>
             {(Object.keys(RUN_STATUS_LABELS) as AgentRunStatus[]).map((status) => (
@@ -417,7 +417,7 @@ export function AuditPage() {
             value={range}
             onChange={(event) => setRange(event.target.value as RangeKey)}
             aria-label="Filter by time"
-            className="rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-800 focus:border-brand-400 focus:outline-none"
+            className="rounded-lg glass-card px-3 py-2 text-sm text-ink-800 focus:border-brand-400 focus:outline-none"
           >
             {RANGES.map((entry) => (
               <option key={entry.key} value={entry.key}>
@@ -442,7 +442,7 @@ export function AuditPage() {
               scroll the whole page sideways instead of being truncated. */}
           <section
             aria-label="Runs"
-            className={`min-w-0 overflow-hidden rounded-xl border border-line bg-paper-0 ${
+            className={`min-w-0 overflow-hidden rounded-xl glass-card ${
               selectedId ? 'hidden xl:block' : ''
             }`}
           >
@@ -492,7 +492,7 @@ export function AuditPage() {
 
           <section
             aria-label="Run detail"
-            className={`min-w-0 rounded-xl border border-line bg-paper-0 p-5 ${
+            className={`min-w-0 rounded-xl glass-card p-5 ${
               selectedId ? '' : 'hidden xl:block'
             }`}
           >

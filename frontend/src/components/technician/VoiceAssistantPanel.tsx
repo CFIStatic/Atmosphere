@@ -186,7 +186,7 @@ export function VoiceAssistantPanel({
           className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition disabled:opacity-40 ${
             speakReplies && synthesis.supported
               ? 'border-brand-200 bg-brand-50 text-brand-700'
-              : 'border-line bg-paper-0 text-ink-500 hover:bg-paper-100'
+              : 'glass-card text-ink-500 hover:bg-paper-100'
           }`}
         >
           <SpeakerIcon width={14} height={14} />
@@ -203,7 +203,7 @@ export function VoiceAssistantPanel({
 
       <div ref={scrollRef} className="cx-scroll flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {turns.length === 0 && !liveText && (
-          <div className="rounded-lg border border-dashed border-line-strong bg-paper-0 px-4 py-6 text-center">
+          <div className="rounded-lg border border-dashed border-line-strong bg-paper-200/50 px-4 py-6 text-center">
             <p className="text-sm text-ink-600">Ask about the job, or dictate a note.</p>
             <p className="mt-1 text-xs text-ink-400">
               {micMode === 'none'
@@ -219,7 +219,7 @@ export function VoiceAssistantPanel({
               className={`max-w-[90%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
                 turn.role === 'user'
                   ? 'rounded-br-sm bg-brand-500 text-white'
-                  : 'rounded-bl-sm border border-line bg-paper-0 text-ink-800 shadow-card'
+                  : 'rounded-bl-sm glass-card text-ink-800 shadow-card'
               }`}
             >
               {turn.content}
@@ -238,7 +238,7 @@ export function VoiceAssistantPanel({
 
         {sending && (
           <div className="flex justify-start">
-            <span className="flex items-center gap-2 rounded-2xl rounded-bl-sm border border-line bg-paper-0 px-3.5 py-2.5 text-sm text-ink-500 shadow-card">
+            <span className="flex items-center gap-2 rounded-2xl rounded-bl-sm glass-card px-3.5 py-2.5 text-sm text-ink-500 shadow-card">
               <SpinnerIcon className="animate-spin text-brand-500" width={15} height={15} />
               Thinking…
             </span>
@@ -260,7 +260,7 @@ export function VoiceAssistantPanel({
         className="border-t border-line px-3 py-3"
       >
         <div
-          className={`flex items-center gap-2 rounded-xl border bg-paper-0 px-2 py-1.5 shadow-card transition ${
+          className={`flex items-center gap-2 rounded-xl border bg-paper-200/50 px-2 py-1.5 shadow-card transition ${
             listening ? 'border-brand-400' : 'border-line'
           }`}
         >

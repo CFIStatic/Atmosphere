@@ -73,6 +73,1038 @@ export interface OrgMember {
   status: string;
 }
 
+/* ---- CRM (customers) -------------------------------------------------- */
+
+/** The CRM's generic list envelope. */
+export interface CrmList<T> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/** Camelized crm_accounts row — only the columns the UI reads are typed. */
+export interface CrmAccount {
+  id: string;
+  name: string;
+  kind?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  city?: string | null;
+  region?: string | null;
+  createdAt?: string;
+}
+
+/** The stages a lead moves through, in pipeline order. */
+export const LEAD_STAGES = ['new', 'contacted', 'qualified', 'estimate_sent', 'won', 'lost'] as const;
+export type LeadStage = (typeof LEAD_STAGES)[number];
+
+export const LEAD_STAGE_LABELS: Record<LeadStage, string> = {
+  new: 'New',
+  contacted: 'Contacted',
+  qualified: 'Qualified',
+  estimate_sent: 'Estimate sent',
+  won: 'Won',
+  lost: 'Lost',
+};
+
+export const LEAD_SOURCES = [
+  'referral', 'insurance_carrier', 'web', 'phone', 'repeat_customer', 'marketing', 'other',
+] as const;
+export type LeadSource = (typeof LEAD_SOURCES)[number];
+
+export const ACCOUNT_TYPES = [
+  'insurance_carrier', 'property_management', 'general_contractor',
+  'referral_partner', 'vendor', 'other',
+] as const;
+export type AccountType = (typeof ACCOUNT_TYPES)[number];
+
+export const CONTACT_TYPES = [
+  'homeowner', 'tenant', 'adjuster', 'agent', 'property_manager', 'vendor', 'other',
+] as const;
+export type ContactType = (typeof CONTACT_TYPES)[number];
+
+export const ACTIVITY_KINDS = ['note', 'call', 'email', 'sms', 'meeting'] as const;
+export type ActivityKind = (typeof ACTIVITY_KINDS)[number];
+
+/** snake_case → words, for enum values shown in the UI. */
+export function humanize(value: string | null | undefined): string {
+  if (!value) return '—';
+  const s = value.replace(/_/g, ' ');
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** Camelized crm_leads row. */
+export interface CrmLead {
+  id: string;
+  title: string;
+  status: LeadStage;
+  source?: LeadSource | null;
+  workType?: WorkType | null;
+  lossType?: LossType | null;
+  estimatedValue?: number | null;
+  description?: string | null;
+  lostReason?: string | null;
+  contactId?: string | null;
+  accountId?: string | null;
+  convertedJobId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CrmLeadInput {
+  title: string;
+  source?: LeadSource;
+  workType?: WorkType | null;
+  lossType?: LossType | null;
+  estimatedValue?: number | null;
+  description?: string | null;
+  accountId?: string | null;
+  contactId?: string | null;
+  status?: LeadStage;
+  lostReason?: string | null;
+}
+
+/** One logged touch — a call, an email, a note — against a lead or account. */
+export interface CrmActivity {
+  id: string;
+  kind: ActivityKind;
+  subject?: string | null;
+  body?: string | null;
+  leadId?: string | null;
+  accountId?: string | null;
+  contactId?: string | null;
+  jobId?: string | null;
+  occurredAt?: string | null;
+  createdAt?: string;
+  profiles?: { email: string | null; fullName: string | null } | null;
+}
+
+export interface CrmActivityInput {
+  kind: ActivityKind;
+  subject?: string;
+  body?: string;
+  leadId?: string;
+  accountId?: string;
+  contactId?: string;
+  jobId?: string;
+}
+
+/* ---- Prospecting -------------------------------------------------------- */
+
+/** A person a search turned up. Never carries contact details. */
+export interface ProspectMatch {
+  providerPersonId: string;
+  fullName: string;
+  title: string | null;
+  companyName: string | null;
+  companyDomain: string | null;
+  location: string | null;
+  linkedinUrl: string | null;
+  confidence: number | null;
+  hasEmail: boolean;
+  hasPhone: boolean;
+  /** Already a contact in the CRM — revealing would buy back our own data. */
+  knownContactId: string | null;
+  /** Already saved as a prospect. */
+  prospectId: string | null;
+  revealed: boolean;
+  suppressed: boolean;
+}
+
+/** One number, labelled. `valid: null` means unchecked, never "does not work". */
+export interface LabelledPhone {
+  number: string;
+  /** work = a published or desk line · mobile = a work cell · personal = private */
+  kind: 'work' | 'mobile' | 'personal' | 'unknown';
+  lineType: 'landline' | 'mobile' | 'voip' | 'tollfree' | 'other' | null;
+  carrier: string | null;
+  valid: boolean | null;
+  verifier: string | null;
+  source: string;
+}
+
+/** A saved prospect. Contact columns are null until a reveal is paid for. */
+export interface Prospect {
+  id: string;
+  fullName: string;
+  title: string | null;
+  companyName: string | null;
+  companyDomain: string | null;
+  location: string | null;
+  email: string | null;
+  phone: string | null;
+  mobile: string | null;
+  provider: string;
+  providerPersonId: string | null;
+  confidence: number | null;
+  status: 'new' | 'saved' | 'contacted' | 'converted' | 'discarded';
+  revealedAt: string | null;
+  revealCostNanos: number;
+  /** Every number, labelled. The flat phone/mobile fields are the summary. */
+  phones?: LabelledPhone[];
+  contactId: string | null;
+  leadId: string | null;
+  createdAt?: string;
+}
+
+/** What verification concluded about an address. */
+export interface EmailVerification {
+  verdict: 'valid' | 'risky' | 'invalid' | 'unknown';
+  score: number;
+  reason: string;
+  /** The domain accepts everything, so no address can be confirmed. */
+  catchAll: boolean;
+  /** Which service confirmed it, or null when nothing did. */
+  verifier?: string | null;
+}
+
+export interface ProspectingStatus {
+  provider: string;
+  /** True when the people are invented. The UI must say so. */
+  sandbox: boolean;
+  revealPriceNanos: number;
+  /**
+   * Which service confirms a mailbox exists — 'ZeroBounce', 'SMTP', … — or
+   * null when nothing does. The UI must not say "verified" when this is null.
+   */
+  verifier?: string | null;
+  /** True when the deployment sells addresses nothing could confirm. */
+  sellUnverified?: boolean;
+  /** Every contact-data vendor in the waterfall, in the order asked. */
+  sources?: string[];
+}
+
+/** What each stage of the pipeline actually did, for one test lookup. */
+export interface Diagnosis {
+  fullName: string;
+  companyDomain: string;
+  nameUsable: boolean;
+  stages: Array<{
+    name: string;
+    evidenceFound: number;
+    directHit: boolean;
+    ms: number;
+    note?: string;
+  }>;
+  evidenceTotal: number;
+  inferredPattern: string | null;
+  patternSupport: number;
+  patternConfidence: number | null;
+  candidates: Array<{ masked: string; verdict: string; reason: string; verifier: string | null }>;
+  wouldReturn: string | null;
+  wouldReturnSource: string | null;
+  mailboxVerifier: string | null;
+  phoneVerifier: string | null;
+  sellUnverified: boolean;
+  summary: string;
+}
+
+/* ---- Connected CRMs ------------------------------------------------------ */
+
+export interface KnownCrm {
+  id: string;
+  name: string;
+  /** oauth = authorise, never a password · browser = signs in as you · rest = an API */
+  method: 'oauth' | 'browser' | 'rest';
+  note: string;
+}
+
+export interface CrmConnections {
+  available: KnownCrm[];
+  connected: Array<{ system: string; accountLabel: string | null; connectedAt: string }>;
+  salesforceConfigured: boolean;
+  browserCrmEnabled: boolean;
+  vaultConfigured: boolean;
+}
+
+/* ---- Live crew positions -------------------------------------------------- */
+
+export interface CrewPosition {
+  userId: string;
+  name: string;
+  lat: number;
+  lon: number;
+  /** Metres. A large number means the dot is a guess — say so rather than draw it. */
+  accuracyM: number | null;
+  headingDeg: number | null;
+  speedMps: number | null;
+  capturedAt: string;
+  nearestPlace: { name: string; miles: number } | null;
+  territory: { id: string; name: string } | null;
+}
+
+/* ---- Sending ------------------------------------------------------------- */
+
+export interface MailProvider {
+  id: 'google_mail' | 'microsoft_mail';
+  name: string;
+  available: boolean;
+  note: string;
+}
+
+export interface SendPolicy {
+  postalAddress: string | null;
+  replyTo: string | null;
+  maxRecipients: number;
+  dailyCeiling: number;
+}
+
+export interface MailStatus {
+  providers: MailProvider[];
+  connected: Array<{ system: string; accountLabel: string | null; connectedAt: string }>;
+  policy: SendPolicy | null;
+  sentToday: number;
+  vaultConfigured: boolean;
+}
+
+export interface SendPreview {
+  dryRun: boolean;
+  wouldSend?: number;
+  sent?: number;
+  blocked: Array<{ email: string; reason: string }>;
+  warnings?: string[];
+  failures?: Array<{ email: string; error: string }>;
+  from: string | null;
+  sample?: string;
+}
+
+export interface ForecastPeriod {
+  name: string;
+  startTime: string;
+  isDaytime: boolean;
+  temperature: number | null;
+  temperatureUnit: string;
+  windSpeed: string | null;
+  precipitationChance: number | null;
+  shortForecast: string;
+  detailedForecast: string | null;
+  /** True when the wording describes weather that makes restoration work. */
+  notable: boolean;
+  group: string | null;
+}
+
+export interface Forecast {
+  place: string | null;
+  periods: ForecastPeriod[];
+  provider: string;
+  attribution: string;
+}
+
+/* ---- Profiler ------------------------------------------------------------ */
+
+export interface ProfileFact {
+  label: string;
+  value: string;
+  /** Where this came from. A fact without a source is not published. */
+  sourceUrl: string;
+  sourceKind: 'company_site' | 'crm';
+}
+
+export interface ProspectProfile {
+  fullName: string;
+  companyDomain: string;
+  companySummary: string | null;
+  companySummarySource: string | null;
+  facts: ProfileFact[];
+  signals: Array<{ headline: string; sourceUrl: string }>;
+  /** Derived from the above, and labelled as derived. Never shown as fact. */
+  talkingPoints: string[];
+  sourcesChecked: Array<{ url: string; ok: boolean; ms: number; skipped?: string }>;
+  /** Categories found and deliberately dropped. */
+  withheld: string[];
+  /** Categories never looked for at all. */
+  excluded: string[];
+}
+
+/* ---- Campaigns & territories --------------------------------------------- */
+
+export interface Territory {
+  id: string;
+  name: string;
+  description: string | null;
+  ownerId: string | null;
+  /** How a territory is actually drawn. Everything else is supplementary. */
+  postalCodes: string[];
+  cities: string[];
+  counties: string[];
+  /** Two letters. Usually derived from the ZIPs; explicit when there are none. */
+  state?: string | null;
+  active: boolean;
+  createdAt: string;
+}
+
+/** One ZIP code, placed. Absent from the list when it has not been geocoded yet. */
+export interface TerritoryPoint {
+  zip: string;
+  lat: number;
+  lon: number;
+  place: string | null;
+}
+
+export interface TerritoryMapEntry {
+  id: string;
+  name: string;
+  /**
+   * States this territory has codes in. A state being listed is not a claim to
+   * cover it — `points` is where the territory actually is.
+   */
+  states: string[];
+  zipsTotal: number;
+  points: TerritoryPoint[];
+}
+
+export interface TerritoryMapResponse {
+  /** How many of the org's ZIPs have a position yet, across all territories. */
+  located: number;
+  total: number;
+  territories: TerritoryMapEntry[];
+}
+
+/* ---- What the company is doing on the work you sold ---------------------- */
+
+export type WorkTone = 'progress' | 'money' | 'crew' | 'attention' | 'other';
+
+export interface SalesWorkJob {
+  id: string;
+  /** Set when Operations has a project delivering this job. */
+  projectId?: string | null;
+  projectNumber?: string | null;
+  phase?: string | null;
+  phaseLabel?: string | null;
+  phaseProgress?: number | null;
+  deliveryMatchedBy?: 'linked' | 'claim-number' | null;
+  customerEmail?: string | null;
+  jobNumber: number | null;
+  title: string;
+  /** Account name, or the contact's if the job has no account. */
+  customer: string | null;
+  status: string;
+  statusLabel: string;
+  /** Still being delivered, as opposed to closed out. */
+  open: boolean;
+  scheduledStart: string | null;
+  contractAmount: number | null;
+  invoicedAmount: number | null;
+  lastEventAt: string | null;
+  lastEventText: string | null;
+  daysQuiet: number | null;
+  /** An open job that has gone longer than its status allows without news. */
+  quiet: boolean;
+}
+
+export interface SalesWorkEvent {
+  id: string;
+  seq: number;
+  jobId: string | null;
+  jobNumber: number | null;
+  jobTitle: string | null;
+  customer: string | null;
+  text: string;
+  tone: WorkTone;
+  by: string | null;
+  at: string;
+}
+
+export interface SalesWorkResponse {
+  scope: 'mine' | 'all';
+  jobs: SalesWorkJob[];
+  /** How many of these jobs have Operations behind them. */
+  deliveryLinked?: number;
+  latest: SalesWorkEvent[];
+  counts: { open: number; onSite: number; quiet: number; awaitingPayment: number };
+}
+
+/** Which platform recorded a line, so the feed can say where it came from. */
+export type WorkSource = 'sales' | 'operations' | 'field';
+
+export interface DryingArea {
+  label: string;
+  latestPct: number | null;
+  goalPct: number | null;
+  readingAt: string | null;
+}
+
+/** The Operations and Field half of a job, when the two have been paired. */
+export interface JobDelivery {
+  projectId: string;
+  projectNumber: string | null;
+  phase: string | null;
+  phaseLabel: string;
+  phaseProgress: number | null;
+  /** 'linked' is explicit; 'claim-number' was inferred from a shared claim. */
+  matchedBy: 'linked' | 'claim-number';
+  targetCompletion: string | null;
+  customerEmail: string | null;
+  adjusterEmail: string | null;
+  drying: DryingArea[];
+  headline: string;
+}
+
+export interface SalesWorkDetail {
+  job: SalesWorkJob & {
+    workType: string | null;
+    scheduledEnd: string | null;
+    actualStart: string | null;
+    actualEnd: string | null;
+    paidAmount: number | null;
+  };
+  delivery: JobDelivery | null;
+  /** Composed from what is recorded. Nothing sends until somebody presses send. */
+  suggestedUpdate: { subject: string; body: string };
+  recipients: Array<{ label: string; email: string }>;
+  sends: Array<{
+    id: string;
+    email: string;
+    subject: string | null;
+    state: string;
+    blockedReason: string | null;
+    at: string;
+  }>;
+  crew: Array<{ userId: string; name: string; role: string; since: string }>;
+  timeline: Array<{
+    id: string;
+    text: string;
+    tone: WorkTone;
+    source: WorkSource;
+    by: string | null;
+    at: string;
+  }>;
+}
+
+/* ---- Who the platform is reaching out to -------------------------------- */
+
+export interface OutreachPerson {
+  email: string;
+  messages: number;
+  delivered: number;
+  bounced: number;
+  blocked: number;
+  campaignMessages: number;
+  updateMessages: number;
+  lastAt: string;
+  unsubscribed: boolean;
+  suppressed: boolean;
+}
+
+export interface OutreachResponse {
+  people: OutreachPerson[];
+  totals: { people: number; messages: number; bounced: number; optedOut: number };
+}
+
+export interface OutreachHistory {
+  email: string;
+  messages: Array<{
+    id: string;
+    kind: 'campaign' | 'job_update';
+    subject: string | null;
+    state: string;
+    blockedReason: string | null;
+    error: string | null;
+    /** The campaign name or the job it was about. */
+    about: string | null;
+    at: string;
+  }>;
+}
+
+/* ---- The shared job record ----------------------------------------------- */
+
+export type ScopeState = 'included' | 'excluded' | 'proposed' | 'approved' | 'declined';
+
+export interface JobParty {
+  id: string;
+  company: string;
+  trade: string | null;
+  contactName: string | null;
+  contact_name?: string | null;
+  email: string | null;
+  phone: string | null;
+  role: 'general_contractor' | 'subcontractor' | 'owner' | 'adjuster';
+  invited_at: string | null;
+  last_seen_at: string | null;
+  revoked_at: string | null;
+  /** Which revision of the facts they last accepted. Null means never. */
+  acknowledgedRevision: number | null;
+  /** Accepted the current facts, with nothing of theirs outstanding. */
+  clear: boolean;
+  because: string;
+  accessToken?: string;
+}
+
+export interface JobScopeItem {
+  id: string;
+  party_id: string | null;
+  state: ScopeState;
+  title: string;
+  detail: string | null;
+  amount: number | null;
+  reason: string | null;
+  revision: number;
+  decided_at: string | null;
+  created_at: string;
+}
+
+export interface JobRisk {
+  key: string;
+  level: 'blocker' | 'warn' | 'note';
+  title: string;
+  action: string;
+  partyId?: string | null;
+  scopeItemId?: string | null;
+}
+
+export interface SharedJobSummary {
+  jobId: string;
+  jobNumber: number | null;
+  title: string;
+  status: string | null;
+  parties: number;
+  currentRevision: number | null;
+  /** Parties not working from the current revision. */
+  behind: number;
+  awaiting: number;
+  exclusions: number;
+}
+
+export interface SharedJobRecord {
+  job: { id: string; jobNumber: number | null; title: string; status: string | null; claimNumber: string | null };
+  brief: { id: string; revision: number; facts: Record<string, string>; note: string | null; createdAt?: string; created_at?: string } | null;
+  revisions: Array<{ revision: number; note: string | null; createdAt: string }>;
+  currentRevision: number | null;
+  parties: JobParty[];
+  scope: JobScopeItem[];
+  money: { approved: number; pending: number; unpricedApprovals: number };
+  messages: Array<{
+    id: string;
+    party_id: string | null;
+    author_label: string;
+    body: string;
+    scope_item_id: string | null;
+    is_decision: boolean;
+    created_at: string;
+  }>;
+  risks: JobRisk[];
+}
+
+/* ---- Proof of work ------------------------------------------------------- */
+
+export type ProofCheckVerdict = 'pass' | 'fail' | 'unknown';
+
+export interface ProofCheck {
+  key: string;
+  verdict: ProofCheckVerdict;
+  detail: string;
+}
+
+export interface ProofDay {
+  partyId: string;
+  company: string;
+  workDate: string;
+  hasBefore: boolean;
+  hasAfter: boolean;
+  checks: ProofCheck[];
+  /** Something is provably wrong — distinct from merely unproven. */
+  contradicted: boolean;
+  summary: string;
+  /** Safe to release money against. Stricter than "looks fine". */
+  payable: boolean;
+  payableBecause: string;
+  accepted: boolean;
+  rejected: boolean;
+  aiSummary: string | null;
+  /**
+   * Did the work area visibly change between the two videos. 'none' is an
+   * answer, not a failure — a claimed day with no visible change is exactly
+   * what this surfaces.
+   */
+  materialChange?: 'significant' | 'minor' | 'none' | 'unclear' | null;
+  /** Lifecycle of the model read: queued, running, done, skipped, failed. */
+  analysisStatus?: string | null;
+  analysisError?: string | null;
+  aiFindings: {
+    materialBecause?: string;
+    changes?: string[];
+    cannotTell?: string[];
+    scopeTouched?: string[];
+    /** Per scope line, what the footage supports. */
+    scopeVerdicts?: ScopeVerdict[];
+    concerns?: string[];
+  } | null;
+  /** Ordered: before first, then after. */
+  proofIds: string[];
+}
+
+export interface ScopeVerdict {
+  title: string;
+  /** 'not_visible' is not a failure — the camera simply did not cover it. */
+  verdict: 'appears_complete' | 'in_progress' | 'not_visible';
+  because: string;
+}
+
+export interface ProofResponse {
+  days: ProofDay[];
+  counts: { days: number; payable: number; contradicted: number; awaitingAfter: number };
+  /** False when the job has no coordinates, so the on-site check cannot run. */
+  siteKnown: boolean;
+}
+
+export interface ProofQuestion {
+  id: string;
+  question: string;
+  answer: string | null;
+  grounded_on: string[];
+  created_at: string;
+}
+
+/* ---- Evidence and chain of custody --------------------------------------- */
+
+export interface EvidenceItem {
+  id: string;
+  partyId: string | null;
+  company: string | null;
+  trade: string | null;
+  workDate: string;
+  phase: 'before' | 'after';
+  category: string | null;
+  title: string;
+  tags: string[];
+  durationSeconds: number | null;
+  byteSize: number | null;
+  capturedAt: string | null;
+  receivedAt: string;
+  hasLocation: boolean;
+  state: string;
+  checks: ProofCheck[];
+  aiSummary: string | null;
+  legalHold: boolean;
+  retentionUntil: string | null;
+  /** SHA-256 of the file. The claim that it has not been altered since. */
+  contentHash: string | null;
+  /** How many times it has been opened. "You never showed me" is answered here. */
+  viewCount: number;
+  lastViewedAt: string | null;
+}
+
+export interface CustodyEntry {
+  id: string;
+  action: string;
+  actor_label: string;
+  actor_role: string | null;
+  detail: string | null;
+  occurred_at: string;
+}
+
+/* ---- Account structure --------------------------------------------------- */
+
+export interface AccountStructure {
+  account: {
+    id: string;
+    name: string;
+    type: string | null;
+    parentAccountId: string | null;
+    /** Set when this record was folded into another. Kept so old links resolve. */
+    mergedIntoId: string | null;
+    city: string | null;
+    region: string | null;
+  };
+  /** Nearest first, so it reads as a breadcrumb without reversing. */
+  ancestors: Array<{ id: string; name: string }>;
+  children: Array<{ id: string; name: string; type?: string | null }>;
+  subtreeSize: number;
+  links: Array<{
+    id: string;
+    otherId: string;
+    otherName: string;
+    kind: string;
+    direction: 'from' | 'to';
+    /** Already phrased from this account's side. */
+    reads: string;
+    note: string | null;
+    startedOn: string | null;
+    endedOn: string | null;
+  }>;
+  people: Array<{
+    id: string;
+    contactId: string;
+    accountId: string;
+    name: string;
+    title: string | null;
+    email: string | null;
+    role: string;
+    isPrimary: boolean;
+    endedOn: string | null;
+  }>;
+  rollup: {
+    accounts: number;
+    jobs: number;
+    openJobs: number;
+    contractTotal: number;
+    invoicedTotal: number;
+    paidTotal: number;
+    /** Jobs booked directly here, as opposed to anywhere in the tree. */
+    ownJobs: number;
+  };
+  mergedIn: Array<{
+    id: string;
+    loserId: string;
+    loserName: string;
+    moved: Record<string, number>;
+    mergedAt: string;
+  }>;
+}
+
+export interface DuplicatePair {
+  score: number;
+  suggestedWinner: string;
+  a: { id: string; name: string; attached: number };
+  b: { id: string; name: string; attached: number };
+}
+
+/* ---- Invitations --------------------------------------------------------- */
+
+export interface OrgInvite {
+  id: string;
+  email: string;
+  /** Advisory — the joiner picks their own role at onboarding. */
+  role: MemberRole;
+  note?: string | null;
+  status: 'pending' | 'joined' | 'revoked';
+  createdAt: string;
+  joinedAt?: string | null;
+  revokedAt?: string | null;
+}
+
+/* ---- Purchasing ---------------------------------------------------------- */
+
+export type PurchaseOrderStatus = 'draft' | 'approved' | 'placed' | 'cancelled';
+export type SupplierId = 'home_depot' | 'lowes' | 'manual';
+
+export interface PurchaseOrder {
+  id: string;
+  estimateId: string | null;
+  jobName: string;
+  claimNumber: string | null;
+  supplier: SupplierId;
+  vendorAccountId: string | null;
+  status: PurchaseOrderStatus;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  placedAt: string | null;
+  externalRef: string | null;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** List view only. */
+  lineCount?: number;
+  estTotal?: number;
+}
+
+export interface PurchaseOrderLine {
+  id: string;
+  materialKey: string;
+  description: string;
+  detail: string | null;
+  quantity: number;
+  unit: string;
+  unitPrice: number | null;
+  /** 'estimate' until a supplier has actually quoted it. */
+  priceBasis: 'estimate' | 'quoted';
+  sourceSummary: string | null;
+}
+
+export interface PurchaseOrderEvent {
+  id: string;
+  actorName: string;
+  action: 'created' | 'edited' | 'approved' | 'reopened' | 'placed' | 'cancelled';
+  detail: string;
+  at: string;
+}
+
+export interface TakeoffLine {
+  materialKey: string;
+  description: string;
+  detail: string;
+  orderUnit: string;
+  quantity: number;
+  estUnitPrice: number;
+  estTotal: number;
+  sourceSummary: string;
+  sourceLineIds: string[];
+  note?: string;
+}
+
+export interface TakeoffResult {
+  lines: TakeoffLine[];
+  noMaterials: Array<{ catalogKey: string; description: string; reason: string }>;
+  unmapped: Array<{ catalogKey: string; description: string; quantity: number; unit: string }>;
+  zeroQuantity: number;
+  estTotal: number;
+}
+
+export interface TakeoffSource {
+  estimateId: string;
+  jobName: string;
+  claimNumber: string | null;
+  total?: number;
+  createdAt: string;
+}
+
+export interface SupplierStatus {
+  id: 'home_depot' | 'lowes';
+  label: string;
+  connected: boolean;
+  accountLabel: string | null;
+  connectedAt: string | null;
+}
+
+export type CampaignStatus = 'draft' | 'active' | 'paused' | 'finished';
+export type CampaignChannel = 'email' | 'call' | 'mixed';
+
+export interface Campaign {
+  id: string;
+  name: string;
+  goal: string | null;
+  channel: CampaignChannel;
+  status: CampaignStatus;
+  territoryId: string | null;
+  ownerId: string | null;
+  startsOn: string | null;
+  endsOn: string | null;
+  createdAt: string;
+  /** Members by status, plus `total`. Absent keys are zero. */
+  counts: Record<string, number>;
+  triggerKind?: 'manual' | 'weather' | 'seasonal';
+  triggerConfig?: TriggerConfig;
+  audienceConfig?: AudienceConfig;
+  messageSubject?: string | null;
+  messageBody?: string | null;
+}
+
+export interface PlaceCategory { id: string; label: string; blurb: string; }
+
+export interface FoundPlace {
+  externalId: string; category: string; name: string;
+  street: string | null; city: string | null; state: string | null;
+  postalCode: string | null; lat: number | null; lon: number | null;
+  phone: string | null; website: string | null;
+}
+
+export interface WeatherGroup { id: string; label: string; blurb: string; events: string[]; }
+
+export interface WeatherAlert {
+  id: string; event: string; severity: string; urgency: string;
+  headline: string | null; areaDesc: string;
+  effective: string | null; onset: string | null; expires: string | null;
+  group: string | null;
+  hoursOfNotice: number | null;
+  /** True when the office drew a shape, so ZIP matching was exact. */
+  hasGeometry?: boolean;
+  /**
+   * Which of your territories this covers, and exactly which of their ZIP
+   * codes. `matchedBy: 'geometry'` means the codes are inside the warned
+   * polygon; 'area-name' means only the county was mentioned.
+   */
+  territories: Array<{
+    id: string;
+    name: string;
+    zips?: string[];
+    matchedBy?: 'geometry' | 'area-name' | 'none';
+  }>;
+}
+
+export interface TriggerConfig {
+  groups?: string[];
+  severities?: string[];
+  leadTimeHours?: number;
+  cooldownDays?: number;
+}
+
+export interface AudienceConfig {
+  placeCategories?: string[];
+  includeContacts?: boolean;
+  territoryId?: string | null;
+  titleKeywords?: string[];
+}
+
+export interface AudienceMember {
+  kind: 'contact' | 'place';
+  id: string; name: string;
+  email: string | null; company: string | null; title: string | null;
+  why: string;
+}
+
+export type CampaignMemberStatus =
+  | 'pending' | 'sent' | 'opened' | 'replied' | 'bounced' | 'unsubscribed' | 'skipped';
+
+export interface CampaignMember {
+  id: string;
+  campaignId: string;
+  contactId: string | null;
+  prospectId: string | null;
+  status: CampaignMemberStatus;
+  lastTouchAt: string | null;
+  touches: number;
+  note: string | null;
+  personName: string;
+  personEmail: string | null;
+  personCompany: string | null;
+}
+
+/** One vendor or verifier, as the settings screen describes it. */
+export interface Integration {
+  id: string;
+  name: string;
+  kind: 'source' | 'verifier';
+  /** Credentials present at all. */
+  configured: boolean;
+  /** Null until tested; true/false after a live credential call. */
+  reachable: boolean | null;
+  detail: string | null;
+  costNanos: number;
+}
+
+export interface ProspectSearchResponse extends ProspectingStatus {
+  matches: ProspectMatch[];
+  total: number | null;
+}
+
+export interface ProspectQuery {
+  q?: string;
+  location?: string;
+  companyDomain?: string;
+  industry?: string;
+  titles?: string[];
+  limit?: number;
+}
+
+export interface Suppression {
+  id: string;
+  kind: 'email' | 'phone' | 'domain';
+  value: string;
+  reason: string | null;
+  createdAt?: string;
+}
+
+export interface CrmSummary {
+  contacts: number;
+  properties: number;
+  openLeads: number;
+  activeJobs: number;
+  completedJobs: number;
+}
+
+/** Camelized crm_contacts row. */
+export interface CrmContact {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  companyName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  mobile?: string | null;
+  createdAt?: string;
+}
+
 /**
  * The credential carried by a password-recovery link. Supabase emits one of
  * three shapes depending on the email template and flow type; the backend
@@ -270,6 +1302,10 @@ export interface JobSummary {
   eventCount: number;
   lastEvent: string | null;
   lastEventAt: string | null;
+  contractAmount: number | null;
+  invoicedAmount: number | null;
+  paidAmount: number | null;
+  scheduledStart: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1092,6 +2128,663 @@ export const api = {
     }),
 
   getMembers: () => request<{ members: OrgMember[] }>('/api/org/members', { method: 'GET' }),
+
+  // ---- CRM (customers) ----
+  crmAccounts: (search = '') =>
+    request<CrmList<CrmAccount>>(
+      `/api/crm/accounts${search ? `?search=${encodeURIComponent(search)}` : ''}`,
+      { method: 'GET' },
+    ),
+
+  crmLeads: (search = '') =>
+    request<CrmList<CrmLead>>(
+      `/api/crm/leads${search ? `?search=${encodeURIComponent(search)}` : ''}`,
+      { method: 'GET' },
+    ),
+
+  createLead: (input: CrmLeadInput) =>
+    request<{ item: CrmLead }>('/api/crm/leads', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  updateLead: (id: string, patch: Partial<CrmLeadInput>) =>
+    request<{ item: CrmLead }>(`/api/crm/leads/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+
+  /** Turns a won lead into a job, carrying its people and value across. */
+  convertLead: (id: string, overrides: { title?: string; workType?: WorkType } = {}) =>
+    request<{ job: Job; leadUpdated: boolean }>(`/api/crm/leads/${id}/convert`, {
+      method: 'POST',
+      body: JSON.stringify(overrides),
+    }),
+
+  createAccount: (input: { name: string; type?: AccountType; phone?: string; email?: string; city?: string; region?: string; notes?: string }) =>
+    request<{ item: CrmAccount }>('/api/crm/accounts', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  createContact: (input: { firstName?: string; lastName?: string; type?: ContactType; companyName?: string; email?: string; phone?: string; mobile?: string; accountId?: string }) =>
+    request<{ item: CrmContact }>('/api/crm/contacts', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  /** Activities, optionally narrowed to one lead / account / job. */
+  crmActivities: (filter: { leadId?: string; accountId?: string; jobId?: string } = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(filter).forEach(([k, v]) => v && qs.set(k, v));
+    const suffix = qs.toString() ? `?${qs}` : '';
+    return request<CrmList<CrmActivity>>(`/api/crm/activities${suffix}`, { method: 'GET' });
+  },
+
+  logActivity: (input: CrmActivityInput) =>
+    request<{ item: CrmActivity }>('/api/crm/activities', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  crmSummary: () => request<{ summary: CrmSummary }>('/api/crm/summary', { method: 'GET' }),
+
+  // ---- Prospecting (find contact details) ----
+  prospectingStatus: () =>
+    request<ProspectingStatus>('/api/prospecting/status', { method: 'GET' }),
+
+  /** Free: people without their contact details. */
+  prospectSearch: (query: ProspectQuery) =>
+    request<ProspectSearchResponse>('/api/prospecting/search', {
+      method: 'POST',
+      body: JSON.stringify(query),
+    }),
+
+  /**
+   * The metered call.
+   *
+   * There is deliberately no idempotency key here: the server derives one
+   * from (org, person), so a retry of the same reveal replays free and no
+   * client can reuse a paid key to get another person for nothing.
+   */
+  prospectReveal: (providerPersonId: string) =>
+    request<{
+      prospect: Prospect;
+      charged: boolean;
+      reason?: string;
+      /** 'People Data Labs', 'Pattern + verification', … */
+      source?: string;
+      phones?: LabelledPhone[];
+      verification?: EmailVerification | null;
+    }>(
+      '/api/prospecting/reveal',
+      { method: 'POST', body: JSON.stringify({ providerPersonId }) },
+    ),
+
+  /**
+   * What is plugged in and whether it works. With `test`, the server makes a
+   * real credential call against each — the difference between listing
+   * environment variables and knowing the truth.
+   */
+  prospectingIntegrations: (test = false) =>
+    request<{ items: Integration[]; mode: string; sellUnverified: boolean }>(
+      `/api/prospecting/integrations${test ? '?test=1' : ''}`,
+      { method: 'GET' },
+    ),
+
+  /** Whether this org contributes to the shared contact network. */
+  /**
+   * Run the pipeline against a name and company without charging or saving.
+   * Addresses come back masked — enough to recognise one you know, not enough
+   * to be an unbilled reveal.
+   */
+  diagnoseLookup: (fullName: string, companyDomain: string) =>
+    request<Diagnosis>('/api/prospecting/diagnose', {
+      method: 'POST',
+      body: JSON.stringify({ fullName, companyDomain }),
+    }),
+
+  // ---- Connected CRMs ----
+  crmConnections: () => request<CrmConnections>('/api/integrations/crm', { method: 'GET' }),
+
+  /** Returns the Salesforce URL to send the user to. We never see a password. */
+  connectSalesforce: () =>
+    request<{ url: string }>('/api/integrations/crm/salesforce/connect', { method: 'POST' }),
+
+  completeSalesforce: (code: string, state: string) =>
+    request<{ connected: boolean; accountLabel: string | null }>(
+      '/api/integrations/crm/salesforce/callback',
+      { method: 'POST', body: JSON.stringify({ code, state }) },
+    ),
+
+  disconnectSalesforce: () =>
+    request<{ disconnected: boolean; revokedAtSalesforce: boolean }>(
+      '/api/integrations/crm/salesforce',
+      { method: 'DELETE' },
+    ),
+
+  /**
+   * Professional context on one person before a call. Reads the company's own
+   * public pages; every item carries the page it came from.
+   */
+  buildProfile: (fullName: string, companyDomain: string) =>
+    request<ProspectProfile>('/api/prospecting/profile', {
+      method: 'POST',
+      body: JSON.stringify({ fullName, companyDomain }),
+    }),
+
+  // ---- Live crew positions ----
+  locationSharing: () =>
+    request<{ sharing: boolean; shareWindow: string; decidedAt: string | null }>(
+      '/api/locations/sharing',
+      { method: 'GET' },
+    ),
+
+  /** The person's own decision. Turning it off erases what was collected. */
+  setLocationSharing: (sharing: boolean, shareWindow?: 'always' | 'shift') =>
+    request<{ sharing: boolean; erased?: number }>('/api/locations/sharing', {
+      method: 'PUT',
+      body: JSON.stringify({ sharing, shareWindow }),
+    }),
+
+  pingLocation: (fix: {
+    lat: number;
+    lon: number;
+    accuracy?: number | null;
+    heading?: number | null;
+    speed?: number | null;
+  }) =>
+    request<{ recorded: boolean }>('/api/locations/ping', {
+      method: 'POST',
+      body: JSON.stringify(fix),
+    }),
+
+  crewPositions: () =>
+    request<{ items: CrewPosition[]; sharing: number }>('/api/locations/crew', { method: 'GET' }),
+
+  nearestCrew: (lat: number, lon: number) =>
+    request<{ items: Array<{ userId: string; name: string; miles: number; capturedAt: string }> }>(
+      `/api/locations/nearest?lat=${lat}&lon=${lon}`,
+      { method: 'GET' },
+    ),
+
+  // ---- Sending ----
+  mailStatus: () => request<MailStatus>('/api/sales/mail', { method: 'GET' }),
+
+  connectMailbox: (system: 'google_mail' | 'microsoft_mail') =>
+    request<{ url: string }>(`/api/sales/mail/${system}/connect`, { method: 'POST' }),
+
+  completeMailbox: (system: string, code: string, state: string) =>
+    request<{ connected: boolean; address: string; provider: string }>(
+      `/api/sales/mail/${system}/callback`,
+      { method: 'POST', body: JSON.stringify({ code, state }) },
+    ),
+
+  disconnectMailbox: (system: string) =>
+    request<{ disconnected: boolean }>(`/api/sales/mail/${system}`, { method: 'DELETE' }),
+
+  saveSendPolicy: (policy: Partial<SendPolicy>) =>
+    request<{ policy: SendPolicy }>('/api/sales/send-policy', {
+      method: 'PUT',
+      body: JSON.stringify(policy),
+    }),
+
+  /** Dry run unless confirm is true. Preview and send share one screening path. */
+  sendCampaign: (id: string, options: { confirm?: boolean; event?: string; area?: string } = {}) =>
+    request<SendPreview>(`/api/sales/campaigns/${id}/send`, {
+      method: 'POST',
+      body: JSON.stringify(options),
+    }),
+
+  forecast: (lat: number, lon: number, hourly = false) =>
+    request<Forecast>(
+      `/api/sales/forecast?lat=${lat}&lon=${lon}${hourly ? '&hourly=1' : ''}`,
+      { method: 'GET' },
+    ),
+
+  // ---- Places: the buildings worth selling to ----
+  placeCategories: () =>
+    request<{ categories: PlaceCategory[]; attribution: string }>('/api/sales/place-categories', {
+      method: 'GET',
+    }),
+
+  searchPlaces: (area: string, categories: string[], limit?: number) =>
+    request<{
+      places: FoundPlace[];
+      box: { displayName: string } | null;
+      note: string | null;
+      attribution: string;
+    }>('/api/sales/places/search', {
+      method: 'POST',
+      body: JSON.stringify({ area, categories, limit }),
+    }),
+
+  importPlaces: (places: FoundPlace[], territoryId?: string | null) =>
+    request<{ imported: number }>('/api/sales/places/import', {
+      method: 'POST',
+      body: JSON.stringify({ places, territoryId }),
+    }),
+
+  // ---- Weather ----
+  weatherGroups: () =>
+    request<{ groups: WeatherGroup[]; attribution: string }>('/api/sales/weather/events', {
+      method: 'GET',
+    }),
+
+  /**
+   * Live alerts across every state your territories touch — derived from
+   * their ZIP codes, so coverage is national with nothing to configure.
+   * `state` overrides that to look somewhere you do not yet work.
+   */
+  activeWeather: (state?: string) =>
+    request<{
+      alerts: WeatherAlert[];
+      attribution: string;
+      statesWatched: string[];
+      zipsLocated: number;
+      zipsTotal: number;
+    }>(`/api/sales/weather/active${state ? `?state=${encodeURIComponent(state)}` : ''}`, {
+      method: 'GET',
+    }),
+
+  /** Dry run: what would fire right now, what would not, and why. Sends nothing. */
+  pendingCampaigns: () =>
+    request<{
+      fire: Array<{
+        campaignId: string;
+        campaignName: string;
+        reason: string;
+        matchedZips?: string[];
+        matchedBy?: string;
+      }>;
+      skip: Array<{ campaignId: string; campaignName: string; reason: string }>;
+      alertsSeen: number;
+    }>('/api/sales/campaigns/pending', { method: 'GET' }),
+
+  campaignAudience: (id: string) =>
+    request<{ members: AudienceMember[]; total: number; contacts: number; places: number }>(
+      `/api/sales/campaigns/${id}/audience`,
+      { method: 'GET' },
+    ),
+
+  // ---- Delivery, seen from Sales ----
+  salesWork: (scope: 'mine' | 'all' = 'mine') =>
+    request<SalesWorkResponse>(`/api/sales/work?scope=${scope}`, { method: 'GET' }),
+
+  salesWorkJob: (jobId: string) =>
+    request<SalesWorkDetail>(`/api/sales/work/${jobId}`, { method: 'GET' }),
+
+  sendJobUpdate: (
+    jobId: string,
+    input: { to: string; subject: string; body: string; confirm?: boolean },
+  ) =>
+    request<{
+      dryRun?: boolean;
+      wouldSend?: number;
+      sent?: number;
+      blocked: Array<{ email: string; reason: string }>;
+      warnings?: string[];
+      from?: string;
+      error?: string | null;
+    }>(`/api/sales/work/${jobId}/update`, { method: 'POST', body: JSON.stringify(input) }),
+
+  outreachPeople: () =>
+    request<OutreachResponse>('/api/sales/communications', { method: 'GET' }),
+
+  outreachHistory: (email: string) =>
+    request<OutreachHistory>(`/api/sales/communications/${encodeURIComponent(email)}`, {
+      method: 'GET',
+    }),
+
+  // ---- The shared job record ----
+  sharedJobs: () =>
+    request<{ jobs: SharedJobSummary[]; counts: { jobs: number; parties: number; blockers: number; awaiting: number } }>(
+      '/api/operations/shared',
+      { method: 'GET' },
+    ),
+
+  sharedJob: (jobId: string) =>
+    request<SharedJobRecord>(`/api/operations/shared/${jobId}`, { method: 'GET' }),
+
+  addJobParty: (
+    jobId: string,
+    input: { company: string; trade?: string | null; contactName?: string | null; email?: string | null; role?: string },
+  ) =>
+    request<{ party: JobParty }>(`/api/operations/shared/${jobId}/parties`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  jobPartyLink: (jobId: string, partyId: string) =>
+    request<{ company: string; path: string }>(
+      `/api/operations/shared/${jobId}/parties/${partyId}/link`,
+      { method: 'GET' },
+    ),
+
+  revokeJobParty: (jobId: string, partyId: string) =>
+    request<{ ok: boolean }>(`/api/operations/shared/${jobId}/parties/${partyId}/revoke`, {
+      method: 'POST',
+    }),
+
+  publishJobBrief: (jobId: string, input: { facts?: Record<string, string>; note?: string | null }) =>
+    request<{ brief: { revision: number }; acceptanceLapsedFor: number }>(
+      `/api/operations/shared/${jobId}/brief`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+
+  addJobScope: (
+    jobId: string,
+    input: { title: string; detail?: string | null; state?: ScopeState; amount?: number | null; reason?: string | null; partyId?: string | null },
+  ) =>
+    request<{ item: JobScopeItem }>(`/api/operations/shared/${jobId}/scope`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  decideJobScope: (
+    jobId: string,
+    itemId: string,
+    input: { decision: 'approved' | 'declined'; amount?: number | null; reason?: string | null },
+  ) =>
+    request<{ item: JobScopeItem }>(`/api/operations/shared/${jobId}/scope/${itemId}/decide`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  postJobMessage: (jobId: string, input: { body: string; scopeItemId?: string | null; isDecision?: boolean }) =>
+    request<{ message: { id: string } }>(`/api/operations/shared/${jobId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  // ---- Invitations ----
+  orgInvites: () => request<{ invites: OrgInvite[] }>('/api/org/invites', { method: 'GET' }),
+
+  createOrgInvite: (input: { email: string; role?: MemberRole; note?: string }) =>
+    request<{ invite: OrgInvite; emailed: boolean; joinCode: string }>('/api/org/invites', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  revokeOrgInvite: (id: string) =>
+    request<{ ok: boolean }>(`/api/org/invites/${id}/revoke`, { method: 'POST' }),
+
+  // ---- Purchasing ----
+  purchasingSources: () =>
+    request<{ sources: TakeoffSource[] }>('/api/purchasing/sources', { method: 'GET' }),
+
+  purchasingTakeoff: (estimateId: string) =>
+    request<{ source: TakeoffSource; takeoff: TakeoffResult }>('/api/purchasing/takeoff', {
+      method: 'POST',
+      body: JSON.stringify({ estimateId }),
+    }),
+
+  purchaseOrders: () =>
+    request<{ orders: PurchaseOrder[] }>('/api/purchasing/orders', { method: 'GET' }),
+
+  purchaseOrder: (id: string) =>
+    request<{
+      order: PurchaseOrder;
+      lines: PurchaseOrderLine[];
+      estTotal: number;
+      events: PurchaseOrderEvent[];
+    }>(`/api/purchasing/orders/${id}`, { method: 'GET' }),
+
+  createPurchaseOrder: (input: {
+    estimateId?: string | null;
+    jobName: string;
+    claimNumber?: string | null;
+    supplier: SupplierId;
+    note?: string | null;
+    lines: Array<{
+      materialKey: string;
+      description: string;
+      detail?: string | null;
+      quantity: number;
+      unit: string;
+      unitPrice?: number | null;
+      sourceSummary?: string | null;
+    }>;
+  }) =>
+    request<{ order: PurchaseOrder }>('/api/purchasing/orders', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  approvePurchaseOrder: (id: string) =>
+    request<{ order: PurchaseOrder }>(`/api/purchasing/orders/${id}/approve`, { method: 'POST' }),
+
+  reopenPurchaseOrder: (id: string) =>
+    request<{ order: PurchaseOrder }>(`/api/purchasing/orders/${id}/reopen`, { method: 'POST' }),
+
+  placePurchaseOrder: (id: string, reference?: string) =>
+    request<{ order: PurchaseOrder }>(`/api/purchasing/orders/${id}/place`, {
+      method: 'POST',
+      body: JSON.stringify({ reference: reference || undefined }),
+    }),
+
+  cancelPurchaseOrder: (id: string) =>
+    request<{ order: PurchaseOrder }>(`/api/purchasing/orders/${id}/cancel`, { method: 'POST' }),
+
+  purchasingSuppliers: () =>
+    request<{ suppliers: SupplierStatus[] }>('/api/purchasing/suppliers', { method: 'GET' }),
+
+  connectSupplier: (id: 'home_depot' | 'lowes', fields: Record<string, string>, accountLabel?: string) =>
+    request<{ ok: boolean }>(`/api/purchasing/suppliers/${id}/connect`, {
+      method: 'POST',
+      body: JSON.stringify({ fields, accountLabel }),
+    }),
+
+  disconnectSupplier: (id: 'home_depot' | 'lowes') =>
+    request<{ ok: boolean }>(`/api/purchasing/suppliers/${id}`, { method: 'DELETE' }),
+
+  // ---- Account structure ----
+  accountStructure: (accountId: string) =>
+    request<AccountStructure>(`/api/crm/accounts/${accountId}/structure`, { method: 'GET' }),
+
+  setAccountParent: (accountId: string, parentAccountId: string | null) =>
+    request<{ ok: boolean }>(`/api/crm/accounts/${accountId}/parent`, {
+      method: 'PATCH',
+      body: JSON.stringify({ parentAccountId }),
+    }),
+
+  linkAccounts: (
+    accountId: string,
+    input: { toAccountId: string; kind: string; note?: string | null; startedOn?: string | null },
+  ) =>
+    request<{ id: string }>(`/api/crm/accounts/${accountId}/links`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  endAccountLink: (linkId: string) =>
+    request<{ ok: boolean }>(`/api/crm/accounts/links/${linkId}/end`, { method: 'POST' }),
+
+  addAccountPerson: (
+    accountId: string,
+    input: { contactId: string; role?: string; isPrimary?: boolean },
+  ) =>
+    request<{ ok: boolean }>(`/api/crm/accounts/${accountId}/people`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  duplicateAccounts: () =>
+    request<{ pairs: DuplicatePair[] }>('/api/crm/accounts/duplicates', { method: 'GET' }),
+
+  /** Without `confirm` this changes nothing and reports what would move. */
+  mergeAccounts: (input: { winnerId: string; loserId: string; confirm?: boolean }) =>
+    request<{
+      dryRun: boolean;
+      moved: Record<string, number>;
+      total: number;
+      winner?: { id: string; name: string };
+      loser?: { id: string; name: string };
+    }>('/api/crm/accounts/merge', { method: 'POST', body: JSON.stringify(input) }),
+
+  // ---- Proof of work ----
+  jobProofs: (jobId: string) =>
+    request<ProofResponse>(`/api/operations/shared/${jobId}/proof`, { method: 'GET' }),
+
+  decideProofDay: (
+    jobId: string,
+    workDate: string,
+    input: { partyId: string; decision: 'accepted' | 'rejected'; note?: string },
+  ) =>
+    request<{ ok: boolean }>(`/api/operations/shared/${jobId}/proof/${workDate}/decide`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  askAboutProofs: (jobId: string, question: string) =>
+    request<{ answer: string; groundedOn: number; question: ProofQuestion }>(
+      `/api/operations/shared/${jobId}/proof/ask`,
+      { method: 'POST', body: JSON.stringify({ question }) },
+    ),
+
+  proofQuestions: (jobId: string) =>
+    request<{ questions: ProofQuestion[] }>(`/api/operations/shared/${jobId}/proof/questions`, {
+      method: 'GET',
+    }),
+
+  jobEvidence: (jobId: string) =>
+    request<{ items: EvidenceItem[]; counts: { items: number; onHold: number; neverViewed: number } }>(
+      `/api/operations/shared/${jobId}/evidence`,
+      { method: 'GET' },
+    ),
+
+  evidenceCustody: (jobId: string, proofId: string) =>
+    request<{ entries: CustodyEntry[] }>(
+      `/api/operations/shared/${jobId}/evidence/${proofId}/custody`,
+      { method: 'GET' },
+    ),
+
+  setEvidenceHold: (jobId: string, proofId: string, input: { hold: boolean; reason?: string }) =>
+    request<{ ok: boolean }>(`/api/operations/shared/${jobId}/evidence/${proofId}/hold`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  reanalyseProofDay: (jobId: string, workDate: string, partyId: string) =>
+    request<{ summary: string | null; findings: unknown; model: string | null }>(
+      `/api/operations/shared/${jobId}/proof/${workDate}/analyse`,
+      { method: 'POST', body: JSON.stringify({ partyId }) },
+    ),
+
+  proofVideoUrl: (proofId: string) =>
+    request<{ url: string; expiresInSeconds: number }>(
+      `/api/operations/shared/proof/${proofId}/video`,
+      { method: 'GET' },
+    ),
+
+  // ---- Territories ----
+  territories: () => request<{ items: Territory[] }>('/api/sales/territories', { method: 'GET' }),
+
+  territoryMap: () =>
+    request<TerritoryMapResponse>('/api/sales/territories/map', { method: 'GET' }),
+
+  createTerritory: (input: Partial<Territory> & { name: string }) =>
+    request<{ item: Territory }>('/api/sales/territories', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  updateTerritory: (id: string, input: Partial<Territory>) =>
+    request<{ item: Territory }>(`/api/sales/territories/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+
+  deleteTerritory: (id: string) =>
+    request<{ ok: boolean }>(`/api/sales/territories/${id}`, { method: 'DELETE' }),
+
+  // ---- Campaigns ----
+  campaigns: () => request<{ items: Campaign[] }>('/api/sales/campaigns', { method: 'GET' }),
+
+  createCampaign: (input: { name: string } & Partial<Campaign>) =>
+    request<{ item: Campaign }>('/api/sales/campaigns', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  updateCampaign: (id: string, input: Partial<Campaign>) =>
+    request<{ item: Campaign }>(`/api/sales/campaigns/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+
+  deleteCampaign: (id: string) =>
+    request<{ ok: boolean }>(`/api/sales/campaigns/${id}`, { method: 'DELETE' }),
+
+  campaignMembers: (id: string) =>
+    request<{ items: CampaignMember[] }>(`/api/sales/campaigns/${id}/members`, { method: 'GET' }),
+
+  addCampaignMember: (id: string, input: { contactId?: string; prospectId?: string; note?: string }) =>
+    request<{ item: CampaignMember }>(`/api/sales/campaigns/${id}/members`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  setCampaignMemberStatus: (id: string, memberId: string, status: CampaignMemberStatus) =>
+    request<{ item: CampaignMember }>(`/api/sales/campaigns/${id}/members/${memberId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+
+  networkSettings: () =>
+    request<{ contributing: boolean; decidedAt: string | null; enabled: boolean }>(
+      '/api/prospecting/network',
+      { method: 'GET' },
+    ),
+
+  /**
+   * Opt in or out. Opting out withdraws every row this org ever contributed —
+   * an opt-out that left them in the pool would not be one.
+   */
+  setNetworkContribution: (contributing: boolean) =>
+    request<{ contributing: boolean; withdrawn: number }>('/api/prospecting/network', {
+      method: 'PUT',
+      body: JSON.stringify({ contributing }),
+    }),
+
+  contributeToNetwork: () =>
+    request<{ contributed: number; considered: number }>('/api/prospecting/network/contribute', {
+      method: 'POST',
+    }),
+
+  prospects: () => request<{ items: Prospect[] }>('/api/prospecting/prospects', { method: 'GET' }),
+
+  /** Erasure. Suppresses the person by default so a search cannot re-add them. */
+  deleteProspect: (id: string, suppress = true) =>
+    request<{ ok: boolean; suppressed: boolean }>(
+      `/api/prospecting/prospects/${id}?suppress=${suppress}`,
+      { method: 'DELETE' },
+    ),
+
+  /** Turns a revealed prospect into a contact and a lead. */
+  prospectImport: (prospectId: string, overrides: { title?: string; estimatedValue?: number | null } = {}) =>
+    request<{ contact: CrmContact; lead: CrmLead }>('/api/prospecting/import', {
+      method: 'POST',
+      body: JSON.stringify({ prospectId, ...overrides }),
+    }),
+
+  suppressions: () =>
+    request<{ items: Suppression[] }>('/api/prospecting/suppressions', { method: 'GET' }),
+
+  addSuppression: (input: { kind: Suppression['kind']; value: string; reason?: string }) =>
+    request<{ item: Suppression }>('/api/prospecting/suppressions', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  removeSuppression: (id: string) =>
+    request<{ ok: boolean }>(`/api/prospecting/suppressions/${id}`, { method: 'DELETE' }),
+
+  crmContacts: (search = '') =>
+    request<CrmList<CrmContact>>(
+      `/api/crm/contacts${search ? `?search=${encodeURIComponent(search)}` : ''}`,
+      { method: 'GET' },
+    ),
 
   // ---- Audit ----
   auditAgents: () => request<{ agents: AgentSummary[] }>('/api/audit/agents', { method: 'GET' }),

@@ -23,6 +23,14 @@ import { aiRouter } from './routes/ai.js';
 import { modelGatewayRouter } from './routes/modelGateway.js';
 import { webhookRouter } from './routes/webhooks.js';
 import { crmRouter } from './routes/crm.js';
+import { prospectingRouter } from './routes/prospecting.js';
+import { campaignsRouter } from './routes/campaigns.js';
+import { salesWorkRouter } from './routes/salesWork.js';
+import { sharedJobsRouter, jobShareRouter } from './routes/sharedJobs.js';
+import { purchasingRouter } from './routes/purchasing.js';
+import { crmAccountsRouter } from './routes/crmAccounts.js';
+import { unsubscribeRouter } from './routes/unsubscribe.js';
+import { locationsRouter } from './routes/locations.js';
 import { backupRouter } from './routes/backups.js';
 import { integrationsRouter } from './routes/integrations.js';
 import { computerRouter } from './routes/computer.js';
@@ -164,7 +172,24 @@ export function createApp(): Express {
   app.use('/api/web-access', webAccessRouter);
   app.use('/api/connectors', connectorsRouter);
   app.use('/api/verifier', verifierRouter);
+  // Before crmRouter, not after. crmRouter registers a generic GET
+  // /accounts/:id, so mounted second this router would never be reached —
+  // /accounts/duplicates would be read as an account whose id is "duplicates".
+  // Express falls through to crmRouter for anything this one does not handle.
+  app.use('/api/crm/accounts', crmAccountsRouter);
   app.use('/api/crm', crmRouter);
+  app.use('/api/prospecting', prospectingRouter);
+  // Campaigns and territories share a router: a campaign is usually worked one
+  // territory at a time, and splitting them would put one join across two files.
+  app.use('/api/sales', campaignsRouter);
+  // Same namespace, separate file: delivery visibility has nothing to do with
+  // campaigns beyond both being things a salesperson opens.
+  app.use('/api/sales', salesWorkRouter);
+  app.use('/api/locations', locationsRouter);
+  // Deliberately outside every auth middleware: the person clicking is a
+  // recipient who never had an account, and an unsubscribe link that requires
+  // signing in is not one.
+  app.use('/api/unsubscribe', unsubscribeRouter);
   app.use('/api/backups', backupRouter);
   app.use('/api/integrations', integrationsRouter);
   app.use('/api/computer', computerRouter);

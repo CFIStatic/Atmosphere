@@ -455,7 +455,7 @@ export const activityToRow = (v: z.infer<typeof activityUpdateSchema>) =>
 
 /* ----------------------------------------------------------- integrations */
 
-export const SOURCE_KINDS = ['rest', 'csv', 'webhook', 'manual'] as const;
+export const SOURCE_KINDS = ['rest', 'salesforce', 'browser_crm', 'csv', 'webhook', 'manual'] as const;
 
 export const sourceCreateSchema = z.object({
   system: requiredText(60, 'System name'),

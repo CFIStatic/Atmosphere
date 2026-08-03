@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, ApiError } from '../lib/api';
+import { PLATFORM_HOME } from '../lib/platforms';
+import { getPlatform } from '../lib/usePlatform';
 import { Logo } from '../components/Logo';
 import { PinPad } from '../components/PinPad';
 import { EyeIcon, EyeOffIcon, SpinnerIcon, CheckIcon } from '../components/icons';
@@ -47,7 +49,9 @@ export function LoginPage() {
         if (cancelled) return;
         setPinEnrolled(status.enrolled);
         const locked = status.lockedUntil ? new Date(status.lockedUntil) > new Date() : false;
-        setShowPin(status.enrolled && !locked);
+        // An explicit signup link beats the device PIN — a new teammate may be
+        // creating their account from a machine someone else enrolled.
+        setShowPin(status.enrolled && !locked && !wantsSignup);
         if (locked) {
           setPinError('Too many incorrect PINs. Sign in with your password to continue.');
         }
@@ -58,7 +62,7 @@ export function LoginPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [wantsSignup]);
 
   useEffect(() => () => window.clearTimeout(shakeTimer.current), []);
 
@@ -240,7 +244,7 @@ export function LoginPage() {
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           placeholder="you@company.com"
-                          className="w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
+                          className="w-full rounded-lg glass-card px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
                         />
                       </div>
 
@@ -278,7 +282,7 @@ export function LoginPage() {
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             placeholder="••••••••"
-                            className="w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 pr-11 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
+                            className="w-full rounded-lg glass-card px-3.5 py-2.5 pr-11 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
                           />
                           <button
                             type="button"
@@ -319,7 +323,7 @@ export function LoginPage() {
                           setShowPin(true);
                           setPinError(null);
                         }}
-                        className="mt-3 w-full rounded-lg border border-line bg-paper-0 px-4 py-2.5 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
+                        className="mt-3 w-full rounded-lg glass-card px-4 py-2.5 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
                       >
                         Use your PIN instead
                       </button>
@@ -340,7 +344,7 @@ export function LoginPage() {
           </div>
 
           <p className="mt-6 text-center text-xs text-ink-400">
-            Protected by Supabase Auth · Passwords are encrypted and never stored in plain text.
+            Passwords are encrypted, never stored in plain text, and never seen by this page.
           </p>
         </div>
       </main>

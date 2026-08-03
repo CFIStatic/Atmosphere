@@ -202,7 +202,7 @@ export function BillingPage() {
           </div>
         )}
         {!canManage && (
-          <p className="mt-6 rounded-xl border border-line bg-paper-0 px-4 py-3 text-sm text-ink-600">
+          <p className="mt-6 rounded-xl glass-card px-4 py-3 text-sm text-ink-600">
             You can view billing, but only an accountant, office manager or project manager can
             change the plan or buy credits.
           </p>
@@ -210,14 +210,14 @@ export function BillingPage() {
 
         {/* ---- Balance + current plan ---- */}
         <div className="mt-8 grid gap-4 lg:grid-cols-3">
-          <div className="rounded-xl border border-line bg-paper-0 p-5 lg:col-span-2">
+          <div className="rounded-xl glass-card p-5 lg:col-span-2">
             <p className="text-xs font-medium uppercase tracking-wide text-ink-500">Credit balance</p>
             <p className="mt-1 text-4xl font-bold tracking-tight text-ink-900">
               {formatUsd(balance?.totalNanos ?? 0)}
             </p>
 
             <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-lg bg-paper-0 px-3 py-2">
+              <div className="rounded-lg bg-paper-200/50 px-3 py-2">
                 <dt className="text-xs text-ink-500">Plan credits</dt>
                 <dd className="mt-0.5 font-semibold text-ink-800">
                   {formatUsd(balance?.planNanos ?? 0)}
@@ -226,7 +226,7 @@ export function BillingPage() {
                   {balance?.nextExpiry ? `Expires ${formatDate(balance.nextExpiry)}` : 'No expiry'}
                 </dd>
               </div>
-              <div className="rounded-lg bg-paper-0 px-3 py-2">
+              <div className="rounded-lg bg-paper-200/50 px-3 py-2">
                 <dt className="text-xs text-ink-500">Purchased credits</dt>
                 <dd className="mt-0.5 font-semibold text-ink-800">
                   {formatUsd(balance?.purchasedNanos ?? 0)}
@@ -244,7 +244,7 @@ export function BillingPage() {
                   </span>
                 </div>
                 <div
-                  className="mt-2 h-2 overflow-hidden rounded-full bg-paper-0"
+                  className="mt-2 h-2 overflow-hidden rounded-full bg-paper-200/50"
                   role="progressbar"
                   aria-valuenow={Math.round(usedPct(usage.priceNanos, sub.includedCreditsNanos))}
                   aria-valuemin={0}
@@ -263,7 +263,7 @@ export function BillingPage() {
             )}
           </div>
 
-          <div className="rounded-xl border border-line bg-paper-0 p-5">
+          <div className="rounded-xl glass-card p-5">
             <p className="text-xs font-medium uppercase tracking-wide text-ink-500">Current plan</p>
             <p className="mt-1 text-2xl font-bold text-ink-900">{sub?.planName}</p>
             <p className="mt-1 text-sm text-ink-600">
@@ -296,7 +296,7 @@ export function BillingPage() {
                 key={pack.code}
                 onClick={() => buyPack(pack.code, pack.name)}
                 disabled={!canManage || busy !== null}
-                className="group rounded-xl border border-line bg-paper-0 p-4 text-left transition hover:border-brand-200 hover:bg-paper-0 disabled:cursor-not-allowed disabled:opacity-50"
+                className="group rounded-xl glass-card p-4 text-left transition hover:border-brand-200 hover:disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <p className="text-lg font-semibold text-ink-900">{formatCents(pack.priceCents)}</p>
                 <p className="mt-0.5 text-sm text-ink-600">
@@ -313,7 +313,7 @@ export function BillingPage() {
               </button>
             ))}
 
-            <div className="rounded-xl border border-dashed border-line bg-paper-0 p-4">
+            <div className="rounded-xl border border-dashed glass-card p-4">
               <label htmlFor="custom-amount" className="text-sm font-medium text-ink-700">
                 Custom amount
               </label>
@@ -357,7 +357,7 @@ export function BillingPage() {
         <section className="mt-12">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-semibold text-ink-900">Plans</h2>
-            <div className="flex rounded-lg border border-line bg-paper-0 p-1 text-sm">
+            <div className="flex rounded-lg glass-card p-1 text-sm">
               {(['monthly', 'annual'] as BillingInterval[]).map((i) => (
                 <button
                   key={i}
@@ -408,7 +408,7 @@ export function BillingPage() {
 
           <div className="mt-4 overflow-x-auto rounded-xl border border-line">
             <table className="w-full min-w-[46rem] text-sm">
-              <thead className="bg-paper-0 text-left text-xs uppercase tracking-wide text-ink-600">
+              <thead className="bg-paper-200/50 text-left text-xs uppercase tracking-wide text-ink-600">
                 <tr>
                   <th scope="col" className="px-4 py-3 font-medium">Model</th>
                   <th scope="col" className="px-4 py-3 text-right font-medium">Input</th>
@@ -420,7 +420,7 @@ export function BillingPage() {
               </thead>
               <tbody className="divide-y divide-line">
                 {catalog?.rateCard.map((rate) => (
-                  <tr key={rate.modelId} className="bg-paper-0">
+                  <tr key={rate.modelId} className="bg-paper-200/50">
                     <td className="px-4 py-3">
                       <p className="font-medium text-ink-900">{rate.displayName}</p>
                       <p className="text-xs text-ink-500">
@@ -454,7 +454,7 @@ export function BillingPage() {
               <button
                 onClick={openPortal}
                 disabled={busy !== null}
-                className="flex items-center gap-2 rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100 disabled:opacity-50"
+                className="flex items-center gap-2 rounded-lg glass-card px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100 disabled:opacity-50"
               >
                 {busy === 'portal' && <SpinnerIcon className="animate-spin" width={15} height={15} />}
                 Manage payment methods
@@ -470,7 +470,7 @@ export function BillingPage() {
               </p>
             ) : (
               <table className="w-full min-w-[42rem] text-sm">
-                <thead className="bg-paper-0 text-left text-xs uppercase tracking-wide text-ink-600">
+                <thead className="bg-paper-200/50 text-left text-xs uppercase tracking-wide text-ink-600">
                   <tr>
                     <th scope="col" className="px-4 py-3 font-medium">Date</th>
                     <th scope="col" className="px-4 py-3 font-medium">Description</th>
@@ -482,7 +482,7 @@ export function BillingPage() {
                 </thead>
                 <tbody className="divide-y divide-line">
                   {payments.map((p) => (
-                    <tr key={p.id} className="bg-paper-0">
+                    <tr key={p.id} className="bg-paper-200/50">
                       <td className="px-4 py-2.5 text-ink-600">{formatDate(p.createdAt)}</td>
                       <td className="px-4 py-2.5">
                         <p className="font-medium text-ink-900">
@@ -541,7 +541,7 @@ export function BillingPage() {
                 {ledger.map((entry) => (
                   <li
                     key={entry.id}
-                    className="flex items-center justify-between gap-4 bg-paper-0 px-5 py-3"
+                    className="flex items-center justify-between gap-4 bg-paper-200/50 px-5 py-3"
                   >
                     <div>
                       <p className="text-sm font-medium text-ink-900">
@@ -576,7 +576,7 @@ function PaymentStatus({ status, reason }: { status: Payment['status']; reason: 
     succeeded: 'bg-success-50 text-success-600',
     pending: 'bg-caution-50 text-caution-600',
     failed: 'bg-danger-50 text-danger-700',
-    refunded: 'bg-gray-500/20 text-ink-700',
+    refunded: 'bg-paper-300 text-ink-700',
   };
   return (
     <span className="inline-flex flex-col items-start">
@@ -615,7 +615,7 @@ function PlanCard({
       className={`flex flex-col rounded-xl border p-5 transition ${
         isCurrent
           ? 'border-brand-200 bg-brand-50'
-          : 'border-line bg-paper-0 hover:border-line-strong'
+          : 'glass-card hover:border-line-strong'
       }`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -658,7 +658,7 @@ function PlanCard({
         disabled={disabled || isCurrent || plan.isContactSales}
         className={`mt-5 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
           isCurrent
-            ? 'border border-line bg-paper-0 text-ink-600'
+            ? 'glass-card text-ink-600'
             : 'bg-brand-500 text-ink-900 hover:bg-brand-500'
         }`}
       >
@@ -699,7 +699,7 @@ function SpendControls({
 
   return (
     <section className="mt-12 grid gap-4 md:grid-cols-2">
-      <div className="rounded-xl border border-line bg-paper-0 p-5">
+      <div className="rounded-xl glass-card p-5">
         <h3 className="font-semibold text-ink-900">Reload</h3>
         <p className="mt-1 text-sm text-ink-600">
           How the credit balance tops back up — every purchase on your say-so, or
@@ -714,7 +714,7 @@ function SpendControls({
             className={`rounded-lg border px-3 py-2 text-left text-sm transition disabled:opacity-50 ${
               !settings.autoReloadEnabled
                 ? 'border-brand-500 bg-brand-50 text-ink-900'
-                : 'border-line bg-paper-0 text-ink-600 hover:bg-paper-100'
+                : 'glass-card text-ink-600 hover:bg-paper-100'
             }`}
           >
             Manual reload
@@ -729,7 +729,7 @@ function SpendControls({
             className={`rounded-lg border px-3 py-2 text-left text-sm transition disabled:opacity-50 ${
               settings.autoReloadEnabled
                 ? 'border-brand-500 bg-brand-50 text-ink-900'
-                : 'border-line bg-paper-0 text-ink-600 hover:bg-paper-100'
+                : 'glass-card text-ink-600 hover:bg-paper-100'
             }`}
           >
             Auto-reload
@@ -763,14 +763,14 @@ function SpendControls({
               )
             }
             disabled={!canManage || busy !== null || !reloadAmount}
-            className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-sm text-ink-800 transition hover:bg-paper-100 disabled:opacity-50"
+            className="rounded-lg glass-card px-3 py-1.5 text-sm text-ink-800 transition hover:bg-paper-100 disabled:opacity-50"
           >
             Save
           </button>
         </div>
       </div>
 
-      <div className="rounded-xl border border-line bg-paper-0 p-5">
+      <div className="rounded-xl glass-card p-5">
         <h3 className="font-semibold text-ink-900">Monthly spend limit</h3>
         <p className="mt-1 text-sm text-ink-600">
           Requests are refused once usage in a billing period reaches this cap. Leave blank for no
@@ -804,7 +804,7 @@ function SpendControls({
               )
             }
             disabled={!canManage || busy !== null}
-            className="rounded-lg border border-line bg-paper-0 px-3 py-1.5 text-sm text-ink-800 transition hover:bg-paper-100 disabled:opacity-50"
+            className="rounded-lg glass-card px-3 py-1.5 text-sm text-ink-800 transition hover:bg-paper-100 disabled:opacity-50"
           >
             Save
           </button>

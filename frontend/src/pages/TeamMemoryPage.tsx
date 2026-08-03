@@ -10,6 +10,8 @@ import {
   type MemoryEvent,
 } from '../lib/api';
 import { AppShell, PageHeader, PanelSpinner, EmptyState, ErrorNote } from '../components/AppShell';
+import { InvitePanel } from '../components/team/InvitePanel';
+import { usePlatform } from '../lib/usePlatform';
 import { MemoryFeed } from '../components/MemoryFeed';
 import { SpinnerIcon, ChevronLeftIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
@@ -27,15 +29,15 @@ function AgentCard({ agent, onOpen }: { agent: AgentMemory; onOpen: () => void }
   return (
     <button
       onClick={onOpen}
-      className="rounded-xl border border-white/10 bg-ink-800/50 p-5 text-left transition hover:border-brand-400/40 hover:bg-ink-800/80"
+      className="rounded-xl glass-card p-5 text-left transition hover:border-brand-400/40 hover:bg-paper-200"
     >
       <div className="flex items-center gap-3">
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-600/30 text-sm font-semibold uppercase text-brand-200">
           {name.slice(0, 2)}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-white">{name}</p>
-          <p className="truncate text-xs text-gray-500">
+          <p className="truncate text-sm font-medium text-ink-900">{name}</p>
+          <p className="truncate text-xs text-ink-500">
             {ROLE_LABELS[agent.role] ?? agent.role} · {WORK_TYPE_LABELS[agent.workType] ?? agent.workType}
           </p>
         </div>
@@ -49,13 +51,13 @@ function AgentCard({ agent, onOpen }: { agent: AgentMemory; onOpen: () => void }
           ['Logged', formatMinutes(agent.minutesLogged)],
         ].map(([label, value]) => (
           <div key={label}>
-            <dt className="text-xs text-gray-500">{label}</dt>
-            <dd className="font-semibold text-gray-100">{value}</dd>
+            <dt className="text-xs text-ink-500">{label}</dt>
+            <dd className="font-semibold text-ink-800">{value}</dd>
           </div>
         ))}
       </dl>
 
-      <p className="mt-3 text-xs text-gray-500">Last active {timeAgo(agent.lastActiveAt)}</p>
+      <p className="mt-3 text-xs text-ink-500">Last active {timeAgo(agent.lastActiveAt)}</p>
     </button>
   );
 }
@@ -107,7 +109,7 @@ function AgentDetail({ userId, onBack }: { userId: string; onBack: () => void })
     <>
       <button
         onClick={onBack}
-        className="mb-4 inline-flex items-center gap-1 text-sm text-gray-400 transition hover:text-gray-200"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-ink-600 transition hover:text-ink-800"
       >
         <ChevronLeftIcon width={16} height={16} />
         Everyone
@@ -135,9 +137,9 @@ function AgentDetail({ userId, onBack }: { userId: string; onBack: () => void })
               ['Tasks done', String(agent.tasksCompleted)],
               ['Work logged', formatMinutes(agent.minutesLogged)],
             ].map(([label, value]) => (
-              <div key={label} className="rounded-xl border border-white/10 bg-ink-800/50 px-4 py-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</p>
-                <p className="mt-1 text-xl font-semibold text-white">{value}</p>
+              <div key={label} className="rounded-xl glass-card px-4 py-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-ink-500">{label}</p>
+                <p className="mt-1 text-xl font-semibold text-ink-900">{value}</p>
               </div>
             ))}
           </div>
@@ -154,7 +156,7 @@ function AgentDetail({ userId, onBack }: { userId: string; onBack: () => void })
               <button
                 onClick={loadMore}
                 disabled={loadingMore}
-                className="flex items-center gap-2 rounded-lg border border-white/10 bg-ink-800/60 px-5 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-ink-700 disabled:opacity-60"
+                className="flex items-center gap-2 rounded-lg glass-card px-5 py-2.5 text-sm font-medium text-ink-800 transition hover:bg-paper-200 disabled:opacity-60"
               >
                 {loadingMore && <SpinnerIcon className="animate-spin" width={16} height={16} />}
                 {loadingMore ? 'Loading…' : 'Load earlier'}
@@ -193,6 +195,8 @@ export function TeamMemoryPage() {
             title="Team"
             description="Everyone linked to your organization, and what the record says each of them has done."
           />
+
+          {platform === 'manager' && <InvitePanel />}
 
           {error && (
             <div className="mb-4">
