@@ -69,7 +69,14 @@ export function ProspectorPage() {
       });
       setMatches(res.matches);
       setTotal(res.total);
-      setStatus({ provider: res.provider, sandbox: res.sandbox, revealPriceNanos: res.revealPriceNanos });
+      setStatus({
+        provider: res.provider,
+        sandbox: res.sandbox,
+        revealPriceNanos: res.revealPriceNanos,
+        verifier: res.verifier,
+        sellUnverified: res.sellUnverified,
+        sources: res.sources,
+      });
     } catch (err) {
       setMatches([]);
       setError(err instanceof Error ? err.message : 'Could not run that search.');
@@ -353,11 +360,30 @@ export function ProspectorPage() {
             </table>
           </div>
 
+          {/* This paragraph is a promise about billing, so it has to track the
+              configuration rather than describe the best case. A deployment
+              with no verifier confirms nothing, and saying otherwise here
+              would be the most expensive sentence on the page. */}
           <p className="mt-3 max-w-3xl text-xs leading-relaxed text-ink-500">
-            Every address is checked against the receiving mail server before you are charged: a
-            mailbox that does not exist is never sold. People already in your CRM, already
-            revealed, or on your do-not-contact list are never billed again, and a search that
-            finds nothing costs nothing.
+            {status?.verifier ? (
+              <>
+                Every address is checked against the receiving mail server by {status.verifier}{' '}
+                before you are charged: a mailbox that does not exist is never sold.
+              </>
+            ) : status?.sellUnverified ? (
+              <>
+                <span className="text-caution-600">No verification is configured.</span> Addresses are
+                returned as the vendor supplied them and have not been confirmed to exist.
+              </>
+            ) : (
+              <>
+                <span className="text-caution-600">No verification is configured</span>, so addresses
+                nobody could confirm are withheld rather than billed. Connect a verifier in
+                Settings to raise the match rate.
+              </>
+            )}{' '}
+            People already in your CRM, already revealed, or on your do-not-contact list are never
+            billed again, and a search that finds nothing costs nothing.
           </p>
         </>
       )}
@@ -381,7 +407,7 @@ export function ProspectorPage() {
  */
 function VerdictBadge({ verification }: { verification: EmailVerification | null }) {
   if (!verification) return null;
-  const { verdict, catchAll, reason } = verification;
+  const { verdict, catchAll, reason, verifier } = verification;
 
   const style =
     verdict === 'valid'
@@ -399,9 +425,14 @@ function VerdictBadge({ verification }: { verification: EmailVerification | null
           ? 'Undeliverable'
           : 'Unconfirmed';
 
+  // Naming who confirmed it turns "Verified" from a claim into a citation —
+  // and makes it obvious when the answer came from nobody at all.
+  const title = verifier ? `${reason} (${verifier})` : reason;
+
   return (
-    <span title={reason} className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${style}`}>
+    <span title={title} className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${style}`}>
       {label}
+      {verdict === 'valid' && verifier ? ` · ${verifier}` : ''}
     </span>
   );
 }

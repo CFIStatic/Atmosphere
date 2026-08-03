@@ -2,11 +2,17 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { requireOrgContext } from '../lib/orgContext.js';
+import { requireOrgContext, requireOrgRole } from '../lib/orgContext.js';
 import { HttpError } from '../lib/errors.js';
 import { billingError } from '../lib/billing.js';
 import { config } from '../config.js';
-import { buildContactProvider, buildProviderChain, ProviderError } from '../prospecting/index.js';
+import {
+  buildContactProvider,
+  buildProviderChain,
+  integrationStatus,
+  ProviderError,
+} from '../prospecting/index.js';
+import { buildMailboxVerifier } from '../prospecting/verifiers/index.js';
 import { runWaterfall } from '../prospecting/waterfall.js';
 import type { KnownAddress } from '../prospecting/patterns.js';
 
@@ -42,6 +48,16 @@ const searchLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many searches. Give it a minute.', code: 'rate_limited' },
+});
+
+// Credential tests call out to vendors, so they are throttled harder than
+// anything else here: a loop over this endpoint is a loop over their API.
+const integrationsLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many credential checks. Give it a minute.', code: 'rate_limited' },
 });
 
 const revealLimiter = rateLimit({
@@ -247,15 +263,47 @@ async function findKnownContact(
 prospectingRouter.get('/status', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const provider = buildContactProvider();
+    const verifier = buildMailboxVerifier();
     res.json({
       provider: provider.name,
       sandbox: provider.sandbox,
       revealPriceNanos: config.prospecting.revealPriceNanos,
+      // What is actually confirming addresses, so the UI can stop claiming
+      // "verified" in a deployment where nothing verifies anything.
+      verifier: verifier?.name ?? null,
+      sellUnverified: config.prospecting.sellUnverified,
+      sources: buildProviderChain().map((p) => p.name),
     });
   } catch (err) {
     next(err);
   }
 });
+
+/**
+ * GET /api/prospecting/integrations?test=1
+ * What is plugged in and whether it works. With `test`, makes a real
+ * credential call against each — the difference between listing environment
+ * variables and telling an operator the truth.
+ */
+prospectingRouter.get(
+  '/integrations',
+  integrationsLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      // Live credential checks reach out to vendors, so they are an
+      // owner/admin action rather than something any member can trigger.
+      await requireOrgRole(req, ['owner', 'admin']);
+      const items = await integrationStatus(req.query.test === '1');
+      res.json({
+        items,
+        mode: config.prospecting.mode,
+        sellUnverified: config.prospecting.sellUnverified,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 /**
  * POST /api/prospecting/search

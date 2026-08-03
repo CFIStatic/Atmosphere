@@ -1,6 +1,4 @@
-import { promises as dns } from 'node:dns';
-import net from 'node:net';
-import { config } from '../config.js';
+import { buildMailboxVerifier, lowestMx } from './verifiers/index.js';
 
 /**
  * Email verification — the difference between a guess and an address.
@@ -14,15 +12,15 @@ import { config } from '../config.js';
  *
  *   1. Syntax        — malformed, or a free-mail/role address we won't sell.
  *   2. MX records    — does the domain accept mail at all?
- *   3. Catch-all     — probe a random local part. If the server accepts THAT,
- *                      it accepts everything, and no per-address answer is
- *                      possible. The result is 'risky', never 'valid'.
- *   4. SMTP probe    — RCPT TO for the real address, then QUIT. No message is
- *                      ever sent; we ask whether the mailbox exists and hang up.
+ *   3. Mailbox       — does this specific address exist? Delegated to whatever
+ *                      verifier is configured: our own SMTP probe where port
+ *                      25 is open, or ZeroBounce/NeverBounce over HTTPS where
+ *                      it is not. That choice lives in verifiers/index.ts and
+ *                      nothing here depends on which one answered.
  *
- * That last step is standard practice (it is what Hunter, NeverBounce and
- * ZeroBounce do) but it is a network conversation with a stranger's server, so
- * it is bounded by a short timeout and never retried in a loop.
+ * Steps 1 and 2 run first and locally on purpose. They settle a large share of
+ * bad addresses for the price of a DNS lookup, so a metered verifier is never
+ * billed for a question we could answer ourselves.
  *
  * A verdict is deliberately three-valued. 'risky' is not a failure — it is the
  * honest answer for a catch-all domain, and the UI says so rather than
@@ -42,6 +40,12 @@ export interface VerificationResult {
   catchAll: boolean;
   /** True when the domain has no mail exchanger at all. */
   noMx: boolean;
+  /**
+   * Which verifier answered — 'SMTP', 'ZeroBounce', … — or null when nothing
+   * confirmed the mailbox. The customer is entitled to know the difference
+   * between "a mail server accepted this" and "nobody checked".
+   */
+  verifier: string | null;
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@.]+\.[^\s@]+$/;
@@ -77,100 +81,8 @@ export function isFreeDomain(email: string): boolean {
   return parts ? FREE_DOMAINS.has(parts.domain) : false;
 }
 
-/** Lowest MX host for a domain, or null when the domain takes no mail. */
-async function lowestMx(domain: string): Promise<string | null> {
-  try {
-    const records = await dns.resolveMx(domain);
-    if (!records.length) return null;
-    return records.sort((a, b) => a.priority - b.priority)[0].exchange;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * One SMTP conversation, asking about one address, sending nothing.
- *
- * Returns true when the server accepts the recipient, false when it rejects
- * it outright, and null when it declines to say — greylisting, a rate limit,
- * or a timeout. Null is not a rejection and must never be reported as one.
- */
-function probeRecipient(
-  mx: string,
-  address: string,
-  timeoutMs: number,
-): Promise<boolean | null> {
-  return new Promise((resolve) => {
-    const from = config.prospecting.verifyFromAddress;
-    const helo = config.prospecting.verifyHeloDomain;
-
-    const socket = net.createConnection({ host: mx, port: 25 });
-    let settled = false;
-    let stage = 0;
-    let buffer = '';
-
-    const done = (value: boolean | null) => {
-      if (settled) return;
-      settled = true;
-      try {
-        socket.write('QUIT\r\n');
-      } catch {
-        /* the server may already be gone */
-      }
-      socket.destroy();
-      resolve(value);
-    };
-
-    socket.setTimeout(timeoutMs, () => done(null));
-    socket.on('error', () => done(null));
-    socket.on('close', () => done(null));
-
-    socket.on('data', (chunk) => {
-      buffer += chunk.toString('utf8');
-      if (!buffer.endsWith('\n')) return;
-      const line = buffer.trim().split('\n').pop() ?? '';
-      const code = Number(line.slice(0, 3));
-      buffer = '';
-
-      // Any 4xx here is "come back later", not "no such person".
-      if (code >= 400 && stage < 3) return done(null);
-
-      if (stage === 0) {
-        if (code !== 220) return done(null);
-        socket.write(`EHLO ${helo}\r\n`);
-        stage = 1;
-        return;
-      }
-      if (stage === 1) {
-        if (code !== 250) return done(null);
-        socket.write(`MAIL FROM:<${from}>\r\n`);
-        stage = 2;
-        return;
-      }
-      if (stage === 2) {
-        if (code !== 250) return done(null);
-        socket.write(`RCPT TO:<${address}>\r\n`);
-        stage = 3;
-        return;
-      }
-      if (stage === 3) {
-        if (code === 250 || code === 251) return done(true);
-        // 550/551/553 — no such mailbox. 5xx generally means refused.
-        if (code >= 500) return done(false);
-        return done(null);
-      }
-    });
-  });
-}
-
-/** A local part no real person owns, used to ask "do you accept everything?". */
-function catchAllProbeAddress(domain: string): string {
-  const nonce = Math.random().toString(36).slice(2, 14);
-  return `atm-verify-${nonce}@${domain}`;
-}
-
 export interface VerifyOptions {
-  /** Skip the SMTP conversation — DNS-only, for bulk pre-filtering. */
+  /** Skip the mailbox check — DNS-only, for free bulk pre-filtering. */
   dnsOnly?: boolean;
 }
 
@@ -183,7 +95,9 @@ export async function verifyEmail(
   options: VerifyOptions = {},
 ): Promise<VerificationResult> {
   const address = email.trim().toLowerCase();
-  const base = { email: address, catchAll: false, noMx: false };
+  // Everything below step 3 is answered locally, so nothing confirmed a
+  // mailbox and `verifier` stays null; the delegated branches set their own.
+  const base = { email: address, catchAll: false, noMx: false, verifier: null };
 
   if (!EMAIL_RE.test(address)) {
     return { ...base, verdict: 'invalid', score: 0, reason: 'Not a valid address.' };
@@ -216,33 +130,41 @@ export async function verifyEmail(
     };
   }
 
-  if (options.dnsOnly || !config.prospecting.smtpProbeEnabled) {
+  const verifier = options.dnsOnly ? null : buildMailboxVerifier();
+  if (!verifier) {
     return {
       ...base,
       verdict: 'unknown',
       score: 0.5,
-      reason: 'The domain accepts mail; the mailbox was not probed.',
+      reason: 'The domain accepts mail; the mailbox itself was not confirmed.',
+      verifier: null,
     };
   }
 
-  const timeout = config.prospecting.verifyTimeoutMs;
+  const result = await verifier.check(address, parts.domain);
 
-  // Ask about a made-up address first. A server that accepts it accepts
-  // anything, and every per-address answer from it would be a lie.
-  const catchAll = await probeRecipient(mx, catchAllProbeAddress(parts.domain), timeout);
-  if (catchAll === true) {
+  if (result.catchAll === true) {
     return {
       ...base,
       catchAll: true,
       verdict: 'risky',
       score: 0.55,
       reason: 'The domain accepts all mail, so the mailbox cannot be confirmed.',
+      verifier: verifier.name,
     };
   }
 
-  const accepted = await probeRecipient(mx, address, timeout);
+  if (result.disposable) {
+    return {
+      ...base,
+      verdict: 'invalid',
+      score: 0.05,
+      reason: 'A disposable inbox — real today, gone next week.',
+      verifier: verifier.name,
+    };
+  }
 
-  if (accepted === true) {
+  if (result.exists === true) {
     const role = ROLE_LOCALS.has(parts.local);
     return {
       ...base,
@@ -251,15 +173,17 @@ export async function verifyEmail(
       reason: role
         ? 'A shared mailbox — real, but nobody in particular reads it.'
         : 'The mail server accepted this mailbox.',
+      verifier: verifier.name,
     };
   }
 
-  if (accepted === false) {
+  if (result.exists === false) {
     return {
       ...base,
       verdict: 'invalid',
       score: 0.05,
       reason: 'The mail server rejected this mailbox.',
+      verifier: verifier.name,
     };
   }
 
@@ -268,5 +192,6 @@ export async function verifyEmail(
     verdict: 'unknown',
     score: 0.5,
     reason: 'The mail server would not confirm either way.',
+    verifier: verifier.name,
   };
 }

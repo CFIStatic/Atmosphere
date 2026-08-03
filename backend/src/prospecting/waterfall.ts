@@ -52,9 +52,13 @@ function sellable(result: VerificationResult): boolean {
   // A catch-all domain can never be confirmed; it is still the right address
   // far more often than not, so it is offered — labelled — rather than binned.
   if (result.verdict === 'risky' && result.catchAll) return true;
-  // With SMTP probing switched off everything is 'unknown'; refusing to return
-  // anything would make the feature useless in that deployment.
-  if (result.verdict === 'unknown' && !config.prospecting.smtpProbeEnabled) return true;
+  // An address nothing could confirm is sold only where a deployment has
+  // explicitly opted into that. This used to be the default whenever SMTP
+  // probing was off, which meant the out-of-the-box configuration billed for
+  // addresses whose only credential was that the domain had an MX record.
+  // Selling a vendor's assertion as a verified contact is the failure mode
+  // this whole file exists to prevent.
+  if (result.verdict === 'unknown' && config.prospecting.sellUnverified) return true;
   return false;
 }
 
@@ -77,11 +81,34 @@ export async function runWaterfall(
 
     if (!contact.email) {
       // A phone with no email is still worth having, and there is nothing to
-      // verify — SMTP has no opinion about phone numbers.
+      // verify — no verifier has an opinion about phone numbers.
       if (contact.phone || contact.mobile) {
         return { ...contact, source: provider.name, verification: null, attempts };
       }
       continue;
+    }
+
+    if (provider.sandbox) {
+      // Synthetic people live on reserved domains that by definition have no
+      // mail server, so verification can only ever fail. Running it anyway
+      // would leave sandbox mode returning phone numbers and no addresses,
+      // which teaches an operator nothing about how the real path behaves.
+      // The verdict says plainly that nothing was checked.
+      attempts.push({ email: contact.email, verdict: 'sandbox', source: provider.name });
+      return {
+        ...contact,
+        source: provider.name,
+        verification: {
+          email: contact.email,
+          verdict: 'unknown',
+          score: 0.5,
+          reason: 'Sample data — not a real mailbox and never verified.',
+          catchAll: false,
+          noMx: false,
+          verifier: null,
+        },
+        attempts,
+      };
     }
 
     const verification = await verifyEmail(contact.email);

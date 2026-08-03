@@ -647,8 +647,32 @@ const routes: Array<[string, RegExp, Handler]> = [
     };
   }],
 
+  // The walkthrough shows the un-configured state, because that is what a new
+  // deployment actually looks like and this screen's whole job is to say so.
+  // Testing changes nothing here: an integration with no credentials has
+  // nothing to test, which is exactly what the real endpoint reports too.
+  ['GET', /^\/api\/prospecting\/integrations/, () => ({
+    body: {
+      mode: 'sandbox',
+      sellUnverified: false,
+      items: [
+        { id: 'people_data_labs', name: 'People Data Labs', kind: 'source', configured: false, reachable: null, detail: null, costNanos: 20_000_000 },
+        { id: 'hunter', name: 'Hunter', kind: 'source', configured: false, reachable: null, detail: null, costNanos: 10_000_000 },
+        { id: 'zerobounce', name: 'ZeroBounce', kind: 'verifier', configured: false, reachable: null, detail: null, costNanos: 0 },
+        { id: 'neverbounce', name: 'NeverBounce', kind: 'verifier', configured: false, reachable: null, detail: null, costNanos: 0 },
+        { id: 'smtp', name: 'SMTP', kind: 'verifier', configured: false, reachable: null, detail: null, costNanos: 0 },
+      ],
+    },
+  })],
   ['GET', /^\/api\/prospecting\/status$/, () => ({
-    body: { provider: 'Sandbox', sandbox: true, revealPriceNanos: REVEAL_PRICE_NANOS },
+    body: {
+      provider: 'Sandbox',
+      sandbox: true,
+      revealPriceNanos: REVEAL_PRICE_NANOS,
+      verifier: null,
+      sellUnverified: false,
+      sources: ['Sandbox'],
+    },
   })],
   ['POST', /^\/api\/prospecting\/search$/, (_m, b) => {
     const q = String(b.q ?? '').toLowerCase();

@@ -244,6 +244,8 @@ export interface EmailVerification {
   reason: string;
   /** The domain accepts everything, so no address can be confirmed. */
   catchAll: boolean;
+  /** Which service confirmed it, or null when nothing did. */
+  verifier?: string | null;
 }
 
 export interface ProspectingStatus {
@@ -251,6 +253,28 @@ export interface ProspectingStatus {
   /** True when the people are invented. The UI must say so. */
   sandbox: boolean;
   revealPriceNanos: number;
+  /**
+   * Which service confirms a mailbox exists — 'ZeroBounce', 'SMTP', … — or
+   * null when nothing does. The UI must not say "verified" when this is null.
+   */
+  verifier?: string | null;
+  /** True when the deployment sells addresses nothing could confirm. */
+  sellUnverified?: boolean;
+  /** Every contact-data vendor in the waterfall, in the order asked. */
+  sources?: string[];
+}
+
+/** One vendor or verifier, as the settings screen describes it. */
+export interface Integration {
+  id: string;
+  name: string;
+  kind: 'source' | 'verifier';
+  /** Credentials present at all. */
+  configured: boolean;
+  /** Null until tested; true/false after a live credential call. */
+  reachable: boolean | null;
+  detail: string | null;
+  costNanos: number;
 }
 
 export interface ProspectSearchResponse extends ProspectingStatus {
@@ -1127,6 +1151,17 @@ export const api = {
     }>(
       '/api/prospecting/reveal',
       { method: 'POST', body: JSON.stringify({ providerPersonId }) },
+    ),
+
+  /**
+   * What is plugged in and whether it works. With `test`, the server makes a
+   * real credential call against each — the difference between listing
+   * environment variables and knowing the truth.
+   */
+  prospectingIntegrations: (test = false) =>
+    request<{ items: Integration[]; mode: string; sellUnverified: boolean }>(
+      `/api/prospecting/integrations${test ? '?test=1' : ''}`,
+      { method: 'GET' },
     ),
 
   prospects: () => request<{ items: Prospect[] }>('/api/prospecting/prospects', { method: 'GET' }),

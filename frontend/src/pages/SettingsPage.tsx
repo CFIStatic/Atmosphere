@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -16,6 +17,7 @@ import {
   USAGE_INTENT_LABELS,
   WORK_TYPE_LABELS,
   type ContractorType,
+  type Integration,
   type MemberRole,
   type UsageIntent,
   type WorkType,
@@ -30,13 +32,14 @@ import {
   EyeIcon,
   EyeOffIcon,
   LogOutIcon,
+  SearchIcon,
   ShieldIcon,
   SlidersIcon,
   SpinnerIcon,
   UserIcon,
 } from '../components/icons';
 
-type SectionId = 'profile' | 'security' | 'organization' | 'preferences';
+type SectionId = 'profile' | 'security' | 'organization' | 'contactdata' | 'preferences';
 
 const SECTIONS: {
   id: SectionId;
@@ -51,6 +54,12 @@ const SECTIONS: {
     label: 'Organization',
     blurb: 'Your org, invite code, and role',
     icon: BuildingIcon,
+  },
+  {
+    id: 'contactdata',
+    label: 'Contact data',
+    blurb: 'Where prospect emails and phones come from',
+    icon: SearchIcon,
   },
   { id: 'preferences', label: 'Preferences', blurb: 'How this device behaves', icon: SlidersIcon },
 ];
@@ -111,6 +120,7 @@ export function SettingsPage() {
             {active === 'profile' && <ProfileSection />}
             {active === 'security' && <SecuritySection />}
             {active === 'organization' && <OrganizationSection />}
+            {active === 'contactdata' && <ContactDataSection />}
             {active === 'preferences' && <PreferencesSection />}
           </div>
         </div>
@@ -814,5 +824,206 @@ function PreferencesSection() {
         </div>
       </div>
     </Card>
+  );
+}
+
+/**
+ * Contact data — where prospect emails and phone numbers actually come from.
+ *
+ * This screen exists because the honest answer to "is this data real?" is
+ * configuration, not marketing. A deployment with no vendor key returns
+ * invented people; one with a vendor but no verifier returns addresses nobody
+ * confirmed. Both are legitimate states to be in and neither should be a
+ * surprise, so the panel names them rather than showing a green tick for
+ * "connected" and leaving it there.
+ *
+ * The Test button makes real credential calls. A key can be present,
+ * well-formed, and rejected — or valid with no credits left behind it — and
+ * only asking the vendor tells you which.
+ */
+function ContactDataSection() {
+  const [items, setItems] = useState<Integration[]>([]);
+  const [mode, setMode] = useState<string>('');
+  const [sellUnverified, setSellUnverified] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [testing, setTesting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async (test: boolean) => {
+    test ? setTesting(true) : setLoading(true);
+    setError(null);
+    try {
+      const res = await api.prospectingIntegrations(test);
+      setItems(res.items);
+      setMode(res.mode);
+      setSellUnverified(res.sellUnverified);
+    } catch (err) {
+      setError(
+        err instanceof ApiError && err.code === 'insufficient_role'
+          ? 'Only an owner or admin can see the contact-data configuration.'
+          : err instanceof Error
+            ? err.message
+            : 'Could not load integrations.',
+      );
+    } finally {
+      setTesting(false);
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load(false);
+  }, [load]);
+
+  const sources = items.filter((i) => i.kind === 'source');
+  const verifiers = items.filter((i) => i.kind === 'verifier');
+  const liveSource = sources.some((s) => s.configured);
+  const liveVerifier = verifiers.some((v) => v.configured);
+
+  return (
+    <div className="space-y-5">
+      <Card
+        title="What this is finding"
+        description="Prospecting buys contact details from data vendors and confirms the addresses before you are charged. Both halves have to be configured for the results to be real."
+      >
+        {loading ? (
+          <p className="text-sm text-ink-600">Checking…</p>
+        ) : error ? (
+          <ErrorText message={error} />
+        ) : (
+          <div className="space-y-4">
+            <div
+              className={`rounded-lg border p-4 text-sm ${
+                liveSource && liveVerifier
+                  ? 'border-success-200 bg-success-50 text-success-600'
+                  : 'border-caution-200 bg-caution-50 text-caution-600'
+              }`}
+            >
+              {!liveSource ? (
+                <>
+                  <strong>Sample data.</strong> No contact-data vendor is connected, so searches
+                  return invented people and reveals are free. Nothing here reaches a real person.
+                </>
+              ) : !liveVerifier ? (
+                <>
+                  <strong>Unverified.</strong> A vendor is connected, but nothing is confirming
+                  that the addresses it returns actually exist.{' '}
+                  {sellUnverified
+                    ? 'This deployment sells them anyway — every address is the vendor’s word alone.'
+                    : 'Unconfirmed addresses are withheld rather than billed, so match rates will look low until a verifier is added.'}
+                </>
+              ) : (
+                <>
+                  <strong>Live.</strong> Real contact data, and every address is checked against
+                  the receiving mail server before you are charged for it.
+                </>
+              )}
+            </div>
+
+            <ReadOnlyRow label="Mode" value={mode === 'live' ? 'Live' : 'Sandbox'} />
+
+            <IntegrationList
+              heading="Sources"
+              blurb="Asked in order until one has the person. More sources, higher match rate."
+              items={sources}
+            />
+            <IntegrationList
+              heading="Verification"
+              blurb="Confirms a mailbox exists. ZeroBounce and NeverBounce work over HTTPS; the built-in SMTP probe needs outbound port 25, which most hosts block."
+              items={verifiers}
+            />
+
+            <div className="flex items-center gap-3 pt-1">
+              <PrimaryButton onClick={() => void load(true)} disabled={testing}>
+                {testing ? 'Testing…' : 'Test credentials'}
+              </PrimaryButton>
+              <span className="text-xs text-ink-500">
+                Makes a real call to each connected vendor.
+              </span>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      <Card
+        title="Connecting a vendor"
+        description="Keys are set on the server, not here — they belong to Atmosphere rather than to one organization, and the per-reveal credit charge is what covers them."
+      >
+        <dl className="space-y-3 text-sm">
+          {[
+            ['PEOPLE_DATA_LABS_API_KEY', 'Person search and enrichment. The primary source.'],
+            ['HUNTER_API_KEY', 'Domain crawler. Finds people at small companies no database holds.'],
+            ['ZEROBOUNCE_API_KEY', 'Mailbox verification over HTTPS. Works on any host.'],
+            ['NEVERBOUNCE_API_KEY', 'Alternative verifier, same job.'],
+          ].map(([key, blurb]) => (
+            <div key={key} className="flex flex-col gap-0.5">
+              <code className="font-mono text-xs text-ink-900">{key}</code>
+              <span className="text-ink-600">{blurb}</span>
+            </div>
+          ))}
+        </dl>
+      </Card>
+    </div>
+  );
+}
+
+function IntegrationList({
+  heading,
+  blurb,
+  items,
+}: {
+  heading: string;
+  blurb: string;
+  items: Integration[];
+}) {
+  return (
+    <div>
+      <h3 className="text-sm font-semibold text-ink-900">{heading}</h3>
+      <p className="mt-0.5 text-xs text-ink-500">{blurb}</p>
+      <ul className="mt-3 space-y-2">
+        {items.map((item) => (
+          <li
+            key={item.id}
+            className="flex items-center justify-between gap-3 rounded-lg glass-card px-3.5 py-2.5"
+          >
+            <span className="text-sm text-ink-900">{item.name}</span>
+            <IntegrationBadge item={item} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * Four states, deliberately distinct. "Configured but never tested" is not the
+ * same claim as "we called it and it answered", and collapsing them is how a
+ * settings screen ends up reassuring somebody about a key that does not work.
+ */
+function IntegrationBadge({ item }: { item: Integration }) {
+  if (!item.configured) {
+    return <span className="text-xs text-ink-500">Not connected</span>;
+  }
+  if (item.reachable === true) {
+    return (
+      <span className="rounded-full bg-success-50 px-2 py-0.5 text-xs font-medium text-success-600">
+        Working
+      </span>
+    );
+  }
+  if (item.reachable === false) {
+    return (
+      <span
+        className="rounded-full bg-danger-50 px-2 py-0.5 text-xs font-medium text-danger-600"
+        title={item.detail ?? undefined}
+      >
+        Failing
+      </span>
+    );
+  }
+  return (
+    <span className="rounded-full bg-paper-200 px-2 py-0.5 text-xs font-medium text-ink-700">
+      Connected · untested
+    </span>
   );
 }

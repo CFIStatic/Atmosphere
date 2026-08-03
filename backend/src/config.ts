@@ -507,11 +507,20 @@ export const config = {
       | 'sandbox',
 
     provider: (process.env.PROSPECTING_PROVIDER ?? 'people_data_labs') as
-      | 'people_data_labs',
+      | 'people_data_labs'
+      | 'hunter',
 
     peopleDataLabsApiKey: process.env.PEOPLE_DATA_LABS_API_KEY ?? '',
     peopleDataLabsBaseUrl:
       process.env.PEOPLE_DATA_LABS_BASE_URL ?? 'https://api.peopledatalabs.com',
+
+    // Hunter sits second in the waterfall. It is a domain crawler rather than
+    // a people database, so it holds the small-company people PDL has never
+    // heard of — and its domain search is what supplies pattern-inference
+    // evidence to an org whose own CRM is still empty.
+    hunterApiKey: process.env.HUNTER_API_KEY ?? '',
+    hunterBaseUrl: process.env.HUNTER_BASE_URL ?? 'https://api.hunter.io',
+    hunterCostNanos: Number(process.env.PROSPECTING_HUNTER_COST_NANOS ?? 10_000_000),
 
     // What one revealed contact costs the customer, in nanodollars.
     // 1 credit = 1 USD = 1_000_000_000 nanos, so this default is $0.25 a
@@ -541,6 +550,37 @@ export const config = {
       Boolean(process.env.PROSPECTING_VERIFY_FROM) &&
       !/\.invalid$/.test(process.env.PROSPECTING_VERIFY_FROM ?? ''),
     verifyTimeoutMs: Number(process.env.PROSPECTING_VERIFY_TIMEOUT_MS ?? 6_000),
+
+    // Which verifier answers "does this mailbox exist?".
+    //
+    // 'auto' takes the best configured option: a paid HTTPS verifier first,
+    // then our own SMTP probe. Pin a specific one when an operator wants a
+    // particular vendor despite another key being present in the environment.
+    verifier: (process.env.PROSPECTING_VERIFIER ?? 'auto') as
+      | 'auto'
+      | 'zerobounce'
+      | 'neverbounce'
+      | 'smtp',
+
+    // HTTPS verification vendors. These are what make the feature accurate on
+    // a host with port 25 blocked — which is AWS, GCP, Azure and most PaaS by
+    // default. Roughly half a cent a check against a $0.25 reveal.
+    zeroBounceApiKey: process.env.ZEROBOUNCE_API_KEY ?? '',
+    zeroBounceBaseUrl: process.env.ZEROBOUNCE_BASE_URL ?? 'https://api.zerobounce.net',
+    neverBounceApiKey: process.env.NEVERBOUNCE_API_KEY ?? '',
+    neverBounceBaseUrl: process.env.NEVERBOUNCE_BASE_URL ?? 'https://api.neverbounce.com',
+
+    // May an address nothing could confirm still be sold?
+    //
+    // This defaults to false, and the default is the point. With no verifier
+    // configured every address comes back 'unknown', and the permissive
+    // reading of that — "well, the domain has an MX record" — means billing a
+    // customer for a string a vendor asserted and nobody checked. That is
+    // precisely the product this feature is not supposed to be.
+    //
+    // Set true only for a deployment that has deliberately accepted vendor
+    // data at face value. The UI says which mode it is in either way.
+    sellUnverified: process.env.PROSPECTING_SELL_UNVERIFIED === 'true',
     // The envelope sender used when probing. Must be an address at a domain we
     // control: mail servers check it, and a forged one gets us blocklisted.
     verifyFromAddress: process.env.PROSPECTING_VERIFY_FROM ?? 'verify@atmosphere.invalid',
