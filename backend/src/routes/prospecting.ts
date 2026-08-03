@@ -65,9 +65,11 @@ const searchSchema = z.object({
 
 const revealSchema = z.object({
   providerPersonId: z.string().trim().min(1, 'Which person?').max(200),
-  /** Idempotency: a retried reveal must not bill twice. */
-  requestId: z.string().trim().min(8).max(120),
 });
+// Note what is absent: an idempotency key. It used to be supplied by the
+// caller, which meant the party being billed chose the only thing telling two
+// purchases apart — reuse one key and every later reveal was free. The key is
+// now derived from (org, person) inside the handler.
 
 const importSchema = z.object({
   prospectId: z.string().uuid(),
@@ -125,10 +127,19 @@ async function loadKnownAddresses(supabase: any, orgId: string): Promise<KnownAd
 
 /** Everything the org has said never to contact, in one cheap lookup. */
 async function loadSuppressions(supabase: any, orgId: string) {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('crm_suppressions')
     .select('kind, value')
     .eq('org_id', orgId);
+  // Fail closed. An unreadable suppression list must stop a reveal, never
+  // quietly permit one: the whole point of the list is that it is obeyed.
+  if (error) {
+    throw new HttpError(
+      503,
+      'Could not read your do-not-contact list, so nothing was contacted.',
+      'suppression_unavailable',
+    );
+  }
   const emails = new Set<string>();
   const phones = new Set<string>();
   const domains = new Set<string>();
@@ -139,6 +150,93 @@ async function loadSuppressions(supabase: any, orgId: string) {
     else domains.add(value);
   }
   return { emails, phones, domains };
+}
+
+/** Digits only, so (512) 555-0110 and 5125550110 are the same number. */
+const digits = (value: string) => value.replace(/\D/g, '');
+
+/**
+ * Is any part of this contact on the list? Checked against email, landline
+ * AND mobile — an earlier version omitted the mobile, which is the number the
+ * UI shows first, so a suppressed person could still be called.
+ */
+function suppressionHit(
+  suppression: { emails: Set<string>; phones: Set<string>; domains: Set<string> },
+  contact: { email?: string | null; phone?: string | null; mobile?: string | null; domain?: string | null },
+): boolean {
+  if (contact.domain && suppression.domains.has(contact.domain.toLowerCase())) return true;
+  if (contact.email && suppression.emails.has(contact.email.toLowerCase())) return true;
+  for (const number of [contact.phone, contact.mobile]) {
+    if (number && suppression.phones.has(digits(number))) return true;
+  }
+  return false;
+}
+
+/**
+ * Does this org already hold this person as a contact?
+ *
+ * The header of this file promises we never sell someone back their own data.
+ * Until now that promise was kept by the search endpoint annotating a match and
+ * the UI greying out a button — which is a hint, not a rule, and a hint does
+ * not survive a direct API call. This is the rule.
+ *
+ * The match is deliberately narrow. Name alone is not identity: there is more
+ * than one Marcia Delgado, and refusing to sell the second one because the
+ * first is in the CRM would be worse than the duplicate charge it prevents. So
+ * the employer has to agree too, by email domain or by company name.
+ *
+ * A contact holding no email and no phone is not a match either — there is
+ * nothing to hand back, and buying the details is exactly what the customer is
+ * trying to do.
+ */
+async function findKnownContact(
+  supabase: any,
+  orgId: string,
+  fullName: string,
+  companyDomain: string | null,
+  companyName: string | null,
+): Promise<Record<string, any> | null> {
+  const wanted = fullName.trim().toLowerCase().replace(/\s+/g, ' ');
+  const first = wanted.split(' ')[0];
+  if (!first) return null;
+
+  const { data, error } = await supabase
+    .from('crm_contacts')
+    .select('id, first_name, last_name, email, phone, mobile, company_name')
+    .eq('org_id', orgId)
+    .ilike('first_name', first)
+    .limit(50);
+  // Fail closed, for the same reason the suppression read does: if we cannot
+  // tell whether they already own this person, do not sell them.
+  if (error) {
+    throw new HttpError(
+      503,
+      'Could not check your existing contacts, so nothing was charged.',
+      'crm_precheck_failed',
+    );
+  }
+
+  const domain = (companyDomain ?? '').toLowerCase();
+  const company = (companyName ?? '').trim().toLowerCase();
+
+  return (
+    (data ?? []).find((c: any) => {
+      const full = [c.first_name, c.last_name]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .replace(/\s+/g, ' ');
+      if (full !== wanted) return false;
+      if (!c.email && !c.phone && !c.mobile) return false;
+
+      const emailDomain = c.email ? String(c.email).toLowerCase().split('@')[1] ?? '' : '';
+      const theirCompany = String(c.company_name ?? '').trim().toLowerCase();
+      return (
+        (Boolean(domain) && emailDomain === domain) ||
+        (Boolean(company) && theirCompany === company)
+      );
+    }) ?? null
+  );
 }
 
 /**
@@ -245,37 +343,106 @@ prospectingRouter.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { orgId, userId, supabase } = await requireOrgContext(req);
-      const { providerPersonId, requestId } = revealSchema.parse(req.body ?? {});
+      const { providerPersonId } = revealSchema.parse(req.body ?? {});
       const provider = buildContactProvider();
 
       // Already bought? Hand back what we hold. Charging twice for the same
       // person is the single most corrosive thing a tool like this can do.
-      const { data: existing } = await supabase
+      const { data: existing, error: existingError } = await supabase
         .from('crm_prospects')
         .select('*')
         .eq('org_id', orgId)
         .eq('provider_person_id', providerPersonId)
         .maybeSingle();
+      // Fail closed: if we cannot tell whether this was already bought, do not
+      // buy it again on the customer's behalf.
+      if (existingError) {
+        throw new HttpError(
+          503,
+          'Could not check whether you already have this contact.',
+          'reveal_precheck_failed',
+        );
+      }
 
       if (existing?.revealed_at) {
+        // Suppression applies to use, not just to purchase: a person added to
+        // the list after they were bought must stop being handed out.
+        const suppressionNow = await loadSuppressions(supabase, orgId);
+        if (
+          suppressionHit(suppressionNow, {
+            email: existing.email,
+            phone: existing.phone,
+            mobile: existing.mobile,
+            domain: existing.company_domain,
+          })
+        ) {
+          throw new HttpError(
+            409,
+            'That contact is on your do-not-contact list.',
+            'suppressed',
+          );
+        }
         res.json({ prospect: camel(existing), charged: false, reason: 'already_revealed' });
         return;
       }
 
       const suppression = await loadSuppressions(supabase, orgId);
 
-      // Find the person again so the saved row carries their identity even if
-      // the vendor holds no contact details for them.
-      const found = await provider.search({ q: undefined, limit: 100 });
+      // Identity, resolved BEFORE anything is spent or probed. The saved row
+      // first (free), then the provider by id. An unfiltered re-search cannot
+      // be relied on to contain the person, and getting this wrong meant the
+      // suppression check below silently had nothing to check.
       const match =
-        found.matches.find((m) => m.providerPersonId === providerPersonId) ?? null;
+        (await provider.getPerson(providerPersonId)) ??
+        (existing
+          ? {
+              providerPersonId,
+              fullName: existing.full_name,
+              title: existing.title,
+              companyName: existing.company_name,
+              companyDomain: existing.company_domain,
+              location: existing.location,
+              linkedinUrl: existing.linkedin_url,
+              confidence: existing.confidence,
+              hasEmail: false,
+              hasPhone: false,
+            }
+          : null);
 
-      const domain = (match?.companyDomain ?? existing?.company_domain ?? '').toLowerCase();
-      if (domain && suppression.domains.has(domain)) {
+      if (!match) {
+        throw new HttpError(
+          404,
+          'That person is no longer available from the provider.',
+          'person_not_found',
+        );
+      }
+
+      // Suppression is evaluated before the waterfall runs, so a suppressed
+      // person is never looked up at a vendor and their employer's mail server
+      // is never probed on their behalf.
+      if (suppressionHit(suppression, { domain: match.companyDomain })) {
         throw new HttpError(
           409,
-          'That company is on your do-not-contact list.',
+          'That company is on your do-not-contact list — nothing was charged.',
           'suppressed',
+        );
+      }
+
+      // Never sell someone back their own data — enforced here, not just
+      // hinted at by the search endpoint, because the hint lives in a response
+      // the caller is free to ignore.
+      const owned = await findKnownContact(
+        supabase,
+        orgId,
+        match.fullName,
+        match.companyDomain,
+        match.companyName,
+      );
+      if (owned) {
+        throw new HttpError(
+          409,
+          `${match.fullName} is already in your contacts — nothing was charged.`,
+          'already_in_crm',
         );
       }
 
@@ -285,8 +452,8 @@ prospectingRouter.post(
       const knownAddresses = await loadKnownAddresses(supabase, orgId);
       const contact = await runWaterfall(buildProviderChain(), {
         providerPersonId,
-        fullName: match?.fullName ?? existing?.full_name ?? '',
-        companyDomain: match?.companyDomain ?? existing?.company_domain ?? null,
+        fullName: match.fullName,
+        companyDomain: match.companyDomain,
         knownAddresses,
       });
 
@@ -299,8 +466,11 @@ prospectingRouter.post(
       }
 
       if (
-        (contact.email && suppression.emails.has(contact.email.toLowerCase())) ||
-        (contact.phone && suppression.phones.has(contact.phone.replace(/\D/g, '')))
+        suppressionHit(suppression, {
+          email: contact.email,
+          phone: contact.phone,
+          mobile: contact.mobile,
+        })
       ) {
         throw new HttpError(
           409,
@@ -311,25 +481,31 @@ prospectingRouter.post(
 
       // Charge before writing the details. If the charge fails the customer
       // keeps their credits and we keep no data we were not paid for.
-      const price = config.prospecting.revealPriceNanos;
+      // The idempotency key is derived, never accepted. Bound to the org and
+      // the person, a retry of THIS reveal replays free while a different
+      // reveal cannot masquerade as one. The price is looked up in the
+      // database by feature name for the same reason.
+      const chargeKey = `reveal:${orgId}:${providerPersonId}`;
       const { data: receipt, error: chargeError } = await supabase.rpc('charge_feature_credits', {
         p_org: orgId,
         p_feature: 'contact_reveal',
-        p_amount_nanos: price,
-        p_request_id: requestId,
-        p_description: `Contact reveal — ${match?.fullName ?? providerPersonId}`,
+        p_request_id: chargeKey,
+        p_description: `Contact reveal — ${match.fullName}`,
         p_cost_nanos: contact.costNanos,
       });
       if (chargeError) throw billingError(chargeError);
 
+      const price = Number((receipt as any)?.price_nanos ?? 0);
+      const alreadyPaid = Boolean((receipt as any)?.duplicate);
+
       const row = {
         org_id: orgId,
-        full_name: match?.fullName ?? existing?.full_name ?? 'Unknown',
-        title: match?.title ?? existing?.title ?? null,
-        company_name: match?.companyName ?? existing?.company_name ?? null,
-        company_domain: match?.companyDomain ?? existing?.company_domain ?? null,
-        location: match?.location ?? existing?.location ?? null,
-        linkedin_url: match?.linkedinUrl ?? existing?.linkedin_url ?? null,
+        full_name: match.fullName,
+        title: match.title,
+        company_name: match.companyName,
+        company_domain: match.companyDomain,
+        location: match.location,
+        linkedin_url: match.linkedinUrl,
         email: contact.email,
         phone: contact.phone,
         mobile: contact.mobile,
@@ -347,11 +523,23 @@ prospectingRouter.post(
         ? await supabase.from('crm_prospects').update(row).eq('id', existing.id).select('*').single()
         : await supabase.from('crm_prospects').insert(row).select('*').single();
 
-      if (saved.error) throw new HttpError(400, saved.error.message, 'prospect_save_failed');
+      if (saved.error) {
+        // The credit is already spent by the time we get here. Saying "save
+        // failed" and stopping would leave someone believing they had been
+        // charged for nothing, so say what is actually true: the money is
+        // recorded, and the retry is free because the idempotency key is
+        // (org, person) — the replay returns this same receipt rather than
+        // billing a second time.
+        throw new HttpError(
+          500,
+          'We found their details and the charge is recorded, but saving them failed. Try again — the retry costs nothing.',
+          'prospect_save_failed',
+        );
+      }
 
       res.status(201).json({
         prospect: camel(saved.data),
-        charged: true,
+        charged: !alreadyPaid,
         receipt: receipt ?? null,
         // How it was found and how sure we are — the customer is entitled to
         // know whether they are looking at a vendor match or a verified guess.
@@ -417,24 +605,80 @@ prospectingRouter.post('/import', async (req: Request, res: Response, next: Next
       );
     }
 
-    const [firstName, ...rest] = String(prospect.full_name ?? '').split(' ');
-
-    const { data: contact, error: contactErr } = await supabase
-      .from('crm_contacts')
-      .insert({
-        org_id: orgId,
-        created_by: userId,
-        first_name: firstName || null,
-        last_name: rest.join(' ') || null,
-        company_name: prospect.company_name,
-        title: prospect.title,
+    const suppression = await loadSuppressions(supabase, orgId);
+    if (
+      suppressionHit(suppression, {
         email: prospect.email,
         phone: prospect.phone,
         mobile: prospect.mobile,
+        domain: prospect.company_domain,
       })
-      .select('*')
-      .single();
-    if (contactErr) throw new HttpError(400, contactErr.message, 'contact_create_failed');
+    ) {
+      throw new HttpError(
+        409,
+        'That contact is on your do-not-contact list and cannot be added.',
+        'suppressed',
+      );
+    }
+
+    const [firstName, ...rest] = String(prospect.full_name ?? '').split(' ');
+
+    // Reuse the contact if this person is already in the CRM rather than
+    // creating a second copy of them. Importing the same human twice — from
+    // two vendor records, or after someone typed them in by hand — is the
+    // ordinary way a CRM fills up with duplicate people, and de-duplicating
+    // them later is a job nobody does.
+    const { data: matches, error: lookupErr } = prospect.email
+      ? await supabase
+          .from('crm_contacts')
+          .select('*')
+          .eq('org_id', orgId)
+          .ilike('email', String(prospect.email))
+          .limit(1)
+      : { data: null, error: null };
+    if (lookupErr) throw new HttpError(500, lookupErr.message, 'contact_lookup_failed');
+
+    let contact = (matches ?? [])[0] ?? null;
+
+    if (contact) {
+      // They already exist, so fill in only what their record is missing. The
+      // reveal was paid for; leaving a blank phone next to a number we now
+      // hold would waste it. Nothing already on the record is overwritten.
+      const patch: Record<string, any> = {};
+      if (!contact.phone && prospect.phone) patch.phone = prospect.phone;
+      if (!contact.mobile && prospect.mobile) patch.mobile = prospect.mobile;
+      if (!contact.title && prospect.title) patch.title = prospect.title;
+      if (!contact.company_name && prospect.company_name) {
+        patch.company_name = prospect.company_name;
+      }
+      if (Object.keys(patch).length) {
+        const { data: updated } = await supabase
+          .from('crm_contacts')
+          .update(patch)
+          .eq('id', contact.id)
+          .select('*')
+          .single();
+        if (updated) contact = updated;
+      }
+    } else {
+      const { data: created, error: contactErr } = await supabase
+        .from('crm_contacts')
+        .insert({
+          org_id: orgId,
+          created_by: userId,
+          first_name: firstName || null,
+          last_name: rest.join(' ') || null,
+          company_name: prospect.company_name,
+          title: prospect.title,
+          email: prospect.email,
+          phone: prospect.phone,
+          mobile: prospect.mobile,
+        })
+        .select('*')
+        .single();
+      if (contactErr) throw new HttpError(400, contactErr.message, 'contact_create_failed');
+      contact = created;
+    }
 
     const { data: lead, error: leadErr } = await supabase
       .from('crm_leads')
@@ -464,6 +708,66 @@ prospectingRouter.post('/import', async (req: Request, res: Response, next: Next
     next(err);
   }
 });
+
+/**
+ * DELETE /api/prospecting/prospects/:id
+ * Erasure. A contact-data product without a delete button is not one anybody
+ * should run: a person who asks to be removed must actually be removable, and
+ * suppressing them at the same time is what stops the next search re-adding
+ * them.
+ */
+prospectingRouter.delete(
+  '/prospects/:id',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { orgId, userId, supabase } = await requireOrgContext(req);
+      const suppress = req.query.suppress !== 'false';
+
+      const { data: prospect, error: readErr } = await supabase
+        .from('crm_prospects')
+        .select('*')
+        .eq('org_id', orgId)
+        .eq('id', req.params.id)
+        .maybeSingle();
+      if (readErr) throw new HttpError(500, readErr.message, 'prospect_read_failed');
+      if (!prospect) throw new HttpError(404, 'Prospect not found.', 'not_found');
+
+      // Suppress before deleting, or the row comes straight back on the next
+      // search and the erasure means nothing.
+      if (suppress) {
+        const rows = [
+          prospect.email ? { kind: 'email', value: String(prospect.email).toLowerCase() } : null,
+          prospect.phone ? { kind: 'phone', value: String(prospect.phone).toLowerCase() } : null,
+          prospect.mobile ? { kind: 'phone', value: String(prospect.mobile).toLowerCase() } : null,
+        ].filter(Boolean) as Array<{ kind: string; value: string }>;
+
+        if (rows.length) {
+          await supabase.from('crm_suppressions').upsert(
+            rows.map((r) => ({
+              org_id: orgId,
+              created_by: userId,
+              kind: r.kind,
+              value: r.value,
+              reason: 'Erased at request',
+            })),
+            { onConflict: 'org_id,kind,value' },
+          );
+        }
+      }
+
+      const { error } = await supabase
+        .from('crm_prospects')
+        .delete()
+        .eq('org_id', orgId)
+        .eq('id', req.params.id);
+      if (error) throw new HttpError(400, error.message, 'prospect_delete_failed');
+
+      res.json({ ok: true, suppressed: suppress });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 /** GET/POST/DELETE suppression — do-not-contact, per organization. */
 prospectingRouter.get('/suppressions', async (req: Request, res: Response, next: NextFunction) => {

@@ -114,6 +114,12 @@ export interface InferredPattern {
 }
 
 /**
+ * How many attributed addresses at a domain before its convention is believed.
+ * One address is a coincidence; two agreeing is a convention.
+ */
+export const MIN_PATTERN_SUPPORT = 2;
+
+/**
  * Infer a domain's convention from addresses already known at that domain.
  *
  * Evidence is per domain and nothing else: a pattern learned from one company
@@ -149,16 +155,17 @@ export function inferPattern(known: KnownAddress[], domain: string): InferredPat
   }
   if (!best) return null;
 
+  if (bestSupport < MIN_PATTERN_SUPPORT) return null;
   return { pattern: best, support: bestSupport, confidence: bestSupport / attributed };
 }
 
 /**
  * The addresses to try for one person at one domain, best first.
  *
- * When the domain's convention is known it leads and the rest follow as
- * fallbacks; when it is not, the list is simply the common conventions in
- * order. Callers verify down the list and stop at the first mailbox that
- * exists — so a wrong guess costs a DNS lookup, not a customer's credit.
+ * The learned convention leads and the other conventions follow as fallbacks.
+ * A domain with no evidence yields nothing at all. Callers verify down the
+ * list and stop at the first mailbox that exists — so a wrong guess costs a
+ * DNS lookup, not a customer's credit.
  */
 export function candidateEmails(
   fullName: string,
@@ -169,10 +176,17 @@ export function candidateEmails(
   const name = splitName(fullName);
   if (!name || !domain) return [];
 
+  // No evidence at this domain means no candidates. Guessing addresses at a
+  // company we know nothing about is how a prospecting tool starts mailing
+  // strangers at addresses that never existed — and the header of this file
+  // promises we do not do it.
   const inferred = inferPattern(known, domain);
-  const ordered: EmailPattern[] = inferred
-    ? [inferred.pattern, ...PATTERNS.filter((p) => p !== inferred.pattern)]
-    : [...PATTERNS];
+  if (!inferred) return [];
+
+  const ordered: EmailPattern[] = [
+    inferred.pattern,
+    ...PATTERNS.filter((p) => p !== inferred.pattern),
+  ];
 
   const seen = new Set<string>();
   const out: string[] = [];

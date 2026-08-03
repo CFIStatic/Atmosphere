@@ -532,7 +532,14 @@ export const config = {
     // asks whether a mailbox exists (RCPT TO, then QUIT — no message is ever
     // sent). Some hosts block outbound port 25; turn this off there and every
     // address falls back to a DNS-only 'unknown'.
-    smtpProbeEnabled: (process.env.PROSPECTING_SMTP_PROBE ?? 'true') !== 'false',
+    // OFF unless explicitly enabled. Probing opens connections to strangers'
+    // mail servers from your IP; done with a forged envelope sender, or from a
+    // host whose reputation you have not thought about, it is a fast way onto
+    // a blocklist. Turn it on deliberately, with a real sending domain below.
+    smtpProbeEnabled:
+      process.env.PROSPECTING_SMTP_PROBE === 'true' &&
+      Boolean(process.env.PROSPECTING_VERIFY_FROM) &&
+      !/\.invalid$/.test(process.env.PROSPECTING_VERIFY_FROM ?? ''),
     verifyTimeoutMs: Number(process.env.PROSPECTING_VERIFY_TIMEOUT_MS ?? 6_000),
     // The envelope sender used when probing. Must be an address at a domain we
     // control: mail servers check it, and a forged one gets us blocklisted.
@@ -542,6 +549,8 @@ export const config = {
     // Pattern inference finds the people no vendor has: learn a company's
     // convention from addresses the org already holds, apply it, verify it.
     // Nothing is sold unless a mail server confirms the mailbox.
+    // Inference only produces candidates; verification decides. With probing
+    // off there is nothing to confirm a guess, so this follows it.
     patternInferenceEnabled: (process.env.PROSPECTING_PATTERNS ?? 'true') !== 'false',
     maxPatternCandidates: Number(process.env.PROSPECTING_MAX_CANDIDATES ?? 5),
   },

@@ -110,8 +110,11 @@ create index if not exists crm_prospects_org_status_idx
 -- Soft dedupe, matching the CRM's "normalise and look up, never reject" stance.
 create index if not exists crm_prospects_email_idx
   on public.crm_prospects (org_id, lower(email));
-create index if not exists crm_prospects_provider_idx
-  on public.crm_prospects (org_id, provider, provider_person_id);
+-- Unique, not merely indexed: the already-revealed guard reads this row, and
+-- a duplicate would let a concurrent second call charge for the same person.
+create unique index if not exists crm_prospects_provider_idx
+  on public.crm_prospects (org_id, provider_person_id)
+  where provider_person_id is not null;
 
 -- ---------------------------------------------------------------------------
 -- Suppression list
@@ -134,8 +137,13 @@ create table if not exists public.crm_suppressions (
   constraint crm_suppressions_value_present check (length(btrim(value)) > 0)
 );
 
-create unique index if not exists crm_suppressions_unique_idx
-  on public.crm_suppressions (org_id, kind, lower(value));
+-- A plain column constraint rather than an expression index: the route
+-- upserts with ON CONFLICT (org_id, kind, value), and PostgREST can only
+-- target a real constraint. Values are lowercased by the writer.
+alter table public.crm_suppressions
+  drop constraint if exists crm_suppressions_unique;
+alter table public.crm_suppressions
+  add constraint crm_suppressions_unique unique (org_id, kind, value);
 
 -- ---------------------------------------------------------------------------
 -- Triggers: updated_at + immutable ownership
@@ -200,6 +208,33 @@ revoke all on public.crm_prospects from anon;
 revoke all on public.crm_suppressions from anon;
 
 -- ---------------------------------------------------------------------------
+-- Feature prices — server-side, so a caller cannot choose what it pays
+-- ---------------------------------------------------------------------------
+--
+-- The first draft took the amount as an argument, which made the price a
+-- client input on a function every authenticated member may execute. Prices
+-- live here instead; the charge function looks them up by feature name and
+-- refuses a feature it has never heard of.
+
+create table if not exists public.feature_prices (
+  feature text primary key,
+  price_nanos bigint not null check (price_nanos >= 0),
+  description text,
+  updated_at timestamptz not null default now()
+);
+
+insert into public.feature_prices (feature, price_nanos, description)
+values ('contact_reveal', 250000000, 'One revealed business contact')
+on conflict (feature) do nothing;
+
+alter table public.feature_prices enable row level security;
+drop policy if exists feature_prices_select on public.feature_prices;
+create policy feature_prices_select on public.feature_prices
+  for select to authenticated using (true);
+grant select on public.feature_prices to authenticated;
+revoke all on public.feature_prices from anon;
+
+-- ---------------------------------------------------------------------------
 -- charge_feature_credits — a flat price, drawn from the same credit lots
 -- ---------------------------------------------------------------------------
 --
@@ -219,7 +254,6 @@ revoke all on public.crm_suppressions from anon;
 create or replace function public.charge_feature_credits(
   p_org uuid,
   p_feature text,
-  p_amount_nanos bigint,
   p_request_id text,
   p_description text default null,
   p_cost_nanos bigint default 0
@@ -239,6 +273,7 @@ declare
   v_spend_limit bigint;
   v_period_spend bigint;
   v_model_id text := 'feature:' || coalesce(p_feature, 'unknown');
+  p_amount_nanos bigint;
   lot record;
 begin
   if v_uid is null then
@@ -253,17 +288,38 @@ begin
     raise exception 'request_id_required' using errcode = 'P0001';
   end if;
 
-  if p_amount_nanos is null or p_amount_nanos < 0 then
-    raise exception 'invalid_amount' using errcode = 'P0001';
+  -- The price is ours, not the caller's.
+  select price_nanos into p_amount_nanos
+    from public.feature_prices where feature = p_feature;
+
+  if p_amount_nanos is null then
+    raise exception 'unknown_feature'
+      using detail = format('no price for %s', p_feature), errcode = 'P0001';
   end if;
 
   -- Replay of a charge already made: hand back the original receipt rather
-  -- than billing twice. Same contract as record_usage.
+  -- than billing twice.
+  --
+  -- The key alone is NOT enough to authorise that. `usage_events` is a shared
+  -- namespace — `record_usage` dedupes in it too — and for a feature charge
+  -- the amount and the subject both come from the caller, so the key is the
+  -- only thing distinguishing two different purchases. Returning a stranger's
+  -- receipt here would hand out unlimited free reveals (and, across the
+  -- namespace, free model calls). So a replay must prove it is the SAME
+  -- charge; anything else is a collision and must fail loudly.
   select * into v_existing
     from public.usage_events
    where org_id = p_org and request_id = p_request_id;
 
   if found then
+    if v_existing.model_id is distinct from v_model_id
+       or v_existing.feature is distinct from p_feature
+       or v_existing.price_nanos is distinct from p_amount_nanos then
+      raise exception 'request_id_conflict'
+        using detail = 'That idempotency key was already used for a different charge.',
+              errcode = 'P0001';
+    end if;
+
     return jsonb_build_object(
       'event_id', v_existing.id,
       'price_nanos', v_existing.price_nanos,
@@ -358,8 +414,8 @@ begin
 end $$;
 
 revoke execute on function
-  public.charge_feature_credits(uuid, text, bigint, text, text, bigint)
+  public.charge_feature_credits(uuid, text, text, text, bigint)
   from public, anon;
 grant execute on function
-  public.charge_feature_credits(uuid, text, bigint, text, text, bigint)
+  public.charge_feature_credits(uuid, text, text, text, bigint)
   to authenticated;

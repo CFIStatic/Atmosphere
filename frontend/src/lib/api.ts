@@ -1110,10 +1110,13 @@ export const api = {
     }),
 
   /**
-   * The metered call. `requestId` is the idempotency key — a retry must never
-   * bill twice, so it is generated once per person per attempt.
+   * The metered call.
+   *
+   * There is deliberately no idempotency key here: the server derives one
+   * from (org, person), so a retry of the same reveal replays free and no
+   * client can reuse a paid key to get another person for nothing.
    */
-  prospectReveal: (providerPersonId: string, requestId: string) =>
+  prospectReveal: (providerPersonId: string) =>
     request<{
       prospect: Prospect;
       charged: boolean;
@@ -1123,10 +1126,17 @@ export const api = {
       verification?: EmailVerification | null;
     }>(
       '/api/prospecting/reveal',
-      { method: 'POST', body: JSON.stringify({ providerPersonId, requestId }) },
+      { method: 'POST', body: JSON.stringify({ providerPersonId }) },
     ),
 
   prospects: () => request<{ items: Prospect[] }>('/api/prospecting/prospects', { method: 'GET' }),
+
+  /** Erasure. Suppresses the person by default so a search cannot re-add them. */
+  deleteProspect: (id: string, suppress = true) =>
+    request<{ ok: boolean; suppressed: boolean }>(
+      `/api/prospecting/prospects/${id}?suppress=${suppress}`,
+      { method: 'DELETE' },
+    ),
 
   /** Turns a revealed prospect into a contact and a lead. */
   prospectImport: (prospectId: string, overrides: { title?: string; estimatedValue?: number | null } = {}) =>

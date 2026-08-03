@@ -142,6 +142,16 @@ export class PeopleDataLabsProvider implements ContactDataProvider {
     return { matches, total: typeof body.total === 'number' ? body.total : null };
   }
 
+  async getPerson(providerPersonId: string): Promise<ProspectMatch | null> {
+    // Same enrich call as reveal(), read only for identity. PDL bills the
+    // call either way, which is why the route caches the row it saved at
+    // search time and only falls back to this.
+    const body = await this.call<{ data?: PdlPerson | null }>('/v5/person/enrich', {
+      pdl_id: providerPersonId,
+    });
+    return body.data ? asMatch(body.data) : null;
+  }
+
   async reveal(providerPersonId: string): Promise<RevealedContact | null> {
     const body = await this.call<{ data?: PdlPerson | null }>('/v5/person/enrich', {
       pdl_id: providerPersonId,

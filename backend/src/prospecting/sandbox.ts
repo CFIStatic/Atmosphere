@@ -255,6 +255,11 @@ export class SandboxContactProvider implements ContactDataProvider {
     return { matches: hits.slice(0, limit).map(toMatch), total: hits.length };
   }
 
+  async getPerson(providerPersonId: string): Promise<ProspectMatch | null> {
+    const person = PEOPLE.find((p) => p.providerPersonId === providerPersonId);
+    return person ? toMatch(person) : null;
+  }
+
   async reveal(providerPersonId: string): Promise<RevealedContact | null> {
     const person = PEOPLE.find((p) => p.providerPersonId === providerPersonId);
     if (!person) return null;

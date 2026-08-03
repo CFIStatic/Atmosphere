@@ -65,7 +65,9 @@ test('inferPattern learns a company convention from its known addresses', () => 
 test('inference is per domain and never bleeds across companies', () => {
   const known = [
     { email: 'marcia.delgado@acme.com', fullName: 'Marcia Delgado' },
+    { email: 'ray.calloway@acme.com', fullName: 'Ray Calloway' },
     { email: 'rcalloway@other.com', fullName: 'Ray Calloway' },
+    { email: 'mdelgado@other.com', fullName: 'Marcia Delgado' },
   ];
   assert.equal(inferPattern(known, 'acme.com')?.pattern, '{first}.{last}');
   assert.equal(inferPattern(known, 'other.com')?.pattern, '{f}{last}');
@@ -73,10 +75,18 @@ test('inference is per domain and never bleeds across companies', () => {
   assert.equal(inferPattern(known, 'unseen.com'), null);
 });
 
+test('a single address is not a convention', () => {
+  // One address is a coincidence. Believing it would have the tool guessing
+  // at a whole company off one data point.
+  const known = [{ email: 'marcia.delgado@acme.com', fullName: 'Marcia Delgado' }];
+  assert.equal(inferPattern(known, 'acme.com'), null);
+});
+
 test('inference reports lower confidence when a company is inconsistent', () => {
   const known = [
     { email: 'marcia.delgado@acme.com', fullName: 'Marcia Delgado' },
-    { email: 'rcalloway@acme.com', fullName: 'Ray Calloway' },
+    { email: 'ray.calloway@acme.com', fullName: 'Ray Calloway' },
+    { email: 'tbergeron@acme.com', fullName: 'Tomas Bergeron' },
   ];
   const inferred = inferPattern(known, 'acme.com');
   assert.ok(inferred);
@@ -95,13 +105,15 @@ test('candidateEmails leads with the learned convention, then falls back', () =>
   assert.ok(candidates.every((c) => c.endsWith('@acme.com')));
 });
 
-test('candidateEmails still works with no evidence, in prevalence order', () => {
-  const candidates = candidateEmails('Marcia Delgado', 'acme.com', [], 3);
-  assert.deepEqual(candidates, [
-    'marcia.delgado@acme.com',
-    'mdelgado@acme.com',
-    'marcia@acme.com',
-  ]);
+test('candidateEmails produces nothing at a domain it has no evidence for', () => {
+  // The guarantee in the file header: inference is observation, not guessing.
+  assert.deepEqual(candidateEmails('Marcia Delgado', 'acme.com', [], 3), []);
+  assert.deepEqual(
+    candidateEmails('Marcia Delgado', 'acme.com', [
+      { email: 'ray.calloway@elsewhere.com', fullName: 'Ray Calloway' },
+    ]),
+    [],
+  );
 });
 
 test('candidateEmails produces nothing it could not justify', () => {

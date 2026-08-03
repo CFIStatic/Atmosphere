@@ -91,6 +91,14 @@ export interface ContactDataProvider {
   /** Cheap credential check for the settings screen. Throws when unusable. */
   verify(): Promise<void>;
   search(query: ProspectQuery): Promise<ProspectSearchResult>;
+  /**
+   * One person by the vendor's id, without their contact details.
+   *
+   * The reveal path needs this: it must know whose company domain to check
+   * against the suppression list BEFORE it spends anything, and re-running a
+   * search cannot be relied on to contain them.
+   */
+  getPerson(providerPersonId: string): Promise<ProspectMatch | null>;
   /** Null when the vendor turns out to hold nothing — the caller must not charge. */
   reveal(providerPersonId: string): Promise<RevealedContact | null>;
 }

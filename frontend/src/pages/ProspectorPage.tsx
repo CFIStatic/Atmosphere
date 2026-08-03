@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   api,
@@ -20,12 +20,6 @@ const TITLE_PRESETS = [
   { label: 'General contractors', titles: ['owner', 'vp construction'] },
 ];
 
-/** A reveal must bill once. One key per person per attempt, held until it lands. */
-function newRequestId(personId: string): string {
-  const rand = Math.random().toString(36).slice(2, 10);
-  return `reveal-${personId}-${rand}`;
-}
-
 /**
  * Prospector — finding the people who hand out the work.
  *
@@ -45,7 +39,12 @@ export function ProspectorPage() {
   const [matches, setMatches] = useState<ProspectMatch[] | null>(null);
   const [total, setTotal] = useState<number | null>(null);
   const [searching, setSearching] = useState(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  // Every id currently mid-flight. A Set, because two reveals can run at once
+  // and a scalar would let the first to finish re-enable the second's button
+  // while its charge was still in the air. Held in a ref as well as state so
+  // the guard at the top of reveal() reads synchronously.
+  const [busy, setBusy] = useState<Set<string>>(new Set());
+  const inFlight = useRef<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<Record<string, Prospect>>({});
@@ -79,14 +78,27 @@ export function ProspectorPage() {
     }
   }, [q, location, titles]);
 
+  function beginWork(id: string): boolean {
+    if (inFlight.current.has(id)) return false;
+    inFlight.current.add(id);
+    setBusy(new Set(inFlight.current));
+    return true;
+  }
+
+  function endWork(id: string) {
+    inFlight.current.delete(id);
+    setBusy(new Set(inFlight.current));
+  }
+
   async function reveal(match: ProspectMatch) {
-    setBusyId(match.providerPersonId);
+    // Synchronous guard: a double-click fires two handlers before any state
+    // update lands, and the second must not reach the charge.
+    if (!beginWork(match.providerPersonId)) return;
     setError(null);
     setNotice(null);
     try {
       const { prospect, charged, source, verification } = await api.prospectReveal(
         match.providerPersonId,
-        newRequestId(match.providerPersonId),
       );
       setRevealed((prev) => ({ ...prev, [match.providerPersonId]: prospect }));
       setProof((prev) => ({ ...prev, [match.providerPersonId]: { source, verification } }));
@@ -104,19 +116,19 @@ export function ProspectorPage() {
             : 'Could not reveal that contact.';
       setError(message);
     } finally {
-      setBusyId(null);
+      endWork(match.providerPersonId);
     }
   }
 
   async function addToPipeline(prospect: Prospect) {
-    setBusyId(prospect.id);
+    if (!beginWork(prospect.id)) return;
     setError(null);
     try {
       const { lead } = await api.prospectImport(prospect.id);
       navigate('/pipeline', { state: { highlight: lead.id } });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not add them to the pipeline.');
-      setBusyId(null);
+      endWork(prospect.id);
     }
   }
 
@@ -253,7 +265,8 @@ export function ProspectorPage() {
               <tbody>
                 {matches.map((match) => {
                   const got = revealed[match.providerPersonId] ?? null;
-                  const busy = busyId === match.providerPersonId || busyId === got?.id;
+                  const working =
+                    busy.has(match.providerPersonId) || (got ? busy.has(got.id) : false);
                   return (
                     <tr key={match.providerPersonId} className="border-b border-line last:border-b-0">
                       <td className="px-4 py-3">
@@ -308,20 +321,28 @@ export function ProspectorPage() {
                         ) : got ? (
                           <button
                             onClick={() => void addToPipeline(got)}
-                            disabled={busy || Boolean(got.leadId)}
+                            disabled={working || Boolean(got.leadId)}
                             className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink-800 transition hover:border-brand-500 hover:text-ink-900 disabled:opacity-50"
                           >
-                            {got.leadId ? 'On the pipeline' : busy ? 'Adding…' : 'Add to pipeline'}
+                            {got.leadId ? 'On the pipeline' : working ? 'Adding…' : 'Add to pipeline'}
+                          </button>
+                        ) : match.revealed ? (
+                          <button
+                            onClick={() => void reveal(match)}
+                            disabled={working}
+                            className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink-800 transition hover:border-brand-500 disabled:opacity-50"
+                          >
+                            {working ? 'Opening…' : 'Show details · free'}
                           </button>
                         ) : !match.hasEmail && !match.hasPhone ? (
                           <span className="text-xs text-ink-500">Nothing on file</span>
                         ) : (
                           <button
                             onClick={() => void reveal(match)}
-                            disabled={busy}
+                            disabled={working}
                             className="rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-400 disabled:opacity-50"
                           >
-                            {busy ? 'Revealing…' : `Reveal · ${price}`}
+                            {working ? 'Revealing…' : `Reveal · ${price}`}
                           </button>
                         )}
                       </td>
