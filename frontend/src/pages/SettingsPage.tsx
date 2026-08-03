@@ -27,6 +27,7 @@ import {
 } from '../lib/api';
 import { AppShell } from '../components/AppShell';
 import { PinSetupCard } from '../components/PinSetupCard';
+import { BillingSection } from '../components/settings/BillingSection';
 import { displayName, initials } from '../lib/display';
 import { setPreference, usePreferences, type Preferences } from '../lib/preferences';
 import { usePlatform } from '../lib/usePlatform';
@@ -42,12 +43,14 @@ import {
   SlidersIcon,
   SpinnerIcon,
   UserIcon,
+  CreditCardIcon,
 } from '../components/icons';
 
 type SectionId =
   | 'profile'
   | 'security'
   | 'organization'
+  | 'billing'
   | 'integrations'
   | 'sending'
   | 'contactdata'
@@ -70,6 +73,16 @@ const SECTIONS: SettingsSection[] = [
     label: 'Organization',
     blurb: 'Your org, invite code, and role',
     icon: BuildingIcon,
+  },
+  {
+    // Sits with the org because that is what it is about — the company's plan,
+    // its seats, its receipts. Manager-only: everyone else can see what the
+    // company owns without being shown what it costs.
+    id: 'billing',
+    label: 'Billing',
+    blurb: 'Seats, what Atmosphere costs, and past charges',
+    icon: CreditCardIcon,
+    platform: 'manager',
   },
   {
     id: 'integrations',
@@ -165,6 +178,7 @@ export function SettingsPage() {
             {active === 'profile' && <ProfileSection />}
             {active === 'security' && <SecuritySection />}
             {active === 'organization' && <OrganizationSection />}
+            {active === 'billing' && <BillingSection />}
             {active === 'integrations' && <IntegrationsSection />}
             {active === 'sending' && <SendingSection />}
             {active === 'contactdata' && <ContactDataSection />}

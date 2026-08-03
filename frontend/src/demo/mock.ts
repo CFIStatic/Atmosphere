@@ -373,9 +373,11 @@ const balance = () => ({
 
 const OVERVIEW = (): BillingOverview => ({
   subscription: {
-    planCode: 'team', planName: 'Team', billingInterval: 'monthly', seats: 5, status: 'active',
+    planCode: 'team', planName: 'Team', billingInterval: 'monthly', seats: 7, status: 'active',
     periodStart: '2026-07-15T00:00:00Z', periodEnd: '2026-08-15T00:00:00Z', cancelAtPeriodEnd: false,
-    monthlyPriceCents: 3000, includedCreditsNanos: 0, rateMultiplier: 5,
+    // Per-seat plan: 7 × $30. The overview carries the computed total, which
+    // is what the RPC returns — the invoice below has always said the same.
+    monthlyPriceCents: 21000, includedCreditsNanos: 0, rateMultiplier: 5,
   },
   settings: state.settings,
   balance: balance(),
@@ -401,9 +403,10 @@ const PURCHASES = [
 ];
 
 const PAYMENTS = [
-  { id: 'pay-1', kind: 'subscription' as const, status: 'succeeded' as const, amountCents: 15000, currency: 'usd', description: 'Team — 5 seats, July 15 to August 15', receiptUrl: null, hostedInvoiceUrl: null, invoicePdfUrl: null, receiptEmail: 'elena@ortizrestoration.com', cardBrand: 'visa', cardLast4: '4242', periodStart: '2026-07-15T00:00:00Z', periodEnd: '2026-08-15T00:00:00Z', failureReason: null, createdAt: '2026-07-15T00:05:00Z' },
+  { id: 'pay-1', kind: 'subscription' as const, status: 'succeeded' as const, amountCents: 21000, currency: 'usd', description: 'Team — 7 seats, July 15 to August 15', receiptUrl: null, hostedInvoiceUrl: 'about:blank#demo-invoice', invoicePdfUrl: 'about:blank#demo-invoice-pdf', receiptEmail: 'elena@ortizrestoration.com', cardBrand: 'visa', cardLast4: '4242', periodStart: '2026-07-15T00:00:00Z', periodEnd: '2026-08-15T00:00:00Z', failureReason: null, createdAt: '2026-07-15T00:05:00Z' },
   { id: 'pay-2', kind: 'credits' as const, status: 'succeeded' as const, amountCents: 10000, currency: 'usd', description: 'Pro credit pack', receiptUrl: null, hostedInvoiceUrl: null, invoicePdfUrl: null, receiptEmail: 'elena@ortizrestoration.com', cardBrand: 'visa', cardLast4: '4242', periodStart: null, periodEnd: null, failureReason: null, createdAt: '2026-07-28T14:00:05Z' },
   { id: 'pay-3', kind: 'credits' as const, status: 'succeeded' as const, amountCents: 10000, currency: 'usd', description: 'Pro credit pack — auto-reload', receiptUrl: null, hostedInvoiceUrl: null, invoicePdfUrl: null, receiptEmail: 'elena@ortizrestoration.com', cardBrand: 'visa', cardLast4: '4242', periodStart: null, periodEnd: null, failureReason: null, createdAt: '2026-07-18T03:20:04Z' },
+  { id: 'pay-4', kind: 'subscription' as const, status: 'failed' as const, amountCents: 21000, currency: 'usd', description: 'Team — 7 seats, June 15 to July 15', receiptUrl: null, hostedInvoiceUrl: null, invoicePdfUrl: null, receiptEmail: 'elena@ortizrestoration.com', cardBrand: 'visa', cardLast4: '4242', periodStart: '2026-06-15T00:00:00Z', periodEnd: '2026-07-15T00:00:00Z', failureReason: 'Card declined — insufficient funds. Retried successfully two days later.', createdAt: '2026-06-15T00:04:00Z' },
 ];
 
 /* ------------------------------------------------------------------ usage */
