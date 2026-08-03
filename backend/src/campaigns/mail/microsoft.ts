@@ -87,6 +87,25 @@ export class MicrosoftSender implements MailSender {
         ...(message.replyTo
           ? { replyTo: [{ emailAddress: { address: message.replyTo } }] }
           : {}),
+        // Graph restricts custom headers to x-prefixed names and a small
+        // count. List-Unsubscribe is a standard header and Graph accepts it
+        // here; the send id is ours, and it is the only way to correlate a
+        // bounce on this path since sendMail returns no message id.
+        ...(message.unsubscribe || message.sendId
+          ? {
+              internetMessageHeaders: [
+                ...(message.unsubscribe
+                  ? [
+                      { name: 'List-Unsubscribe', value: `<${message.unsubscribe.url}>` },
+                      { name: 'List-Unsubscribe-Post', value: 'List-Unsubscribe=One-Click' },
+                    ]
+                  : []),
+                ...(message.sendId
+                  ? [{ name: 'x-atmosphere-send-id', value: message.sendId }]
+                  : []),
+              ],
+            }
+          : {}),
       },
       saveToSentItems: true,
     };

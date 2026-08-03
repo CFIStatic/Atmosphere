@@ -27,6 +27,17 @@
  * implementation is permitted to be the place a suppression check lives.
  */
 
+/**
+ * One-click unsubscribe headers.
+ *
+ * Cheap, and they convert "reported as spam" into "one click" — which is the
+ * difference between a complaint that damages the sender's reputation and one
+ * that does not. Gmail and Yahoo both weight these heavily for bulk senders.
+ */
+export interface UnsubscribeHeaders {
+  url: string;
+}
+
 export interface OutgoingMessage {
   to: string;
   /** The person's name, when known, so the header reads "Tomas Bergeron <…>". */
@@ -45,6 +56,17 @@ export interface OutgoingMessage {
    */
   inReplyTo?: string | null;
   references?: string | null;
+  /** Adds List-Unsubscribe and List-Unsubscribe-Post. */
+  unsubscribe?: UnsubscribeHeaders | null;
+  /**
+   * Our own id for this send, stamped as a header.
+   *
+   * Graph answers a successful sendMail with 202 and no message id, so there
+   * is otherwise nothing to correlate a later bounce against on the Microsoft
+   * path. Stamping it costs nothing and cannot be retrofitted onto mail
+   * already sent.
+   */
+  sendId?: string | null;
 }
 
 export interface SendResult {
@@ -119,6 +141,13 @@ export function buildRfc822(message: OutgoingMessage, from: SenderIdentity): str
   ];
 
   if (message.replyTo) headers.push(`Reply-To: ${clean(message.replyTo)}`);
+  if (message.unsubscribe) {
+    headers.push(`List-Unsubscribe: <${clean(message.unsubscribe.url)}>`);
+    // Declares that the URL accepts a POST, so a mail client can unsubscribe
+    // without opening a browser.
+    headers.push('List-Unsubscribe-Post: List-Unsubscribe=One-Click');
+  }
+  if (message.sendId) headers.push(`X-Atmosphere-Send-Id: ${clean(message.sendId)}`);
   if (message.inReplyTo) headers.push(`In-Reply-To: ${clean(message.inReplyTo)}`);
   if (message.references) headers.push(`References: ${clean(message.references)}`);
 

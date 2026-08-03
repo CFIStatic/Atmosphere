@@ -202,3 +202,50 @@ test('non-ASCII survives in headers and body', () => {
   const body = raw.split('\r\n\r\n')[1];
   assert.ok(Buffer.from(body.replace(/\r\n/g, ''), 'base64').toString('utf8').includes('José'));
 });
+
+/* ---- one-click unsubscribe and send correlation -------------------------- */
+
+test('List-Unsubscribe headers are emitted when an unsubscribe URL is given', () => {
+  // These turn "reported as spam" into "removed", which is the difference
+  // between a complaint that damages the customer's domain and one that
+  // does not. Gmail and Yahoo both weight them for bulk senders.
+  const raw = buildRfc822(
+    {
+      to: 'tomas@northgatemed.com',
+      subject: 'Checking in',
+      text: 'Body',
+      unsubscribe: { url: 'https://api.atmosphere.build/api/unsubscribe?t=abc123' },
+      sendId: 'send-42',
+    },
+    { address: 'dana@atmosphere.build', displayName: 'Dana', provider: 'Gmail' },
+  );
+  const headers = raw.split('\r\n\r\n')[0];
+  assert.match(headers, /^List-Unsubscribe: <https:\/\/api\.atmosphere\.build\/api\/unsubscribe\?t=abc123>$/m);
+  assert.match(headers, /^List-Unsubscribe-Post: List-Unsubscribe=One-Click$/m);
+  // Graph returns no message id, so this header is the only way to correlate
+  // a later bounce on the Microsoft path.
+  assert.match(headers, /^X-Atmosphere-Send-Id: send-42$/m);
+});
+
+test('an unsubscribe URL cannot smuggle headers either', () => {
+  const raw = buildRfc822(
+    {
+      to: 'tomas@northgatemed.com',
+      subject: 'Checking in',
+      text: 'Body',
+      unsubscribe: { url: 'https://x.test/u\r\nBcc: attacker@evil.com' },
+    },
+    { address: 'dana@atmosphere.build', displayName: null, provider: 'Gmail' },
+  );
+  assert.ok(!/^Bcc:/im.test(raw.split('\r\n\r\n')[0]));
+});
+
+test('the headers are absent when nothing asks for them', () => {
+  const raw = buildRfc822(
+    { to: 'a@b.com', subject: 'x', text: 'y' },
+    { address: 'c@d.com', displayName: null, provider: 'Gmail' },
+  );
+  const headers = raw.split('\r\n\r\n')[0];
+  assert.ok(!headers.includes('List-Unsubscribe'));
+  assert.ok(!headers.includes('X-Atmosphere-Send-Id'));
+});

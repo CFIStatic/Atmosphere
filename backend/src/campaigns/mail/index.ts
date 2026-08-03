@@ -34,7 +34,12 @@ async function refresh(system: MailSystem, refreshToken: string): Promise<Refres
       : config.campaigns.microsoftClientSecret,
   });
   // Microsoft wants the scope repeated on refresh; Google does not.
-  if (!google) body.set('scope', 'https://graph.microsoft.com/Mail.Send offline_access');
+  // User.Read is not optional here: identity() reads /v1.0/me, which Mail.Send
+  // does not authorize. Without it the OAuth callback and every subsequent
+  // send return 403 — the connection appears to succeed and nothing ever goes.
+  if (!google) {
+    body.set('scope', 'https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/User.Read offline_access');
+  }
 
   const res = await fetch(google ? config.campaigns.googleTokenUrl : config.campaigns.microsoftTokenUrl, {
     method: 'POST',
@@ -60,14 +65,28 @@ async function refresh(system: MailSystem, refreshToken: string): Promise<Refres
   return { accessToken: json.access_token };
 }
 
-/** The sender for this org, or null when no mailbox is connected. */
-export async function buildMailSender(orgId: string): Promise<MailSender | null> {
-  for (const system of ['google_mail', 'microsoft_mail'] as const) {
+/**
+ * The sender for this org, or null when no mailbox is connected.
+ *
+ * `preferred` exists because taking whichever grant was found first meant an
+ * org with both connected sent from Google forever, with nothing in the UI
+ * saying so and no way to change it. Which mailbox mail comes from is the
+ * customer's decision, not an artifact of loop order.
+ */
+export async function buildMailSender(
+  orgId: string,
+  preferred?: MailSystem | null,
+): Promise<MailSender | null> {
+  const order: MailSystem[] = preferred
+    ? [preferred, ...(['google_mail', 'microsoft_mail'] as const).filter((s) => s !== preferred)]
+    : ['google_mail', 'microsoft_mail'];
+
+  for (const system of order) {
     const grant = await loadGrant(orgId, system);
     if (!grant) continue;
     const { accessToken } = await refresh(system, grant.refreshToken);
     return system === 'google_mail'
-      ? new GmailSender(accessToken)
+      ? new GmailSender(accessToken, grant.instanceUrl || null)
       : new MicrosoftSender(accessToken);
   }
   return null;
@@ -87,7 +106,16 @@ export function mailAuthorizeUrl(system: MailSystem, state: string, redirectUri:
     url.searchParams.set('response_type', 'code');
     url.searchParams.set('client_id', config.campaigns.googleClientId);
     url.searchParams.set('redirect_uri', redirectUri);
-    url.searchParams.set('scope', 'https://www.googleapis.com/auth/gmail.send');
+    // gmail.send grants no read access whatsoever, so the Gmail profile
+    // endpoint is not a reliable way to learn the sending address. openid,
+    // email and profile are non-sensitive, add nothing to the verification
+    // burden, and additionally supply a display name — without which every
+    // message goes out with a bare address in From:, undercutting the entire
+    // "a person typed this" premise.
+    url.searchParams.set(
+      'scope',
+      'https://www.googleapis.com/auth/gmail.send openid email profile',
+    );
     // Without both of these Google returns a refresh token once and never
     // again, and a campaign that fires next month has nothing to refresh with.
     url.searchParams.set('access_type', 'offline');
@@ -101,7 +129,10 @@ export function mailAuthorizeUrl(system: MailSystem, state: string, redirectUri:
   url.searchParams.set('client_id', config.campaigns.microsoftClientId);
   url.searchParams.set('redirect_uri', redirectUri);
   // offline_access is what yields a refresh token at all.
-  url.searchParams.set('scope', 'https://graph.microsoft.com/Mail.Send offline_access');
+  url.searchParams.set(
+    'scope',
+    'https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/User.Read offline_access',
+  );
   url.searchParams.set('state', state);
   return url.toString();
 }

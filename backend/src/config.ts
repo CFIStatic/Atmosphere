@@ -543,16 +543,35 @@ export const config = {
 
     // Sending as the customer, from their own mailbox.
     //
-    // Both scopes are send-only: gmail.send and Mail.Send grant no ability to
-    // read anything. Worth knowing before launch — Google treats gmail.send as
-    // a restricted scope, so past ~100 users the app needs verification plus an
-    // annual security assessment, and many Microsoft tenants require an admin
-    // to consent rather than the individual user.
+    // Sending is send-only where it can be. gmail.send and Mail.Send grant no
+    // ability to read mail; the extra scopes alongside them exist only to learn
+    // which account is connected, because neither send scope can answer that:
+    //
+    //   Google      + openid email profile   (non-sensitive)
+    //   Microsoft   + User.Read              (required for /v1.0/me)
+    //
+    // Without those the OAuth callback 403s and the connection appears to
+    // succeed while nothing ever sends.
+    //
+    // Before launch: gmail.send needs Google app verification past ~100 users,
+    // and that 100 is a lifetime cap rather than a concurrent one. Sources
+    // disagree on whether it is "sensitive" (verification only) or "restricted"
+    // (verification plus a paid annual security assessment) — confirm against
+    // Google's OAuth API Verification FAQ before committing a budget.
+    //
+    // Not ambiguous, and it decides the schedule: while the consent screen is
+    // in Testing, Google expires every refresh token after seven days. A
+    // campaign that fires next month has nothing to refresh with, so
+    // verification blocks scheduled sending rather than following it.
     googleClientId: process.env.GOOGLE_CLIENT_ID ?? '',
     googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
     gmailBaseUrl: process.env.GMAIL_BASE_URL ?? 'https://gmail.googleapis.com',
     googleAuthUrl: process.env.GOOGLE_AUTH_URL ?? 'https://accounts.google.com/o/oauth2/v2/auth',
     googleTokenUrl: process.env.GOOGLE_TOKEN_URL ?? 'https://oauth2.googleapis.com/token',
+    // Identity comes from here, not from Gmail: gmail.send grants no read
+    // access, so the Gmail profile endpoint cannot be relied on to answer.
+    googleUserinfoUrl:
+      process.env.GOOGLE_USERINFO_URL ?? 'https://openidconnect.googleapis.com/v1/userinfo',
 
     microsoftClientId: process.env.MICROSOFT_CLIENT_ID ?? '',
     microsoftClientSecret: process.env.MICROSOFT_CLIENT_SECRET ?? '',
@@ -561,6 +580,25 @@ export const config = {
       process.env.MICROSOFT_AUTH_URL ?? 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
     microsoftTokenUrl:
       process.env.MICROSOFT_TOKEN_URL ?? 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+
+    // Where the unsubscribe link in every email points.
+    //
+    // This must resolve to the BACKEND handler, not the app. The link is
+    // clicked from a mail client by somebody who has no account and never
+    // will, and the first version of this pointed at the SPA — which has no
+    // such route, so every message shipped carried an opt-out that went
+    // nowhere. That is a CAN-SPAM violation per message, not a broken link.
+    //
+    // Defaulted from the API's own public origin so a deployment that sets
+    // nothing still produces a working link.
+    unsubscribeBaseUrl:
+      process.env.UNSUBSCRIBE_BASE_URL ??
+      `${process.env.PUBLIC_API_ORIGIN ?? `http://localhost:${process.env.PORT ?? 4000}`}/api/unsubscribe`,
+
+    // Gap between messages in a send run. Exchange Online hard-caps a mailbox
+    // at 30 a minute and will not raise it; two seconds sits comfortably
+    // inside that and inside Gmail's far looser limit.
+    sendSpacingMs: Number(process.env.CAMPAIGNS_SEND_SPACING_MS ?? 2_000),
 
     countryCode: process.env.CAMPAIGNS_COUNTRY ?? 'us',
     requestTimeoutMs: Number(process.env.CAMPAIGNS_TIMEOUT_MS ?? 25_000),

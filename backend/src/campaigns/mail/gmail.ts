@@ -11,22 +11,26 @@ import { buildRfc822, toBase64Url, type MailSender, type OutgoingMessage, type S
  * "Read, compose, send and permanently delete all your email", which is what
  * the broader scopes say — and which is a reasonable thing to refuse.
  *
- * Practical consequence worth knowing before you ship: Google treats
- * `gmail.send` as a restricted scope. An app serving more than a hundred
- * users needs verification, and restricted scopes additionally require an
- * annual third-party security assessment. That is a real cost and a real
- * calendar delay, and it is a business decision rather than a technical one.
- * Until it clears, the app works fine for test users added in the console.
+ * Practical consequence worth knowing before you ship: `gmail.send` requires
+ * Google app verification once the app serves more than a hundred users, and
+ * that hundred is a lifetime cap rather than a concurrent one. Sources
+ * disagree on whether it is classed "sensitive" (verification only, free) or
+ * "restricted" (verification plus an annual paid third-party security
+ * assessment) — it is absent from Google's published restricted-Gmail-scope
+ * list, which suggests sensitive, but this should be confirmed against the
+ * OAuth API Verification FAQ before anyone commits a budget or a date.
+ *
+ * The part that is not ambiguous, and that decides the schedule: while the
+ * consent screen sits in Testing, Google force-expires every refresh token
+ * after seven days. A campaign that fires next month has nothing left to
+ * refresh with, so verification is a launch blocker for scheduled sending
+ * rather than post-launch cleanup.
  *
  * The message lands in the customer's own Sent folder and threads normally,
  * because it genuinely is their mail. That is the whole reason to do it this
  * way rather than through a sending service: a reply goes back to them, not
  * to a webhook.
  */
-
-interface GmailProfile {
-  emailAddress?: string;
-}
 
 interface GmailSendResponse {
   id?: string;
@@ -45,33 +49,51 @@ export class GmailSender implements MailSender {
   readonly dailyCeiling = 450;
 
   private readonly accessToken: string;
+  private readonly knownAddress: string | null;
+  private readonly knownName: string | null;
   private cached: SenderIdentity | null = null;
 
-  constructor(accessToken: string) {
+  constructor(accessToken: string, knownAddress: string | null = null, knownName: string | null = null) {
     this.accessToken = accessToken;
+    this.knownAddress = knownAddress;
+    this.knownName = knownName;
   }
 
   private headers(): Record<string, string> {
     return { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' };
   }
 
+  /**
+   * Who mail will come from.
+   *
+   * Read from the OpenID userinfo endpoint rather than Gmail's own profile
+   * endpoint. `gmail.send` grants no read access at all, so asking Gmail
+   * about the mailbox is at best undefined and at worst a 403 that kills the
+   * whole flow — and userinfo additionally returns a display name, without
+   * which every message goes out with a bare address in From:.
+   */
   async identity(): Promise<SenderIdentity> {
     if (this.cached) return this.cached;
 
-    const res = await fetch(`${config.campaigns.gmailBaseUrl}/gmail/v1/users/me/profile`, {
-      headers: this.headers(),
-    });
+    // Captured at connect time, when the token was fresh. Avoids a network
+    // call per send and works even if userinfo is briefly unreachable.
+    if (this.knownAddress) {
+      this.cached = { address: this.knownAddress, displayName: this.knownName, provider: this.name };
+      return this.cached;
+    }
+
+    const res = await fetch(`${config.campaigns.googleUserinfoUrl}`, { headers: this.headers() });
     if (!res.ok) {
       throw new Error(
         res.status === 401
           ? 'The Gmail connection has expired. Reconnect it in Settings.'
-          : `Gmail returned ${res.status}.`,
+          : `Google returned ${res.status} when asked which account this is.`,
       );
     }
-    const body = (await res.json()) as GmailProfile;
-    if (!body.emailAddress) throw new Error('Gmail did not report an address for this account.');
+    const body = (await res.json()) as { email?: string; name?: string };
+    if (!body.email) throw new Error('Google did not report an address for this account.');
 
-    this.cached = { address: body.emailAddress, displayName: null, provider: this.name };
+    this.cached = { address: body.email, displayName: body.name ?? null, provider: this.name };
     return this.cached;
   }
 

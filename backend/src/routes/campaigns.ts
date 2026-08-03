@@ -738,10 +738,12 @@ campaignsRouter.get(
       const [contacts, places, territory] = await Promise.all([
         audience.includeContacts
           ? supabase
-              .from('crm_contacts')
-              .select('id, first_name, last_name, email, title, company_name')
+              // The view, not the table. It filters marketing_opt_out and
+              // is_archived structurally — a hand-written column list forgot
+              // both, twice, and mailed people who had asked not to be.
+              .from('crm_campaign_audience')
+              .select('id, first_name, last_name, email, title, company_name, city, postal_code')
               .eq('org_id', orgId)
-              .not('email', 'is', null)
               .limit(2000)
           : Promise.resolve({ data: [] as any[] }),
         supabase.from('crm_places').select('*').eq('org_id', orgId).limit(2000),
@@ -1010,7 +1012,10 @@ campaignsRouter.post(
 
       const policy = {
         postalAddress: policyRow?.postal_address ?? '',
-        unsubscribeUrl: `${config.frontendOrigins[0]}/unsubscribe`,
+        // The backend handler, not the app: the person clicking has no
+        // account. Pointing this at the SPA shipped a dead opt-out link in
+        // every message.
+        unsubscribeUrl: config.campaigns.unsubscribeBaseUrl,
         maxRecipients: policyRow?.max_recipients ?? 200,
         dailyCeiling: policyRow?.daily_ceiling ?? 300,
       };
@@ -1019,7 +1024,14 @@ campaignsRouter.post(
       // hundred: a campaign missing its postal address has already committed
       // the violation four hundred times by then.
       const problems = [...validatePolicy(policy), ...subjectProblems(campaign.message_subject)];
-      const blocking = validatePolicy(policy);
+      // Subject checks are advisory on a dry run and blocking on a real send.
+      // "Warn the operator" is not a control on a path where the point is that
+      // no operator is watching — and a deceptive subject is the specific thing
+      // CAN-SPAM prohibits.
+      const blocking = [
+        ...validatePolicy(policy),
+        ...(confirm ? subjectProblems(campaign.message_subject) : []),
+      ];
       if (blocking.length) {
         throw new HttpError(400, blocking.join(' '), 'policy_incomplete');
       }
@@ -1030,10 +1042,12 @@ campaignsRouter.post(
       const [contactsRes, placesRes, territoryRes] = await Promise.all([
         audienceCfg.includeContacts
           ? supabase
-              .from('crm_contacts')
-              .select('id, first_name, last_name, email, title, company_name')
+              // The view, not the table. It filters marketing_opt_out and
+              // is_archived structurally — a hand-written column list forgot
+              // both, twice, and mailed people who had asked not to be.
+              .from('crm_campaign_audience')
+              .select('id, first_name, last_name, email, title, company_name, city, postal_code')
               .eq('org_id', orgId)
-              .not('email', 'is', null)
               .limit(2000)
           : Promise.resolve({ data: [] as any[] }),
         supabase.from('crm_places').select('*').eq('org_id', orgId).limit(2000),
@@ -1048,6 +1062,15 @@ campaignsRouter.post(
         places: (placesRes.data ?? []) as any[],
         territory: (territoryRes as any).data ?? null,
       });
+
+      // The sender is resolved before screening, not after, so its own daily
+      // ceiling can bound the budget. Previously the Gmail and Microsoft
+      // ceilings were declared and never read — screening had already decided
+      // how many to send before anybody asked what the mailbox would accept.
+      const sender = confirm ? await buildMailSender(orgId) : null;
+      if (confirm && !sender) {
+        throw new HttpError(400, 'Connect a mailbox before sending.', 'no_mailbox');
+      }
 
       // Everything the gate needs, loaded once.
       const since = new Date();
@@ -1102,7 +1125,14 @@ campaignsRouter.post(
             .filter((r) => r.state === 'bounced')
             .map((r) => String(r.email).toLowerCase()),
         ),
-        policy,
+        policy: {
+          ...policy,
+          // The lowest of the three: what the customer set, and what the
+          // mailbox provider will actually accept. Exceeding a provider's
+          // limit gets the mailbox locked, which costs the customer their
+          // email rather than costing us a campaign.
+          dailyCeiling: Math.min(policy.dailyCeiling, sender?.dailyCeiling ?? policy.dailyCeiling),
+        },
         sentToday: todayCount.count ?? 0,
       });
 
@@ -1125,14 +1155,11 @@ campaignsRouter.post(
         return;
       }
 
-      const sender = await buildMailSender(orgId);
-      if (!sender) {
-        throw new HttpError(400, 'Connect a mailbox before sending.', 'no_mailbox');
-      }
-      const identity = await sender.identity();
+      const identity = await sender!.identity();
 
       let sent = 0;
       const failures: Array<{ email: string; error: string }> = [];
+      const sendSpacingMs = config.campaigns.sendSpacingMs;
 
       for (const recipient of screened.send) {
         // The row is written first so the unique index on (fire_id, email) is
@@ -1162,12 +1189,19 @@ campaignsRouter.post(
           row.unsubscribe_token,
         );
 
-        const result = await sender.send({
+        const unsubscribeUrl = `${policy.unsubscribeUrl}${policy.unsubscribeUrl.includes('?') ? '&' : '?'}t=${encodeURIComponent(row.unsubscribe_token)}`;
+
+        const result = await sender!.send({
           to: recipient.email,
           toName: recipient.name ?? null,
           subject: renderTemplate(campaign.message_subject, { event: event ?? null, area: area ?? null }),
           text: body,
           replyTo: policyRow?.reply_to ?? null,
+          // One-click unsubscribe turns "reported as spam" into "removed",
+          // which is the difference between a complaint that damages the
+          // customer's domain and one that does not.
+          unsubscribe: { url: unsubscribeUrl },
+          sendId: row.id,
         });
 
         await supabase
@@ -1182,6 +1216,15 @@ campaignsRouter.post(
 
         if (result.ok) sent += 1;
         else failures.push({ email: recipient.email, error: result.error ?? 'unknown' });
+
+        // Exchange Online caps a mailbox at 30 messages a minute and it is not
+        // raisable; Graph additionally allows four concurrent per mailbox. An
+        // unpaced loop trips both and the customer's mailbox gets throttled
+        // mid-campaign. Two seconds between messages sits inside every
+        // provider's limit and nobody is waiting on this.
+        if (screened.send.length > 1) {
+          await new Promise((r) => setTimeout(r, sendSpacingMs));
+        }
       }
 
       res.json({
