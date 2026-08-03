@@ -88,7 +88,13 @@ function routerProps(): Record<string, unknown> {
   if (!import.meta.env.VITE_DEMO) return {};
   try {
     const entry = localStorage.getItem('atmosphere.route');
-    if (entry) return { initialEntries: [entry] };
+    if (entry) {
+      // Consumed, not remembered. Leaving it set would send every reload back
+      // to the same screen however far somebody had navigated, which reads as
+      // the app refusing to move.
+      localStorage.removeItem('atmosphere.route');
+      return { initialEntries: [entry] };
+    }
   } catch {
     /* storage denied — fall through to the default entry */
   }
