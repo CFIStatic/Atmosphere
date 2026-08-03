@@ -471,6 +471,11 @@ const CONTACTS: Array<Record<string, any>> = [
   { id: 'ct-1', firstName: 'Jordan', lastName: 'Hollis', companyName: null, email: 'j.hollis@example.com', phone: '(512) 555-0122', mobile: null },
   { id: 'ct-2', firstName: 'Rita', lastName: 'Calloway', companyName: 'Alliance Mutual', email: 'r.calloway@alliancemutual.com', phone: '(512) 555-0184', mobile: null },
   { id: 'ct-3', firstName: 'Sam', lastName: 'Okafor', companyName: 'Camden Court HOA', email: 'sam@camdencourt.org', phone: null, mobile: '(512) 555-0171' },
+  // Deliberately the same person as sandbox sbx-5, so the walkthrough actually
+  // demonstrates the rule rather than asserting it: search greys Devon out, and
+  // a reveal called directly is refused instead of selling back data the org
+  // already owns.
+  { id: 'ct-4', firstName: 'Devon', lastName: 'Ashby', companyName: 'Camden Court HOA', email: 'devon@camdencourt.org', phone: '(512) 555-0139', mobile: null },
 ];
 
 const ACTIVITIES: Array<Record<string, any>> = [
@@ -689,11 +694,29 @@ const routes: Array<[string, RegExp, Handler]> = [
     if (existing?.revealedAt) {
       return { body: { prospect: existing, charged: false, reason: 'already_revealed' } };
     }
-    const suppressedDomains = new Set(
-      SUPPRESSIONS.filter((s) => s.kind === 'domain').map((s) => String(s.value).toLowerCase()),
-    );
-    if (suppressedDomains.has(String(person.companyDomain ?? '').toLowerCase())) {
-      return { status: 409, body: { error: 'That company is on your do-not-contact list.', code: 'suppressed' } };
+    // Domain, email, landline AND mobile. The mobile was missing on the server
+    // and it is the number the UI shows first, so a suppressed person could
+    // still be called.
+    const suppressedOf = (kind: string) =>
+      new Set(
+        SUPPRESSIONS.filter((s) => s.kind === kind).map((s) => String(s.value).toLowerCase()),
+      );
+    const digitsOnly = (v: string) => v.replace(/\D/g, '');
+    const suppressedPhones = new Set([...suppressedOf('phone')].map(digitsOnly));
+    const suppressed =
+      suppressedOf('domain').has(String(person.companyDomain ?? '').toLowerCase()) ||
+      suppressedOf('email').has(String(person.email ?? '').toLowerCase()) ||
+      [person.phone, person.mobile].some(
+        (n) => n && suppressedPhones.has(digitsOnly(String(n))),
+      );
+    if (suppressed) {
+      return {
+        status: 409,
+        body: {
+          error: 'That contact is on your do-not-contact list — nothing was charged.',
+          code: 'suppressed',
+        },
+      };
     }
     if (!person.email && !person.phone && !person.mobile) {
       return {
@@ -704,9 +727,36 @@ const routes: Array<[string, RegExp, Handler]> = [
         },
       };
     }
-    const requestId = String(b.requestId ?? '');
-    const duplicate = CHARGED.has(requestId);
-    if (!duplicate) CHARGED.add(requestId);
+    // Already in the CRM — revealing would sell them back their own data.
+    // The server enforces this on name AND employer; so does the demo, or the
+    // walkthrough would show a charge the real product refuses to make.
+    const wanted = String(person.fullName).trim().toLowerCase();
+    const owned = CONTACTS.find((c) => {
+      const full = [c.firstName, c.lastName].filter(Boolean).join(' ').toLowerCase();
+      if (full !== wanted) return false;
+      if (!c.email && !c.phone && !c.mobile) return false;
+      const emailDomain = c.email ? String(c.email).toLowerCase().split('@')[1] ?? '' : '';
+      return (
+        emailDomain === String(person.companyDomain ?? '').toLowerCase() ||
+        String(c.companyName ?? '').trim().toLowerCase() ===
+          String(person.companyName ?? '').trim().toLowerCase()
+      );
+    });
+    if (owned) {
+      return {
+        status: 409,
+        body: {
+          error: `${person.fullName} is already in your contacts — nothing was charged.`,
+          code: 'already_in_crm',
+        },
+      };
+    }
+    // The idempotency key is derived from (org, person), never sent by the
+    // client — mirroring the server, where letting the caller choose it meant
+    // one paid key unlocked every later reveal for nothing.
+    const chargeKey = `reveal:demo-org:${id}`;
+    const duplicate = CHARGED.has(chargeKey);
+    if (!duplicate) CHARGED.add(chargeKey);
     const prospect = {
       id: `pr-${PROSPECTS.length + 1}`,
       fullName: person.fullName, title: person.title, companyName: person.companyName,
