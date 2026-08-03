@@ -23,10 +23,13 @@ import {
   type MailSystem,
 } from '../campaigns/mail/index.js';
 import { buildForecastProvider, FORECAST_PROVIDERS } from '../campaigns/forecast/index.js';
+import { statesForTerritories, zipsForTerritories } from '../campaigns/zips.js';
+import { locateZips } from '../campaigns/zipLocator.js';
+import { geometryContains } from '../campaigns/geo.js';
 import { findPlaces, PLACE_CATEGORIES, PLACE_ATTRIBUTION } from '../campaigns/places.js';
 import {
   activeAlerts,
-  alertCoversTerritory,
+  alertZipCoverage,
   hoursOfNotice,
   WEATHER_EVENTS,
   WEATHER_ATTRIBUTION,
@@ -627,30 +630,60 @@ campaignsRouter.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { orgId, supabase } = await requireOrgContext(req);
-      const state = typeof req.query.state === 'string' ? req.query.state : 'TX';
+      const { data: territories } = await supabase
+        .from('crm_territories')
+        .select('*')
+        .eq('org_id', orgId);
 
-      const [alerts, { data: territories }] = await Promise.all([
-        activeAlerts(state),
-        supabase.from('crm_territories').select('*').eq('org_id', orgId),
+      // The states come from the org's own ZIP codes, not from a parameter and
+      // certainly not from a hardcoded 'TX'. A company working Texarkana spans
+      // two states and a franchise group spans a dozen; asking about one of
+      // them was the difference between a national product and a demo.
+      const states = statesForTerritories((territories ?? []) as any[]);
+      // An explicit override stays available for looking somewhere you do not
+      // yet have a territory.
+      const asked = typeof req.query.state === 'string' ? [req.query.state] : [];
+      const lookIn = asked.length ? asked : states;
+
+      const zips = zipsForTerritories((territories ?? []) as any[]);
+      const [alerts, centroids] = await Promise.all([
+        activeAlerts(lookIn),
+        // Bounded: unlocated ZIPs resolve over subsequent calls and matching
+        // degrades to county names meanwhile rather than blocking the page.
+        locateZips(zips, 12),
       ]);
 
       res.json({
         attribution: WEATHER_ATTRIBUTION,
-        alerts: alerts.map((alert) => ({
-          ...alert,
-          hoursOfNotice: hoursOfNotice(alert),
-          // The join a salesperson actually cares about: not "is there a
-          // storm" but "is there a storm where I sell".
-          territories: (territories ?? [])
-            .filter((t: any) =>
-              alertCoversTerritory(alert, {
-                cities: t.cities,
-                counties: t.counties,
-                postalCodes: t.postal_codes,
-              }),
-            )
-            .map((t: any) => ({ id: t.id, name: t.name })),
-        })),
+        statesWatched: lookIn,
+        zipsLocated: centroids.size,
+        zipsTotal: zips.length,
+        alerts: alerts.map((alert) => {
+          // Not "is there a storm" but "is there a storm on my ZIPs" — which
+          // is a far narrower and more useful claim than a county name.
+          const hits = (territories ?? [])
+            .map((t: any) => {
+              const cover = alertZipCoverage(
+                alert,
+                { postal_codes: t.postal_codes, cities: t.cities, counties: t.counties },
+                centroids,
+                geometryContains as any,
+              );
+              return cover.covered
+                ? { id: t.id, name: t.name, zips: cover.zips, matchedBy: cover.method }
+                : null;
+            })
+            .filter(Boolean);
+
+          return {
+            ...alert,
+            // The shape is large and the client does not draw it.
+            geometry: undefined,
+            hasGeometry: Boolean(alert.geometry),
+            hoursOfNotice: hoursOfNotice(alert),
+            territories: hits,
+          };
+        }),
       });
     } catch (err) {
       next(err);
@@ -675,10 +708,17 @@ campaignsRouter.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { orgId, supabase } = await requireOrgContext(req);
-      const state = typeof req.query.state === 'string' ? req.query.state : 'TX';
+      // Same rule as the alerts view: the states are the org's own, derived
+      // from their ZIPs, so a campaign in Oklahoma is evaluated against
+      // Oklahoma weather without anybody configuring a region.
+      const { data: allTerritories } = await supabase
+        .from('crm_territories')
+        .select('*')
+        .eq('org_id', orgId);
+      const states = statesForTerritories((allTerritories ?? []) as any[]);
 
       const [alerts, campaigns, territories, fires] = await Promise.all([
-        activeAlerts(state),
+        activeAlerts(states),
         supabase.from('crm_campaigns').select('*').eq('org_id', orgId),
         supabase.from('crm_territories').select('*').eq('org_id', orgId),
         supabase
@@ -700,6 +740,9 @@ campaignsRouter.get(
         campaigns: (campaigns.data ?? []) as any[],
         territories: (territories.data ?? []) as any[],
         alerts,
+        // Without these, matching falls back to county names — which is 1,100
+        // square miles when the warning polygon is a fraction of that.
+        zipCentroids: await locateZips(zipsForTerritories((allTerritories ?? []) as any[]), 12),
         firedAlertIds,
         lastFiredAt,
       });

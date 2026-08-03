@@ -79,9 +79,19 @@ export interface WeatherAlert {
   expires: string | null;
   /** Which of our groups this belongs to, when it belongs to one. */
   group: string | null;
+  /**
+   * The warned area as an actual shape, when the issuing office drew one.
+   *
+   * This is what makes ZIP-level matching possible: a polygon and a point
+   * settle exactly which of a territory's codes are inside the storm, where a
+   * county name only says the storm is somewhere in 1,100 square miles.
+   * Watches are usually issued over whole zones and carry none.
+   */
+  geometry: { type?: string; coordinates?: unknown } | null;
 }
 
 interface NwsFeature {
+  geometry?: { type?: string; coordinates?: unknown } | null;
   properties?: {
     id?: string;
     event?: string;
@@ -106,17 +116,27 @@ export function groupFor(event: string): string | null {
 }
 
 /**
- * Active alerts for a state.
+ * Active alerts across any number of states.
+ *
+ * Takes a list because a hardcoded single state was never a real product: an
+ * organization working Texarkana spans two, and a franchise group spans a
+ * dozen. The states come from the ZIPs in their own territories, so coverage
+ * is national without anybody configuring a region.
+ *
+ * The alerts endpoint accepts a comma-separated `area`, so this stays one
+ * request however many states are involved.
  *
  * Never throws. A weather service outage must not fail a page load; it means
  * no alerts are known right now, which the UI can say honestly.
  */
-export async function activeAlerts(stateCode: string): Promise<WeatherAlert[]> {
-  const area = stateCode.trim().toUpperCase();
-  if (!/^[A-Z]{2}$/.test(area)) return [];
+export async function activeAlerts(states: string | string[]): Promise<WeatherAlert[]> {
+  const list = (Array.isArray(states) ? states : [states])
+    .map((s) => s.trim().toUpperCase())
+    .filter((s) => /^[A-Z]{2}$/.test(s));
+  if (!list.length) return [];
 
   const url = new URL('/alerts/active', config.campaigns.weatherBaseUrl);
-  url.searchParams.set('area', area);
+  url.searchParams.set('area', [...new Set(list)].join(','));
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.campaigns.requestTimeoutMs);
@@ -150,6 +170,7 @@ export async function activeAlerts(stateCode: string): Promise<WeatherAlert[]> {
           onset: p.onset ?? null,
           expires: p.expires ?? null,
           group: groupFor(p.event),
+          geometry: feature.geometry ?? null,
         };
       })
       .filter((a): a is WeatherAlert => a !== null);
@@ -162,6 +183,9 @@ export async function activeAlerts(stateCode: string): Promise<WeatherAlert[]> {
 
 /**
  * Does this alert cover this territory?
+ *
+ * Name-based, and now the fallback rather than the only method — see
+ * `alertCoversTerritoryByZip` for the geometric version, which is exact.
  *
  * Matching is on the words the issuing office used, because a territory is
  * described the way a sales team talks — "Round Rock", "Williamson County",
@@ -216,3 +240,45 @@ export function hoursOfNotice(alert: WeatherAlert, now = new Date()): number | n
 }
 
 export const WEATHER_ATTRIBUTION = 'Alerts from the US National Weather Service';
+
+/**
+ * Which of a territory's ZIP codes are inside this alert.
+ *
+ * The precise version, and the one that makes ZIP-defined territories work.
+ * A county name says the storm is somewhere in 1,100 square miles; a polygon
+ * against a ZIP centroid says which of your codes are actually under it.
+ *
+ * Falls back to the county names the office wrote when the alert carries no
+ * shape — watches usually do not — or when none of the ZIPs have been located
+ * yet. Reporting which method answered matters: "four of your ZIPs are inside
+ * the warned polygon" and "your county is mentioned" are different claims and
+ * a salesperson deciding who to call should know which they have.
+ */
+export function alertZipCoverage(
+  alert: WeatherAlert,
+  territory: {
+    postal_codes?: string[] | null;
+    cities?: string[] | null;
+    counties?: string[] | null;
+  },
+  centroids: Map<string, { lat: number; lon: number }>,
+  contains: (geometry: unknown, point: { lat: number; lon: number }) => boolean,
+): { covered: boolean; zips: string[]; method: 'geometry' | 'area-name' | 'none' } {
+  const zips = (territory.postal_codes ?? [])
+    .map((z) => String(z).trim().split('-')[0].replace(/\D/g, ''))
+    .filter((z) => z.length === 5);
+
+  const locatable = zips.filter((z) => centroids.has(z));
+
+  if (alert.geometry && locatable.length) {
+    const inside = locatable.filter((zip) => {
+      const point = centroids.get(zip);
+      return point ? contains(alert.geometry, point) : false;
+    });
+    return { covered: inside.length > 0, zips: inside, method: 'geometry' };
+  }
+
+  // No shape, or no located ZIPs yet. The county names are all there is.
+  const byName = alertCoversTerritory(alert, territory);
+  return { covered: byName, zips: [], method: byName ? 'area-name' : 'none' };
+}

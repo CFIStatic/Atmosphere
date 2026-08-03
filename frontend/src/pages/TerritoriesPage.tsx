@@ -128,10 +128,12 @@ export function TerritoriesPage() {
               className="mt-1 w-full rounded-lg glass-field px-3.5 py-2.5 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
               value={areas}
               onChange={(e) => setAreas(e.target.value)}
-              placeholder="78701, 78702, Round Rock, Williamson County"
+              placeholder="78664, 78665, 78681, Round Rock, Williamson County"
             />
             <span className="mt-1.5 block text-xs text-ink-500">
-              ZIPs, cities and counties, comma separated — they get sorted out for you.
+              ZIP codes first — they are what weather alerts are matched against, street by street
+              rather than county by county. Cities and counties can go in the same box and get
+              sorted out for you.
             </span>
           </label>
           <button
@@ -184,11 +186,21 @@ export function TerritoriesPage() {
                       <p className="mt-0.5 text-xs text-ink-600">{territory.description}</p>
                     )}
                   </div>
-                  {!territory.ownerId && (
-                    <span className="shrink-0 rounded-full bg-caution-50 px-2 py-0.5 text-[10.5px] font-semibold text-caution-600">
-                      unassigned
-                    </span>
-                  )}
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {territory.postalCodes.length === 0 && (
+                      <span
+                        title="Weather alerts match this territory by county name only, which is far coarser. Add ZIP codes for street-level matching."
+                        className="rounded-full bg-caution-50 px-2 py-0.5 text-[10.5px] font-semibold text-caution-600"
+                      >
+                        no ZIPs
+                      </span>
+                    )}
+                    {!territory.ownerId && (
+                      <span className="rounded-full bg-caution-50 px-2 py-0.5 text-[10.5px] font-semibold text-caution-600">
+                        unassigned
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-1.5">

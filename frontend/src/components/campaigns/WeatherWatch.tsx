@@ -15,9 +15,14 @@ import { api, type WeatherAlert } from '../../lib/api';
  * somebody needs explained, and "why didn't this send?" is the question that
  * actually gets asked.
  */
-export function WeatherWatch({ state = 'TX' }: { state?: string }) {
+export function WeatherWatch() {
   const [alerts, setAlerts] = useState<WeatherAlert[] | null>(null);
   const [attribution, setAttribution] = useState('');
+  const [coverage, setCoverage] = useState<{
+    states: string[];
+    zipsLocated: number;
+    zipsTotal: number;
+  } | null>(null);
   const [pending, setPending] = useState<{
     fire: Array<{ campaignId: string; campaignName: string; reason: string }>;
     skip: Array<{ campaignId: string; campaignName: string; reason: string }>;
@@ -26,11 +31,16 @@ export function WeatherWatch({ state = 'TX' }: { state?: string }) {
 
   useEffect(() => {
     let live = true;
-    Promise.all([api.activeWeather(state), api.pendingCampaigns(state)])
+    Promise.all([api.activeWeather(), api.pendingCampaigns()])
       .then(([weather, decisions]) => {
         if (!live) return;
         setAlerts(weather.alerts);
         setAttribution(weather.attribution);
+        setCoverage({
+          states: weather.statesWatched ?? [],
+          zipsLocated: weather.zipsLocated ?? 0,
+          zipsTotal: weather.zipsTotal ?? 0,
+        });
         setPending(decisions);
       })
       .catch((err) => {
@@ -41,7 +51,7 @@ export function WeatherWatch({ state = 'TX' }: { state?: string }) {
     return () => {
       live = false;
     };
-  }, [state]);
+  }, []);
 
   // Alerts touching a territory this org actually covers come first — the rest
   // of the state is context, not news.
@@ -52,7 +62,13 @@ export function WeatherWatch({ state = 'TX' }: { state?: string }) {
     <section className="rounded-xl glass-card p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-base font-semibold text-ink-900">Weather in your territories</h2>
-        <span className="text-xs text-ink-500">{state}</span>
+        {/* Which states are being watched, derived from the ZIPs in the
+            territories rather than configured anywhere. */}
+        <span className="text-xs text-ink-500">
+          {coverage?.states.length
+            ? coverage.states.join(' · ')
+            : 'No states yet — add ZIP codes to a territory'}
+        </span>
       </div>
       <p className="mt-1 text-sm text-ink-600">
         Live alerts, and what your campaigns would do about them right now. Nothing is sent from
@@ -76,7 +92,8 @@ export function WeatherWatch({ state = 'TX' }: { state?: string }) {
                 <>
                   {' '}
                   <span className="tabular-nums">{elsewhere.length}</span> alert
-                  {elsewhere.length === 1 ? '' : 's'} elsewhere in {state}.
+                  {elsewhere.length === 1 ? '' : 's'} elsewhere in{' '}
+                  {coverage?.states.join(', ') || 'the states you work'}.
                 </>
               )}
             </p>
@@ -93,9 +110,28 @@ export function WeatherWatch({ state = 'TX' }: { state?: string }) {
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-ink-700">{alert.areaDesc}</p>
-                  <p className="mt-1.5 text-[11px] text-ink-500">
-                    Your territories: {alert.territories.map((t) => t.name).join(', ')}
-                  </p>
+                  {/* Which ZIPs, not just which county. A warning polygon is
+                      often a fraction of a county, and "four of your codes"
+                      is a different instruction from "Williamson County". */}
+                  <ul className="mt-1.5 space-y-0.5">
+                    {alert.territories.map((t) => (
+                      <li key={t.id} className="text-[11px] text-ink-500">
+                        <span className="text-ink-700">{t.name}</span>
+                        {t.zips && t.zips.length > 0 ? (
+                          <>
+                            {' — '}
+                            {t.zips.slice(0, 6).join(', ')}
+                            {t.zips.length > 6 ? ` +${t.zips.length - 6} more` : ''}
+                          </>
+                        ) : (
+                          <span className="text-ink-400">
+                            {' '}
+                            — county-level match only
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
                 </li>
               ))}
             </ul>
@@ -143,7 +179,20 @@ export function WeatherWatch({ state = 'TX' }: { state?: string }) {
         </div>
       )}
 
-      {attribution && <p className="mt-4 text-[11px] text-ink-400">{attribution}</p>}
+      {attribution && (
+        <p className="mt-4 text-[11px] text-ink-400">
+          {attribution}
+          {coverage && coverage.zipsTotal > 0 && (
+            <>
+              {' · '}
+              {coverage.zipsLocated} of {coverage.zipsTotal} ZIP codes located
+              {coverage.zipsLocated < coverage.zipsTotal
+                ? ' — the rest resolve over the next few checks and match by county meanwhile'
+                : ''}
+            </>
+          )}
+        </p>
+      )}
     </section>
   );
 }

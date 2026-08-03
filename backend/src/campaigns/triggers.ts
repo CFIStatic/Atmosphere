@@ -1,4 +1,5 @@
-import { activeAlerts, alertCoversTerritory, hoursOfNotice, type WeatherAlert } from './weather.js';
+import { activeAlerts, alertZipCoverage, hoursOfNotice, type WeatherAlert } from './weather.js';
+import { geometryContains } from './geo.js';
 
 /**
  * Deciding what fires, and who it goes to.
@@ -44,6 +45,10 @@ export interface FireDecision {
   campaignId: string;
   campaignName: string;
   alert: WeatherAlert;
+  /** Exactly which of the territory's ZIPs are under the storm. */
+  matchedZips: string[];
+  /** 'geometry' is exact; 'area-name' means only the county was mentioned. */
+  matchedBy: string;
   /** Why this one fired, in words that can go in the audit trail. */
   reason: string;
 }
@@ -77,6 +82,12 @@ export function decideFires(input: {
   }>;
   territories: Array<{ id: string; cities: string[]; counties: string[]; postal_codes: string[] }>;
   alerts: WeatherAlert[];
+  /**
+   * ZIP centroids, so a territory drawn in ZIPs is matched against the alert's
+   * actual polygon rather than against the county name the office wrote.
+   * Empty is fine — matching falls back to names.
+   */
+  zipCentroids?: Map<string, { lat: number; lon: number }>;
   /** Alert ids this campaign has already fired on. */
   firedAlertIds: Set<string>;
   /** Most recent fire per campaign, for the cooldown. */
@@ -131,19 +142,29 @@ export function decideFires(input: {
       continue;
     }
 
+    let coverage: ReturnType<typeof alertZipCoverage> | null = null;
+
     const match = input.alerts.find((alert) => {
       if (!alert.group || !groups.includes(alert.group)) return false;
       if (!severities.includes(alert.severity)) return false;
       if (input.firedAlertIds.has(`${campaign.id}:${alert.id}`)) return false;
-      if (
-        !alertCoversTerritory(alert, {
+
+      // ZIP-level where the alert has a shape and the codes have been located,
+      // county names otherwise. A warning polygon is often a fraction of a
+      // county, so this is the difference between mailing the people actually
+      // under the storm and mailing eleven hundred square miles.
+      const cover = alertZipCoverage(
+        alert,
+        {
+          postal_codes: territory.postal_codes,
           cities: territory.cities,
           counties: territory.counties,
-          postalCodes: territory.postal_codes,
-        })
-      ) {
-        return false;
-      }
+        },
+        input.zipCentroids ?? new Map(),
+        geometryContains as any,
+      );
+      if (!cover.covered) return false;
+      coverage = cover;
       // Too early is a real failure mode: a watch issued four days out often
       // misses entirely, and "a storm is coming" that never arrives is the
       // email that gets a sender ignored.
@@ -162,14 +183,21 @@ export function decideFires(input: {
     }
 
     const notice = hoursOfNotice(match, now);
+    const where =
+      coverage && (coverage as any).method === 'geometry' && (coverage as any).zips.length
+        ? `${(coverage as any).zips.length} of your ZIP codes`
+        : match.areaDesc;
+
     fire.push({
       campaignId: campaign.id,
       campaignName: campaign.name,
       alert: match,
+      matchedZips: coverage ? (coverage as any).zips : [],
+      matchedBy: coverage ? (coverage as any).method : 'none',
       reason:
         notice !== null && notice > 0
-          ? `${match.event} for ${match.areaDesc}, about ${Math.round(notice)}h out.`
-          : `${match.event} in effect for ${match.areaDesc}.`,
+          ? `${match.event} over ${where}, about ${Math.round(notice)}h out.`
+          : `${match.event} in effect over ${where}.`,
     });
   }
 

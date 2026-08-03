@@ -427,9 +427,12 @@ export interface Territory {
   name: string;
   description: string | null;
   ownerId: string | null;
+  /** How a territory is actually drawn. Everything else is supplementary. */
   postalCodes: string[];
   cities: string[];
   counties: string[];
+  /** Two letters. Usually derived from the ZIPs; explicit when there are none. */
+  state?: string | null;
   active: boolean;
   createdAt: string;
 }
@@ -474,8 +477,19 @@ export interface WeatherAlert {
   effective: string | null; onset: string | null; expires: string | null;
   group: string | null;
   hoursOfNotice: number | null;
-  /** Which of your territories this alert covers — the join that matters. */
-  territories: Array<{ id: string; name: string }>;
+  /** True when the office drew a shape, so ZIP matching was exact. */
+  hasGeometry?: boolean;
+  /**
+   * Which of your territories this covers, and exactly which of their ZIP
+   * codes. `matchedBy: 'geometry'` means the codes are inside the warned
+   * polygon; 'area-name' means only the county was mentioned.
+   */
+  territories: Array<{
+    id: string;
+    name: string;
+    zips?: string[];
+    matchedBy?: 'geometry' | 'area-name' | 'none';
+  }>;
 }
 
 export interface TriggerConfig {
@@ -1556,19 +1570,35 @@ export const api = {
       method: 'GET',
     }),
 
-  activeWeather: (state = 'TX') =>
-    request<{ alerts: WeatherAlert[]; attribution: string }>(
-      `/api/sales/weather/active?state=${encodeURIComponent(state)}`,
-      { method: 'GET' },
-    ),
+  /**
+   * Live alerts across every state your territories touch — derived from
+   * their ZIP codes, so coverage is national with nothing to configure.
+   * `state` overrides that to look somewhere you do not yet work.
+   */
+  activeWeather: (state?: string) =>
+    request<{
+      alerts: WeatherAlert[];
+      attribution: string;
+      statesWatched: string[];
+      zipsLocated: number;
+      zipsTotal: number;
+    }>(`/api/sales/weather/active${state ? `?state=${encodeURIComponent(state)}` : ''}`, {
+      method: 'GET',
+    }),
 
   /** Dry run: what would fire right now, what would not, and why. Sends nothing. */
-  pendingCampaigns: (state = 'TX') =>
+  pendingCampaigns: () =>
     request<{
-      fire: Array<{ campaignId: string; campaignName: string; reason: string }>;
+      fire: Array<{
+        campaignId: string;
+        campaignName: string;
+        reason: string;
+        matchedZips?: string[];
+        matchedBy?: string;
+      }>;
       skip: Array<{ campaignId: string; campaignName: string; reason: string }>;
       alertsSeen: number;
-    }>(`/api/sales/campaigns/pending?state=${encodeURIComponent(state)}`, { method: 'GET' }),
+    }>('/api/sales/campaigns/pending', { method: 'GET' }),
 
   campaignAudience: (id: string) =>
     request<{ members: AudienceMember[]; total: number; contacts: number; places: number }>(

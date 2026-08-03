@@ -518,18 +518,20 @@ const NETWORK = { contributing: false, decidedAt: null as string | null, shared:
 const TERRITORIES: Array<Record<string, any>> = [
   {
     id: 'terr-1', name: 'North Austin', description: 'Multifamily and HOA focus',
-    ownerId: 'u-1', postalCodes: ['78727', '78729', '78750'], cities: ['Cedar Park', 'Round Rock'],
-    counties: ['Williamson County'], active: true, createdAt: '2026-06-01T00:00:00Z',
+    ownerId: 'u-1',
+    postalCodes: ['78664', '78681', '78717', '78727', '78729', '78750'],
+    cities: ['Cedar Park', 'Round Rock'],
+    counties: ['Williamson County'], state: 'TX', active: true, createdAt: '2026-06-01T00:00:00Z',
   },
   {
     id: 'terr-2', name: 'Central Austin', description: 'Commercial and healthcare',
     ownerId: null, postalCodes: ['78701', '78702', '78703'], cities: ['Austin'],
-    counties: [], active: true, createdAt: '2026-06-01T00:00:00Z',
+    counties: [], state: 'TX', active: true, createdAt: '2026-06-01T00:00:00Z',
   },
   {
-    id: 'terr-3', name: 'San Antonio', description: null,
-    ownerId: null, postalCodes: [], cities: ['San Antonio'], counties: ['Bexar County'],
-    active: true, createdAt: '2026-07-14T00:00:00Z',
+    id: 'terr-3', name: 'Lawton, OK', description: 'Red River expansion',
+    ownerId: null, postalCodes: ['73501', '73505'], cities: ['Lawton'],
+    counties: ['Comanche County'], state: 'OK', active: true, createdAt: '2026-07-14T00:00:00Z',
   },
 ];
 
@@ -920,6 +922,11 @@ const routes: Array<[string, RegExp, Handler]> = [
   ['GET', /^\/api\/sales\/weather\/active/, () => ({
     body: {
       attribution: 'Alerts from the US National Weather Service',
+      // Derived from the ZIPs in the territories below — TX and OK here,
+      // because the demo org works both sides of the Red River.
+      statesWatched: ['OK', 'TX'],
+      zipsLocated: 9,
+      zipsTotal: 11,
       alerts: [
         {
           id: 'urn:oid:2.49.0.1.840.0.demo1',
@@ -928,14 +935,19 @@ const routes: Array<[string, RegExp, Handler]> = [
           areaDesc: 'Williamson; Travis',
           effective: null, onset: null, expires: null, group: 'hail',
           hoursOfNotice: 31,
-          territories: [{ id: 'terr-1', name: 'North Austin' }],
+          hasGeometry: true,
+          // Exactly which codes are under the warned polygon — not "somewhere
+          // in Williamson County".
+          territories: [
+            { id: 'terr-1', name: 'North Austin', zips: ['78664', '78681', '78717'], matchedBy: 'geometry' },
+          ],
         },
         {
           id: 'urn:oid:2.49.0.1.840.0.demo2',
           event: 'Flood Watch', severity: 'Moderate', urgency: 'Expected',
           headline: null, areaDesc: 'Bexar',
           effective: null, onset: null, expires: null, group: 'flood',
-          hoursOfNotice: 14, territories: [],
+          hoursOfNotice: 14, hasGeometry: false, territories: [],
         },
       ],
     },
@@ -947,7 +959,9 @@ const routes: Array<[string, RegExp, Handler]> = [
         {
           campaignId: 'camp-3',
           campaignName: 'Hail watch — North Austin schools',
-          reason: 'Severe Thunderstorm Watch for Williamson; Travis, about 31h out.',
+          matchedZips: ['78664', '78681', '78717'],
+          matchedBy: 'geometry',
+          reason: 'Severe Thunderstorm Watch over 3 of your ZIP codes, about 31h out.',
         },
       ],
       skip: [
