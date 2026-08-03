@@ -12,6 +12,13 @@ import {
   listQuerySchema,
 } from '../lib/crmValidation.js';
 import { syncSource, recordsFromCsv, IntegrationsNotConfiguredError } from '../lib/integrations/mirror.js';
+import { randomBytes } from 'node:crypto';
+import { z } from 'zod';
+import { requireOrgRole } from '../lib/orgContext.js';
+import { createAdminClient } from '../lib/supabase.js';
+import { listGrants, loadGrant, saveGrant, deleteGrant } from '../lib/integrations/oauthVault.js';
+import { authorizeUrl, exchangeCode, revoke } from '../lib/integrations/salesforce.js';
+import { KNOWN_CRMS } from '../lib/integrations/browserCrm.js';
 
 export const integrationsRouter = Router();
 
@@ -350,3 +357,168 @@ integrationsRouter.get('/records', async (req: Request, res: Response, next: Nex
     next(err);
   }
 });
+
+/* ---- Connecting a customer's own CRM ------------------------------------- */
+
+/**
+ * The OAuth dance, and why it is worth the extra endpoints.
+ *
+ * The alternative — take the customer's Salesforce password and drive a
+ * browser with it — is one form field and no callback. It is also their entire
+ * Salesforce org in our database, their MFA defeated, and a credential that
+ * breaks the next time they rotate it. OAuth costs three endpoints and gives a
+ * scoped grant they can revoke from their own admin screen without telling us.
+ *
+ * `state` is the load-bearing part. It ties the callback to the org that
+ * started the flow and expires quickly; without it, anyone who could reach the
+ * callback URL could attach their own Salesforce to somebody else's
+ * organization and start reading what syncs back.
+ */
+
+/** Pending flows, held in memory: short-lived by design and fine to lose. */
+const pendingStates = new Map<string, { orgId: string; userId: string; expiresAt: number }>();
+
+function newState(orgId: string, userId: string): string {
+  // Sweep on write — the map is small and this avoids a timer that would keep
+  // a process alive purely to tidy up.
+  const now = Date.now();
+  for (const [key, value] of pendingStates) {
+    if (value.expiresAt < now) pendingStates.delete(key);
+  }
+  const state = randomBytes(24).toString('base64url');
+  pendingStates.set(state, { orgId, userId, expiresAt: now + 10 * 60_000 });
+  return state;
+}
+
+function redirectUri(): string {
+  return `${config.frontendOrigins[0]}/settings?section=integrations&oauth=salesforce`;
+}
+
+/** GET /api/integrations/crm — what is connected, and what could be. */
+integrationsRouter.get('/crm', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { orgId } = await requireOrgContext(req);
+    const connected = config.integrations.oauthKey ? await listGrants(orgId) : [];
+    res.json({
+      available: KNOWN_CRMS,
+      connected,
+      // The UI has to be able to explain *why* a button is disabled rather
+      // than just disabling it.
+      salesforceConfigured: Boolean(config.integrations.salesforce.clientId),
+      browserCrmEnabled: config.integrations.browserCrmEnabled,
+      vaultConfigured: Boolean(config.integrations.oauthKey),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** POST /api/integrations/crm/salesforce/connect — begin authorisation. */
+integrationsRouter.post(
+  '/crm/salesforce/connect',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { orgId, userId } = await requireOrgRole(req, ['owner', 'admin']);
+
+      if (!config.integrations.salesforce.clientId) {
+        throw new HttpError(
+          503,
+          'Salesforce is not configured on this deployment.',
+          'salesforce_not_configured',
+        );
+      }
+      if (!config.integrations.oauthKey) {
+        // Better to refuse than to store a refresh token we cannot seal.
+        throw new HttpError(
+          503,
+          'Connecting a CRM needs INTEGRATIONS_OAUTH_KEY so the grant can be encrypted at rest.',
+          'vault_not_configured',
+        );
+      }
+
+      res.json({ url: authorizeUrl(newState(orgId, userId), redirectUri()) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** POST /api/integrations/crm/salesforce/callback — finish authorisation. */
+integrationsRouter.post(
+  '/crm/salesforce/callback',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await requireOrgRole(req, ['owner', 'admin']);
+      const { code, state } = z
+        .object({ code: z.string().min(1), state: z.string().min(1) })
+        .parse(req.body ?? {});
+
+      const pending = pendingStates.get(state);
+      pendingStates.delete(state);
+      if (!pending || pending.expiresAt < Date.now()) {
+        throw new HttpError(
+          400,
+          'That authorization has expired. Start again from Settings.',
+          'state_expired',
+        );
+      }
+
+      const grant = await exchangeCode(code, redirectUri());
+      await saveGrant(pending.orgId, pending.userId, { system: 'salesforce', ...grant });
+
+      // A source row is what the sync scheduler walks; without one the grant
+      // exists and nothing ever pulls anything through it.
+      const admin = createAdminClient();
+      if (admin) {
+        await admin.from('crm_integration_sources').upsert(
+          {
+            org_id: pending.orgId,
+            system: 'salesforce',
+            kind: 'salesforce',
+            config: { orgId: pending.orgId },
+            enabled: true,
+          },
+          { onConflict: 'org_id,system' },
+        );
+      }
+
+      res.json({ connected: true, accountLabel: grant.accountLabel });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** DELETE /api/integrations/crm/salesforce — revoke, then forget. */
+integrationsRouter.delete(
+  '/crm/salesforce',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { orgId } = await requireOrgRole(req, ['owner', 'admin']);
+
+      // Revoke at Salesforce first. Deleting our copy stops us using it; only
+      // revocation stops it working, and a disconnect that skipped this would
+      // leave a live grant in their org with our name on it.
+      const grant = await loadGrant(orgId, 'salesforce');
+      let revoked = false;
+      if (grant) revoked = await revoke(grant.refreshToken);
+
+      await deleteGrant(orgId, 'salesforce');
+
+      const admin = createAdminClient();
+      if (admin) {
+        await admin
+          .from('crm_integration_sources')
+          .update({ enabled: false })
+          .eq('org_id', orgId)
+          .eq('system', 'salesforce');
+      }
+
+      // Reported honestly: if revocation failed the customer should revoke it
+      // themselves rather than assume we handled it.
+      res.json({ disconnected: true, revokedAtSalesforce: revoked });
+    } catch (err) {
+      next(err);
+    }
+  },
+);

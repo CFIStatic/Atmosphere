@@ -303,6 +303,24 @@ export interface Diagnosis {
   summary: string;
 }
 
+/* ---- Connected CRMs ------------------------------------------------------ */
+
+export interface KnownCrm {
+  id: string;
+  name: string;
+  /** oauth = authorise, never a password · browser = signs in as you · rest = an API */
+  method: 'oauth' | 'browser' | 'rest';
+  note: string;
+}
+
+export interface CrmConnections {
+  available: KnownCrm[];
+  connected: Array<{ system: string; accountLabel: string | null; connectedAt: string }>;
+  salesforceConfigured: boolean;
+  browserCrmEnabled: boolean;
+  vaultConfigured: boolean;
+}
+
 /* ---- Profiler ------------------------------------------------------------ */
 
 export interface ProfileFact {
@@ -1290,6 +1308,25 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ fullName, companyDomain }),
     }),
+
+  // ---- Connected CRMs ----
+  crmConnections: () => request<CrmConnections>('/api/integrations/crm', { method: 'GET' }),
+
+  /** Returns the Salesforce URL to send the user to. We never see a password. */
+  connectSalesforce: () =>
+    request<{ url: string }>('/api/integrations/crm/salesforce/connect', { method: 'POST' }),
+
+  completeSalesforce: (code: string, state: string) =>
+    request<{ connected: boolean; accountLabel: string | null }>(
+      '/api/integrations/crm/salesforce/callback',
+      { method: 'POST', body: JSON.stringify({ code, state }) },
+    ),
+
+  disconnectSalesforce: () =>
+    request<{ disconnected: boolean; revokedAtSalesforce: boolean }>(
+      '/api/integrations/crm/salesforce',
+      { method: 'DELETE' },
+    ),
 
   /**
    * Professional context on one person before a call. Reads the company's own

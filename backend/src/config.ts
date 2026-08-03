@@ -451,6 +451,28 @@ export const config = {
     // the disk before anyone notices.
     maxRecordsPerRun: Number(process.env.INTEGRATION_MAX_RECORDS ?? 50_000),
     requestTimeoutMs: Number(process.env.INTEGRATION_TIMEOUT_MS ?? 30_000),
+
+    // Sealing key for OAuth grants against customers' own CRMs. Absent from
+    // the database on purpose: a database leak alone must not yield a usable
+    // refresh token, which is the same separation the device pepper relies on.
+    oauthKey: process.env.INTEGRATIONS_OAUTH_KEY ?? '',
+
+    salesforce: {
+      // A Connected App in Salesforce. Without these the connector refuses to
+      // run rather than falling back to asking for a password — the fallback
+      // is the thing OAuth exists to avoid.
+      clientId: process.env.SALESFORCE_CLIENT_ID ?? '',
+      clientSecret: process.env.SALESFORCE_CLIENT_SECRET ?? '',
+      // Sandboxes live at test.salesforce.com; this is how a customer points
+      // us at one without a code change.
+      loginUrl: process.env.SALESFORCE_LOGIN_URL ?? 'https://login.salesforce.com',
+      apiVersion: process.env.SALESFORCE_API_VERSION ?? 'v60.0',
+    },
+
+    // Reading a CRM through a signed-in browser. Off unless switched on: it
+    // necessarily involves holding a customer's password, and that should take
+    // a deliberate act rather than being available by default.
+    browserCrmEnabled: process.env.INTEGRATIONS_BROWSER_CRM === 'true',
   },
 
   computerUse: {

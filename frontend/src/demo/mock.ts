@@ -713,6 +713,23 @@ const routes: Array<[string, RegExp, Handler]> = [
       ],
     },
   })],
+  ['GET', /^\/api\/integrations\/crm$/, () => ({
+    // Unconnected, and honest about why each button is or is not available —
+    // which is the state a new deployment is genuinely in.
+    body: {
+      available: [
+        { id: 'salesforce', name: 'Salesforce', method: 'oauth', note: 'Authorise in Salesforce. We never see your password, MFA keeps working, and you can revoke us from your own admin screen.' },
+        { id: 'luxor', name: 'Luxor CRM', method: 'browser', note: 'No public API we can use, so this signs in the way you do. Your password is encrypted and only ever sent to Luxor.' },
+        { id: 'dash', name: 'Dash', method: 'browser', note: 'Signs in through the browser and reads the pages you would read.' },
+        { id: 'custom_rest', name: 'Anything with an API', method: 'rest', note: 'If your CRM publishes a REST API, point us at it — no browser, no stored password.' },
+      ],
+      connected: [],
+      salesforceConfigured: false,
+      browserCrmEnabled: false,
+      vaultConfigured: false,
+    },
+  })],
+
   ['POST', /^\/api\/prospecting\/profile$/, (_m, b) => {
     const name = String(b.fullName ?? '');
     const domain = String(b.companyDomain ?? '').toLowerCase();

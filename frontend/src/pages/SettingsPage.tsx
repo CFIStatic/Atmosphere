@@ -17,6 +17,7 @@ import {
   USAGE_INTENT_LABELS,
   WORK_TYPE_LABELS,
   type ContractorType,
+  type CrmConnections,
   type Diagnosis,
   type Integration,
   type MemberRole,
@@ -42,7 +43,13 @@ import {
   UserIcon,
 } from '../components/icons';
 
-type SectionId = 'profile' | 'security' | 'organization' | 'contactdata' | 'preferences';
+type SectionId =
+  | 'profile'
+  | 'security'
+  | 'organization'
+  | 'integrations'
+  | 'contactdata'
+  | 'preferences';
 
 interface SettingsSection {
   id: SectionId;
@@ -60,6 +67,12 @@ const SECTIONS: SettingsSection[] = [
     id: 'organization',
     label: 'Organization',
     blurb: 'Your org, invite code, and role',
+    icon: BuildingIcon,
+  },
+  {
+    id: 'integrations',
+    label: 'Connected apps',
+    blurb: 'Your CRM and the data we mirror from it',
     icon: BuildingIcon,
   },
   {
@@ -141,6 +154,7 @@ export function SettingsPage() {
             {active === 'profile' && <ProfileSection />}
             {active === 'security' && <SecuritySection />}
             {active === 'organization' && <OrganizationSection />}
+            {active === 'integrations' && <IntegrationsSection />}
             {active === 'contactdata' && <ContactDataSection />}
             {active === 'preferences' && <PreferencesSection />}
           </div>
@@ -1313,5 +1327,225 @@ function TestLookupCard() {
         </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * Connected apps — the customer's own CRM, mirrored.
+ *
+ * The screen has one job beyond the buttons: make the difference between the
+ * two ways of connecting legible, because they are not equivalent and a
+ * customer choosing between them deserves to know why.
+ *
+ * Authorising (Salesforce) means they approve us in their vendor's own UI. We
+ * never see a password, their MFA keeps working, and they can cut us off from
+ * their admin screen without telling us.
+ *
+ * Signing in (a CRM with no API) means we hold their password and type it in
+ * like a person. It is a real risk they are taking deliberately, so the card
+ * says that in those words rather than dressing it as "connecting".
+ */
+function IntegrationsSection() {
+  const [state, setState] = useState<CrmConnections | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [params, setParams] = useSearchParams();
+
+  const load = useCallback(async () => {
+    try {
+      setState(await api.crmConnections());
+    } catch (err) {
+      setError(
+        err instanceof ApiError && err.code === 'insufficient_role'
+          ? 'Only an owner or admin can manage connected apps.'
+          : err instanceof Error
+            ? err.message
+            : 'Could not load connections.',
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  // Salesforce sends the browser back here with ?code=&state=. Completing the
+  // exchange server-side is what keeps the client secret off the client.
+  useEffect(() => {
+    const code = params.get('code');
+    const oauthState = params.get('state');
+    if (!code || !oauthState) return;
+
+    setBusy('salesforce');
+    api
+      .completeSalesforce(code, oauthState)
+      .then((res) => {
+        setNote(`Salesforce connected${res.accountLabel ? ` — ${res.accountLabel}` : ''}.`);
+        return load();
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : 'Could not finish connecting.'))
+      .finally(() => {
+        setBusy(null);
+        // Clear the code from the URL so a refresh does not replay a spent one.
+        const next = new URLSearchParams(params);
+        next.delete('code');
+        next.delete('state');
+        setParams(next, { replace: true });
+      });
+  }, [params, setParams, load]);
+
+  async function connect() {
+    setBusy('salesforce');
+    setError(null);
+    try {
+      const { url } = await api.connectSalesforce();
+      window.location.href = url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not start that connection.');
+      setBusy(null);
+    }
+  }
+
+  async function disconnect() {
+    setBusy('salesforce');
+    setError(null);
+    setNote(null);
+    try {
+      const res = await api.disconnectSalesforce();
+      setNote(
+        res.revokedAtSalesforce
+          ? 'Disconnected and revoked at Salesforce.'
+          : 'Disconnected here. Salesforce did not confirm the revocation — revoke it in Setup → Connected Apps to be certain.',
+      );
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not disconnect.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const connectedSystems = new Set((state?.connected ?? []).map((c) => c.system));
+
+  return (
+    <div className="space-y-5">
+      <Card
+        title="Your CRM"
+        description="Mirror the customers, contacts and opportunities you already have, so prospecting knows who you know and never sells you a contact you own."
+      >
+        {!state ? (
+          <p className="text-sm text-ink-600">Loading…</p>
+        ) : (
+          <div className="space-y-3">
+            {state.available.map((crm) => {
+              const isConnected = connectedSystems.has(crm.id);
+              const detail = state.connected.find((c) => c.system === crm.id);
+              const canOauth = crm.method === 'oauth' && state.salesforceConfigured && state.vaultConfigured;
+
+              return (
+                <div key={crm.id} className="rounded-lg glass-card p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-semibold text-ink-900">{crm.name}</h3>
+                        <MethodBadge method={crm.method} />
+                      </div>
+                      <p className="mt-1 text-xs leading-relaxed text-ink-600">{crm.note}</p>
+                      {detail && (
+                        <p className="mt-1.5 text-xs text-success-600">
+                          Connected{detail.accountLabel ? ` — ${detail.accountLabel}` : ''}
+                        </p>
+                      )}
+                    </div>
+
+                    {crm.method === 'oauth' && (
+                      <div className="shrink-0">
+                        {isConnected ? (
+                          <button
+                            onClick={() => void disconnect()}
+                            disabled={busy === crm.id}
+                            className="rounded-lg border border-line px-3 py-2 text-xs font-medium text-ink-700 transition hover:bg-paper-200/50 disabled:opacity-50"
+                          >
+                            Disconnect
+                          </button>
+                        ) : (
+                          <PrimaryButton onClick={() => void connect()} busy={busy === crm.id} disabled={!canOauth}>
+                            Authorise
+                          </PrimaryButton>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* A disabled button with no explanation is a dead end. */}
+                  {crm.method === 'oauth' && !canOauth && !isConnected && (
+                    <p className="mt-2 text-xs text-caution-600">
+                      {!state.salesforceConfigured
+                        ? 'Needs SALESFORCE_CLIENT_ID and SALESFORCE_CLIENT_SECRET on the server.'
+                        : 'Needs INTEGRATIONS_OAUTH_KEY so the grant can be encrypted at rest.'}
+                    </p>
+                  )}
+                  {crm.method === 'browser' && !state.browserCrmEnabled && (
+                    <p className="mt-2 text-xs text-caution-600">
+                      Browser sign-in is switched off on this deployment. Turn it on with
+                      INTEGRATIONS_BROWSER_CRM=true, then add the login under Web access.
+                    </p>
+                  )}
+                  {crm.method === 'browser' && state.browserCrmEnabled && (
+                    <p className="mt-2 text-xs text-ink-500">
+                      Set the sign-in up under Web access — the same vault and audit trail as your
+                      carrier portals.
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+
+            {note && <p className="text-sm text-success-600">{note}</p>}
+            <ErrorText message={error} />
+          </div>
+        )}
+      </Card>
+
+      <Card
+        title="Why authorising beats a password"
+        description="Both routes reach the same data. They are not the same risk, and where a CRM offers the first we use it."
+      >
+        <dl className="space-y-3 text-sm">
+          <div>
+            <dt className="font-medium text-ink-800">Authorising</dt>
+            <dd className="mt-0.5 text-ink-600">
+              You approve us inside your CRM, seeing exactly what is being asked for. We never
+              learn your password, your multi-factor login keeps working, and you can revoke us
+              from your own admin screen without contacting us. The grant is encrypted before it
+              is stored, under a key that is not in the database.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-ink-800">Signing in as you</dt>
+            <dd className="mt-0.5 text-ink-600">
+              For CRMs that publish no API. We hold your password and type it in the way you
+              would, which means it defeats your multi-factor login and breaks whenever you change
+              it. It is encrypted at rest and only ever sent to the one site you named — but it is
+              a larger thing to hand over, and it is only offered where there is no alternative.
+            </dd>
+          </div>
+        </dl>
+      </Card>
+    </div>
+  );
+}
+
+function MethodBadge({ method }: { method: 'oauth' | 'browser' | 'rest' }) {
+  const style =
+    method === 'oauth'
+      ? 'bg-success-50 text-success-600'
+      : method === 'rest'
+        ? 'bg-brand-50 text-brand-700'
+        : 'bg-caution-50 text-caution-600';
+  const label = method === 'oauth' ? 'authorise' : method === 'rest' ? 'API' : 'browser sign-in';
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${style}`}>{label}</span>
   );
 }
