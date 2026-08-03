@@ -163,6 +163,9 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
         items: [
           { to: '/jobs', label: 'Jobs', Icon: BriefcaseIcon },
           { to: '/pm', label: 'Project board', Icon: DecisionIcon },
+          // Operations' alone: it is the general contractor's record of what a
+          // sub was told, and neither Sales nor Field is a party to that.
+          { to: '/shared', label: 'Shared Dashboard', Icon: UsersIcon },
           { to: '/schedule', label: 'Schedule', Icon: HistoryIcon },
           { to: '/mitigation', label: 'Estimating', Icon: ArtifactIcon },
         ],

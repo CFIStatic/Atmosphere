@@ -22,6 +22,7 @@ import { crmRouter } from './routes/crm.js';
 import { prospectingRouter } from './routes/prospecting.js';
 import { campaignsRouter } from './routes/campaigns.js';
 import { salesWorkRouter } from './routes/salesWork.js';
+import { sharedJobsRouter, jobShareRouter } from './routes/sharedJobs.js';
 import { unsubscribeRouter } from './routes/unsubscribe.js';
 import { locationsRouter } from './routes/locations.js';
 import { backupRouter } from './routes/backups.js';
@@ -140,6 +141,11 @@ export function createApp(): Express {
   // Server-to-server: no session cookie, authenticated by Stripe's signature.
   app.use('/api/webhooks', webhookRouter);
   app.use('/api/pm', pmRouter);
+  app.use('/api/operations', sharedJobsRouter);
+  // Outside every auth middleware, like the unsubscribe route and for the same
+  // reason: the person clicking is a subcontractor who never had an account,
+  // and a shared job record that requires signing in is not shared.
+  app.use('/api/job-share', jobShareRouter);
   app.use('/api/web-access', webAccessRouter);
   app.use('/api/verifier', verifierRouter);
   app.use('/api/crm', crmRouter);

@@ -610,6 +610,85 @@ export interface OutreachHistory {
   }>;
 }
 
+/* ---- The shared job record ----------------------------------------------- */
+
+export type ScopeState = 'included' | 'excluded' | 'proposed' | 'approved' | 'declined';
+
+export interface JobParty {
+  id: string;
+  company: string;
+  trade: string | null;
+  contactName: string | null;
+  contact_name?: string | null;
+  email: string | null;
+  phone: string | null;
+  role: 'general_contractor' | 'subcontractor' | 'owner' | 'adjuster';
+  invited_at: string | null;
+  last_seen_at: string | null;
+  revoked_at: string | null;
+  /** Which revision of the facts they last accepted. Null means never. */
+  acknowledgedRevision: number | null;
+  /** Accepted the current facts, with nothing of theirs outstanding. */
+  clear: boolean;
+  because: string;
+  accessToken?: string;
+}
+
+export interface JobScopeItem {
+  id: string;
+  party_id: string | null;
+  state: ScopeState;
+  title: string;
+  detail: string | null;
+  amount: number | null;
+  reason: string | null;
+  revision: number;
+  decided_at: string | null;
+  created_at: string;
+}
+
+export interface JobRisk {
+  key: string;
+  level: 'blocker' | 'warn' | 'note';
+  title: string;
+  action: string;
+  partyId?: string | null;
+  scopeItemId?: string | null;
+}
+
+export interface SharedJobSummary {
+  jobId: string;
+  jobNumber: number | null;
+  title: string;
+  status: string | null;
+  parties: number;
+  currentRevision: number | null;
+  /** Parties not working from the current revision. */
+  behind: number;
+  awaiting: number;
+  exclusions: number;
+}
+
+export interface SharedJobRecord {
+  job: { id: string; jobNumber: number | null; title: string; status: string | null; claimNumber: string | null };
+  brief: { id: string; revision: number; facts: Record<string, string>; note: string | null; createdAt?: string; created_at?: string } | null;
+  revisions: Array<{ revision: number; note: string | null; createdAt: string }>;
+  currentRevision: number | null;
+  parties: JobParty[];
+  scope: JobScopeItem[];
+  money: { approved: number; pending: number; unpricedApprovals: number };
+  messages: Array<{
+    id: string;
+    party_id: string | null;
+    author_label: string;
+    body: string;
+    scope_item_id: string | null;
+    is_decision: boolean;
+    created_at: string;
+  }>;
+  risks: JobRisk[];
+}
+
 export type CampaignStatus = 'draft' | 'active' | 'paused' | 'finished';
 export type CampaignChannel = 'email' | 'call' | 'mixed';
 
@@ -1806,6 +1885,61 @@ export const api = {
   outreachHistory: (email: string) =>
     request<OutreachHistory>(`/api/sales/communications/${encodeURIComponent(email)}`, {
       method: 'GET',
+    }),
+
+  // ---- The shared job record ----
+  sharedJobs: () =>
+    request<{ jobs: SharedJobSummary[]; counts: { jobs: number; parties: number; blockers: number; awaiting: number } }>(
+      '/api/operations/shared',
+      { method: 'GET' },
+    ),
+
+  sharedJob: (jobId: string) =>
+    request<SharedJobRecord>(`/api/operations/shared/${jobId}`, { method: 'GET' }),
+
+  addJobParty: (
+    jobId: string,
+    input: { company: string; trade?: string | null; contactName?: string | null; email?: string | null; role?: string },
+  ) =>
+    request<{ party: JobParty }>(`/api/operations/shared/${jobId}/parties`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  revokeJobParty: (jobId: string, partyId: string) =>
+    request<{ ok: boolean }>(`/api/operations/shared/${jobId}/parties/${partyId}/revoke`, {
+      method: 'POST',
+    }),
+
+  publishJobBrief: (jobId: string, input: { facts?: Record<string, string>; note?: string | null }) =>
+    request<{ brief: { revision: number }; acceptanceLapsedFor: number }>(
+      `/api/operations/shared/${jobId}/brief`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+
+  addJobScope: (
+    jobId: string,
+    input: { title: string; detail?: string | null; state?: ScopeState; amount?: number | null; reason?: string | null; partyId?: string | null },
+  ) =>
+    request<{ item: JobScopeItem }>(`/api/operations/shared/${jobId}/scope`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  decideJobScope: (
+    jobId: string,
+    itemId: string,
+    input: { decision: 'approved' | 'declined'; amount?: number | null; reason?: string | null },
+  ) =>
+    request<{ item: JobScopeItem }>(`/api/operations/shared/${jobId}/scope/${itemId}/decide`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  postJobMessage: (jobId: string, input: { body: string; scopeItemId?: string | null; isDecision?: boolean }) =>
+    request<{ message: { id: string } }>(`/api/operations/shared/${jobId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify(input),
     }),
 
   // ---- Territories ----

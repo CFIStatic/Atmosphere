@@ -716,6 +716,97 @@ const OUTREACH_HISTORY: Record<string, any[]> = {
   ],
 };
 
+/**
+ * The shared job record. Job #1038 is deliberately in a bad state — a sub on a
+ * superseded revision, a request left two days, an unpriced approval — because
+ * a demo where everything is fine does not show what the page is for.
+ */
+const SHARED_JOBS = [
+  { jobId: 'job-1038', jobNumber: 1038, title: 'Cedar Ridge — storm damage, roof tarp + rebuild', status: 'in_progress', parties: 3, currentRevision: 4, behind: 2, awaiting: 1, exclusions: 2 },
+  { jobId: 'job-1041', jobNumber: 1041, title: 'Meridian Ave — water loss, Class 3', status: 'in_progress', parties: 1, currentRevision: 2, behind: 0, awaiting: 0, exclusions: 1 },
+];
+
+const SHARED_RECORDS: Record<string, any> = {
+  'job-1038': {
+    job: { id: 'job-1038', jobNumber: 1038, title: 'Cedar Ridge — storm damage, roof tarp + rebuild', status: 'in_progress', claimNumber: 'CLM-88396' },
+    brief: {
+      id: 'br-4', revision: 4, created_at: '2026-08-04T08:00:00Z',
+      note: 'Carrier approved the deck replacement; skylights removed from scope.',
+      facts: {
+        'Site address': '2214 Cedar Ridge Dr, Round Rock TX',
+        'Gate / access': 'Lockbox on the side gate — 4412',
+        'Permit': 'BP-2026-8841 (posted on site)',
+        'Carrier approval': '$13,980 + $4,180 supplement',
+        'Site contact': 'Priya Shah, 512-555-0148',
+        'Working hours': '7am–6pm, no Sunday work (HOA)',
+        'Dumpster': 'Driveway, right side only — do not block the hydrant',
+      },
+    },
+    revisions: [
+      { revision: 4, note: 'Carrier approved the deck replacement; skylights removed from scope.', createdAt: '2026-08-04T08:00:00Z' },
+      { revision: 3, note: 'Added HOA working hours.', createdAt: '2026-07-29T10:00:00Z' },
+      { revision: 2, note: 'Permit posted.', createdAt: '2026-07-23T14:00:00Z' },
+      { revision: 1, note: 'Initial scope.', createdAt: '2026-07-19T09:00:00Z' },
+    ],
+    currentRevision: 4,
+    parties: [
+      { id: 'pty-1', company: 'Ortiz Restoration', trade: null, contactName: 'Priya Shah', email: 'priya@ortizrestoration.com', phone: null, role: 'general_contractor', invited_at: '2026-07-19T09:00:00Z', last_seen_at: '2026-08-05T07:40:00Z', revoked_at: null, acknowledgedRevision: 4, clear: true, because: 'Accepted revision 4. Nothing outstanding.' },
+      { id: 'pty-2', company: 'Delgado Roofing', trade: 'roofing', contactName: 'Hector Delgado', email: 'hector@delgadoroofing.example', phone: null, role: 'subcontractor', invited_at: '2026-07-19T10:00:00Z', last_seen_at: '2026-08-01T06:20:00Z', revoked_at: null, acknowledgedRevision: 3, clear: false, because: 'They accepted revision 3; the job is on 4.' },
+      { id: 'pty-3', company: 'Brightline Electric', trade: 'electrical', contactName: 'Nina Osei', email: 'nina@brightline.example', phone: null, role: 'subcontractor', invited_at: '2026-08-01T09:00:00Z', last_seen_at: null, revoked_at: null, acknowledgedRevision: null, clear: false, because: 'They have not accepted the scope.' },
+    ],
+    scope: [
+      { id: 'sc-1', party_id: null, state: 'excluded', title: 'Do not touch the solar array or its conduit', detail: null, amount: null, reason: 'Owner has a separate contract with the solar installer; disconnect voids their warranty.', revision: 4, decided_at: null, created_at: '2026-07-19T09:10:00Z' },
+      { id: 'sc-2', party_id: null, state: 'excluded', title: 'Do not remove the skylights', detail: null, amount: null, reason: 'Carrier declined them on revision 4. Removing them is unpaid work.', revision: 4, decided_at: null, created_at: '2026-08-04T08:05:00Z' },
+      { id: 'sc-3', party_id: 'pty-2', state: 'proposed', title: 'Replace 6 sheets of decking — rot found under the north valley', detail: 'Not visible until the tear-off. Photos posted in the thread.', amount: 1240, reason: null, revision: 4, decided_at: null, created_at: '2026-08-03T11:20:00Z' },
+      { id: 'sc-4', party_id: 'pty-2', state: 'included', title: 'Tear off and replace roof — architectural shingle, 30yr', detail: null, amount: null, reason: null, revision: 4, decided_at: null, created_at: '2026-07-19T09:05:00Z' },
+      { id: 'sc-5', party_id: 'pty-3', state: 'included', title: 'Rewire the two circuits in the affected bedrooms', detail: null, amount: null, reason: null, revision: 4, decided_at: null, created_at: '2026-08-01T09:05:00Z' },
+      { id: 'sc-6', party_id: 'pty-2', state: 'approved', title: 'Ridge vent — replace full run', detail: null, amount: null, reason: null, revision: 3, decided_at: '2026-07-28T14:00:00Z', created_at: '2026-07-27T09:00:00Z' },
+    ],
+    money: { approved: 0, pending: 1240, unpricedApprovals: 1 },
+    messages: [
+      { id: 'msg-1', party_id: 'pty-2', author_label: 'Hector Delgado, Delgado Roofing', body: 'Tear-off is done on the north slope. Found rot under the valley — six sheets. Photos attached in the request. Not touching it until somebody says yes.', scope_item_id: 'sc-3', is_decision: false, created_at: '2026-08-03T11:22:00Z' },
+      { id: 'msg-2', party_id: null, author_label: 'Priya Shah', body: 'Seen. Getting the carrier to look at it today — do not proceed yet.', scope_item_id: 'sc-3', is_decision: false, created_at: '2026-08-03T13:05:00Z' },
+      { id: 'msg-3', party_id: null, author_label: 'Priya Shah', body: 'Revision 4 published — carrier approved the deck replacement and pulled the skylights out of scope. Everyone please re-accept.', scope_item_id: null, is_decision: true, created_at: '2026-08-04T08:02:00Z' },
+    ],
+    risks: [
+      { key: 'stale:pty-2', level: 'blocker', title: 'Delgado Roofing accepted revision 3; the job is on 4', action: 'They are working from a superseded scope. Get the new one accepted before more work happens.', partyId: 'pty-2' },
+      { key: 'unacked:pty-3', level: 'blocker', title: 'Brightline Electric has not accepted the scope', action: 'They have the link and have not confirmed. Do not let them start.', partyId: 'pty-3' },
+      { key: 'proposed:sc-3', level: 'blocker', title: 'Waiting on your answer: Replace 6 sheets of decking — rot found under the north valley', action: 'Asked 2 days ago. Answer it or it gets decided on site.', scopeItemId: 'sc-3' },
+      { key: 'never-opened:pty-3', level: 'warn', title: 'Brightline Electric has never opened the job record', action: 'Invited 4 days ago and never viewed. Assume they have not seen any of it.', partyId: 'pty-3' },
+      { key: 'unpriced:sc-6', level: 'warn', title: 'Approved with no amount: Ridge vent — replace full run', action: 'Put a number on it now. Agreeing the price after the work is a negotiation.', scopeItemId: 'sc-6' },
+    ],
+  },
+  'job-1041': {
+    job: { id: 'job-1041', jobNumber: 1041, title: 'Meridian Ave — water loss, Class 3', status: 'in_progress', claimNumber: 'CLM-88412' },
+    brief: {
+      id: 'br-2', revision: 2, created_at: '2026-07-26T09:00:00Z', note: 'Added dry standard and equipment plan.',
+      facts: {
+        'Site address': '1408 Meridian Ave, Austin TX',
+        'Gate / access': 'Homeowner on site 8–5; key under the planter otherwise',
+        'Dry standard': '16% WME, control reading 12%',
+        'Equipment': '4 air movers, 2 LGR dehus — do not remove without a reading',
+      },
+    },
+    revisions: [
+      { revision: 2, note: 'Added dry standard and equipment plan.', createdAt: '2026-07-26T09:00:00Z' },
+      { revision: 1, note: 'Initial scope.', createdAt: '2026-07-24T15:10:00Z' },
+    ],
+    currentRevision: 2,
+    parties: [
+      { id: 'pty-4', company: 'Kestrel Flooring', trade: 'flooring', contactName: 'Sam Ruiz', email: 'sam@kestrelfloors.example', phone: null, role: 'subcontractor', invited_at: '2026-07-26T09:30:00Z', last_seen_at: '2026-08-02T08:15:00Z', revoked_at: null, acknowledgedRevision: 2, clear: true, because: 'Accepted revision 2. Nothing outstanding.' },
+    ],
+    scope: [
+      { id: 'sc-7', party_id: null, state: 'excluded', title: 'Do not pull the hardwood in the dining room', detail: null, amount: null, reason: 'Still drying in place — a reading has to clear it first.', revision: 2, decided_at: null, created_at: '2026-07-26T09:20:00Z' },
+      { id: 'sc-8', party_id: 'pty-4', state: 'included', title: 'Replace kitchen LVP after the dry standard is met', detail: null, amount: null, reason: null, revision: 2, decided_at: null, created_at: '2026-07-26T09:22:00Z' },
+    ],
+    money: { approved: 0, pending: 0, unpricedApprovals: 0 },
+    messages: [
+      { id: 'msg-4', party_id: 'pty-4', author_label: 'Sam Ruiz, Kestrel Flooring', body: 'Accepted. Holding off on the dining room until I see a reading.', scope_item_id: null, is_decision: false, created_at: '2026-08-02T08:16:00Z' },
+    ],
+    risks: [],
+  },
+};
+
 const CAMPAIGNS: Array<Record<string, any>> = [
   {
     id: 'camp-1', name: 'Q3 property managers — North Austin',
@@ -1235,6 +1326,54 @@ const routes: Array<[string, RegExp, Handler]> = [
   ['GET', /^\/api\/sales\/communications\/(.+)$/, (m) => {
     const email = decodeURIComponent(m[1]);
     return { body: { email, messages: OUTREACH_HISTORY[email] ?? [] } };
+  }],
+
+  /* ------------------------------------------- shared job record */
+  ['GET', /^\/api\/operations\/shared$/, () => ({
+    body: {
+      jobs: SHARED_JOBS,
+      counts: {
+        jobs: SHARED_JOBS.length,
+        parties: SHARED_JOBS.reduce((n, j) => n + j.parties, 0),
+        blockers: SHARED_JOBS.reduce((n, j) => n + j.behind, 0),
+        awaiting: SHARED_JOBS.reduce((n, j) => n + j.awaiting, 0),
+      },
+    },
+  })],
+  ['GET', /^\/api\/operations\/shared\/([\w-]+)$/, (m) => {
+    const record = SHARED_RECORDS[m[1]];
+    return record ? { body: record } : { status: 404, body: { error: 'job_not_found' } };
+  }],
+  ['POST', /^\/api\/operations\/shared\/([\w-]+)\/parties$/, (_m, b) => ({
+    status: 201,
+    body: { party: { id: `pty-${Date.now()}`, company: String(b.company ?? ''), accessToken: 'k3Jv9QxR2mT8pLwZaN4hC7yD' } },
+  })],
+  ['POST', /^\/api\/operations\/shared\/([\w-]+)\/brief$/, (m) => {
+    const record = SHARED_RECORDS[m[1]];
+    const next = (record?.currentRevision ?? 0) + 1;
+    return { status: 201, body: { brief: { revision: next }, acceptanceLapsedFor: record?.parties?.length ?? 0 } };
+  }],
+  ['POST', /^\/api\/operations\/shared\/([\w-]+)\/scope$/, (_m, b) => ({
+    status: 201,
+    body: { item: { id: `sc-${Date.now()}`, title: String(b.title ?? ''), state: b.state ?? 'included' } },
+  })],
+  ['POST', /^\/api\/operations\/shared\/([\w-]+)\/scope\/([\w-]+)\/decide$/, (m, b) => {
+    const record = SHARED_RECORDS[m[1]];
+    const item = record?.scope?.find((s: any) => s.id === m[2]);
+    if (item) {
+      item.state = b.decision;
+      item.amount = b.amount ?? null;
+      item.decided_at = new Date().toISOString();
+      record.risks = record.risks.filter((r: any) => r.scopeItemId !== m[2]);
+      record.money = { ...record.money, approved: (record.money.approved ?? 0) + Number(b.amount ?? 0), pending: 0 };
+    }
+    return { body: { item } };
+  }],
+  ['POST', /^\/api\/operations\/shared\/([\w-]+)\/messages$/, (m, b) => {
+    const record = SHARED_RECORDS[m[1]];
+    const message = { id: `msg-${Date.now()}`, party_id: null, author_label: 'Dana Ortiz', body: String(b.body ?? ''), scope_item_id: null, is_decision: false, created_at: new Date().toISOString() };
+    record?.messages?.unshift(message);
+    return { status: 201, body: { message } };
   }],
 
   /* ------------------------------------------- campaigns & territories */

@@ -36,6 +36,7 @@ import { CampaignsPage } from './pages/CampaignsPage';
 import { ProfilerPage } from './pages/ProfilerPage';
 import { TerritoriesPage } from './pages/TerritoriesPage';
 import { SalesWorkPage } from './pages/SalesWorkPage';
+import { SharedDashboardPage } from './pages/SharedDashboardPage';
 import { getPlatform } from './lib/usePlatform';
 
 function FullScreenSpinner() {
@@ -155,6 +156,14 @@ export default function App() {
               element: (
                 <RequirePlatform platform="sales">
                   <SalesWorkPage />
+                </RequirePlatform>
+              ),
+            },
+            {
+              path: '/shared',
+              element: (
+                <RequirePlatform platform="operations">
+                  <SharedDashboardPage />
                 </RequirePlatform>
               ),
             },
