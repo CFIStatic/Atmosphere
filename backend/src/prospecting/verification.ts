@@ -60,10 +60,59 @@ const ROLE_LOCALS = new Set([
   'abuse', 'marketing', 'jobs', 'careers', 'team',
 ]);
 
+/**
+ * Consumer mail providers. An address here belongs to a person rather than to
+ * a job, and this product does not sell it.
+ *
+ * The list has to be broad, because a short one fails silently in the worst
+ * direction: `ymail.com` and `rocketmail.com` are Yahoo's own alternate
+ * domains, and while they were missing, somebody's private mailbox was being
+ * treated as a business address by every layer downstream. The cost of a
+ * missing entry is a person's personal address getting sold; the cost of an
+ * extra entry is one business contact we decline to sell. Those are not
+ * remotely equivalent, so this errs long.
+ */
 const FREE_DOMAINS = new Set([
-  'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com',
-  'icloud.com', 'me.com', 'live.com', 'msn.com', 'proton.me', 'protonmail.com',
+  // Google
+  'gmail.com', 'googlemail.com',
+  // Yahoo, including the alternates people forget
+  'yahoo.com', 'yahoo.co.uk', 'yahoo.ca', 'yahoo.com.au', 'yahoo.fr', 'yahoo.de',
+  'ymail.com', 'rocketmail.com',
+  // Microsoft
+  'hotmail.com', 'hotmail.co.uk', 'outlook.com', 'live.com', 'msn.com',
+  // Apple
+  'icloud.com', 'me.com', 'mac.com',
+  // Privacy-focused
+  'proton.me', 'protonmail.com', 'pm.me', 'tutanota.com', 'tuta.io',
+  'hushmail.com',
+  // Everyone else in common use
+  'aol.com', 'aim.com', 'gmx.com', 'gmx.net', 'gmx.de', 'mail.com',
+  'zoho.com', 'yandex.com', 'yandex.ru', 'fastmail.com', 'fastmail.fm',
+  'inbox.com', 'mail.ru', 'qq.com', '163.com', '126.com', 'naver.com',
+  'daum.net', 'seznam.cz', 'web.de', 't-online.de', 'orange.fr', 'wanadoo.fr',
+  'free.fr', 'libero.it', 'virgilio.it', 'terra.com.br', 'uol.com.br',
+  'bol.com.br', 'rediffmail.com', 'sina.com', 'comcast.net', 'verizon.net',
+  'att.net', 'sbcglobal.net', 'bellsouth.net', 'cox.net', 'charter.net',
+  'earthlink.net', 'juno.com', 'btinternet.com', 'sky.com', 'talktalk.net',
+  'shaw.ca', 'rogers.com', 'telus.net', 'bigpond.com', 'optusnet.com.au',
 ]);
+
+/**
+ * Throwaway inbox services. Real for an hour, gone by the time anyone writes,
+ * and a strong signal that whoever used it did not want to be contacted.
+ */
+const DISPOSABLE_DOMAINS = new Set([
+  'mailinator.com', 'guerrillamail.com', 'guerrillamail.net', '10minutemail.com',
+  'temp-mail.org', 'tempmail.com', 'throwawaymail.com', 'yopmail.com',
+  'trashmail.com', 'sharklasers.com', 'getnada.com', 'maildrop.cc',
+  'dispostable.com', 'fakeinbox.com', 'mintemail.com', 'spamgourmet.com',
+  'mailnesia.com', 'tempinbox.com', 'moakt.com', 'emailondeck.com',
+]);
+
+export function isDisposableDomain(email: string): boolean {
+  const parts = splitEmail(email);
+  return parts ? DISPOSABLE_DOMAINS.has(parts.domain) : false;
+}
 
 export function splitEmail(email: string): { local: string; domain: string } | null {
   const at = email.lastIndexOf('@');
@@ -109,13 +158,25 @@ export async function verifyEmail(
   }
 
   if (FREE_DOMAINS.has(parts.domain)) {
-    // Deliverable, but a personal mailbox is not a business contact and we do
-    // not sell it as one.
+    // Deliverable, and deliberately not sold. A consumer mailbox belongs to a
+    // person rather than to a job: it is the address someone gives their
+    // family, and it is not what they published to be contacted about work.
+    // 'risky' without catchAll can never pass sellable(), so this is a refusal
+    // rather than a warning.
     return {
       ...base,
       verdict: 'risky',
       score: 0.4,
       reason: 'Personal mailbox, not a company address.',
+    };
+  }
+
+  if (DISPOSABLE_DOMAINS.has(parts.domain)) {
+    return {
+      ...base,
+      verdict: 'invalid',
+      score: 0,
+      reason: 'A throwaway inbox — whoever used it did not want to be contacted.',
     };
   }
 

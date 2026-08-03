@@ -7,6 +7,7 @@ import {
   type ProspectSearchResult,
   type RevealedContact,
 } from './ports.js';
+import { isFreeDomain } from './verification.js';
 
 /**
  * People Data Labs, as one implementation of the port.
@@ -159,7 +160,16 @@ export class PeopleDataLabsProvider implements ContactDataProvider {
     const person = body.data;
     if (!person) return null;
 
-    const email = person.work_email ?? person.emails?.[0]?.address ?? null;
+    // Work address only. PDL returns `recommended_personal_email` and mixes
+    // personal addresses into `emails`, and taking element zero meant that
+    // whenever someone had no work address on file we reached for whatever
+    // happened to be first — frequently their private mailbox. Downstream
+    // verification refuses consumer domains, but that is a backstop, not a
+    // reason to go looking. `recommended_personal_email` is never read.
+    const email =
+      person.work_email ??
+      person.emails?.map((e) => e.address).find((a) => a && !isFreeDomain(a)) ??
+      null;
     const mobile = person.mobile_phone ?? null;
     const phone = person.phone_numbers?.[0] ?? null;
     if (!email && !mobile && !phone) return null;

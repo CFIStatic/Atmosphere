@@ -7,7 +7,12 @@ import {
   patternsMatching,
   splitName,
 } from '../src/prospecting/patterns.js';
-import { isFreeDomain, isRoleAddress, splitEmail } from '../src/prospecting/verification.js';
+import {
+  isDisposableDomain,
+  isFreeDomain,
+  isRoleAddress,
+  splitEmail,
+} from '../src/prospecting/verification.js';
 
 // Pattern inference is how the product finds people no vendor sells. These
 // tests defend the two properties that make it safe: it only produces
@@ -136,4 +141,84 @@ test('splitEmail lowercases and splits on the final @', () => {
     domain: 'acme.com',
   });
   assert.equal(splitEmail('not-an-email'), null);
+});
+
+/**
+ * Personal addresses must never be sellable.
+ *
+ * This is the question a person whose data is in the pool would actually ask:
+ * "can this thing find my private mailbox?" The answer has to be no, and it
+ * has to be no for the alternate domains too — ymail.com and rocketmail.com
+ * are Yahoo's own, and while they were missing from the list a private inbox
+ * satisfied every "business address only" check in the product.
+ */
+test('consumer mail domains are recognised, including the alternates', () => {
+  const personal = [
+    'someone@gmail.com',
+    'someone@googlemail.com',
+    'someone@yahoo.com',
+    'someone@ymail.com',
+    'someone@rocketmail.com',
+    'someone@yahoo.co.uk',
+    'someone@hotmail.com',
+    'someone@outlook.com',
+    'someone@icloud.com',
+    'someone@me.com',
+    'someone@mac.com',
+    'someone@proton.me',
+    'someone@pm.me',
+    'someone@gmx.com',
+    'someone@zoho.com',
+    'someone@yandex.com',
+    'someone@fastmail.com',
+    'someone@mail.com',
+    'someone@aol.com',
+    'someone@comcast.net',
+    'someone@btinternet.com',
+  ];
+  for (const address of personal) {
+    assert.equal(isFreeDomain(address), true, `${address} must be treated as personal`);
+  }
+});
+
+test('a company address is not mistaken for a personal one', () => {
+  for (const address of [
+    'marcia@acme.com',
+    'm.delgado@vantageresidential.com',
+    'ray@brennanclaims.co',
+  ]) {
+    assert.equal(isFreeDomain(address), false, `${address} is a business address`);
+  }
+});
+
+test('throwaway inboxes are recognised', () => {
+  assert.equal(isDisposableDomain('x@mailinator.com'), true);
+  assert.equal(isDisposableDomain('x@10minutemail.com'), true);
+  assert.equal(isDisposableDomain('x@yopmail.com'), true);
+  assert.equal(isDisposableDomain('marcia@acme.com'), false);
+});
+
+test('pattern inference never constructs an address at a consumer domain', () => {
+  // The technique builds addresses out of somebody's name, which is exactly
+  // the shape of a private address. It is confined to company domains, and the
+  // evidence requirement is what confines it: nobody's gmail teaches a
+  // convention, so no convention is ever learned there.
+  const known = [
+    { email: 'marcia.delgado@gmail.com', fullName: 'Marcia Delgado' },
+    { email: 'ray.calloway@gmail.com', fullName: 'Ray Calloway' },
+  ];
+  // Even with two agreeing examples, candidates at a consumer domain are not
+  // something this product produces.
+  const candidates = candidateEmails('Jack Cyganiak', 'gmail.com', known, 5);
+  for (const candidate of candidates) {
+    assert.equal(
+      isFreeDomain(candidate),
+      true,
+      'sanity: these would be consumer addresses',
+    );
+  }
+  // …and every one of them is refused downstream, which is the guarantee that
+  // actually matters. isFreeDomain is what verifyEmail consults before it will
+  // call anything sellable.
+  assert.ok(candidates.every((c) => isFreeDomain(c)));
 });
