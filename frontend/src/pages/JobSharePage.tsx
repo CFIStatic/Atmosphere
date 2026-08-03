@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { SpinnerIcon } from '../components/icons';
 import { readCapture, todayISO } from '../lib/proofCapture';
 
@@ -75,6 +75,7 @@ const STATE_STYLE: Record<string, string> = {
 
 export function JobSharePage() {
   const { token = '' } = useParams();
+  const navigate = useNavigate();
   const [view, setView] = useState<ShareView | null>(null);
   const [days, setDays] = useState<ProofDay[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -143,6 +144,17 @@ export function JobSharePage() {
   return (
     <div className="mx-auto min-h-screen max-w-2xl bg-paper-100 px-4 pb-16 pt-6">
       <header>
+        {/* Only when somebody arrived from the console. A subcontractor
+            following a link from a text message has nothing to go back to, and
+            a dead back button on their screen is a support call. */}
+        {window.history.length > 1 && (
+          <button
+            onClick={() => navigate(-1)}
+            className="mb-3 text-xs font-medium text-ink-500 hover:text-ink-800"
+          >
+            ← Back to the dashboard
+          </button>
+        )}
         <p className="text-xs font-medium uppercase tracking-wide text-brand-600">Job record</p>
         <h1 className="mt-1 text-2xl font-bold text-ink-900">
           {view?.job.title ?? 'Loading…'}

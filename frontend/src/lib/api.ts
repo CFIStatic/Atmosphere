@@ -1966,6 +1966,12 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
+  jobPartyLink: (jobId: string, partyId: string) =>
+    request<{ company: string; path: string }>(
+      `/api/operations/shared/${jobId}/parties/${partyId}/link`,
+      { method: 'GET' },
+    ),
+
   revokeJobParty: (jobId: string, partyId: string) =>
     request<{ ok: boolean }>(`/api/operations/shared/${jobId}/parties/${partyId}/revoke`, {
       method: 'POST',

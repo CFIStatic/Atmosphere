@@ -272,6 +272,46 @@ sharedJobsRouter.post(
   },
 );
 
+/**
+ * GET /shared/:jobId/parties/:partyId/link
+ * The link for this company, so it can be sent again.
+ *
+ * A token shown once at creation is a token nobody can resend when the sub
+ * changes phones or the text never arrived, and the workaround people reach for
+ * is adding the company a second time — which quietly splits their acceptance
+ * and their proof history across two rows.
+ *
+ * Only somebody already inside the org can read it, and they can already revoke
+ * it, so this grants nothing they did not have.
+ */
+sharedJobsRouter.get(
+  '/shared/:jobId/parties/:partyId/link',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { orgId, supabase } = await requireOrgContext(req);
+      const { data, error } = await supabase
+        .from('job_parties')
+        .select('company, access_token, revoked_at')
+        .eq('org_id', orgId)
+        .eq('job_id', req.params.jobId)
+        .eq('id', req.params.partyId)
+        .maybeSingle();
+      if (error) throw new HttpError(500, error.message, 'link_failed');
+      if (!data) throw new HttpError(404, 'No such company on this job.', 'party_not_found');
+      if ((data as any).revoked_at) {
+        throw new HttpError(409, 'Access for this company was revoked.', 'revoked');
+      }
+
+      res.json({
+        company: (data as any).company,
+        path: `/shared/${(data as any).access_token}`,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 /** Revoke rather than delete: who had access when is part of the record. */
 sharedJobsRouter.post(
   '/shared/:jobId/parties/:partyId/revoke',

@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AppShell, EmptyState, PageHeader } from '../components/AppShell';
 import {
   api,
@@ -455,6 +456,14 @@ function PartyList({ record, onChanged }: { record: SharedJobRecord; onChanged: 
               <p className="text-[11px] text-ink-500">{party.because}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              {/* The two things a general contractor actually needs and could
+                  not do: look at what the sub is looking at, and send the link
+                  again when the first text never arrived. Without the second,
+                  people add the company twice and split its acceptance and
+                  proof history across two rows. */}
+              {!party.revoked_at && (
+                <PartyLink jobId={record.job.id} partyId={party.id} company={party.company} />
+              )}
               <span className="text-[11px] text-ink-400">
                 {party.last_seen_at ? `seen ${ago(party.last_seen_at)}` : 'never opened'}
               </span>
@@ -684,5 +693,68 @@ function Thread({ record, onPosted }: { record: SharedJobRecord; onPosted: () =>
         </ol>
       )}
     </section>
+  );
+}
+
+
+/**
+ * Open, or copy, a company's link.
+ *
+ * "Open their view" is the honest label: this is not a preview mode, it is the
+ * subcontractor's actual screen behind their actual token. Anything else would
+ * let a general contractor sign off a scope on the sub's behalf without meaning
+ * to, and an acceptance nobody made is worse than none.
+ */
+function PartyLink({
+  jobId,
+  partyId,
+  company,
+}: {
+  jobId: string;
+  partyId: string;
+  company: string;
+}) {
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  async function go(open: boolean) {
+    setBusy(true);
+    try {
+      const { path } = await api.jobPartyLink(jobId, partyId);
+      if (open) {
+        navigate(path);
+        return;
+      }
+      const full = `${window.location.origin}${path}`;
+      await navigator.clipboard?.writeText(full).catch(() => {
+        // Clipboard is refused on insecure origins and in some embedded
+        // frames. Showing the link beats failing silently.
+        window.prompt(`Link for ${company}`, full);
+      });
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <span className="flex items-center gap-1.5">
+      <button
+        onClick={() => void go(true)}
+        disabled={busy}
+        className="rounded-full glass-card px-2 py-0.5 text-[10.5px] font-medium text-ink-600 hover:text-ink-900 disabled:opacity-50"
+      >
+        Open their view
+      </button>
+      <button
+        onClick={() => void go(false)}
+        disabled={busy}
+        className="rounded-full glass-card px-2 py-0.5 text-[10.5px] font-medium text-ink-600 hover:text-ink-900 disabled:opacity-50"
+      >
+        {copied ? 'Copied' : 'Copy link'}
+      </button>
+    </span>
   );
 }

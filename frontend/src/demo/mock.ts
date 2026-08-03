@@ -1571,6 +1571,12 @@ const routes: Array<[string, RegExp, Handler]> = [
     const record = SHARED_RECORDS[m[1]];
     return record ? { body: record } : { status: 404, body: { error: 'job_not_found' } };
   }],
+  ['GET', /^\/api\/operations\/shared\/([\w-]+)\/parties\/([\w-]+)\/link$/, (m) => {
+    const record = SHARED_RECORDS[m[1]];
+    const party = record?.parties?.find((p: any) => p.id === m[2]);
+    // Every demo party lands on the one sub view there is fixture data for.
+    return { body: { company: party?.company ?? 'Company', path: '/shared/demo-token' } };
+  }],
   ['POST', /^\/api\/operations\/shared\/([\w-]+)\/parties$/, (_m, b) => ({
     status: 201,
     body: { party: { id: `pty-${Date.now()}`, company: String(b.company ?? ''), accessToken: 'k3Jv9QxR2mT8pLwZaN4hC7yD' } },
