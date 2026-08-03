@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { AppShell, EmptyState, PageHeader } from '../components/AppShell';
 import { api, type Territory } from '../lib/api';
-import { GlobeIcon, SpinnerIcon } from '../components/icons';
+import { GlobeIcon, SearchIcon, SpinnerIcon } from '../components/icons';
 import { CrewMap } from '../components/campaigns/CrewMap';
 import { TerritoryMap } from '../components/campaigns/TerritoryMap';
 
@@ -31,6 +31,7 @@ export function TerritoriesPage() {
   // Which territory the map is framed on. Held here rather than inside the
   // map so a card in the list below can drive it too.
   const [focusId, setFocusId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -87,6 +88,23 @@ export function TerritoriesPage() {
   }
 
   const unowned = (items ?? []).filter((t) => !t.ownerId).length;
+
+  // Matches on everything a territory is described by, not just its name:
+  // people look for "78664" or "Williamson" at least as often as "North
+  // Austin", and a search that only read the name would come back empty for
+  // the thing they are holding in their hand.
+  const query = search.trim().toLowerCase();
+  const listed = (items ?? []).filter((t) => {
+    if (!query) return true;
+    return [t.name, t.description ?? '', ...t.postalCodes, ...t.cities, ...t.counties]
+      .join(' ')
+      .toLowerCase()
+      .includes(query);
+  });
+
+  const selected = focusId ? (items ?? []).find((t) => t.id === focusId) ?? null : null;
+
+  const areasOf = (t: Territory) => [...t.postalCodes, ...t.cities, ...t.counties];
 
   return (
     <AppShell>
@@ -158,111 +176,156 @@ export function TerritoriesPage() {
         </p>
       )}
 
-      {/* The map, then who is in it, then the definitions. Somebody opening
-          this page is asking "where do we cover" and "who is there right
-          now" — the ZIP lists below are reference material for both. */}
-      <div className="mt-6 space-y-4">
-        <TerritoryMap focusId={focusId} onFocus={setFocusId} />
-        <CrewMap />
-      </div>
-
-      {items === null ? (
-        <p className="mt-6 text-sm text-ink-600">Loading…</p>
-      ) : items.length === 0 ? (
-        <div className="mt-6">
-          <EmptyState
-            title="No territories yet"
-            hint="Start with the metros you already work. A territory is how you tell who is responsible for the accounts in an area — and who has nobody covering them."
-          />
+      {/* List beside map, not list under map. Selecting a territory used to
+          change a picture that had scrolled off the top of the screen, which
+          is the whole reason this page was awkward. The map stays put while
+          the list is worked through. */}
+      <div className="mt-6 grid gap-4 lg:grid-cols-[22rem_minmax(0,1fr)] lg:items-start">
+        {/* Map first in the source order so it is what appears on a phone,
+            where nothing can be sticky and the list runs long. */}
+        <div className="space-y-4 lg:sticky lg:top-6 lg:order-2">
+          <TerritoryMap focusId={focusId} onFocus={setFocusId} />
+          <CrewMap focusTerritoryId={focusId} focusName={selected?.name ?? null} />
         </div>
-      ) : (
-        <>
+
+        <div className="lg:order-1">
           {unowned > 0 && (
-            <p className="mt-6 rounded-lg border border-caution-200 bg-caution-50 px-4 py-3 text-sm text-caution-600">
+            <p className="mb-3 rounded-lg border border-caution-200 bg-caution-50 px-4 py-2.5 text-sm text-caution-600">
               {unowned} {unowned === 1 ? 'territory has' : 'territories have'} nobody assigned.
             </p>
           )}
-          <ul className="mt-6 grid gap-3 sm:grid-cols-2">
-            {items.map((territory) => (
-              <li
-                key={territory.id}
-                className={`rounded-xl glass-card p-4 transition ${
-                  focusId === territory.id ? 'ring-2 ring-brand-300' : ''
+
+          <div className="rounded-xl glass-card">
+            <div className="border-b border-line p-3">
+              <label className="relative block">
+                <span className="sr-only">Search territories</span>
+                <SearchIcon
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400"
+                  width={14}
+                  height={14}
+                />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search name, ZIP, city, county"
+                  className="w-full rounded-lg glass-field py-2 pl-9 pr-3 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
+                />
+              </label>
+
+              {/* The way back out. Without it the only way to unselect is to
+                  find the highlighted row again and click it a second time. */}
+              <button
+                onClick={() => setFocusId(null)}
+                aria-pressed={focusId === null}
+                className={`mt-2 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
+                  focusId === null
+                    ? 'bg-brand-600/10 font-medium text-brand-600'
+                    : 'text-ink-600 hover:text-ink-900'
                 }`}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    {/* The name is the control: clicking it frames this
-                        territory on the map above, which is the natural
-                        gesture and saves a second row of buttons. */}
-                    <button
-                      onClick={() =>
-                        setFocusId((current) => (current === territory.id ? null : territory.id))
-                      }
-                      aria-pressed={focusId === territory.id}
-                      className="text-left text-sm font-semibold text-ink-900 hover:text-brand-600"
-                    >
-                      {territory.name}
-                    </button>
-                    {territory.description && (
-                      <p className="mt-0.5 text-xs text-ink-600">{territory.description}</p>
-                    )}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    {territory.postalCodes.length === 0 && (
-                      <span
-                        title="Weather alerts match this territory by county name only, which is far coarser. Add ZIP codes for street-level matching."
-                        className="rounded-full bg-caution-50 px-2 py-0.5 text-[10.5px] font-semibold text-caution-600"
-                      >
-                        no ZIPs
-                      </span>
-                    )}
-                    {!territory.ownerId && (
-                      <span className="rounded-full bg-caution-50 px-2 py-0.5 text-[10.5px] font-semibold text-caution-600">
-                        unassigned
-                      </span>
-                    )}
-                  </div>
-                </div>
+                All territories
+                <span className="text-xs tabular-nums text-ink-400">{(items ?? []).length}</span>
+              </button>
+            </div>
 
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {[...territory.postalCodes, ...territory.cities, ...territory.counties]
-                    .slice(0, 8)
-                    .map((area) => (
-                      <span
-                        key={area}
-                        className="rounded-full bg-paper-200/60 px-2 py-0.5 text-[11px] text-ink-600"
+            {items === null ? (
+              <p className="p-4 text-sm text-ink-600">Loading…</p>
+            ) : items.length === 0 ? (
+              <div className="p-2">
+                <EmptyState
+                  title="No territories yet"
+                  hint="Start with the metros you already work. A territory is how you tell who is responsible for the accounts in an area — and who has nobody covering them."
+                />
+              </div>
+            ) : listed.length === 0 ? (
+              <p className="p-4 text-sm text-ink-600">
+                Nothing matches “{search.trim()}”.
+              </p>
+            ) : (
+              // Capped and scrollable: a franchise group has dozens, and a
+              // list that pushed the page to six screens would undo the point
+              // of putting it beside the map.
+              <ul className="max-h-[32rem] divide-y divide-line overflow-y-auto">
+                {listed.map((territory) => {
+                  const on = focusId === territory.id;
+                  const areas = areasOf(territory);
+                  return (
+                    <li key={territory.id}>
+                      <button
+                        onClick={() => setFocusId(on ? null : territory.id)}
+                        aria-pressed={on}
+                        className={`block w-full px-4 py-3 text-left transition ${
+                          on ? 'bg-brand-600/10' : 'hover:bg-paper-200/40'
+                        }`}
                       >
-                        {area}
-                      </span>
-                    ))}
-                  {territory.postalCodes.length +
-                    territory.cities.length +
-                    territory.counties.length >
-                    8 && (
-                    <span className="px-1 text-[11px] text-ink-500">
-                      +
-                      {territory.postalCodes.length +
-                        territory.cities.length +
-                        territory.counties.length -
-                        8}{' '}
-                      more
-                    </span>
-                  )}
-                  {territory.postalCodes.length +
-                    territory.cities.length +
-                    territory.counties.length ===
-                    0 && (
-                    <span className="flex items-center gap-1 text-[11px] text-ink-500">
-                      <GlobeIcon width={12} height={12} /> No area defined yet
-                    </span>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+                        <span className="flex items-start justify-between gap-2">
+                          <span
+                            className={`text-sm font-semibold ${
+                              on ? 'text-brand-600' : 'text-ink-900'
+                            }`}
+                          >
+                            {territory.name}
+                          </span>
+                          <span className="flex shrink-0 items-center gap-1">
+                            {territory.postalCodes.length === 0 && (
+                              <span
+                                title="Weather alerts match this territory by county name only, which is far coarser. Add ZIP codes for street-level matching."
+                                className="rounded-full bg-caution-50 px-2 py-0.5 text-[10px] font-semibold text-caution-600"
+                              >
+                                no ZIPs
+                              </span>
+                            )}
+                            {!territory.ownerId && (
+                              <span className="rounded-full bg-caution-50 px-2 py-0.5 text-[10px] font-semibold text-caution-600">
+                                unassigned
+                              </span>
+                            )}
+                          </span>
+                        </span>
+
+                        <span className="mt-0.5 block truncate text-xs text-ink-500">
+                          {territory.description ||
+                            (areas.length ? areas.slice(0, 3).join(' · ') : 'No area defined yet')}
+                        </span>
+
+                        <span className="mt-1 block text-[11px] text-ink-400">
+                          {territory.postalCodes.length > 0 ? (
+                            <>
+                              {territory.postalCodes.length} ZIP
+                              {territory.postalCodes.length === 1 ? '' : 's'}
+                            </>
+                          ) : (
+                            <span className="flex items-center gap-1">
+                              <GlobeIcon width={11} height={11} /> names only
+                            </span>
+                          )}
+                        </span>
+                      </button>
+
+                      {/* The full area list only for the selection. Showing it
+                          for every row is what made the old grid a wall of
+                          five-digit numbers. */}
+                      {on && areas.length > 0 && (
+                        <div className="flex flex-wrap gap-1 px-4 pb-3">
+                          {areas.map((area) => (
+                            <span
+                              key={area}
+                              className="rounded-full bg-paper-200/60 px-2 py-0.5 text-[11px] text-ink-600"
+                            >
+                              {area}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
+      </div>
+
     </AppShell>
   );
 }

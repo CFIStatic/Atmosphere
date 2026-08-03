@@ -38,9 +38,10 @@ const ZIP_RADIUS = 4.2;
 export function TerritoryMap({ focusId = null, onFocus }: Props) {
   const [entries, setEntries] = useState<TerritoryMapEntry[] | null>(null);
   const [coverage, setCoverage] = useState({ located: 0, total: 0 });
-  // Opens on the country. Somebody looking at a national map wants to see the
-  // country and where they sit in it; zooming straight to a metro answers a
-  // question they have not asked yet.
+  // Opens on the country, and follows the selection from there. Nothing
+  // selected is a question about the whole footprint; picking a territory is a
+  // question about that territory, and making somebody click "fit" afterwards
+  // was a step that only ever had one right answer.
   const [zoomed, setZoomed] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,6 +63,12 @@ export function TerritoryMap({ focusId = null, onFocus }: Props) {
       live = false;
     };
   }, []);
+
+  // Following the selection rather than deriving from it, so the manual toggle
+  // still wins until the selection next changes.
+  useEffect(() => {
+    setZoomed(Boolean(focusId));
+  }, [focusId]);
 
   const shown = useMemo(
     () => (entries ?? []).filter((t) => !focusId || t.id === focusId),
@@ -114,9 +121,12 @@ export function TerritoryMap({ focusId = null, onFocus }: Props) {
       h = want;
     }
 
-    // Below about a tenth of the country the outlines are coarser than the
-    // zoom, and the state shapes start to look hand-drawn.
-    const minWidth = USA_VIEWBOX.width / 9;
+    // The floor is a state's width, not a metro's, and that is about what
+    // there is to see rather than a rendering limit: the only outlines here
+    // are state borders, so zooming to a suburb leaves an empty orange field
+    // with no landmark to place it against. Roughly this frame is where Texas
+    // and its neighbours are still recognisable.
+    const minWidth = USA_VIEWBOX.width / 4;
     if (w < minWidth) {
       minX -= (minWidth - w) / 2;
       minY -= (minWidth / ratio - h) / 2;
@@ -259,30 +269,9 @@ export function TerritoryMap({ focusId = null, onFocus }: Props) {
         </svg>
       </div>
 
-      {/* A legend that is also the control: clicking a territory frames it. */}
-      {entries && entries.length > 0 && (
-        <ul className="mt-3 flex flex-wrap gap-1.5">
-          {entries.map((t) => {
-            const on = focusId === t.id;
-            return (
-              <li key={t.id}>
-                <button
-                  onClick={() => onFocus?.(on ? null : t.id)}
-                  aria-pressed={on}
-                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
-                    on ? 'bg-brand-600 text-ink-900' : 'glass-card text-ink-600 hover:text-ink-900'
-                  }`}
-                >
-                  {t.name}
-                  <span className={on ? 'ml-1.5 opacity-80' : 'ml-1.5 text-ink-400'}>
-                    {t.states.length ? t.states.join(' · ') : 'no ZIPs'}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      {/* No legend here on purpose. The territory list beside this map is the
+          legend, and two lists of the same three names — one of which was
+          twenty pixels tall — was the thing that made this page fiddly. */}
 
       <p className="mt-3 text-[11px] text-ink-400">
         Boundaries from the US Census Bureau

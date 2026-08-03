@@ -10,12 +10,24 @@ import { useLiveLocation } from '../../lib/useLiveLocation';
  * would be the wrong shape for this feature — the people being located are the
  * people using it, and the toggle should not be somewhere else.
  *
- * There is no map here, and that is deliberate rather than pending. The
- * operational questions are "who is closest" and "who is in that territory",
- * and a sorted list answers both immediately on a phone in a truck. A map is
- * a nicer demo and a worse tool.
+ * There is no map inside this panel, and that is deliberate rather than
+ * pending. The operational questions are "who is closest" and "who is in that
+ * territory", and a sorted list answers both immediately on a phone in a
+ * truck. The territory map sits above it and answers a different question.
  */
-export function CrewMap() {
+
+interface Props {
+  /**
+   * Narrow the list to one territory. Set when a territory is selected on the
+   * page, because "who is in North Austin right now" is the question that
+   * selection was making, and answering it here saves reading the whole roster
+   * and matching names by eye.
+   */
+  focusTerritoryId?: string | null;
+  focusName?: string | null;
+}
+
+export function CrewMap({ focusTerritoryId = null, focusName = null }: Props = {}) {
   const location = useLiveLocation();
   const [crew, setCrew] = useState<CrewPosition[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,13 +58,22 @@ export function CrewMap() {
     };
   }, [location.sharing]);
 
+  // Filtered rather than re-fetched: the positions are already here, and a
+  // second request per selection would be a lot of traffic for a subset.
+  const listed = (crew ?? []).filter(
+    (p) => !focusTerritoryId || p.territory?.id === focusTerritoryId,
+  );
+  const hiddenElsewhere = (crew ?? []).length - listed.length;
+
   const minutesAgo = (iso: string) =>
     Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
 
   return (
     <section className="rounded-xl glass-card p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-base font-semibold text-ink-900">Crew right now</h2>
+        <h2 className="text-base font-semibold text-ink-900">
+          {focusName ? `Crew in ${focusName}` : 'Crew right now'}
+        </h2>
         {location.active && (
           <span className="flex items-center gap-1.5 text-xs text-success-600">
             <span className="h-1.5 w-1.5 rounded-full bg-success-600" aria-hidden="true" />
@@ -112,14 +133,22 @@ export function CrewMap() {
 
       {crew === null ? (
         <p className="mt-4 text-sm text-ink-600">Checking…</p>
-      ) : crew.length === 0 ? (
+      ) : listed.length === 0 ? (
         <p className="mt-4 rounded-lg border border-line px-4 py-3 text-sm text-ink-600">
-          Nobody is sharing right now. Anyone on the team can turn it on above — it cannot be
-          switched on for them.
+          {focusName
+            ? `Nobody is in ${focusName} right now.`
+            : 'Nobody is sharing right now. Anyone on the team can turn it on above — it cannot be switched on for them.'}
+          {hiddenElsewhere > 0 && (
+            <>
+              {' '}
+              <span className="tabular-nums">{hiddenElsewhere}</span>{' '}
+              {hiddenElsewhere === 1 ? 'person is' : 'people are'} sharing elsewhere.
+            </>
+          )}
         </p>
       ) : (
         <ul className="mt-4 space-y-2">
-          {crew.map((person) => {
+          {listed.map((person) => {
             const stale = minutesAgo(person.capturedAt) > 15;
             // A fix this coarse is a neighbourhood, not a location, and
             // presenting it as one would send somebody to the wrong place.
