@@ -321,6 +321,22 @@ export interface CrmConnections {
   vaultConfigured: boolean;
 }
 
+/* ---- Live crew positions -------------------------------------------------- */
+
+export interface CrewPosition {
+  userId: string;
+  name: string;
+  lat: number;
+  lon: number;
+  /** Metres. A large number means the dot is a guess — say so rather than draw it. */
+  accuracyM: number | null;
+  headingDeg: number | null;
+  speedMps: number | null;
+  capturedAt: string;
+  nearestPlace: { name: string; miles: number } | null;
+  territory: { id: string; name: string } | null;
+}
+
 /* ---- Sending ------------------------------------------------------------- */
 
 export interface MailProvider {
@@ -1441,6 +1457,41 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ fullName, companyDomain }),
     }),
+
+  // ---- Live crew positions ----
+  locationSharing: () =>
+    request<{ sharing: boolean; shareWindow: string; decidedAt: string | null }>(
+      '/api/locations/sharing',
+      { method: 'GET' },
+    ),
+
+  /** The person's own decision. Turning it off erases what was collected. */
+  setLocationSharing: (sharing: boolean, shareWindow?: 'always' | 'shift') =>
+    request<{ sharing: boolean; erased?: number }>('/api/locations/sharing', {
+      method: 'PUT',
+      body: JSON.stringify({ sharing, shareWindow }),
+    }),
+
+  pingLocation: (fix: {
+    lat: number;
+    lon: number;
+    accuracy?: number | null;
+    heading?: number | null;
+    speed?: number | null;
+  }) =>
+    request<{ recorded: boolean }>('/api/locations/ping', {
+      method: 'POST',
+      body: JSON.stringify(fix),
+    }),
+
+  crewPositions: () =>
+    request<{ items: CrewPosition[]; sharing: number }>('/api/locations/crew', { method: 'GET' }),
+
+  nearestCrew: (lat: number, lon: number) =>
+    request<{ items: Array<{ userId: string; name: string; miles: number; capturedAt: string }> }>(
+      `/api/locations/nearest?lat=${lat}&lon=${lon}`,
+      { method: 'GET' },
+    ),
 
   // ---- Sending ----
   mailStatus: () => request<MailStatus>('/api/sales/mail', { method: 'GET' }),

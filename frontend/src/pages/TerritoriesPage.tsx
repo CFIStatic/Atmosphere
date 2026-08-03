@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { AppShell, EmptyState, PageHeader } from '../components/AppShell';
 import { api, type Territory } from '../lib/api';
 import { GlobeIcon, SpinnerIcon } from '../components/icons';
+import { CrewMap } from '../components/campaigns/CrewMap';
 
 /**
  * Territories — who owns which patch of the map.
@@ -149,6 +150,13 @@ export function TerritoriesPage() {
           {error}
         </p>
       )}
+
+      {/* Live positions sit above the territory list: "who is in North Austin
+          right now" is the question somebody opens this page to answer, and
+          the definitions below it are reference material. */}
+      <div className="mt-6">
+        <CrewMap />
+      </div>
 
       {items === null ? (
         <p className="mt-6 text-sm text-ink-600">Loading…</p>

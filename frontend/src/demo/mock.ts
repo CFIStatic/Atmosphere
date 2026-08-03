@@ -509,6 +509,9 @@ const REVEAL_PRICE_NANOS = 250_000_000;
 const CHARGED = new Set<string>();
 
 /** Contribution state for the shared network. Off until somebody decides. */
+/** Whether the demo viewer is sharing their own position. Off, like a real one. */
+const SHARING = { on: false, at: null as string | null };
+
 const NETWORK = { contributing: false, decidedAt: null as string | null, shared: 0 };
 
 /** Territories a restoration company in Central Texas would actually run. */
@@ -787,6 +790,27 @@ const routes: Array<[string, RegExp, Handler]> = [
       },
     };
   }],
+
+  /* ------------------------------------------- live crew positions */
+  ['GET', /^\/api\/locations\/sharing$/, () => ({
+    body: { sharing: SHARING.on, shareWindow: 'shift', decidedAt: SHARING.at },
+  })],
+  ['PUT', /^\/api\/locations\/sharing$/, (_m, b) => {
+    SHARING.on = Boolean(b.sharing);
+    SHARING.at = '2026-08-04T09:00:00Z';
+    return { body: { sharing: SHARING.on, erased: SHARING.on ? undefined : 12 } };
+  }],
+  ['POST', /^\/api\/locations\/ping$/, () => ({ body: { recorded: SHARING.on } })],
+  ['GET', /^\/api\/locations\/crew$/, () => ({
+    body: {
+      sharing: 3,
+      items: [
+        { userId: 'u-2', name: 'Ken Ohara', lat: 30.51, lon: -97.68, accuracyM: 12, headingDeg: 140, speedMps: 13.4, capturedAt: new Date(Date.now() - 60_000).toISOString(), nearestPlace: { name: 'Stony Point High School', miles: 1.2 }, territory: { id: 'terr-1', name: 'North Austin' } },
+        { userId: 'u-3', name: 'Marisol Vega', lat: 30.27, lon: -97.74, accuracyM: 28, headingDeg: null, speedMps: 0, capturedAt: new Date(Date.now() - 7 * 60_000).toISOString(), nearestPlace: { name: 'Baylor Scott & White Medical Center', miles: 18.4 }, territory: { id: 'terr-2', name: 'Central Austin' } },
+        { userId: 'u-4', name: 'Trey Boland', lat: 29.43, lon: -98.49, accuracyM: 1400, headingDeg: null, speedMps: 0, capturedAt: new Date(Date.now() - 22 * 60_000).toISOString(), nearestPlace: null, territory: null },
+      ],
+    },
+  })],
 
   /* ------------------------------------------- sending */
   ['GET', /^\/api\/sales\/mail$/, () => ({
