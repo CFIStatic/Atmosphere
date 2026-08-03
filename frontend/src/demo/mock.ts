@@ -508,6 +508,9 @@ const REVEAL_PRICE_NANOS = 250_000_000;
 /** Charges already made, so a retried reveal bills once — as the RPC does. */
 const CHARGED = new Set<string>();
 
+/** Contribution state for the shared network. Off until somebody decides. */
+const NETWORK = { contributing: false, decidedAt: null as string | null, shared: 0 };
+
 /** The activities handler needs the query it was called with. */
 const LAST_QUERY: { leadId?: string } = {};
 
@@ -664,6 +667,25 @@ const routes: Array<[string, RegExp, Handler]> = [
       ],
     },
   })],
+  ['GET', /^\/api\/prospecting\/network$/, () => ({
+    // Off, like every real org before somebody decides otherwise.
+    body: { contributing: NETWORK.contributing, decidedAt: NETWORK.decidedAt, enabled: true },
+  })],
+  ['PUT', /^\/api\/prospecting\/network$/, (_m, b) => {
+    const next = Boolean(b.contributing);
+    const withdrawn = !next && NETWORK.contributing ? NETWORK.shared : 0;
+    NETWORK.contributing = next;
+    NETWORK.decidedAt = '2026-08-03T00:00:00Z';
+    if (!next) NETWORK.shared = 0;
+    return { body: { contributing: next, withdrawn } };
+  }],
+  ['POST', /^\/api\/prospecting\/network\/contribute$/, () => {
+    // Only business addresses count, which is why the number shared is lower
+    // than the number considered — sam@camdencourt.org is fine, a gmail is not.
+    const eligible = CONTACTS.filter((c) => c.email && !/gmail|yahoo|outlook/.test(String(c.email)));
+    NETWORK.shared = eligible.length;
+    return { body: { contributed: eligible.length, considered: CONTACTS.length } };
+  }],
   ['GET', /^\/api\/prospecting\/status$/, () => ({
     body: {
       provider: 'Sandbox',

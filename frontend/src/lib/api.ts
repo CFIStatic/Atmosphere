@@ -1164,6 +1164,28 @@ export const api = {
       { method: 'GET' },
     ),
 
+  /** Whether this org contributes to the shared contact network. */
+  networkSettings: () =>
+    request<{ contributing: boolean; decidedAt: string | null; enabled: boolean }>(
+      '/api/prospecting/network',
+      { method: 'GET' },
+    ),
+
+  /**
+   * Opt in or out. Opting out withdraws every row this org ever contributed —
+   * an opt-out that left them in the pool would not be one.
+   */
+  setNetworkContribution: (contributing: boolean) =>
+    request<{ contributing: boolean; withdrawn: number }>('/api/prospecting/network', {
+      method: 'PUT',
+      body: JSON.stringify({ contributing }),
+    }),
+
+  contributeToNetwork: () =>
+    request<{ contributed: number; considered: number }>('/api/prospecting/network/contribute', {
+      method: 'POST',
+    }),
+
   prospects: () => request<{ items: Prospect[] }>('/api/prospecting/prospects', { method: 'GET' }),
 
   /** Erasure. Suppresses the person by default so a search cannot re-add them. */

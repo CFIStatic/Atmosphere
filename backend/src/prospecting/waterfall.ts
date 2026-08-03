@@ -1,4 +1,5 @@
 import { candidateEmails, type KnownAddress } from './patterns.js';
+import type { ContactSource } from './sources/ports.js';
 import { verifyEmail, type VerificationResult } from './verification.js';
 import { config } from '../config.js';
 import type { ContactDataProvider, RevealedContact } from './ports.js';
@@ -12,15 +13,25 @@ import type { ContactDataProvider, RevealedContact } from './ports.js';
  * product does this, and it is the difference between a tool that works on a
  * demo list and one that works on a customer's territory.
  *
- * The order is deliberate — cheapest and most likely first:
+ * The order is deliberate — free first, then cheapest, then most speculative:
  *
+ *   0. The free sources: the shared network, the company's own website, the
+ *      public web archive. None of these bill anybody.
  *   1. Each configured vendor, in turn, until one answers.
- *   2. Pattern inference against the company domain, verified by SMTP.
+ *   2. Pattern inference against the company domain, verified.
  *
- * Step 2 is what finds the people no database has: a small property-management
- * firm's operations manager is not in anyone's dataset, but their company uses
- * `first.last@` like everyone else, and a mail server will tell you whether
- * that mailbox exists.
+ * Putting step 0 first is the economics of the whole feature. A free answer
+ * and a paid answer are worth exactly the same to the customer, so every hit
+ * up there is margin that would otherwise have gone to a data vendor.
+ *
+ * Step 0 also feeds step 2, which is the part that compounds. Inference
+ * refuses to guess at a domain it has no evidence for — correct, but it meant
+ * a customer with an empty CRM got nothing from it. Now one crawl of a
+ * company's team page teaches us that company's convention permanently, and
+ * from then on we can find people there that no database sells: the small
+ * property-management firm's operations manager is in nobody's dataset, but
+ * his employer uses `first.last@` like everyone else, and a mail server will
+ * say whether that mailbox exists.
  *
  * Two rules hold the billing story together:
  *
@@ -36,6 +47,12 @@ export interface WaterfallInput {
   companyDomain: string | null;
   /** The org's own known addresses, used to learn the domain's convention. */
   knownAddresses?: KnownAddress[];
+  /**
+   * Free sources, asked before any vendor is billed. They also supply the
+   * domain evidence pattern inference refuses to guess without, which is what
+   * makes the engine work for an organization whose own CRM is still empty.
+   */
+  sources?: ContactSource[];
 }
 
 export interface WaterfallResult extends RevealedContact {
@@ -67,6 +84,60 @@ export async function runWaterfall(
   input: WaterfallInput,
 ): Promise<WaterfallResult | null> {
   const attempts: WaterfallResult['attempts'] = [];
+  const domain = input.companyDomain?.trim().toLowerCase() ?? '';
+
+  // Evidence accumulates as we go: anything a free source publishes at this
+  // domain teaches pattern inference the company's convention, whether or not
+  // it happened to hold the person we asked about.
+  const evidence: KnownAddress[] = [...(input.knownAddresses ?? [])];
+
+  // ---- 0. The free sources, before anything is billed ---------------------
+  //
+  // A free answer and a paid answer are worth exactly the same to the customer.
+  // Asking here first is the difference between a reveal that costs us three
+  // cents and one that costs us nothing.
+  for (const source of input.sources ?? []) {
+    if (!domain) break;
+
+    let published: KnownAddress[] = [];
+    try {
+      published = await source.addressesAt(domain);
+    } catch {
+      // A source that is down, blocked, or slow is not an error worth failing
+      // a reveal over — it simply had nothing.
+      published = [];
+    }
+    for (const entry of published) {
+      if (!evidence.some((e) => e.email.toLowerCase() === entry.email.toLowerCase())) {
+        evidence.push(entry);
+      }
+    }
+
+    let hit: Awaited<ReturnType<ContactSource['find']>> = null;
+    try {
+      hit = await source.find(input.fullName, domain);
+    } catch {
+      hit = null;
+    }
+    if (!hit?.email) continue;
+
+    const verification = await verifyEmail(hit.email);
+    attempts.push({ email: hit.email, verdict: verification.verdict, source: source.name });
+    if (!sellable(verification)) continue;
+
+    return {
+      providerPersonId: input.providerPersonId,
+      email: hit.email,
+      phone: hit.phone,
+      mobile: hit.mobile,
+      confidence: verification.score,
+      // Nobody was paid, so this reveal costs us nothing but a lookup.
+      costNanos: 0,
+      source: source.name,
+      verification,
+      attempts,
+    };
+  }
 
   // ---- 1. The vendors, in order -------------------------------------------
   for (const provider of providers) {
@@ -141,14 +212,16 @@ export async function runWaterfall(
 
   // ---- 2. Pattern inference, verified -------------------------------------
   if (!config.prospecting.patternInferenceEnabled) return null;
-
-  const domain = input.companyDomain?.trim().toLowerCase() ?? '';
   if (!domain) return null;
 
+  // `evidence`, not just the org's own addresses: everything the free sources
+  // published at this domain counts. That is the whole unlock — inference
+  // refuses to guess without evidence, so a customer with an empty CRM used to
+  // get nothing from it, and now a single crawl fixes that for the domain.
   const candidates = candidateEmails(
     input.fullName,
     domain,
-    input.knownAddresses ?? [],
+    evidence,
     config.prospecting.maxPatternCandidates,
   );
 

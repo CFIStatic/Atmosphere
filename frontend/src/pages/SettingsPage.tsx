@@ -945,6 +945,8 @@ function ContactDataSection() {
         )}
       </Card>
 
+      <NetworkCard />
+
       <Card
         title="Connecting a vendor"
         description="Keys are set on the server, not here — they belong to Atmosphere rather than to one organization, and the per-reveal credit charge is what covers them."
@@ -1025,5 +1027,115 @@ function IntegrationBadge({ item }: { item: Integration }) {
     <span className="rounded-full bg-paper-200 px-2 py-0.5 text-xs font-medium text-ink-700">
       Connected · untested
     </span>
+  );
+}
+
+/**
+ * The shared contact network — the one setting on this page with someone
+ * else's interests on the other side of it.
+ *
+ * Contributing means this organization's business contacts become findable by
+ * every other customer. That is a genuinely good trade for the org — the pool
+ * gets better for them too — but the people in those records never agreed to
+ * anything, so the control says exactly what happens rather than describing it
+ * as "improve your results". Off is the default, and turning it off again
+ * withdraws what was already given rather than merely stopping new writes.
+ */
+function NetworkCard() {
+  const [contributing, setContributing] = useState(false);
+  const [enabled, setEnabled] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .networkSettings()
+      .then((res) => {
+        setContributing(res.contributing);
+        setEnabled(res.enabled);
+      })
+      .catch(() => setEnabled(false))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function toggle(next: boolean) {
+    setBusy(true);
+    setError(null);
+    setNote(null);
+    try {
+      const res = await api.setNetworkContribution(next);
+      setContributing(res.contributing);
+      setNote(
+        next
+          ? 'Contributing. Your business contacts are now findable by other organizations.'
+          : `Withdrawn — ${res.withdrawn} ${res.withdrawn === 1 ? 'record' : 'records'} removed from the pool.`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not change that.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function contributeNow() {
+    setBusy(true);
+    setError(null);
+    setNote(null);
+    try {
+      const res = await api.contributeToNetwork();
+      setNote(`Shared ${res.contributed} of ${res.considered} contacts.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not contribute.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!enabled) return null;
+
+  return (
+    <Card
+      title="Shared contact network"
+      description="Organizations that opt in pool the business contacts they already hold, and can find people the others have recorded. It is the single biggest lever on how often a search finds somebody."
+    >
+      {loading ? (
+        <p className="text-sm text-ink-600">Checking…</p>
+      ) : (
+        <div className="space-y-4">
+          <Toggle
+            checked={contributing}
+            onChange={(next) => void toggle(next)}
+            label="Contribute our contacts"
+            description="Your contacts' names, work emails and work phone numbers become findable by other Atmosphere organizations. Personal addresses and shared mailboxes are never shared. Turning this off removes everything you have contributed."
+          />
+
+          <div className="rounded-lg border border-line p-4 text-xs leading-relaxed text-ink-600">
+            <p className="font-medium text-ink-800">What this means for the people in your CRM</p>
+            <p className="mt-1">
+              Their work contact details are shared with other companies using Atmosphere. Anyone
+              can ask to be removed, and an erasure is permanent across the whole network — it
+              cannot be undone by another organization contributing them again. Only business
+              addresses are eligible; personal ones are rejected outright.
+            </p>
+          </div>
+
+          {contributing && (
+            <div className="flex items-center gap-3">
+              <PrimaryButton onClick={() => void contributeNow()} busy={busy}>
+                Share existing contacts
+              </PrimaryButton>
+              <span className="text-xs text-ink-500">
+                Pushes contacts you already have. New ones go automatically.
+              </span>
+            </div>
+          )}
+
+          {note && <p className="text-sm text-success-600">{note}</p>}
+          <ErrorText message={error} />
+        </div>
+      )}
+    </Card>
   );
 }

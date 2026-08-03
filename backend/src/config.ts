@@ -586,6 +586,31 @@ export const config = {
     verifyFromAddress: process.env.PROSPECTING_VERIFY_FROM ?? 'verify@atmosphere.invalid',
     verifyHeloDomain: process.env.PROSPECTING_VERIFY_HELO ?? 'atmosphere.invalid',
 
+    // Free sources, asked before any vendor is billed.
+    //
+    // A free answer and a paid answer are worth the same to the customer and
+    // very different to us, so the waterfall spends nothing until these have
+    // had their turn. They also feed pattern inference the domain evidence it
+    // refuses to guess without — which is what makes the engine work for a
+    // customer whose own CRM is still empty.
+    webCrawlEnabled: (process.env.PROSPECTING_WEB_CRAWL ?? 'true') !== 'false',
+    crawlTimeoutMs: Number(process.env.PROSPECTING_CRAWL_TIMEOUT_MS ?? 6_000),
+    crawlMaxPages: Number(process.env.PROSPECTING_CRAWL_MAX_PAGES ?? 4),
+
+    commonCrawlEnabled: (process.env.PROSPECTING_COMMON_CRAWL ?? 'true') !== 'false',
+    commonCrawlBaseUrl: process.env.COMMON_CRAWL_BASE_URL ?? 'https://index.commoncrawl.org',
+    commonCrawlDataUrl: process.env.COMMON_CRAWL_DATA_URL ?? 'https://data.commoncrawl.org',
+    // Pinned rather than discovered: listing available crawls is itself a
+    // network call, and a stale-but-working index beats a reveal that fails
+    // because discovery timed out.
+    commonCrawlIndex: process.env.COMMON_CRAWL_INDEX ?? 'CC-MAIN-2026-22',
+    commonCrawlLimit: Number(process.env.COMMON_CRAWL_LIMIT ?? 60),
+    commonCrawlMaxRecords: Number(process.env.COMMON_CRAWL_MAX_RECORDS ?? 3),
+
+    // The contributory network. Reading the pool is on by default; writing to
+    // it is per-org opt-in and enforced in SQL, not here.
+    networkEnabled: (process.env.PROSPECTING_NETWORK ?? 'true') !== 'false',
+
     // Pattern inference finds the people no vendor has: learn a company's
     // convention from addresses the org already holds, apply it, verify it.
     // Nothing is sold unless a mail server confirms the mailbox.

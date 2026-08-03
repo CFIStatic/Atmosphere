@@ -13,6 +13,8 @@ import {
   ProviderError,
 } from '../prospecting/index.js';
 import { buildMailboxVerifier } from '../prospecting/verifiers/index.js';
+import { buildSourceChain } from '../prospecting/sources/index.js';
+import { createAdminClient } from '../lib/supabase.js';
 import { runWaterfall } from '../prospecting/waterfall.js';
 import type { KnownAddress } from '../prospecting/patterns.js';
 
@@ -503,6 +505,11 @@ prospectingRouter.post(
         fullName: match.fullName,
         companyDomain: match.companyDomain,
         knownAddresses,
+        // The free sources go first inside the waterfall. Passing the admin
+        // client is what lets the shared network be read at all: the pool is
+        // deliberately not tenant-readable, because a direct SELECT over it
+        // would hand a customer the database this product sells.
+        sources: buildSourceChain(createAdminClient(), orgId),
       });
 
       if (!contact) {
@@ -803,6 +810,22 @@ prospectingRouter.delete(
         }
       }
 
+      // Erasure has to reach the shared pool too, or "remove me" means "remove
+      // me from this one organization while every other customer keeps buying
+      // me". The tombstone is global and permanent, so a different org syncing
+      // its CRM tomorrow cannot quietly undo it.
+      let erasedFromNetwork = false;
+      if (suppress && prospect.email && config.prospecting.networkEnabled) {
+        const admin = createAdminClient();
+        if (admin) {
+          const { error: eraseError } = await admin.rpc('network_erase', {
+            p_email: String(prospect.email).toLowerCase(),
+            p_reason: 'Erased at request',
+          });
+          erasedFromNetwork = !eraseError;
+        }
+      }
+
       const { error } = await supabase
         .from('crm_prospects')
         .delete()
@@ -810,7 +833,7 @@ prospectingRouter.delete(
         .eq('id', req.params.id);
       if (error) throw new HttpError(400, error.message, 'prospect_delete_failed');
 
-      res.json({ ok: true, suppressed: suppress });
+      res.json({ ok: true, suppressed: suppress, erasedFromNetwork });
     } catch (err) {
       next(err);
     }
@@ -876,6 +899,138 @@ prospectingRouter.delete(
   },
 );
 
+
+/* ---- The shared contact network ----------------------------------------- */
+
+const contributionSchema = z.object({ contributing: z.boolean() });
+
+/**
+ * GET /api/prospecting/network
+ * Whether this org contributes to the shared pool, and what that means.
+ */
+prospectingRouter.get('/network', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { orgId, supabase } = await requireOrgContext(req);
+    const { data, error } = await supabase
+      .from('network_contribution_settings')
+      .select('contributing, decided_at')
+      .eq('org_id', orgId)
+      .maybeSingle();
+    if (error) throw new HttpError(500, error.message, 'network_settings_failed');
+
+    // Absent row means never decided, which is the same as off — the default
+    // is the consent decision, so it is reported as such rather than as null.
+    res.json({
+      contributing: Boolean(data?.contributing),
+      decidedAt: data?.decided_at ?? null,
+      enabled: config.prospecting.networkEnabled,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PUT /api/prospecting/network
+ * Opt in or out. Opting out withdraws everything this org ever contributed —
+ * an opt-out that left the rows in the pool would not be one.
+ */
+prospectingRouter.put('/network', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { orgId, userId, supabase } = await requireOrgRole(req, ['owner', 'admin']);
+    const { contributing } = contributionSchema.parse(req.body ?? {});
+
+    const { error } = await supabase.from('network_contribution_settings').upsert(
+      {
+        org_id: orgId,
+        contributing,
+        decided_by: userId,
+        decided_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'org_id' },
+    );
+    if (error) throw new HttpError(400, error.message, 'network_settings_failed');
+
+    let withdrawn = 0;
+    if (!contributing) {
+      const admin = createAdminClient();
+      if (!admin) {
+        // Recording the opt-out but failing to act on it would leave the org
+        // believing their data was withdrawn when it was not.
+        throw new HttpError(
+          503,
+          'Opt-out recorded but the pool could not be reached. Contact support so your contributions are withdrawn.',
+          'network_withdraw_failed',
+        );
+      }
+      const { data, error: withdrawError } = await admin.rpc('network_withdraw', {
+        p_org: orgId,
+      });
+      if (withdrawError) {
+        throw new HttpError(503, 'Could not withdraw your contributions.', 'network_withdraw_failed');
+      }
+      withdrawn = Number(data ?? 0);
+    }
+
+    res.json({ contributing, withdrawn });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/prospecting/network/contribute
+ * Push this org's business contacts into the shared pool.
+ *
+ * Every guard that matters lives in SQL: the opt-in check, the business-address
+ * constraint, and the erasure tombstones. This handler is a loop, deliberately,
+ * so that no future caller can contribute by taking a different code path.
+ */
+prospectingRouter.post(
+  '/network/contribute',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { orgId, supabase } = await requireOrgRole(req, ['owner', 'admin']);
+
+      const admin = createAdminClient();
+      if (!admin) throw new HttpError(503, 'The shared network is unavailable.', 'network_unavailable');
+
+      const { data: contacts, error } = await supabase
+        .from('crm_contacts')
+        .select('first_name, last_name, email, phone, mobile, title, company_name')
+        .eq('org_id', orgId)
+        .not('email', 'is', null)
+        .limit(1000);
+      if (error) throw new HttpError(500, error.message, 'contacts_read_failed');
+
+      let contributed = 0;
+      for (const c of contacts ?? []) {
+        const fullName = [c.first_name, c.last_name].filter(Boolean).join(' ').trim();
+        if (!fullName || !c.email) continue;
+        const { data: ok } = await admin.rpc('network_contribute', {
+          p_org: orgId,
+          p_email: c.email,
+          p_full_name: fullName,
+          p_title: c.title ?? null,
+          p_company: c.company_name ?? null,
+          p_phone: c.phone ?? null,
+          p_mobile: c.mobile ?? null,
+        });
+        if (ok) contributed += 1;
+      }
+
+      res.json({ contributed, considered: contacts?.length ?? 0 });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// Registered last on purpose. Express walks the stack forward from wherever
+// next(err) was called, so an error handler sitting above a route never sees
+// that route's failures — which is exactly what happened when the network
+// endpoints were appended below it.
 /** Vendor failures arrive as ProviderError and carry their own status. */
 prospectingRouter.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
   if (err instanceof ProviderError) {
