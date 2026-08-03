@@ -13,7 +13,6 @@ import {
   type SendPreview,
 } from '../lib/api';
 import { SpinnerIcon } from '../components/icons';
-import { PlaceFinder } from '../components/campaigns/PlaceFinder';
 import { WeatherWatch } from '../components/campaigns/WeatherWatch';
 
 /**
@@ -469,9 +468,8 @@ export function CampaignsPage() {
         </p>
       )}
 
-      <div className="mt-6 space-y-4">
+      <div className="mt-6">
         <WeatherWatch />
-        <PlaceFinder territories={territories} onImported={() => void load()} />
       </div>
 
       {items === null ? (
