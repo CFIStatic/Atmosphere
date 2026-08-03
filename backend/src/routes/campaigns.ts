@@ -22,6 +22,7 @@ import {
   MAIL_PROVIDERS,
   type MailSystem,
 } from '../campaigns/mail/index.js';
+import { buildForecastProvider, FORECAST_PROVIDERS } from '../campaigns/forecast/index.js';
 import { findPlaces, PLACE_CATEGORIES, PLACE_ATTRIBUTION } from '../campaigns/places.js';
 import {
   activeAlerts,
@@ -1195,3 +1196,34 @@ campaignsRouter.post(
     }
   },
 );
+
+/**
+ * GET /api/sales/forecast?lat=&lon=&hourly=
+ * Several days ahead for one point, so a salesperson can see the storm before
+ * anybody issues a warning about it.
+ */
+campaignsRouter.get('/forecast', placeLimiter, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await requireOrgContext(req);
+    const lat = Number(req.query.lat);
+    const lon = Number(req.query.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      throw new HttpError(400, 'A latitude and longitude are needed.', 'bad_point');
+    }
+
+    const provider = buildForecastProvider();
+    const forecast =
+      req.query.hourly === '1' ? await provider.hourly(lat, lon) : await provider.daily(lat, lon);
+    if (!forecast) {
+      throw new HttpError(502, 'No forecast is available for that location.', 'no_forecast');
+    }
+    res.json(forecast);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /api/sales/forecast-providers — what could answer, and what it costs. */
+campaignsRouter.get('/forecast-providers', async (_req: Request, res: Response) => {
+  res.json({ providers: FORECAST_PROVIDERS, active: buildForecastProvider().name });
+});

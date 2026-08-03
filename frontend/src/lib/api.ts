@@ -321,6 +321,63 @@ export interface CrmConnections {
   vaultConfigured: boolean;
 }
 
+/* ---- Sending ------------------------------------------------------------- */
+
+export interface MailProvider {
+  id: 'google_mail' | 'microsoft_mail';
+  name: string;
+  available: boolean;
+  note: string;
+}
+
+export interface SendPolicy {
+  postalAddress: string | null;
+  replyTo: string | null;
+  maxRecipients: number;
+  dailyCeiling: number;
+}
+
+export interface MailStatus {
+  providers: MailProvider[];
+  connected: Array<{ system: string; accountLabel: string | null; connectedAt: string }>;
+  policy: SendPolicy | null;
+  sentToday: number;
+  vaultConfigured: boolean;
+}
+
+export interface SendPreview {
+  dryRun: boolean;
+  wouldSend?: number;
+  sent?: number;
+  blocked: Array<{ email: string; reason: string }>;
+  warnings?: string[];
+  failures?: Array<{ email: string; error: string }>;
+  from: string | null;
+  sample?: string;
+}
+
+export interface ForecastPeriod {
+  name: string;
+  startTime: string;
+  isDaytime: boolean;
+  temperature: number | null;
+  temperatureUnit: string;
+  windSpeed: string | null;
+  precipitationChance: number | null;
+  shortForecast: string;
+  detailedForecast: string | null;
+  /** True when the wording describes weather that makes restoration work. */
+  notable: boolean;
+  group: string | null;
+}
+
+export interface Forecast {
+  place: string | null;
+  periods: ForecastPeriod[];
+  provider: string;
+  attribution: string;
+}
+
 /* ---- Profiler ------------------------------------------------------------ */
 
 export interface ProfileFact {
@@ -1384,6 +1441,40 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ fullName, companyDomain }),
     }),
+
+  // ---- Sending ----
+  mailStatus: () => request<MailStatus>('/api/sales/mail', { method: 'GET' }),
+
+  connectMailbox: (system: 'google_mail' | 'microsoft_mail') =>
+    request<{ url: string }>(`/api/sales/mail/${system}/connect`, { method: 'POST' }),
+
+  completeMailbox: (system: string, code: string, state: string) =>
+    request<{ connected: boolean; address: string; provider: string }>(
+      `/api/sales/mail/${system}/callback`,
+      { method: 'POST', body: JSON.stringify({ code, state }) },
+    ),
+
+  disconnectMailbox: (system: string) =>
+    request<{ disconnected: boolean }>(`/api/sales/mail/${system}`, { method: 'DELETE' }),
+
+  saveSendPolicy: (policy: Partial<SendPolicy>) =>
+    request<{ policy: SendPolicy }>('/api/sales/send-policy', {
+      method: 'PUT',
+      body: JSON.stringify(policy),
+    }),
+
+  /** Dry run unless confirm is true. Preview and send share one screening path. */
+  sendCampaign: (id: string, options: { confirm?: boolean; event?: string; area?: string } = {}) =>
+    request<SendPreview>(`/api/sales/campaigns/${id}/send`, {
+      method: 'POST',
+      body: JSON.stringify(options),
+    }),
+
+  forecast: (lat: number, lon: number, hourly = false) =>
+    request<Forecast>(
+      `/api/sales/forecast?lat=${lat}&lon=${lon}${hourly ? '&hourly=1' : ''}`,
+      { method: 'GET' },
+    ),
 
   // ---- Places: the buildings worth selling to ----
   placeCategories: () =>

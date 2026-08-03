@@ -18,6 +18,7 @@ import {
   WORK_TYPE_LABELS,
   type ContractorType,
   type CrmConnections,
+  type MailStatus,
   type Diagnosis,
   type Integration,
   type MemberRole,
@@ -48,6 +49,7 @@ type SectionId =
   | 'security'
   | 'organization'
   | 'integrations'
+  | 'sending'
   | 'contactdata'
   | 'preferences';
 
@@ -74,6 +76,15 @@ const SECTIONS: SettingsSection[] = [
     label: 'Connected apps',
     blurb: 'Your CRM and the data we mirror from it',
     icon: BuildingIcon,
+  },
+  {
+    // Connecting a mailbox is a Sales concern and an owner decision: it is the
+    // company's own address that campaign mail goes out from.
+    id: 'sending',
+    label: 'Sending email',
+    blurb: 'The mailbox campaigns send from',
+    icon: SearchIcon,
+    platform: 'sales',
   },
   {
     // Where prospecting gets its data is a Sales question. Showing it to
@@ -155,6 +166,7 @@ export function SettingsPage() {
             {active === 'security' && <SecuritySection />}
             {active === 'organization' && <OrganizationSection />}
             {active === 'integrations' && <IntegrationsSection />}
+            {active === 'sending' && <SendingSection />}
             {active === 'contactdata' && <ContactDataSection />}
             {active === 'preferences' && <PreferencesSection />}
           </div>
@@ -1547,5 +1559,269 @@ function MethodBadge({ method }: { method: 'oauth' | 'browser' | 'rest' }) {
   const label = method === 'oauth' ? 'authorise' : method === 'rest' ? 'API' : 'browser sign-in';
   return (
     <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${style}`}>{label}</span>
+  );
+}
+
+/**
+ * Sending email — connecting the mailbox campaigns go out from.
+ *
+ * Reachable during setup and forever after, because the mailbox is the thing
+ * most likely to need reconnecting: people change jobs, revoke grants, and
+ * rotate passwords, and a campaign that silently stops sending is worse than
+ * one that never started.
+ *
+ * The page is explicit about what is being asked for. "Connect your email" is
+ * the kind of phrase that gets clicked without thought; what we actually want
+ * is permission to send as you and nothing else, and saying so is both more
+ * honest and — in my experience of these consent screens — more likely to be
+ * granted.
+ */
+function SendingSection() {
+  const [state, setState] = useState<MailStatus | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [params, setParams] = useSearchParams();
+
+  const [address, setAddress] = useState('');
+  const [maxRecipients, setMaxRecipients] = useState(200);
+  const [savedPolicy, setSavedPolicy] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await api.mailStatus();
+      setState(res);
+      setAddress(res.policy?.postalAddress ?? '');
+      setMaxRecipients(res.policy?.maxRecipients ?? 200);
+    } catch (err) {
+      setError(
+        err instanceof ApiError && err.code === 'insufficient_role'
+          ? 'Only an owner or admin can set up sending.'
+          : err instanceof Error
+            ? err.message
+            : 'Could not load sending setup.',
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  // The provider sends the browser back here with ?code=&state=.
+  useEffect(() => {
+    const code = params.get('code');
+    const oauthState = params.get('state');
+    if (!code || !oauthState) return;
+    const system = params.get('provider') ?? 'google_mail';
+
+    setBusy(system);
+    api
+      .completeMailbox(system, code, oauthState)
+      .then((res) => {
+        setNote(`Connected — campaigns will send from ${res.address}.`);
+        return load();
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : 'Could not finish connecting.'))
+      .finally(() => {
+        setBusy(null);
+        const next = new URLSearchParams(params);
+        next.delete('code');
+        next.delete('state');
+        setParams(next, { replace: true });
+      });
+  }, [params, setParams, load]);
+
+  async function connect(system: 'google_mail' | 'microsoft_mail') {
+    setBusy(system);
+    setError(null);
+    try {
+      const { url } = await api.connectMailbox(system);
+      window.location.href = url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not start that connection.');
+      setBusy(null);
+    }
+  }
+
+  async function disconnect(system: string) {
+    setBusy(system);
+    try {
+      await api.disconnectMailbox(system);
+      setNote('Disconnected. Campaigns will not send until a mailbox is connected again.');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not disconnect.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function savePolicy(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    try {
+      await api.saveSendPolicy({ postalAddress: address, maxRecipients });
+      setSavedPolicy(true);
+      setTimeout(() => setSavedPolicy(false), 2500);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save that.');
+    }
+  }
+
+  const connectedSystems = new Set((state?.connected ?? []).map((c) => c.system));
+  const hasMailbox = connectedSystems.size > 0;
+  const hasAddress = Boolean(state?.policy?.postalAddress?.trim());
+
+  return (
+    <div className="space-y-5">
+      <Card
+        title="The mailbox campaigns send from"
+        description="Campaign email goes out from your own address, so it lands like a note from a person and replies come straight back to you."
+      >
+        {!state ? (
+          <p className="text-sm text-ink-600">Loading…</p>
+        ) : (
+          <div className="space-y-3">
+            <div
+              className={`rounded-lg border p-4 text-sm ${
+                hasMailbox && hasAddress
+                  ? 'border-success-200 bg-success-50 text-success-600'
+                  : 'border-caution-200 bg-caution-50 text-caution-600'
+              }`}
+            >
+              {!hasMailbox ? (
+                <>
+                  <strong>No mailbox connected.</strong> Campaigns cannot send until one is.
+                </>
+              ) : !hasAddress ? (
+                <>
+                  <strong>Almost there.</strong> Add your postal address below — every commercial
+                  email is legally required to carry one, and sending is blocked until it does.
+                </>
+              ) : (
+                <>
+                  <strong>Ready to send.</strong> {state.sentToday} sent today.
+                </>
+              )}
+            </div>
+
+            {state.providers.map((provider) => {
+              const isConnected = connectedSystems.has(provider.id);
+              const detail = state.connected.find((c) => c.system === provider.id);
+              return (
+                <div key={provider.id} className="rounded-lg glass-card p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-semibold text-ink-900">{provider.name}</h3>
+                      <p className="mt-1 text-xs leading-relaxed text-ink-600">{provider.note}</p>
+                      {detail?.accountLabel && (
+                        <p className="mt-1.5 text-xs text-success-600">
+                          Sending as {detail.accountLabel}
+                        </p>
+                      )}
+                    </div>
+                    <div className="shrink-0">
+                      {isConnected ? (
+                        <button
+                          onClick={() => void disconnect(provider.id)}
+                          disabled={busy === provider.id}
+                          className="rounded-lg border border-line px-3 py-2 text-xs font-medium text-ink-700 transition hover:bg-paper-200/50 disabled:opacity-50"
+                        >
+                          Disconnect
+                        </button>
+                      ) : (
+                        <PrimaryButton
+                          onClick={() => void connect(provider.id)}
+                          busy={busy === provider.id}
+                          disabled={!provider.available || !state.vaultConfigured}
+                        >
+                          Connect
+                        </PrimaryButton>
+                      )}
+                    </div>
+                  </div>
+                  {!provider.available && !isConnected && (
+                    <p className="mt-2 text-xs text-caution-600">
+                      Not configured on this deployment.
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+
+            {note && <p className="text-sm text-success-600">{note}</p>}
+            <ErrorText message={error} />
+          </div>
+        )}
+      </Card>
+
+      <Card
+        title="What every email must carry"
+        description="US law requires a physical postal address and a working unsubscribe in every commercial email. We add both automatically — the address has to be yours."
+      >
+        <form onSubmit={savePolicy} className="space-y-4">
+          <Field
+            label="Your postal address"
+            hint="Appears at the foot of every campaign email. A PO box is fine."
+          >
+            <input
+              className={INPUT_CLASS}
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="Atmosphere Restoration, 100 Congress Ave, Austin TX 78701"
+            />
+          </Field>
+          <Field
+            label="Most people one campaign may reach"
+            hint="A wall, not a target. An audience rule that unexpectedly matches four thousand people should stop here rather than send."
+          >
+            <input
+              type="number"
+              min={1}
+              max={5000}
+              className={INPUT_CLASS}
+              value={maxRecipients}
+              onChange={(e) => setMaxRecipients(Number(e.target.value))}
+            />
+          </Field>
+          <div className="flex items-center gap-3">
+            <PrimaryButton type="submit">Save</PrimaryButton>
+            <Saved show={savedPolicy} />
+          </div>
+        </form>
+      </Card>
+
+      <Card
+        title="What we can and cannot do with your mailbox"
+        description="Worth being precise about, because the permission screen goes past quickly."
+      >
+        <dl className="space-y-3 text-sm">
+          <div>
+            <dt className="font-medium text-ink-800">We can send</dt>
+            <dd className="mt-0.5 text-ink-600">
+              Messages you have written, to people your campaign rules select. They appear in your
+              Sent folder like anything else you send.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-ink-800">We cannot read</dt>
+            <dd className="mt-0.5 text-ink-600">
+              The permission requested is send-only. There is no version of this connection that
+              can open a message in your inbox — not your mail, not your contacts, not your
+              calendar.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-ink-800">You can revoke it without us</dt>
+            <dd className="mt-0.5 text-ink-600">
+              From your Google or Microsoft account settings, at any time. Disconnecting here does
+              the same thing.
+            </dd>
+          </div>
+        </dl>
+      </Card>
+    </div>
   );
 }

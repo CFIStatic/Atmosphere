@@ -10,6 +10,7 @@ import {
   type WeatherGroup,
   type PlaceCategory,
   type AudienceMember,
+  type SendPreview,
 } from '../lib/api';
 import { SpinnerIcon } from '../components/icons';
 import { PlaceFinder } from '../components/campaigns/PlaceFinder';
@@ -72,6 +73,8 @@ export function CampaignsPage() {
     'Hi {{first_name}},\n\nHope things are good at {{company}}. We\u2019re watching {{event}} for {{area}} over the next couple of days and wanted to check in before it arrives.\n\nIf anything does come up \u2014 water, roof, anything \u2014 we can have someone out same day. No obligation either way; just wanted you to have a number that answers.\n\n\u2014 {{sender}}',
   );
   const [audience, setAudience] = useState<Record<string, AudienceMember[]>>({});
+  const [preview, setPreview] = useState<Record<string, SendPreview>>({});
+  const [sending, setSending] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -175,6 +178,44 @@ export function CampaignsPage() {
       setError(err instanceof Error ? err.message : 'Could not update that.');
       const res = await api.campaignMembers(campaignId);
       setMembers((prev) => ({ ...prev, [campaignId]: res.items }));
+    }
+  }
+
+  /**
+   * The dry run. Never sends — and it is the default action on purpose,
+   * because a weather campaign's audience is a rule rather than a list and the
+   * only way to know who it reaches today is to ask.
+   */
+  async function check(id: string) {
+    setSending(id);
+    setError(null);
+    try {
+      const result = await api.sendCampaign(id);
+      setPreview((prev) => ({ ...prev, [id]: result }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not check that campaign.');
+    } finally {
+      setSending(null);
+    }
+  }
+
+  async function reallySend(id: string, count: number) {
+    // A confirm on an action that mails real people from the customer's own
+    // address. The count is in the question because "send this campaign?" is
+    // a different decision at 6 recipients and at 600.
+    if (!window.confirm(`Send this campaign to ${count} ${count === 1 ? 'person' : 'people'} now?`)) {
+      return;
+    }
+    setSending(id);
+    setError(null);
+    try {
+      const res = await api.sendCampaign(id, { confirm: true });
+      setPreview((prev) => ({ ...prev, [id]: res }));
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send that campaign.');
+    } finally {
+      setSending(null);
     }
   }
 
@@ -505,6 +546,32 @@ export function CampaignsPage() {
 
                 {open && (
                   <div className="mt-4 border-t border-line pt-4">
+                    <div className="mb-4 flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => void check(campaign.id)}
+                        disabled={sending === campaign.id}
+                        className="flex items-center gap-2 rounded-lg glass-card px-3 py-2 text-xs font-semibold text-ink-800 transition hover:bg-paper-200/50 disabled:opacity-50"
+                      >
+                        {sending === campaign.id && (
+                          <SpinnerIcon className="animate-spin" width={14} height={14} />
+                        )}
+                        Check who this would reach
+                      </button>
+                      {preview[campaign.id]?.dryRun && (preview[campaign.id].wouldSend ?? 0) > 0 && (
+                        <button
+                          onClick={() =>
+                            void reallySend(campaign.id, preview[campaign.id].wouldSend ?? 0)
+                          }
+                          disabled={sending === campaign.id}
+                          className="rounded-lg bg-brand-600 px-3 py-2 text-xs font-semibold text-ink-900 shadow-card transition hover:bg-brand-700 disabled:opacity-50"
+                        >
+                          Send to {preview[campaign.id].wouldSend} now
+                        </button>
+                      )}
+                    </div>
+
+                    {preview[campaign.id] && <SendReport report={preview[campaign.id]} />}
+
                     {audience[campaign.id] && audience[campaign.id].length > 0 && (
                       <div className="mb-4 rounded-lg border border-brand-200 bg-brand-50/40 p-3">
                         <p className="text-xs font-semibold text-ink-900">
@@ -580,5 +647,84 @@ export function CampaignsPage() {
         </ul>
       )}
     </AppShell>
+  );
+}
+
+/**
+ * What a dry run found.
+ *
+ * The blocked list is shown with its reasons rather than summarised to a
+ * number, because "34 blocked" tells nobody anything while "12 unsubscribed,
+ * 3 already sent, 19 personal addresses" tells them their audience rule is
+ * pointed at the wrong people.
+ */
+function SendReport({ report }: { report: SendPreview }) {
+  const byReason = new Map<string, number>();
+  for (const b of report.blocked) byReason.set(b.reason, (byReason.get(b.reason) ?? 0) + 1);
+
+  const READABLE: Record<string, string> = {
+    suppressed: 'on your do-not-contact list',
+    erased: 'asked to be erased',
+    unsubscribed: 'unsubscribed',
+    already_sent: 'already sent this',
+    role_address: 'shared mailbox (info@, sales@)',
+    personal_address: 'personal address',
+    disposable: 'throwaway inbox',
+    invalid: 'not a valid address',
+    bounced_before: 'bounced before',
+    over_campaign_cap: 'over the campaign limit',
+    over_daily_cap: 'over today’s sending limit',
+  };
+
+  return (
+    <div className="mb-4 rounded-lg border border-line p-3">
+      <p className="text-xs font-semibold text-ink-900">
+        {report.dryRun ? (
+          <>
+            Would send to <span className="tabular-nums">{report.wouldSend}</span>
+          </>
+        ) : (
+          <>
+            Sent <span className="tabular-nums">{report.sent}</span>
+            {report.from ? ` from ${report.from}` : ''}
+          </>
+        )}
+      </p>
+
+      {byReason.size > 0 && (
+        <ul className="mt-2 space-y-0.5">
+          {[...byReason.entries()].map(([reason, count]) => (
+            <li key={reason} className="text-[11px] text-ink-600">
+              <span className="tabular-nums">{count}</span> skipped — {READABLE[reason] ?? reason}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {report.warnings && report.warnings.length > 0 && (
+        <ul className="mt-2 space-y-0.5">
+          {report.warnings.map((w) => (
+            <li key={w} className="text-[11px] text-caution-600">
+              {w}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {report.failures && report.failures.length > 0 && (
+        <p className="mt-2 text-[11px] text-danger-600">
+          {report.failures.length} failed to send.
+        </p>
+      )}
+
+      {report.sample && (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-[11px] text-ink-500">Preview the message</summary>
+          <pre className="mt-1.5 whitespace-pre-wrap rounded-lg bg-paper-100/40 p-3 text-[11px] leading-relaxed text-ink-700">
+            {report.sample}
+          </pre>
+        </details>
+      )}
+    </div>
   );
 }

@@ -788,6 +788,54 @@ const routes: Array<[string, RegExp, Handler]> = [
     };
   }],
 
+  /* ------------------------------------------- sending */
+  ['GET', /^\/api\/sales\/mail$/, () => ({
+    body: {
+      providers: [
+        { id: 'google_mail', name: 'Gmail / Google Workspace', available: false, note: 'Sends from your own address, lands in your Sent folder, and replies come straight back to you. We ask only for permission to send — never to read your mail.' },
+        { id: 'microsoft_mail', name: 'Microsoft 365 / Outlook', available: false, note: 'Same arrangement. Some organizations require an administrator to approve it rather than you.' },
+      ],
+      connected: [],
+      policy: null,
+      sentToday: 0,
+      vaultConfigured: false,
+    },
+  })],
+  ['PUT', /^\/api\/sales\/send-policy$/, (_m, b) => ({
+    body: { policy: { postalAddress: b.postalAddress ?? null, replyTo: null, maxRecipients: b.maxRecipients ?? 200, dailyCeiling: 300 } },
+  })],
+  ['POST', /^\/api\/sales\/campaigns\/([^/]+)\/send$/, (_m, b) => {
+    // The walkthrough shows a dry run, which is the default and the point:
+    // nothing sends until somebody has seen who it would reach.
+    if (b.confirm) {
+      return { status: 400, body: { error: 'Connect a mailbox before sending.', code: 'no_mailbox' } };
+    }
+    return {
+      body: {
+        dryRun: true,
+        wouldSend: 4,
+        from: null,
+        blocked: [
+          { email: 'info@camdencourt.org', reason: 'role_address' },
+          { email: 'sam@gmail.com', reason: 'personal_address' },
+          { email: 'r.calloway@alliancemutual.com', reason: 'unsubscribed' },
+        ],
+        warnings: ['A postal address is required in every commercial email. Add yours in Settings.'],
+        sample: 'Hi Tomas,\n\nHope things are good at Northgate Medical Group. We\u2019re watching hail for Williamson County over the next couple of days and wanted to check in before it arrives.\n\nIf anything does come up \u2014 water, roof, anything \u2014 we can have someone out same day. No obligation either way; just wanted you to have a number that answers.\n\n\u2014 Dana',
+      },
+    };
+  }],
+  ['GET', /^\/api\/sales\/forecast-providers$/, () => ({
+    body: {
+      active: 'National Weather Service',
+      providers: [
+        { id: 'nws', name: 'National Weather Service', cost: 'Free', available: true, note: 'US only. Government-authoritative, and the source the commercial services start from.' },
+        { id: 'openweather', name: 'OpenWeather', cost: 'From ~$0 / 1,000 calls', available: false, note: 'Global, self-serve in minutes. Less severe-weather detail.' },
+        { id: 'weatherchannel', name: 'The Weather Channel (IBM)', cost: 'Enterprise contract', available: false, note: 'Not self-serve. Sold through IBM Environmental Intelligence Suite and priced by contract.' },
+      ],
+    },
+  })],
+
   /* ------------------------------------------- places & weather */
   ['GET', /^\/api\/sales\/place-categories$/, () => ({
     body: {
