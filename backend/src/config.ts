@@ -517,6 +517,28 @@ export const config = {
     actionTimeoutMs: Number(process.env.COMPUTER_USE_ACTION_TIMEOUT_MS ?? 45 * 1000),
     maxTokens: Number(process.env.COMPUTER_USE_MAX_TOKENS ?? 16000),
   },
+  campaigns: {
+    // Public map and weather data. Both are free and open, and both ask for a
+    // contactable User-Agent as a condition of use rather than a suggestion —
+    // getting blocked would break the feature for every customer at once.
+    userAgent: process.env.CAMPAIGNS_USER_AGENT ?? 'AtmosphereBot/1.0 (+https://atmosphere.build/bot)',
+
+    // OpenStreetMap. Chosen over Google Places deliberately: Places charges per
+    // call and forbids storing results, which makes building a territory list
+    // out of it both expensive and against the terms. OSM is ODbL — free to
+    // query, free to cache, attribution the only obligation.
+    nominatimBaseUrl: process.env.NOMINATIM_BASE_URL ?? 'https://nominatim.openstreetmap.org',
+    overpassBaseUrl: process.env.OVERPASS_BASE_URL ?? 'https://overpass-api.de/api/interpreter',
+    maxPlacesPerSearch: Number(process.env.CAMPAIGNS_MAX_PLACES ?? 300),
+
+    // The National Weather Service. Free, no key, and authoritative — these are
+    // the alerts that drive the warnings on the radio.
+    weatherBaseUrl: process.env.WEATHER_BASE_URL ?? 'https://api.weather.gov',
+
+    countryCode: process.env.CAMPAIGNS_COUNTRY ?? 'us',
+    requestTimeoutMs: Number(process.env.CAMPAIGNS_TIMEOUT_MS ?? 25_000),
+  },
+
   prospecting: {
     // Finding contact details is a licensed-data problem: the records are
     // bought from a vendor per match, not computed. 'sandbox' serves invented

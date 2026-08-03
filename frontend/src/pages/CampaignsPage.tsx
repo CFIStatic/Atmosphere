@@ -7,8 +7,13 @@ import {
   type CampaignMember,
   type CampaignMemberStatus,
   type Territory,
+  type WeatherGroup,
+  type PlaceCategory,
+  type AudienceMember,
 } from '../lib/api';
 import { SpinnerIcon } from '../components/icons';
+import { PlaceFinder } from '../components/campaigns/PlaceFinder';
+import { WeatherWatch } from '../components/campaigns/WeatherWatch';
 
 /**
  * Campaigns — deliberate outreach, and whether it worked.
@@ -52,11 +57,34 @@ export function CampaignsPage() {
   const [channel, setChannel] = useState<CampaignChannel>('email');
   const [territoryId, setTerritoryId] = useState('');
 
+  // Weather trigger + audience rules + the message itself. A weather campaign
+  // sends while nobody is watching, so all three are written up front.
+  const [triggerKind, setTriggerKind] = useState<'manual' | 'weather'>('manual');
+  const [groups, setGroups] = useState<string[]>([]);
+  const [leadHours, setLeadHours] = useState(48);
+  const [weatherGroups, setWeatherGroups] = useState<WeatherGroup[]>([]);
+  const [placeCats, setPlaceCats] = useState<PlaceCategory[]>([]);
+  const [audCategories, setAudCategories] = useState<string[]>([]);
+  const [includeContacts, setIncludeContacts] = useState(true);
+  const [titleWords, setTitleWords] = useState('facilities, operations, property');
+  const [subject, setSubject] = useState('Checking in ahead of the weather');
+  const [body, setBody] = useState(
+    'Hi {{first_name}},\n\nHope things are good at {{company}}. We\u2019re watching {{event}} for {{area}} over the next couple of days and wanted to check in before it arrives.\n\nIf anything does come up \u2014 water, roof, anything \u2014 we can have someone out same day. No obligation either way; just wanted you to have a number that answers.\n\n\u2014 {{sender}}',
+  );
+  const [audience, setAudience] = useState<Record<string, AudienceMember[]>>({});
+
   async function load() {
     try {
-      const [campaigns, terr] = await Promise.all([api.campaigns(), api.territories()]);
+      const [campaigns, terr, weather, cats] = await Promise.all([
+        api.campaigns(),
+        api.territories(),
+        api.weatherGroups().catch(() => ({ groups: [] as WeatherGroup[] })),
+        api.placeCategories().catch(() => ({ categories: [] as PlaceCategory[] })),
+      ]);
       setItems(campaigns.items);
       setTerritories(terr.items);
+      setWeatherGroups(weather.groups);
+      setPlaceCats(cats.categories);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load campaigns.');
       setItems([]);
@@ -70,12 +98,24 @@ export function CampaignsPage() {
   async function openCampaign(id: string) {
     const next = openId === id ? null : id;
     setOpenId(next);
-    if (next && !members[next]) {
+    if (!next) return;
+
+    if (!members[next]) {
       try {
         const res = await api.campaignMembers(next);
         setMembers((prev) => ({ ...prev, [next]: res.items }));
       } catch {
         setMembers((prev) => ({ ...prev, [next]: [] }));
+      }
+    }
+    // Who the *rules* would reach, which is not the same as who has already
+    // been added — and it is the number that matters before a send.
+    if (!audience[next]) {
+      try {
+        const res = await api.campaignAudience(next);
+        setAudience((prev) => ({ ...prev, [next]: res.members }));
+      } catch {
+        setAudience((prev) => ({ ...prev, [next]: [] }));
       }
     }
   }
@@ -90,6 +130,20 @@ export function CampaignsPage() {
         goal: goal || null,
         channel,
         territoryId: territoryId || null,
+        triggerKind,
+        triggerConfig:
+          triggerKind === 'weather' ? { groups, leadTimeHours: leadHours, cooldownDays: 14 } : {},
+        audienceConfig: {
+          placeCategories: audCategories,
+          includeContacts,
+          territoryId: territoryId || null,
+          titleKeywords: titleWords
+            .split(',')
+            .map((t) => t.trim())
+            .filter(Boolean),
+        },
+        messageSubject: subject || null,
+        messageBody: body || null,
       });
       setName('');
       setGoal('');
@@ -195,6 +249,168 @@ export function CampaignsPage() {
               </select>
             </label>
           </div>
+          {/* ---- what makes it go out ---- */}
+          <fieldset className="rounded-lg border border-line p-4">
+            <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-ink-500">
+              When it sends
+            </legend>
+            <div className="flex flex-wrap gap-1.5">
+              {(['manual', 'weather'] as const).map((kind) => (
+                <button
+                  key={kind}
+                  type="button"
+                  onClick={() => setTriggerKind(kind)}
+                  aria-pressed={triggerKind === kind}
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                    triggerKind === kind
+                      ? 'bg-brand-600 text-ink-900'
+                      : 'glass-card text-ink-600 hover:text-ink-900'
+                  }`}
+                >
+                  {kind === 'manual' ? 'When I send it' : 'When the weather turns'}
+                </button>
+              ))}
+            </div>
+
+            {triggerKind === 'weather' && (
+              <div className="mt-3 space-y-3">
+                <div className="flex flex-wrap gap-1.5">
+                  {weatherGroups.map((g) => {
+                    const on = groups.includes(g.id);
+                    return (
+                      <button
+                        key={g.id}
+                        type="button"
+                        title={g.blurb}
+                        onClick={() =>
+                          setGroups((prev) =>
+                            prev.includes(g.id) ? prev.filter((x) => x !== g.id) : [...prev, g.id],
+                          )
+                        }
+                        aria-pressed={on}
+                        className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                          on ? 'bg-caution-50 text-caution-600' : 'glass-card text-ink-600'
+                        }`}
+                      >
+                        {g.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <label className="block max-w-xs">
+                  <span className="text-sm font-medium text-ink-700">Send when it is within</span>
+                  <select
+                    className="mt-1 w-full rounded-lg glass-field px-3.5 py-2.5 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+                    value={leadHours}
+                    onChange={(e) => setLeadHours(Number(e.target.value))}
+                  >
+                    <option value={12}>12 hours</option>
+                    <option value={24}>1 day</option>
+                    <option value={48}>2 days</option>
+                    <option value={72}>3 days</option>
+                  </select>
+                  <span className="mt-1.5 block text-xs text-ink-500">
+                    Warnings usually arrive hours ahead, watches a day or two. Further out than this
+                    and it waits — a storm that misses makes the next email easy to ignore.
+                  </span>
+                </label>
+              </div>
+            )}
+          </fieldset>
+
+          {/* ---- who it goes to ---- */}
+          <fieldset className="rounded-lg border border-line p-4">
+            <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-ink-500">
+              Who it goes to
+            </legend>
+
+            <label className="flex items-start gap-2.5">
+              <input
+                type="checkbox"
+                checked={includeContacts}
+                onChange={(e) => setIncludeContacts(e.target.checked)}
+                className="mt-0.5 accent-brand-600"
+              />
+              <span className="text-sm text-ink-700">
+                People already in my CRM
+                <span className="block text-xs text-ink-500">
+                  Filtered by the territory and job titles below.
+                </span>
+              </span>
+            </label>
+
+            <p className="mt-3 text-sm text-ink-700">Buildings I have saved</p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {placeCats.map((c) => {
+                const on = audCategories.includes(c.id);
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    title={c.blurb}
+                    onClick={() =>
+                      setAudCategories((prev) =>
+                        prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id],
+                      )
+                    }
+                    aria-pressed={on}
+                    className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                      on ? 'bg-brand-600 text-ink-900' : 'glass-card text-ink-600 hover:text-ink-900'
+                    }`}
+                  >
+                    {c.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <label className="mt-3 block">
+              <span className="text-sm font-medium text-ink-700">Job titles</span>
+              <input
+                className="mt-1 w-full rounded-lg glass-field px-3.5 py-2.5 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+                value={titleWords}
+                onChange={(e) => setTitleWords(e.target.value)}
+                placeholder="facilities, operations, property"
+              />
+              <span className="mt-1.5 block text-xs text-ink-500">
+                Comma separated. Leave empty to reach everyone in the territory.
+              </span>
+            </label>
+          </fieldset>
+
+          {/* ---- what it says ---- */}
+          <fieldset className="rounded-lg border border-line p-4">
+            <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-ink-500">
+              What it says
+            </legend>
+            <label className="block">
+              <span className="text-sm font-medium text-ink-700">Subject</span>
+              <input
+                className="mt-1 w-full rounded-lg glass-field px-3.5 py-2.5 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+              />
+            </label>
+            <label className="mt-3 block">
+              <span className="text-sm font-medium text-ink-700">Message</span>
+              <textarea
+                rows={9}
+                className="mt-1 w-full rounded-lg glass-field px-3.5 py-2.5 text-sm leading-relaxed text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+              />
+              <span className="mt-1.5 block text-xs text-ink-500">
+                <code className="text-ink-600">{'{{first_name}}'}</code>{' '}
+                <code className="text-ink-600">{'{{company}}'}</code>{' '}
+                <code className="text-ink-600">{'{{event}}'}</code>{' '}
+                <code className="text-ink-600">{'{{area}}'}</code>{' '}
+                <code className="text-ink-600">{'{{sender}}'}</code> get filled in. A missing name
+                becomes “there”, never “Hi ,”.
+              </span>
+            </label>
+          </fieldset>
+
           <button
             type="submit"
             disabled={busy}
@@ -211,6 +427,11 @@ export function CampaignsPage() {
           {error}
         </p>
       )}
+
+      <div className="mt-6 space-y-4">
+        <WeatherWatch />
+        <PlaceFinder territories={territories} onImported={() => void load()} />
+      </div>
 
       {items === null ? (
         <p className="mt-6 text-sm text-ink-600">Loading…</p>
@@ -245,6 +466,11 @@ export function CampaignsPage() {
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
+                    {campaign.triggerKind === 'weather' && (
+                      <span className="rounded-full bg-caution-50 px-2 py-0.5 text-[10.5px] font-semibold text-caution-600">
+                        weather
+                      </span>
+                    )}
                     <span className="text-xs text-ink-500">
                       {total} {total === 1 ? 'person' : 'people'}
                     </span>
@@ -279,6 +505,30 @@ export function CampaignsPage() {
 
                 {open && (
                   <div className="mt-4 border-t border-line pt-4">
+                    {audience[campaign.id] && audience[campaign.id].length > 0 && (
+                      <div className="mb-4 rounded-lg border border-brand-200 bg-brand-50/40 p-3">
+                        <p className="text-xs font-semibold text-ink-900">
+                          Its rules would reach{' '}
+                          <span className="tabular-nums">{audience[campaign.id].length}</span>{' '}
+                          {audience[campaign.id].length === 1 ? 'person' : 'people'} today
+                        </p>
+                        <ul className="mt-1.5 space-y-0.5">
+                          {audience[campaign.id].slice(0, 5).map((m) => (
+                            <li key={`${m.kind}-${m.id}`} className="text-[11px] text-ink-600">
+                              {m.name}
+                              {m.company && m.company !== m.name ? ` · ${m.company}` : ''} —{' '}
+                              <span className="text-ink-500">{m.why}</span>
+                            </li>
+                          ))}
+                          {audience[campaign.id].length > 5 && (
+                            <li className="text-[11px] text-ink-500">
+                              +{audience[campaign.id].length - 5} more
+                            </li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
+
                     {!members[campaign.id] ? (
                       <p className="text-xs text-ink-500">Loading…</p>
                     ) : members[campaign.id].length === 0 ? (

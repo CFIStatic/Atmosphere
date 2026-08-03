@@ -3,6 +3,33 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { HttpError } from '../lib/errors.js';
+import rateLimit from 'express-rate-limit';
+import { findPlaces, PLACE_CATEGORIES, PLACE_ATTRIBUTION } from '../campaigns/places.js';
+import {
+  activeAlerts,
+  alertCoversTerritory,
+  hoursOfNotice,
+  WEATHER_EVENTS,
+  WEATHER_ATTRIBUTION,
+} from '../campaigns/weather.js';
+import {
+  buildAudience,
+  decideFires,
+  renderTemplate,
+  type AudienceConfig,
+} from '../campaigns/triggers.js';
+
+// Map and weather services are free, shared, and community- or
+// government-run. Staying well inside their limits is a condition of being
+// allowed to use them at all, so the ceiling lives here rather than in
+// everyone's good intentions.
+const placeLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many map or weather lookups. Give it a minute.', code: 'rate_limited' },
+});
 
 /**
  * Campaigns and territories — the two things the pipeline cannot express.
@@ -52,6 +79,25 @@ const campaignSchema = z.object({
   ownerId: z.string().uuid().nullable().optional(),
   startsOn: z.string().date().nullable().optional(),
   endsOn: z.string().date().nullable().optional(),
+  triggerKind: z.enum(['manual', 'weather', 'seasonal']).optional(),
+  triggerConfig: z
+    .object({
+      groups: z.array(z.string().max(40)).max(10).optional(),
+      severities: z.array(z.string().max(20)).max(6).optional(),
+      leadTimeHours: z.number().int().min(0).max(240).optional(),
+      cooldownDays: z.number().int().min(0).max(365).optional(),
+    })
+    .optional(),
+  audienceConfig: z
+    .object({
+      placeCategories: z.array(z.string().max(40)).max(12).optional(),
+      includeContacts: z.boolean().optional(),
+      territoryId: z.string().uuid().nullable().optional(),
+      titleKeywords: z.array(z.string().max(60)).max(12).optional(),
+    })
+    .optional(),
+  messageSubject: z.string().max(200).nullable().optional(),
+  messageBody: z.string().max(5000).nullable().optional(),
 });
 
 const memberSchema = z
@@ -221,6 +267,11 @@ campaignsRouter.post('/campaigns', async (req: Request, res: Response, next: Nex
         owner_id: input.ownerId ?? null,
         starts_on: input.startsOn ?? null,
         ends_on: input.endsOn ?? null,
+        trigger_kind: input.triggerKind ?? 'manual',
+        trigger_config: input.triggerConfig ?? {},
+        audience_config: input.audienceConfig ?? {},
+        message_subject: input.messageSubject ?? null,
+        message_body: input.messageBody ?? null,
       })
       .select('*')
       .single();
@@ -245,6 +296,11 @@ campaignsRouter.patch('/campaigns/:id', async (req: Request, res: Response, next
     if (input.ownerId !== undefined) patch.owner_id = input.ownerId;
     if (input.startsOn !== undefined) patch.starts_on = input.startsOn;
     if (input.endsOn !== undefined) patch.ends_on = input.endsOn;
+    if (input.triggerKind !== undefined) patch.trigger_kind = input.triggerKind;
+    if (input.triggerConfig !== undefined) patch.trigger_config = input.triggerConfig;
+    if (input.audienceConfig !== undefined) patch.audience_config = input.audienceConfig;
+    if (input.messageSubject !== undefined) patch.message_subject = input.messageSubject;
+    if (input.messageBody !== undefined) patch.message_body = input.messageBody;
 
     const { data, error } = await supabase
       .from('crm_campaigns')
@@ -391,6 +447,328 @@ campaignsRouter.delete(
         .eq('id', req.params.memberId);
       if (error) throw new HttpError(400, error.message, 'member_remove_failed');
       res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/* ---- Places: the buildings worth selling to ------------------------------ */
+
+const placeSearchSchema = z.object({
+  area: z.string().trim().min(2).max(120),
+  categories: z.array(z.string().trim().min(1).max(40)).min(1).max(10),
+  limit: z.number().int().min(1).max(300).optional(),
+});
+
+/** GET /api/sales/place-categories — what can be searched for. */
+campaignsRouter.get('/place-categories', async (_req: Request, res: Response) => {
+  res.json({
+    categories: Object.entries(PLACE_CATEGORIES).map(([id, spec]) => ({
+      id,
+      label: spec.label,
+      blurb: spec.blurb,
+    })),
+    attribution: PLACE_ATTRIBUTION,
+  });
+});
+
+/**
+ * POST /api/sales/places/search
+ * Every school / hospital / clinic in an area. Free — this is open map data,
+ * not a licensed dataset, so nothing here touches the credit ledger.
+ */
+campaignsRouter.post(
+  '/places/search',
+  placeLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await requireOrgContext(req);
+      const input = placeSearchSchema.parse(req.body ?? {});
+      const result = await findPlaces(input.area, input.categories, input.limit ?? 200);
+      res.json({ ...result, attribution: PLACE_ATTRIBUTION });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** POST /api/sales/places/import — keep the ones worth working. */
+campaignsRouter.post('/places/import', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { orgId, supabase } = await requireOrgContext(req);
+    const input = z
+      .object({
+        territoryId: z.string().uuid().nullable().optional(),
+        places: z
+          .array(
+            z.object({
+              externalId: z.string().min(1).max(120),
+              category: z.string().min(1).max(40),
+              name: z.string().min(1).max(200),
+              street: z.string().max(200).nullable().optional(),
+              city: z.string().max(120).nullable().optional(),
+              state: z.string().max(60).nullable().optional(),
+              postalCode: z.string().max(20).nullable().optional(),
+              lat: z.number().nullable().optional(),
+              lon: z.number().nullable().optional(),
+              phone: z.string().max(60).nullable().optional(),
+              website: z.string().max(300).nullable().optional(),
+            }),
+          )
+          .min(1)
+          .max(300),
+      })
+      .parse(req.body ?? {});
+
+    // Upsert, not insert: searching the same area twice is normal, and it
+    // should refresh what is there rather than create a second copy of every
+    // school in Round Rock.
+    const { data, error } = await supabase
+      .from('crm_places')
+      .upsert(
+        input.places.map((p) => ({
+          org_id: orgId,
+          source: 'osm',
+          external_id: p.externalId,
+          category: p.category,
+          name: p.name,
+          street: p.street ?? null,
+          city: p.city ?? null,
+          state: p.state ?? null,
+          postal_code: p.postalCode ?? null,
+          lat: p.lat ?? null,
+          lon: p.lon ?? null,
+          phone: p.phone ?? null,
+          website: p.website ?? null,
+          territory_id: input.territoryId ?? null,
+          updated_at: new Date().toISOString(),
+        })),
+        { onConflict: 'org_id,source,external_id' },
+      )
+      .select('id');
+
+    if (error) throw new HttpError(400, error.message, 'place_import_failed');
+    res.status(201).json({ imported: data?.length ?? 0 });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /api/sales/places — what this org has kept. */
+campaignsRouter.get('/places', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { orgId, supabase } = await requireOrgContext(req);
+    let query = supabase.from('crm_places').select('*').eq('org_id', orgId).order('name').limit(1000);
+    if (typeof req.query.territoryId === 'string') {
+      query = query.eq('territory_id', req.query.territoryId);
+    }
+    if (typeof req.query.category === 'string') query = query.eq('category', req.query.category);
+
+    const { data, error } = await query;
+    if (error) throw new HttpError(500, error.message, 'places_failed');
+    res.json({ items: (data ?? []).map((r: any) => camel(r)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* ---- Weather ------------------------------------------------------------- */
+
+/** GET /api/sales/weather/events — the event groups a campaign can watch. */
+campaignsRouter.get('/weather/events', async (_req: Request, res: Response) => {
+  res.json({
+    groups: Object.entries(WEATHER_EVENTS).map(([id, spec]) => ({
+      id,
+      label: spec.label,
+      blurb: spec.blurb,
+      events: spec.events,
+    })),
+    attribution: WEATHER_ATTRIBUTION,
+  });
+});
+
+/**
+ * GET /api/sales/weather/active?state=TX
+ * What the National Weather Service has out right now, annotated with which
+ * of this org's territories each alert covers.
+ */
+campaignsRouter.get(
+  '/weather/active',
+  placeLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { orgId, supabase } = await requireOrgContext(req);
+      const state = typeof req.query.state === 'string' ? req.query.state : 'TX';
+
+      const [alerts, { data: territories }] = await Promise.all([
+        activeAlerts(state),
+        supabase.from('crm_territories').select('*').eq('org_id', orgId),
+      ]);
+
+      res.json({
+        attribution: WEATHER_ATTRIBUTION,
+        alerts: alerts.map((alert) => ({
+          ...alert,
+          hoursOfNotice: hoursOfNotice(alert),
+          // The join a salesperson actually cares about: not "is there a
+          // storm" but "is there a storm where I sell".
+          territories: (territories ?? [])
+            .filter((t: any) =>
+              alertCoversTerritory(alert, {
+                cities: t.cities,
+                counties: t.counties,
+                postalCodes: t.postal_codes,
+              }),
+            )
+            .map((t: any) => ({ id: t.id, name: t.name })),
+        })),
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/* ---- What would fire, and who it would reach ----------------------------- */
+
+/**
+ * GET /api/sales/campaigns/pending
+ * A dry run: which weather campaigns would go out right now, which would not,
+ * and why. Sends nothing.
+ *
+ * The "why not" half is the point. A campaign that stayed silent through a
+ * hail storm is the thing somebody needs explained, and without this the only
+ * answer available is a shrug.
+ */
+campaignsRouter.get(
+  '/campaigns/pending',
+  placeLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { orgId, supabase } = await requireOrgContext(req);
+      const state = typeof req.query.state === 'string' ? req.query.state : 'TX';
+
+      const [alerts, campaigns, territories, fires] = await Promise.all([
+        activeAlerts(state),
+        supabase.from('crm_campaigns').select('*').eq('org_id', orgId),
+        supabase.from('crm_territories').select('*').eq('org_id', orgId),
+        supabase
+          .from('crm_campaign_fires')
+          .select('campaign_id, alert_id, fired_at')
+          .eq('org_id', orgId),
+      ]);
+
+      const firedAlertIds = new Set<string>();
+      const lastFiredAt = new Map<string, Date>();
+      for (const row of (fires.data ?? []) as any[]) {
+        if (row.alert_id) firedAlertIds.add(`${row.campaign_id}:${row.alert_id}`);
+        const at = new Date(row.fired_at);
+        const seen = lastFiredAt.get(row.campaign_id);
+        if (!seen || at > seen) lastFiredAt.set(row.campaign_id, at);
+      }
+
+      const decision = decideFires({
+        campaigns: (campaigns.data ?? []) as any[],
+        territories: (territories.data ?? []) as any[],
+        alerts,
+        firedAlertIds,
+        lastFiredAt,
+      });
+
+      res.json({ ...decision, alertsSeen: alerts.length });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * GET /api/sales/campaigns/:id/audience
+ * Who this campaign would reach, from its rules rather than a frozen list.
+ * The same function answers this and the send path, so a preview of forty
+ * cannot become a mailing of four hundred.
+ */
+campaignsRouter.get(
+  '/campaigns/:id/audience',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { orgId, supabase } = await requireOrgContext(req);
+
+      const { data: campaign, error } = await supabase
+        .from('crm_campaigns')
+        .select('*')
+        .eq('org_id', orgId)
+        .eq('id', req.params.id)
+        .maybeSingle();
+      if (error) throw new HttpError(500, error.message, 'campaign_read_failed');
+      if (!campaign) throw new HttpError(404, 'Campaign not found.', 'not_found');
+
+      const audience = (campaign.audience_config ?? {}) as AudienceConfig;
+      const territoryId = audience.territoryId ?? campaign.territory_id ?? null;
+
+      const [contacts, places, territory] = await Promise.all([
+        audience.includeContacts
+          ? supabase
+              .from('crm_contacts')
+              .select('id, first_name, last_name, email, title, company_name')
+              .eq('org_id', orgId)
+              .not('email', 'is', null)
+              .limit(2000)
+          : Promise.resolve({ data: [] as any[] }),
+        supabase.from('crm_places').select('*').eq('org_id', orgId).limit(2000),
+        territoryId
+          ? supabase.from('crm_territories').select('*').eq('id', territoryId).maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
+
+      const members = buildAudience({
+        audience: { ...audience, territoryId },
+        contacts: (contacts.data ?? []) as any[],
+        places: (places.data ?? []) as any[],
+        territory: (territory as any).data ?? null,
+      });
+
+      res.json({
+        members,
+        total: members.length,
+        contacts: members.filter((m) => m.kind === 'contact').length,
+        places: members.filter((m) => m.kind === 'place').length,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** POST /api/sales/campaigns/:id/preview — render the message for one person. */
+campaignsRouter.post(
+  '/campaigns/:id/preview',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { orgId, supabase } = await requireOrgContext(req);
+      const vars = z
+        .object({
+          firstName: z.string().max(80).optional(),
+          company: z.string().max(160).optional(),
+          event: z.string().max(80).optional(),
+          area: z.string().max(160).optional(),
+          senderName: z.string().max(80).optional(),
+        })
+        .parse(req.body ?? {});
+
+      const { data: campaign } = await supabase
+        .from('crm_campaigns')
+        .select('message_subject, message_body')
+        .eq('org_id', orgId)
+        .eq('id', req.params.id)
+        .maybeSingle();
+      if (!campaign) throw new HttpError(404, 'Campaign not found.', 'not_found');
+
+      res.json({
+        subject: renderTemplate(campaign.message_subject ?? '', vars),
+        body: renderTemplate(campaign.message_body ?? '', vars),
+      });
     } catch (err) {
       next(err);
     }

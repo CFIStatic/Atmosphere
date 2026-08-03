@@ -377,6 +377,53 @@ export interface Campaign {
   createdAt: string;
   /** Members by status, plus `total`. Absent keys are zero. */
   counts: Record<string, number>;
+  triggerKind?: 'manual' | 'weather' | 'seasonal';
+  triggerConfig?: TriggerConfig;
+  audienceConfig?: AudienceConfig;
+  messageSubject?: string | null;
+  messageBody?: string | null;
+}
+
+export interface PlaceCategory { id: string; label: string; blurb: string; }
+
+export interface FoundPlace {
+  externalId: string; category: string; name: string;
+  street: string | null; city: string | null; state: string | null;
+  postalCode: string | null; lat: number | null; lon: number | null;
+  phone: string | null; website: string | null;
+}
+
+export interface WeatherGroup { id: string; label: string; blurb: string; events: string[]; }
+
+export interface WeatherAlert {
+  id: string; event: string; severity: string; urgency: string;
+  headline: string | null; areaDesc: string;
+  effective: string | null; onset: string | null; expires: string | null;
+  group: string | null;
+  hoursOfNotice: number | null;
+  /** Which of your territories this alert covers — the join that matters. */
+  territories: Array<{ id: string; name: string }>;
+}
+
+export interface TriggerConfig {
+  groups?: string[];
+  severities?: string[];
+  leadTimeHours?: number;
+  cooldownDays?: number;
+}
+
+export interface AudienceConfig {
+  placeCategories?: string[];
+  includeContacts?: boolean;
+  territoryId?: string | null;
+  titleKeywords?: string[];
+}
+
+export interface AudienceMember {
+  kind: 'contact' | 'place';
+  id: string; name: string;
+  email: string | null; company: string | null; title: string | null;
+  why: string;
 }
 
 export type CampaignMemberStatus =
@@ -1337,6 +1384,55 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ fullName, companyDomain }),
     }),
+
+  // ---- Places: the buildings worth selling to ----
+  placeCategories: () =>
+    request<{ categories: PlaceCategory[]; attribution: string }>('/api/sales/place-categories', {
+      method: 'GET',
+    }),
+
+  searchPlaces: (area: string, categories: string[], limit?: number) =>
+    request<{
+      places: FoundPlace[];
+      box: { displayName: string } | null;
+      note: string | null;
+      attribution: string;
+    }>('/api/sales/places/search', {
+      method: 'POST',
+      body: JSON.stringify({ area, categories, limit }),
+    }),
+
+  importPlaces: (places: FoundPlace[], territoryId?: string | null) =>
+    request<{ imported: number }>('/api/sales/places/import', {
+      method: 'POST',
+      body: JSON.stringify({ places, territoryId }),
+    }),
+
+  // ---- Weather ----
+  weatherGroups: () =>
+    request<{ groups: WeatherGroup[]; attribution: string }>('/api/sales/weather/events', {
+      method: 'GET',
+    }),
+
+  activeWeather: (state = 'TX') =>
+    request<{ alerts: WeatherAlert[]; attribution: string }>(
+      `/api/sales/weather/active?state=${encodeURIComponent(state)}`,
+      { method: 'GET' },
+    ),
+
+  /** Dry run: what would fire right now, what would not, and why. Sends nothing. */
+  pendingCampaigns: (state = 'TX') =>
+    request<{
+      fire: Array<{ campaignId: string; campaignName: string; reason: string }>;
+      skip: Array<{ campaignId: string; campaignName: string; reason: string }>;
+      alertsSeen: number;
+    }>(`/api/sales/campaigns/pending?state=${encodeURIComponent(state)}`, { method: 'GET' }),
+
+  campaignAudience: (id: string) =>
+    request<{ members: AudienceMember[]; total: number; contacts: number; places: number }>(
+      `/api/sales/campaigns/${id}/audience`,
+      { method: 'GET' },
+    ),
 
   // ---- Territories ----
   territories: () => request<{ items: Territory[] }>('/api/sales/territories', { method: 'GET' }),

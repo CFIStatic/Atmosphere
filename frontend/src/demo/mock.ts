@@ -538,6 +538,17 @@ const CAMPAIGNS: Array<Record<string, any>> = [
     startsOn: '2026-07-01', endsOn: null, createdAt: '2026-07-01T00:00:00Z',
   },
   {
+    id: 'camp-3', name: 'Hail watch — North Austin schools',
+    goal: 'Be the call they already have when hail hits',
+    channel: 'email', status: 'active', territoryId: 'terr-1', ownerId: 'u-1',
+    startsOn: null, endsOn: null, createdAt: '2026-07-20T00:00:00Z',
+    triggerKind: 'weather',
+    triggerConfig: { groups: ['hail', 'wind'], leadTimeHours: 48, cooldownDays: 14 },
+    audienceConfig: { placeCategories: ['school', 'hospital', 'senior_living'], includeContacts: true, territoryId: 'terr-1', titleKeywords: ['facilities', 'operations', 'property'] },
+    messageSubject: 'Checking in ahead of the weather',
+    messageBody: 'Hi {{first_name}}, ...',
+  },
+  {
     id: 'camp-2', name: 'Adjuster reintroductions',
     goal: 'Re-engage the desk adjusters we worked with last year',
     channel: 'mixed', status: 'paused', territoryId: null, ownerId: 'u-1',
@@ -546,6 +557,7 @@ const CAMPAIGNS: Array<Record<string, any>> = [
 ];
 
 const CAMPAIGN_MEMBERS: Record<string, Array<Record<string, any>>> = {
+  'camp-3': [],
   'camp-1': [
     { id: 'cm-1', campaignId: 'camp-1', contactId: 'ct-2', prospectId: null, status: 'replied', lastTouchAt: '2026-07-28T15:00:00Z', touches: 3, note: null, personName: 'Rita Calloway', personEmail: 'r.calloway@alliancemutual.com', personCompany: 'Alliance Mutual' },
     { id: 'cm-2', campaignId: 'camp-1', contactId: 'ct-3', prospectId: null, status: 'opened', lastTouchAt: '2026-07-30T09:20:00Z', touches: 2, note: null, personName: 'Sam Okafor', personEmail: 'sam@camdencourt.org', personCompany: 'Camden Court HOA' },
@@ -774,6 +786,116 @@ const routes: Array<[string, RegExp, Handler]> = [
         ],
       },
     };
+  }],
+
+  /* ------------------------------------------- places & weather */
+  ['GET', /^\/api\/sales\/place-categories$/, () => ({
+    body: {
+      attribution: '© OpenStreetMap contributors (ODbL)',
+      categories: [
+        { id: 'school', label: 'Schools', blurb: 'K-12, public and private' },
+        { id: 'university', label: 'Colleges & universities', blurb: 'Campuses and community colleges' },
+        { id: 'hospital', label: 'Hospitals', blurb: 'Full hospitals with inpatient care' },
+        { id: 'clinic', label: 'Clinics & medical offices', blurb: 'Urgent care, doctors, dentists' },
+        { id: 'senior_living', label: 'Senior living', blurb: 'Nursing homes and assisted living' },
+        { id: 'hotel', label: 'Hotels', blurb: 'Hotels and motels' },
+        { id: 'church', label: 'Churches & places of worship', blurb: 'Often self-managed' },
+        { id: 'government', label: 'Government buildings', blurb: 'City, county and public offices' },
+        { id: 'retail', label: 'Retail & shopping centres', blurb: 'Malls, supermarkets, big box' },
+        { id: 'office', label: 'Office buildings', blurb: 'Commercial multi-tenant' },
+      ],
+    },
+  })],
+  ['POST', /^\/api\/sales\/places\/search$/, (_m, b) => {
+    const cats = Array.isArray(b.categories) ? (b.categories as string[]) : [];
+    const pool = [
+      { externalId: 'way/1', category: 'school', name: 'Round Rock High School', street: '300 N Lake Creek Dr', city: 'Round Rock', state: 'TX', postalCode: '78681', lat: 30.52, lon: -97.68, phone: '(512) 555-0301', website: null },
+      { externalId: 'way/2', category: 'school', name: 'Stony Point High School', street: '1801 Tiger Trail', city: 'Round Rock', state: 'TX', postalCode: '78664', lat: 30.49, lon: -97.65, phone: null, website: null },
+      { externalId: 'way/3', category: 'school', name: 'Cedar Ridge High School', street: '2801 Gattis School Rd', city: 'Round Rock', state: 'TX', postalCode: '78664', lat: 30.48, lon: -97.63, phone: '(512) 555-0344', website: null },
+      { externalId: 'way/4', category: 'hospital', name: 'Baylor Scott & White Medical Center', street: '300 University Blvd', city: 'Round Rock', state: 'TX', postalCode: '78665', lat: 30.55, lon: -97.67, phone: '(512) 555-0400', website: null },
+      { externalId: 'way/5', category: 'hospital', name: 'St. David\u2019s Round Rock Medical Center', street: '2400 Round Rock Ave', city: 'Round Rock', state: 'TX', postalCode: '78681', lat: 30.51, lon: -97.71, phone: null, website: null },
+      { externalId: 'node/6', category: 'clinic', name: 'Lone Star Urgent Care', street: '1615 Gattis School Rd', city: 'Round Rock', state: 'TX', postalCode: '78664', lat: 30.49, lon: -97.66, phone: '(512) 555-0455', website: null },
+      { externalId: 'node/7', category: 'clinic', name: 'Brightway Dental Partners', street: '211 University Blvd', city: 'Round Rock', state: 'TX', postalCode: '78665', lat: 30.54, lon: -97.68, phone: null, website: null },
+      { externalId: 'way/8', category: 'senior_living', name: 'Oakwood Assisted Living', street: '900 Sam Bass Rd', city: 'Round Rock', state: 'TX', postalCode: '78681', lat: 30.53, lon: -97.72, phone: '(512) 555-0512', website: null },
+    ];
+    const places = pool.filter((p) => cats.includes(p.category));
+    return {
+      body: {
+        places,
+        box: { displayName: 'Round Rock, Williamson County, Texas, United States' },
+        note: places.length ? null : 'No places of that kind are mapped in that area.',
+        attribution: '© OpenStreetMap contributors (ODbL)',
+      },
+    };
+  }],
+  ['POST', /^\/api\/sales\/places\/import$/, (_m, b) => ({
+    status: 201,
+    body: { imported: Array.isArray(b.places) ? b.places.length : 0 },
+  })],
+  ['GET', /^\/api\/sales\/weather\/events$/, () => ({
+    body: {
+      attribution: 'Alerts from the US National Weather Service',
+      groups: [
+        { id: 'hail', label: 'Hail', blurb: 'Roof and siding work. The biggest single driver in Texas.', events: [] },
+        { id: 'wind', label: 'High wind', blurb: 'Roof damage, downed trees, envelope failures.', events: [] },
+        { id: 'tornado', label: 'Tornado', blurb: 'Structural. Minutes of notice, not days.', events: [] },
+        { id: 'flood', label: 'Flooding', blurb: 'Water mitigation — the fastest work to mobilise on.', events: [] },
+        { id: 'winter', label: 'Freeze & winter storm', blurb: 'Burst pipes.', events: [] },
+        { id: 'hurricane', label: 'Hurricane & tropical', blurb: 'Days of notice, largest events.', events: [] },
+      ],
+    },
+  })],
+  ['GET', /^\/api\/sales\/weather\/active/, () => ({
+    body: {
+      attribution: 'Alerts from the US National Weather Service',
+      alerts: [
+        {
+          id: 'urn:oid:2.49.0.1.840.0.demo1',
+          event: 'Severe Thunderstorm Watch', severity: 'Severe', urgency: 'Future',
+          headline: 'Severe Thunderstorm Watch until 10 PM CDT',
+          areaDesc: 'Williamson; Travis',
+          effective: null, onset: null, expires: null, group: 'hail',
+          hoursOfNotice: 31,
+          territories: [{ id: 'terr-1', name: 'North Austin' }],
+        },
+        {
+          id: 'urn:oid:2.49.0.1.840.0.demo2',
+          event: 'Flood Watch', severity: 'Moderate', urgency: 'Expected',
+          headline: null, areaDesc: 'Bexar',
+          effective: null, onset: null, expires: null, group: 'flood',
+          hoursOfNotice: 14, territories: [],
+        },
+      ],
+    },
+  })],
+  ['GET', /^\/api\/sales\/campaigns\/pending/, () => ({
+    body: {
+      alertsSeen: 2,
+      fire: [
+        {
+          campaignId: 'camp-3',
+          campaignName: 'Hail watch — North Austin schools',
+          reason: 'Severe Thunderstorm Watch for Williamson; Travis, about 31h out.',
+        },
+      ],
+      skip: [
+        { campaignId: 'camp-1', campaignName: 'Q3 property managers — North Austin', reason: 'Campaign is active but not weather-triggered.' },
+        { campaignId: 'camp-2', campaignName: 'Adjuster reintroductions', reason: 'Campaign is paused.' },
+      ],
+    },
+  })],
+  ['GET', /^\/api\/sales\/campaigns\/([^/]+)\/audience$/, (m) => {
+    const id = String(m).split('/campaigns/')[1]?.split('/')[0] ?? '';
+    if (id !== 'camp-3') return { body: { members: [], total: 0, contacts: 0, places: 0 } };
+    const members = [
+      { kind: 'contact', id: 'ct-4', name: 'Devon Ashby', email: 'devon@camdencourt.org', company: 'Camden Court HOA', title: 'Director of Operations', why: 'Director of Operations in your CRM' },
+      { kind: 'place', id: 'pl-1', name: 'Round Rock High School', email: null, company: 'Round Rock High School', title: null, why: 'school in this area — no contact yet' },
+      { kind: 'place', id: 'pl-2', name: 'Stony Point High School', email: null, company: 'Stony Point High School', title: null, why: 'school in this area — no contact yet' },
+      { kind: 'place', id: 'pl-3', name: 'Cedar Ridge High School', email: null, company: 'Cedar Ridge High School', title: null, why: 'school in this area — no contact yet' },
+      { kind: 'place', id: 'pl-4', name: 'Baylor Scott & White Medical Center', email: null, company: 'Baylor Scott & White Medical Center', title: null, why: 'hospital in this area — no contact yet' },
+      { kind: 'place', id: 'pl-5', name: 'Oakwood Assisted Living', email: null, company: 'Oakwood Assisted Living', title: null, why: 'senior living in this area — no contact yet' },
+    ];
+    return { body: { members, total: members.length, contacts: 1, places: 5 } };
   }],
 
   /* ------------------------------------------- campaigns & territories */
