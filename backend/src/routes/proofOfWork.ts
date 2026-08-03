@@ -230,6 +230,17 @@ export async function recordProof(party: any, admin: any, body: unknown) {
     }
   }
 
+  await recordAccess(admin, {
+    orgId: party.org_id,
+    jobId: party.job_id,
+    proofId: (proof as any).id,
+    action: 'uploaded',
+    partyId: party.id,
+    actorLabel: `${party.contact_name ? `${party.contact_name}, ` : ''}${party.company}`,
+    actorRole: party.role ?? 'subcontractor',
+    detail: `${input.phase} · ${input.workDate}`,
+  });
+
   return {
     proof,
     checks,
@@ -462,6 +473,17 @@ export async function decideProofDay(req: Request, res: Response, next: NextFunc
       .eq('work_date', req.params.workDate);
     if (error) throw new HttpError(400, error.message, 'decide_failed');
 
+    // Against the day rather than one file, because accepting a day is a
+    // decision about the pair.
+    const actor = await actorFor(supabase, userId);
+    await recordAccess(supabase, {
+      orgId,
+      jobId: req.params.jobId,
+      action: input.decision,
+      detail: `${req.params.workDate}${input.note ? ` — ${input.note}` : ''}`,
+      ...actor,
+    });
+
     res.json({ ok: true });
   } catch (err) {
     next(err);
@@ -547,10 +569,10 @@ export async function proofQuestions(req: Request, res: Response, next: NextFunc
  */
 export async function proofVideoUrl(req: Request, res: Response, next: NextFunction) {
   try {
-    const { orgId, supabase } = await requireOrgContext(req);
+    const { orgId, userId, supabase } = await requireOrgContext(req);
     const { data: proof } = await supabase
       .from('job_proofs')
-      .select('storage_path')
+      .select('storage_path, job_id, work_date, phase')
       .eq('org_id', orgId)
       .eq('id', req.params.proofId)
       .maybeSingle();
@@ -563,6 +585,19 @@ export async function proofVideoUrl(req: Request, res: Response, next: NextFunct
       .from(PROOF_BUCKET)
       .createSignedUrl((proof as any).storage_path, 600);
     if (error) throw new HttpError(500, error.message, 'signed_url_failed');
+
+    // Logged here rather than on playback: this is the moment the file becomes
+    // watchable, and it is the only moment the server reliably hears about.
+    // Somebody who fetched the link and closed the tab still had it.
+    const actor = await actorFor(supabase, userId);
+    await recordAccess(supabase, {
+      orgId,
+      jobId: (proof as any).job_id,
+      proofId: req.params.proofId,
+      action: 'viewed',
+      detail: `${(proof as any).phase} · ${(proof as any).work_date}`,
+      ...actor,
+    });
 
     res.json({ url: (data as any).signedUrl, expiresInSeconds: 600 });
   } catch (err) {
@@ -614,6 +649,182 @@ export async function reanalyseProofDay(req: Request, res: Response, next: NextF
       // unread, and the dashboard says so.
       model: (after as any)?.ai_model ?? null,
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/* ---- Evidence: the list, the custody log, and holds ---------------------- */
+
+/**
+ * Write a line into the chain of custody.
+ *
+ * Never throws into the caller. An access that failed to log is bad; a video
+ * that failed to play because logging the view fell over is worse, and the
+ * second failure hides the first behind a support ticket about playback.
+ */
+export async function recordAccess(
+  supabase: any,
+  input: {
+    orgId: string;
+    jobId: string;
+    proofId?: string | null;
+    action: string;
+    actorId?: string | null;
+    partyId?: string | null;
+    actorLabel: string;
+    actorRole?: string | null;
+    detail?: string | null;
+  },
+): Promise<void> {
+  try {
+    await supabase.from('job_evidence_access').insert({
+      org_id: input.orgId,
+      job_id: input.jobId,
+      proof_id: input.proofId ?? null,
+      action: input.action,
+      actor_id: input.actorId ?? null,
+      party_id: input.partyId ?? null,
+      actor_label: input.actorLabel,
+      actor_role: input.actorRole ?? null,
+      detail: input.detail ?? null,
+    });
+  } catch {
+    /* see above */
+  }
+}
+
+/** Who is asking, in the words the log will keep forever. */
+async function actorFor(supabase: any, userId: string) {
+  const { data } = await supabase
+    .from('profiles')
+    .select('full_name, email')
+    .eq('id', userId)
+    .maybeSingle();
+  return {
+    actorId: userId,
+    actorLabel: (data as any)?.full_name ?? (data as any)?.email ?? 'Office',
+    actorRole: 'general_contractor',
+  };
+}
+
+/**
+ * GET /api/operations/shared/:jobId/evidence
+ * Every file on this job, as a list wants it.
+ */
+export async function jobEvidence(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId, supabase } = await requireOrgContext(req);
+    const { data, error } = await supabase
+      .from('job_evidence_items')
+      .select('*')
+      .eq('org_id', orgId)
+      .eq('job_id', req.params.jobId)
+      .order('work_date', { ascending: false })
+      .order('phase');
+    if (error) throw new HttpError(500, error.message, 'evidence_failed');
+
+    const rows = (data ?? []) as any[];
+    res.json({
+      items: rows.map((row) => ({
+        id: row.id,
+        partyId: row.party_id,
+        company: row.party_company,
+        trade: row.party_trade,
+        workDate: row.work_date,
+        phase: row.phase,
+        category: row.category,
+        title: row.title,
+        tags: row.tags ?? [],
+        durationSeconds: row.duration_seconds === null ? null : Number(row.duration_seconds),
+        byteSize: row.byte_size === null ? null : Number(row.byte_size),
+        capturedAt: row.captured_at,
+        receivedAt: row.received_at,
+        hasLocation: row.lat !== null && row.lon !== null,
+        state: row.state,
+        checks: row.checks ?? [],
+        aiSummary: row.ai_summary,
+        legalHold: row.legal_hold,
+        retentionUntil: row.retention_until,
+        // Shown truncated. The full digest is on the detail panel, because the
+        // point of it there is that somebody can compare it to a file they
+        // were sent.
+        contentHash: row.content_hash,
+        viewCount: Number(row.view_count ?? 0),
+        lastViewedAt: row.last_viewed_at,
+      })),
+      counts: {
+        items: rows.length,
+        onHold: rows.filter((r) => r.legal_hold).length,
+        neverViewed: rows.filter((r) => Number(r.view_count ?? 0) === 0).length,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** GET /api/operations/shared/:jobId/evidence/:proofId/custody */
+export async function evidenceCustody(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId, supabase } = await requireOrgContext(req);
+    const { data, error } = await supabase
+      .from('job_evidence_access')
+      .select('id, action, actor_label, actor_role, detail, occurred_at')
+      .eq('org_id', orgId)
+      .eq('proof_id', req.params.proofId)
+      .order('occurred_at', { ascending: false })
+      .limit(200);
+    if (error) throw new HttpError(500, error.message, 'custody_failed');
+    res.json({ entries: data ?? [] });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /api/operations/shared/:jobId/evidence/:proofId/hold
+ * Put a file beyond the reach of retention, or let it go again.
+ *
+ * Both directions are logged, because "who released the hold on the file we
+ * needed" is a question somebody eventually asks.
+ */
+export async function setEvidenceHold(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId, userId, supabase } = await requireOrgContext(req);
+    const input = z
+      .object({ hold: z.boolean(), reason: z.string().trim().max(500).optional() })
+      .parse(req.body ?? {});
+
+    if (input.hold && !input.reason) {
+      throw new HttpError(
+        400,
+        'Say why it is on hold. A hold nobody can explain is one somebody lifts.',
+        'reason_required',
+      );
+    }
+
+    const { error } = await supabase
+      .from('job_proofs')
+      .update({
+        legal_hold: input.hold,
+        hold_reason: input.hold ? (input.reason ?? null) : null,
+      })
+      .eq('org_id', orgId)
+      .eq('id', req.params.proofId);
+    if (error) throw new HttpError(400, error.message, 'hold_failed');
+
+    const actor = await actorFor(supabase, userId);
+    await recordAccess(supabase, {
+      orgId,
+      jobId: req.params.jobId,
+      proofId: req.params.proofId,
+      action: input.hold ? 'held' : 'released',
+      detail: input.reason ?? null,
+      ...actor,
+    });
+
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

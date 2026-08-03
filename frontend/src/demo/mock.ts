@@ -995,6 +995,38 @@ const SHARE_PROOF_DAYS = [
   { workDate: '2026-08-01', hasBefore: true, hasAfter: true, summary: 'Nothing contradicts it, but 2 things could not be checked.', problems: [], accepted: true },
 ];
 
+/**
+ * The evidence locker. Six files across the two crews, one on legal hold for
+ * the disputed day, and a chain of custody that includes views — because "you
+ * never showed me that video" is answered by a number.
+ */
+const EVIDENCE: Record<string, any[]> = {
+  'job-1038': [
+    { id: 'pf-1', partyId: 'pty-2', company: 'Delgado Roofing', trade: 'roofing', workDate: '2026-08-05', phase: 'before', category: 'before', title: 'Before — Aug 05', tags: ['north slope'], durationSeconds: 68, byteSize: 84_310_000, capturedAt: '2026-08-05T12:58:00Z', receivedAt: '2026-08-05T13:02:00Z', hasLocation: true, state: 'checked', checks: [], aiSummary: null, legalHold: false, retentionUntil: '2028-08-05', contentHash: '4f2a9c1d8b73e5460af1c92d7e3b8054916cfa2d7b04e8135ca6dfe27093b118', viewCount: 3, lastViewedAt: '2026-08-05T18:22:00Z' },
+    { id: 'pf-2', partyId: 'pty-2', company: 'Delgado Roofing', trade: 'roofing', workDate: '2026-08-05', phase: 'after', category: 'after', title: 'After — Aug 05', tags: ['north slope', 'decking'], durationSeconds: 94, byteSize: 121_800_000, capturedAt: '2026-08-05T20:46:00Z', receivedAt: '2026-08-05T20:51:00Z', hasLocation: true, state: 'analysed', checks: [], aiSummary: 'The north slope is stripped to the deck in the before frames and fully dried-in with underlayment and new shingles across roughly two thirds of it in the after. Six sheets of new decking are visible in the valley.', legalHold: false, retentionUntil: '2028-08-05', contentHash: 'c81be4079d3a52f6148e0b7d93ac25e1f70648b2ad91c3506fe8b74d2a109c37', viewCount: 2, lastViewedAt: '2026-08-06T07:41:00Z' },
+    { id: 'pf-3', partyId: 'pty-2', company: 'Delgado Roofing', trade: 'roofing', workDate: '2026-08-04', phase: 'before', category: 'before', title: 'Before — Aug 04', tags: [], durationSeconds: 41, byteSize: 52_400_000, capturedAt: '2026-08-04T13:05:00Z', receivedAt: '2026-08-04T13:08:00Z', hasLocation: true, state: 'checked', checks: [], aiSummary: null, legalHold: false, retentionUntil: '2028-08-04', contentHash: '9a4c2f81de06b3574c98a1f2b7e04d63951c8a70bd42e6f1039c85ba7d21e4f0', viewCount: 1, lastViewedAt: '2026-08-06T09:12:00Z' },
+    { id: 'pf-4', partyId: 'pty-2', company: 'Delgado Roofing', trade: 'roofing', workDate: '2026-08-04', phase: 'after', category: 'issue', title: 'After — Aug 04 (disputed)', tags: ['off-site', 'disputed'], durationSeconds: 52, byteSize: 61_900_000, capturedAt: '2026-08-04T19:30:00Z', receivedAt: '2026-08-04T22:40:00Z', hasLocation: true, state: 'analysed', checks: [{ key: 'on_site', verdict: 'fail', detail: 'Filmed 2.14 miles from the site — outside the 0.25-mile radius.' }], aiSummary: 'The after frames show a different roof pitch and a different street elevation from the before. Both show roofing work in progress.', legalHold: true, retentionUntil: null, contentHash: '2e7b90a4c1d85f36027ea9b41c6d3805f71b29ac04e8d517b3a62ce09f4d1836', viewCount: 5, lastViewedAt: '2026-08-06T09:15:00Z' },
+    { id: 'pf-5', partyId: 'pty-3', company: 'Brightline Electric', trade: 'electrical', workDate: '2026-08-05', phase: 'before', category: 'before', title: 'Before — Aug 05', tags: [], durationSeconds: 33, byteSize: 38_200_000, capturedAt: '2026-08-05T14:10:00Z', receivedAt: '2026-08-05T14:12:00Z', hasLocation: false, state: 'checked', checks: [{ key: 'on_site', verdict: 'unknown', detail: 'The video carries no location. Ask them to allow location in the app.' }], aiSummary: null, legalHold: false, retentionUntil: '2028-08-05', contentHash: '7c05fa9138be6247d0a1e83bc4f9d2058ba61374ec802f9de5164a730bc8912e', viewCount: 0, lastViewedAt: null },
+    { id: 'pf-6', partyId: 'pty-2', company: 'Delgado Roofing', trade: 'roofing', workDate: '2026-08-01', phase: 'before', category: 'condition', title: 'Pre-existing damage — Aug 01', tags: ['gutter', 'pre-existing'], durationSeconds: 55, byteSize: 66_100_000, capturedAt: '2026-08-01T12:40:00Z', receivedAt: '2026-08-01T12:44:00Z', hasLocation: false, state: 'checked', checks: [{ key: 'on_site', verdict: 'unknown', detail: 'The video carries no location. Ask them to allow location in the app.' }], aiSummary: null, legalHold: false, retentionUntil: '2033-08-01', contentHash: 'b3419e7c05d2a86f14730bce29a5d861f04c73b95e2018da6cf4b7350e9a1d26', viewCount: 1, lastViewedAt: '2026-08-02T08:05:00Z' },
+  ],
+  'job-1041': [],
+};
+
+const CUSTODY: Record<string, any[]> = {
+  'pf-4': [
+    { id: 'cu-1', action: 'held', actor_label: 'Priya Shah', actor_role: 'general_contractor', detail: 'Disputed day — mediation pending', occurred_at: '2026-08-06T09:20:00Z' },
+    { id: 'cu-2', action: 'viewed', actor_label: 'Priya Shah', actor_role: 'general_contractor', detail: 'after · 2026-08-04', occurred_at: '2026-08-06T09:15:00Z' },
+    { id: 'cu-3', action: 'viewed', actor_label: 'Tom Reyes', actor_role: 'general_contractor', detail: 'after · 2026-08-04', occurred_at: '2026-08-05T16:02:00Z' },
+    { id: 'cu-4', action: 'analysed', actor_label: 'Atmosphere', actor_role: null, detail: 'Frames read; two videos do not appear to show the same building', occurred_at: '2026-08-04T22:44:00Z' },
+    { id: 'cu-5', action: 'uploaded', actor_label: 'Hector Delgado, Delgado Roofing', actor_role: 'subcontractor', detail: 'after · 2026-08-04', occurred_at: '2026-08-04T22:40:00Z' },
+  ],
+  'pf-2': [
+    { id: 'cu-6', action: 'viewed', actor_label: 'Priya Shah', actor_role: 'general_contractor', detail: 'after · 2026-08-05', occurred_at: '2026-08-06T07:41:00Z' },
+    { id: 'cu-7', action: 'analysed', actor_label: 'Atmosphere', actor_role: null, detail: 'Frames read against 5 scope lines', occurred_at: '2026-08-05T20:55:00Z' },
+    { id: 'cu-8', action: 'uploaded', actor_label: 'Hector Delgado, Delgado Roofing', actor_role: 'subcontractor', detail: 'after · 2026-08-05', occurred_at: '2026-08-05T20:51:00Z' },
+  ],
+};
+
 const CAMPAIGNS: Array<Record<string, any>> = [
   {
     id: 'camp-1', name: 'Q3 property managers — North Austin',
@@ -1555,6 +1587,39 @@ const routes: Array<[string, RegExp, Handler]> = [
     return { status: 201, body: { proof: { id: `pf-${Date.now()}` }, checks: [], problems } };
   }],
 
+  ['GET', /^\/api\/operations\/shared\/([\w-]+)\/evidence$/, (m) => {
+    const items = EVIDENCE[m[1]] ?? [];
+    return {
+      body: {
+        items,
+        counts: {
+          items: items.length,
+          onHold: items.filter((i: any) => i.legalHold).length,
+          neverViewed: items.filter((i: any) => i.viewCount === 0).length,
+        },
+      },
+    };
+  }],
+  ['GET', /^\/api\/operations\/shared\/([\w-]+)\/evidence\/([\w-]+)\/custody$/, (m) => ({
+    body: { entries: CUSTODY[m[2]] ?? [] },
+  })],
+  ['POST', /^\/api\/operations\/shared\/([\w-]+)\/evidence\/([\w-]+)\/hold$/, (m, b) => {
+    const item = (EVIDENCE[m[1]] ?? []).find((i: any) => i.id === m[2]);
+    if (item) {
+      item.legalHold = Boolean(b.hold);
+      item.retentionUntil = item.legalHold ? null : '2028-08-05';
+    }
+    (CUSTODY[m[2]] ??= []).unshift({
+      id: `cu-${Date.now()}`,
+      action: b.hold ? 'held' : 'released',
+      actor_label: 'Dana Ortiz',
+      actor_role: 'general_contractor',
+      detail: (b.reason as string) ?? null,
+      occurred_at: new Date().toISOString(),
+    });
+    return { body: { ok: true } };
+  }],
+
   /* ------------------------------------------- shared job record */
   ['GET', /^\/api\/operations\/shared$/, () => ({
     body: {
@@ -1643,11 +1708,23 @@ const routes: Array<[string, RegExp, Handler]> = [
     }
     return { body: { ok: true } };
   }],
-  ['GET', /^\/api\/operations\/shared\/proof\/([\w-]+)\/video$/, () => ({
-    // A generated clip rather than a real one: the demo has to show the player
-    // working without shipping somebody's house in the bundle.
-    body: { url: DEMO_CLIP, expiresInSeconds: 600 },
-  })],
+  ['GET', /^\/api\/operations\/shared\/proof\/([\w-]+)\/video$/, (m) => {
+    for (const items of Object.values(EVIDENCE)) {
+      const item = (items as any[]).find((i) => i.id === m[1]);
+      if (!item) continue;
+      item.viewCount += 1;
+      item.lastViewedAt = new Date().toISOString();
+      (CUSTODY[m[1]] ??= []).unshift({
+        id: `cu-${Date.now()}`,
+        action: 'viewed',
+        actor_label: 'Dana Ortiz',
+        actor_role: 'general_contractor',
+        detail: `${item.phase} · ${item.workDate}`,
+        occurred_at: new Date().toISOString(),
+      });
+    }
+    return { body: { url: DEMO_CLIP, expiresInSeconds: 600 } };
+  }],
   ['POST', /^\/api\/operations\/shared\/([\w-]+)\/proof\/([\d-]+)\/analyse$/, (m, b) => {
     const record = PROOF_DAYS[m[1]];
     const day = record?.days?.find((d: any) => d.workDate === m[2] && d.partyId === b.partyId);

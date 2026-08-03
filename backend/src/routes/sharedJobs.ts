@@ -23,6 +23,9 @@ import {
   proofQuestions,
   proofVideoUrl,
   reanalyseProofDay,
+  jobEvidence,
+  evidenceCustody,
+  setEvidenceHold,
 } from './proofOfWork.js';
 
 /**
@@ -726,6 +729,12 @@ sharedJobsRouter.post('/shared/:jobId/proof/ask', askAboutProofs);
 sharedJobsRouter.post('/shared/:jobId/proof/:workDate/decide', decideProofDay);
 sharedJobsRouter.post('/shared/:jobId/proof/:workDate/analyse', reanalyseProofDay);
 sharedJobsRouter.get('/shared/proof/:proofId/video', proofVideoUrl);
+
+// Evidence, in the shape a records system uses: a list, a custody log per file,
+// and a hold that outranks retention.
+sharedJobsRouter.get('/shared/:jobId/evidence', jobEvidence);
+sharedJobsRouter.get('/shared/:jobId/evidence/:proofId/custody', evidenceCustody);
+sharedJobsRouter.post('/shared/:jobId/evidence/:proofId/hold', setEvidenceHold);
 
 /**
  * The subcontractor's side, through their job token.

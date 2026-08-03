@@ -749,6 +749,44 @@ export interface ProofQuestion {
   created_at: string;
 }
 
+/* ---- Evidence and chain of custody --------------------------------------- */
+
+export interface EvidenceItem {
+  id: string;
+  partyId: string | null;
+  company: string | null;
+  trade: string | null;
+  workDate: string;
+  phase: 'before' | 'after';
+  category: string | null;
+  title: string;
+  tags: string[];
+  durationSeconds: number | null;
+  byteSize: number | null;
+  capturedAt: string | null;
+  receivedAt: string;
+  hasLocation: boolean;
+  state: string;
+  checks: ProofCheck[];
+  aiSummary: string | null;
+  legalHold: boolean;
+  retentionUntil: string | null;
+  /** SHA-256 of the file. The claim that it has not been altered since. */
+  contentHash: string | null;
+  /** How many times it has been opened. "You never showed me" is answered here. */
+  viewCount: number;
+  lastViewedAt: string | null;
+}
+
+export interface CustodyEntry {
+  id: string;
+  action: string;
+  actor_label: string;
+  actor_role: string | null;
+  detail: string | null;
+  occurred_at: string;
+}
+
 export type CampaignStatus = 'draft' | 'active' | 'paused' | 'finished';
 export type CampaignChannel = 'email' | 'call' | 'mixed';
 
@@ -2031,6 +2069,24 @@ export const api = {
   proofQuestions: (jobId: string) =>
     request<{ questions: ProofQuestion[] }>(`/api/operations/shared/${jobId}/proof/questions`, {
       method: 'GET',
+    }),
+
+  jobEvidence: (jobId: string) =>
+    request<{ items: EvidenceItem[]; counts: { items: number; onHold: number; neverViewed: number } }>(
+      `/api/operations/shared/${jobId}/evidence`,
+      { method: 'GET' },
+    ),
+
+  evidenceCustody: (jobId: string, proofId: string) =>
+    request<{ entries: CustodyEntry[] }>(
+      `/api/operations/shared/${jobId}/evidence/${proofId}/custody`,
+      { method: 'GET' },
+    ),
+
+  setEvidenceHold: (jobId: string, proofId: string, input: { hold: boolean; reason?: string }) =>
+    request<{ ok: boolean }>(`/api/operations/shared/${jobId}/evidence/${proofId}/hold`, {
+      method: 'POST',
+      body: JSON.stringify(input),
     }),
 
   reanalyseProofDay: (jobId: string, workDate: string, partyId: string) =>

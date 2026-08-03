@@ -10,6 +10,7 @@ import {
 } from '../lib/api';
 import { SpinnerIcon } from '../components/icons';
 import { ProofOfWork } from '../components/shared/ProofOfWork';
+import { EvidenceLocker } from '../components/shared/EvidenceLocker';
 
 /**
  * One job, two companies, one record.
@@ -256,8 +257,11 @@ export function SharedDashboardPage() {
                   <ScopeList record={record} onDecide={decide} onChanged={() => void openJob(record.job.id)} />
 
                   {/* Below the scope, because proof only means anything once
-                      there is an agreed scope to be proof of. */}
+                      there is an agreed scope to be proof of. The day view
+                      answers "can I pay for Tuesday"; the locker answers
+                      "what have we got, and who has seen it". */}
                   <ProofOfWork jobId={record.job.id} />
+                  <EvidenceLocker jobId={record.job.id} />
 
                   <Thread record={record} onPosted={() => void openJob(record.job.id)} />
                 </>
