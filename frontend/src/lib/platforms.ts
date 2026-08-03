@@ -119,6 +119,7 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
         label: 'Pipeline',
         items: [
           { to: '/prospector', label: 'Find contacts', Icon: SearchIcon },
+          { to: '/profiler', label: 'Profiler', Icon: ThoughtIcon },
           { to: '/pipeline', label: 'Leads', Icon: TrendIcon },
           { to: '/customers', label: 'Accounts & contacts', Icon: BuildingIcon },
           { to: '/estimator', label: 'Bids', Icon: ArtifactIcon },

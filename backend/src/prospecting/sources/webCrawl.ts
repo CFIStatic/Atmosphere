@@ -95,7 +95,7 @@ export function robotsForbids(robotsTxt: string, path: string): boolean {
 }
 
 /** Strip tags so names sitting next to addresses survive as adjacent words. */
-function toText(html: string): string {
+export function toText(html: string): string {
   return html
     .replace(/<(script|style|noscript)[\s\S]*?<\/\1>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')

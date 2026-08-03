@@ -15,6 +15,7 @@ import {
 import { buildMailboxVerifier } from '../prospecting/verifiers/index.js';
 import { buildSourceChain } from '../prospecting/sources/index.js';
 import { diagnose } from '../prospecting/diagnose.js';
+import { buildProfile, type ProfileFact } from '../prospecting/profiler/index.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { runWaterfall } from '../prospecting/waterfall.js';
 import type { KnownAddress } from '../prospecting/patterns.js';
@@ -948,6 +949,68 @@ prospectingRouter.post(
         known,
       );
       res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+const profileSchema = z.object({
+  fullName: z.string().trim().min(2).max(120),
+  companyDomain: z.string().trim().min(3).max(200),
+});
+
+/**
+ * POST /api/prospecting/profile
+ *
+ * Professional context on one person before a sales call: their role, how long
+ * they have been in it, what their employer does and what it has announced —
+ * every item carrying the page it came from.
+ *
+ * Scope is the point. It reads a company's own public business pages, which is
+ * material published for the express purpose of being found by people who want
+ * to do business with them. It does not assemble a picture of somebody's
+ * private life, and the categories it refuses are listed in the response so
+ * the boundary is visible on the screen rather than only in the code.
+ */
+prospectingRouter.post(
+  '/profile',
+  searchLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { orgId, supabase } = await requireOrgContext(req);
+      const { fullName, companyDomain } = profileSchema.parse(req.body ?? {});
+
+      if (!config.prospecting.profilerEnabled) {
+        throw new HttpError(503, 'The profiler is switched off.', 'profiler_disabled');
+      }
+
+      // What the org already knows about them beats anything on a website: a
+      // colleague's note from a call last March is better context than a bio.
+      const crmFacts: ProfileFact[] = [];
+      const [firstName, ...rest] = fullName.trim().split(/\s+/);
+      const { data: known } = await supabase
+        .from('crm_contacts')
+        .select('id, first_name, last_name, title, company_name')
+        .eq('org_id', orgId)
+        .ilike('first_name', firstName)
+        .limit(20);
+
+      const lastName = rest.join(' ').toLowerCase();
+      const match = (known ?? []).find(
+        (c: any) => String(c.last_name ?? '').toLowerCase() === lastName,
+      );
+      if (match?.title) {
+        crmFacts.push({
+          label: 'Title',
+          value: match.title,
+          sourceUrl: `/customers?contact=${match.id}`,
+          sourceKind: 'crm',
+        });
+      }
+
+      const profile = await buildProfile(fullName, companyDomain, crmFacts);
+      res.json(profile);
     } catch (err) {
       next(err);
     }

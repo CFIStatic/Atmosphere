@@ -713,6 +713,52 @@ const routes: Array<[string, RegExp, Handler]> = [
       ],
     },
   })],
+  ['POST', /^\/api\/prospecting\/profile$/, (_m, b) => {
+    const name = String(b.fullName ?? '');
+    const domain = String(b.companyDomain ?? '').toLowerCase();
+    const site = `https://${domain}`;
+    return {
+      body: {
+        fullName: name,
+        companyDomain: domain,
+        companySummary:
+          'Northgate Medical Group operates eleven outpatient clinics across Central Texas, with an in-house facilities team responsible for maintenance, compliance and emergency response.',
+        companySummarySource: `${site}/about`,
+        facts: [
+          { label: 'Title', value: 'Facilities Director', sourceUrl: `${site}/team`, sourceKind: 'company_site' },
+          { label: 'With the company since', value: '2021', sourceUrl: `${site}/team`, sourceKind: 'company_site' },
+          {
+            label: 'From their bio',
+            value: `${name} oversees maintenance and capital projects across all eleven Northgate locations, with a focus on minimising disruption to patient care.`,
+            sourceUrl: `${site}/team`,
+            sourceKind: 'company_site',
+          },
+        ],
+        signals: [
+          { headline: 'Northgate announced the opening of its third Round Rock clinic in March.', sourceUrl: `${site}/news` },
+          { headline: 'The group completed a facilities-wide HVAC replacement programme last quarter.', sourceUrl: `${site}/news` },
+        ],
+        talkingPoints: [
+          'They run facilities — response time and minimising disruption to tenants will matter more to them than headline price.',
+          '5 years in the role — they will have existing vendors, so lead with what those vendors are not doing.',
+          'Recent company news to open with: "Northgate announced the opening of its third Round Rock clinic in March."',
+        ],
+        sourcesChecked: [
+          { url: `${site}/about`, ok: true, ms: 340 },
+          { url: `${site}/team`, ok: true, ms: 291 },
+          { url: `${site}/leadership`, ok: false, ms: 122 },
+          { url: `${site}/news`, ok: true, ms: 402 },
+          { url: `${site}/careers`, ok: false, ms: 8, skipped: 'robots.txt' },
+        ],
+        withheld: [],
+        excluded: [
+          'Home address', 'Family and relationships', 'Age and date of birth', 'Health',
+          'Religion', 'Politics', 'Personal finances', 'Personal social media',
+        ],
+      },
+    };
+  }],
+
   /* ------------------------------------------- campaigns & territories */
   ['GET', /^\/api\/sales\/territories$/, () => ({ body: { items: TERRITORIES } })],
   ['POST', /^\/api\/sales\/territories$/, (_m, b) => {

@@ -33,6 +33,7 @@ import { SpinnerIcon } from './components/icons';
 import { PLATFORM_HOME } from './lib/platforms';
 import { RequirePlatform } from './components/RequirePlatform';
 import { CampaignsPage } from './pages/CampaignsPage';
+import { ProfilerPage } from './pages/ProfilerPage';
 import { TerritoriesPage } from './pages/TerritoriesPage';
 import { getPlatform } from './lib/usePlatform';
 
@@ -120,6 +121,14 @@ export default function App() {
               element: (
                 <RequirePlatform platform="sales">
                   <ProspectorPage />
+                </RequirePlatform>
+              ),
+            },
+            {
+              path: '/profiler',
+              element: (
+                <RequirePlatform platform="sales">
+                  <ProfilerPage />
                 </RequirePlatform>
               ),
             },

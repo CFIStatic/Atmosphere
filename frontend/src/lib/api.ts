@@ -303,6 +303,32 @@ export interface Diagnosis {
   summary: string;
 }
 
+/* ---- Profiler ------------------------------------------------------------ */
+
+export interface ProfileFact {
+  label: string;
+  value: string;
+  /** Where this came from. A fact without a source is not published. */
+  sourceUrl: string;
+  sourceKind: 'company_site' | 'crm';
+}
+
+export interface ProspectProfile {
+  fullName: string;
+  companyDomain: string;
+  companySummary: string | null;
+  companySummarySource: string | null;
+  facts: ProfileFact[];
+  signals: Array<{ headline: string; sourceUrl: string }>;
+  /** Derived from the above, and labelled as derived. Never shown as fact. */
+  talkingPoints: string[];
+  sourcesChecked: Array<{ url: string; ok: boolean; ms: number; skipped?: string }>;
+  /** Categories found and deliberately dropped. */
+  withheld: string[];
+  /** Categories never looked for at all. */
+  excluded: string[];
+}
+
 /* ---- Campaigns & territories --------------------------------------------- */
 
 export interface Territory {
@@ -1261,6 +1287,16 @@ export const api = {
    */
   diagnoseLookup: (fullName: string, companyDomain: string) =>
     request<Diagnosis>('/api/prospecting/diagnose', {
+      method: 'POST',
+      body: JSON.stringify({ fullName, companyDomain }),
+    }),
+
+  /**
+   * Professional context on one person before a call. Reads the company's own
+   * public pages; every item carries the page it came from.
+   */
+  buildProfile: (fullName: string, companyDomain: string) =>
+    request<ProspectProfile>('/api/prospecting/profile', {
       method: 'POST',
       body: JSON.stringify({ fullName, companyDomain }),
     }),

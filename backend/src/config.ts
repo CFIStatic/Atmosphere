@@ -618,6 +618,12 @@ export const config = {
     commonCrawlLimit: Number(process.env.COMMON_CRAWL_LIMIT ?? 60),
     commonCrawlMaxRecords: Number(process.env.COMMON_CRAWL_MAX_RECORDS ?? 3),
 
+    // The Profiler reads a company's own public pages for professional
+    // context before a sales call. Capped tightly: this is a handful of pages
+    // once, not a spider.
+    profilerEnabled: (process.env.PROSPECTING_PROFILER ?? 'true') !== 'false',
+    profilerMaxPages: Number(process.env.PROSPECTING_PROFILER_MAX_PAGES ?? 6),
+
     // The contributory network. Reading the pool is on by default; writing to
     // it is per-org opt-in and enforced in SQL, not here.
     networkEnabled: (process.env.PROSPECTING_NETWORK ?? 'true') !== 'false',
