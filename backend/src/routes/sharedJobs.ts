@@ -22,6 +22,7 @@ import {
   askAboutProofs,
   proofQuestions,
   proofVideoUrl,
+  reanalyseProofDay,
 } from './proofOfWork.js';
 
 /**
@@ -683,6 +684,7 @@ sharedJobsRouter.get('/shared/:jobId/proof', jobProofs);
 sharedJobsRouter.get('/shared/:jobId/proof/questions', proofQuestions);
 sharedJobsRouter.post('/shared/:jobId/proof/ask', askAboutProofs);
 sharedJobsRouter.post('/shared/:jobId/proof/:workDate/decide', decideProofDay);
+sharedJobsRouter.post('/shared/:jobId/proof/:workDate/analyse', reanalyseProofDay);
 sharedJobsRouter.get('/shared/proof/:proofId/video', proofVideoUrl);
 
 /**

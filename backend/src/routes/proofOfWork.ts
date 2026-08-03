@@ -241,7 +241,7 @@ export async function recordProof(party: any, admin: any, body: unknown) {
 }
 
 /** Load a day's frames and run the model over them. */
-async function analyseDay(admin: any, party: any, workDate: string) {
+export async function analyseDay(admin: any, party: any, workDate: string) {
   const { data: proofs } = await admin
     .from('job_proofs')
     .select('id, phase')
@@ -304,6 +304,7 @@ async function analyseDay(admin: any, party: any, workDate: string) {
         changes: analysis.changes,
         cannotTell: analysis.cannotTell,
         scopeTouched: analysis.scopeTouched,
+        scopeVerdicts: analysis.scopeVerdicts,
         concerns: analysis.concerns,
       },
       ai_model: analysis.model,
@@ -564,6 +565,55 @@ export async function proofVideoUrl(req: Request, res: Response, next: NextFunct
     if (error) throw new HttpError(500, error.message, 'signed_url_failed');
 
     res.json({ url: (data as any).signedUrl, expiresInSeconds: 600 });
+  } catch (err) {
+    next(err);
+  }
+}
+
+
+/**
+ * POST /api/operations/shared/:jobId/proof/:workDate/analyse
+ * Watch the day again.
+ *
+ * Analysis normally runs the moment the after video lands. This exists for the
+ * two cases where that is not enough: the model was unavailable at the time, or
+ * the scope has since changed and the old verdicts were written against a list
+ * that no longer exists.
+ */
+export async function reanalyseProofDay(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId, supabase } = await requireOrgContext(req);
+    const input = z.object({ partyId: z.string().uuid() }).parse(req.body ?? {});
+
+    const { data: party } = await supabase
+      .from('job_parties')
+      .select('id, org_id, job_id, trade')
+      .eq('org_id', orgId)
+      .eq('id', input.partyId)
+      .maybeSingle();
+    if (!party) throw new HttpError(404, 'No such company on this job.', 'party_not_found');
+
+    const admin = createAdminClient();
+    if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');
+
+    await analyseDay(admin, party, req.params.workDate);
+
+    const { data: after } = await supabase
+      .from('job_proofs')
+      .select('ai_summary, ai_findings, ai_model')
+      .eq('org_id', orgId)
+      .eq('party_id', input.partyId)
+      .eq('work_date', req.params.workDate)
+      .eq('phase', 'after')
+      .maybeSingle();
+
+    res.json({
+      summary: (after as any)?.ai_summary ?? null,
+      findings: (after as any)?.ai_findings ?? null,
+      // Null rather than an apology. A day that could not be read stays
+      // unread, and the dashboard says so.
+      model: (after as any)?.ai_model ?? null,
+    });
   } catch (err) {
     next(err);
   }

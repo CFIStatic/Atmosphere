@@ -57,6 +57,7 @@ export function ProofOfWork({ jobId }: { jobId: string }) {
   const [questions, setQuestions] = useState<ProofQuestion[]>([]);
   const [question, setQuestion] = useState('');
   const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
@@ -105,12 +106,15 @@ export function ProofOfWork({ jobId }: { jobId: string }) {
     }
   }
 
-  async function watch(proofId: string) {
+  async function reanalyse(day: ProofDay) {
+    setBusy(`${day.partyId}|${day.workDate}`);
     try {
-      const { url } = await api.proofVideoUrl(proofId);
-      window.open(url, '_blank', 'noopener');
-    } catch {
-      setError('Could not open that video.');
+      await api.reanalyseProofDay(jobId, day.workDate, day.partyId);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not read the videos.');
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -262,6 +266,44 @@ export function ProofOfWork({ jobId }: { jobId: string }) {
                             ))}
                           </ul>
                         ) : null}
+                        {/* Per scope line. "Not visible" is given the same
+                            weight as the other two on purpose: the camera not
+                            covering the bathroom says nothing about the
+                            bathroom, and somebody withholding a payment has to
+                            be able to tell that apart from work not done. */}
+                        {day.aiFindings?.scopeVerdicts?.length ? (
+                          <ul className="mt-2 space-y-1 border-t border-line pt-2">
+                            {day.aiFindings.scopeVerdicts.map((v) => (
+                              <li key={v.title} className="flex items-start gap-2">
+                                <span
+                                  className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
+                                    v.verdict === 'appears_complete'
+                                      ? 'bg-success-600'
+                                      : v.verdict === 'in_progress'
+                                        ? 'bg-caution-600'
+                                        : 'bg-ink-400'
+                                  }`}
+                                  aria-hidden="true"
+                                />
+                                <span className="min-w-0">
+                                  <span className="block text-[11px] font-medium text-ink-800">
+                                    {v.title}
+                                    <span className="ml-1.5 font-normal text-ink-500">
+                                      {v.verdict === 'appears_complete'
+                                        ? 'looks finished'
+                                        : v.verdict === 'in_progress'
+                                          ? 'under way'
+                                          : 'not in shot'}
+                                    </span>
+                                  </span>
+                                  {v.because && (
+                                    <span className="block text-[11px] text-ink-500">{v.because}</span>
+                                  )}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
                         {day.aiFindings?.concerns?.length ? (
                           <p className="mt-1.5 text-[11px] text-caution-600">
                             Worth a look: {day.aiFindings.concerns.join('; ')}
@@ -278,16 +320,28 @@ export function ProofOfWork({ jobId }: { jobId: string }) {
                       </div>
                     )}
 
-                    <div className="mt-3 flex flex-wrap gap-2">
+                    {/* The videos themselves, side by side. A summary is a
+                        convenience; the footage is the documentation, and
+                        somebody deciding on a payment should be one click from
+                        it rather than one tab away. */}
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
                       {day.proofIds.map((id, i) => (
-                        <button
-                          key={id}
-                          onClick={() => void watch(id)}
-                          className="rounded-lg glass-card px-2.5 py-1 text-[11px] font-medium text-ink-700 hover:text-ink-900"
-                        >
-                          Watch {i === 0 ? 'before' : 'after'}
-                        </button>
+                        <ProofVideo key={id} proofId={id} label={i === 0 ? 'Before' : 'After'} />
                       ))}
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        onClick={() => void reanalyse(day)}
+                        disabled={busy === `${day.partyId}|${day.workDate}` || !day.hasAfter}
+                        title={day.hasAfter ? undefined : 'Nothing to compare against until the after video is filed.'}
+                        className="flex items-center gap-1.5 rounded-lg glass-card px-2.5 py-1 text-[11px] font-medium text-ink-700 disabled:opacity-40"
+                      >
+                        {busy === `${day.partyId}|${day.workDate}` && (
+                          <SpinnerIcon className="animate-spin" width={11} height={11} />
+                        )}
+                        {day.aiSummary ? 'Watch it again' : 'Have the AI watch it'}
+                      </button>
                       {!day.accepted && (
                         <>
                           <button
@@ -363,5 +417,74 @@ export function ProofOfWork({ jobId }: { jobId: string }) {
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * The footage itself.
+ *
+ * Loaded on demand rather than on render: a job with three weeks of days would
+ * otherwise mint sixty signed URLs to show two. The URL is short-lived by
+ * design — these are the insides of somebody's house, and a link that works
+ * forever is one that will end up forwarded.
+ *
+ * The poster is deliberately absent. A still frame chosen by the browser is
+ * usually black, and a black rectangle reads as a broken video rather than one
+ * that has not been asked for yet.
+ */
+function ProofVideo({ proofId, label }: { proofId: string; label: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  async function open() {
+    setLoading(true);
+    try {
+      const res = await api.proofVideoUrl(proofId);
+      setUrl(res.url);
+    } catch {
+      setFailed(true);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-line bg-paper-100">
+      <div className="flex items-center justify-between px-2.5 py-1.5">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">
+          {label}
+        </span>
+        {url && (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] text-brand-600 hover:text-brand-700"
+          >
+            Full screen
+          </a>
+        )}
+      </div>
+
+      {url ? (
+        <video
+          src={url}
+          controls
+          playsInline
+          preload="metadata"
+          className="block max-h-64 w-full bg-black"
+        />
+      ) : (
+        <button
+          onClick={() => void open()}
+          disabled={loading || failed}
+          className="flex h-28 w-full items-center justify-center gap-2 text-xs text-ink-600 hover:text-ink-900 disabled:opacity-60"
+        >
+          {loading && <SpinnerIcon className="animate-spin" width={13} height={13} />}
+          {failed ? 'Could not load this video' : loading ? 'Loading…' : `Play the ${label.toLowerCase()}`}
+        </button>
+      )}
+    </div>
   );
 }

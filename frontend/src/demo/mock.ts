@@ -844,6 +844,11 @@ const PROOF_DAYS: Record<string, any> = {
           ],
           cannotTell: ['The south slope is out of frame in both videos'],
           scopeTouched: ['Tear off and replace roof — architectural shingle, 30yr', 'Replace 6 sheets of decking — rot found under the north valley'],
+          scopeVerdicts: [
+            { title: 'Replace 6 sheets of decking — rot found under the north valley', verdict: 'appears_complete', because: 'Six new sheets visible in the valley where the before showed dark delaminated sheathing.' },
+            { title: 'Tear off and replace roof — architectural shingle, 30yr', verdict: 'in_progress', because: 'Shingles laid to the ridge on the north slope only; the south slope is not in frame.' },
+            { title: 'Rewire the two circuits in the affected bedrooms', verdict: 'not_visible', because: 'No interior footage in either video.' },
+          ],
           concerns: [],
         },
         proofIds: ['pf-1', 'pf-2'],
@@ -916,6 +921,9 @@ const PROOF_DAYS: Record<string, any> = {
           changes: ['North slope stripped to bare deck', 'Old shingles cleared to the driveway dumpster'],
           cannotTell: ['No close view of the deck condition underneath'],
           scopeTouched: ['Tear off and replace roof — architectural shingle, 30yr'],
+          scopeVerdicts: [
+            { title: 'Tear off and replace roof — architectural shingle, 30yr', verdict: 'in_progress', because: 'Tear-off complete on the north slope; nothing laid back down yet.' },
+          ],
           concerns: [],
         },
         proofIds: ['pf-6', 'pf-7'],
@@ -936,6 +944,56 @@ const PROOF_QUESTIONS: Record<string, any[]> = {
     },
   ],
 };
+
+/**
+ * A three-frame clip, drawn rather than filmed. Enough for the player to be
+ * demonstrably a player; nobody's actual house ends up in the bundle.
+ */
+const DEMO_CLIP =
+  'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAr1tZGF0AAACrgYF//+q3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE0OCAtIEguMjY0L01QRUctNCBBVkMgY29kZWM=';
+
+/**
+ * The subcontractor's own view, through their job link. Same rows as the
+ * general contractor's dashboard, narrowed to what one company can see.
+ */
+const SHARE_VIEW: Record<string, any> = {
+  'demo-token': {
+    you: { company: 'Delgado Roofing', trade: 'roofing', role: 'subcontractor' },
+    job: { jobNumber: 1038, title: 'Cedar Ridge — storm damage, roof tarp + rebuild', claimNumber: 'CLM-88396', scheduledStart: '2026-08-01T14:00:00Z' },
+    brief: {
+      revision: 4,
+      note: 'Carrier approved the deck replacement; skylights removed from scope.',
+      facts: {
+        'Site address': '2214 Cedar Ridge Dr, Round Rock TX',
+        'Gate / access': 'Lockbox on the side gate — 4412',
+        'Working hours': '7am–6pm, no Sunday work (HOA)',
+        'Dumpster': 'Driveway, right side only — do not block the hydrant',
+        'Site contact': 'Priya Shah, 512-555-0148',
+      },
+    },
+    currentRevision: 4,
+    acknowledgedRevision: 3,
+    clear: false,
+    because: 'They accepted revision 3; the job is on 4.',
+    scope: [
+      { id: 'sc-1', state: 'excluded', title: 'Do not touch the solar array or its conduit', detail: null, amount: null, reason: 'Owner has a separate contract with the solar installer; disconnect voids their warranty.' },
+      { id: 'sc-2', state: 'excluded', title: 'Do not remove the skylights', detail: null, amount: null, reason: 'Carrier declined them on revision 4. Removing them is unpaid work.' },
+      { id: 'sc-3', state: 'proposed', title: 'Replace 6 sheets of decking — rot found under the north valley', detail: 'Not visible until the tear-off. Photos posted in the thread.', amount: 1240, reason: null },
+      { id: 'sc-4', state: 'included', title: 'Tear off and replace roof — architectural shingle, 30yr', detail: null, amount: null, reason: null },
+      { id: 'sc-6', state: 'approved', title: 'Ridge vent — replace full run', detail: null, amount: null, reason: null },
+    ],
+    messages: [
+      { id: 'msg-3', author_label: 'Priya Shah', body: 'Revision 4 published — carrier approved the deck replacement and pulled the skylights out of scope. Everyone please re-accept.', created_at: '2026-08-04T08:02:00Z' },
+      { id: 'msg-2', author_label: 'Priya Shah', body: 'Seen. Getting the carrier to look at it today — do not proceed yet.', created_at: '2026-08-03T13:05:00Z' },
+    ],
+  },
+};
+
+const SHARE_PROOF_DAYS = [
+  { workDate: '2026-08-05', hasBefore: true, hasAfter: true, summary: 'Before and after both check out.', problems: [], accepted: false },
+  { workDate: '2026-08-04', hasBefore: true, hasAfter: true, summary: '1 check failed. Do not pay against this without asking.', problems: ['Filmed 2.14 miles from the site — outside the 0.25-mile radius.'], accepted: false },
+  { workDate: '2026-08-01', hasBefore: true, hasAfter: true, summary: 'Nothing contradicts it, but 2 things could not be checked.', problems: [], accepted: true },
+];
 
 const CAMPAIGNS: Array<Record<string, any>> = [
   {
@@ -1458,6 +1516,45 @@ const routes: Array<[string, RegExp, Handler]> = [
     return { body: { email, messages: OUTREACH_HISTORY[email] ?? [] } };
   }],
 
+  /* ------------------------------------------- the sub's job link */
+  ['GET', /^\/api\/job-share\/([\w-]+)$/, (m) => {
+    const view = SHARE_VIEW[m[1]] ?? SHARE_VIEW['demo-token'];
+    return { body: view };
+  }],
+  ['GET', /^\/api\/job-share\/([\w-]+)\/proof$/, () => ({ body: { days: SHARE_PROOF_DAYS } })],
+  ['POST', /^\/api\/job-share\/([\w-]+)\/accept$/, (m, b) => {
+    const view = SHARE_VIEW[m[1]] ?? SHARE_VIEW['demo-token'];
+    view.acknowledgedRevision = Number(b.revision ?? view.currentRevision);
+    view.clear = view.acknowledgedRevision === view.currentRevision && !view.scope.some((s: any) => s.state === 'proposed');
+    view.because = view.clear
+      ? `Accepted revision ${view.currentRevision}. Nothing outstanding.`
+      : '1 item waiting on an answer.';
+    return { body: { ok: true, revision: view.currentRevision } };
+  }],
+  ['POST', /^\/api\/job-share\/([\w-]+)\/ask$/, (m, b) => {
+    const view = SHARE_VIEW[m[1]] ?? SHARE_VIEW['demo-token'];
+    view.messages.unshift({ id: `msg-${Date.now()}`, author_label: 'Hector Delgado, Delgado Roofing', body: String(b.body ?? ''), created_at: new Date().toISOString() });
+    if (b.asScopeItem) {
+      view.scope.unshift({ id: `sc-${Date.now()}`, state: 'proposed', title: String(b.asScopeItem), detail: String(b.body ?? ''), amount: null, reason: null });
+    }
+    return { status: 201, body: { message: view.messages[0], scopeItemId: null } };
+  }],
+  ['POST', /^\/api\/job-share\/([\w-]+)\/proof\/upload-url$/, (_m, b) => ({
+    body: { path: `demo/${b.workDate}-${b.phase}.mp4`, token: 'demo-upload-token' },
+  })],
+  ['POST', /^\/api\/job-share\/([\w-]+)\/proof$/, (_m, b) => {
+    const day = SHARE_PROOF_DAYS.find((d) => d.workDate === b.workDate) ?? { workDate: String(b.workDate), hasBefore: false, hasAfter: false, summary: '', problems: [] as string[], accepted: false };
+    if (!SHARE_PROOF_DAYS.includes(day as any)) SHARE_PROOF_DAYS.unshift(day as any);
+    if (b.phase === 'before') day.hasBefore = true;
+    else day.hasAfter = true;
+    // No location on a desktop browser, so the demo shows the honest outcome:
+    // nothing wrong, and something that could not be checked.
+    const problems = b.lat === undefined ? [] : [];
+    day.problems = problems;
+    day.summary = day.hasBefore && day.hasAfter ? 'Nothing contradicts it, but 2 things could not be checked.' : 'Started but not finished: no after video yet.';
+    return { status: 201, body: { proof: { id: `pf-${Date.now()}` }, checks: [], problems } };
+  }],
+
   /* ------------------------------------------- shared job record */
   ['GET', /^\/api\/operations\/shared$/, () => ({
     body: {
@@ -1541,8 +1638,15 @@ const routes: Array<[string, RegExp, Handler]> = [
     return { body: { ok: true } };
   }],
   ['GET', /^\/api\/operations\/shared\/proof\/([\w-]+)\/video$/, () => ({
-    body: { url: 'about:blank#demo-video', expiresInSeconds: 600 },
+    // A generated clip rather than a real one: the demo has to show the player
+    // working without shipping somebody's house in the bundle.
+    body: { url: DEMO_CLIP, expiresInSeconds: 600 },
   })],
+  ['POST', /^\/api\/operations\/shared\/([\w-]+)\/proof\/([\d-]+)\/analyse$/, (m, b) => {
+    const record = PROOF_DAYS[m[1]];
+    const day = record?.days?.find((d: any) => d.workDate === m[2] && d.partyId === b.partyId);
+    return { body: { summary: day?.aiSummary ?? null, findings: day?.aiFindings ?? null, model: 'claude' } };
+  }],
 
   /* ------------------------------------------- campaigns & territories */
   ['GET', /^\/api\/sales\/territories$/, () => ({ body: { items: TERRITORIES } })],

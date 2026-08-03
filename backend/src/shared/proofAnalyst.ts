@@ -34,6 +34,22 @@ export interface ProofFrame {
   base64: string;
 }
 
+/**
+ * What the footage says about one scope line.
+ *
+ * Three verdicts, and the third is the one that keeps this honest. A camera
+ * that never pointed at the bathroom says nothing about the bathroom, and
+ * `not_visible` is the difference between "we did not see it done" and "it was
+ * not done" — a distinction somebody withholding a payment has to be able to
+ * make.
+ */
+export interface ScopeVerdict {
+  title: string;
+  verdict: 'appears_complete' | 'in_progress' | 'not_visible';
+  /** What in the frames led to that, so it can be checked rather than trusted. */
+  because: string;
+}
+
 export interface ProofAnalysis {
   /** Two or three sentences a project manager can read at a glance. */
   summary: string;
@@ -43,6 +59,8 @@ export interface ProofAnalysis {
   cannotTell: string[];
   /** Scope lines the footage appears to touch, by title. Never invented. */
   scopeTouched: string[];
+  /** Per scope line, what the footage supports. */
+  scopeVerdicts: ScopeVerdict[];
   /** Anything visible that looks like work nobody asked for. */
   concerns: string[];
   model: string | null;
@@ -58,9 +76,10 @@ Your output is read by a project manager deciding whether to pay for that day. T
 4. Only list a scope line under scopeTouched if the frames actually show work on it. An empty list is fine.
 5. Under concerns, note anything visible that looks like damage, a hazard, or work outside the listed scope. Nothing else.
 6. Never mention money, hours, or whether the work seems worth paying for. You are not being asked.
+7. Give a verdict for every scope line you are shown, using its exact title. Use "appears_complete" only when the after frames show the finished state of that line. Use "in_progress" when work on it is visible but unfinished. Use "not_visible" when the frames simply do not cover it — that is the correct answer far more often than the other two, and choosing it costs nothing. Never mark a line complete because the other lines are.
 
 Reply with JSON only, no prose around it:
-{"summary": string, "changes": string[], "cannotTell": string[], "scopeTouched": string[], "concerns": string[]}`;
+{"summary": string, "changes": string[], "cannotTell": string[], "scopeTouched": string[], "scopeVerdicts": [{"title": string, "verdict": "appears_complete" | "in_progress" | "not_visible", "because": string}], "concerns": string[]}`;
 
 /** Frames get expensive fast; this is enough to see a room change. */
 const MAX_FRAMES_PER_VIDEO = 6;
@@ -108,13 +127,62 @@ export function parseAnalysis(text: string): Omit<ProofAnalysis, 'model'> | null
       ? value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0).slice(0, 12)
       : [];
 
+  // Verdicts are validated hard. A completion claim on a line nobody asked
+  // about, or with an invented verdict word, is exactly the kind of confident
+  // nonsense that gets a payment released.
+  const allowed = new Set(['appears_complete', 'in_progress', 'not_visible']);
+  const scopeVerdicts: ScopeVerdict[] = Array.isArray(parsed.scopeVerdicts)
+    ? parsed.scopeVerdicts
+        .filter(
+          (v: any) =>
+            v &&
+            typeof v.title === 'string' &&
+            v.title.trim() &&
+            typeof v.verdict === 'string' &&
+            allowed.has(v.verdict),
+        )
+        .map((v: any) => ({
+          title: String(v.title).trim().slice(0, 200),
+          verdict: v.verdict as ScopeVerdict['verdict'],
+          because: typeof v.because === 'string' ? v.because.trim().slice(0, 500) : '',
+        }))
+        .slice(0, 20)
+    : [];
+
   return {
     summary: parsed.summary.trim().slice(0, 2000),
     changes: list(parsed.changes),
     cannotTell: list(parsed.cannotTell),
     scopeTouched: list(parsed.scopeTouched),
+    scopeVerdicts,
     concerns: list(parsed.concerns),
   };
+}
+
+/**
+ * Drop verdicts about lines that are not in the scope.
+ *
+ * A model asked to judge six lines will occasionally return a seventh it
+ * invented, and a completion claim against work nobody ordered is worse than
+ * no claim at all. Matched case-insensitively on the trimmed title, because
+ * exact-match on a title somebody typed is a coin flip.
+ */
+export function keepKnownScope(
+  verdicts: ScopeVerdict[],
+  scopeTitles: string[],
+): ScopeVerdict[] {
+  const known = new Map(scopeTitles.map((t) => [t.trim().toLowerCase(), t]));
+  const seen = new Set<string>();
+  const out: ScopeVerdict[] = [];
+  for (const verdict of verdicts) {
+    const key = verdict.title.trim().toLowerCase();
+    const real = known.get(key);
+    if (!real || seen.has(key)) continue;
+    seen.add(key);
+    // The stored title wins, so the dashboard can match it to the scope row.
+    out.push({ ...verdict, title: real });
+  }
+  return out;
 }
 
 /**
@@ -167,7 +235,11 @@ export async function analyseProofDay(input: {
 
   const parsed = parseAnalysis(text);
   if (!parsed) return null;
-  return { ...parsed, model: response.model };
+  return {
+    ...parsed,
+    scopeVerdicts: keepKnownScope(parsed.scopeVerdicts, input.scopeTitles),
+    model: response.model,
+  };
 }
 
 const QA_SYSTEM = `You answer a project manager's questions about a subcontractor's daily proof-of-work videos, using only the analyses provided.

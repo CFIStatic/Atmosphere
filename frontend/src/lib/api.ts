@@ -719,9 +719,19 @@ export interface ProofDay {
     changes?: string[];
     cannotTell?: string[];
     scopeTouched?: string[];
+    /** Per scope line, what the footage supports. */
+    scopeVerdicts?: ScopeVerdict[];
     concerns?: string[];
   } | null;
+  /** Ordered: before first, then after. */
   proofIds: string[];
+}
+
+export interface ScopeVerdict {
+  title: string;
+  /** 'not_visible' is not a failure — the camera simply did not cover it. */
+  verdict: 'appears_complete' | 'in_progress' | 'not_visible';
+  because: string;
 }
 
 export interface ProofResponse {
@@ -2016,6 +2026,12 @@ export const api = {
     request<{ questions: ProofQuestion[] }>(`/api/operations/shared/${jobId}/proof/questions`, {
       method: 'GET',
     }),
+
+  reanalyseProofDay: (jobId: string, workDate: string, partyId: string) =>
+    request<{ summary: string | null; findings: unknown; model: string | null }>(
+      `/api/operations/shared/${jobId}/proof/${workDate}/analyse`,
+      { method: 'POST', body: JSON.stringify({ partyId }) },
+    ),
 
   proofVideoUrl: (proofId: string) =>
     request<{ url: string; expiresInSeconds: number }>(

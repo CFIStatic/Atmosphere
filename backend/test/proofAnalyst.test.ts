@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseAnalysis } from '../src/shared/proofAnalyst.js';
+import { parseAnalysis, keepKnownScope } from '../src/shared/proofAnalyst.js';
 
 /**
  * Reading the model's reply.
@@ -86,4 +86,70 @@ test('"no visible change" survives intact', () => {
   assert.ok(parsed);
   assert.match(parsed.summary, /substantially the same/);
   assert.deepEqual(parsed.changes, []);
+});
+
+/* ---- Completion verdicts ------------------------------------------------- */
+
+test('scope verdicts parse, and invented verdict words are dropped', () => {
+  const parsed = parseAnalysis(
+    JSON.stringify({
+      summary: 'Drywall work on the north wall.',
+      scopeVerdicts: [
+        { title: 'Hang and finish drywall', verdict: 'appears_complete', because: 'Board hung and taped across the wall in the after frames.' },
+        { title: 'Paint', verdict: 'not_visible', because: 'No painted surfaces in frame.' },
+        { title: 'Trim', verdict: 'mostly_done', because: 'Invented verdict.' },
+        { title: '', verdict: 'in_progress', because: 'No title.' },
+        { verdict: 'appears_complete' },
+      ],
+    }),
+  );
+  assert.ok(parsed);
+  assert.equal(parsed.scopeVerdicts.length, 2);
+  assert.deepEqual(
+    parsed.scopeVerdicts.map((v) => v.verdict),
+    ['appears_complete', 'not_visible'],
+  );
+});
+
+test('a verdict about work nobody ordered is discarded', () => {
+  // A completion claim against a line that is not in the scope is worse than
+  // no claim: it is an assertion that unordered work was done and finished.
+  const kept = keepKnownScope(
+    [
+      { title: 'Hang and finish drywall', verdict: 'appears_complete', because: 'x' },
+      { title: 'Replace the windows', verdict: 'appears_complete', because: 'nobody asked for this' },
+    ],
+    ['Hang and finish drywall', 'Paint the ceiling'],
+  );
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].title, 'Hang and finish drywall');
+});
+
+test('scope titles are matched loosely but stored exactly', () => {
+  // The model echoes titles back with its own spacing and casing; the stored
+  // title has to win so the dashboard can line the verdict up with its row.
+  const kept = keepKnownScope(
+    [{ title: '  hang and FINISH drywall ', verdict: 'in_progress', because: 'x' }],
+    ['Hang and finish drywall'],
+  );
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].title, 'Hang and finish drywall');
+});
+
+test('a duplicated verdict for one line is kept once', () => {
+  const kept = keepKnownScope(
+    [
+      { title: 'Paint', verdict: 'appears_complete', because: 'first' },
+      { title: 'paint', verdict: 'not_visible', because: 'second' },
+    ],
+    ['Paint'],
+  );
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].because, 'first');
+});
+
+test('no verdicts at all is valid — the camera may not have covered anything', () => {
+  const parsed = parseAnalysis(JSON.stringify({ summary: 'Nothing much visible.' }));
+  assert.ok(parsed);
+  assert.deepEqual(parsed.scopeVerdicts, []);
 });

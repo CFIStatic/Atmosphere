@@ -37,6 +37,7 @@ import { ProfilerPage } from './pages/ProfilerPage';
 import { TerritoriesPage } from './pages/TerritoriesPage';
 import { SalesWorkPage } from './pages/SalesWorkPage';
 import { SharedDashboardPage } from './pages/SharedDashboardPage';
+import { JobSharePage } from './pages/JobSharePage';
 import { getPlatform } from './lib/usePlatform';
 
 function FullScreenSpinner() {
@@ -77,12 +78,35 @@ function PlatformRedirect() {
 // available, so they route in memory; real builds keep clean URLs.
 const Router = import.meta.env.VITE_DEMO ? MemoryRouter : BrowserRouter;
 
+/**
+ * A memory router has no URL to read, so a demo cannot be opened on a
+ * particular screen the way a real build can. This carries the entry point in
+ * localStorage instead — the only way to reach a page that is deliberately
+ * outside the console, like the subcontractor's job link.
+ */
+function routerProps(): Record<string, unknown> {
+  if (!import.meta.env.VITE_DEMO) return {};
+  try {
+    const entry = localStorage.getItem('atmosphere.route');
+    if (entry) return { initialEntries: [entry] };
+  } catch {
+    /* storage denied — fall through to the default entry */
+  }
+  return {};
+}
+
 export default function App() {
   return (
-    <Router>
+    <Router {...routerProps()}>
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+
+          {/* The subcontractor's screen. Outside every guard by construction:
+              they work for six general contractors and have an account with
+              none of them, and a shared job record that requires signing in is
+              not shared. The token in the path is the whole credential. */}
+          <Route path="/shared/:token" element={<JobSharePage />} />
 
           {/* Recovery routes stay outside ProtectedRoute: a locked-out user has
               no session, and the reset link must work in a fresh browser. */}
