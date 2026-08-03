@@ -128,6 +128,11 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
       {
         label: 'Reach',
         items: [
+          // Campaigns and Territories are Sales' alone — nobody in Operations
+          // or Field runs outreach or owns a patch of map, and putting them in
+          // the shared groups would have them appear for everyone.
+          { to: '/campaigns', label: 'Campaigns', Icon: BoltIcon },
+          { to: '/territories', label: 'Territories', Icon: GlobeIcon },
           { to: '/web-access', label: 'Carrier portals', Icon: GlobeIcon },
           { to: '/audit', label: 'Sales agent', Icon: BoltIcon },
           { to: '/memory', label: 'Account history', Icon: ThoughtIcon },

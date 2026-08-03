@@ -17,6 +17,7 @@ import {
   USAGE_INTENT_LABELS,
   WORK_TYPE_LABELS,
   type ContractorType,
+  type Diagnosis,
   type Integration,
   type MemberRole,
   type UsageIntent,
@@ -26,6 +27,8 @@ import { AppShell } from '../components/AppShell';
 import { PinSetupCard } from '../components/PinSetupCard';
 import { displayName, initials } from '../lib/display';
 import { setPreference, usePreferences, type Preferences } from '../lib/preferences';
+import { usePlatform } from '../lib/usePlatform';
+import type { PlatformId } from '../lib/platforms';
 import {
   BuildingIcon,
   CheckIcon,
@@ -41,12 +44,16 @@ import {
 
 type SectionId = 'profile' | 'security' | 'organization' | 'contactdata' | 'preferences';
 
-const SECTIONS: {
+interface SettingsSection {
   id: SectionId;
   label: string;
   blurb: string;
   icon: typeof UserIcon;
-}[] = [
+  /** When set, the section only appears inside that platform. */
+  platform?: PlatformId;
+}
+
+const SECTIONS: SettingsSection[] = [
   { id: 'profile', label: 'Profile', blurb: 'Your name and account details', icon: UserIcon },
   { id: 'security', label: 'Security', blurb: 'Password and PIN sign-in', icon: ShieldIcon },
   {
@@ -56,10 +63,14 @@ const SECTIONS: {
     icon: BuildingIcon,
   },
   {
+    // Where prospecting gets its data is a Sales question. Showing it to
+    // someone working in Field or Operations is clutter at best, and at worst
+    // invites them to change how another team's tooling behaves.
     id: 'contactdata',
     label: 'Contact data',
     blurb: 'Where prospect emails and phones come from',
     icon: SearchIcon,
+    platform: 'sales',
   },
   { id: 'preferences', label: 'Preferences', blurb: 'How this device behaves', icon: SlidersIcon },
 ];
@@ -68,12 +79,22 @@ function isSectionId(value: string | null): value is SectionId {
   return SECTIONS.some((section) => section.id === value);
 }
 
+/** The sections this platform actually owns, plus the ones everybody has. */
+function sectionsFor(platform: PlatformId): SettingsSection[] {
+  return SECTIONS.filter((section) => !section.platform || section.platform === platform);
+}
+
 export function SettingsPage() {
   // The section lives in the URL so a settings link can point at one directly
   // and the browser's back button steps between them.
   const [params, setParams] = useSearchParams();
+  const [platform] = usePlatform();
+  const visible = sectionsFor(platform);
   const raw = params.get('section');
-  const active: SectionId = isSectionId(raw) ? raw : 'profile';
+  // A section this platform does not own falls back to Profile rather than
+  // rendering a panel with no way to navigate to or from it.
+  const requested: SectionId = isSectionId(raw) ? raw : 'profile';
+  const active: SectionId = visible.some((s) => s.id === requested) ? requested : 'profile';
 
   function select(section: SectionId) {
     setParams(section === 'profile' ? {} : { section }, { replace: false });
@@ -94,7 +115,7 @@ export function SettingsPage() {
               tabs above it on narrow ones. */}
           <nav className="lg:w-60 lg:shrink-0">
             <ul className="flex gap-2 overflow-x-auto pb-2 lg:flex-col lg:gap-1 lg:overflow-visible lg:pb-0">
-              {SECTIONS.map((section) => {
+              {visible.map((section) => {
                 const isActive = section.id === active;
                 return (
                   <li key={section.id} className="shrink-0 lg:shrink">
@@ -945,6 +966,8 @@ function ContactDataSection() {
         )}
       </Card>
 
+      <TestLookupCard />
+
       <NetworkCard />
 
       <Card
@@ -1134,6 +1157,159 @@ function NetworkCard() {
 
           {note && <p className="text-sm text-success-600">{note}</p>}
           <ErrorText message={error} />
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/**
+ * Test a lookup — the answer to "is any of this real?"
+ *
+ * A search result cannot answer that question: it looks identical whether the
+ * pipeline confirmed a mailbox or a vendor asserted something nobody checked.
+ * This runs the whole thing against a name and company you pick and shows what
+ * each stage actually did, so a null result says which stage was empty instead
+ * of leaving somebody guessing.
+ *
+ * Run it on yourself first. You already know your own work address, so it
+ * tells you immediately whether the machinery works.
+ */
+function TestLookupCard() {
+  const [fullName, setFullName] = useState('');
+  const [domain, setDomain] = useState('');
+  const [result, setResult] = useState<Diagnosis | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      setResult(await api.diagnoseLookup(fullName, domain));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not run that lookup.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card
+      title="Test a lookup"
+      description="Runs the full pipeline against one person without charging or saving anything. Try your own name and company domain — you already know the right answer, which makes it the honest test."
+    >
+      <form onSubmit={run} className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Full name">
+            <input
+              className={INPUT_CLASS}
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Marcia Delgado"
+              required
+              minLength={2}
+            />
+          </Field>
+          <Field label="Company domain" hint="Just the domain — vantageresidential.com">
+            <input
+              className={INPUT_CLASS}
+              value={domain}
+              onChange={(e) => setDomain(e.target.value)}
+              placeholder="vantageresidential.com"
+              required
+              minLength={3}
+            />
+          </Field>
+        </div>
+        <PrimaryButton type="submit" busy={busy}>
+          Run lookup
+        </PrimaryButton>
+        <ErrorText message={error} />
+      </form>
+
+      {result && (
+        <div className="mt-6 space-y-4 border-t border-line pt-5">
+          <div
+            className={`rounded-lg border p-4 text-sm ${
+              result.wouldReturn
+                ? 'border-success-200 bg-success-50 text-success-600'
+                : 'border-caution-200 bg-caution-50 text-caution-600'
+            }`}
+          >
+            {result.summary}
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold text-ink-900">Sources</h3>
+            <ul className="mt-2 space-y-1.5">
+              {result.stages.length === 0 && (
+                <li className="text-xs text-ink-500">No free sources are enabled.</li>
+              )}
+              {result.stages.map((stage) => (
+                <li
+                  key={stage.name}
+                  className="flex items-center justify-between gap-3 rounded-lg glass-card px-3 py-2 text-xs"
+                >
+                  <span className="text-ink-800">{stage.name}</span>
+                  <span className="text-ink-500">
+                    {stage.directHit && <span className="text-success-600">held them · </span>}
+                    {stage.evidenceFound} known {stage.evidenceFound === 1 ? 'address' : 'addresses'}
+                    {' · '}
+                    {stage.ms}ms
+                    {stage.note ? ` · ${stage.note}` : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <dl className="grid gap-2 text-xs sm:grid-cols-3">
+            <ReadOnlyRow label="Evidence" value={`${result.evidenceTotal} addresses`} />
+            <ReadOnlyRow
+              label="Convention"
+              value={
+                result.inferredPattern
+                  ? `${result.inferredPattern} (${result.patternSupport} agree)`
+                  : 'none inferred'
+              }
+            />
+            <ReadOnlyRow label="Verifier" value={result.mailboxVerifier ?? 'none configured'} />
+          </dl>
+
+          {result.candidates.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-ink-900">Addresses tried</h3>
+              <p className="mt-0.5 text-xs text-ink-500">
+                Masked on purpose — this runs the same machinery a paid reveal runs.
+              </p>
+              <ul className="mt-2 space-y-1.5">
+                {result.candidates.map((candidate) => (
+                  <li
+                    key={candidate.masked}
+                    className="flex items-center justify-between gap-3 rounded-lg glass-card px-3 py-2 text-xs"
+                  >
+                    <span className="font-mono text-ink-800">{candidate.masked}</span>
+                    <span
+                      title={candidate.reason}
+                      className={
+                        candidate.verdict === 'valid'
+                          ? 'text-success-600'
+                          : candidate.verdict === 'invalid'
+                            ? 'text-danger-600'
+                            : 'text-caution-600'
+                      }
+                    >
+                      {candidate.verdict}
+                      {candidate.verifier ? ` · ${candidate.verifier}` : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </Card>

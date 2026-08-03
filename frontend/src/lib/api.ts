@@ -278,6 +278,80 @@ export interface ProspectingStatus {
   sources?: string[];
 }
 
+/** What each stage of the pipeline actually did, for one test lookup. */
+export interface Diagnosis {
+  fullName: string;
+  companyDomain: string;
+  nameUsable: boolean;
+  stages: Array<{
+    name: string;
+    evidenceFound: number;
+    directHit: boolean;
+    ms: number;
+    note?: string;
+  }>;
+  evidenceTotal: number;
+  inferredPattern: string | null;
+  patternSupport: number;
+  patternConfidence: number | null;
+  candidates: Array<{ masked: string; verdict: string; reason: string; verifier: string | null }>;
+  wouldReturn: string | null;
+  wouldReturnSource: string | null;
+  mailboxVerifier: string | null;
+  phoneVerifier: string | null;
+  sellUnverified: boolean;
+  summary: string;
+}
+
+/* ---- Campaigns & territories --------------------------------------------- */
+
+export interface Territory {
+  id: string;
+  name: string;
+  description: string | null;
+  ownerId: string | null;
+  postalCodes: string[];
+  cities: string[];
+  counties: string[];
+  active: boolean;
+  createdAt: string;
+}
+
+export type CampaignStatus = 'draft' | 'active' | 'paused' | 'finished';
+export type CampaignChannel = 'email' | 'call' | 'mixed';
+
+export interface Campaign {
+  id: string;
+  name: string;
+  goal: string | null;
+  channel: CampaignChannel;
+  status: CampaignStatus;
+  territoryId: string | null;
+  ownerId: string | null;
+  startsOn: string | null;
+  endsOn: string | null;
+  createdAt: string;
+  /** Members by status, plus `total`. Absent keys are zero. */
+  counts: Record<string, number>;
+}
+
+export type CampaignMemberStatus =
+  | 'pending' | 'sent' | 'opened' | 'replied' | 'bounced' | 'unsubscribed' | 'skipped';
+
+export interface CampaignMember {
+  id: string;
+  campaignId: string;
+  contactId: string | null;
+  prospectId: string | null;
+  status: CampaignMemberStatus;
+  lastTouchAt: string | null;
+  touches: number;
+  note: string | null;
+  personName: string;
+  personEmail: string | null;
+  personCompany: string | null;
+}
+
 /** One vendor or verifier, as the settings screen describes it. */
 export interface Integration {
   id: string;
@@ -1180,6 +1254,68 @@ export const api = {
     ),
 
   /** Whether this org contributes to the shared contact network. */
+  /**
+   * Run the pipeline against a name and company without charging or saving.
+   * Addresses come back masked — enough to recognise one you know, not enough
+   * to be an unbilled reveal.
+   */
+  diagnoseLookup: (fullName: string, companyDomain: string) =>
+    request<Diagnosis>('/api/prospecting/diagnose', {
+      method: 'POST',
+      body: JSON.stringify({ fullName, companyDomain }),
+    }),
+
+  // ---- Territories ----
+  territories: () => request<{ items: Territory[] }>('/api/sales/territories', { method: 'GET' }),
+
+  createTerritory: (input: Partial<Territory> & { name: string }) =>
+    request<{ item: Territory }>('/api/sales/territories', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  updateTerritory: (id: string, input: Partial<Territory>) =>
+    request<{ item: Territory }>(`/api/sales/territories/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+
+  deleteTerritory: (id: string) =>
+    request<{ ok: boolean }>(`/api/sales/territories/${id}`, { method: 'DELETE' }),
+
+  // ---- Campaigns ----
+  campaigns: () => request<{ items: Campaign[] }>('/api/sales/campaigns', { method: 'GET' }),
+
+  createCampaign: (input: { name: string } & Partial<Campaign>) =>
+    request<{ item: Campaign }>('/api/sales/campaigns', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  updateCampaign: (id: string, input: Partial<Campaign>) =>
+    request<{ item: Campaign }>(`/api/sales/campaigns/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+
+  deleteCampaign: (id: string) =>
+    request<{ ok: boolean }>(`/api/sales/campaigns/${id}`, { method: 'DELETE' }),
+
+  campaignMembers: (id: string) =>
+    request<{ items: CampaignMember[] }>(`/api/sales/campaigns/${id}/members`, { method: 'GET' }),
+
+  addCampaignMember: (id: string, input: { contactId?: string; prospectId?: string; note?: string }) =>
+    request<{ item: CampaignMember }>(`/api/sales/campaigns/${id}/members`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  setCampaignMemberStatus: (id: string, memberId: string, status: CampaignMemberStatus) =>
+    request<{ item: CampaignMember }>(`/api/sales/campaigns/${id}/members/${memberId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+
   networkSettings: () =>
     request<{ contributing: boolean; decidedAt: string | null; enabled: boolean }>(
       '/api/prospecting/network',

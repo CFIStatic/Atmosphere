@@ -511,6 +511,52 @@ const CHARGED = new Set<string>();
 /** Contribution state for the shared network. Off until somebody decides. */
 const NETWORK = { contributing: false, decidedAt: null as string | null, shared: 0 };
 
+/** Territories a restoration company in Central Texas would actually run. */
+const TERRITORIES: Array<Record<string, any>> = [
+  {
+    id: 'terr-1', name: 'North Austin', description: 'Multifamily and HOA focus',
+    ownerId: 'u-1', postalCodes: ['78727', '78729', '78750'], cities: ['Cedar Park', 'Round Rock'],
+    counties: ['Williamson County'], active: true, createdAt: '2026-06-01T00:00:00Z',
+  },
+  {
+    id: 'terr-2', name: 'Central Austin', description: 'Commercial and healthcare',
+    ownerId: null, postalCodes: ['78701', '78702', '78703'], cities: ['Austin'],
+    counties: [], active: true, createdAt: '2026-06-01T00:00:00Z',
+  },
+  {
+    id: 'terr-3', name: 'San Antonio', description: null,
+    ownerId: null, postalCodes: [], cities: ['San Antonio'], counties: ['Bexar County'],
+    active: true, createdAt: '2026-07-14T00:00:00Z',
+  },
+];
+
+const CAMPAIGNS: Array<Record<string, any>> = [
+  {
+    id: 'camp-1', name: 'Q3 property managers — North Austin',
+    goal: 'Get on the approved vendor list before storm season',
+    channel: 'email', status: 'active', territoryId: 'terr-1', ownerId: 'u-1',
+    startsOn: '2026-07-01', endsOn: null, createdAt: '2026-07-01T00:00:00Z',
+  },
+  {
+    id: 'camp-2', name: 'Adjuster reintroductions',
+    goal: 'Re-engage the desk adjusters we worked with last year',
+    channel: 'mixed', status: 'paused', territoryId: null, ownerId: 'u-1',
+    startsOn: '2026-05-12', endsOn: null, createdAt: '2026-05-12T00:00:00Z',
+  },
+];
+
+const CAMPAIGN_MEMBERS: Record<string, Array<Record<string, any>>> = {
+  'camp-1': [
+    { id: 'cm-1', campaignId: 'camp-1', contactId: 'ct-2', prospectId: null, status: 'replied', lastTouchAt: '2026-07-28T15:00:00Z', touches: 3, note: null, personName: 'Rita Calloway', personEmail: 'r.calloway@alliancemutual.com', personCompany: 'Alliance Mutual' },
+    { id: 'cm-2', campaignId: 'camp-1', contactId: 'ct-3', prospectId: null, status: 'opened', lastTouchAt: '2026-07-30T09:20:00Z', touches: 2, note: null, personName: 'Sam Okafor', personEmail: 'sam@camdencourt.org', personCompany: 'Camden Court HOA' },
+    { id: 'cm-3', campaignId: 'camp-1', contactId: 'ct-4', prospectId: null, status: 'sent', lastTouchAt: '2026-07-30T09:20:00Z', touches: 1, note: null, personName: 'Devon Ashby', personEmail: 'devon@camdencourt.org', personCompany: 'Camden Court HOA' },
+    { id: 'cm-4', campaignId: 'camp-1', contactId: 'ct-1', prospectId: null, status: 'pending', lastTouchAt: null, touches: 0, note: null, personName: 'Jordan Hollis', personEmail: 'j.hollis@example.com', personCompany: null },
+  ],
+  'camp-2': [
+    { id: 'cm-5', campaignId: 'camp-2', contactId: 'ct-2', prospectId: null, status: 'bounced', lastTouchAt: '2026-05-20T11:00:00Z', touches: 1, note: null, personName: 'Rita Calloway', personEmail: 'r.calloway@alliancemutual.com', personCompany: 'Alliance Mutual' },
+  ],
+};
+
 /** The activities handler needs the query it was called with. */
 const LAST_QUERY: { leadId?: string } = {};
 
@@ -667,6 +713,94 @@ const routes: Array<[string, RegExp, Handler]> = [
       ],
     },
   })],
+  /* ------------------------------------------- campaigns & territories */
+  ['GET', /^\/api\/sales\/territories$/, () => ({ body: { items: TERRITORIES } })],
+  ['POST', /^\/api\/sales\/territories$/, (_m, b) => {
+    const item = {
+      id: `terr-${TERRITORIES.length + 1}`,
+      name: String(b.name ?? 'Untitled'),
+      description: b.description ?? null,
+      ownerId: null,
+      postalCodes: b.postalCodes ?? [],
+      cities: b.cities ?? [],
+      counties: b.counties ?? [],
+      active: true,
+      createdAt: '2026-08-03T00:00:00Z',
+    };
+    TERRITORIES.push(item);
+    return { status: 201, body: { item } };
+  }],
+  ['GET', /^\/api\/sales\/campaigns$/, () => ({
+    body: {
+      items: CAMPAIGNS.map((c) => ({
+        ...c,
+        counts: (CAMPAIGN_MEMBERS[c.id] ?? []).reduce(
+          (acc, m) => ({ ...acc, [m.status]: (acc[m.status] ?? 0) + 1, total: (acc.total ?? 0) + 1 }),
+          {} as Record<string, number>,
+        ),
+      })),
+    },
+  })],
+  ['POST', /^\/api\/sales\/campaigns$/, (_m, b) => {
+    const item = {
+      id: `camp-${CAMPAIGNS.length + 1}`,
+      name: String(b.name ?? 'Untitled'),
+      goal: b.goal ?? null,
+      channel: b.channel ?? 'email',
+      status: 'draft',
+      territoryId: b.territoryId ?? null,
+      ownerId: null,
+      startsOn: null,
+      endsOn: null,
+      createdAt: '2026-08-03T00:00:00Z',
+    };
+    CAMPAIGNS.unshift(item);
+    CAMPAIGN_MEMBERS[item.id] = [];
+    return { status: 201, body: { item: { ...item, counts: { total: 0 } } } };
+  }],
+  ['GET', /^\/api\/sales\/campaigns\/([^/]+)\/members$/, (m) => {
+    const id = String(m).split('/campaigns/')[1]?.split('/')[0] ?? '';
+    return { body: { items: CAMPAIGN_MEMBERS[id] ?? [] } };
+  }],
+  ['PATCH', /^\/api\/sales\/campaigns\/([^/]+)\/members\/([^/]+)$/, (m, b) => {
+    const parts = String(m).split('/');
+    const campaignId = parts[parts.indexOf('campaigns') + 1];
+    const memberId = parts[parts.length - 1];
+    const member = (CAMPAIGN_MEMBERS[campaignId] ?? []).find((x) => x.id === memberId);
+    if (member) member.status = String(b.status ?? member.status);
+    return { body: { item: member ?? null } };
+  }],
+
+  ['POST', /^\/api\/prospecting\/diagnose$/, (_m, b) => {
+    // The walkthrough's honest answer: sources are enabled and find nothing
+    // at an unknown domain, so inference has nothing to build from. That is
+    // the state a new deployment is genuinely in, and the summary says which
+    // stage was empty rather than just reporting no result.
+    const name = String(b.fullName ?? '');
+    const domain = String(b.companyDomain ?? '').toLowerCase();
+    return {
+      body: {
+        fullName: name,
+        companyDomain: domain,
+        nameUsable: name.trim().split(/\s+/).length >= 2,
+        stages: [
+          { name: 'Company website', evidenceFound: 0, directHit: false, ms: 412 },
+          { name: 'Common Crawl', evidenceFound: 0, directHit: false, ms: 688 },
+        ],
+        evidenceTotal: 0,
+        inferredPattern: null,
+        patternSupport: 0,
+        patternConfidence: null,
+        candidates: [],
+        wouldReturn: null,
+        wouldReturnSource: null,
+        mailboxVerifier: null,
+        phoneVerifier: null,
+        sellUnverified: false,
+        summary: `No addresses are known at ${domain}, from your CRM or any source. Inference will not guess at a domain with no evidence, so there is nothing to build a candidate from. Connect a source, or add one contact at this company.`,
+      },
+    };
+  }],
   ['GET', /^\/api\/prospecting\/network$/, () => ({
     // Off, like every real org before somebody decides otherwise.
     body: { contributing: NETWORK.contributing, decidedAt: NETWORK.decidedAt, enabled: true },

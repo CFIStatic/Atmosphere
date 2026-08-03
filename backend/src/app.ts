@@ -20,6 +20,7 @@ import { modelGatewayRouter } from './routes/modelGateway.js';
 import { webhookRouter } from './routes/webhooks.js';
 import { crmRouter } from './routes/crm.js';
 import { prospectingRouter } from './routes/prospecting.js';
+import { campaignsRouter } from './routes/campaigns.js';
 import { backupRouter } from './routes/backups.js';
 import { integrationsRouter } from './routes/integrations.js';
 import { computerRouter } from './routes/computer.js';
@@ -140,6 +141,9 @@ export function createApp(): Express {
   app.use('/api/verifier', verifierRouter);
   app.use('/api/crm', crmRouter);
   app.use('/api/prospecting', prospectingRouter);
+  // Campaigns and territories share a router: a campaign is usually worked one
+  // territory at a time, and splitting them would put one join across two files.
+  app.use('/api/sales', campaignsRouter);
   app.use('/api/backups', backupRouter);
   app.use('/api/integrations', integrationsRouter);
   app.use('/api/computer', computerRouter);

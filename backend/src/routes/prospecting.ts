@@ -14,6 +14,7 @@ import {
 } from '../prospecting/index.js';
 import { buildMailboxVerifier } from '../prospecting/verifiers/index.js';
 import { buildSourceChain } from '../prospecting/sources/index.js';
+import { diagnose } from '../prospecting/diagnose.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { runWaterfall } from '../prospecting/waterfall.js';
 import type { KnownAddress } from '../prospecting/patterns.js';
@@ -911,6 +912,47 @@ prospectingRouter.delete(
   },
 );
 
+
+const diagnoseSchema = z.object({
+  fullName: z.string().trim().min(2).max(120),
+  companyDomain: z.string().trim().min(3).max(200),
+});
+
+/**
+ * POST /api/prospecting/diagnose
+ *
+ * Runs the whole pipeline against a name and company you choose, and reports
+ * what each stage did. Charges nothing and writes nothing.
+ *
+ * Addresses come back masked, because this runs exactly the machinery a reveal
+ * runs — returning them in full would be an unbilled reveal with extra steps.
+ * A masked address is still enough to recognise one you already know, which is
+ * the point: run it against yourself and you can tell at a glance whether the
+ * pipeline found the right answer.
+ */
+prospectingRouter.post(
+  '/diagnose',
+  integrationsLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      // It spends vendor calls and reveals how the machinery behaves, so it is
+      // an operator's tool rather than something any member can run in a loop.
+      const { orgId, supabase } = await requireOrgRole(req, ['owner', 'admin']);
+      const { fullName, companyDomain } = diagnoseSchema.parse(req.body ?? {});
+
+      const known = await loadKnownAddresses(supabase, orgId);
+      const result = await diagnose(
+        fullName,
+        companyDomain,
+        buildSourceChain(createAdminClient(), orgId),
+        known,
+      );
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 /* ---- The shared contact network ----------------------------------------- */
 

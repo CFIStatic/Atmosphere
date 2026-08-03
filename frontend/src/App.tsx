@@ -31,6 +31,9 @@ import { EstimatorPage } from './pages/EstimatorPage';
 import { MitigationEstimatorPage } from './pages/MitigationEstimatorPage';
 import { SpinnerIcon } from './components/icons';
 import { PLATFORM_HOME } from './lib/platforms';
+import { RequirePlatform } from './components/RequirePlatform';
+import { CampaignsPage } from './pages/CampaignsPage';
+import { TerritoriesPage } from './pages/TerritoriesPage';
 import { getPlatform } from './lib/usePlatform';
 
 function FullScreenSpinner() {
@@ -109,7 +112,34 @@ export default function App() {
             { path: '/schedule', element: <SchedulePage /> },
             { path: '/customers', element: <CustomersPage /> },
             { path: '/pipeline', element: <PipelinePage /> },
-            { path: '/prospector', element: <ProspectorPage /> },
+            // Prospecting is Sales' alone. Landing here from another platform
+            // switches into Sales rather than framing a sales tool with
+            // somebody else's navigation.
+            {
+              path: '/prospector',
+              element: (
+                <RequirePlatform platform="sales">
+                  <ProspectorPage />
+                </RequirePlatform>
+              ),
+            },
+            // Campaigns and Territories are Sales' alone, same as prospecting.
+            {
+              path: '/campaigns',
+              element: (
+                <RequirePlatform platform="sales">
+                  <CampaignsPage />
+                </RequirePlatform>
+              ),
+            },
+            {
+              path: '/territories',
+              element: (
+                <RequirePlatform platform="sales">
+                  <TerritoriesPage />
+                </RequirePlatform>
+              ),
+            },
             { path: '/costing', element: <JobCostingPage /> },
           ].map(({ path, element }) => (
             <Route
