@@ -10,6 +10,8 @@ import {
   type MemoryEvent,
 } from '../lib/api';
 import { AppShell, PageHeader, PanelSpinner, EmptyState, ErrorNote } from '../components/AppShell';
+import { InvitePanel } from '../components/team/InvitePanel';
+import { usePlatform } from '../lib/usePlatform';
 import { MemoryFeed } from '../components/MemoryFeed';
 import { SpinnerIcon, ChevronLeftIcon } from '../components/icons';
 
@@ -167,6 +169,11 @@ function AgentDetail({ userId, onBack }: { userId: string; onBack: () => void })
 }
 
 export function TeamMemoryPage() {
+  // The invite panel belongs to the manager's view of this page. Operations
+  // sees the same route as "Crew" for reading the record, and growing the
+  // company is the manager's job — the join code is not a secret from anyone,
+  // but the screen for using it lives where the responsibility does.
+  const [platform] = usePlatform();
   const [agents, setAgents] = useState<AgentMemory[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -191,6 +198,8 @@ export function TeamMemoryPage() {
             title="Team"
             description="Everyone linked to your organization, and what the record says each of them has done."
           />
+
+          {platform === 'manager' && <InvitePanel />}
 
           {error && (
             <div className="mb-4">

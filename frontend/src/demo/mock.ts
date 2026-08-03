@@ -1105,6 +1105,13 @@ const CUSTODY: Record<string, any[]> = {
   ],
 };
 
+/** Invitations: one waiting, one answered, one withdrawn. */
+const ORG_INVITES: Array<Record<string, any>> = [
+  { id: 'inv-1', email: 'kai.osei@example.com', role: 'field_technician', note: null, status: 'pending', createdAt: '2026-08-04T09:00:00Z', joinedAt: null, revokedAt: null },
+  { id: 'inv-2', email: 'elena@ortizrestoration.com', role: 'accountant', note: null, status: 'joined', createdAt: '2026-07-02T10:00:00Z', joinedAt: '2026-07-03T08:15:00Z', revokedAt: null },
+  { id: 'inv-3', email: 'wrong.address@example.com', role: 'sales', note: null, status: 'revoked', createdAt: '2026-07-20T14:00:00Z', joinedAt: null, revokedAt: '2026-07-20T14:05:00Z' },
+];
+
 const CAMPAIGNS: Array<Record<string, any>> = [
   {
     id: 'camp-1', name: 'Q3 property managers — North Austin',
@@ -1695,6 +1702,23 @@ const routes: Array<[string, RegExp, Handler]> = [
       detail: (b.reason as string) ?? null,
       occurred_at: new Date().toISOString(),
     });
+    return { body: { ok: true } };
+  }],
+
+  /* ------------------------------------------- invitations */
+  ['GET', /^\/api\/org\/invites$/, () => ({ body: { invites: ORG_INVITES } })],
+  ['POST', /^\/api\/org\/invites$/, (_m, b) => {
+    const invite = { id: `inv-${Date.now()}`, email: String(b.email ?? '').toLowerCase(), role: b.role ?? 'field_technician', note: b.note ?? null, status: 'pending', createdAt: new Date().toISOString(), joinedAt: null, revokedAt: null };
+    ORG_INVITES.unshift(invite);
+    // The demo has no connected mailbox, which is also day one in real life —
+    // the panel's "send them the code yourself" path is the one worth showing.
+    return { status: 201, body: { invite, emailed: false, joinCode: 'ORTIZ-4481' } };
+  }],
+  ['POST', /^\/api\/org\/invites\/([\w-]+)\/revoke$/, (m) => {
+    const invite = ORG_INVITES.find((i) => i.id === m[1] && i.status === 'pending');
+    if (!invite) return { status: 409, body: { error: 'That invitation is not pending — it was already answered or withdrawn.' } };
+    invite.status = 'revoked';
+    invite.revokedAt = new Date().toISOString();
     return { body: { ok: true } };
   }],
 

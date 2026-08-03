@@ -863,6 +863,20 @@ export interface DuplicatePair {
   b: { id: string; name: string; attached: number };
 }
 
+/* ---- Invitations --------------------------------------------------------- */
+
+export interface OrgInvite {
+  id: string;
+  email: string;
+  /** Advisory — the joiner picks their own role at onboarding. */
+  role: MemberRole;
+  note?: string | null;
+  status: 'pending' | 'joined' | 'revoked';
+  createdAt: string;
+  joinedAt?: string | null;
+  revokedAt?: string | null;
+}
+
 export type CampaignStatus = 'draft' | 'active' | 'paused' | 'finished';
 export type CampaignChannel = 'email' | 'call' | 'mixed';
 
@@ -2121,6 +2135,18 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+
+  // ---- Invitations ----
+  orgInvites: () => request<{ invites: OrgInvite[] }>('/api/org/invites', { method: 'GET' }),
+
+  createOrgInvite: (input: { email: string; role?: MemberRole; note?: string }) =>
+    request<{ invite: OrgInvite; emailed: boolean; joinCode: string }>('/api/org/invites', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  revokeOrgInvite: (id: string) =>
+    request<{ ok: boolean }>(`/api/org/invites/${id}/revoke`, { method: 'POST' }),
 
   // ---- Account structure ----
   accountStructure: (accountId: string) =>
