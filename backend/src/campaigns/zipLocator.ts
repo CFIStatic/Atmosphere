@@ -1,18 +1,27 @@
 import { config } from '../config.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { normaliseZip, zipToState } from './zips.js';
+import { centroidFor } from './zipCentroids.data.js';
 
 /**
- * Turning ZIP codes into points, once.
+ * Turning ZIP codes into points.
  *
- * The expensive half of zips.ts. Geocoding is rate-limited to one request a
- * second by the service's terms, so doing it per request would make a page
- * load take a minute for a territory with sixty ZIPs. Doing it once and
- * keeping the answer makes the second load instant and the hundredth free.
+ * Three sources, cheapest first, and the order is the whole design:
  *
- * Shared across organizations deliberately: where 78664 is does not belong to
- * anybody, and org-scoping it would mean geocoding the same code once per
- * customer to learn the same fact.
+ *   1. The bundled table. Every US ZIP, offline, instant. This answers
+ *      essentially everything, and it is what makes a five-hundred-code
+ *      franchise draw its map on the first page load instead of the twentieth.
+ *   2. The shared `zip_centroids` table, which holds anything geocoded before.
+ *   3. The geocoder, rate-limited to one request a second by its terms, for
+ *      the handful of new or unusual codes the table has never seen.
+ *
+ * Before the table existed this started at (3), which meant a page load was
+ * capped at a couple of dozen codes and weather matching quietly degraded to
+ * county names for everything else — the coarser answer, given silently.
+ *
+ * Anything geocoded is written back and shared across organizations
+ * deliberately: where 78664 is does not belong to anybody, and org-scoping it
+ * would mean geocoding the same code once per customer to learn the same fact.
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -93,8 +102,30 @@ export async function locateZips(zips: string[], limit = 12): Promise<Map<string
   const missing: string[] = [];
   for (const zip of wanted) {
     const cached = memory.get(zip);
-    if (cached) found.set(zip, cached);
-    else missing.push(zip);
+    if (cached) {
+      found.set(zip, cached);
+      continue;
+    }
+
+    // The bundled table, which knows almost every code and costs nothing.
+    const bundled = centroidFor(zip);
+    if (bundled) {
+      const point: ZipPoint = {
+        zip,
+        lat: bundled.lat,
+        lon: bundled.lon,
+        state: zipToState(zip),
+        // The table carries a city name, but the geocoded rows carry a fuller
+        // address, and one field that means two different things is worse than
+        // a null. Places come from the geocoder or not at all.
+        place: null,
+      };
+      memory.set(zip, point);
+      found.set(zip, point);
+      continue;
+    }
+
+    missing.push(zip);
   }
   if (!missing.length) return found;
 

@@ -437,6 +437,33 @@ export interface Territory {
   createdAt: string;
 }
 
+/** One ZIP code, placed. Absent from the list when it has not been geocoded yet. */
+export interface TerritoryPoint {
+  zip: string;
+  lat: number;
+  lon: number;
+  place: string | null;
+}
+
+export interface TerritoryMapEntry {
+  id: string;
+  name: string;
+  /**
+   * States this territory has codes in. A state being listed is not a claim to
+   * cover it — `points` is where the territory actually is.
+   */
+  states: string[];
+  zipsTotal: number;
+  points: TerritoryPoint[];
+}
+
+export interface TerritoryMapResponse {
+  /** How many of the org's ZIPs have a position yet, across all territories. */
+  located: number;
+  total: number;
+  territories: TerritoryMapEntry[];
+}
+
 export type CampaignStatus = 'draft' | 'active' | 'paused' | 'finished';
 export type CampaignChannel = 'email' | 'call' | 'mixed';
 
@@ -1608,6 +1635,9 @@ export const api = {
 
   // ---- Territories ----
   territories: () => request<{ items: Territory[] }>('/api/sales/territories', { method: 'GET' }),
+
+  territoryMap: () =>
+    request<TerritoryMapResponse>('/api/sales/territories/map', { method: 'GET' }),
 
   createTerritory: (input: Partial<Territory> & { name: string }) =>
     request<{ item: Territory }>('/api/sales/territories', {

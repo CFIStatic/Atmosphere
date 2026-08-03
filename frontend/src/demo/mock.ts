@@ -535,6 +535,39 @@ const TERRITORIES: Array<Record<string, any>> = [
   },
 ];
 
+/**
+ * Where those ZIPs are. Real centroids, not sketched — a demo map with the
+ * dots in roughly-Texas would be worse than no map.
+ */
+const TERRITORY_POINTS = [
+  {
+    id: 'terr-1', name: 'North Austin', states: ['TX'], zipsTotal: 6,
+    points: [
+      { zip: '78664', lat: 30.5145, lon: -97.668, place: 'Round Rock, TX' },
+      { zip: '78681', lat: 30.5083, lon: -97.6789, place: 'Round Rock, TX' },
+      { zip: '78717', lat: 30.506, lon: -97.7472, place: 'Austin, TX' },
+      { zip: '78727', lat: 30.4254, lon: -97.7195, place: 'Austin, TX' },
+      { zip: '78729', lat: 30.4521, lon: -97.7688, place: 'Austin, TX' },
+      { zip: '78750', lat: 30.4224, lon: -97.7967, place: 'Austin, TX' },
+    ],
+  },
+  {
+    id: 'terr-2', name: 'Central Austin', states: ['TX'], zipsTotal: 3,
+    points: [
+      { zip: '78701', lat: 30.2713, lon: -97.7426, place: 'Austin, TX' },
+      { zip: '78702', lat: 30.2638, lon: -97.7166, place: 'Austin, TX' },
+      { zip: '78703', lat: 30.2907, lon: -97.7648, place: 'Austin, TX' },
+    ],
+  },
+  {
+    id: 'terr-3', name: 'Lawton, OK', states: ['OK'], zipsTotal: 2,
+    points: [
+      { zip: '73501', lat: 34.5915, lon: -98.3698, place: 'Lawton, OK' },
+      { zip: '73505', lat: 34.6179, lon: -98.4552, place: 'Lawton, OK' },
+    ],
+  },
+];
+
 const CAMPAIGNS: Array<Record<string, any>> = [
   {
     id: 'camp-1', name: 'Q3 property managers — North Austin',
@@ -986,6 +1019,16 @@ const routes: Array<[string, RegExp, Handler]> = [
 
   /* ------------------------------------------- campaigns & territories */
   ['GET', /^\/api\/sales\/territories$/, () => ({ body: { items: TERRITORIES } })],
+
+  // Real ZIP centroids, from the same table the backend carries — the map is
+  // only worth looking at if the dots are where the codes actually are.
+  ['GET', /^\/api\/sales\/territories\/map$/, () => ({
+    body: {
+      located: TERRITORY_POINTS.reduce((n, t) => n + t.points.length, 0),
+      total: TERRITORIES.reduce((n, t) => n + t.postalCodes.length, 0),
+      territories: TERRITORY_POINTS,
+    },
+  })],
   ['POST', /^\/api\/sales\/territories$/, (_m, b) => {
     const item = {
       id: `terr-${TERRITORIES.length + 1}`,

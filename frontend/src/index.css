@@ -44,6 +44,12 @@
   --line: 36 34 31;
   --line-strong: 52 49 45;
 
+  /* How strongly the territory map tints a state you have ZIP codes in.
+     Theme-dependent because the same alpha over near-black reads twice as
+     loud as it does over paper, and this wash has to stay a hint — anything
+     bolder claims the whole state as covered, which it is not. */
+  --map-tint: 0.06;
+
   --danger-50: 48 20 18;
   --danger-200: 84 32 27;
   --danger-600: 240 122 98;
@@ -101,6 +107,8 @@
   --paper-0: 255 255 255;
   --paper-50: 251 250 247;
   --paper-100: 244 241 235;
+
+  --map-tint: 0.15;
   --paper-200: 237 233 225;
   --paper-300: 228 223 213;
   --paper-400: 216 210 197;

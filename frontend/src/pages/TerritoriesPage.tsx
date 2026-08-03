@@ -3,6 +3,7 @@ import { AppShell, EmptyState, PageHeader } from '../components/AppShell';
 import { api, type Territory } from '../lib/api';
 import { GlobeIcon, SpinnerIcon } from '../components/icons';
 import { CrewMap } from '../components/campaigns/CrewMap';
+import { TerritoryMap } from '../components/campaigns/TerritoryMap';
 
 /**
  * Territories — who owns which patch of the map.
@@ -15,8 +16,9 @@ import { CrewMap } from '../components/campaigns/CrewMap';
  *
  * Areas are described the way sales teams actually talk — ZIPs, cities,
  * counties — rather than as geometry. Forcing "Austin metro" into a polygon
- * would make the feature unusable by the people who need it, and a map can
- * come later for anyone who wants one.
+ * would make the feature unusable by the people who need it. The map is drawn
+ * *from* those lists instead: each ZIP is located once and shaded, so nobody
+ * traces a boundary and the picture still comes out.
  *
  * An unowned territory is shown as a gap rather than hidden, because that is
  * the thing worth noticing on this page.
@@ -26,6 +28,9 @@ export function TerritoriesPage() {
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Which territory the map is framed on. Held here rather than inside the
+  // map so a card in the list below can drive it too.
+  const [focusId, setFocusId] = useState<string | null>(null);
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -153,10 +158,11 @@ export function TerritoriesPage() {
         </p>
       )}
 
-      {/* Live positions sit above the territory list: "who is in North Austin
-          right now" is the question somebody opens this page to answer, and
-          the definitions below it are reference material. */}
-      <div className="mt-6">
+      {/* The map, then who is in it, then the definitions. Somebody opening
+          this page is asking "where do we cover" and "who is there right
+          now" — the ZIP lists below are reference material for both. */}
+      <div className="mt-6 space-y-4">
+        <TerritoryMap focusId={focusId} onFocus={setFocusId} />
         <CrewMap />
       </div>
 
@@ -178,10 +184,26 @@ export function TerritoriesPage() {
           )}
           <ul className="mt-6 grid gap-3 sm:grid-cols-2">
             {items.map((territory) => (
-              <li key={territory.id} className="rounded-xl glass-card p-4">
+              <li
+                key={territory.id}
+                className={`rounded-xl glass-card p-4 transition ${
+                  focusId === territory.id ? 'ring-2 ring-brand-300' : ''
+                }`}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h2 className="text-sm font-semibold text-ink-900">{territory.name}</h2>
+                    {/* The name is the control: clicking it frames this
+                        territory on the map above, which is the natural
+                        gesture and saves a second row of buttons. */}
+                    <button
+                      onClick={() =>
+                        setFocusId((current) => (current === territory.id ? null : territory.id))
+                      }
+                      aria-pressed={focusId === territory.id}
+                      className="text-left text-sm font-semibold text-ink-900 hover:text-brand-600"
+                    >
+                      {territory.name}
+                    </button>
                     {territory.description && (
                       <p className="mt-0.5 text-xs text-ink-600">{territory.description}</p>
                     )}

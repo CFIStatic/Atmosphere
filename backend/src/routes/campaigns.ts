@@ -243,6 +243,66 @@ campaignsRouter.delete('/territories/:id', async (req: Request, res: Response, n
   }
 });
 
+/**
+ * GET /api/sales/territories/map
+ * Every territory as something drawable: which states it touches, and where
+ * its ZIP codes actually are.
+ *
+ * Separate from GET /territories rather than folded into it, because locating
+ * ZIPs can mean geocoding, and the campaign form that also lists territories
+ * has no business waiting on that.
+ *
+ * The two halves are different claims and the client keeps them apart. A state
+ * in `states` means "some of this territory is in that state" — it is not a
+ * claim to cover the state, and shading Texas orange for eleven ZIPs around
+ * Austin would be a lie the map tells at a glance. `points` is the real
+ * coverage.
+ */
+campaignsRouter.get(
+  '/territories/map',
+  placeLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { orgId, supabase } = await requireOrgContext(req);
+      const { data, error } = await supabase
+        .from('crm_territories')
+        .select('*')
+        .eq('org_id', orgId)
+        .order('name');
+      if (error) throw new HttpError(500, error.message, 'territories_failed');
+
+      const territories = (data ?? []) as any[];
+      const zips = zipsForTerritories(territories);
+      // Bounded like everywhere else this is called: a new territory with two
+      // hundred codes fills in over the next few loads instead of holding this
+      // request open for three minutes.
+      const centroids = await locateZips(zips, 24);
+
+      res.json({
+        located: centroids.size,
+        total: zips.length,
+        territories: territories.map((t) => {
+          const mine = zipsForTerritories([t]);
+          return {
+            id: t.id,
+            name: t.name,
+            states: statesForTerritories([t]),
+            zipsTotal: mine.length,
+            points: mine
+              .map((zip) => {
+                const at = centroids.get(zip);
+                return at ? { zip, lat: at.lat, lon: at.lon, place: at.place } : null;
+              })
+              .filter(Boolean),
+          };
+        }),
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 /* ---- Campaigns ----------------------------------------------------------- */
 
 campaignsRouter.get('/campaigns', async (req: Request, res: Response, next: NextFunction) => {

@@ -1,3 +1,5 @@
+import { zipRecord } from './zipCentroids.data.js';
+
 /**
  * ZIP codes, which is how a territory is actually described.
  *
@@ -9,17 +11,19 @@
  * territory defined the normal way matched no weather at all, silently. This
  * file is what makes a ZIP mean something.
  *
- * Two conversions, and they are deliberately different in cost:
+ * Two conversions, both answered by the bundled table in zipCentroids.data.ts:
  *
- *   ZIP → state    A lookup table. Instant, offline, exact. Needed to know
- *                  which states to ask the weather service about, and asking
- *                  for the wrong ones is the difference between national
- *                  coverage and a hardcoded 'TX'.
+ *   ZIP → state    Which states to ask the weather service about. Asking for
+ *                  the wrong ones is the difference between national coverage
+ *                  and a hardcoded 'TX'.
  *
- *   ZIP → point    A geocode. Slow and rate-limited, so it is cached
- *                  permanently — a ZIP centroid does not move. Needed for
- *                  point-in-polygon against an alert's actual shape, which is
- *                  far better than matching the county name the office wrote.
+ *   ZIP → point    Point-in-polygon against an alert's actual shape, which is
+ *                  far better than matching the county name the office wrote,
+ *                  and the thing the territory map is drawn from.
+ *
+ * The ranges below predate the table and stay as the fallback for a code it
+ * has never seen. They are an inference from the published allocations; the
+ * table is the fact. Where they disagree, the table wins.
  */
 
 /**
@@ -78,12 +82,25 @@ export function normaliseZip(raw: string | null | undefined): string | null {
 /**
  * Which state is this ZIP in?
  *
+ * The bundled table first, because it is a fact rather than an inference: it
+ * holds the actual state for all forty-two thousand codes, including every
+ * one that sits outside its state's block, not just the handful anybody
+ * thought to list below.
+ *
+ * The ranges remain as the fallback for a code the table has never seen — new
+ * allocations happen — and as the thing that keeps this function working if
+ * the table is ever unavailable.
+ *
  * Null when it is not a recognisable US code, which the caller treats as "no
  * weather coverage" rather than guessing at a state.
  */
 export function zipToState(raw: string | null | undefined): string | null {
   const zip = normaliseZip(raw);
   if (!zip) return null;
+
+  const known = zipRecord(zip);
+  if (known?.state) return known.state;
+
   if (EXCEPTIONS[zip]) return EXCEPTIONS[zip];
 
   const n = Number(zip);
