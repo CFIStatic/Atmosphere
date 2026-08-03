@@ -5,6 +5,7 @@ import {
   type SalesWorkResponse,
   type SalesWorkDetail,
   type WorkTone,
+  type WorkSource,
 } from '../lib/api';
 import { SpinnerIcon } from '../components/icons';
 
@@ -16,20 +17,39 @@ import { SpinnerIcon } from '../components/icons';
  * is "let me find out" — which is the moment the relationship they spent months
  * building starts costing them.
  *
- * Everything needed to answer that call is already recorded. Crews log hours,
- * tasks close, jobs change status, and a trigger writes every one into the
- * org's memory. It has simply never been pointed at the person who sold the
- * job. This page points it at them.
+ * Everything needed to answer that call is already recorded — in three
+ * different places. Sales' own job row, the Operations project board (phase,
+ * milestones, the alerts the project agent raises), and the Field app (moisture
+ * readings, equipment on and off site). This page is where the three meet.
  *
- * Read-only, deliberately. Somebody watching delivery from the outside is
- * exactly the wrong person to be able to move a schedule from a summary
- * screen, and offering it would produce changes made without the context the
- * office has.
+ * The two halves were never introduced: pm_projects was built on its own branch
+ * and deliberately avoided foreign keys back to the Sales tables. So a
+ * salesperson could not see the work even in principle. The pairing now runs
+ * off an explicit link where one exists and a shared claim number where it does
+ * not, and the page says which — "linked" and "same claim number" are different
+ * levels of confidence and the person about to email a customer should know
+ * which they have.
+ *
+ * Read-only about the work, deliberately: somebody watching delivery from the
+ * outside is the wrong person to move a schedule from a summary screen.
+ *
+ * Not read-only about the relationship, which is the point. A drafted update is
+ * composed from what is actually recorded and put in front of the salesperson
+ * with everything filled in. Nothing is delivered until they press send — the
+ * automation stops at composing, because the failure mode of an automatic send
+ * is telling somebody their house is dry when a reading says otherwise.
  *
  * The organising idea is that progress is not the news. A job moving along
  * needs nobody's attention; a job that has gone quiet is the one the customer
  * is about to ring about, and that is what this page puts first.
  */
+
+/** Where a line came from. Field lines carry the most weight with a customer. */
+const SOURCE_LABEL: Record<WorkSource, string> = {
+  sales: 'Sales',
+  operations: 'Operations',
+  field: 'Field',
+};
 
 const TONE_DOT: Record<WorkTone, string> = {
   progress: 'bg-success-600',
@@ -264,7 +284,76 @@ export function SalesWorkPage() {
                           <p className="text-xs text-ink-500">Could not load this job's timeline.</p>
                         ) : (
                           <>
-                            <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-ink-600">
+                            {/* The Operations and Field picture, when the two
+                                sides of this job have found each other. */}
+                            {info.delivery ? (
+                              <div className="rounded-lg border border-line p-3">
+                                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                                  <span className="text-xs font-semibold text-ink-900">
+                                    {info.delivery.headline}
+                                  </span>
+                                  <span className="text-[11px] text-ink-400">
+                                    {info.delivery.projectNumber ?? 'Operations'}
+                                    {/* Which is a claim about how confident the
+                                        pairing is, and somebody about to email
+                                        a customer should be able to see it. */}
+                                    {info.delivery.matchedBy === 'claim-number' && (
+                                      <span
+                                        title="Paired by matching claim number rather than an explicit link."
+                                        className="ml-1.5 rounded-full bg-caution-50 px-1.5 py-0.5 text-[10px] font-semibold text-caution-600"
+                                      >
+                                        matched on claim #
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+
+                                {info.delivery.drying.length > 0 && (
+                                  <ul className="mt-2 grid gap-1 sm:grid-cols-2">
+                                    {info.delivery.drying.map((area) => {
+                                      const judged =
+                                        area.latestPct !== null && area.goalPct !== null;
+                                      const dry = judged && area.latestPct! <= area.goalPct!;
+                                      return (
+                                        <li
+                                          key={area.label}
+                                          className="flex items-baseline justify-between gap-2 text-[11px]"
+                                        >
+                                          <span className="text-ink-700">{area.label}</span>
+                                          <span
+                                            className={
+                                              !judged
+                                                ? 'text-ink-400'
+                                                : dry
+                                                  ? 'text-success-600'
+                                                  : 'text-caution-600'
+                                            }
+                                          >
+                                            {area.latestPct === null
+                                              ? 'no reading yet'
+                                              : `${area.latestPct}%${
+                                                  area.goalPct !== null
+                                                    ? ` / ${area.goalPct}% goal`
+                                                    : ''
+                                                }`}
+                                          </span>
+                                        </li>
+                                      );
+                                    })}
+                                  </ul>
+                                )}
+                              </div>
+                            ) : (
+                              // Saying so beats a thin page somebody reads as
+                              // "nothing is happening".
+                              <p className="rounded-lg border border-line px-3 py-2 text-[11px] text-ink-500">
+                                No Operations project is paired with this job, so there is no phase
+                                or drying data here yet. Pairing happens automatically once both
+                                sides carry the same claim number.
+                              </p>
+                            )}
+
+                            <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-ink-600">
                               {info.crew.length > 0 && (
                                 <span>
                                   <span className="text-ink-500">On it: </span>
@@ -300,7 +389,7 @@ export function SalesWorkPage() {
                                     <span className="min-w-0">
                                       <span className="block text-xs text-ink-800">{entry.text}</span>
                                       <span className="block text-[11px] text-ink-400">
-                                        {ago(entry.at)}
+                                        {SOURCE_LABEL[entry.source] ?? 'Sales'} · {ago(entry.at)}
                                         {entry.by ? ` · ${entry.by}` : ''}
                                       </span>
                                     </span>
@@ -308,6 +397,8 @@ export function SalesWorkPage() {
                                 ))}
                               </ol>
                             )}
+
+                            <UpdateComposer job={job} info={info} />
                           </>
                         )}
                       </div>
@@ -362,5 +453,180 @@ export function SalesWorkPage() {
         </>
       )}
     </AppShell>
+  );
+}
+
+/**
+ * The update, drafted for you.
+ *
+ * This is where "stay in the loop" turns into "keep the relationship". The
+ * subject and body arrive filled in from what the crews actually recorded, so
+ * the salesperson's job is to read it, change what they want, and send —
+ * rather than to compose a progress report about work they cannot see.
+ *
+ * Two things it will not do. It will not send without a preview first: the
+ * preview runs the same screening as the send, so "this person unsubscribed"
+ * is known before anybody presses the button rather than after. And it will
+ * not send to more than one person at a time — a bulk "update everyone" on a
+ * page somebody opens between calls is how four hundred customers get mailed
+ * about work on another house.
+ */
+function UpdateComposer({
+  job,
+  info,
+}: {
+  job: { id: string; customer: string | null };
+  info: SalesWorkDetail;
+}) {
+  const [open, setOpen] = useState(false);
+  const [to, setTo] = useState(info.recipients[0]?.email ?? info.delivery?.customerEmail ?? '');
+  const [subject, setSubject] = useState(info.suggestedUpdate.subject);
+  const [body, setBody] = useState(info.suggestedUpdate.body);
+  const [checking, setChecking] = useState(false);
+  const [preview, setPreview] = useState<{
+    wouldSend: number;
+    blocked: Array<{ email: string; reason: string }>;
+    warnings?: string[];
+  } | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+
+  async function check() {
+    setChecking(true);
+    setResult(null);
+    try {
+      const res = await api.sendJobUpdate(job.id, { to, subject, body });
+      setPreview({ wouldSend: res.wouldSend ?? 0, blocked: res.blocked, warnings: res.warnings });
+    } catch (err) {
+      setResult(err instanceof Error ? err.message : 'Could not check that.');
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  async function send() {
+    setChecking(true);
+    try {
+      const res = await api.sendJobUpdate(job.id, { to, subject, body, confirm: true });
+      setResult(
+        res.sent
+          ? `Sent to ${to}${res.from ? ` from ${res.from}` : ''}.`
+          : (res.blocked[0]?.reason ?? res.error ?? 'Nothing was sent.'),
+      );
+      setPreview(null);
+    } catch (err) {
+      setResult(err instanceof Error ? err.message : 'Could not send that.');
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  const alreadySent = info.sends.filter((s) => s.state === 'sent');
+
+  return (
+    <div className="mt-3 border-t border-line pt-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <button
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="text-xs font-semibold text-brand-600 hover:text-brand-700"
+        >
+          {open ? 'Hide the update' : 'Send an update'}
+        </button>
+        {/* What has already gone out about this job, so nobody sends the same
+            news twice from two different screens. */}
+        {alreadySent.length > 0 && (
+          <span className="text-[11px] text-ink-400">
+            {alreadySent.length} update{alreadySent.length === 1 ? '' : 's'} sent · last{' '}
+            {ago(alreadySent[0].at)}
+          </span>
+        )}
+      </div>
+
+      {open && (
+        <div className="mt-2 space-y-2">
+          <div className="flex flex-wrap gap-2">
+            {info.recipients.map((r) => (
+              <button
+                key={r.email}
+                onClick={() => setTo(r.email)}
+                aria-pressed={to === r.email}
+                className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition ${
+                  to === r.email ? 'bg-brand-600 text-ink-900' : 'glass-card text-ink-600'
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+
+          <input
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            placeholder="who it goes to"
+            className="w-full rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+          />
+          <input
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            className="w-full rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+          />
+          <textarea
+            rows={10}
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            className="w-full rounded-lg glass-field px-3 py-2 text-xs leading-relaxed text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+          />
+
+          <p className="text-[11px] text-ink-400">
+            Your postal address and a working unsubscribe link are added automatically. Both are
+            required by law on a message like this.
+          </p>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => void check()}
+              disabled={checking || !to}
+              className="flex items-center gap-1.5 rounded-lg glass-card px-3 py-1.5 text-xs font-medium text-ink-700 transition hover:text-ink-900 disabled:opacity-50"
+            >
+              {checking && <SpinnerIcon className="animate-spin" width={12} height={12} />}
+              Check it first
+            </button>
+            {/* Deliberately only reachable after a check: the preview runs the
+                same screening the send does, so an unsubscribe is known before
+                the button is pressed rather than after. */}
+            {preview && preview.wouldSend > 0 && (
+              <button
+                onClick={() => void send()}
+                disabled={checking}
+                className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-ink-900 transition hover:bg-brand-700 disabled:opacity-50"
+              >
+                Send it
+              </button>
+            )}
+          </div>
+
+          {preview && (
+            <div className="rounded-lg border border-line px-3 py-2 text-[11px]">
+              {preview.wouldSend > 0 ? (
+                <p className="text-success-600">Clear to send to {to}.</p>
+              ) : (
+                <p className="text-caution-600">
+                  Will not send —{' '}
+                  {preview.blocked[0]?.reason.replace(/_/g, ' ') ?? 'blocked'}
+                  {preview.blocked[0]?.reason === 'unsubscribed' && '. Worth a phone call instead.'}
+                </p>
+              )}
+              {preview.warnings?.map((w) => (
+                <p key={w} className="mt-1 text-caution-600">
+                  {w}
+                </p>
+              ))}
+            </div>
+          )}
+
+          {result && <p className="text-[11px] text-ink-700">{result}</p>}
+        </div>
+      )}
+    </div>
   );
 }

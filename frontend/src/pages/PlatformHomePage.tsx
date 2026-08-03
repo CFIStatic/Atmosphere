@@ -14,6 +14,7 @@ import {
   type PmOverview,
 } from '../lib/api';
 import { AppShell } from '../components/AppShell';
+import { CommunicationsPanel } from '../components/CommunicationsPanel';
 import { AtmosphereRail } from '../components/AtmosphereRail';
 import { displayName } from '../lib/display';
 import { formatUsd } from '../lib/money';
@@ -346,6 +347,11 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
             )}
           </div>
         </section>
+
+        {/* Sales only: this is the platform that sends, so this is where
+            "who are we writing to?" has to be answerable. Operations and Field
+            record the work; they do not mail anybody. */}
+        {platformId === 'sales' && <CommunicationsPanel />}
       </div>
     </AppShell>
   );

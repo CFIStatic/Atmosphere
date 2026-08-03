@@ -138,6 +138,8 @@ const SALES_WORK_JOBS = [
     lastEventAt: '2026-08-03T09:20:00Z',
     lastEventText: '0.8h logged — Repositioned two air movers to the master bedroom closet; subfloor down to 14.2% from 16.8%',
     daysQuiet: 0, quiet: false,
+    projectId: 'pm-1041', projectNumber: 'P-2041', phase: 'drying', phaseLabel: 'Drying',
+    phaseProgress: 0.42, deliveryMatchedBy: 'linked', customerEmail: 'elena.nguyen@example.com',
   },
   {
     id: 'job-1042', jobNumber: 1042, title: 'Mould remediation, unit 4B',
@@ -145,6 +147,8 @@ const SALES_WORK_JOBS = [
     scheduledStart: '2026-08-05T14:00:00Z', contractAmount: 9200, invoicedAmount: 0,
     lastEventAt: '2026-08-02T16:44:00Z', lastEventText: 'Scheduled',
     daysQuiet: 1, quiet: false,
+    projectId: 'pm-1042', projectNumber: 'P-2042', phase: 'scheduled', phaseLabel: 'Scheduled',
+    phaseProgress: 0.25, deliveryMatchedBy: 'claim-number', customerEmail: 'facilities@harborpoint.example',
   },
   {
     id: 'job-1035', jobNumber: 1035, title: 'Contents pack-out',
@@ -167,25 +171,64 @@ const SALES_WORK_LATEST = [
 
 const SALES_WORK_TIMELINES: Record<string, any> = {
   'job-1041': {
+    // The Operations and Field half — phase from the project board, drying
+    // readings from the Field app.
+    delivery: {
+      projectId: 'pm-1041', projectNumber: 'P-2041', phase: 'drying',
+      phaseLabel: 'Drying', phaseProgress: 0.42, matchedBy: 'linked',
+      targetCompletion: '2026-08-08T00:00:00Z',
+      customerEmail: 'elena.nguyen@example.com', adjusterEmail: 'c.brandt@meridianmutual.example',
+      drying: [
+        { label: 'Master bedroom', latestPct: 14.2, goalPct: 16, readingAt: '2026-08-03T09:00:00Z' },
+        { label: 'Kitchen', latestPct: 15.1, goalPct: 16, readingAt: '2026-08-03T09:04:00Z' },
+        { label: 'Dining', latestPct: 18.6, goalPct: 16, readingAt: '2026-08-03T09:08:00Z' },
+      ],
+      headline: 'Drying — 2 of 3 areas at dry standard.',
+    },
+    suggestedUpdate: {
+      subject: 'Update on your water loss, class 3',
+      body: 'Hi Elena,\n\nWanted to give you a quick update on water loss, class 3.\n\nWhere things stand: drying.\n2 of 3 affected areas are at dry standard so far.\n\nRecently:\n  • Equipment pulled in Master bedroom\n  • Moisture reading — Dining at 18.6%\n  • Carrier approval received — done\n\nAnything you want to ask about, just reply to this and it comes straight to me.\n\n— Dana Ortiz',
+    },
+    recipients: [
+      { label: 'Customer (from Operations)', email: 'elena.nguyen@example.com' },
+      { label: 'Adjuster', email: 'c.brandt@meridianmutual.example' },
+    ],
+    sends: [
+      { id: 'snd-1', email: 'elena.nguyen@example.com', subject: 'Day 5 update on your water loss', state: 'sent', blockedReason: null, at: '2026-07-29T15:12:00Z' },
+    ],
     crew: [
       { userId: 'u-marcus', name: 'Marcus Webb', role: 'lead', since: '2026-07-24T15:05:00Z' },
       { userId: 'u-tom', name: 'Tom Reyes', role: 'crew', since: '2026-07-25T08:00:00Z' },
     ],
     timeline: [
-      { id: 'ev-1', seq: 910, text: '0.8h logged — Repositioned two air movers to the master bedroom closet; subfloor down to 14.2% from 16.8%', tone: 'progress', by: 'marcus@ortizrestoration.com', at: '2026-08-03T09:20:00Z' },
-      { id: 'ev-2', seq: 908, text: 'Finished: Day 8 moisture readings', tone: 'progress', by: 'marcus@ortizrestoration.com', at: '2026-08-03T08:05:00Z' },
-      { id: 'ev-5', seq: 880, text: '0.3h logged — Adjuster confirmed supplement path for cabinet uppers; send photos with the day-8 update', tone: 'progress', by: 'dana@ortizrestoration.com', at: '2026-08-01T15:00:00Z' },
-      { id: 'ev-8', seq: 800, text: 'Crew started on site', tone: 'progress', by: 'marcus@ortizrestoration.com', at: '2026-07-24T13:20:00Z' },
-      { id: 'ev-9', seq: 799, text: 'Job opened', tone: 'other', by: 'dana@ortizrestoration.com', at: '2026-07-24T15:02:00Z' },
+      { id: 'ev-1', text: '0.8h logged — Repositioned two air movers to the master bedroom closet; subfloor down to 14.2% from 16.8%', tone: 'progress', source: 'sales', by: 'marcus@ortizrestoration.com', at: '2026-08-03T09:20:00Z' },
+      { id: 'dv-1', text: 'Moisture reading — Dining at 18.6%', tone: 'progress', source: 'field', by: null, at: '2026-08-03T09:08:00Z' },
+      { id: 'dv-2', text: 'Equipment pulled in Master bedroom', tone: 'progress', source: 'field', by: null, at: '2026-08-03T08:30:00Z' },
+      { id: 'ev-2', text: 'Finished: Day 8 moisture readings', tone: 'progress', source: 'sales', by: 'marcus@ortizrestoration.com', at: '2026-08-03T08:05:00Z' },
+      { id: 'dv-3', text: 'Carrier approval received — done', tone: 'progress', source: 'operations', by: null, at: '2026-08-02T10:00:00Z' },
+      { id: 'ev-5', text: '0.3h logged — Adjuster confirmed supplement path for cabinet uppers; send photos with the day-8 update', tone: 'progress', source: 'sales', by: 'dana@ortizrestoration.com', at: '2026-08-01T15:00:00Z' },
+      { id: 'dv-4', text: 'Equipment set in Dining', tone: 'crew', source: 'field', by: null, at: '2026-07-30T08:05:00Z' },
+      { id: 'ev-8', text: 'Crew started on site', tone: 'progress', source: 'sales', by: 'marcus@ortizrestoration.com', at: '2026-07-24T13:20:00Z' },
+      { id: 'ev-9', text: 'Job opened', tone: 'other', source: 'sales', by: 'dana@ortizrestoration.com', at: '2026-07-24T15:02:00Z' },
     ],
     scheduledEnd: '2026-08-08T00:00:00Z',
   },
   'job-1038': {
+    // No Operations project paired: this job carries no claim number that
+    // matches, which is exactly the case the page has to explain rather than
+    // render as an empty panel.
+    delivery: null,
+    suggestedUpdate: {
+      subject: 'Update on your storm damage — roof tarp and rebuild',
+      body: 'Hi there,\n\nWanted to give you a quick update on storm damage — roof tarp and rebuild.\n\nWhere things stand: not started.\n\nAnything you want to ask about, just reply to this and it comes straight to me.\n\n— Dana Ortiz',
+    },
+    recipients: [],
+    sends: [],
     crew: [{ userId: 'u-priya', name: 'Priya Shah', role: 'supervisor', since: '2026-07-19T09:00:00Z' }],
     timeline: [
-      { id: 'ev-7', seq: 840, text: 'Supplement approved by carrier — $4,180', tone: 'money', by: 'priya@ortizrestoration.com', at: '2026-07-26T10:05:00Z' },
-      { id: 'ev-10', seq: 812, text: 'Crew started on site', tone: 'progress', by: 'priya@ortizrestoration.com', at: '2026-07-21T14:00:00Z' },
-      { id: 'ev-11', seq: 805, text: 'Job opened', tone: 'other', by: 'dana@ortizrestoration.com', at: '2026-07-19T08:30:00Z' },
+      { id: 'ev-7', text: 'Supplement approved by carrier — $4,180', tone: 'money', source: 'sales', by: 'priya@ortizrestoration.com', at: '2026-07-26T10:05:00Z' },
+      { id: 'ev-10', text: 'Crew started on site', tone: 'progress', source: 'sales', by: 'priya@ortizrestoration.com', at: '2026-07-21T14:00:00Z' },
+      { id: 'ev-11', text: 'Job opened', tone: 'other', source: 'sales', by: 'dana@ortizrestoration.com', at: '2026-07-19T08:30:00Z' },
     ],
     scheduledEnd: '2026-08-14T00:00:00Z',
   },
@@ -644,6 +687,34 @@ const TERRITORY_POINTS = [
     ],
   },
 ];
+
+/**
+ * Who the platform has written to. Campaigns and job updates in one list,
+ * because a recipient experiences mail from the company, not two subsystems.
+ */
+const OUTREACH_PEOPLE = [
+  { email: 'elena.nguyen@example.com', messages: 3, delivered: 3, bounced: 0, blocked: 0, campaignMessages: 1, updateMessages: 2, lastAt: '2026-08-03T09:30:00Z', unsubscribed: false, suppressed: false },
+  { email: 'facilities@harborpoint.example', messages: 4, delivered: 4, bounced: 0, blocked: 0, campaignMessages: 4, updateMessages: 0, lastAt: '2026-08-02T14:10:00Z', unsubscribed: false, suppressed: false },
+  { email: 'j.mercer@roundrockisd.example', messages: 2, delivered: 1, bounced: 0, blocked: 1, campaignMessages: 2, updateMessages: 0, lastAt: '2026-08-01T09:05:00Z', unsubscribed: true, suppressed: false },
+  { email: 'office@lakeviewdental.example', messages: 5, delivered: 5, bounced: 0, blocked: 0, campaignMessages: 2, updateMessages: 3, lastAt: '2026-07-29T17:35:00Z', unsubscribed: false, suppressed: false },
+  { email: 'p.okafor@cedarridgehoa.example', messages: 2, delivered: 1, bounced: 1, blocked: 0, campaignMessages: 2, updateMessages: 0, lastAt: '2026-07-26T11:00:00Z', unsubscribed: false, suppressed: false },
+];
+
+const OUTREACH_HISTORY: Record<string, any[]> = {
+  'elena.nguyen@example.com': [
+    { id: 'h1', kind: 'job_update', subject: 'Update on your water loss, class 3', state: 'sent', blockedReason: null, error: null, about: '#1041 · Water loss, Class 3', at: '2026-08-03T09:30:00Z' },
+    { id: 'h2', kind: 'job_update', subject: 'Day 5 update on your water loss', state: 'sent', blockedReason: null, error: null, about: '#1041 · Water loss, Class 3', at: '2026-07-29T15:12:00Z' },
+    { id: 'h3', kind: 'campaign', subject: 'Checking in ahead of the weather', state: 'sent', blockedReason: null, error: null, about: 'Hail watch — North Austin schools', at: '2026-07-20T13:00:00Z' },
+  ],
+  'j.mercer@roundrockisd.example': [
+    { id: 'h4', kind: 'campaign', subject: 'Checking in ahead of the weather', state: 'blocked', blockedReason: 'unsubscribed', error: null, about: 'Hail watch — North Austin schools', at: '2026-08-01T09:05:00Z' },
+    { id: 'h5', kind: 'campaign', subject: 'Before storm season', state: 'sent', blockedReason: null, error: null, about: 'Q3 property managers — North Austin', at: '2026-07-08T10:00:00Z' },
+  ],
+  'p.okafor@cedarridgehoa.example': [
+    { id: 'h6', kind: 'campaign', subject: 'Before storm season', state: 'bounced', blockedReason: null, error: '550 5.1.1 recipient rejected', about: 'Q3 property managers — North Austin', at: '2026-07-26T11:00:00Z' },
+    { id: 'h7', kind: 'campaign', subject: 'Introducing ourselves', state: 'sent', blockedReason: null, error: null, about: 'Q3 property managers — North Austin', at: '2026-07-02T10:00:00Z' },
+  ],
+};
 
 const CAMPAIGNS: Array<Record<string, any>> = [
   {
@@ -1122,10 +1193,48 @@ const routes: Array<[string, RegExp, Handler]> = [
     return {
       body: {
         job: { ...job, workType: 'restoration', scheduledEnd: extra.scheduledEnd, actualStart: null, actualEnd: null, paidAmount: 0 },
+        delivery: extra.delivery ?? null,
+        suggestedUpdate: extra.suggestedUpdate ?? { subject: `Update on your ${job.title.toLowerCase()}`, body: 'Hi there,\n\n— Dana Ortiz' },
+        recipients: extra.recipients ?? [],
+        sends: extra.sends ?? [],
         crew: extra.crew,
         timeline: extra.timeline,
       },
     };
+  }],
+
+  ['POST', /^\/api\/sales\/work\/([\w-]+)\/update$/, (_m, b) => {
+    // Same two-step as the live route: a check that screens, then a send.
+    const to = String(b.to ?? '');
+    const stopped = OUTREACH_PEOPLE.find((p) => p.email === to && (p.unsubscribed || p.suppressed));
+    if (!b.confirm) {
+      return {
+        body: {
+          dryRun: true,
+          wouldSend: stopped ? 0 : 1,
+          blocked: stopped ? [{ email: to, reason: stopped.unsubscribed ? 'unsubscribed' : 'suppressed' }] : [],
+          warnings: [],
+        },
+      };
+    }
+    if (stopped) return { body: { sent: 0, blocked: [{ email: to, reason: 'unsubscribed' }] } };
+    return { body: { sent: 1, blocked: [], from: 'dana@ortizrestoration.com', error: null } };
+  }],
+
+  ['GET', /^\/api\/sales\/communications$/, () => ({
+    body: {
+      people: OUTREACH_PEOPLE,
+      totals: {
+        people: OUTREACH_PEOPLE.length,
+        messages: OUTREACH_PEOPLE.reduce((n, p) => n + p.messages, 0),
+        bounced: OUTREACH_PEOPLE.reduce((n, p) => n + p.bounced, 0),
+        optedOut: OUTREACH_PEOPLE.filter((p) => p.unsubscribed || p.suppressed).length,
+      },
+    },
+  })],
+  ['GET', /^\/api\/sales\/communications\/(.+)$/, (m) => {
+    const email = decodeURIComponent(m[1]);
+    return { body: { email, messages: OUTREACH_HISTORY[email] ?? [] } };
   }],
 
   /* ------------------------------------------- campaigns & territories */

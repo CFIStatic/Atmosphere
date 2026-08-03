@@ -7,7 +7,6 @@ import rateLimit from 'express-rate-limit';
 import { randomBytes } from 'node:crypto';
 import { config } from '../config.js';
 import { requireOrgRole } from '../lib/orgContext.js';
-import { createAdminClient } from '../lib/supabase.js';
 import { listGrants, saveGrant, deleteGrant } from '../lib/integrations/oauthVault.js';
 import {
   buildMailSender,
@@ -23,6 +22,7 @@ import {
   type MailSystem,
 } from '../campaigns/mail/index.js';
 import { buildForecastProvider, FORECAST_PROVIDERS } from '../campaigns/forecast/index.js';
+import { loadGateLists } from '../campaigns/mail/gate.js';
 import { statesForTerritories, zipsForTerritories } from '../campaigns/zips.js';
 import { locateZips } from '../campaigns/zipLocator.js';
 import { geometryContains } from '../campaigns/geo.js';
@@ -1175,59 +1175,16 @@ campaignsRouter.post(
         throw new HttpError(400, 'Connect a mailbox before sending.', 'no_mailbox');
       }
 
-      // Everything the gate needs, loaded once.
-      const since = new Date();
-      since.setHours(0, 0, 0, 0);
-      const [supp, unsub, priorSends, todayCount] = await Promise.all([
-        supabase.from('crm_suppressions').select('kind, value').eq('org_id', orgId),
-        supabase.from('crm_unsubscribes').select('email').eq('org_id', orgId),
-        supabase.from('crm_sends').select('email, state').eq('org_id', orgId).eq('campaign_id', req.params.id),
-        supabase
-          .from('crm_sends')
-          .select('id', { count: 'exact', head: true })
-          .eq('org_id', orgId)
-          .eq('state', 'sent')
-          .gte('sent_at', since.toISOString()),
-      ]);
-
-      // Global erasure tombstones, read once. They outrank every other list
-      // and they cross org boundaries — somebody who asked to be forgotten
-      // stays forgotten regardless of which customer holds their address.
-      const admin = createAdminClient();
-      const erasedEmails = new Set<string>();
-      if (admin) {
-        const { data: erased } = await admin.from('network_erasures').select('email');
-        for (const row of (erased ?? []) as any[]) {
-          erasedEmails.add(String(row.email).toLowerCase());
-        }
-      }
-
-      const suppressedEmails = new Set<string>();
-      const suppressedDomains = new Set<string>();
-      for (const row of (supp.data ?? []) as any[]) {
-        const v = String(row.value ?? '').toLowerCase();
-        if (row.kind === 'email') suppressedEmails.add(v);
-        if (row.kind === 'domain') suppressedDomains.add(v);
-      }
+      // Everything the gate needs, loaded once — and loaded by the same code
+      // the job-update sender uses. Two slightly different versions of this is
+      // how an unsubscribe gets honoured on one path and not the other.
+      const lists = await loadGateLists(supabase, orgId, { campaignId: req.params.id });
 
       const screened = screenRecipients({
         recipients: members
           .filter((m) => m.email)
           .map((m) => ({ email: m.email as string, name: m.name, company: m.company })),
-        suppressedEmails,
-        suppressedDomains,
-        erasedEmails,
-        unsubscribed: new Set(((unsub.data ?? []) as any[]).map((r) => String(r.email).toLowerCase())),
-        alreadySent: new Set(
-          ((priorSends.data ?? []) as any[])
-            .filter((r) => r.state === 'sent')
-            .map((r) => String(r.email).toLowerCase()),
-        ),
-        hardBounced: new Set(
-          ((priorSends.data ?? []) as any[])
-            .filter((r) => r.state === 'bounced')
-            .map((r) => String(r.email).toLowerCase()),
-        ),
+        ...lists,
         policy: {
           ...policy,
           // The lowest of the three: what the customer set, and what the
@@ -1236,7 +1193,6 @@ campaignsRouter.post(
           // email rather than costing us a campaign.
           dailyCeiling: Math.min(policy.dailyCeiling, sender?.dailyCeiling ?? policy.dailyCeiling),
         },
-        sentToday: todayCount.count ?? 0,
       });
 
       if (!confirm) {

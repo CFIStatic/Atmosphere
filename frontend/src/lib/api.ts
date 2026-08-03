@@ -470,6 +470,14 @@ export type WorkTone = 'progress' | 'money' | 'crew' | 'attention' | 'other';
 
 export interface SalesWorkJob {
   id: string;
+  /** Set when Operations has a project delivering this job. */
+  projectId?: string | null;
+  projectNumber?: string | null;
+  phase?: string | null;
+  phaseLabel?: string | null;
+  phaseProgress?: number | null;
+  deliveryMatchedBy?: 'linked' | 'claim-number' | null;
+  customerEmail?: string | null;
   jobNumber: number | null;
   title: string;
   /** Account name, or the contact's if the job has no account. */
@@ -504,8 +512,36 @@ export interface SalesWorkEvent {
 export interface SalesWorkResponse {
   scope: 'mine' | 'all';
   jobs: SalesWorkJob[];
+  /** How many of these jobs have Operations behind them. */
+  deliveryLinked?: number;
   latest: SalesWorkEvent[];
   counts: { open: number; onSite: number; quiet: number; awaitingPayment: number };
+}
+
+/** Which platform recorded a line, so the feed can say where it came from. */
+export type WorkSource = 'sales' | 'operations' | 'field';
+
+export interface DryingArea {
+  label: string;
+  latestPct: number | null;
+  goalPct: number | null;
+  readingAt: string | null;
+}
+
+/** The Operations and Field half of a job, when the two have been paired. */
+export interface JobDelivery {
+  projectId: string;
+  projectNumber: string | null;
+  phase: string | null;
+  phaseLabel: string;
+  phaseProgress: number | null;
+  /** 'linked' is explicit; 'claim-number' was inferred from a shared claim. */
+  matchedBy: 'linked' | 'claim-number';
+  targetCompletion: string | null;
+  customerEmail: string | null;
+  adjusterEmail: string | null;
+  drying: DryingArea[];
+  headline: string;
 }
 
 export interface SalesWorkDetail {
@@ -516,8 +552,62 @@ export interface SalesWorkDetail {
     actualEnd: string | null;
     paidAmount: number | null;
   };
+  delivery: JobDelivery | null;
+  /** Composed from what is recorded. Nothing sends until somebody presses send. */
+  suggestedUpdate: { subject: string; body: string };
+  recipients: Array<{ label: string; email: string }>;
+  sends: Array<{
+    id: string;
+    email: string;
+    subject: string | null;
+    state: string;
+    blockedReason: string | null;
+    at: string;
+  }>;
   crew: Array<{ userId: string; name: string; role: string; since: string }>;
-  timeline: Array<{ id: string; seq: number; text: string; tone: WorkTone; by: string | null; at: string }>;
+  timeline: Array<{
+    id: string;
+    text: string;
+    tone: WorkTone;
+    source: WorkSource;
+    by: string | null;
+    at: string;
+  }>;
+}
+
+/* ---- Who the platform is reaching out to -------------------------------- */
+
+export interface OutreachPerson {
+  email: string;
+  messages: number;
+  delivered: number;
+  bounced: number;
+  blocked: number;
+  campaignMessages: number;
+  updateMessages: number;
+  lastAt: string;
+  unsubscribed: boolean;
+  suppressed: boolean;
+}
+
+export interface OutreachResponse {
+  people: OutreachPerson[];
+  totals: { people: number; messages: number; bounced: number; optedOut: number };
+}
+
+export interface OutreachHistory {
+  email: string;
+  messages: Array<{
+    id: string;
+    kind: 'campaign' | 'job_update';
+    subject: string | null;
+    state: string;
+    blockedReason: string | null;
+    error: string | null;
+    /** The campaign name or the job it was about. */
+    about: string | null;
+    at: string;
+  }>;
 }
 
 export type CampaignStatus = 'draft' | 'active' | 'paused' | 'finished';
@@ -1695,6 +1785,28 @@ export const api = {
 
   salesWorkJob: (jobId: string) =>
     request<SalesWorkDetail>(`/api/sales/work/${jobId}`, { method: 'GET' }),
+
+  sendJobUpdate: (
+    jobId: string,
+    input: { to: string; subject: string; body: string; confirm?: boolean },
+  ) =>
+    request<{
+      dryRun?: boolean;
+      wouldSend?: number;
+      sent?: number;
+      blocked: Array<{ email: string; reason: string }>;
+      warnings?: string[];
+      from?: string;
+      error?: string | null;
+    }>(`/api/sales/work/${jobId}/update`, { method: 'POST', body: JSON.stringify(input) }),
+
+  outreachPeople: () =>
+    request<OutreachResponse>('/api/sales/communications', { method: 'GET' }),
+
+  outreachHistory: (email: string) =>
+    request<OutreachHistory>(`/api/sales/communications/${encodeURIComponent(email)}`, {
+      method: 'GET',
+    }),
 
   // ---- Territories ----
   territories: () => request<{ items: Territory[] }>('/api/sales/territories', { method: 'GET' }),
