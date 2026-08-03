@@ -807,6 +807,136 @@ const SHARED_RECORDS: Record<string, any> = {
   },
 };
 
+/**
+ * Proof of work. One clean day, one that fails a check, one still waiting on
+ * its after video, and one that is merely unproven — because "unproven" and
+ * "disproven" reading differently is the whole point of the feature.
+ */
+const PROOF_DAYS: Record<string, any> = {
+  'job-1038': {
+    siteKnown: true,
+    days: [
+      {
+        partyId: 'pty-2', company: 'Delgado Roofing', workDate: '2026-08-05',
+        hasBefore: true, hasAfter: true, contradicted: false,
+        summary: 'Before and after both check out.',
+        payable: true, payableBecause: 'Before and after both check out on every count.',
+        accepted: false, rejected: false,
+        checks: [
+          { key: 'before.on_site', verdict: 'pass', detail: 'Filmed at the site.' },
+          { key: 'before.same_day', verdict: 'pass', detail: 'Filmed on 2026-08-05.' },
+          { key: 'before.uploaded_promptly', verdict: 'pass', detail: 'Uploaded straight away.' },
+          { key: 'before.long_enough', verdict: 'pass', detail: '68 seconds.' },
+          { key: 'before.not_a_reupload', verdict: 'pass', detail: 'Not a copy of anything already on this job.' },
+          { key: 'after.on_site', verdict: 'pass', detail: 'Filmed at the site.' },
+          { key: 'after.same_day', verdict: 'pass', detail: 'Filmed on 2026-08-05.' },
+          { key: 'after.uploaded_promptly', verdict: 'pass', detail: 'Uploaded straight away.' },
+          { key: 'after.long_enough', verdict: 'pass', detail: '94 seconds.' },
+          { key: 'after.not_a_reupload', verdict: 'pass', detail: 'Not a copy of anything already on this job.' },
+          { key: 'ordered', verdict: 'pass', detail: '7.8 hours of work between the two.' },
+        ],
+        aiSummary: 'The north slope is stripped to the deck in the before frames and fully dried-in with underlayment and new shingles across roughly two thirds of it in the after. Six sheets of new decking are visible in the valley where the before shows dark, delaminated sheathing.',
+        aiFindings: {
+          changes: [
+            'North valley: dark delaminated decking replaced with new sheets',
+            'Underlayment laid across the full north slope',
+            'Shingles installed to roughly the ridge line on the north slope',
+          ],
+          cannotTell: ['The south slope is out of frame in both videos'],
+          scopeTouched: ['Tear off and replace roof — architectural shingle, 30yr', 'Replace 6 sheets of decking — rot found under the north valley'],
+          concerns: [],
+        },
+        proofIds: ['pf-1', 'pf-2'],
+      },
+      {
+        partyId: 'pty-2', company: 'Delgado Roofing', workDate: '2026-08-04',
+        hasBefore: true, hasAfter: true, contradicted: true,
+        summary: '1 check failed. Do not pay against this without asking.',
+        payable: false, payableBecause: 'Filmed 2.14 miles from the site — outside the 0.25-mile radius.',
+        accepted: false, rejected: false,
+        checks: [
+          { key: 'before.on_site', verdict: 'pass', detail: 'Filmed 0.03 miles from the site.' },
+          { key: 'before.same_day', verdict: 'pass', detail: 'Filmed on 2026-08-04.' },
+          { key: 'before.uploaded_promptly', verdict: 'pass', detail: 'Uploaded straight away.' },
+          { key: 'before.long_enough', verdict: 'pass', detail: '41 seconds.' },
+          { key: 'before.not_a_reupload', verdict: 'pass', detail: 'Not a copy of anything already on this job.' },
+          { key: 'after.on_site', verdict: 'fail', detail: 'Filmed 2.14 miles from the site — outside the 0.25-mile radius.' },
+          { key: 'after.same_day', verdict: 'pass', detail: 'Filmed on 2026-08-04.' },
+          { key: 'after.uploaded_promptly', verdict: 'pass', detail: 'Uploaded 3h after filming.' },
+          { key: 'after.long_enough', verdict: 'pass', detail: '52 seconds.' },
+          { key: 'after.not_a_reupload', verdict: 'pass', detail: 'Not a copy of anything already on this job.' },
+          { key: 'ordered', verdict: 'pass', detail: '6.2 hours of work between the two.' },
+        ],
+        aiSummary: 'The after frames show a different roof pitch and a different street elevation from the before. Both show roofing work in progress.',
+        aiFindings: {
+          changes: [],
+          cannotTell: ['The two videos do not appear to show the same building'],
+          scopeTouched: [],
+          concerns: ['The after footage appears to be a different property'],
+        },
+        proofIds: ['pf-3', 'pf-4'],
+      },
+      {
+        partyId: 'pty-3', company: 'Brightline Electric', workDate: '2026-08-05',
+        hasBefore: true, hasAfter: false, contradicted: false,
+        summary: 'Started but not finished: no after video yet.',
+        payable: false, payableBecause: 'A day needs both a before and an after.',
+        accepted: false, rejected: false,
+        checks: [
+          { key: 'before.on_site', verdict: 'unknown', detail: 'The video carries no location. Ask them to allow location in the app.' },
+          { key: 'before.same_day', verdict: 'pass', detail: 'Filmed on 2026-08-05.' },
+          { key: 'before.uploaded_promptly', verdict: 'pass', detail: 'Uploaded straight away.' },
+          { key: 'before.long_enough', verdict: 'pass', detail: '33 seconds.' },
+          { key: 'before.not_a_reupload', verdict: 'pass', detail: 'Not a copy of anything already on this job.' },
+        ],
+        aiSummary: null, aiFindings: null,
+        proofIds: ['pf-5'],
+      },
+      {
+        partyId: 'pty-2', company: 'Delgado Roofing', workDate: '2026-08-01',
+        hasBefore: true, hasAfter: true, contradicted: false,
+        summary: 'Nothing contradicts it, but 2 things could not be checked.',
+        payable: false, payableBecause: '2 things could not be checked — The video carries no location. Ask them to allow location in the app.',
+        accepted: true, rejected: false,
+        checks: [
+          { key: 'before.on_site', verdict: 'unknown', detail: 'The video carries no location. Ask them to allow location in the app.' },
+          { key: 'before.same_day', verdict: 'pass', detail: 'Filmed on 2026-08-01.' },
+          { key: 'before.uploaded_promptly', verdict: 'pass', detail: 'Uploaded straight away.' },
+          { key: 'before.long_enough', verdict: 'pass', detail: '55 seconds.' },
+          { key: 'before.not_a_reupload', verdict: 'pass', detail: 'Not a copy of anything already on this job.' },
+          { key: 'after.on_site', verdict: 'unknown', detail: 'The video carries no location. Ask them to allow location in the app.' },
+          { key: 'after.same_day', verdict: 'pass', detail: 'Filmed on 2026-08-01.' },
+          { key: 'after.uploaded_promptly', verdict: 'pass', detail: 'Uploaded 2h after filming.' },
+          { key: 'after.long_enough', verdict: 'pass', detail: '71 seconds.' },
+          { key: 'after.not_a_reupload', verdict: 'pass', detail: 'Not a copy of anything already on this job.' },
+          { key: 'ordered', verdict: 'pass', detail: '8.1 hours of work between the two.' },
+        ],
+        aiSummary: 'Tear-off of the north slope, from intact shingles in the before to bare deck with the felt stripped in the after. Debris is in a dumpster on the driveway in both.',
+        aiFindings: {
+          changes: ['North slope stripped to bare deck', 'Old shingles cleared to the driveway dumpster'],
+          cannotTell: ['No close view of the deck condition underneath'],
+          scopeTouched: ['Tear off and replace roof — architectural shingle, 30yr'],
+          concerns: [],
+        },
+        proofIds: ['pf-6', 'pf-7'],
+      },
+    ],
+  },
+  'job-1041': { siteKnown: false, days: [] },
+};
+
+const PROOF_QUESTIONS: Record<string, any[]> = {
+  'job-1038': [
+    {
+      id: 'q-1',
+      question: 'When did the decking replacement actually happen?',
+      answer: 'On 2026-08-05. The after footage that day shows six new sheets in the north valley where the before showed dark, delaminated sheathing. The videos on file do not show decking work on any other day.',
+      grounded_on: ['2026-08-05', '2026-08-04', '2026-08-01'],
+      created_at: '2026-08-05T18:40:00Z',
+    },
+  ],
+};
+
 const CAMPAIGNS: Array<Record<string, any>> = [
   {
     id: 'camp-1', name: 'Q3 property managers — North Austin',
@@ -1375,6 +1505,44 @@ const routes: Array<[string, RegExp, Handler]> = [
     record?.messages?.unshift(message);
     return { status: 201, body: { message } };
   }],
+
+  ['GET', /^\/api\/operations\/shared\/([\w-]+)\/proof$/, (m) => {
+    const record = PROOF_DAYS[m[1]] ?? { siteKnown: false, days: [] };
+    const days = record.days;
+    return {
+      body: {
+        days,
+        counts: {
+          days: days.length,
+          payable: days.filter((d: any) => d.payable && !d.accepted).length,
+          contradicted: days.filter((d: any) => d.contradicted).length,
+          awaitingAfter: days.filter((d: any) => d.hasBefore && !d.hasAfter).length,
+        },
+        siteKnown: record.siteKnown,
+      },
+    };
+  }],
+  ['GET', /^\/api\/operations\/shared\/([\w-]+)\/proof\/questions$/, (m) => ({
+    body: { questions: PROOF_QUESTIONS[m[1]] ?? [] },
+  })],
+  ['POST', /^\/api\/operations\/shared\/([\w-]+)\/proof\/ask$/, (m, b) => {
+    const answer = 'The videos on file do not show that. The record covers 2026-08-01, 08-04 and 08-05 for Delgado Roofing and one part-day for Brightline Electric.';
+    const entry = { id: `q-${Date.now()}`, question: String(b.question ?? ''), answer, grounded_on: ['2026-08-05', '2026-08-04', '2026-08-01'], created_at: new Date().toISOString() };
+    (PROOF_QUESTIONS[m[1]] ??= []).unshift(entry);
+    return { status: 201, body: { answer, question: entry, groundedOn: 3 } };
+  }],
+  ['POST', /^\/api\/operations\/shared\/([\w-]+)\/proof\/([\d-]+)\/decide$/, (m, b) => {
+    const record = PROOF_DAYS[m[1]];
+    const day = record?.days?.find((d: any) => d.workDate === m[2] && d.partyId === b.partyId);
+    if (day) {
+      day.accepted = b.decision === 'accepted';
+      day.rejected = b.decision === 'rejected';
+    }
+    return { body: { ok: true } };
+  }],
+  ['GET', /^\/api\/operations\/shared\/proof\/([\w-]+)\/video$/, () => ({
+    body: { url: 'about:blank#demo-video', expiresInSeconds: 600 },
+  })],
 
   /* ------------------------------------------- campaigns & territories */
   ['GET', /^\/api\/sales\/territories$/, () => ({ body: { items: TERRITORIES } })],

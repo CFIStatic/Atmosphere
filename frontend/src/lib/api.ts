@@ -689,6 +689,56 @@ export interface SharedJobRecord {
   risks: JobRisk[];
 }
 
+/* ---- Proof of work ------------------------------------------------------- */
+
+export type ProofCheckVerdict = 'pass' | 'fail' | 'unknown';
+
+export interface ProofCheck {
+  key: string;
+  verdict: ProofCheckVerdict;
+  detail: string;
+}
+
+export interface ProofDay {
+  partyId: string;
+  company: string;
+  workDate: string;
+  hasBefore: boolean;
+  hasAfter: boolean;
+  checks: ProofCheck[];
+  /** Something is provably wrong — distinct from merely unproven. */
+  contradicted: boolean;
+  summary: string;
+  /** Safe to release money against. Stricter than "looks fine". */
+  payable: boolean;
+  payableBecause: string;
+  accepted: boolean;
+  rejected: boolean;
+  aiSummary: string | null;
+  aiFindings: {
+    changes?: string[];
+    cannotTell?: string[];
+    scopeTouched?: string[];
+    concerns?: string[];
+  } | null;
+  proofIds: string[];
+}
+
+export interface ProofResponse {
+  days: ProofDay[];
+  counts: { days: number; payable: number; contradicted: number; awaitingAfter: number };
+  /** False when the job has no coordinates, so the on-site check cannot run. */
+  siteKnown: boolean;
+}
+
+export interface ProofQuestion {
+  id: string;
+  question: string;
+  answer: string | null;
+  grounded_on: string[];
+  created_at: string;
+}
+
 export type CampaignStatus = 'draft' | 'active' | 'paused' | 'finished';
 export type CampaignChannel = 'email' | 'call' | 'mixed';
 
@@ -1941,6 +1991,37 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+
+  // ---- Proof of work ----
+  jobProofs: (jobId: string) =>
+    request<ProofResponse>(`/api/operations/shared/${jobId}/proof`, { method: 'GET' }),
+
+  decideProofDay: (
+    jobId: string,
+    workDate: string,
+    input: { partyId: string; decision: 'accepted' | 'rejected'; note?: string },
+  ) =>
+    request<{ ok: boolean }>(`/api/operations/shared/${jobId}/proof/${workDate}/decide`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  askAboutProofs: (jobId: string, question: string) =>
+    request<{ answer: string; groundedOn: number; question: ProofQuestion }>(
+      `/api/operations/shared/${jobId}/proof/ask`,
+      { method: 'POST', body: JSON.stringify({ question }) },
+    ),
+
+  proofQuestions: (jobId: string) =>
+    request<{ questions: ProofQuestion[] }>(`/api/operations/shared/${jobId}/proof/questions`, {
+      method: 'GET',
+    }),
+
+  proofVideoUrl: (proofId: string) =>
+    request<{ url: string; expiresInSeconds: number }>(
+      `/api/operations/shared/proof/${proofId}/video`,
+      { method: 'GET' },
+    ),
 
   // ---- Territories ----
   territories: () => request<{ items: Territory[] }>('/api/sales/territories', { method: 'GET' }),

@@ -1,0 +1,570 @@
+import { type Request, type Response, type NextFunction } from 'express';
+import { z } from 'zod';
+import { HttpError } from '../lib/errors.js';
+import { requireOrgContext } from '../lib/orgContext.js';
+import { createAdminClient } from '../lib/supabase.js';
+import {
+  verifyDay,
+  verifyProof,
+  payable,
+  type ProofUpload,
+} from '../shared/proofVerifier.js';
+import { analyseProofDay, answerFromProofs, type ProofFrame } from '../shared/proofAnalyst.js';
+
+/**
+ * Proof of work: the endpoints.
+ *
+ * Two audiences, as everywhere in the shared record. The subcontractor uploads
+ * through their job token from the app; the general contractor reads, accepts
+ * and asks questions through their session.
+ *
+ * The video itself never passes through this API. The device uploads straight
+ * to storage with a short-lived signed URL and then posts the key, the hash and
+ * the capture facts here. A hundred-megabyte clip through an Express route is a
+ * request that times out on a truck's signal and an API that falls over when
+ * two crews finish at once.
+ */
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+export const PROOF_BUCKET = 'job-proofs';
+
+const PROOF_SELECT =
+  'id, party_id, work_date, phase, storage_path, byte_size, duration_seconds, content_hash, ' +
+  'captured_at, received_at, lat, lon, accuracy_m, state, checks, ai_summary, ai_findings, ' +
+  'ai_model, decided_at, decided_note, created_at';
+
+/** The row shape the verifier wants. */
+function asUpload(row: any): ProofUpload {
+  return {
+    id: row.id,
+    phase: row.phase,
+    workDate: row.work_date,
+    capturedAt: row.captured_at,
+    receivedAt: row.received_at,
+    durationSeconds: row.duration_seconds === null ? null : Number(row.duration_seconds),
+    contentHash: row.content_hash,
+    lat: row.lat === null ? null : Number(row.lat),
+    lon: row.lon === null ? null : Number(row.lon),
+    accuracyM: row.accuracy_m === null ? null : Number(row.accuracy_m),
+  };
+}
+
+/**
+ * Where the job is, for the on-site check.
+ *
+ * From the property when there is one, then the paired Operations project.
+ * Returns null rather than a guess: the verifier reports "no location on file"
+ * as unknown, which is the honest outcome and stops a payment just as firmly as
+ * a failure would.
+ */
+async function siteLocation(supabase: any, orgId: string, jobId: string) {
+  const { data: job } = await supabase
+    .from('crm_jobs')
+    .select('property_id')
+    .eq('org_id', orgId)
+    .eq('id', jobId)
+    .maybeSingle();
+
+  if ((job as any)?.property_id) {
+    const { data: property } = await supabase
+      .from('crm_properties')
+      .select('lat, lon')
+      .eq('id', (job as any).property_id)
+      .maybeSingle();
+    const lat = (property as any)?.lat;
+    const lon = (property as any)?.lon;
+    if (lat !== null && lat !== undefined && lon !== null && lon !== undefined) {
+      return { lat: Number(lat), lon: Number(lon) };
+    }
+  }
+  return null;
+}
+
+/* ---- The subcontractor's side ------------------------------------------- */
+
+/**
+ * POST /api/job-share/:token/proof/upload-url
+ * A short-lived signed URL to put the video straight into storage.
+ */
+export async function createUploadUrl(
+  party: any,
+  admin: any,
+  body: unknown,
+): Promise<{ path: string; token: string }> {
+  const input = z
+    .object({
+      workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      phase: z.enum(['before', 'after']),
+      extension: z.string().regex(/^[a-z0-9]{2,5}$/).default('mp4'),
+    })
+    .parse(body ?? {});
+
+  // Path carries the job and party so a leaked signed URL cannot be aimed at
+  // another job's folder.
+  const path = `${party.org_id}/${party.job_id}/${party.id}/${input.workDate}-${input.phase}.${input.extension}`;
+
+  const { data, error } = await admin.storage.from(PROOF_BUCKET).createSignedUploadUrl(path, {
+    upsert: true,
+  });
+  if (error) throw new HttpError(500, error.message, 'upload_url_failed');
+  return { path, token: (data as any).token };
+}
+
+const recordSchema = z.object({
+  workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  phase: z.enum(['before', 'after']),
+  storagePath: z.string().min(1).max(500),
+  byteSize: z.number().int().positive().optional(),
+  durationSeconds: z.number().min(0).max(60 * 60).optional(),
+  /** SHA-256 hex, computed on the device before upload. */
+  contentHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  capturedAt: z.string().datetime().optional(),
+  lat: z.number().min(-90).max(90).optional(),
+  lon: z.number().min(-180).max(180).optional(),
+  accuracyM: z.number().min(0).optional(),
+  /** Stills the phone pulled from the clip, as base64 JPEG. */
+  frames: z
+    .array(z.object({ atSeconds: z.number().min(0), base64: z.string().min(100).max(4_000_000) }))
+    .max(12)
+    .optional(),
+});
+
+/**
+ * POST /api/job-share/:token/proof
+ * Record an uploaded video, run the checks, and store the findings.
+ *
+ * The checks run here rather than on read, so the record shows what was known
+ * at the time — including a re-upload check against everything already on the
+ * job, which is only meaningful at the moment of upload.
+ */
+export async function recordProof(party: any, admin: any, body: unknown) {
+  const input = recordSchema.parse(body);
+
+  // Everything already filed on this job, for the re-upload check. Hashes only.
+  const { data: priorRows } = await admin
+    .from('job_proofs')
+    .select('content_hash')
+    .eq('job_id', party.job_id)
+    .not('content_hash', 'is', null);
+  const seenHashes = new Set(((priorRows ?? []) as any[]).map((r) => r.content_hash));
+
+  const receivedAt = new Date().toISOString();
+  const site = await siteLocation(admin, party.org_id, party.job_id);
+
+  const checks = verifyProof(
+    {
+      id: 'pending',
+      phase: input.phase,
+      workDate: input.workDate,
+      capturedAt: input.capturedAt ?? null,
+      receivedAt,
+      durationSeconds: input.durationSeconds ?? null,
+      contentHash: input.contentHash ?? null,
+      lat: input.lat ?? null,
+      lon: input.lon ?? null,
+      accuracyM: input.accuracyM ?? null,
+    },
+    site,
+    { seenHashes },
+  );
+
+  // Upsert on the unique (party, day, phase): a second attempt replaces rather
+  // than piling up, because two different "after" videos for one day is an
+  // argument nobody can settle.
+  const { data: proof, error } = await admin
+    .from('job_proofs')
+    .upsert(
+      {
+        org_id: party.org_id,
+        job_id: party.job_id,
+        party_id: party.id,
+        work_date: input.workDate,
+        phase: input.phase,
+        storage_path: input.storagePath,
+        byte_size: input.byteSize ?? null,
+        duration_seconds: input.durationSeconds ?? null,
+        content_hash: input.contentHash ?? null,
+        captured_at: input.capturedAt ?? null,
+        received_at: receivedAt,
+        lat: input.lat ?? null,
+        lon: input.lon ?? null,
+        accuracy_m: input.accuracyM ?? null,
+        state: 'checked',
+        checks,
+      },
+      { onConflict: 'party_id,work_date,phase' },
+    )
+    .select(PROOF_SELECT)
+    .single();
+  if (error) throw new HttpError(400, error.message, 'proof_failed');
+
+  if (input.frames?.length) {
+    for (const frame of input.frames) {
+      const path = `${party.org_id}/${party.job_id}/${party.id}/${input.workDate}-${input.phase}-f${Math.round(frame.atSeconds)}.jpg`;
+      const bytes = Buffer.from(frame.base64, 'base64');
+      await admin.storage.from(PROOF_BUCKET).upload(path, bytes, {
+        contentType: 'image/jpeg',
+        upsert: true,
+      });
+      await admin.from('job_proof_frames').upsert(
+        {
+          org_id: party.org_id,
+          proof_id: (proof as any).id,
+          at_seconds: frame.atSeconds,
+          storage_path: path,
+        },
+        { onConflict: 'proof_id,at_seconds' },
+      );
+    }
+  }
+
+  // Analysis runs when the day is complete, because the whole question is what
+  // changed between the two. Failures here are swallowed: a missing analysis is
+  // an honest gap, and a failed upload because the model was down is not.
+  if (input.phase === 'after') {
+    try {
+      await analyseDay(admin, party, input.workDate);
+    } catch {
+      /* the day stays 'checked'; the dashboard says it has not been read yet */
+    }
+  }
+
+  return {
+    proof,
+    checks,
+    // Said back immediately, in the app, while the crew is still on site. A
+    // problem told to somebody on Friday about Tuesday's video is not
+    // actionable; the same problem told at 4pm is.
+    problems: checks.filter((c) => c.verdict === 'fail').map((c) => c.detail),
+  };
+}
+
+/** Load a day's frames and run the model over them. */
+async function analyseDay(admin: any, party: any, workDate: string) {
+  const { data: proofs } = await admin
+    .from('job_proofs')
+    .select('id, phase')
+    .eq('party_id', party.id)
+    .eq('work_date', workDate);
+
+  const rows = (proofs ?? []) as any[];
+  const before = rows.find((r) => r.phase === 'before');
+  const after = rows.find((r) => r.phase === 'after');
+  if (!before || !after) return;
+
+  const framesFor = async (proofId: string): Promise<ProofFrame[]> => {
+    const { data } = await admin
+      .from('job_proof_frames')
+      .select('at_seconds, storage_path')
+      .eq('proof_id', proofId)
+      .order('at_seconds');
+    const out: ProofFrame[] = [];
+    for (const row of ((data ?? []) as any[]).slice(0, 8)) {
+      const file = await admin.storage.from(PROOF_BUCKET).download(row.storage_path);
+      if (!file.data) continue;
+      const buffer = Buffer.from(await file.data.arrayBuffer());
+      out.push({ atSeconds: Number(row.at_seconds), base64: buffer.toString('base64') });
+    }
+    return out;
+  };
+
+  const [beforeFrames, afterFrames] = await Promise.all([
+    framesFor(before.id),
+    framesFor(after.id),
+  ]);
+  if (!beforeFrames.length || !afterFrames.length) return;
+
+  const { data: scope } = await admin
+    .from('job_scope_items')
+    .select('title, party_id, state')
+    .eq('job_id', party.job_id)
+    .in('state', ['included', 'approved']);
+
+  const titles = ((scope ?? []) as any[])
+    .filter((s) => !s.party_id || s.party_id === party.id)
+    .map((s) => s.title);
+
+  const analysis = await analyseProofDay({
+    beforeFrames,
+    afterFrames,
+    scopeTitles: titles,
+    workDate,
+    trade: party.trade,
+  });
+  if (!analysis) return;
+
+  // Written to the after row: it is the one that carries the day's outcome.
+  await admin
+    .from('job_proofs')
+    .update({
+      state: 'analysed',
+      ai_summary: analysis.summary,
+      ai_findings: {
+        changes: analysis.changes,
+        cannotTell: analysis.cannotTell,
+        scopeTouched: analysis.scopeTouched,
+        concerns: analysis.concerns,
+      },
+      ai_model: analysis.model,
+    })
+    .eq('id', after.id);
+}
+
+/** GET /api/job-share/:token/proof — what this sub has filed. */
+export async function listPartyProofs(party: any, admin: any) {
+  const { data } = await admin
+    .from('job_proofs')
+    .select(PROOF_SELECT)
+    .eq('party_id', party.id)
+    .order('work_date', { ascending: false })
+    .limit(60);
+
+  const rows = (data ?? []) as any[];
+  const site = await siteLocation(admin, party.org_id, party.job_id);
+  const byDate = new Map<string, any[]>();
+  for (const row of rows) {
+    const list = byDate.get(row.work_date) ?? [];
+    list.push(row);
+    byDate.set(row.work_date, list);
+  }
+
+  return {
+    days: [...byDate.entries()].map(([workDate, list]) => {
+      const before = list.find((r) => r.phase === 'before');
+      const after = list.find((r) => r.phase === 'after');
+      const verdict = verifyDay({
+        workDate,
+        before: before ? asUpload(before) : null,
+        after: after ? asUpload(after) : null,
+        site,
+      });
+      return {
+        workDate,
+        hasBefore: verdict.hasBefore,
+        hasAfter: verdict.hasAfter,
+        summary: verdict.summary,
+        // The sub sees what failed, so they can refilm today rather than argue
+        // in a fortnight.
+        problems: verdict.checks.filter((c) => c.verdict === 'fail').map((c) => c.detail),
+        accepted: list.every((r) => r.state === 'accepted'),
+      };
+    }),
+  };
+}
+
+/* ---- The general contractor's side --------------------------------------- */
+
+/** GET /api/operations/shared/:jobId/proof */
+export async function jobProofs(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId, supabase } = await requireOrgContext(req);
+    const jobId = req.params.jobId;
+
+    const [{ data: proofRows }, { data: partyRows }, site] = await Promise.all([
+      supabase
+        .from('job_proofs')
+        .select(PROOF_SELECT)
+        .eq('org_id', orgId)
+        .eq('job_id', jobId)
+        .order('work_date', { ascending: false })
+        .limit(200),
+      supabase.from('job_parties').select('id, company, trade').eq('job_id', jobId),
+      siteLocation(supabase, orgId, jobId),
+    ]);
+
+    const rows = (proofRows ?? []) as any[];
+    const company = new Map(((partyRows ?? []) as any[]).map((p) => [p.id, p.company]));
+
+    // Grouped by party and day, because a day is what gets paid.
+    const grouped = new Map<string, any[]>();
+    for (const row of rows) {
+      const key = `${row.party_id}|${row.work_date}`;
+      const list = grouped.get(key) ?? [];
+      list.push(row);
+      grouped.set(key, list);
+    }
+
+    const days = [...grouped.entries()].map(([key, list]) => {
+      const [partyId, workDate] = key.split('|');
+      const before = list.find((r) => r.phase === 'before');
+      const after = list.find((r) => r.phase === 'after');
+      const verdict = verifyDay({
+        workDate,
+        before: before ? asUpload(before) : null,
+        after: after ? asUpload(after) : null,
+        site,
+      });
+      const pay = payable(verdict);
+
+      return {
+        partyId,
+        company: company.get(partyId) ?? 'Company',
+        workDate,
+        hasBefore: verdict.hasBefore,
+        hasAfter: verdict.hasAfter,
+        checks: verdict.checks,
+        contradicted: verdict.contradicted,
+        summary: verdict.summary,
+        // Kept separate from the summary on purpose. "Looks fine" and "safe to
+        // pay against" are different claims and only one of them moves money.
+        payable: pay.ok,
+        payableBecause: pay.because,
+        accepted: list.every((r) => r.state === 'accepted'),
+        rejected: list.some((r) => r.state === 'rejected'),
+        aiSummary: after?.ai_summary ?? null,
+        aiFindings: after?.ai_findings ?? null,
+        proofIds: list.map((r) => r.id),
+      };
+    });
+
+    days.sort((a, b) => b.workDate.localeCompare(a.workDate));
+
+    res.json({
+      days,
+      counts: {
+        days: days.length,
+        payable: days.filter((d) => d.payable && !d.accepted).length,
+        contradicted: days.filter((d) => d.contradicted).length,
+        awaitingAfter: days.filter((d) => d.hasBefore && !d.hasAfter).length,
+      },
+      siteKnown: Boolean(site),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** POST /api/operations/shared/:jobId/proof/:workDate/decide */
+export async function decideProofDay(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId, userId, supabase } = await requireOrgContext(req);
+    const input = z
+      .object({
+        partyId: z.string().uuid(),
+        decision: z.enum(['accepted', 'rejected']),
+        note: z.string().trim().max(1000).optional(),
+      })
+      .parse(req.body ?? {});
+
+    const { error } = await supabase
+      .from('job_proofs')
+      .update({
+        state: input.decision,
+        decided_by: userId,
+        decided_at: new Date().toISOString(),
+        decided_note: input.note ?? null,
+      })
+      .eq('org_id', orgId)
+      .eq('job_id', req.params.jobId)
+      .eq('party_id', input.partyId)
+      .eq('work_date', req.params.workDate);
+    if (error) throw new HttpError(400, error.message, 'decide_failed');
+
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /api/operations/shared/:jobId/proof/ask
+ * Ask a question of the record.
+ *
+ * The answer is stored with the question and the days it was drawn from, so
+ * "you told me the subfloor was done" is answerable six weeks later rather
+ * than a matter of recollection.
+ */
+export async function askAboutProofs(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId, userId, supabase } = await requireOrgContext(req);
+    const input = z.object({ question: z.string().trim().min(3).max(1000) }).parse(req.body ?? {});
+
+    const { data } = await supabase
+      .from('job_proofs')
+      .select('work_date, ai_summary, ai_findings')
+      .eq('org_id', orgId)
+      .eq('job_id', req.params.jobId)
+      .eq('phase', 'after')
+      .not('ai_summary', 'is', null)
+      .order('work_date', { ascending: false })
+      .limit(40);
+
+    const days = ((data ?? []) as any[]).map((row) => ({
+      workDate: row.work_date,
+      summary: row.ai_summary as string,
+      changes: (row.ai_findings?.changes ?? []) as string[],
+      concerns: (row.ai_findings?.concerns ?? []) as string[],
+    }));
+
+    const result = await answerFromProofs({ question: input.question, days });
+    if (!result) {
+      throw new HttpError(503, 'The assistant is not available right now.', 'model_unavailable');
+    }
+
+    const { data: stored } = await supabase
+      .from('job_proof_questions')
+      .insert({
+        org_id: orgId,
+        job_id: req.params.jobId,
+        question: input.question,
+        answer: result.answer,
+        model: result.model,
+        grounded_on: days.map((d) => d.workDate),
+        asked_by: userId,
+      })
+      .select('id, question, answer, grounded_on, created_at')
+      .single();
+
+    res.status(201).json({ answer: result.answer, question: stored, groundedOn: days.length });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** GET /api/operations/shared/:jobId/proof/questions */
+export async function proofQuestions(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId, supabase } = await requireOrgContext(req);
+    const { data } = await supabase
+      .from('job_proof_questions')
+      .select('id, question, answer, grounded_on, created_at')
+      .eq('org_id', orgId)
+      .eq('job_id', req.params.jobId)
+      .order('created_at', { ascending: false })
+      .limit(30);
+    res.json({ questions: data ?? [] });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * A short-lived link to actually watch a video.
+ *
+ * Signed rather than public: these are the insides of somebody's house.
+ */
+export async function proofVideoUrl(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId, supabase } = await requireOrgContext(req);
+    const { data: proof } = await supabase
+      .from('job_proofs')
+      .select('storage_path')
+      .eq('org_id', orgId)
+      .eq('id', req.params.proofId)
+      .maybeSingle();
+    if (!proof) throw new HttpError(404, 'No such video.', 'not_found');
+
+    const admin = createAdminClient();
+    if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');
+
+    const { data, error } = await admin.storage
+      .from(PROOF_BUCKET)
+      .createSignedUrl((proof as any).storage_path, 600);
+    if (error) throw new HttpError(500, error.message, 'signed_url_failed');
+
+    res.json({ url: (data as any).signedUrl, expiresInSeconds: 600 });
+  } catch (err) {
+    next(err);
+  }
+}

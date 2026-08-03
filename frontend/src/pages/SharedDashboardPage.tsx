@@ -8,6 +8,7 @@ import {
   type ScopeState,
 } from '../lib/api';
 import { SpinnerIcon } from '../components/icons';
+import { ProofOfWork } from '../components/shared/ProofOfWork';
 
 /**
  * One job, two companies, one record.
@@ -252,6 +253,10 @@ export function SharedDashboardPage() {
                   />
 
                   <ScopeList record={record} onDecide={decide} onChanged={() => void openJob(record.job.id)} />
+
+                  {/* Below the scope, because proof only means anything once
+                      there is an agreed scope to be proof of. */}
+                  <ProofOfWork jobId={record.job.id} />
 
                   <Thread record={record} onPosted={() => void openJob(record.job.id)} />
                 </>

@@ -13,6 +13,16 @@ import {
   type Party,
   type ScopeItem,
 } from '../shared/jobRecord.js';
+import {
+  createUploadUrl,
+  recordProof,
+  listPartyProofs,
+  jobProofs,
+  decideProofDay,
+  askAboutProofs,
+  proofQuestions,
+  proofVideoUrl,
+} from './proofOfWork.js';
 
 /**
  * The shared job record.
@@ -659,6 +669,62 @@ jobShareRouter.post(
       if (error) throw new HttpError(400, error.message, 'ask_failed');
 
       res.status(201).json({ message: data, scopeItemId });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+
+/* ---- Proof of work ------------------------------------------------------- */
+
+// The general contractor's side. Reading, deciding, and asking.
+sharedJobsRouter.get('/shared/:jobId/proof', jobProofs);
+sharedJobsRouter.get('/shared/:jobId/proof/questions', proofQuestions);
+sharedJobsRouter.post('/shared/:jobId/proof/ask', askAboutProofs);
+sharedJobsRouter.post('/shared/:jobId/proof/:workDate/decide', decideProofDay);
+sharedJobsRouter.get('/shared/proof/:proofId/video', proofVideoUrl);
+
+/**
+ * The subcontractor's side, through their job token.
+ *
+ * Three calls, in the order the app makes them: ask for somewhere to put the
+ * file, put it there, then tell us it is there along with everything the phone
+ * knows about how it was filmed.
+ */
+jobShareRouter.post(
+  '/:token/proof/upload-url',
+  shareLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { party, admin } = await partyForToken(req.params.token);
+      res.json(await createUploadUrl(party, admin, req.body));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+jobShareRouter.post(
+  '/:token/proof',
+  shareLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { party, admin } = await partyForToken(req.params.token);
+      res.status(201).json(await recordProof(party, admin, req.body));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+jobShareRouter.get(
+  '/:token/proof',
+  shareLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { party, admin } = await partyForToken(req.params.token);
+      res.json(await listPartyProofs(party, admin));
     } catch (err) {
       next(err);
     }
