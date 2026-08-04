@@ -2948,6 +2948,18 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ estimate, confirmedFindings }) },
     ),
 
+  // ---- Symbility (Claims Connect) ----
+  symbilityStatus: () => request<SymbilityStatus>('/api/symbility/status', { method: 'GET' }),
+
+  symbilityConnect: (input: SymbilityConnectInput) =>
+    request<SymbilityConnectResponse>('/api/symbility/connect', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  symbilityDisconnect: () =>
+    request<{ ok: boolean }>('/api/symbility/disconnect', { method: 'POST' }),
+
 
 
   // ---- Construction Estimator ----
@@ -4308,6 +4320,46 @@ export interface XactimateConnectInput {
 
 export type XactimateConnectResponse =
   | { status: 'connected'; profile: { username: string; displayName?: string; companyName?: string }; scopes: ConsentScope[]; expiresAt: string }
+  | { status: 'mfa_required'; challengeId: string; message: string };
+
+export type SymbilityScope = 'read_profile' | 'read_claims' | 'write_estimate';
+
+export interface SymbilityStatus {
+  connected: boolean;
+  sessionActive: boolean;
+  driver: 'mock' | 'web';
+  webAutomationEnabled: boolean;
+  storageAvailable: boolean;
+  username: string | null;
+  scopes: SymbilityScope[];
+  storageMode: 'session' | 'stored';
+  grantedAt: string | null;
+  expiresAt: string | null;
+  availableScopes: Array<{
+    scope: SymbilityScope;
+    label: string;
+    description: string;
+    defaultGranted: boolean;
+  }>;
+}
+
+export interface SymbilityConnectInput {
+  username: string;
+  password: string;
+  mfaCode?: string;
+  scopes: SymbilityScope[];
+  storageMode: 'session' | 'stored';
+  consentDays: number;
+  acknowledgedTerms: true;
+}
+
+export type SymbilityConnectResponse =
+  | {
+      status: 'connected';
+      profile: { username: string; displayName?: string; companyName?: string };
+      scopes: SymbilityScope[];
+      expiresAt: string;
+    }
   | { status: 'mfa_required'; challengeId: string; message: string };
 
 export interface PriceListSummary {

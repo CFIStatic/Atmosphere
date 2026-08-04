@@ -36,6 +36,7 @@ import { careersRouter } from './routes/careers.js';
 import { contactRouter } from './routes/contact.js';
 import { mitigationRouter } from './routes/mitigation.js';
 import { xactimateRouter } from './routes/xactimate.js';
+import { symbilityRouter } from './routes/symbility.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
 import { verificationHook, pumpVerificationQueue } from './lib/verifierRunner.js';
@@ -128,6 +129,7 @@ export function createApp(): Express {
   app.use('/api/audit', auditRouter);
   app.use('/api/mitigation', mitigationRouter);
   app.use('/api/xactimate', xactimateRouter);
+  app.use('/api/symbility', symbilityRouter);
   app.use('/api/jobs', jobsRouter);
   app.use('/api/memory', memoryRouter);
   app.use('/api/technician', technicianRouter);

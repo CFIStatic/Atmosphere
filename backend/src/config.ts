@@ -116,6 +116,27 @@ export const config = {
     encryptionKey: process.env.XACTIMATE_ENC_KEY ?? '',
   },
 
+  symbility: {
+    // CoreLogic Symbility (Claims Connect) — the other estimating platform a
+    // restoration org lives in, and for many carrier programs the required
+    // one. Same posture as Xactimate: 'mock' by default so the whole connect
+    // flow is exercisable without real credentials, and which driver runs is a
+    // deployment decision, never a per-request one.
+    driver: (process.env.SYMBILITY_DRIVER === 'web' ? 'web' : 'mock') as 'mock' | 'web',
+
+    // There is no partner API wired here yet, so web login is the live path —
+    // and like Xactimate it is off unless explicitly enabled, because whether
+    // automating a Claims Connect account is permitted is between the account
+    // holder and CoreLogic.
+    webAutomationEnabled: process.env.SYMBILITY_WEB_AUTOMATION === 'true',
+    headless: process.env.SYMBILITY_HEADLESS !== 'false',
+    webSelectors: parseJsonRecord(process.env.SYMBILITY_WEB_SELECTORS),
+
+    // Sealed with its own key; falls back to the Xactimate vault key so a
+    // server configured for one estimating vault covers both.
+    encryptionKey: process.env.SYMBILITY_ENC_KEY ?? process.env.XACTIMATE_ENC_KEY ?? '',
+  },
+
   sla: {
     // Where carrier program agreements come from. 'manual' is the default and
     // the only source guaranteed to match what the franchise actually signed —

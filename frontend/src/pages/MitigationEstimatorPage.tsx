@@ -6,6 +6,7 @@ import { SpinnerIcon } from '../components/icons';
 import { SourcePanel, type Sources } from '../components/estimator/SourcePanel';
 import { EstimateResult } from '../components/estimator/EstimateResult';
 import { XactimateCard } from '../components/estimator/XactimateCard';
+import { SymbilityCard } from '../components/estimator/SymbilityCard';
 
 /**
  * The Mitigation Estimator workspace.
@@ -187,6 +188,10 @@ export function MitigationEstimatorPage() {
                 if (hasSources) void build();
               }}
             />
+
+            {/* The other estimating platform, same contract: web sign-in as
+                the user, scoped consent, session-only by default. */}
+            <SymbilityCard />
 
             <SourcePanel
               sources={sources}

@@ -1295,6 +1295,14 @@ const TECH_CAPABILITIES: TechnicianCapabilities = {
   assistant: true, transcription: true, maxAudioUploadBytes: 26_214_400,
 };
 
+/** Symbility connection — stateful so the demo connect flow actually connects. */
+const SYMBILITY_STATE: {
+  connected: boolean;
+  username: string | null;
+  scopes: string[];
+  grantedAt: string;
+} = { connected: false, username: null, scopes: [], grantedAt: '' };
+
 const XACTIMATE_STATUS: XactimateStatus = {
   connected: false, sessionActive: false, driver: 'mock', storageAvailable: true,
   webAutomationEnabled: false, username: null, scopes: [], storageMode: 'session',
@@ -2535,6 +2543,57 @@ const routes: Array<[string, RegExp, Handler]> = [
   })],
   ['GET', /^\/api\/estimator\/runs$/, () => ({ body: { runs: [] } })],
   ['GET', /^\/api\/xactimate\/status$/, () => ({ body: XACTIMATE_STATUS })],
+
+  /* ------------------------------------------- symbility */
+  ['GET', /^\/api\/symbility\/status$/, () => ({
+    body: {
+      connected: SYMBILITY_STATE.connected,
+      sessionActive: SYMBILITY_STATE.connected,
+      driver: 'mock',
+      webAutomationEnabled: false,
+      storageAvailable: true,
+      username: SYMBILITY_STATE.username,
+      scopes: SYMBILITY_STATE.connected ? SYMBILITY_STATE.scopes : [],
+      storageMode: 'session',
+      grantedAt: SYMBILITY_STATE.connected ? SYMBILITY_STATE.grantedAt : null,
+      expiresAt: SYMBILITY_STATE.connected
+        ? new Date(Date.now() + 30 * 86_400_000).toISOString()
+        : null,
+      availableScopes: [
+        { scope: 'read_profile', label: 'See who is signed in', description: 'Read your name and company so the app can show which account is connected.', defaultGranted: true },
+        { scope: 'read_claims', label: 'Read claim assignments', description: 'See the claims assigned to your account in Claims Connect.', defaultGranted: true },
+        { scope: 'write_estimate', label: 'Write estimates', description: 'Create or update an estimate on a claim. Never submits without you.', defaultGranted: false },
+      ],
+    },
+  })],
+  ['POST', /^\/api\/symbility\/connect$/, (_m, b) => {
+    const password = String(b.password ?? '');
+    if (password.includes('mfa') && !b.mfaCode) {
+      return {
+        status: 202,
+        body: { status: 'mfa_required', challengeId: 'ch-1', message: 'Claims Connect asked for a verification code. Enter it to finish connecting.' },
+      };
+    }
+    SYMBILITY_STATE.connected = true;
+    SYMBILITY_STATE.username = String(b.username ?? '');
+    SYMBILITY_STATE.scopes = Array.isArray(b.scopes) ? (b.scopes as string[]) : ['read_profile'];
+    SYMBILITY_STATE.grantedAt = new Date().toISOString();
+    return {
+      status: 201,
+      body: {
+        status: 'connected',
+        profile: { username: SYMBILITY_STATE.username, displayName: SYMBILITY_STATE.username.split('@')[0], companyName: 'Ortiz Restoration' },
+        scopes: SYMBILITY_STATE.scopes,
+        expiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+        storageMode: 'session',
+      },
+    };
+  }],
+  ['POST', /^\/api\/symbility\/disconnect$/, () => {
+    SYMBILITY_STATE.connected = false;
+    SYMBILITY_STATE.username = null;
+    return { body: { ok: true } };
+  }],
 ];
 
 const realFetch = window.fetch.bind(window);
