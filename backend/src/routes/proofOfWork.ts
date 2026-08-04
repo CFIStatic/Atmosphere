@@ -16,6 +16,7 @@ import {
   type ProofFrame,
 } from '../shared/proofAnalyst.js';
 import { RetryQueue } from '../shared/retryQueue.js';
+import { attachProofToEpisode } from '../episodes/attach.js';
 import { isModelProviderConfigured } from '../lib/anthropic.js';
 
 /**
@@ -233,6 +234,19 @@ export async function recordProof(party: any, admin: any, body: unknown) {
   // phase, because refilming the before invalidates an analysis just as surely
   // as filing the after completes one.
   const analysis = await queueDayAnalysis(admin, party, input.workDate);
+
+  // The same upload, seen as an episode. Additive and non-blocking: it never
+  // throws into this path, because a crew in a doorway must not get an error
+  // from a table that enriches a record which is already complete without it.
+  await attachProofToEpisode(admin, {
+    orgId: party.org_id,
+    jobId: party.job_id,
+    partyId: party.id,
+    workDate: input.workDate,
+    proofId: (proof as any).id,
+    proofPhase: input.phase,
+    performerLabel: `${party.contact_name ? `${party.contact_name}, ` : ''}${party.company}`,
+  });
 
   await recordAccess(admin, {
     orgId: party.org_id,

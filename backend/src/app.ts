@@ -24,6 +24,7 @@ import { campaignsRouter } from './routes/campaigns.js';
 import { salesWorkRouter } from './routes/salesWork.js';
 import { sharedJobsRouter, jobShareRouter } from './routes/sharedJobs.js';
 import { purchasingRouter } from './routes/purchasing.js';
+import { episodesRouter } from './routes/episodes.js';
 import { crmAccountsRouter } from './routes/crmAccounts.js';
 import { unsubscribeRouter } from './routes/unsubscribe.js';
 import { locationsRouter } from './routes/locations.js';
@@ -147,6 +148,7 @@ export function createApp(): Express {
   app.use('/api/pm', pmRouter);
   app.use('/api/operations', sharedJobsRouter);
   app.use('/api/purchasing', purchasingRouter);
+  app.use('/api/episodes', episodesRouter);
   // Outside every auth middleware, like the unsubscribe route and for the same
   // reason: the person clicking is a subcontractor who never had an account,
   // and a shared job record that requires signing in is not shared.
