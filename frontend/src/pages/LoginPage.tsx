@@ -17,12 +17,14 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const redirectTo = (location.state as { from?: string } | null)?.from ?? '/dashboard';
+  const redirectTo = (location.state as { from?: string } | null)?.from ?? PLATFORM_HOME[getPlatform()];
 
-  const [mode, setMode] = useState<Mode>(() =>
-    searchParams.get('mode') === 'signup' ? 'signup' : 'login',
-  );
-  const [email, setEmail] = useState('');
+  // The corporate site deep-links here (…/login?mode=signup&email=…) so its
+  // "Create your organization" CTAs open the create-account form directly.
+  const wantsSignup = searchParams.get('mode') === 'signup';
+
+  const [mode, setMode] = useState<Mode>(() => (wantsSignup ? 'signup' : 'login'));
+  const [email, setEmail] = useState(() => searchParams.get('email') ?? '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);

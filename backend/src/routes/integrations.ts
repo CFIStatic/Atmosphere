@@ -28,6 +28,12 @@ import {
 import { promoteSourceToCrm } from '../lib/integrations/promote.js';
 import { pushToCrm } from '../lib/integrations/push.js';
 import { createAdminClient } from '../lib/supabase.js';
+import { randomBytes } from 'node:crypto';
+import { z } from 'zod';
+import { requireOrgRole } from '../lib/orgContext.js';
+import { listGrants, loadGrant, saveGrant, deleteGrant } from '../lib/integrations/oauthVault.js';
+import { authorizeUrl, exchangeCode, revoke } from '../lib/integrations/salesforce.js';
+import { KNOWN_CRMS } from '../lib/integrations/browserCrm.js';
 
 export const integrationsRouter = Router();
 

@@ -166,6 +166,10 @@ export function createApp(): Express {
   // Server-to-server: no session cookie, authenticated by Stripe's signature.
   app.use('/api/webhooks', webhookRouter);
   app.use('/api/pm', pmRouter);
+  app.use('/api/operations', sharedJobsRouter);
+  app.use('/api/purchasing', purchasingRouter);
+  // Outside every auth middleware: the subcontractor's token is the credential.
+  app.use('/api/job-share', jobShareRouter);
   // HomeOwner Report: staff management + tokenized guest access.
   app.use('/api/portal', portalRouter);
   app.use('/api/finance', financeRouter);

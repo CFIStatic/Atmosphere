@@ -171,6 +171,7 @@ function AgentDetail({ userId, onBack }: { userId: string; onBack: () => void })
 
 export function TeamMemoryPage() {
   useFeatureTimer('team_memory');
+  const [platform] = usePlatform();
   const [agents, setAgents] = useState<AgentMemory[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

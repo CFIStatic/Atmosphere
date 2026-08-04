@@ -1,5 +1,12 @@
-import { lazy, Suspense, type ReactNode } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { lazy, Suspense, useEffect, type ReactNode } from 'react';
+import {
+  BrowserRouter,
+  MemoryRouter,
+  Navigate,
+  Route,
+  Routes,
+  useNavigate,
+} from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { LoginPage } from './pages/LoginPage';
@@ -16,13 +23,18 @@ import { SalesWorkPage } from './pages/SalesWorkPage';
 import { SharedDashboardPage } from './pages/SharedDashboardPage';
 import { PurchaseOrdersPage } from './pages/PurchaseOrdersPage';
 import { JobSharePage } from './pages/JobSharePage';
+import { PlatformHomePage } from './pages/PlatformHomePage';
+import { MyWorkPage } from './pages/MyWorkPage';
+import { ApprovalsPage } from './pages/ApprovalsPage';
+import { SchedulePage } from './pages/SchedulePage';
+import { CustomersPage } from './pages/CustomersPage';
+import { PipelinePage } from './pages/PipelinePage';
+import { ProspectorPage } from './pages/ProspectorPage';
+import { JobCostingPage } from './pages/JobCostingPage';
 import { getPlatform } from './lib/usePlatform';
 
 // Auth and onboarding stay eager so /login is fast. Everything else loads on demand —
 // dev mode otherwise pulls in every page on the first visit.
-const DashboardPage = lazy(() =>
-  import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })),
-);
 const InternalAnalyticsRoute = lazy(() =>
   import('./pages/analytics/AnalyticsRoutes').then((m) => ({
     default: m.InternalAnalyticsRoute,
@@ -491,7 +503,7 @@ export default function App() {
           />
 
           <Route
-            path="/sales"
+            path="/sales-agent"
             element={
               <ProtectedRoute>
                 <RequireOnboarded>
@@ -501,7 +513,7 @@ export default function App() {
             }
           />
           <Route
-            path="/sales/:id"
+            path="/sales-agent/:id"
             element={
               <ProtectedRoute>
                 <RequireOnboarded>

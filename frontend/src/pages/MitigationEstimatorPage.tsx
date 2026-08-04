@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import {
   api,
   ApiError,
@@ -7,7 +6,7 @@ import {
   type MitigationEstimate,
   type XactimateStatus,
 } from '../lib/api';
-import { Logo } from '../components/Logo';
+import { AppShell } from '../components/AppShell';
 import { SpinnerIcon } from '../components/icons';
 import { SourcePanel, type Sources } from '../components/estimator/SourcePanel';
 import { EstimateResult } from '../components/estimator/EstimateResult';

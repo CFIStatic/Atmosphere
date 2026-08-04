@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode, type ComponentType, type SVGProps } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, ROLE_LABELS } from '../lib/api';
 import { displayName, initials } from '../lib/display';
@@ -9,19 +9,6 @@ import { usePlatform } from '../lib/usePlatform';
 import { Logo } from './Logo';
 import {
   AuditIcon,
-  BoltIcon,
-  BriefcaseIcon,
-  ChartIcon,
-  CreditCardIcon,
-  GlobeIcon,
-  GaugeIcon,
-  HistoryIcon,
-  HomeIcon,
-  MailIcon,
-  MicIcon,
-  PlugIcon,
-  SpinnerIcon,
-  UsersIcon,
   ChevronDownIcon,
   CloseIcon,
   GaugeIcon,
@@ -31,104 +18,406 @@ import {
   MoonIcon,
   SearchIcon,
   SettingsIcon,
-  SparkIcon,
+  SpinnerIcon,
+  SunIcon,
 } from './icons';
 
-type IconComp = ComponentType<SVGProps<SVGSVGElement>>;
-
-const NAV: Array<{ to: string; label: string; Icon: IconComp }> = [
-  { to: '/dashboard', label: 'Dashboard', Icon: HomeIcon },
-  { to: '/sales', label: 'Outreach', Icon: SparkIcon },
-  { to: '/jobs', label: 'Jobs', Icon: BriefcaseIcon },
-  { to: '/finance', label: 'Finance', Icon: GaugeIcon },
-  { to: '/memory', label: 'Memory', Icon: HistoryIcon },
-  { to: '/team', label: 'Team', Icon: UsersIcon },
-  { to: '/technician', label: 'Technician', Icon: MicIcon },
-  { to: '/connectors', label: 'Connectors', Icon: PlugIcon },
-  { to: '/computer-use', label: 'Computer', Icon: BoltIcon },
-  { to: '/email-marketing', label: 'Email', Icon: MailIcon },
-  { to: '/integrations', label: 'CRM', Icon: GlobeIcon },
-  { to: '/usage', label: 'Usage', Icon: ChartIcon },
-  { to: '/billing', label: 'Billing', Icon: CreditCardIcon },
-  { to: '/audit', label: 'Audit', Icon: AuditIcon },
-];
+/** Every destination the jump palette can reach, across all four platforms. */
+const JUMP_TARGETS = (() => {
+  const seen = new Map<string, { to: string; label: string; Icon: typeof GaugeIcon }>();
+  for (const id of PLATFORM_IDS) {
+    for (const group of PLATFORMS[id].groups) {
+      for (const item of group.items) {
+        const key = `${item.to}:${item.label}`;
+        if (!seen.has(key)) seen.set(key, item);
+      }
+    }
+  }
+  seen.set('/audit:Audit trail', { to: '/audit', label: 'Audit trail', Icon: AuditIcon });
+  seen.set('/technician:Field capture', { to: '/technician', label: 'Field capture', Icon: MicIcon });
+  return [...seen.values()];
+})();
 
 /**
- * Shared page frame: brand on the left rail, primary navigation underneath,
- * account menu in the top-right of the content pane.
+ * The console frame: fixed sidebar, top bar with the jump palette and the
+ * approvals pill, and the page content. `rail` renders a right-hand column on
+ * wide screens — the Overview passes the Atmosphere panel through it.
  */
 export function AppShell({
   children,
+  rail,
   wide = false,
 }: {
   children: ReactNode;
   /** Drop the max-width constraint for workspace-style pages. */
   wide?: boolean;
+  rail?: ReactNode;
 }) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [approvalCount, setApprovalCount] = useState(0);
+  const [platformId, setPlatformId] = usePlatform();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Landing on a platform's home makes it the active one; shared screens
+  // (Jobs, Billing, Settings) leave the choice alone, so opening a job from
+  // Sales does not throw you into Operations.
+  useEffect(() => {
+    const fromPath = platformOfPath(location.pathname);
+    if (fromPath && fromPath !== platformId) setPlatformId(fromPath);
+  }, [location.pathname, platformId, setPlatformId]);
+
+  const platform = PLATFORMS[platformId];
+
+  // The pill is a glance, not a live feed — one fetch per mount is enough,
+  // and a backend without the verifier configured simply shows no pill.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getEscalations()
+      .then(({ escalations }) => {
+        if (!cancelled) setApprovalCount(escalations.filter((e) => e.status === 'open').length);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
-    <div className="cx-aurora flex min-h-screen bg-paper-100">
-      <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r border-line bg-paper-0/80 backdrop-blur lg:flex">
-        <div className="border-b border-line px-4 py-4">
-          <Logo />
+    <div className="min-h-screen bg-paper-100">
+      {/* ---- Sidebar ---- */}
+      {/* The rail is fixed furniture: full height, its own scroll region, and
+          no transition at desktop widths. The slide belongs to the mobile
+          drawer alone, so nothing here can move under a pointer. */}
+      <aside
+        className={`glass-rail fixed inset-y-0 left-0 z-40 flex w-60 flex-col transition-transform duration-200 md:translate-x-0 md:transform-none md:transition-none ${
+          mobileOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <div className="flex shrink-0 items-center justify-between px-5 py-5">
+          <NavLink to={PLATFORM_HOME[platformId]} aria-label={`Atmosphere — ${platform.name}`}>
+            <Logo />
+          </NavLink>
+          <button
+            className="text-ink-500 md:hidden"
+            onClick={() => setMobileOpen(false)}
+            aria-label="Close navigation"
+          >
+            <CloseIcon width={18} height={18} />
+          </button>
         </div>
-        <nav aria-label="Primary" className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
-          {NAV.map(({ to, label, Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                  isActive
-                    ? 'bg-brand-50 text-brand-700'
-                    : 'text-ink-600 hover:bg-paper-100 hover:text-ink-900'
-                }`
-              }
-            >
-              <Icon width={17} height={17} />
-              {label}
-            </NavLink>
+
+        <div className="shrink-0 px-3 pb-1">
+          <PlatformSwitcher
+            active={platformId}
+            onSelect={(next) => {
+              setPlatformId(next);
+              setMobileOpen(false);
+              navigate(PLATFORM_HOME[next]);
+            }}
+          />
+        </div>
+
+        <nav aria-label="Primary" className="cx-scroll cx-gutter min-h-0 flex-1 overflow-y-auto px-3 pb-6">
+          {platform.groups.map((group) => (
+            <div key={group.label} className="mt-4 first:mt-0">
+              <p className="px-2.5 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.09em] text-ink-500">
+                {group.label}
+              </p>
+              <div className="space-y-0.5">
+                {group.items.map(({ to, label, Icon }) => (
+                  <NavLink
+                    key={`${group.label}-${to}`}
+                    to={to}
+                    onClick={() => setMobileOpen(false)}
+                    className={({ isActive }) =>
+                      `flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13.5px] font-medium transition-colors ${
+                        isActive
+                          ? 'bg-brand-50 text-brand-700'
+                          : 'text-ink-600 hover:bg-paper-200 hover:text-ink-900'
+                      }`
+                    }
+                  >
+                    <Icon width={16} height={16} />
+                    <span className="flex-1">{label}</span>
+                    {to === '/approvals' && approvalCount > 0 && (
+                      <span className="rounded-full bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700">
+                        {approvalCount}
+                      </span>
+                    )}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between gap-4 border-b border-line bg-paper-0/60 px-4 py-3 backdrop-blur sm:px-8">
-          <div className="lg:hidden">
-            <Logo />
+      {mobileOpen && (
+        <button
+          aria-label="Close navigation"
+          className="fixed inset-0 z-30 bg-black/50 md:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      {/* ---- Top bar + content ---- */}
+      <div className="md:pl-60">
+        <header className="glass-bar sticky top-0 z-20">
+          <div className="flex items-center gap-3 px-4 py-3 sm:px-6">
+            <button
+              className="text-ink-600 md:hidden"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Open navigation"
+            >
+              <MenuIcon width={20} height={20} />
+            </button>
+
+            <JumpPalette />
+
+            <div className="ml-auto flex items-center gap-3">
+              <ThemeToggle />
+              {approvalCount > 0 && (
+                <button
+                  onClick={() => navigate('/approvals')}
+                  className="hidden items-center gap-1.5 rounded-full border border-caution-200 bg-caution-50 px-3 py-1.5 text-xs font-semibold text-caution-600 transition hover:border-caution-600 sm:flex"
+                >
+                  {approvalCount} awaiting approval
+                </button>
+              )}
+              <AccountMenu />
+            </div>
           </div>
-          <div className="hidden text-sm text-ink-500 lg:block">Atmosphere</div>
-          <AccountMenu />
         </header>
 
-        {/* Mobile nav — horizontal scroll, same destinations as the left rail. */}
-        <nav
-          aria-label="Primary"
-          className="flex gap-1 overflow-x-auto border-b border-line px-3 py-2 lg:hidden"
-        >
-          {NAV.map(({ to, label, Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                `flex items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition ${
-                  isActive ? 'bg-brand-50 text-brand-700' : 'text-ink-600 hover:text-ink-900'
-                }`
-              }
-            >
-              <Icon width={16} height={16} />
-              {label}
-            </NavLink>
-          ))}
-        </nav>
-
-        <main className={`w-full flex-1 px-4 py-6 sm:px-8 ${wide ? '' : 'mx-auto max-w-6xl'}`}>
-          {children}
-        </main>
+        <div className={rail ? 'xl:flex' : undefined}>
+          <main
+            className={`min-w-0 flex-1 px-4 py-6 sm:px-6 ${rail || wide ? '' : 'max-w-6xl'}`}
+          >
+            {children}
+          </main>
+          {rail && (
+            <aside className="w-full shrink-0 px-4 pb-8 sm:px-6 xl:w-[352px] xl:pl-2 xl:pt-6">
+              {rail}
+            </aside>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
+/**
+ * The platform switcher. Four products, one console — this is the only
+ * control that changes what the sidebar contains, and it names the platform
+ * you are in so that is never ambiguous.
+ */
+function PlatformSwitcher({
+  active,
+  onSelect,
+}: {
+  active: keyof typeof PLATFORMS;
+  onSelect: (next: keyof typeof PLATFORMS) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const platform = PLATFORMS[active];
+
+  useEffect(() => {
+    if (!open) return undefined;
+    function onPointerDown(event: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(event.target as Node)) setOpen(false);
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        onClick={() => setOpen((value) => !value)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="flex w-full items-center gap-2.5 rounded-lg glass-card px-2.5 py-2 text-left transition hover:border-line-strong"
+      >
+        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-brand-50 text-brand-700">
+          <platform.Icon width={14} height={14} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] font-semibold text-ink-900">
+            {platform.short}
+          </span>
+          <span className="block truncate text-[11px] text-ink-500">{platform.tagline}</span>
+        </span>
+        <ChevronDownIcon width={14} height={14} className="shrink-0 text-ink-500" />
+      </button>
+
+      {open && (
+        <div
+          role="listbox"
+          className="absolute left-0 right-0 top-full z-40 mt-1.5 overflow-hidden rounded-xl glass-panel"
+        >
+          {PLATFORM_IDS.map((id) => {
+            const p = PLATFORMS[id];
+            return (
+              <button
+                key={id}
+                role="option"
+                aria-selected={id === active}
+                onClick={() => {
+                  onSelect(id);
+                  setOpen(false);
+                }}
+                className={`flex w-full items-center gap-2.5 px-2.5 py-2.5 text-left transition hover:bg-paper-200 ${
+                  id === active ? 'bg-brand-50' : ''
+                }`}
+              >
+                <span
+                  className={`grid h-6 w-6 shrink-0 place-items-center rounded-md ${
+                    id === active ? 'bg-brand-500 text-white' : 'bg-paper-200 text-ink-600'
+                  }`}
+                >
+                  <p.Icon width={14} height={14} />
+                </span>
+                <span className="min-w-0">
+                  <span
+                    className={`block truncate text-[13px] font-semibold ${
+                      id === active ? 'text-brand-700' : 'text-ink-900'
+                    }`}
+                  >
+                    {p.name}
+                  </span>
+                  <span className="block truncate text-[11px] text-ink-500">{p.tagline}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Dark is the default; light is one click, and the choice sticks. */
+function ThemeToggle() {
+  const { theme } = usePreferences();
+  const dark = theme === 'dark';
+  return (
+    <button
+      onClick={() => setPreference('theme', dark ? 'light' : 'dark')}
+      aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+      title={dark ? 'Light mode' : 'Dark mode'}
+      className="grid h-8 w-8 place-items-center rounded-full border border-line text-ink-600 transition hover:border-line-strong hover:text-ink-900"
+    >
+      {dark ? <SunIcon width={15} height={15} /> : <MoonIcon width={15} height={15} />}
+    </button>
+  );
+}
+
+/**
+ * The jump palette: type to filter destinations, Enter goes to the first
+ * match. ⌘K / Ctrl-K focuses it from anywhere, which is the whole point —
+ * hands stay on the keys between screens.
+ */
+function JumpPalette() {
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const navigate = useNavigate();
+
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return JUMP_TARGETS;
+    return JUMP_TARGETS.filter((t) => t.label.toLowerCase().includes(q));
+  }, [query]);
+
+  const go = useCallback(
+    (to: string) => {
+      navigate(to);
+      setOpen(false);
+      setQuery('');
+      inputRef.current?.blur();
+    },
+    [navigate],
+  );
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        inputRef.current?.focus();
+        setOpen(true);
+      }
+      if (event.key === 'Escape') setOpen(false);
+    }
+    function onPointerDown(event: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', onPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onPointerDown);
+    };
+  }, []);
+
+  return (
+    <div ref={wrapRef} className="relative w-full max-w-md">
+      <div className="flex items-center gap-2 rounded-lg glass-card px-3 py-2 text-sm text-ink-500 transition focus-within:border-brand-500">
+        <SearchIcon width={15} height={15} className="shrink-0" />
+        <input
+          ref={inputRef}
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && matches[0]) go(matches[0].to);
+          }}
+          placeholder="Jump to…"
+          aria-label="Jump to a screen"
+          className="w-full bg-transparent text-ink-900 placeholder-ink-500 outline-none"
+        />
+        <kbd className="hidden rounded border border-line px-1.5 py-0.5 text-[10.5px] text-ink-500 sm:block">
+          ⌘K
+        </kbd>
+      </div>
+
+      {open && matches.length > 0 && (
+        <div className="absolute left-0 right-0 top-full z-30 mt-1.5 overflow-hidden rounded-xl glass-panel">
+          {matches.slice(0, 7).map(({ to, label, Icon }, i) => (
+            <button
+              key={`${to}-${label}`}
+              onClick={() => go(to)}
+              className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition hover:bg-paper-200 ${
+                i === 0 ? 'text-ink-900' : 'text-ink-700'
+              }`}
+            >
+              <Icon width={15} height={15} className="text-ink-500" />
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The account block. It carries the two things that are about *you* rather
+ * than about the work: Settings, and signing out.
+ */
 function AccountMenu() {
   const { user, profile, membership, logout } = useAuth();
   const { confirmSignOut } = usePreferences();
