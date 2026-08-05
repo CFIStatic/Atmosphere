@@ -9,7 +9,8 @@ written to appeal to contractors of every trade.
 
 | File              | Page                                                        |
 | ----------------- | ----------------------------------------------------------- |
-| `index.html`      | Home — thesis, replayable run receipt, platform overview    |
+| `index.html`      | Home — Work Verification Platform thesis, replayable clip record, platform overview |
+| `verification.html` | Work Verification Platform — the main product: film, check, read, hold, share |
 | `platform.html`   | Platform hub — the four platforms + the shared foundation   |
 | `sales.html`      | Sales Platform — pipeline, the agent, the handoff           |
 | `operations.html` | Operations Platform — project management, estimating, assistance |

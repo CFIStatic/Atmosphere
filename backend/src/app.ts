@@ -28,6 +28,8 @@ import { campaignsRouter } from './routes/campaigns.js';
 import { salesWorkRouter } from './routes/salesWork.js';
 import { sharedJobsRouter, jobShareRouter } from './routes/sharedJobs.js';
 import { purchasingRouter } from './routes/purchasing.js';
+import { episodesRouter } from './routes/episodes.js';
+import { evidencePortalRouter, evidenceShareRouter } from './routes/evidencePortal.js';
 import { crmAccountsRouter } from './routes/crmAccounts.js';
 import { unsubscribeRouter } from './routes/unsubscribe.js';
 import { locationsRouter } from './routes/locations.js';
@@ -44,6 +46,7 @@ import { xactimateRouter } from './routes/xactimate.js';
 import { salesRouter } from './routes/sales.js';
 import { emailMarketingRouter } from './routes/emailMarketing.js';
 import { cyberRouter } from './routes/cyber.js';
+import { symbilityRouter } from './routes/symbility.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { cyberMonitor } from './cyber/index.js';
 import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
@@ -151,6 +154,7 @@ export function createApp(): Express {
   app.use('/api/audit', auditRouter);
   app.use('/api/mitigation', mitigationRouter);
   app.use('/api/xactimate', xactimateRouter);
+  app.use('/api/symbility', symbilityRouter);
   app.use('/api/jobs', jobsRouter);
   app.use('/api/memory', memoryRouter);
   app.use('/api/technician', technicianRouter);
@@ -168,7 +172,14 @@ export function createApp(): Express {
   app.use('/api/pm', pmRouter);
   app.use('/api/operations', sharedJobsRouter);
   app.use('/api/purchasing', purchasingRouter);
-  // Outside every auth middleware: the subcontractor's token is the credential.
+  app.use('/api/episodes', episodesRouter);
+  app.use('/api/evidence-portal', evidencePortalRouter);
+  // Outside auth like the job-share routes, and for the same reason: the
+  // person holding a Verifier link is an adjuster who never had an account.
+  app.use('/api/verifier-share', evidenceShareRouter);
+  // Outside every auth middleware, like the unsubscribe route and for the same
+  // reason: the person clicking is a subcontractor who never had an account,
+  // and a shared job record that requires signing in is not shared.
   app.use('/api/job-share', jobShareRouter);
   // HomeOwner Report: staff management + tokenized guest access.
   app.use('/api/portal', portalRouter);

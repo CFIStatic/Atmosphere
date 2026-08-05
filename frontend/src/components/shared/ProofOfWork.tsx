@@ -36,6 +36,17 @@ import { SpinnerIcon } from '../icons';
  * a crew claimed a day and the footage shows nothing changed, which is the
  * sentence this feature exists to put in front of a project manager.
  */
+/**
+ * The opening-shot habit, in words. 'not_exterior' is stated plainly rather
+ * than styled as a failure — the checks that gate money live elsewhere; this
+ * is the filming habit the guide teaches, made visible so it improves.
+ */
+const OPENING_WORDS: Record<string, string> = {
+  exterior: 'at the property',
+  not_exterior: 'did not start outside',
+  unclear: 'could not tell',
+};
+
 const MATERIAL_CHIP: Record<string, { word: string; style: string }> = {
   significant: { word: 'work changed', style: 'bg-success-50 text-success-600' },
   minor: { word: 'small change', style: 'bg-paper-200/60 text-ink-600' },
@@ -299,6 +310,58 @@ export function ProofOfWork({ jobId }: { jobId: string }) {
                           <p className="mt-1 text-[11px] text-ink-600">
                             <span className="text-ink-500">Why: </span>
                             {day.aiFindings.materialBecause}
+                          </p>
+                        )}
+                        {(day.reports?.before || day.reports?.after) && (
+                          <div className="mt-2 space-y-2">
+                            {(['before', 'after'] as const).map((half) => {
+                              const report = day.reports?.[half];
+                              if (!report) return null;
+                              return (
+                                <div key={half} className="rounded-lg bg-paper-100/60 px-2.5 py-2">
+                                  <p className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-400">
+                                    {half} video — narrated report
+                                  </p>
+                                  {report.status === 'done' && report.text ? (
+                                    <>
+                                      <p className="mt-1 text-[11.5px] leading-snug text-ink-700">
+                                        {report.text}
+                                      </p>
+                                      {report.coverage.length > 0 && (
+                                        <p className="mt-1 text-[10.5px] text-ink-500">
+                                          Covered {report.coverage.filter((c) => c.seen).length} of{' '}
+                                          {report.coverage.length} shot-list steps
+                                          {report.coverage.some((c) => !c.seen) &&
+                                            ` — missing: ${report.coverage
+                                              .filter((c) => !c.seen)
+                                              .map((c) => c.label.toLowerCase())
+                                              .slice(0, 2)
+                                              .join('; ')}${
+                                              report.coverage.filter((c) => !c.seen).length > 2 ? '…' : ''
+                                            }`}
+                                        </p>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <p className="mt-1 text-[11px] text-ink-500">
+                                      {report.status === 'queued' || report.status === 'running'
+                                        ? 'Being written — the model is reading the clip now.'
+                                        : report.status === 'failed'
+                                          ? `Failed: ${report.error ?? 'the model reply was not usable.'}`
+                                          : report.status === 'skipped'
+                                            ? (report.error ?? 'Skipped.')
+                                            : 'Not narrated.'}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        {day.aiFindings?.opening && (
+                          <p className="mt-1 text-[11px] text-ink-500">
+                            Opening shots — before: {OPENING_WORDS[day.aiFindings.opening.before]}
+                            {' · '}after: {OPENING_WORDS[day.aiFindings.opening.after]}
                           </p>
                         )}
                         {day.aiFindings?.changes?.length ? (

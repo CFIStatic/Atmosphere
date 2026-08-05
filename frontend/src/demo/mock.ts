@@ -12,6 +12,7 @@
  * Nothing here ships in a normal build: `main.tsx` only imports this module
  * when VITE_DEMO is set, so production bundles never contain it.
  */
+import { DEMO_ESTIMATE, DEMO_ESTIMATE_SOURCES, DEMO_ESTIMATE_TAKEOFF } from './demoEstimate';
 import type {
   AgentMemory,
   Escalation,
@@ -895,6 +896,42 @@ const PROOF_DAYS: Record<string, any> = {
         payable: true, payableBecause: 'Before and after both check out on every count.',
         accepted: false, rejected: false,
         materialChange: 'significant', analysisStatus: 'done', analysisError: null,
+        reports: {
+          before: {
+            status: 'done',
+            text: 'Opens at the street with the house number in frame, then climbs to the north slope where the tarp is still battened down. The middle of the clip walks the full slope edge to edge, and it ends on the intact skylights, untouched.',
+            entries: [
+              { frame: 0, atSeconds: 6, stageIndex: 0, note: 'Front elevation, house number visible.' },
+              { frame: 2, atSeconds: 41, stageIndex: 1, note: 'Tarp still in place across the north slope.' },
+              { frame: 5, atSeconds: 88, stageIndex: 3, note: 'Skylights intact, passed without contact.' },
+            ],
+            coverage: [
+            { stageIndex: 0, label: 'Start outside, facing the front of the building', seen: true },
+            { stageIndex: 1, label: 'Walk the area for \u201cStrip north slope to decking\u201d', seen: true },
+            { stageIndex: 2, label: 'Walk the area for \u201cInstall synthetic underlayment\u201d', seen: true },
+            { stageIndex: 3, label: 'Pass the excluded area \u2014 \u201cTouch the skylights\u201d', seen: true },
+            { stageIndex: 4, label: 'Finish on anything unexpected you found', seen: true },
+          ],
+            error: null,
+          },
+          after: {
+            status: 'done',
+            text: 'Opens at the front elevation, then shows the north slope stripped to decking with underlayment and new shingles across roughly two thirds of it. New decking sheets are visible in the valley. The clip ends mid-slope; the skylight pass and the wrap shot are not in the footage.',
+            entries: [
+              { frame: 0, atSeconds: 5, stageIndex: 0, note: 'Front elevation, same vantage as the morning clip.' },
+              { frame: 2, atSeconds: 39, stageIndex: 1, note: 'Slope stripped; underlayment laid to the ridge.' },
+              { frame: 4, atSeconds: 71, stageIndex: 2, note: 'New shingles across two thirds of the slope.' },
+            ],
+            coverage: [
+            { stageIndex: 0, label: 'Start outside, facing the front of the building', seen: true },
+            { stageIndex: 1, label: 'Walk the area for \u201cStrip north slope to decking\u201d', seen: true },
+            { stageIndex: 2, label: 'Walk the area for \u201cInstall synthetic underlayment\u201d', seen: true },
+            { stageIndex: 3, label: 'Pass the excluded area \u2014 \u201cTouch the skylights\u201d', seen: false },
+            { stageIndex: 4, label: 'Finish on anything unexpected you found', seen: false },
+          ],
+            error: null,
+          },
+        },
         checks: [
           { key: 'before.on_site', verdict: 'pass', detail: 'Filmed at the site.' },
           { key: 'before.same_day', verdict: 'pass', detail: 'Filmed on 2026-08-05.' },
@@ -910,6 +947,7 @@ const PROOF_DAYS: Record<string, any> = {
         ],
         aiSummary: 'The north slope is stripped to the deck in the before frames and fully dried-in with underlayment and new shingles across roughly two thirds of it in the after. Six sheets of new decking are visible in the valley where the before shows dark, delaminated sheathing.',
         aiFindings: {
+          opening: { before: 'exterior', after: 'exterior' },
           materialBecause: 'The before shows bare stripped deck; the after shows underlayment and shingles across two thirds of the slope, with new decking in the valley.',
           changes: [
             'North valley: dark delaminated decking replaced with new sheets',
@@ -934,6 +972,25 @@ const PROOF_DAYS: Record<string, any> = {
         payable: false, payableBecause: 'Filmed 2.14 miles from the site — outside the 0.25-mile radius.',
         accepted: false, rejected: false,
         materialChange: 'unclear', analysisStatus: 'done', analysisError: null,
+        reports: {
+          before: {
+            status: 'done',
+            text: 'Opens at a roof slope with intact shingles and no visible storm damage. The pitch and the surrounding trees do not match the other footage filed on this job, and no frame shows the house number or street.',
+            entries: [
+              { frame: 0, atSeconds: 4, stageIndex: -1, note: 'A building exterior, but nothing that identifies which one.' },
+              { frame: 3, atSeconds: 52, stageIndex: -1, note: 'Intact shingles; no work area in frame.' },
+            ],
+            coverage: [
+              { stageIndex: 0, label: 'Start outside, facing the front of the building', seen: false },
+              { stageIndex: 1, label: 'Walk the area for \u201cStrip north slope to decking\u201d', seen: false },
+              { stageIndex: 2, label: 'Walk the area for \u201cInstall synthetic underlayment\u201d', seen: false },
+              { stageIndex: 3, label: 'Pass the excluded area \u2014 \u201cTouch the skylights\u201d', seen: false },
+              { stageIndex: 4, label: 'Finish on anything unexpected you found', seen: false },
+            ],
+            error: null,
+          },
+          after: { status: 'queued', text: null, entries: [], coverage: [], error: null },
+        },
         checks: [
           { key: 'before.on_site', verdict: 'pass', detail: 'Filmed 0.03 miles from the site.' },
           { key: 'before.same_day', verdict: 'pass', detail: 'Filmed on 2026-08-04.' },
@@ -949,6 +1006,7 @@ const PROOF_DAYS: Record<string, any> = {
         ],
         aiSummary: 'The after frames show a different roof pitch and a different street elevation from the before. Both show roofing work in progress.',
         aiFindings: {
+          opening: { before: 'exterior', after: 'exterior' },
           materialBecause: 'The two videos do not appear to show the same building, so no before-and-after comparison is possible.',
           changes: [],
           cannotTell: ['The two videos do not appear to show the same building'],
@@ -996,6 +1054,7 @@ const PROOF_DAYS: Record<string, any> = {
         ],
         aiSummary: 'Tear-off of the north slope, from intact shingles in the before to bare deck with the felt stripped in the after. Debris is in a dumpster on the driveway in both.',
         aiFindings: {
+          opening: { before: 'exterior', after: 'not_exterior' },
           changes: ['North slope stripped to bare deck', 'Old shingles cleared to the driveway dumpster'],
           cannotTell: ['No close view of the deck condition underneath'],
           scopeTouched: ['Tear off and replace roof — architectural shingle, 30yr'],
@@ -1068,7 +1127,7 @@ const SHARE_VIEW: Record<string, any> = {
 };
 
 const SHARE_PROOF_DAYS = [
-  { workDate: '2026-08-05', hasBefore: true, hasAfter: true, summary: 'Before and after both check out.', problems: [], accepted: false },
+  { workDate: '2026-08-05', hasBefore: true, hasAfter: false, summary: 'Before filed this morning. Film the after when the day wraps.', problems: [], accepted: false },
   { workDate: '2026-08-04', hasBefore: true, hasAfter: true, summary: '1 check failed. Do not pay against this without asking.', problems: ['Filmed 2.14 miles from the site — outside the 0.25-mile radius.'], accepted: false },
   { workDate: '2026-08-01', hasBefore: true, hasAfter: true, summary: 'Nothing contradicts it, but 2 things could not be checked.', problems: [], accepted: true },
 ];
@@ -1104,6 +1163,25 @@ const CUSTODY: Record<string, any[]> = {
     { id: 'cu-8', action: 'uploaded', actor_label: 'Hector Delgado, Delgado Roofing', actor_role: 'subcontractor', detail: 'after · 2026-08-05', occurred_at: '2026-08-05T20:51:00Z' },
   ],
 };
+
+/**
+ * Verifier shares: who outside holds a way into each job's evidence. One
+ * working link (opened, expiring), one revoked (the audit trail of an act),
+ * and Meridian's adjuster — the story the platform demo tells from the
+ * other side.
+ */
+const VERIFIER_SHARES: Array<Record<string, any>> = [
+  { id: 'vs-1', jobId: 'job-1038', label: 'M. Rhodes — TDI appraisal', recipientEmail: 'm.rhodes@tdi-appraisal.com', path: '/verifier/shared/demo-rhodes', createdAt: '2026-07-22T15:00:00Z', expiresAt: '2026-09-01T00:00:00Z', revokedAt: null, lastOpenedAt: '2026-08-03T10:15:00Z', openCount: 3, state: 'live' },
+  { id: 'vs-2', jobId: 'job-1038', label: 'Halcyon PA Group', recipientEmail: 'files@halcyonpa.com', path: '/verifier/shared/demo-halcyon', createdAt: '2026-07-18T09:00:00Z', expiresAt: null, revokedAt: '2026-07-30T16:40:00Z', lastOpenedAt: '2026-07-19T08:20:00Z', openCount: 1, state: 'revoked' },
+  { id: 'vs-3', jobId: 'job-1041', label: 'R. Calloway — Alliance Mutual', recipientEmail: 'r.calloway@alliancemutual.com', path: '/verifier/shared/demo-calloway', createdAt: '2026-07-28T12:00:00Z', expiresAt: '2026-09-06T00:00:00Z', revokedAt: null, lastOpenedAt: '2026-08-04T11:15:00Z', openCount: 5, state: 'live' },
+];
+
+/** Addresses the demo treats as already holding an Atmosphere account. */
+const KNOWN_ACCOUNTS = new Set([
+  'r.calloway@alliancemutual.com',
+  'm.rhodes@tdi-appraisal.com',
+  'priya@ortizrestoration.com',
+]);
 
 /** Invitations: one waiting, one answered, one withdrawn. */
 const ORG_INVITES: Array<Record<string, any>> = [
@@ -1217,6 +1295,26 @@ const SUPPLIER_STATUS: Array<Record<string, any>> = [
 const poTotal = (lines: Array<Record<string, any>>) =>
   Math.round(lines.reduce((sum, l) => sum + l.quantity * (l.unitPrice ?? 0), 0) * 100) / 100;
 
+/**
+ * Saving an estimate on the Estimating tab registers it as a purchasing
+ * source, so "Order the materials" lands on a takeoff that exists — the same
+ * automatic flow the live backend gets from both features reading
+ * estimator_estimates.
+ */
+function registerDemoEstimateSource(estimateId: string) {
+  if (!PURCHASING_SOURCES.some((s) => s.estimateId === estimateId)) {
+    PURCHASING_SOURCES.unshift({
+      estimateId,
+      jobName: DEMO_ESTIMATE.assessment?.propertyAddress ?? 'Demo estimate',
+      claimNumber: DEMO_ESTIMATE.assessment?.claimNumber ?? null,
+      total: DEMO_ESTIMATE.lineItems.reduce((sum: number, l: any) => sum + (l.rcv ?? 0), 0),
+      createdAt: new Date().toISOString(),
+    });
+  }
+  TAKEOFFS[estimateId] = DEMO_ESTIMATE_TAKEOFF;
+  TAKEOFF_LINES[estimateId] = DEMO_ESTIMATE_TAKEOFF.lines;
+}
+
 const CAMPAIGNS: Array<Record<string, any>> = [
   {
     id: 'camp-1', name: 'Q3 property managers — North Austin',
@@ -1257,7 +1355,7 @@ const CAMPAIGN_MEMBERS: Record<string, Array<Record<string, any>>> = {
 };
 
 /** Handlers that need the query string get it here, since Handler takes only the path match. */
-const LAST_QUERY: { leadId?: string; scope?: string } = {};
+const LAST_QUERY: { leadId?: string; scope?: string; phase?: string; jobId?: string } = {};
 
 const COMPUTER_STATUS: ComputerStatus = {
   enabled: true,
@@ -1273,6 +1371,63 @@ const COMPUTER_STATUS: ComputerStatus = {
 const TECH_CAPABILITIES: TechnicianCapabilities = {
   assistant: true, transcription: true, maxAudioUploadBytes: 26_214_400,
 };
+
+/** Symbility connection — stateful so the demo connect flow actually connects. */
+/** The filming shot list, phase-worded like the backend's captureGuide.ts. */
+function demoCaptureGuide(phase: string) {
+  const before = phase !== 'after';
+  return {
+    phase: before ? 'before' : 'after',
+    targetSeconds: 95,
+    steps: [
+      {
+        kind: 'anchor',
+        instruction:
+          'Start outside, facing the front of the building. Hold steady for a few seconds \u2014 get the house number, the mailbox, or anything that makes the property unmistakable.',
+        why: 'The first thing verification does is prove this footage is this site. A video that opens indoors could be any building anywhere, and every check after that is weaker for it.',
+      },
+      {
+        kind: 'scope',
+        instruction: before
+          ? 'Walk the area for \u201cStrip north slope to decking\u201d before touching it. Slow pan, arm\u2019s length, corners included.'
+          : 'Show the finished state of \u201cStrip north slope to decking\u201d. Slow pan across the whole area \u2014 the edges matter more than the middle.',
+        why: before
+          ? 'The before is the baseline the after gets compared against. An area skipped now cannot show change later.'
+          : 'The comparison can only credit what it can see. Work off-camera reads as work not done.',
+      },
+      {
+        kind: 'scope',
+        instruction: before
+          ? 'Walk the area for \u201cInstall synthetic underlayment\u201d before touching it. Slow pan, arm\u2019s length, corners included.'
+          : 'Show the finished state of \u201cInstall synthetic underlayment\u201d. Slow pan across the whole area \u2014 the edges matter more than the middle.',
+        why: before
+          ? 'The before is the baseline the after gets compared against. An area skipped now cannot show change later.'
+          : 'The comparison can only credit what it can see. Work off-camera reads as work not done.',
+      },
+      {
+        kind: 'exclusion',
+        instruction: 'Pass the excluded area \u2014 \u201cTouch the skylights\u201d \u2014 and film it untouched. (Carrier pulled them out of scope)',
+        why: 'The day somebody asks whether you touched it, the answer is this timestamped pan of it intact.',
+      },
+      {
+        kind: 'wrap',
+        instruction: before
+          ? 'Finish on anything unexpected you found \u2014 damage, water, access problems. Keep location on for the whole clip.'
+          : 'Finish on any meter or reading in use \u2014 numbers on camera count as documentation. Then stop recording before you leave the site.',
+        why: before
+          ? 'A surprise filmed at 7am is a change order. The same surprise mentioned at 5pm is an argument.'
+          : 'A reading in the video is evidence; a reading remembered later is a claim.',
+      },
+    ],
+  };
+}
+
+const SYMBILITY_STATE: {
+  connected: boolean;
+  username: string | null;
+  scopes: string[];
+  grantedAt: string;
+} = { connected: false, username: null, scopes: [], grantedAt: '' };
 
 const XACTIMATE_STATUS: XactimateStatus = {
   connected: false, sessionActive: false, driver: 'mock', storageAvailable: true,
@@ -1739,6 +1894,28 @@ const routes: Array<[string, RegExp, Handler]> = [
   }],
 
   /* ------------------------------------------- the sub's job link */
+  ['GET', /^\/api\/job-share\/([\w-]+)\/capture-guide$/, () => ({
+    body: { guide: demoCaptureGuide(LAST_QUERY.phase ?? 'before') },
+  })],
+  ['POST', /^\/api\/operations\/shared\/([\w-]+)\/live-observe$/, (() => {
+    // Cycles through the shot list so a demo recording watches the stage
+    // chip advance the way a real walkthrough would.
+    let tick = -1;
+    const STAGES = [
+      { stageIndex: 0, stageLabel: 'Start outside, facing the front of the building', stageKind: 'anchor', note: 'Front elevation in frame; hold a beat longer.', confidence: 0.86 },
+      { stageIndex: 1, stageLabel: 'Walk the area for \u201cStrip north slope to decking\u201d', stageKind: 'scope', note: 'North slope in frame, panning left to right.', confidence: 0.78 },
+      { stageIndex: 1, stageLabel: 'Walk the area for \u201cStrip north slope to decking\u201d', stageKind: 'scope', note: 'Close on the stripped decking at the valley.', confidence: 0.74 },
+      { stageIndex: 3, stageLabel: 'Pass the excluded area \u2014 \u201cTouch the skylights\u201d', stageKind: 'exclusion', note: 'Skylights in frame, intact.', confidence: 0.81 },
+      { stageIndex: 4, stageLabel: 'Finish on anything unexpected you found', stageKind: 'wrap', note: 'Moisture meter held to the lens; reading legible.', confidence: 0.7 },
+    ];
+    return () => {
+      tick += 1;
+      return { body: STAGES[Math.min(tick, STAGES.length - 1)] };
+    };
+  })()],
+  ['GET', /^\/api\/operations\/shared\/([\w-]+)\/capture-guide$/, () => ({
+    body: { guide: demoCaptureGuide(LAST_QUERY.phase ?? 'before') },
+  })],
   ['GET', /^\/api\/job-share\/([\w-]+)$/, (m) => {
     const view = SHARE_VIEW[m[1]] ?? SHARE_VIEW['demo-token'];
     return { body: view };
@@ -1807,6 +1984,52 @@ const routes: Array<[string, RegExp, Handler]> = [
       detail: (b.reason as string) ?? null,
       occurred_at: new Date().toISOString(),
     });
+    return { body: { ok: true } };
+  }],
+
+  /* ------------------------------------------- verifier shares */
+  ['GET', /^\/api\/evidence-portal\/shares$/, () => ({
+    body: {
+      shares: LAST_QUERY.jobId
+        ? VERIFIER_SHARES.filter((s) => s.jobId === LAST_QUERY.jobId)
+        : VERIFIER_SHARES,
+    },
+  })],
+  ['POST', /^\/api\/evidence-portal\/shares$/, (_m, b) => {
+    const email = String(b.recipientEmail ?? '').toLowerCase();
+    const days = Number(b.expiresInDays ?? 30);
+    const share = {
+      id: `vs-${Date.now()}`,
+      jobId: String(b.jobId ?? ''),
+      label: String(b.label ?? ''),
+      recipientEmail: email,
+      path: `/verifier/shared/demo-${Date.now().toString(36)}`,
+      createdAt: new Date().toISOString(),
+      expiresAt: days === 0 ? null : new Date(Date.now() + days * 86_400_000).toISOString(),
+      revokedAt: null,
+      lastOpenedAt: null,
+      openCount: 0,
+      state: 'live',
+    };
+    VERIFIER_SHARES.unshift(share);
+    // "nomail" anywhere in the address shows the email-refused path — the
+    // fallback UI is part of the design, so the demo has to be able to reach it.
+    const emailed = !email.includes('nomail');
+    return {
+      status: 201,
+      body: {
+        share: { id: share.id, label: share.label, expiresAt: share.expiresAt, createdAt: share.createdAt, path: share.path },
+        emailed,
+        recipientHasAccount: KNOWN_ACCOUNTS.has(email),
+      },
+    };
+  }],
+  ['POST', /^\/api\/evidence-portal\/shares\/([\w-]+)\/revoke$/, (m) => {
+    const share = VERIFIER_SHARES.find((s) => s.id === m[1]);
+    if (share) {
+      share.revokedAt = new Date().toISOString();
+      share.state = 'revoked';
+    }
     return { body: { ok: true } };
   }],
 
@@ -1964,6 +2187,22 @@ const routes: Array<[string, RegExp, Handler]> = [
     const record = PROOF_DAYS[m[1]];
     const day = record?.days?.find((d: any) => d.workDate === m[2] && d.partyId === b.partyId);
     return { body: { summary: day?.aiSummary ?? null, findings: day?.aiFindings ?? null, model: 'claude' } };
+  }],
+
+  /* ------------------------------------------- estimating (demo pipeline) */
+  // The estimate is the backend's own demo output, frozen at build time — the
+  // Estimating tab builds it, saves it, and hands it to Purchase orders, the
+  // same loop the live product runs.
+  ['GET', /^\/api\/mitigation\/demo-sources$/, () => ({ body: { sources: DEMO_ESTIMATE_SOURCES } })],
+  ['POST', /^\/api\/mitigation\/build$/, () => ({
+    body: { estimate: DEMO_ESTIMATE, priceListConnected: false },
+  })],
+  ['POST', /^\/api\/mitigation\/estimates$/, () => {
+    registerDemoEstimateSource('est-demo-1');
+    return {
+      status: 201,
+      body: { estimateId: 'est-demo-1', jobId: DEMO_ESTIMATE.jobId, estimate: DEMO_ESTIMATE },
+    };
   }],
 
   /* ------------------------------------------- purchasing */
@@ -2498,6 +2737,57 @@ const routes: Array<[string, RegExp, Handler]> = [
   })],
   ['GET', /^\/api\/estimator\/runs$/, () => ({ body: { runs: [] } })],
   ['GET', /^\/api\/xactimate\/status$/, () => ({ body: XACTIMATE_STATUS })],
+
+  /* ------------------------------------------- symbility */
+  ['GET', /^\/api\/symbility\/status$/, () => ({
+    body: {
+      connected: SYMBILITY_STATE.connected,
+      sessionActive: SYMBILITY_STATE.connected,
+      driver: 'mock',
+      webAutomationEnabled: false,
+      storageAvailable: true,
+      username: SYMBILITY_STATE.username,
+      scopes: SYMBILITY_STATE.connected ? SYMBILITY_STATE.scopes : [],
+      storageMode: 'session',
+      grantedAt: SYMBILITY_STATE.connected ? SYMBILITY_STATE.grantedAt : null,
+      expiresAt: SYMBILITY_STATE.connected
+        ? new Date(Date.now() + 30 * 86_400_000).toISOString()
+        : null,
+      availableScopes: [
+        { scope: 'read_profile', label: 'See who is signed in', description: 'Read your name and company so the app can show which account is connected.', defaultGranted: true },
+        { scope: 'read_claims', label: 'Read claim assignments', description: 'See the claims assigned to your account in Claims Connect.', defaultGranted: true },
+        { scope: 'write_estimate', label: 'Write estimates', description: 'Create or update an estimate on a claim. Never submits without you.', defaultGranted: false },
+      ],
+    },
+  })],
+  ['POST', /^\/api\/symbility\/connect$/, (_m, b) => {
+    const password = String(b.password ?? '');
+    if (password.includes('mfa') && !b.mfaCode) {
+      return {
+        status: 202,
+        body: { status: 'mfa_required', challengeId: 'ch-1', message: 'Claims Connect asked for a verification code. Enter it to finish connecting.' },
+      };
+    }
+    SYMBILITY_STATE.connected = true;
+    SYMBILITY_STATE.username = String(b.username ?? '');
+    SYMBILITY_STATE.scopes = Array.isArray(b.scopes) ? (b.scopes as string[]) : ['read_profile'];
+    SYMBILITY_STATE.grantedAt = new Date().toISOString();
+    return {
+      status: 201,
+      body: {
+        status: 'connected',
+        profile: { username: SYMBILITY_STATE.username, displayName: SYMBILITY_STATE.username.split('@')[0], companyName: 'Ortiz Restoration' },
+        scopes: SYMBILITY_STATE.scopes,
+        expiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+        storageMode: 'session',
+      },
+    };
+  }],
+  ['POST', /^\/api\/symbility\/disconnect$/, () => {
+    SYMBILITY_STATE.connected = false;
+    SYMBILITY_STATE.username = null;
+    return { body: { ok: true } };
+  }],
 ];
 
 const realFetch = window.fetch.bind(window);
@@ -2510,6 +2800,8 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   const query = new URLSearchParams((url.split('?')[1] ?? ''));
   LAST_QUERY.leadId = query.get('leadId') ?? undefined;
   LAST_QUERY.scope = query.get('scope') ?? undefined;
+  LAST_QUERY.phase = query.get('phase') ?? undefined;
+  LAST_QUERY.jobId = query.get('jobId') ?? undefined;
 
   const method = (init?.method ?? 'GET').toUpperCase();
   let body: Record<string, unknown> = {};

@@ -15,6 +15,7 @@ import { VideoCapturePanel } from '../components/technician/VideoCapturePanel';
 import { RecordingsPanel } from '../components/technician/RecordingsPanel';
 import { GaugeIcon, ScanIcon, SparkIcon, VideoIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
+import { CaptureGuidePanel } from '../components/field/CaptureGuidePanel';
 
 type View = 'capture' | 'recordings' | 'assistant';
 
@@ -41,6 +42,7 @@ export function TechnicianPage() {
   useFeatureTimer('technician');
   const { user, membership, logout } = useAuth();
   const [view, setView] = useState<View>('capture');
+  const [guideContext, setGuideContext] = useState<{ jobId: string; phase: 'before' | 'after' } | null>(null);
   const [capabilities, setCapabilities] = useState<TechnicianCapabilities | null>(null);
   const [recordings, setRecordings] = useState<StoredRecording[] | null>(null);
   const [detected, setDetected] = useState<{ labels: string[]; at: number }>({ labels: [], at: 0 });
@@ -255,7 +257,12 @@ export function TechnicianPage() {
                   hardware (and the browser's recording indicator) live. */}
               {view !== 'recordings' && (
                 <>
-                  <VideoCapturePanel onSaved={handleSaved} onDetections={handleDetections} />
+                  <CaptureGuidePanel onContext={setGuideContext} />
+                  <VideoCapturePanel
+                    onSaved={handleSaved}
+                    onDetections={handleDetections}
+                    liveContext={guideContext}
+                  />
                   <AudioRecorderPanel onSaved={handleSaved} />
                 </>
               )}

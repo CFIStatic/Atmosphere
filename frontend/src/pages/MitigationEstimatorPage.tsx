@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   api,
   ApiError,
+  type CaptureSyncResult,
   type DryingReportInput,
   type MitigationEstimate,
   type XactimateStatus,
@@ -12,7 +14,7 @@ import { SourcePanel, type Sources } from '../components/estimator/SourcePanel';
 import { EstimateResult } from '../components/estimator/EstimateResult';
 import { XactimateCard } from '../components/estimator/XactimateCard';
 import { CaptureSyncCard } from '../components/estimator/CaptureSyncCard';
-import type { CaptureSyncResult } from '../lib/api';
+import { SymbilityCard } from '../components/estimator/SymbilityCard';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 /**
@@ -38,6 +40,7 @@ const EMPTY_SOURCES: Sources = { photos: [], notes: '', dryingReports: [] };
 
 export function MitigationEstimatorPage() {
   useFeatureTimer('mitigation_estimator');
+  const navigate = useNavigate();
   const [sources, setSources] = useState<Sources>(EMPTY_SOURCES);
   const [estimate, setEstimate] = useState<MitigationEstimate | null>(null);
   const [estimateId, setEstimateId] = useState<string | null>(null);
@@ -292,6 +295,10 @@ export function MitigationEstimatorPage() {
               }}
             />
 
+            {/* The other estimating platform, same contract: web sign-in as
+                the user, scoped consent, session-only by default. */}
+            <SymbilityCard />
+
             <SourcePanel
               sources={sources}
               onChange={setSources}
@@ -380,6 +387,18 @@ export function MitigationEstimatorPage() {
                     </a>
                   ))}
                 </div>
+              )}
+
+              {/* The estimate flows straight into purchasing: same id, no
+                  re-picking from a list. Saved only — the takeoff reads the
+                  stored payload, and an unsaved estimate has none. */}
+              {estimateId && (
+                <button
+                  onClick={() => navigate(`/purchase-orders?from=${estimateId}`)}
+                  className="w-full rounded-lg border border-brand-200 bg-brand-600/10 px-4 py-2.5 text-sm font-semibold text-brand-600 transition hover:bg-brand-600/20"
+                >
+                  Order the materials →
+                </button>
               )}
             </div>
           </div>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AppShell, EmptyState, PageHeader, PanelSpinner } from '../components/AppShell';
 import {
   api,
@@ -66,11 +67,20 @@ interface EditableLine {
 }
 
 export function PurchaseOrdersPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Estimating hands off here with ?from=<estimateId>. Consumed once: the id
+  // seeds the builder, then leaves the URL so refresh and back behave.
+  const [fromEstimate] = useState(() => searchParams.get('from'));
   const [orders, setOrders] = useState<PurchaseOrder[] | null>(null);
   const [suppliers, setSuppliers] = useState<SupplierStatus[]>([]);
-  const [view, setView] = useState<'list' | 'new'>('list');
+  const [view, setView] = useState<'list' | 'new'>(fromEstimate ? 'new' : 'list');
   const [openId, setOpenId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (searchParams.get('from')) setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function loadOrders() {
     try {
@@ -120,6 +130,7 @@ export function PurchaseOrdersPage() {
       {view === 'new' ? (
         <NewOrderBuilder
           suppliers={suppliers}
+          initialEstimateId={fromEstimate}
           onDone={async (id) => {
             setView('list');
             setOpenId(id);
@@ -205,10 +216,13 @@ function SupplierStrip({ suppliers }: { suppliers: SupplierStatus[] }) {
 
 function NewOrderBuilder({
   suppliers,
+  initialEstimateId,
   onDone,
   onCancel,
 }: {
   suppliers: SupplierStatus[];
+  /** Arriving from Estimating: skip the picker, open this estimate's takeoff. */
+  initialEstimateId?: string | null;
   onDone: (orderId: string) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -227,6 +241,12 @@ function NewOrderBuilder({
       .then((r) => setSources(r.sources))
       .catch(() => setSources([]));
   }, []);
+
+  // The Estimating handoff: the takeoff opens itself, the picker never shows.
+  useEffect(() => {
+    if (initialEstimateId) void pick({ estimateId: initialEstimateId } as TakeoffSource);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialEstimateId]);
 
   async function pick(src: TakeoffSource) {
     setBusy(true);
@@ -288,6 +308,14 @@ function NewOrderBuilder({
   }
 
   if (!source) {
+    // Mid-handoff there is nothing to pick — the estimate is already chosen.
+    if (initialEstimateId && !error) {
+      return (
+        <section className="rounded-xl glass-card p-5">
+          <PanelSpinner label="Reading the estimate" />
+        </section>
+      );
+    }
     return (
       <section className="rounded-xl glass-card p-5">
         <h2 className="text-base font-semibold text-ink-900">Start from an estimate</h2>

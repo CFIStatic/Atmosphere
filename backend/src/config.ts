@@ -116,6 +116,27 @@ export const config = {
     encryptionKey: process.env.XACTIMATE_ENC_KEY ?? '',
   },
 
+  symbility: {
+    // CoreLogic Symbility (Claims Connect) — the other estimating platform a
+    // restoration org lives in, and for many carrier programs the required
+    // one. Same posture as Xactimate: 'mock' by default so the whole connect
+    // flow is exercisable without real credentials, and which driver runs is a
+    // deployment decision, never a per-request one.
+    driver: (process.env.SYMBILITY_DRIVER === 'web' ? 'web' : 'mock') as 'mock' | 'web',
+
+    // There is no partner API wired here yet, so web login is the live path —
+    // and like Xactimate it is off unless explicitly enabled, because whether
+    // automating a Claims Connect account is permitted is between the account
+    // holder and CoreLogic.
+    webAutomationEnabled: process.env.SYMBILITY_WEB_AUTOMATION === 'true',
+    headless: process.env.SYMBILITY_HEADLESS !== 'false',
+    webSelectors: parseJsonRecord(process.env.SYMBILITY_WEB_SELECTORS),
+
+    // Sealed with its own key; falls back to the Xactimate vault key so a
+    // server configured for one estimating vault covers both.
+    encryptionKey: process.env.SYMBILITY_ENC_KEY ?? process.env.XACTIMATE_ENC_KEY ?? '',
+  },
+
   sla: {
     // Where carrier program agreements come from. 'manual' is the default and
     // the only source guaranteed to match what the franchise actually signed —
@@ -134,6 +155,17 @@ export const config = {
     assistant: {
       apiKey: process.env.ANTHROPIC_API_KEY ?? '',
       model: process.env.ANTHROPIC_MODEL ?? 'claude-opus-5',
+      // The live capture loop is a five-way classification of a single still,
+      // forty times per walkthrough. That is the cheapest tier's job, and
+      // putting the flagship on it would multiply the pipeline's whole cost
+      // for no visible gain. Narration and the day comparison stay on the
+      // stronger model — they write records people act on.
+      liveModel: process.env.LIVE_OBSERVE_MODEL ?? 'claude-haiku-4-5-20251001',
+      // Per-org, per-day ceiling on live observations. At the default cadence
+      // one walkthrough is ~40 calls, so 2000 is roughly fifty walkthroughs a
+      // day — genuinely heavy use — while capping the worst case (a camera
+      // left recording overnight) at pocket change instead of a surprise.
+      liveDailyCapPerOrg: Number(process.env.LIVE_OBSERVE_DAILY_CAP ?? 2000),
       // Voice replies are spoken aloud, so they must stay short. This caps the
       // response; the system prompt asks for brevity as well.
       maxTokens: Number(process.env.ASSISTANT_MAX_TOKENS ?? 512),

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { SpinnerIcon } from '../components/icons';
 import { readCapture, todayISO } from '../lib/proofCapture';
+import { CaptureGuideSteps } from '../components/shared/CaptureGuideSteps';
+import type { CaptureGuide } from '../lib/api';
 
 /**
  * The subcontractor's screen.
@@ -391,8 +393,27 @@ function ProofSection({
   const [step, setStep] = useState('');
   const [problems, setProblems] = useState<string[]>([]);
   const [done, setDone] = useState<string | null>(null);
+  const [guide, setGuide] = useState<CaptureGuide | null>(null);
   const beforeInput = useRef<HTMLInputElement>(null);
   const afterInput = useRef<HTMLInputElement>(null);
+
+  // The shot list for whichever half of the day comes next. Fetched fresh when
+  // the phase flips, because the after's wording is different work.
+  const guidePhase = todaysDay?.hasBefore ? 'after' : 'before';
+  useEffect(() => {
+    let cancelled = false;
+    call<{ guide: CaptureGuide }>(`${API}/${token}/capture-guide?phase=${guidePhase}`)
+      .then((res) => {
+        if (!cancelled) setGuide(res.guide);
+      })
+      .catch(() => {
+        // No guide is a quieter page, not a broken one — the buttons still work.
+        if (!cancelled) setGuide(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, guidePhase]);
 
   async function upload(file: File, phase: 'before' | 'after') {
     setUploading(phase);
@@ -452,25 +473,33 @@ function ProofSection({
     }
   }
 
+  /**
+   * Both inputs live at the section root, mounted whichever buttons are —
+   * a refilm link for a half whose big button is not on screen still needs
+   * its input to exist.
+   */
+  const CameraInput = ({ phase }: { phase: 'before' | 'after' }) => (
+    <input
+      ref={phase === 'before' ? beforeInput : afterInput}
+      type="file"
+      accept="video/*"
+      // The attribute that makes a phone open the camera rather than the
+      // photo library. It is the difference between filming now and
+      // uploading something from last week.
+      capture="environment"
+      className="hidden"
+      onChange={(e) => {
+        const file = e.target.files?.[0];
+        if (file) void upload(file, phase);
+        e.target.value = '';
+      }}
+    />
+  );
+
   const Button = ({ phase, filed }: { phase: 'before' | 'after'; filed: boolean }) => {
     const input = phase === 'before' ? beforeInput : afterInput;
     return (
       <div className="flex-1">
-        <input
-          ref={input}
-          type="file"
-          accept="video/*"
-          // The attribute that makes a phone open the camera rather than the
-          // photo library. It is the difference between filming now and
-          // uploading something from last week.
-          capture="environment"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void upload(file, phase);
-            e.target.value = '';
-          }}
-        />
         <button
           onClick={() => input.current?.click()}
           disabled={uploading !== null}
@@ -495,18 +524,81 @@ function ProofSection({
     );
   };
 
+  const hasBefore = Boolean(todaysDay?.hasBefore);
+  const hasAfter = Boolean(todaysDay?.hasAfter);
+  const bothFiled = hasBefore && hasAfter;
+  const nextPhase: 'before' | 'after' = hasBefore ? 'after' : 'before';
+
+  /** A quiet way to refilm a half that is already on file. */
+  const RefilmLink = ({ phase }: { phase: 'before' | 'after' }) => (
+    <button
+      onClick={() => (phase === 'before' ? beforeInput : afterInput).current?.click()}
+      disabled={uploading !== null}
+      className="text-[11px] font-medium text-ink-500 underline-offset-2 hover:text-ink-800 hover:underline disabled:opacity-50"
+    >
+      Refilm the {phase}
+    </button>
+  );
+
   return (
     <section className="mt-5 rounded-xl border border-line bg-paper-0 p-4">
-      <h2 className="text-base font-semibold text-ink-900">Today's video</h2>
+      <CameraInput phase="before" />
+      <CameraInput phase="after" />
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 className="text-base font-semibold text-ink-900">Today's video</h2>
+        <span className="flex gap-1.5 text-[10.5px] font-semibold">
+          <span
+            className={`rounded-full px-2 py-0.5 ${hasBefore ? 'bg-success-50 text-success-600' : 'bg-paper-200/60 text-ink-500'}`}
+          >
+            before{hasBefore ? ' ✓' : ''}
+          </span>
+          <span
+            className={`rounded-full px-2 py-0.5 ${hasAfter ? 'bg-success-50 text-success-600' : 'bg-paper-200/60 text-ink-500'}`}
+          >
+            after{hasAfter ? ' ✓' : ''}
+          </span>
+        </span>
+      </div>
       <p className="mt-0.5 text-xs text-ink-600">
-        One before you start, one when you finish. Walk the areas you worked on. Keep location
-        turned on — it is what proves the footage is this site.
+        {bothFiled
+          ? 'Both halves are on file for today.'
+          : `The ${guidePhase} video — one continuous clip, about ${
+              guide ? Math.max(1, Math.round(guide.targetSeconds / 60)) : 2
+            } min, location on.`}
       </p>
 
-      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-        <Button phase="before" filed={Boolean(todaysDay?.hasBefore)} />
-        <Button phase="after" filed={Boolean(todaysDay?.hasAfter)} />
-      </div>
+      {/* The guide and the button are one path: steps down a single rail,
+          record at the end of it. Filming is a motion, not a form. */}
+      {!bothFiled && guide && guide.steps.length > 0 ? (
+        <CaptureGuideSteps
+          steps={guide.steps}
+          final={
+            <div>
+              <Button phase={nextPhase} filed={false} />
+              {nextPhase === 'after' && hasBefore && (
+                <p className="mt-1.5">
+                  <RefilmLink phase="before" />
+                </p>
+              )}
+            </div>
+          }
+        />
+      ) : !bothFiled ? (
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <Button phase="before" filed={hasBefore} />
+          <Button phase="after" filed={hasAfter} />
+        </div>
+      ) : (
+        <div className="mt-3 flex items-center gap-3 rounded-lg border border-success-200 bg-success-50 px-3 py-2.5">
+          <span className="text-xs font-medium text-success-600">
+            Done for today — the office can see the whole day.
+          </span>
+          <span className="ml-auto flex gap-3">
+            <RefilmLink phase="before" />
+            <RefilmLink phase="after" />
+          </span>
+        </div>
+      )}
 
       {/* Told now, while they are still standing on the site. */}
       {problems.length > 0 && (
