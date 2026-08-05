@@ -1,21 +1,21 @@
 import { useEffect, useState } from 'react';
 import { api, type CaptureGuide, type JobSummary } from '../../lib/api';
+import { CaptureGuideSteps } from '../shared/CaptureGuideSteps';
 
 /**
- * The shot list, on the crew's own capture screen.
+ * The shot list, flowing into the camera below it.
  *
- * Same guide the subcontractor sees through their link, through the org door:
- * pick the job, pick which half of the day, film in the order given. The
- * anchor step leads for the same reason everywhere — verification is only as
- * strong as an opening shot that proves which building this is — and the
- * model checks the habit on every analysed day.
+ * Same rail the subcontractor sees through their link — one visual language
+ * for filming proof, wherever it is filmed from. Here the rail's last node is
+ * not a button: the camera panel sits directly underneath this component, so
+ * the final step simply hands off to it. No hide/show, no ceremony — a crew
+ * that has to open a drawer to find the instructions will not open it twice.
  */
 export function CaptureGuidePanel() {
   const [jobs, setJobs] = useState<JobSummary[] | null>(null);
   const [jobId, setJobId] = useState<string>('');
   const [phase, setPhase] = useState<'before' | 'after'>('before');
   const [guide, setGuide] = useState<CaptureGuide | null>(null);
-  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     api
@@ -46,83 +46,67 @@ export function CaptureGuidePanel() {
     };
   }, [jobId, phase]);
 
+  // No jobs, no guide — the capture tools below still work on their own.
   if (jobs !== null && jobs.length === 0) return null;
 
   return (
     <section className="rounded-xl glass-card p-4">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-baseline justify-between gap-2 text-left"
-      >
-        <span className="text-sm font-semibold text-ink-900">Proof filming guide</span>
-        <span className="text-xs text-ink-500">{open ? 'Hide' : 'Show'}</span>
-      </button>
-      <p className="mt-0.5 text-xs text-ink-500">
-        Where to point the camera, in order — starting outside, because the opening shot is what
-        proves the footage is this site.
-      </p>
-
-      {open && (
-        <>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <select
-              value={jobId}
-              onChange={(e) => setJobId(e.target.value)}
-              className="min-w-0 flex-1 rounded-lg glass-field px-2.5 py-1.5 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
-              aria-label="Job"
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-semibold text-ink-900">Film the proof</h2>
+          <p className="mt-0.5 text-xs text-ink-500">
+            In this order — the opening shot is what proves the footage is this site.
+          </p>
+        </div>
+        <div className="flex rounded-lg glass-card p-0.5" role="group" aria-label="Which half of the day">
+          {(['before', 'after'] as const).map((p) => (
+            <button
+              key={p}
+              onClick={() => setPhase(p)}
+              aria-pressed={phase === p}
+              className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
+                phase === p ? 'bg-brand-600 text-white' : 'text-ink-600 hover:text-ink-900'
+              }`}
             >
-              {(jobs ?? []).map((job) => (
-                <option key={job.jobId} value={job.jobId}>
-                  #{job.jobNumber} — {job.title}
-                </option>
-              ))}
-            </select>
-            <div className="flex rounded-lg glass-card p-0.5">
-              {(['before', 'after'] as const).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setPhase(p)}
-                  className={`rounded-md px-3 py-1 text-xs font-semibold ${
-                    phase === p ? 'bg-brand-600 text-white' : 'text-ink-600'
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-          </div>
+              {p}
+            </button>
+          ))}
+        </div>
+      </div>
 
-          {guide && (
-            <>
-              <ol className="mt-3 space-y-2">
-                {guide.steps.map((step, i) => (
-                  <li key={i} className="flex gap-2 text-xs">
-                    <span
-                      className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                        step.kind === 'anchor' ? 'bg-brand-600 text-white' : 'bg-paper-200 text-ink-600'
-                      }`}
-                    >
-                      {i + 1}
-                    </span>
-                    <span>
-                      <span
-                        className={step.kind === 'anchor' ? 'font-semibold text-ink-900' : 'text-ink-800'}
-                      >
-                        {step.kind === 'anchor' && <span className="text-brand-600">Start here: </span>}
-                        {step.instruction}
-                      </span>
-                      <span className="block text-[11px] text-ink-500">{step.why}</span>
-                    </span>
-                  </li>
-                ))}
-              </ol>
-              <p className="mt-2 text-[11px] text-ink-400">
-                Aim for about {Math.max(1, Math.round(guide.targetSeconds / 60))} min. One continuous
-                clip beats five fragments.
-              </p>
-            </>
-          )}
-        </>
+      {jobs !== null && jobs.length > 1 ? (
+        <select
+          value={jobId}
+          onChange={(e) => setJobId(e.target.value)}
+          className="mt-2.5 w-full rounded-lg glass-field px-2.5 py-1.5 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+          aria-label="Job"
+        >
+          {jobs.map((job) => (
+            <option key={job.jobId} value={job.jobId}>
+              #{job.jobNumber} — {job.title}
+            </option>
+          ))}
+        </select>
+      ) : jobs?.length === 1 ? (
+        <p className="mt-2 text-xs font-medium text-ink-700">
+          #{jobs[0].jobNumber} — {jobs[0].title}
+        </p>
+      ) : null}
+
+      {guide && (
+        <CaptureGuideSteps
+          steps={guide.steps}
+          final={
+            <p className="pt-0.5 text-xs text-ink-800">
+              <span className="font-semibold">Record below</span>
+              <span className="text-ink-500">
+                {' '}
+                — one continuous clip, about {Math.max(1, Math.round(guide.targetSeconds / 60))} min.
+                Fragments compare worse than one walk.
+              </span>
+            </p>
+          }
+        />
       )}
     </section>
   );

@@ -1072,7 +1072,7 @@ const SHARE_VIEW: Record<string, any> = {
 };
 
 const SHARE_PROOF_DAYS = [
-  { workDate: '2026-08-05', hasBefore: true, hasAfter: true, summary: 'Before and after both check out.', problems: [], accepted: false },
+  { workDate: '2026-08-05', hasBefore: true, hasAfter: false, summary: 'Before filed this morning. Film the after when the day wraps.', problems: [], accepted: false },
   { workDate: '2026-08-04', hasBefore: true, hasAfter: true, summary: '1 check failed. Do not pay against this without asking.', problems: ['Filmed 2.14 miles from the site — outside the 0.25-mile radius.'], accepted: false },
   { workDate: '2026-08-01', hasBefore: true, hasAfter: true, summary: 'Nothing contradicts it, but 2 things could not be checked.', problems: [], accepted: true },
 ];
