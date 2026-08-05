@@ -6,7 +6,13 @@ import { requireOrgContext } from '../lib/orgContext.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { HttpError } from '../lib/errors.js';
 import { proofVideoUrl, recordAccess } from './proofOfWork.js';
-import { serializeEvidence, shareState } from '../verifier/library.js';
+import {
+  downloadDecision,
+  serializeEvidence,
+  shareRecipientAllowed,
+  shareState,
+} from '../verifier/library.js';
+import { config } from '../config.js';
 
 /**
  * The evidence portal's backend: two doors into one record.
@@ -34,12 +40,19 @@ const PROOF_BUCKET = 'job-proofs';
 const PORTAL_PROOF_SELECT =
   'id, org_id, job_id, party_id, work_date, phase, storage_path, byte_size, duration_seconds, ' +
   'content_hash, captured_at, received_at, lat, lon, accuracy_m, state, checks, ai_summary, ' +
-  'ai_findings, ai_model, ai_material_change, analysis_status, legal_hold, retention_until';
+  'ai_findings, ai_model, ai_material_change, analysis_status, legal_hold, retention_until, labels';
 
 export const evidencePortalRouter = Router();
 
-/** The external door, mounted outside auth: the token is the whole credential. */
+/**
+ * The external door. The token scopes *what* can be seen; a signed-in
+ * Atmosphere account is *who* is seeing it — both are required. That trade
+ * (an account, for access) is deliberate: it puts a verified identity on
+ * every custody entry instead of "whoever held the link", and every adjuster
+ * and attorney who reviews evidence ends up inside Atmosphere.
+ */
 export const evidenceShareRouter = Router();
+evidenceShareRouter.use(requireAuth);
 
 const shareLimiter = rateLimit({
   windowMs: 60_000,
@@ -172,6 +185,7 @@ evidencePortalRouter.use(requireAuth);
 /** GET /api/evidence-portal/library — every clip on every job, newest first. */
 evidencePortalRouter.get('/library', async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const { q } = z.object({ q: z.string().max(120).optional() }).parse(req.query);
     const { supabase, orgId } = await requireOrgContext(req);
     const { data, error } = await supabase
       .from('job_proofs')
@@ -181,7 +195,19 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
       .limit(500);
     if (error) throw new HttpError(500, error.message, 'library_failed');
 
-    const items = await assembleLibrary(supabase, orgId, data ?? []);
+    let items = await assembleLibrary(supabase, orgId, data ?? []);
+    if (q?.trim()) {
+      // The labels are the index; names and hashes come along because that is
+      // what a person actually types. Substring, case-blind, in memory — 500
+      // serialized rows is small, and the GIN index earns its keep on the
+      // database-side queries analytics will run, not here.
+      const needle = q.trim().toLowerCase();
+      items = items.filter((item: any) =>
+        [...(item.labels ?? []), item.jobName, item.company, item.person, item.hash, item.phase]
+          .filter(Boolean)
+          .some((hay: string) => hay.toLowerCase().includes(needle)),
+      );
+    }
     res.json({
       items,
       counts: {
@@ -239,6 +265,69 @@ evidencePortalRouter.get(
 /** GET /api/evidence-portal/evidence/:proofId/video — minted and logged. */
 evidencePortalRouter.get('/evidence/:proofId/video', proofVideoUrl);
 
+/**
+ * GET /api/evidence-portal/evidence/:proofId/download
+ *
+ * The org keeping a copy of its own evidence. Free — it is their record —
+ * but still a ledger row and a custody entry, because "who has a copy of
+ * this clip outside the portal" is a question the org will one day be asked
+ * under oath, and the answer should be a query.
+ */
+evidencePortalRouter.get(
+  '/evidence/:proofId/download',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { supabase, orgId, userId } = await requireOrgContext(req);
+      const { data: proof } = await supabase
+        .from('job_proofs')
+        .select('id, job_id, storage_path, phase, work_date')
+        .eq('org_id', orgId)
+        .eq('id', req.params.proofId)
+        .maybeSingle();
+      if (!proof) throw new HttpError(404, 'No such clip.', 'not_found');
+
+      const admin = createAdminClient();
+      if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');
+
+      const decision = downloadDecision({ isOrgMember: true, feeCents: 0, ledgerStatus: null });
+      // Always 'mint' for a member; asserted so a future edit that breaks the
+      // rule fails loudly here rather than quietly charging the org.
+      if (decision.action !== 'mint') throw new HttpError(500, 'Download rule broke.', 'rule_broken');
+
+      await admin.from('evidence_downloads').insert({
+        org_id: orgId,
+        proof_id: (proof as any).id,
+        requested_by: userId,
+        requester_email: req.user?.email ?? '',
+        fee_cents: 0,
+        status: 'waived',
+        paid_via: 'org_member',
+        paid_at: new Date().toISOString(),
+      });
+
+      const { data, error } = await admin.storage
+        .from(PROOF_BUCKET)
+        .createSignedUrl((proof as any).storage_path, 600, { download: true });
+      if (error) throw new HttpError(500, error.message, 'signed_url_failed');
+
+      await recordAccess(supabase, {
+        orgId,
+        jobId: (proof as any).job_id,
+        proofId: (proof as any).id,
+        action: 'downloaded',
+        actorId: userId,
+        actorLabel: await actorLabelFor(supabase, userId),
+        actorRole: 'general_contractor',
+        detail: `original file · ${(proof as any).phase} · ${(proof as any).work_date}`,
+      });
+
+      res.json({ url: (data as any).signedUrl, expiresInSeconds: 600 });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 /* ---- Shares ---- */
 
 /** POST /api/evidence-portal/shares — hand the record to somebody outside. */
@@ -248,6 +337,9 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
       .object({
         jobId: z.string().uuid(),
         label: z.string().trim().min(2).max(200),
+        // Shares are account-to-account: the pin that makes the custody log
+        // name a person rather than a link.
+        recipientEmail: z.string().email(),
         // Zero means "until revoked" — allowed, but it has to be said.
         expiresInDays: z.number().int().min(0).max(365).default(30),
       })
@@ -273,6 +365,7 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
         org_id: orgId,
         job_id: body.jobId,
         label: body.label,
+        recipient_email: body.recipientEmail.toLowerCase(),
         created_by: userId,
         expires_at: expiresAt,
       })
@@ -289,7 +382,7 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
       actorId: userId,
       actorLabel: await actorLabelFor(supabase, userId),
       actorRole: 'general_contractor',
-      detail: `Verifier link issued to ${body.label}${
+      detail: `Verifier link issued to ${body.label} <${body.recipientEmail.toLowerCase()}>${
         expiresAt ? `, expires ${expiresAt.slice(0, 10)}` : ', no expiry'
       }`,
     });
@@ -393,13 +486,13 @@ evidencePortalRouter.post(
  * client throughout — the anonymous caller has no PostgREST identity, which is
  * the entire design.
  */
-async function shareForToken(token: string) {
+async function shareForToken(token: string, req: Request) {
   const admin = createAdminClient();
   if (!admin) throw new HttpError(503, 'Sharing is not configured on this server.', 'no_admin');
 
   const { data: share } = await admin
     .from('verifier_shares')
-    .select('id, org_id, job_id, label, expires_at, revoked_at, open_count')
+    .select('id, org_id, job_id, label, recipient_email, expires_at, revoked_at, open_count')
     .eq('access_token', token)
     .maybeSingle();
 
@@ -410,13 +503,31 @@ async function shareForToken(token: string) {
   if (state === 'revoked') throw new HttpError(410, 'This link was revoked.', 'revoked');
   if (state === 'expired') throw new HttpError(410, 'This link has expired.', 'expired');
 
-  return { share: share as any, admin };
+  const sessionEmail = req.user?.email ?? null;
+  if (!shareRecipientAllowed((share as any).recipient_email, sessionEmail)) {
+    throw new HttpError(
+      403,
+      `This evidence was shared with ${(share as any).recipient_email}. You are signed in as ${sessionEmail ?? 'nobody'} — sign in with the account the share was issued to.`,
+      'wrong_account',
+    );
+  }
+
+  // The custody log records the verified account, with the share's label as
+  // context. A named, signed-in identity survives a deposition; "someone
+  // with the link" does not.
+  const viewer = {
+    userId: req.user!.id,
+    email: sessionEmail as string,
+    custodyLabel: `${(share as any).label} — signed in as ${sessionEmail}`,
+  };
+
+  return { share: share as any, admin, viewer };
 }
 
 /** GET /api/verifier-share/:token — the job's evidence, for the link holder. */
 evidenceShareRouter.get('/:token', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { share, admin } = await shareForToken(req.params.token);
+    const { share, admin } = await shareForToken(req.params.token, req);
 
     const [{ data: job }, { data: proofs, error }] = await Promise.all([
       admin
@@ -466,7 +577,7 @@ evidenceShareRouter.get(
   '/:token/evidence/:proofId',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { share, admin } = await shareForToken(req.params.token);
+      const { share, admin, viewer } = await shareForToken(req.params.token, req);
 
       const { data: proof } = await admin
         .from('job_proofs')
@@ -493,7 +604,7 @@ evidenceShareRouter.get(
         jobId: share.job_id,
         proofId: req.params.proofId,
         action: 'viewed',
-        actorLabel: share.label,
+        actorLabel: viewer.custodyLabel,
         actorRole: 'external_reviewer',
         detail: 'via Verifier link — frames and analysis',
       });
@@ -515,7 +626,7 @@ evidenceShareRouter.get(
   '/:token/evidence/:proofId/video',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { share, admin } = await shareForToken(req.params.token);
+      const { share, admin, viewer } = await shareForToken(req.params.token, req);
 
       const { data: proof } = await admin
         .from('job_proofs')
@@ -535,7 +646,7 @@ evidenceShareRouter.get(
         jobId: share.job_id,
         proofId: req.params.proofId,
         action: 'viewed',
-        actorLabel: share.label,
+        actorLabel: viewer.custodyLabel,
         actorRole: 'external_reviewer',
         detail: `via Verifier link — original video, ${(proof as any).phase} · ${(proof as any).work_date}`,
       });
@@ -546,3 +657,165 @@ evidenceShareRouter.get(
     }
   },
 );
+
+/**
+ * POST /api/verifier-share/:token/evidence/:proofId/download
+ *
+ * Watching was free; keeping a copy is the paid act. The decision is the
+ * library's one rule; this route only fetches the org's fee, finds or opens
+ * the ledger row, and refuses to mint until the row is settled. 402 is the
+ * honest status code and it carries everything the client needs to proceed.
+ */
+evidenceShareRouter.post(
+  '/:token/evidence/:proofId/download',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { share, admin, viewer } = await shareForToken(req.params.token, req);
+
+      const { data: proof } = await admin
+        .from('job_proofs')
+        .select('id, job_id, storage_path, phase, work_date')
+        .eq('job_id', share.job_id)
+        .eq('id', req.params.proofId)
+        .maybeSingle();
+      if (!proof) throw new HttpError(404, 'No such clip on this job.', 'not_found');
+
+      const { data: policy } = await admin
+        .from('evidence_download_policy')
+        .select('download_fee_cents')
+        .eq('org_id', share.org_id)
+        .maybeSingle();
+      const feeCents = (policy as any)?.download_fee_cents ?? 2500;
+
+      const { data: ledger } = await admin
+        .from('evidence_downloads')
+        .select('id, status')
+        .eq('proof_id', (proof as any).id)
+        .eq('requested_by', viewer.userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const decision = downloadDecision({
+        isOrgMember: false,
+        feeCents,
+        ledgerStatus: ((ledger as any)?.status as any) ?? null,
+      });
+
+      if (decision.action === 'require_payment') {
+        // One pending row per requester per clip; asking twice is not two debts.
+        let downloadId = (ledger as any)?.status === 'pending_payment' ? (ledger as any).id : null;
+        if (!downloadId) {
+          const { data: created, error } = await admin
+            .from('evidence_downloads')
+            .insert({
+              org_id: share.org_id,
+              proof_id: (proof as any).id,
+              share_id: share.id,
+              requested_by: viewer.userId,
+              requester_email: viewer.email,
+              fee_cents: feeCents,
+              status: 'pending_payment',
+            })
+            .select('id')
+            .single();
+          if (error) throw new HttpError(500, error.message, 'ledger_failed');
+          downloadId = (created as any).id;
+        }
+        res.status(402).json({
+          feeCents,
+          downloadId,
+          message: `Downloading the original file costs $${(feeCents / 100).toFixed(2)}. Viewing remains free.`,
+        });
+        return;
+      }
+
+      // Settled (or the org charges nothing): mint, ledger the free case, log.
+      if (decision.reason === 'no_fee' && !(ledger as any)) {
+        await admin.from('evidence_downloads').insert({
+          org_id: share.org_id,
+          proof_id: (proof as any).id,
+          share_id: share.id,
+          requested_by: viewer.userId,
+          requester_email: viewer.email,
+          fee_cents: 0,
+          status: 'waived',
+          paid_via: 'no_fee',
+          paid_at: new Date().toISOString(),
+        });
+      }
+
+      const { data, error } = await admin.storage
+        .from(PROOF_BUCKET)
+        .createSignedUrl((proof as any).storage_path, 600, { download: true });
+      if (error) throw new HttpError(500, error.message, 'signed_url_failed');
+
+      await recordAccess(admin, {
+        orgId: share.org_id,
+        jobId: share.job_id,
+        proofId: (proof as any).id,
+        action: 'downloaded',
+        actorLabel: viewer.custodyLabel,
+        actorRole: 'external_reviewer',
+        detail: `original file · ${(proof as any).phase} · ${(proof as any).work_date} · ${decision.reason === 'paid' ? `fee $${(feeCents / 100).toFixed(2)} paid` : decision.reason}`,
+      });
+
+      res.json({ url: (data as any).signedUrl, expiresInSeconds: 600 });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/verifier-share/:token/downloads/:downloadId/pay
+ *
+ * Settlement. In production this endpoint refuses — a real charge settles
+ * through Stripe checkout landing on the webhooks router, the same path the
+ * billing credits already use — and the refusal names that, so nobody ships
+ * a build where "pay" is a button that pretends. Outside production it
+ * settles as 'dev' so the whole flow is exercisable end to end.
+ */
+evidenceShareRouter.post(
+  '/:token/downloads/:downloadId/pay',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { share, admin, viewer } = await shareForToken(req.params.token, req);
+
+      if (config.isProduction) {
+        throw new HttpError(
+          501,
+          'Card payment for downloads is not wired on this server yet. The charge will settle through Stripe checkout; until then, ask the sharing organization to waive the fee.',
+          'payment_not_wired',
+        );
+      }
+
+      const { data: ledger } = await admin
+        .from('evidence_downloads')
+        .select('id, status, requested_by, org_id')
+        .eq('id', req.params.downloadId)
+        .maybeSingle();
+      if (!ledger || (ledger as any).org_id !== share.org_id) {
+        throw new HttpError(404, 'No such download request.', 'not_found');
+      }
+      if ((ledger as any).requested_by !== viewer.userId) {
+        throw new HttpError(403, 'This download request belongs to another account.', 'not_yours');
+      }
+      if ((ledger as any).status !== 'pending_payment') {
+        res.json({ ok: true, alreadySettled: true });
+        return;
+      }
+
+      const { error } = await admin
+        .from('evidence_downloads')
+        .update({ status: 'paid', paid_via: 'dev', paid_at: new Date().toISOString() })
+        .eq('id', (ledger as any).id);
+      if (error) throw new HttpError(400, error.message, 'settle_failed');
+
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+

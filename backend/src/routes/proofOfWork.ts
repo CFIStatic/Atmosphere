@@ -18,6 +18,9 @@ import {
 import { RetryQueue } from '../shared/retryQueue.js';
 import { attachProofToEpisode } from '../episodes/attach.js';
 import { isModelProviderConfigured } from '../lib/anthropic.js';
+import { config } from '../config.js';
+import { DailyBudget } from '../shared/liveBudget.js';
+import { labelsForProof } from '../verifier/library.js';
 import { buildCaptureGuide } from '../shared/captureGuide.js';
 import { scopeForParty } from '../shared/jobRecord.js';
 import {
@@ -591,12 +594,27 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
   });
   if (!narration) throw new Error('The model reply was not usable.');
 
+  // The historical index rides the same write: phase, trade, and the stages
+  // the narration actually saw, flattened for the GIN index so "every
+  // flood-cut video ever" stays a millisecond query.
+  const { data: partyRow } = await admin
+    .from('job_parties')
+    .select('trade')
+    .eq('id', job.partyId)
+    .maybeSingle();
+
   await write({
     narration: { entries: narration.entries, coverage: narration.coverage, model: narration.model },
     narration_text: narration.report,
     narration_status: 'done',
     narration_error: null,
     narrated_at: new Date().toISOString(),
+    labels: labelsForProof({
+      phase: job.phase,
+      trade: (partyRow as any)?.trade ?? null,
+      narration: { coverage: narration.coverage },
+      stageKinds: steps.map((s) => s.kind),
+    }),
   });
 
   await recordAccess(admin, {
@@ -649,6 +667,8 @@ async function queueNarration(admin: any, party: any, proofId: string, phase: st
  * caller carries its own history — so a dropped connection costs one frame,
  * not a session.
  */
+const liveBudget = new DailyBudget(config.technician.assistant.liveDailyCapPerOrg);
+
 export async function liveObserve(req: Request, res: Response, next: NextFunction) {
   try {
     const body = z
@@ -662,6 +682,18 @@ export async function liveObserve(req: Request, res: Response, next: NextFunctio
 
     if (!isModelProviderConfigured()) {
       throw new HttpError(503, 'Live monitoring needs a configured model.', 'no_model');
+    }
+
+    // The cost fuse. Spent before the model call, because the point of a
+    // ceiling is that nothing above it gets billed. The client shows
+    // "monitoring unavailable" and the recording carries on untouched.
+    const budget = liveBudget.spend(orgId);
+    if (!budget.allowed) {
+      throw new HttpError(
+        429,
+        "Today's live-monitoring allowance is used up. Filed videos still get their narrated reports; live commentary returns tomorrow.",
+        'live_budget_exhausted',
+      );
     }
 
     const { data: scope } = await supabase

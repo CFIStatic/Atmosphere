@@ -1218,7 +1218,51 @@
       '<dt>Episode tier</dt><dd>Tier ' + item.tier + '</dd>' +
       '</dl>' +
       '<p class="footnote">The hash is of the original bytes as uploaded. Re-uploading the same file on another ' +
-      'day or another job is caught by it, which is the cheapest fraud there is and the cheapest to catch.</p>';
+      'day or another job is caught by it, which is the cheapest fraud there is and the cheapest to catch.</p>' +
+      (item._remote && SHARE_TOKEN
+        ? '<div id="dl-block" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line-soft)">' +
+          '<button id="dl-btn" class="navitem" style="width:auto;border:1px solid var(--line);font-weight:600">Download original file</button>' +
+          '<p id="dl-msg" class="footnote" style="margin-top:8px">Viewing is free. Keeping a copy carries the sharing organization\u2019s download fee, and every download is on the access log.</p>' +
+          '</div>'
+        : '');
+
+    var dlBtn = document.getElementById('dl-btn');
+    if (dlBtn) dlBtn.addEventListener('click', function () { requestDownload(item, null); });
+  }
+
+  /**
+   * Watching is free; keeping a copy settles a fee first. The 402 carries the
+   * price and the ledger row; Pay settles it (Stripe in production, the dev
+   * path here) and the retry mints the real file.
+   */
+  function requestDownload(item, downloadId) {
+    var msg = document.getElementById('dl-msg');
+    var btn = document.getElementById('dl-btn');
+    var base = '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN);
+    fetch(base + '/evidence/' + encodeURIComponent(item.id) + '/download', { method: 'POST', credentials: 'include' })
+      .then(function (r) { return r.json().then(function (body) { return { status: r.status, body: body }; }); })
+      .then(function (res) {
+        if (res.status === 402) {
+          if (msg) msg.textContent = res.body.message + ' Every download is on the access log.';
+          if (btn) {
+            btn.textContent = 'Pay $' + (res.body.feeCents / 100).toFixed(2) + ' and download';
+            btn.onclick = function () {
+              fetch(base + '/downloads/' + encodeURIComponent(res.body.downloadId) + '/pay', { method: 'POST', credentials: 'include' })
+                .then(function (r2) { return r2.json(); })
+                .then(function () { requestDownload(item, res.body.downloadId); })
+                .catch(function () { if (msg) msg.textContent = 'Payment did not go through. Try again.'; });
+            };
+          }
+          return;
+        }
+        if (res.status >= 400) {
+          if (msg) msg.textContent = (res.body && res.body.error) || 'The download could not be prepared.';
+          return;
+        }
+        if (msg) msg.textContent = 'Ready \u2014 the link is good for ten minutes, and this download is now on the access log.';
+        window.open(res.body.url, '_blank');
+      })
+      .catch(function () { if (msg) msg.textContent = 'The download could not be prepared.'; });
   }
 
   /* ------------------------------------------------------------------ *
@@ -1338,7 +1382,7 @@
   }
 
   function fetchRemoteDetail(item) {
-    return fetch('/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id))
+    return fetch('/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id), { credentials: 'include' })
       .then(function (r) { if (!r.ok) throw new Error('detail'); return r.json(); })
       .then(function (payload) {
         item.custody = (payload.custody || []).map(function (c) {
@@ -1363,19 +1407,42 @@
   }
 
   function deadLink(status, body) {
+    var main = document.querySelector('.main');
+    document.querySelector('.rail').innerHTML = '';
+
+    // Evidence is shared account-to-account. No session, or the wrong one,
+    // is not a dead link — it is a door that knows who it opens for.
+    if (status === 401) {
+      main.innerHTML =
+        '<div class="empty" style="padding-top:120px">' +
+        '<p style="font-size:16px;font-weight:650;color:var(--ink)">Sign in to view this evidence.</p>' +
+        '<p style="margin-top:8px">This record was shared with your Atmosphere account. Signing in is what puts your name — rather than \u201csomeone with the link\u201d — on the access log.</p>' +
+        '<p style="margin-top:14px"><a href="/login?src=verifier-share" style="display:inline-block;background:var(--accent);color:#fff;font-weight:600;border-radius:8px;padding:9px 16px;text-decoration:none">Sign in</a>' +
+        '<a href="/login?mode=signup&src=verifier-share" style="display:inline-block;margin-left:10px;color:var(--accent);font-weight:600;text-decoration:none">Create a free account</a></p>' +
+        '</div>';
+      return;
+    }
+    if (status === 403) {
+      main.innerHTML =
+        '<div class="empty" style="padding-top:120px">' +
+        '<p style="font-size:16px;font-weight:650;color:var(--ink)">This share belongs to a different account.</p>' +
+        '<p style="margin-top:8px">' + esc((body && body.error) || 'Sign in with the account the share was issued to.') + '</p>' +
+        '</div>';
+      return;
+    }
+
     var word = (body && body.code === 'revoked') ? 'revoked'
       : (body && body.code === 'expired') ? 'expired'
       : status === 404 ? 'not recognised' : 'unavailable';
-    document.querySelector('.main').innerHTML =
+    main.innerHTML =
       '<div class="empty" style="padding-top:120px">' +
       '<p style="font-size:16px;font-weight:650;color:var(--ink)">This evidence link is ' + word + '.</p>' +
       '<p style="margin-top:8px">Ask the person who sent it to issue a new one — links are scoped, expiring, and revocable by design.</p>' +
       '</div>';
-    document.querySelector('.rail').innerHTML = '';
   }
 
   if (SHARE_TOKEN) {
-    fetch('/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN))
+    fetch('/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN), { credentials: 'include' })
       .then(function (r) {
         return r.json().then(function (body) {
           if (!r.ok) { deadLink(r.status, body); return null; }

@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   analysisStateOf,
+  downloadDecision,
+  labelsForProof,
+  shareRecipientAllowed,
   integrityOf,
   labelForCheck,
   needsAttention,
@@ -189,4 +192,78 @@ test('serialization: a wrong-house clip arrives flagged with no analysis body', 
   assert.equal(item.gps, null);
   assert.equal(item.tier, 1, 'no episode yet reads as Tier 1, not as nothing');
   assert.equal(item.legalHold, true);
+});
+
+
+/* ---- labels ---- */
+
+test('labels flatten what the narration saw, and only what it saw', () => {
+  const labels = labelsForProof({
+    phase: 'after',
+    trade: 'Roofing',
+    stageKinds: ['anchor', 'scope', 'exclusion', 'wrap'],
+    narration: {
+      coverage: [
+        { stageIndex: 0, label: 'Start outside, facing the front of the building', seen: true },
+        { stageIndex: 1, label: 'Walk the area for \u201cStrip north slope to decking\u201d', seen: true },
+        { stageIndex: 2, label: 'Pass the excluded area \u2014 \u201cTouch the skylights\u201d', seen: false },
+        { stageIndex: 3, label: 'Finish on anything unexpected you found', seen: true },
+      ],
+    },
+  });
+  assert.ok(labels.includes('after'));
+  assert.ok(labels.includes('roofing'));
+  assert.ok(labels.includes('strip north slope to decking'), 'the quoted scope title is the label');
+  assert.ok(labels.includes('stage:anchor'));
+  assert.ok(labels.includes('stage:wrap'));
+  // The unseen exclusion earns nothing: the index says what the footage
+  // shows, not what the guide asked for.
+  assert.ok(!labels.includes('touch the skylights'));
+  assert.ok(!labels.includes('stage:exclusion'));
+});
+
+test('labels survive a clip with no narration at all', () => {
+  const labels = labelsForProof({ phase: 'before', trade: null, narration: null });
+  assert.deepEqual(labels, ['before']);
+});
+
+/* ---- downloads ---- */
+
+test('the org always mints; outsiders mint only settled or free', () => {
+  assert.deepEqual(downloadDecision({ isOrgMember: true, feeCents: 2500, ledgerStatus: null }), {
+    action: 'mint',
+    reason: 'org_member',
+  });
+  assert.deepEqual(downloadDecision({ isOrgMember: false, feeCents: 2500, ledgerStatus: 'paid' }), {
+    action: 'mint',
+    reason: 'paid',
+  });
+  assert.deepEqual(downloadDecision({ isOrgMember: false, feeCents: 2500, ledgerStatus: 'waived' }), {
+    action: 'mint',
+    reason: 'waived',
+  });
+  assert.deepEqual(downloadDecision({ isOrgMember: false, feeCents: 0, ledgerStatus: null }), {
+    action: 'mint',
+    reason: 'no_fee',
+  });
+  assert.deepEqual(
+    downloadDecision({ isOrgMember: false, feeCents: 2500, ledgerStatus: 'pending_payment' }),
+    { action: 'require_payment', feeCents: 2500 },
+  );
+  assert.deepEqual(downloadDecision({ isOrgMember: false, feeCents: 2500, ledgerStatus: null }), {
+    action: 'require_payment',
+    feeCents: 2500,
+  });
+});
+
+/* ---- recipient pinning ---- */
+
+test('a share opens only for the pinned account; a legacy share for any account', () => {
+  assert.equal(shareRecipientAllowed('R.Calloway@Alliance.com', 'r.calloway@alliance.com'), true);
+  assert.equal(shareRecipientAllowed('r.calloway@alliance.com', 'someone@else.com'), false);
+  // No session is never allowed, pin or no pin — the account is the floor.
+  assert.equal(shareRecipientAllowed('r.calloway@alliance.com', null), false);
+  assert.equal(shareRecipientAllowed(null, null), false);
+  // Legacy rows without a pin still require an account, any account.
+  assert.equal(shareRecipientAllowed(null, 'anyone@example.com'), true);
 });

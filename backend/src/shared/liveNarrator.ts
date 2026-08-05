@@ -82,22 +82,30 @@ export async function observeLiveFrame(input: {
   if (!input.steps.length) return null;
 
   const list = input.steps.map((s, i) => `${i}. [${s.kind}] ${s.label}`).join('\n');
+  // The cheap tier, cached. This call repeats every eight seconds with the
+  // same system prompt and the same shot list — only the image changes — so
+  // both static blocks carry cache markers and successive ticks pay the
+  // cached rate on everything but the frame itself. Model choice and caching
+  // together are what make a forty-call walkthrough cost cents.
   const response = await anthropicClient().messages.create({
-    model: config.technician.assistant.model,
+    model: config.technician.assistant.liveModel,
     max_tokens: 200,
-    system: OBSERVE_SYSTEM,
+    system: [{ type: 'text', text: OBSERVE_SYSTEM, cache_control: { type: 'ephemeral' } }],
     messages: [
       {
         role: 'user',
         content: [
           {
             type: 'text',
+            text: `The shot list:\n${list}`,
+            cache_control: { type: 'ephemeral' },
+          },
+          {
+            type: 'text',
             text:
-              `The shot list:\n${list}\n` +
               (input.lastStageIndex !== null && input.lastStageIndex !== undefined
                 ? `The previous frame was judged stage ${input.lastStageIndex}. Stages usually run in order, but do not force it.\n`
-                : '') +
-              'The current frame:',
+                : '') + 'The current frame:',
           },
           {
             type: 'image',

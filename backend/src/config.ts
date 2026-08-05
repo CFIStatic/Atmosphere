@@ -155,6 +155,17 @@ export const config = {
     assistant: {
       apiKey: process.env.ANTHROPIC_API_KEY ?? '',
       model: process.env.ANTHROPIC_MODEL ?? 'claude-opus-5',
+      // The live capture loop is a five-way classification of a single still,
+      // forty times per walkthrough. That is the cheapest tier's job, and
+      // putting the flagship on it would multiply the pipeline's whole cost
+      // for no visible gain. Narration and the day comparison stay on the
+      // stronger model — they write records people act on.
+      liveModel: process.env.LIVE_OBSERVE_MODEL ?? 'claude-haiku-4-5-20251001',
+      // Per-org, per-day ceiling on live observations. At the default cadence
+      // one walkthrough is ~40 calls, so 2000 is roughly fifty walkthroughs a
+      // day — genuinely heavy use — while capping the worst case (a camera
+      // left recording overnight) at pocket change instead of a surprise.
+      liveDailyCapPerOrg: Number(process.env.LIVE_OBSERVE_DAILY_CAP ?? 2000),
       // Voice replies are spoken aloud, so they must stay short. This caps the
       // response; the system prompt asks for brevity as well.
       maxTokens: Number(process.env.ASSISTANT_MAX_TOKENS ?? 512),

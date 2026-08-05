@@ -147,6 +147,7 @@ export function VideoCapturePanel({ onSaved, onDetections, liveContext }: Props)
   const [observations, setObservations] = useState<Array<LiveStageObservation & { at: number }>>([]);
   const [liveState, setLiveState] = useState<'off' | 'watching' | 'unavailable'>('off');
   const lastStageRef = useRef<number | null>(null);
+  const lastThumbRef = useRef<Uint8ClampedArray | null>(null);
 
   useEffect(() => {
     if (!recording || !liveContext) {
@@ -160,9 +161,35 @@ export function VideoCapturePanel({ onSaved, onDetections, liveContext }: Props)
     setLiveState('watching');
     let cancelled = false;
 
+    /**
+     * The cheapest token is the one never sent. A camera resting on a tailgate
+     * produces near-identical frames for minutes; an 8x8 luma thumbnail costs
+     * microseconds to compare and skips the API call when nothing moved.
+     */
+    const changedSinceLastSample = (video: HTMLVideoElement): boolean => {
+      const probe = document.createElement('canvas');
+      probe.width = 8;
+      probe.height = 8;
+      const pctx = probe.getContext('2d');
+      if (!pctx) return true;
+      pctx.drawImage(video, 0, 0, 8, 8);
+      const { data } = pctx.getImageData(0, 0, 8, 8);
+      const luma = new Uint8ClampedArray(64);
+      for (let i = 0; i < 64; i += 1) {
+        luma[i] = (data[i * 4] + data[i * 4 + 1] + data[i * 4 + 2]) / 3;
+      }
+      const prior = lastThumbRef.current;
+      lastThumbRef.current = luma;
+      if (!prior) return true;
+      let delta = 0;
+      for (let i = 0; i < 64; i += 1) delta += Math.abs(luma[i] - prior[i]);
+      return delta / 64 > 4;
+    };
+
     const sample = async () => {
       const video = videoRef.current;
       if (!video || !video.videoWidth || cancelled) return;
+      if (!changedSinceLastSample(video)) return;
       const canvas = document.createElement('canvas');
       const scale = Math.min(1, 640 / video.videoWidth);
       canvas.width = Math.round(video.videoWidth * scale);

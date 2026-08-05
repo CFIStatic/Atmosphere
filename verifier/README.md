@@ -39,3 +39,18 @@ gets mistaken for the second, and that mistake releases money.
 **Unknown is its own state.** Styled as neither pass nor fail, because an
 unchecked clip is not a clean one — and "we could not tell" is an answer the
 system is required to be able to give.
+
+## The access model
+
+Shares are account-to-account. A share is issued to a recipient's email and
+opens only for a signed-in Atmosphere account matching it — which is what puts
+a verified identity on every custody entry instead of "someone with the link",
+and is also why every adjuster and attorney who reviews evidence ends up with
+an Atmosphere account.
+
+Watching is free; keeping a copy is not. A download by an external account
+settles the sharing organization's fee first (their `evidence_download_policy`
+row; $25 by default), through an append-once ledger — no signed download URL
+exists until the ledger row reads paid or waived. The org's own members
+download their evidence free, but still through the ledger and the custody
+log, because "who holds a copy of this clip" should always be a query.

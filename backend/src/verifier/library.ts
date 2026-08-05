@@ -200,6 +200,7 @@ export function serializeEvidence(input: {
     flagged: needsAttention({ integrity, analysis, materialChange }),
     legalHold: Boolean(proof.legal_hold),
     retentionUntil: proof.retention_until ?? null,
+    labels: Array.isArray(proof.labels) ? proof.labels : [],
     analysis:
       analysis === 'done'
         ? {
@@ -218,4 +219,86 @@ export function serializeEvidence(input: {
           }
         : null,
   };
+}
+
+/* ------------------------------------------------------------------ *
+ * Labels — the historical library's index
+ * ------------------------------------------------------------------ */
+
+/**
+ * Flatten one clip's queryable facts into the label array the GIN index
+ * serves. Derived and recomputable, never hand-edited: phase, trade, the
+ * stage kinds the narration actually saw, and the scope areas it visited —
+ * lowercased, deduped, and capped, because an index that grows unbounded
+ * stops being one.
+ */
+export function labelsForProof(input: {
+  phase: string;
+  trade?: string | null;
+  narration?: {
+    entries?: Array<{ stageIndex: number }>;
+    coverage?: Array<{ stageIndex: number; label: string; seen: boolean }>;
+  } | null;
+  stageKinds?: string[];
+  materialChange?: string | null;
+}): string[] {
+  const labels = new Set<string>();
+  labels.add(input.phase.toLowerCase());
+  if (input.trade?.trim()) labels.add(input.trade.trim().toLowerCase());
+  if (input.materialChange) labels.add(`change:${input.materialChange}`);
+
+  const coverage = input.narration?.coverage ?? [];
+  for (const step of coverage) {
+    if (!step.seen) continue;
+    // The step label is a sentence; the label index wants a phrase. Strip the
+    // quoted scope title out when there is one, else the first clause.
+    const quoted = step.label.match(/[\u201c"]([^\u201d"]{2,80})[\u201d"]/);
+    const phrase = (quoted ? quoted[1] : step.label.split('\u2014')[0]).trim().toLowerCase();
+    if (phrase) labels.add(phrase.slice(0, 60));
+    const kind = input.stageKinds?.[step.stageIndex];
+    if (kind) labels.add(`stage:${kind}`);
+  }
+
+  return [...labels].slice(0, 24);
+}
+
+/* ------------------------------------------------------------------ *
+ * Downloads — watching is free, keeping a copy is not
+ * ------------------------------------------------------------------ */
+
+export type DownloadDecision =
+  | { action: 'mint'; reason: 'org_member' | 'paid' | 'waived' | 'no_fee' }
+  | { action: 'require_payment'; feeCents: number };
+
+/**
+ * Whether a download URL may exist for this requester, and why — one rule for
+ * both doors, so the org's own member and the external account are decided by
+ * the same sentence. The org's people always mint (it is their evidence);
+ * outside accounts mint when their ledger row is settled or the org charges
+ * nothing at all.
+ */
+export function downloadDecision(input: {
+  isOrgMember: boolean;
+  feeCents: number;
+  ledgerStatus: 'pending_payment' | 'paid' | 'waived' | null;
+}): DownloadDecision {
+  if (input.isOrgMember) return { action: 'mint', reason: 'org_member' };
+  if (input.ledgerStatus === 'paid') return { action: 'mint', reason: 'paid' };
+  if (input.ledgerStatus === 'waived') return { action: 'mint', reason: 'waived' };
+  if (input.feeCents === 0) return { action: 'mint', reason: 'no_fee' };
+  return { action: 'require_payment', feeCents: input.feeCents };
+}
+
+/**
+ * May this session open this share at all. The share is pinned to an email at
+ * issue time; a legacy row without one accepts any signed-in account (the
+ * account requirement still holds — that is the floor, not the pin).
+ */
+export function shareRecipientAllowed(
+  recipientEmail: string | null | undefined,
+  sessionEmail: string | null | undefined,
+): boolean {
+  if (!sessionEmail?.trim()) return false;
+  if (!recipientEmail?.trim()) return true;
+  return recipientEmail.trim().toLowerCase() === sessionEmail.trim().toLowerCase();
 }
