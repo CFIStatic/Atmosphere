@@ -735,6 +735,8 @@ export interface ProofDay {
     /** Whether each clip opened at the property exterior, as the guide asks. */
     opening?: { before: OpeningWord; after: OpeningWord };
   } | null;
+  /** Per-video narrated reports, independent of the day comparison. */
+  reports?: { before: ProofVideoReport | null; after: ProofVideoReport | null };
   /** Ordered: before first, then after. */
   proofIds: string[];
 }
@@ -753,6 +755,24 @@ export interface CaptureGuide {
   phase: 'before' | 'after';
   steps: CaptureStep[];
   targetSeconds: number;
+}
+
+/** One live frame, judged against the shot list while the camera runs. */
+export interface LiveStageObservation {
+  stageIndex: number;
+  stageLabel: string;
+  stageKind: CaptureStep['kind'] | null;
+  note: string;
+  confidence: number;
+}
+
+/** The report attached to one filed video. */
+export interface ProofVideoReport {
+  status: 'queued' | 'running' | 'done' | 'skipped' | 'failed' | null;
+  text: string | null;
+  entries: Array<{ frame: number; atSeconds: number; stageIndex: number; note: string }>;
+  coverage: Array<{ stageIndex: number; label: string; seen: boolean }>;
+  error: string | null;
 }
 
 export interface ScopeVerdict {
@@ -2401,6 +2421,15 @@ export const api = {
 
   setEvidenceHold: (jobId: string, proofId: string, input: { hold: boolean; reason?: string }) =>
     request<{ ok: boolean }>(`/api/operations/shared/${jobId}/evidence/${proofId}/hold`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  liveObserve: (
+    jobId: string,
+    input: { phase: 'before' | 'after'; frameBase64: string; lastStageIndex?: number | null },
+  ) =>
+    request<LiveStageObservation>(`/api/operations/shared/${jobId}/live-observe`, {
       method: 'POST',
       body: JSON.stringify(input),
     }),

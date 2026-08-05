@@ -40,6 +40,7 @@ const DETECTION_FRESHNESS_MS = 2 * 60 * 1000;
 export function TechnicianPage() {
   const { user, membership, logout } = useAuth();
   const [view, setView] = useState<View>('capture');
+  const [guideContext, setGuideContext] = useState<{ jobId: string; phase: 'before' | 'after' } | null>(null);
   const [capabilities, setCapabilities] = useState<TechnicianCapabilities | null>(null);
   const [recordings, setRecordings] = useState<StoredRecording[] | null>(null);
   const [detected, setDetected] = useState<{ labels: string[]; at: number }>({ labels: [], at: 0 });
@@ -254,8 +255,12 @@ export function TechnicianPage() {
                   hardware (and the browser's recording indicator) live. */}
               {view !== 'recordings' && (
                 <>
-                  <CaptureGuidePanel />
-                  <VideoCapturePanel onSaved={handleSaved} onDetections={handleDetections} />
+                  <CaptureGuidePanel onContext={setGuideContext} />
+                  <VideoCapturePanel
+                    onSaved={handleSaved}
+                    onDetections={handleDetections}
+                    liveContext={guideContext}
+                  />
                   <AudioRecorderPanel onSaved={handleSaved} />
                 </>
               )}

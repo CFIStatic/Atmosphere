@@ -11,7 +11,15 @@ import { CaptureGuideSteps } from '../shared/CaptureGuideSteps';
  * the final step simply hands off to it. No hide/show, no ceremony — a crew
  * that has to open a drawer to find the instructions will not open it twice.
  */
-export function CaptureGuidePanel() {
+export function CaptureGuidePanel({
+  onContext,
+}: {
+  /**
+   * Reports the selected job and phase upward, so the camera panel below can
+   * run live monitoring against the same shot list this guide is showing.
+   */
+  onContext?: (context: { jobId: string; phase: 'before' | 'after' } | null) => void;
+}) {
   const [jobs, setJobs] = useState<JobSummary[] | null>(null);
   const [jobId, setJobId] = useState<string>('');
   const [phase, setPhase] = useState<'before' | 'after'>('before');
@@ -26,6 +34,10 @@ export function CaptureGuidePanel() {
       })
       .catch(() => setJobs([]));
   }, []);
+
+  useEffect(() => {
+    onContext?.(jobId ? { jobId, phase } : null);
+  }, [jobId, phase, onContext]);
 
   useEffect(() => {
     if (!jobId) {

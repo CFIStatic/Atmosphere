@@ -312,6 +312,52 @@ export function ProofOfWork({ jobId }: { jobId: string }) {
                             {day.aiFindings.materialBecause}
                           </p>
                         )}
+                        {(day.reports?.before || day.reports?.after) && (
+                          <div className="mt-2 space-y-2">
+                            {(['before', 'after'] as const).map((half) => {
+                              const report = day.reports?.[half];
+                              if (!report) return null;
+                              return (
+                                <div key={half} className="rounded-lg bg-paper-100/60 px-2.5 py-2">
+                                  <p className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-400">
+                                    {half} video — narrated report
+                                  </p>
+                                  {report.status === 'done' && report.text ? (
+                                    <>
+                                      <p className="mt-1 text-[11.5px] leading-snug text-ink-700">
+                                        {report.text}
+                                      </p>
+                                      {report.coverage.length > 0 && (
+                                        <p className="mt-1 text-[10.5px] text-ink-500">
+                                          Covered {report.coverage.filter((c) => c.seen).length} of{' '}
+                                          {report.coverage.length} shot-list steps
+                                          {report.coverage.some((c) => !c.seen) &&
+                                            ` — missing: ${report.coverage
+                                              .filter((c) => !c.seen)
+                                              .map((c) => c.label.toLowerCase())
+                                              .slice(0, 2)
+                                              .join('; ')}${
+                                              report.coverage.filter((c) => !c.seen).length > 2 ? '…' : ''
+                                            }`}
+                                        </p>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <p className="mt-1 text-[11px] text-ink-500">
+                                      {report.status === 'queued' || report.status === 'running'
+                                        ? 'Being written — the model is reading the clip now.'
+                                        : report.status === 'failed'
+                                          ? `Failed: ${report.error ?? 'the model reply was not usable.'}`
+                                          : report.status === 'skipped'
+                                            ? (report.error ?? 'Skipped.')
+                                            : 'Not narrated.'}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                         {day.aiFindings?.opening && (
                           <p className="mt-1 text-[11px] text-ink-500">
                             Opening shots — before: {OPENING_WORDS[day.aiFindings.opening.before]}

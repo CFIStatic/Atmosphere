@@ -18,6 +18,13 @@ import {
 import { RetryQueue } from '../shared/retryQueue.js';
 import { attachProofToEpisode } from '../episodes/attach.js';
 import { isModelProviderConfigured } from '../lib/anthropic.js';
+import { buildCaptureGuide } from '../shared/captureGuide.js';
+import { scopeForParty } from '../shared/jobRecord.js';
+import {
+  narrateProofVideo,
+  observeLiveFrame,
+  stepsForNarration,
+} from '../shared/liveNarrator.js';
 
 /**
  * Proof of work: the endpoints.
@@ -41,6 +48,7 @@ const PROOF_SELECT =
   'id, party_id, work_date, phase, storage_path, byte_size, duration_seconds, content_hash, ' +
   'captured_at, received_at, lat, lon, accuracy_m, state, checks, ai_summary, ai_findings, ' +
   'ai_model, ai_material_change, analysis_status, analysis_error, analysed_at, ' +
+  'narration, narration_text, narration_status, narration_error, ' +
   'decided_at, decided_note, created_at';
 
 /** The row shape the verifier wants. */
@@ -228,11 +236,21 @@ export async function recordProof(party: any, admin: any, body: unknown) {
     }
   }
 
-  // Analysis is queued, not awaited. A twenty-second vision call does not
-  // belong inside a phone's POST on a truck's signal — the upload records and
-  // returns, and the queue reads the day in the background. Queued on either
-  // phase, because refilming the before invalidates an analysis just as surely
-  // as filing the after completes one.
+  // Two readings queue here, not one. The narration is per-video and exists
+  // the moment this clip lands — its report rides the clip. The comparison is
+  // per-day and waits for its pair. Neither is awaited: a vision call does not
+  // belong inside a phone's POST on a truck's signal.
+  if (input.frames?.length) {
+    await queueNarration(admin, party, (proof as any).id, input.phase, input.workDate);
+  } else {
+    await admin
+      .from('job_proofs')
+      .update({
+        narration_status: 'skipped',
+        narration_error: 'The device uploaded no frames for this clip.',
+      })
+      .eq('id', (proof as any).id);
+  }
   const analysis = await queueDayAnalysis(admin, party, input.workDate);
 
   // The same upload, seen as an episode. Additive and non-blocking: it never
@@ -488,6 +506,202 @@ async function queueDayAnalysis(admin: any, party: any, workDate: string): Promi
   return 'queued';
 }
 
+/* ---- Per-video narration -------------------------------------------------- */
+
+interface NarrationJob {
+  key: string;
+  proofId: string;
+  orgId: string;
+  jobId: string;
+  partyId: string;
+  phase: string;
+  workDate: string;
+}
+
+/** The shot list this crew was actually given, for grounding the narration. */
+async function guideStepsFor(admin: any, jobId: string, partyId: string, phase: string) {
+  const { data: scope } = await admin
+    .from('job_scope_items')
+    .select('title, state, reason, party_id, created_at')
+    .eq('job_id', jobId)
+    .order('created_at');
+  const mine = scopeForParty((scope ?? []) as any[], partyId);
+  const guide = buildCaptureGuide({
+    phase: phase === 'after' ? 'after' : 'before',
+    scope: mine.map((s: any) => ({ title: s.title, state: s.state, reason: s.reason })),
+  });
+  return {
+    steps: stepsForNarration(guide.steps),
+    scopeTitles: mine.filter((s: any) => s.state !== 'declined').map((s: any) => s.title),
+  };
+}
+
+/**
+ * Read one video's stored frames back out of the bucket. The device already
+ * extracted and uploaded them at filing time, so narration needs no video
+ * toolchain — just the JPEGs it was always going to read.
+ */
+async function framesFor(admin: any, proofId: string) {
+  const { data: rows } = await admin
+    .from('job_proof_frames')
+    .select('at_seconds, storage_path')
+    .eq('proof_id', proofId)
+    .order('at_seconds');
+  const frames: Array<{ atSeconds: number; base64: string }> = [];
+  for (const row of (rows ?? []) as any[]) {
+    const { data: blob } = await admin.storage.from(PROOF_BUCKET).download(row.storage_path);
+    if (!blob) continue;
+    frames.push({
+      atSeconds: Number(row.at_seconds),
+      base64: Buffer.from(await blob.arrayBuffer()).toString('base64'),
+    });
+  }
+  return frames;
+}
+
+async function performNarration(admin: any, job: NarrationJob): Promise<void> {
+  await admin.from('job_proofs').update({ narration_status: 'running' }).eq('id', job.proofId);
+
+  const write = async (patch: Record<string, unknown>) =>
+    admin.from('job_proofs').update(patch).eq('id', job.proofId);
+
+  if (!isModelProviderConfigured()) {
+    await write({ narration_status: 'skipped', narration_error: 'No model is configured.' });
+    return;
+  }
+
+  const frames = await framesFor(admin, job.proofId);
+  if (!frames.length) {
+    // Honest and terminal: a clip whose device could not extract frames has
+    // nothing for the model to read, and retrying will not change that.
+    await write({
+      narration_status: 'skipped',
+      narration_error: 'The device uploaded no frames for this clip.',
+    });
+    return;
+  }
+
+  const { steps, scopeTitles } = await guideStepsFor(admin, job.jobId, job.partyId, job.phase);
+  const narration = await narrateProofVideo({
+    frames,
+    steps,
+    scopeTitles,
+    phase: job.phase,
+    workDate: job.workDate,
+  });
+  if (!narration) throw new Error('The model reply was not usable.');
+
+  await write({
+    narration: { entries: narration.entries, coverage: narration.coverage, model: narration.model },
+    narration_text: narration.report,
+    narration_status: 'done',
+    narration_error: null,
+    narrated_at: new Date().toISOString(),
+  });
+
+  await recordAccess(admin, {
+    orgId: job.orgId,
+    jobId: job.jobId,
+    proofId: job.proofId,
+    action: 'analysed',
+    actorLabel: 'Atmosphere',
+    detail: `narrated · ${job.phase} · ${job.workDate}`,
+  });
+}
+
+const narrationQueue = new RetryQueue<NarrationJob>({
+  run: async (job) => {
+    const admin = createAdminClient();
+    if (!admin) throw new Error('Storage is not configured.');
+    await performNarration(admin, job);
+  },
+  onGaveUp: async (job, error) => {
+    const admin = createAdminClient();
+    if (!admin) return;
+    await admin
+      .from('job_proofs')
+      .update({
+        narration_status: 'failed',
+        narration_error: error instanceof Error ? error.message : 'Narration failed.',
+      })
+      .eq('id', job.proofId);
+  },
+});
+
+async function queueNarration(admin: any, party: any, proofId: string, phase: string, workDate: string) {
+  await admin.from('job_proofs').update({ narration_status: 'queued' }).eq('id', proofId);
+  narrationQueue.enqueue({
+    key: `narr:${proofId}`,
+    proofId,
+    orgId: party.org_id,
+    jobId: party.job_id,
+    partyId: party.id,
+    phase,
+    workDate,
+  });
+}
+
+/**
+ * POST /api/operations/shared/:jobId/live-observe
+ *
+ * The live half: one frame from a camera that is recording right now, answered
+ * with which stage of the shot list is on screen. Stateless on purpose — the
+ * caller carries its own history — so a dropped connection costs one frame,
+ * not a session.
+ */
+export async function liveObserve(req: Request, res: Response, next: NextFunction) {
+  try {
+    const body = z
+      .object({
+        phase: z.enum(['before', 'after']).default('before'),
+        frameBase64: z.string().min(100).max(2_000_000),
+        lastStageIndex: z.number().int().min(-1).nullish(),
+      })
+      .parse(req.body);
+    const { orgId, supabase } = await requireOrgContext(req);
+
+    if (!isModelProviderConfigured()) {
+      throw new HttpError(503, 'Live monitoring needs a configured model.', 'no_model');
+    }
+
+    const { data: scope } = await supabase
+      .from('job_scope_items')
+      .select('title, state, reason, party_id, created_at')
+      .eq('org_id', orgId)
+      .eq('job_id', req.params.jobId)
+      .order('created_at');
+    const guide = buildCaptureGuide({
+      phase: body.phase,
+      scope: ((scope ?? []) as any[]).map((s) => ({
+        title: s.title,
+        state: s.state,
+        reason: s.reason,
+      })),
+    });
+    const steps = stepsForNarration(guide.steps);
+
+    const observation = await observeLiveFrame({
+      frameBase64: body.frameBase64,
+      steps,
+      lastStageIndex: body.lastStageIndex ?? null,
+    });
+    if (!observation) {
+      throw new HttpError(502, 'The model reply was not usable.', 'observe_failed');
+    }
+
+    res.json({
+      stageIndex: observation.stageIndex,
+      stageLabel:
+        observation.stageIndex >= 0 ? steps[observation.stageIndex].label : 'Could not tell',
+      stageKind: observation.stageIndex >= 0 ? steps[observation.stageIndex].kind : null,
+      note: observation.note,
+      confidence: observation.confidence,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 /** GET /api/job-share/:token/proof — what this sub has filed. */
 export async function listPartyProofs(party: any, admin: any) {
   const { data } = await admin
@@ -527,6 +741,18 @@ export async function listPartyProofs(party: any, admin: any) {
         accepted: list.every((r) => r.state === 'accepted'),
       };
     }),
+  };
+}
+
+/** One video's narration, as the day view carries it. Null when no clip. */
+function proofReport(row: any) {
+  if (!row) return null;
+  return {
+    status: row.narration_status ?? null,
+    text: row.narration_text ?? null,
+    entries: row.narration?.entries ?? [],
+    coverage: row.narration?.coverage ?? [],
+    error: row.narration_error ?? null,
   };
 }
 
@@ -596,6 +822,13 @@ export async function jobProofs(req: Request, res: Response, next: NextFunction)
         materialChange: after?.ai_material_change ?? null,
         analysisStatus: after?.analysis_status ?? null,
         analysisError: after?.analysis_error ?? null,
+        // The per-video reports, one for each half of the day. Independent of
+        // the comparison above: a before's narration exists hours before any
+        // after arrives.
+        reports: {
+          before: proofReport(before),
+          after: proofReport(after),
+        },
         proofIds: list.map((r) => r.id),
       };
     });

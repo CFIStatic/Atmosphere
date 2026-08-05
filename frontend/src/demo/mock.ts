@@ -896,6 +896,42 @@ const PROOF_DAYS: Record<string, any> = {
         payable: true, payableBecause: 'Before and after both check out on every count.',
         accepted: false, rejected: false,
         materialChange: 'significant', analysisStatus: 'done', analysisError: null,
+        reports: {
+          before: {
+            status: 'done',
+            text: 'Opens at the street with the house number in frame, then climbs to the north slope where the tarp is still battened down. The middle of the clip walks the full slope edge to edge, and it ends on the intact skylights, untouched.',
+            entries: [
+              { frame: 0, atSeconds: 6, stageIndex: 0, note: 'Front elevation, house number visible.' },
+              { frame: 2, atSeconds: 41, stageIndex: 1, note: 'Tarp still in place across the north slope.' },
+              { frame: 5, atSeconds: 88, stageIndex: 3, note: 'Skylights intact, passed without contact.' },
+            ],
+            coverage: [
+            { stageIndex: 0, label: 'Start outside, facing the front of the building', seen: true },
+            { stageIndex: 1, label: 'Walk the area for \u201cStrip north slope to decking\u201d', seen: true },
+            { stageIndex: 2, label: 'Walk the area for \u201cInstall synthetic underlayment\u201d', seen: true },
+            { stageIndex: 3, label: 'Pass the excluded area \u2014 \u201cTouch the skylights\u201d', seen: true },
+            { stageIndex: 4, label: 'Finish on anything unexpected you found', seen: true },
+          ],
+            error: null,
+          },
+          after: {
+            status: 'done',
+            text: 'Opens at the front elevation, then shows the north slope stripped to decking with underlayment and new shingles across roughly two thirds of it. New decking sheets are visible in the valley. The clip ends mid-slope; the skylight pass and the wrap shot are not in the footage.',
+            entries: [
+              { frame: 0, atSeconds: 5, stageIndex: 0, note: 'Front elevation, same vantage as the morning clip.' },
+              { frame: 2, atSeconds: 39, stageIndex: 1, note: 'Slope stripped; underlayment laid to the ridge.' },
+              { frame: 4, atSeconds: 71, stageIndex: 2, note: 'New shingles across two thirds of the slope.' },
+            ],
+            coverage: [
+            { stageIndex: 0, label: 'Start outside, facing the front of the building', seen: true },
+            { stageIndex: 1, label: 'Walk the area for \u201cStrip north slope to decking\u201d', seen: true },
+            { stageIndex: 2, label: 'Walk the area for \u201cInstall synthetic underlayment\u201d', seen: true },
+            { stageIndex: 3, label: 'Pass the excluded area \u2014 \u201cTouch the skylights\u201d', seen: false },
+            { stageIndex: 4, label: 'Finish on anything unexpected you found', seen: false },
+          ],
+            error: null,
+          },
+        },
         checks: [
           { key: 'before.on_site', verdict: 'pass', detail: 'Filmed at the site.' },
           { key: 'before.same_day', verdict: 'pass', detail: 'Filmed on 2026-08-05.' },
@@ -936,6 +972,25 @@ const PROOF_DAYS: Record<string, any> = {
         payable: false, payableBecause: 'Filmed 2.14 miles from the site — outside the 0.25-mile radius.',
         accepted: false, rejected: false,
         materialChange: 'unclear', analysisStatus: 'done', analysisError: null,
+        reports: {
+          before: {
+            status: 'done',
+            text: 'Opens at a roof slope with intact shingles and no visible storm damage. The pitch and the surrounding trees do not match the other footage filed on this job, and no frame shows the house number or street.',
+            entries: [
+              { frame: 0, atSeconds: 4, stageIndex: -1, note: 'A building exterior, but nothing that identifies which one.' },
+              { frame: 3, atSeconds: 52, stageIndex: -1, note: 'Intact shingles; no work area in frame.' },
+            ],
+            coverage: [
+              { stageIndex: 0, label: 'Start outside, facing the front of the building', seen: false },
+              { stageIndex: 1, label: 'Walk the area for \u201cStrip north slope to decking\u201d', seen: false },
+              { stageIndex: 2, label: 'Walk the area for \u201cInstall synthetic underlayment\u201d', seen: false },
+              { stageIndex: 3, label: 'Pass the excluded area \u2014 \u201cTouch the skylights\u201d', seen: false },
+              { stageIndex: 4, label: 'Finish on anything unexpected you found', seen: false },
+            ],
+            error: null,
+          },
+          after: { status: 'queued', text: null, entries: [], coverage: [], error: null },
+        },
         checks: [
           { key: 'before.on_site', verdict: 'pass', detail: 'Filmed 0.03 miles from the site.' },
           { key: 'before.same_day', verdict: 'pass', detail: 'Filmed on 2026-08-04.' },
@@ -1823,6 +1878,22 @@ const routes: Array<[string, RegExp, Handler]> = [
   ['GET', /^\/api\/job-share\/([\w-]+)\/capture-guide$/, () => ({
     body: { guide: demoCaptureGuide(LAST_QUERY.phase ?? 'before') },
   })],
+  ['POST', /^\/api\/operations\/shared\/([\w-]+)\/live-observe$/, (() => {
+    // Cycles through the shot list so a demo recording watches the stage
+    // chip advance the way a real walkthrough would.
+    let tick = -1;
+    const STAGES = [
+      { stageIndex: 0, stageLabel: 'Start outside, facing the front of the building', stageKind: 'anchor', note: 'Front elevation in frame; hold a beat longer.', confidence: 0.86 },
+      { stageIndex: 1, stageLabel: 'Walk the area for \u201cStrip north slope to decking\u201d', stageKind: 'scope', note: 'North slope in frame, panning left to right.', confidence: 0.78 },
+      { stageIndex: 1, stageLabel: 'Walk the area for \u201cStrip north slope to decking\u201d', stageKind: 'scope', note: 'Close on the stripped decking at the valley.', confidence: 0.74 },
+      { stageIndex: 3, stageLabel: 'Pass the excluded area \u2014 \u201cTouch the skylights\u201d', stageKind: 'exclusion', note: 'Skylights in frame, intact.', confidence: 0.81 },
+      { stageIndex: 4, stageLabel: 'Finish on anything unexpected you found', stageKind: 'wrap', note: 'Moisture meter held to the lens; reading legible.', confidence: 0.7 },
+    ];
+    return () => {
+      tick += 1;
+      return { body: STAGES[Math.min(tick, STAGES.length - 1)] };
+    };
+  })()],
   ['GET', /^\/api\/operations\/shared\/([\w-]+)\/capture-guide$/, () => ({
     body: { guide: demoCaptureGuide(LAST_QUERY.phase ?? 'before') },
   })],

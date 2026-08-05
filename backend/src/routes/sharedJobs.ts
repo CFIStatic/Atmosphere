@@ -24,6 +24,7 @@ import {
   proofQuestions,
   proofVideoUrl,
   reanalyseProofDay,
+  liveObserve,
   jobEvidence,
   evidenceCustody,
   setEvidenceHold,
@@ -796,6 +797,7 @@ sharedJobsRouter.get(
   },
 );
 
+sharedJobsRouter.post('/shared/:jobId/live-observe', liveObserve);
 sharedJobsRouter.get('/shared/:jobId/proof', jobProofs);
 sharedJobsRouter.get('/shared/:jobId/proof/questions', proofQuestions);
 sharedJobsRouter.post('/shared/:jobId/proof/ask', askAboutProofs);
