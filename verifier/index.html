@@ -871,9 +871,10 @@
   var rowsEl = $('#rows');
 
   function money(n) { return n.toLocaleString('en-US'); }
-  function mb(bytes) { return (bytes / 1048576).toFixed(0) + ' MB'; }
+  function mb(bytes) { return bytes == null ? '—' : (bytes / 1048576).toFixed(0) + ' MB'; }
   function dur(s) {
-    var m = Math.floor(s / 60), r = s % 60;
+    if (s == null) return '—';
+    var m = Math.floor(s / 60), r = Math.round(s % 60);
     return m + ':' + String(r).padStart(2, '0');
   }
   function dayLabel(iso) {
@@ -900,6 +901,7 @@
     if (a.state === 'queued') return { cls: 'neutral', text: 'Queued' };
     if (a.state === 'skipped') return { cls: 'neutral', text: 'Waiting on the after' };
     if (a.state === 'paired') return { cls: 'neutral', text: 'Read as the before half' };
+    if (a.state === 'failed') return { cls: 'fail', text: 'Analysis failed' };
     if (a.state !== 'done') return { cls: 'neutral', text: 'Not analysed' };
     if (a.materialChange === 'significant') return { cls: 'pass', text: 'Work changed' };
     if (a.materialChange === 'minor') return { cls: 'unknown', text: 'Minor change' };
@@ -979,6 +981,7 @@
   }
 
   function thumbFor(item) {
+    if (!item.after) return frameSVG({ wet: 0.3, cut: 0.2, gear: 0, night: false, label: null });
     return frameSVG({
       wet: item.after.wet, cut: item.after.cut, gear: item.after.gear,
       night: false, label: null
@@ -1039,16 +1042,30 @@
   function open(id) {
     var item = EVIDENCE.filter(function (e) { return e.id === id; })[0];
     if (!item) return;
+    // Against a live backend the list is thin: custody and frames arrive when
+    // a clip is opened, which is also the moment the access gets logged.
+    if (item._remote && !item._loaded) {
+      fetchRemoteDetail(item).then(function () { openLoaded(item); });
+      return;
+    }
+    openLoaded(item);
+  }
+
+  function openLoaded(item) {
     state.open = item;
     state.frame = 0;
     stopPlay();
 
-    $('#d-title').textContent = JOBS[item.job].name;
+    $('#d-title').textContent = (JOBS[item.job] || { name: item.jobName || 'Job' }).name;
     $('#d-meta').innerHTML =
       '<span class="id">' + esc(item.id) + '</span> · ' + esc(item.phase) + ' · ' +
       dayLabel(item.workDate) + ' · ' + esc(item.company) + ' · ' + dur(item.duration) + ' · ' + mb(item.bytes);
 
-    item._frames = frames(item.before, item.after, item.phase + ' · ' + item.workDate);
+    item._frames = item._remoteFrames && item._remoteFrames.length
+      ? item._remoteFrames
+      : frames(item.before || { wet: 0.3, cut: 0.1, gear: 0 },
+               item.after || { wet: 0.2, cut: 0.3, gear: 0, seconds: item.duration || 120 },
+               item.phase + ' · ' + item.workDate);
 
     $('#d-scrub').innerHTML = item._frames.map(function (f, i) {
       return '<button data-i="' + i + '" aria-pressed="' + (i === 0) + '" aria-label="Frame ' + (i + 1) + '"></button>';
@@ -1084,6 +1101,11 @@
     var a = item.analysis || {};
     var el = $('#d-analysis');
 
+    if (a.state === 'failed') {
+      el.innerHTML = '<p style="color:var(--fail)">The analysis failed and gave up after retries. ' +
+        'It can be run again from the platform; the footage itself is unaffected.</p>';
+      return;
+    }
     if (a.state === 'queued' || a.state === 'skipped' || a.state === 'paired') {
       el.innerHTML = '<p style="color:var(--muted)">' + esc(
         a.reason || (a.state === 'paired'
@@ -1189,10 +1211,10 @@
       '<dt>Received</dt><dd>' + stamp(item.uploadedAt) + '</dd>' +
       '<dt>Duration</dt><dd>' + dur(item.duration) + '</dd>' +
       '<dt>Size</dt><dd>' + mb(item.bytes) + '</dd>' +
-      '<dt>Device</dt><dd>' + esc(item.device) + '</dd>' +
+      '<dt>Device</dt><dd>' + esc(item.device || 'not recorded') + '</dd>' +
       '<dt>Location</dt><dd>' + (g ? g.lat.toFixed(4) + ', ' + g.lon.toFixed(4) + ' (±' + g.accuracy + ' ft)' : 'not reported') + '</dd>' +
-      '<dt>From site</dt><dd>' + (g ? (g.distanceFt > 1000 ? (g.distanceFt / 5280).toFixed(2) + ' mi' : g.distanceFt + ' ft') : '—') + '</dd>' +
-      '<dt>SHA-256</dt><dd class="mono">' + esc(item.hash) + '</dd>' +
+      '<dt>From site</dt><dd>' + (g && g.distanceFt != null ? (g.distanceFt > 1000 ? (g.distanceFt / 5280).toFixed(2) + ' mi' : g.distanceFt + ' ft') : '—') + '</dd>' +
+      '<dt>SHA-256</dt><dd class="mono">' + esc(item.hash || 'not recorded') + '</dd>' +
       '<dt>Episode tier</dt><dd>Tier ' + item.tier + '</dd>' +
       '</dl>' +
       '<p class="footnote">The hash is of the original bytes as uploaded. Re-uploading the same file on another ' +
@@ -1253,9 +1275,140 @@
     }, 700);
   });
 
-  initFacets();
-  counts();
-  render();
+  function boot() {
+    initFacets();
+    counts();
+    render();
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Live mode.
+   *
+   * Opened as /verifier/?share=<token>, the page trades the token for one
+   * job's evidence at /api/verifier-share/<token> — the outward door the
+   * backend guards. Every mapping below narrows the API shape onto the shape
+   * this page already renders, so live and demo rows go through identical
+   * code and cannot drift apart.
+   * ------------------------------------------------------------------ */
+
+  var SHARE_TOKEN = new URLSearchParams(location.search).get('share');
+
+  function mapRemoteItem(raw) {
+    return {
+      _remote: true,
+      id: raw.id,
+      job: 'shared',
+      jobName: raw.jobName,
+      company: raw.company || '—',
+      person: raw.person || raw.company || '—',
+      phase: raw.phase,
+      workDate: raw.workDate,
+      capturedAt: raw.capturedAt,
+      uploadedAt: raw.uploadedAt,
+      duration: raw.durationSeconds,
+      bytes: raw.byteSize,
+      device: null,
+      gps: raw.gps ? { lat: raw.gps.lat, lon: raw.gps.lon, accuracy: raw.gps.accuracyM, distanceFt: null } : null,
+      hash: raw.hash,
+      tier: raw.tier || 1,
+      hold: raw.legalHold ? { on: true, reason: 'This clip is under legal hold. Retention cannot delete it while the hold stands.', by: '', at: '' } : null,
+      checks: raw.checks || [],
+      analysis: raw.analysisState === 'done'
+        ? {
+            state: 'done',
+            materialChange: raw.analysis && raw.analysis.materialChange,
+            materialBecause: raw.analysis && raw.analysis.materialBecause,
+            summary: (raw.analysis && raw.analysis.summary) || '',
+            changes: (raw.analysis && raw.analysis.changes) || [],
+            scope: (raw.analysis && raw.analysis.scope) || [],
+            couldNotTell: (raw.analysis && raw.analysis.couldNotTell) || []
+          }
+        : raw.analysisState === 'paired'
+          ? { state: 'paired' }
+          : raw.analysisState === 'waiting_on_after'
+            ? { state: 'skipped', reason: 'No after video has been filed for this day, so there is nothing to compare against.' }
+            : raw.analysisState === 'queued'
+              ? { state: 'queued', reason: 'Queued for analysis. The model has not read the day yet.' }
+              : raw.analysisState === 'failed'
+                ? { state: 'failed' }
+                : { state: 'none' },
+      custody: [],
+      _loaded: false
+    };
+  }
+
+  function fetchRemoteDetail(item) {
+    return fetch('/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id))
+      .then(function (r) { if (!r.ok) throw new Error('detail'); return r.json(); })
+      .then(function (payload) {
+        item.custody = (payload.custody || []).map(function (c) {
+          return {
+            action: c.action,
+            by: c.by,
+            role: c.by === 'Atmosphere' ? 'ai' : (c.role || ''),
+            at: c.at,
+            detail: c.detail || ''
+          };
+        });
+        item._remoteFrames = (payload.frames || []).map(function (f) {
+          return { at: f.atSeconds, src: f.url };
+        });
+        item._loaded = true;
+      })
+      .catch(function () {
+        // The list still opens; the tabs just say less. An error here must
+        // not eat the click.
+        item._loaded = true;
+      });
+  }
+
+  function deadLink(status, body) {
+    var word = (body && body.code === 'revoked') ? 'revoked'
+      : (body && body.code === 'expired') ? 'expired'
+      : status === 404 ? 'not recognised' : 'unavailable';
+    document.querySelector('.main').innerHTML =
+      '<div class="empty" style="padding-top:120px">' +
+      '<p style="font-size:16px;font-weight:650;color:var(--ink)">This evidence link is ' + word + '.</p>' +
+      '<p style="margin-top:8px">Ask the person who sent it to issue a new one — links are scoped, expiring, and revocable by design.</p>' +
+      '</div>';
+    document.querySelector('.rail').innerHTML = '';
+  }
+
+  if (SHARE_TOKEN) {
+    fetch('/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN))
+      .then(function (r) {
+        return r.json().then(function (body) {
+          if (!r.ok) { deadLink(r.status, body); return null; }
+          return body;
+        });
+      })
+      .then(function (payload) {
+        if (!payload) return;
+        JOBS = {
+          shared: {
+            key: 'shared',
+            name: payload.job ? payload.job.title : 'Shared job',
+            number: payload.job ? payload.job.number : null,
+            address: payload.job && payload.job.claimNumber ? 'Claim ' + payload.job.claimNumber : ''
+          }
+        };
+        EVIDENCE = (payload.items || []).map(mapRemoteItem);
+        if (payload.share) {
+          // Its own element — #resultcount belongs to render() and would
+          // overwrite anything written there on the next filter change.
+          var badge = document.createElement('span');
+          badge.className = 'result';
+          badge.textContent = 'shared with ' + payload.share.label +
+            (payload.share.expiresAt ? ' · expires ' + payload.share.expiresAt.slice(0, 10) : '');
+          var anchor = document.getElementById('resultcount');
+          anchor.parentNode.insertBefore(badge, anchor.nextSibling);
+        }
+        boot();
+      })
+      .catch(function () { deadLink(0, null); });
+  } else {
+    boot();
+  }
 })();
 </script>
 </body>
