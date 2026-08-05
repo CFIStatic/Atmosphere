@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { SpinnerIcon } from '../components/icons';
 import { readCapture, todayISO } from '../lib/proofCapture';
 import { CaptureGuideSteps } from '../components/shared/CaptureGuideSteps';
+import type { CaptureGuide } from '../lib/api';
 
 /**
  * The subcontractor's screen.
@@ -392,11 +393,7 @@ function ProofSection({
   const [step, setStep] = useState('');
   const [problems, setProblems] = useState<string[]>([]);
   const [done, setDone] = useState<string | null>(null);
-  const [guide, setGuide] = useState<{
-    phase: string;
-    targetSeconds: number;
-    steps: Array<{ kind: string; instruction: string; why: string }>;
-  } | null>(null);
+  const [guide, setGuide] = useState<CaptureGuide | null>(null);
   const beforeInput = useRef<HTMLInputElement>(null);
   const afterInput = useRef<HTMLInputElement>(null);
 
@@ -405,7 +402,7 @@ function ProofSection({
   const guidePhase = todaysDay?.hasBefore ? 'after' : 'before';
   useEffect(() => {
     let cancelled = false;
-    call<{ guide: typeof guide }>(`${API}/${token}/capture-guide?phase=${guidePhase}`)
+    call<{ guide: CaptureGuide }>(`${API}/${token}/capture-guide?phase=${guidePhase}`)
       .then((res) => {
         if (!cancelled) setGuide(res.guide);
       })
