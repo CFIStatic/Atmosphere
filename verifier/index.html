@@ -1,0 +1,1223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Atmosphere Verifier — evidence review</title>
+<meta name="description" content="Every proof-of-work video on every job, with the analysis, the integrity checks, and the chain of custody behind it." />
+<!--
+  Atmosphere Verifier
+  ===================
+  A separate property from the platform on purpose. The people who need to
+  review proof — an adjuster, a carrier's desk examiner, a GC's project
+  manager, an attorney six months later — do not need an operations console
+  and should not be given one. They need one screen: every clip, what the
+  analysis found, whether the footage can be trusted, and who has touched it.
+
+  Modelled on evidence-management systems rather than on media galleries. The
+  differences that matter:
+
+    * Integrity is a first-class column, not a detail. A clip whose GPS puts it
+      two miles from the site is worse than no clip, and the list says so
+      before anybody opens it.
+    * The analysis and the ground truth are visually separate. What a model
+      concluded and what a person accepted are different claims, and a screen
+      that renders them identically is how the first gets mistaken for the
+      second.
+    * "Unknown" is its own state, styled as neither pass nor fail, because an
+      unchecked clip is not a clean one.
+
+  Self-contained by design: no external requests, no build step. It is a static
+  file that can be served from anywhere, and it drops into the demo artifact as
+  its own view.
+-->
+<style>
+  :root {
+    --chrome: #0e1116;
+    --chrome-2: #171c23;
+    --chrome-line: #262d37;
+    --bg: #f4f6f8;
+    --panel: #ffffff;
+    --line: #dfe4ea;
+    --line-soft: #eef1f5;
+    --ink: #111621;
+    --ink-2: #3c4757;
+    --muted: #6b7686;
+    --faint: #94a0b0;
+    --brand: #f26e22;
+    --sel: #1f5fd0;
+    --sel-soft: #eaf1fd;
+    --pass: #0f7a45;
+    --pass-soft: #e6f4ec;
+    --fail: #c22b2b;
+    --fail-soft: #fdecec;
+    --unknown: #a26200;
+    --unknown-soft: #fdf3e2;
+    --hold: #6b3fa0;
+    --hold-soft: #f2ecfa;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font: inherit; color: inherit; }
+
+  /* ---------- chrome ---------- */
+  .topbar {
+    display: flex; align-items: center; gap: 18px;
+    height: 52px; padding: 0 16px;
+    background: var(--chrome); color: #e8ecf2;
+    border-bottom: 1px solid #000;
+  }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 650; letter-spacing: -0.01em; }
+  .brand .mark {
+    width: 22px; height: 22px; border-radius: 6px; flex: none;
+    background: linear-gradient(150deg, var(--brand), #b8410a);
+    display: grid; place-items: center; color: #fff; font-size: 12px; font-weight: 800;
+  }
+  .brand .sep { color: #4b5563; font-weight: 400; }
+  .brand .sub { color: #9aa6b4; font-weight: 550; }
+
+  .search { flex: 1; max-width: 520px; position: relative; }
+  .search input {
+    width: 100%; height: 32px; padding: 0 10px 0 30px;
+    background: var(--chrome-2); border: 1px solid var(--chrome-line);
+    border-radius: 6px; color: #e8ecf2; font-size: 13px; outline: none;
+  }
+  .search input::placeholder { color: #6d7889; }
+  .search input:focus { border-color: #3d4d63; background: #1b212a; }
+  .search svg { position: absolute; left: 9px; top: 8px; opacity: .55; }
+
+  .topbar .spacer { flex: 1; }
+  .who { display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: #b6c0cc; }
+  .who .avatar {
+    width: 26px; height: 26px; border-radius: 50%; background: #2f3947;
+    display: grid; place-items: center;
+    font-size: 11px; font-weight: 700; color: #d6dee8;
+  }
+  .who .role { color: #7d8899; font-size: 11.5px; }
+
+  /* ---------- layout ---------- */
+  .shell { display: grid; grid-template-columns: 236px minmax(0, 1fr); height: calc(100% - 52px); }
+  @media (max-width: 900px) { .shell { grid-template-columns: 1fr; } .rail { display: none; } }
+
+  .rail {
+    background: var(--panel); border-right: 1px solid var(--line);
+    overflow-y: auto; padding: 14px 0 40px;
+  }
+  .rail h3 {
+    margin: 16px 14px 7px; font-size: 10.5px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--faint); font-weight: 700;
+  }
+  .navitem {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    width: calc(100% - 16px); margin: 1px 8px; padding: 7px 10px;
+    background: none; border: 0; border-radius: 6px; cursor: pointer;
+    font-size: 13px; text-align: left; color: var(--ink-2);
+  }
+  .navitem:hover { background: var(--line-soft); }
+  .navitem[aria-current="true"] { background: var(--sel-soft); color: var(--sel); font-weight: 600; }
+  .navitem .count { font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .navitem[aria-current="true"] .count { color: var(--sel); }
+
+  .facet { padding: 2px 14px 8px; }
+  .facet label {
+    display: flex; align-items: center; gap: 8px; padding: 4px 0;
+    font-size: 12.5px; color: var(--ink-2); cursor: pointer;
+  }
+  .facet input { accent-color: var(--sel); margin: 0; }
+  .facet .n { margin-left: auto; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+
+  .main { overflow-y: auto; }
+
+  /* ---------- toolbar ---------- */
+  .toolbar {
+    position: sticky; top: 0; z-index: 5;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 12px 18px; background: var(--bg);
+    border-bottom: 1px solid var(--line);
+  }
+  .toolbar h1 { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: -0.01em; }
+  .toolbar .result { font-size: 12.5px; color: var(--muted); }
+  .toolbar .spacer { flex: 1; }
+  .seg { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+  .seg button {
+    border: 0; background: none; padding: 6px 12px; font-size: 12.5px;
+    cursor: pointer; color: var(--muted);
+  }
+  .seg button[aria-pressed="true"] { background: var(--sel); color: #fff; font-weight: 600; }
+
+  /* ---------- table ---------- */
+  .tablewrap { padding: 0 18px 60px; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    position: sticky; top: 53px; z-index: 4; background: var(--bg);
+    text-align: left; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--faint); font-weight: 700; padding: 10px 10px; white-space: nowrap;
+    border-bottom: 1px solid var(--line);
+  }
+  tbody tr { background: var(--panel); cursor: pointer; }
+  tbody tr:hover { background: #fbfcfe; }
+  tbody td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+  tbody tr:focus-visible { outline: 2px solid var(--sel); outline-offset: -2px; }
+
+  .thumb {
+    width: 84px; height: 50px; border-radius: 4px; overflow: hidden;
+    background: #2a3140; flex: none; position: relative; display: block;
+  }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb .dur {
+    position: absolute; right: 3px; bottom: 3px; padding: 1px 4px; border-radius: 3px;
+    background: rgba(0,0,0,.78); color: #fff; font-size: 10px; font-variant-numeric: tabular-nums;
+  }
+  .titlecell { min-width: 220px; }
+  .titlecell .t { font-weight: 600; font-size: 13px; }
+  .titlecell .s { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .id { font-family: var(--mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 650; white-space: nowrap;
+  }
+  .chip.pass { background: var(--pass-soft); color: var(--pass); }
+  .chip.fail { background: var(--fail-soft); color: var(--fail); }
+  .chip.unknown { background: var(--unknown-soft); color: var(--unknown); }
+  .chip.hold { background: var(--hold-soft); color: var(--hold); }
+  .chip.neutral { background: var(--line-soft); color: var(--ink-2); }
+  .chip .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  .tier {
+    display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 11px;
+    font-weight: 700; background: #eef1f5; color: var(--ink-2); font-variant-numeric: tabular-nums;
+  }
+  .when { font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+  .when small { display: block; color: var(--faint); font-size: 11px; }
+
+  .empty { padding: 60px 20px; text-align: center; color: var(--muted); }
+
+  /* ---------- detail ---------- */
+  .detail {
+    position: fixed; inset: 0; z-index: 40; display: none;
+    background: rgba(12, 16, 22, .55); backdrop-filter: blur(2px);
+  }
+  .detail[data-open="1"] { display: block; }
+  .sheet {
+    position: absolute; inset: 0 0 0 auto; width: min(1080px, 100%);
+    background: var(--bg); box-shadow: -20px 0 60px -20px rgba(0,0,0,.5);
+    display: flex; flex-direction: column;
+  }
+  .sheethead {
+    display: flex; align-items: flex-start; gap: 14px;
+    padding: 14px 18px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  .sheethead h2 { margin: 0; font-size: 15.5px; font-weight: 650; letter-spacing: -0.01em; }
+  .sheethead .meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .closebtn {
+    margin-left: auto; border: 1px solid var(--line); background: var(--panel);
+    width: 30px; height: 30px; border-radius: 7px; cursor: pointer; color: var(--muted);
+    display: grid; place-items: center; flex: none;
+  }
+  .closebtn:hover { background: var(--line-soft); color: var(--ink); }
+
+  .sheetbody { flex: 1; overflow-y: auto; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(340px, 1fr); }
+  @media (max-width: 860px) { .sheetbody { grid-template-columns: 1fr; } }
+
+  .stage { padding: 16px 18px; border-right: 1px solid var(--line); }
+  .player { background: #0d1117; border-radius: 10px; overflow: hidden; }
+  .player .frame { aspect-ratio: 16 / 10; display: block; width: 100%; }
+  .player .frame img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .controls {
+    display: flex; align-items: center; gap: 10px; padding: 9px 11px;
+    border-top: 1px solid #1b2230; color: #c3ccd8;
+  }
+  .controls button {
+    border: 0; background: #1e2634; color: #dbe3ec; width: 30px; height: 30px;
+    border-radius: 7px; cursor: pointer; display: grid; place-items: center; flex: none;
+  }
+  .controls button:hover { background: #2a3444; }
+  .scrub { flex: 1; display: flex; gap: 3px; }
+  .scrub button {
+    flex: 1; height: 6px; border-radius: 3px; background: #2b3545; width: auto;
+    padding: 0; border: 0; cursor: pointer;
+  }
+  .scrub button[aria-pressed="true"] { background: var(--brand); }
+  .controls .time { font-family: var(--mono); font-size: 11.5px; color: #8b97a6; min-width: 74px; text-align: right; }
+  .framenote { margin-top: 8px; font-size: 11.5px; color: var(--muted); }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-top: 14px; }
+  .card > h4 {
+    margin: 0; padding: 11px 14px; font-size: 12px; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--faint); font-weight: 700;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .card .body { padding: 13px 14px; }
+  .card .body p { margin: 0 0 9px; line-height: 1.55; }
+  .card .body p:last-child { margin-bottom: 0; }
+
+  .side { padding: 16px 18px 60px; }
+  .tabs { display: flex; gap: 3px; background: #e9edf2; padding: 3px; border-radius: 8px; }
+  .tabs button {
+    flex: 1; border: 0; background: none; padding: 7px 6px; border-radius: 6px;
+    font-size: 12.5px; cursor: pointer; color: var(--muted); font-weight: 550;
+  }
+  .tabs button[aria-selected="true"] { background: var(--panel); color: var(--ink); font-weight: 650; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+
+  .kv { display: grid; grid-template-columns: 116px minmax(0,1fr); gap: 6px 12px; font-size: 12.5px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; color: var(--ink); word-break: break-word; }
+  .kv dd.mono { font-family: var(--mono); font-size: 11.5px; }
+
+  .checkrow { display: flex; gap: 9px; align-items: flex-start; padding: 9px 0; border-bottom: 1px solid var(--line-soft); }
+  .checkrow:last-child { border-bottom: 0; }
+  .checkrow .what { font-size: 12.5px; font-weight: 600; }
+  .checkrow .detail-txt { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.5; }
+
+  .verdictline {
+    display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+    border-radius: 9px; font-size: 13px; font-weight: 600; margin-bottom: 12px;
+  }
+  .verdictline.pass { background: var(--pass-soft); color: var(--pass); }
+  .verdictline.fail { background: var(--fail-soft); color: var(--fail); }
+  .verdictline.unknown { background: var(--unknown-soft); color: var(--unknown); }
+
+  .scopelist { list-style: none; margin: 0; padding: 0; }
+  .scopelist li {
+    display: flex; align-items: flex-start; gap: 9px; padding: 8px 0;
+    border-bottom: 1px solid var(--line-soft); font-size: 12.5px;
+  }
+  .scopelist li:last-child { border-bottom: 0; }
+  .scopelist .label { flex: 1; }
+
+  .custody { list-style: none; margin: 0; padding: 0; position: relative; }
+  .custody::before {
+    content: ''; position: absolute; left: 6px; top: 10px; bottom: 10px; width: 1px; background: var(--line);
+  }
+  .custody li { position: relative; padding: 0 0 15px 24px; font-size: 12.5px; }
+  .custody li::before {
+    content: ''; position: absolute; left: 2px; top: 4px; width: 9px; height: 9px;
+    border-radius: 50%; background: var(--panel); border: 2px solid var(--sel);
+  }
+  .custody li.ai::before { border-color: var(--brand); }
+  .custody .act { font-weight: 650; }
+  .custody .by { color: var(--muted); }
+  .custody .at { color: var(--faint); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+
+  .banner {
+    display: flex; gap: 9px; align-items: flex-start;
+    padding: 11px 13px; border-radius: 9px; font-size: 12.5px; line-height: 1.5;
+    margin-bottom: 14px;
+  }
+  .banner.hold { background: var(--hold-soft); color: #4d2c77; }
+  .banner.warn { background: var(--unknown-soft); color: #7a4a00; }
+
+  .footnote { font-size: 11.5px; color: var(--faint); line-height: 1.55; margin-top: 10px; }
+  .srhide { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="mark">A</span>
+    <span>Atmosphere</span><span class="sep">/</span><span class="sub">Verifier</span>
+  </div>
+  <div class="search">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="q" type="search" placeholder="Search by job, company, evidence ID, or hash" aria-label="Search evidence" />
+  </div>
+  <div class="spacer"></div>
+  <div class="who">
+    <div>
+      <div>Dana Ortiz</div>
+      <div class="role">Ortiz Restoration · reviewer</div>
+    </div>
+    <div class="avatar">DO</div>
+  </div>
+</header>
+
+<div class="shell">
+  <aside class="rail">
+    <h3>Evidence</h3>
+    <button class="navitem" data-view="all" aria-current="true">All evidence <span class="count" id="n-all">0</span></button>
+    <button class="navitem" data-view="flagged">Flagged <span class="count" id="n-flag">0</span></button>
+    <button class="navitem" data-view="unanalysed">Not analysed <span class="count" id="n-unan">0</span></button>
+    <button class="navitem" data-view="hold">Legal hold <span class="count" id="n-hold">0</span></button>
+
+    <h3>Job</h3>
+    <div class="facet" id="facet-job"></div>
+
+    <h3>Company</h3>
+    <div class="facet" id="facet-company"></div>
+
+    <h3>Capture</h3>
+    <div class="facet" id="facet-phase"></div>
+  </aside>
+
+  <main class="main">
+    <div class="toolbar">
+      <h1 id="viewtitle">All evidence</h1>
+      <span class="result" id="resultcount"></span>
+      <span class="spacer"></span>
+      <div class="seg" role="group" aria-label="Sort">
+        <button data-sort="recent" aria-pressed="true">Newest</button>
+        <button data-sort="risk" aria-pressed="false">Needs attention</button>
+      </div>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:96px">Clip</th>
+            <th>Evidence</th>
+            <th>Integrity</th>
+            <th>Analysis</th>
+            <th>Tier</th>
+            <th>Recorded</th>
+            <th>Uploaded by</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="empty" id="empty" hidden>Nothing matches those filters.</div>
+      <p class="footnote">
+        Retention and legal hold are enforced on the record, not on this page. A clip under hold is
+        never deleted by a retention schedule, and the hold is visible to everyone who can see the clip.
+      </p>
+    </div>
+  </main>
+</div>
+
+<div class="detail" id="detail" role="dialog" aria-modal="true" aria-labelledby="d-title">
+  <div class="sheet">
+    <div class="sheethead">
+      <div>
+        <h2 id="d-title">—</h2>
+        <div class="meta" id="d-meta"></div>
+      </div>
+      <button class="closebtn" id="d-close" aria-label="Close">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="sheetbody">
+      <section class="stage">
+        <div class="player">
+          <div class="frame" id="d-frame"></div>
+          <div class="controls">
+            <button id="d-play" aria-label="Play frames">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            </button>
+            <div class="scrub" id="d-scrub"></div>
+            <span class="time" id="d-time">frame 1 / 6</span>
+          </div>
+        </div>
+        <p class="framenote">
+          These are the frames the analysis actually read, evenly spaced across the clip. The original
+          file is untouched and downloadable; nothing shown here has been re-encoded.
+        </p>
+        <div class="card">
+          <h4>Analysis</h4>
+          <div class="body" id="d-analysis"></div>
+        </div>
+      </section>
+
+      <section class="side">
+        <div class="tabs" role="tablist">
+          <button role="tab" data-tab="integrity" aria-selected="true">Integrity</button>
+          <button role="tab" data-tab="custody" aria-selected="false">Chain of custody</button>
+          <button role="tab" data-tab="details" aria-selected="false">Details</button>
+        </div>
+        <div id="d-panel" style="margin-top:14px"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ------------------------------------------------------------------ *
+   * Frames
+   *
+   * Drawn rather than filmed, for the same reason the platform demo draws
+   * its clip: nobody's actual house belongs in a file that gets shared
+   * around. They are deliberately schematic — a room, the affected area,
+   * whatever equipment is in play — because the point of this screen is the
+   * reasoning attached to a frame, not the frame's realism.
+   * ------------------------------------------------------------------ */
+
+  function frameSVG(o) {
+    var wet = o.wet || 0;              // 0..1 how much staining shows
+    var cut = o.cut || 0;              // 0..1 how much has been removed
+    var gear = o.gear || 0;            // count of drying units visible
+    var tint = o.night ? '#1b2129' : '#2a313c';
+    var wall = o.night ? '#39424e' : '#4a5462';
+    var parts = [];
+
+    parts.push('<rect width="640" height="400" fill="' + tint + '"/>');
+    // Room shell — back wall, floor line, ceiling line.
+    parts.push('<path d="M90 70 L550 70 L550 320 L90 320 Z" fill="' + wall + '"/>');
+    parts.push('<path d="M90 320 L20 380 L620 380 L550 320 Z" fill="#5b6675"/>');
+    parts.push('<path d="M90 70 L20 20 L620 20 L550 70 Z" fill="#3f4854"/>');
+
+    // Staining on the wall, sized by `wet`.
+    if (wet > 0) {
+      var h = 40 + wet * 150;
+      parts.push('<path d="M120 ' + (320 - h) + ' q60 -22 120 -6 q70 18 130 -8 q60 -24 130 4 L500 320 L120 320 Z" fill="#6b5330" opacity="' + (0.35 + wet * 0.4) + '"/>');
+    }
+    // Removed material — the flood cut, as a clean band with exposed studs.
+    if (cut > 0) {
+      var ch = 60 + cut * 120;
+      parts.push('<rect x="120" y="' + (320 - ch) + '" width="380" height="' + ch + '" fill="#2f3742"/>');
+      for (var s = 0; s < 6; s++) {
+        parts.push('<rect x="' + (135 + s * 62) + '" y="' + (320 - ch) + '" width="13" height="' + ch + '" fill="#8a7a5f"/>');
+      }
+      parts.push('<rect x="120" y="' + (320 - ch - 4) + '" width="380" height="4" fill="#c9d2dd" opacity=".55"/>');
+    }
+    // Equipment.
+    for (var g = 0; g < gear; g++) {
+      var x = 150 + g * 105;
+      parts.push('<rect x="' + x + '" y="286" width="58" height="34" rx="5" fill="#c3552a"/>');
+      parts.push('<circle cx="' + (x + 29) + '" cy="303" r="10" fill="#f0f3f7" opacity=".85"/>');
+    }
+    if (o.label) {
+      parts.push('<rect x="20" y="20" width="' + (o.label.length * 7.4 + 20) + '" height="24" rx="5" fill="rgba(0,0,0,.6)"/>');
+      parts.push('<text x="30" y="37" font-family="ui-monospace, monospace" font-size="12.5" fill="#dfe6ee">' + esc(o.label) + '</text>');
+    }
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" width="640" height="400">' + parts.join('') + '</svg>';
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  /** Six frames across a clip, drifting from the opening state to the closing one. */
+  function frames(from, to, label) {
+    var out = [];
+    for (var i = 0; i < 6; i++) {
+      var t = i / 5;
+      out.push({
+        at: Math.round((i + 0.5) * (to.seconds || 120) / 6),
+        src: frameSVG({
+          wet: from.wet + (to.wet - from.wet) * t,
+          cut: from.cut + (to.cut - from.cut) * t,
+          gear: Math.round(from.gear + (to.gear - from.gear) * t),
+          night: to.night,
+          label: label,
+        }),
+      });
+    }
+    return out;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * The record
+   *
+   * The same narrative the platform demo tells, seen from the reviewer's
+   * side: a clean day, a day filmed at the wrong house, a day nothing
+   * visibly changed, a before with no after, and one clip frozen under
+   * legal hold. Every honest outcome the system can produce appears at
+   * least once, because a demo showing only passes teaches the wrong thing.
+   * ------------------------------------------------------------------ */
+
+  var HASHES = [
+    '9f2c4a1b7e58d3096a4fbb21c7e0d584913a6f2b8c0e7d41a95b3c62f807e1d4',
+    '3a71e0c95d24b8f6072ac1e93b58d40f6218ae7c95d310b428f6ce07a1d93b25',
+    'c04b9d7e1a63f28540e7b91c3d5a806fe24913b7c0d85a6f19e4b273c608d5a1',
+    '7e19b3c05a8d24f6193ec07b45a2d8f60c93715ea28bd4f0396ca7be15d284c0',
+    'b52d8f30c716a94e0d5b83a7f21c604e9d38b5170ac2f94e6d183b7c05a9e264',
+    '18f04ca29e7b53d61840fa9c25e73b06d19c48a5f2703be91d64ca08f37b52e9',
+    '6d3b81f0a95c274e0938bd5170ea2c46f81b930d7a5c26e4901fb83d5c7a2069',
+    'a97c25e0b384df61052a7cb93e08d417f625ba90c8d31e74206fa5b8c93d017e',
+    '2b6f9d04a18e735c0426db91f5a3c807e19d472b0a6c58f3921ed70b4c8a6153',
+    'e470a92c5b18d63f0951ac82e7b40d19638fa5c07d2b91e4805cf36a7b1d902e',
+    '5c81b402d97a63e10f48ba95c02d7e63194af80b25c9d713e06a4bf82d59c107',
+    'd93e07a5c216b840f75ce019b3a82d64071fe95b28c4a3d016fb75c8e920a413'
+  ];
+
+  var JOBS = {
+    cedar: { key: 'cedar', name: 'Cedar Ridge — storm damage, roof tarp + rebuild', number: 1038, address: '4118 Cedar Ridge Dr, Austin TX' },
+    meridian: { key: 'meridian', name: 'Meridian Ave — water loss, Class 3', number: 1041, address: '1841 Meridian Ave, Austin TX' },
+    camden: { key: 'camden', name: 'Camden Court — HOA clubhouse rebuild', number: 1044, address: '900 Camden Ct, Round Rock TX' }
+  };
+
+  function ev(o) { return o; }
+
+  var EVIDENCE = [
+    ev({
+      id: 'EV-1038-0805-A', job: 'cedar', company: 'Delgado Roofing', person: 'Hector Delgado',
+      phase: 'after', workDate: '2026-08-05', capturedAt: '2026-08-05T20:48:00', uploadedAt: '2026-08-05T20:51:00',
+      duration: 143, bytes: 88_400_000, device: 'iPhone 15 · Atmosphere 2.4',
+      gps: { lat: 30.4413, lon: -97.7218, accuracy: 6, distanceFt: 41 },
+      hash: HASHES[0], tier: 2,
+      integrity: 'pass',
+      checks: [
+        { verdict: 'pass', what: 'Filmed on site', detail: '41 ft from the recorded property centre, accuracy ±6 ft.' },
+        { verdict: 'pass', what: 'Filmed on the day claimed', detail: 'Device clock 20:48, received 20:51 — a three-minute gap.' },
+        { verdict: 'pass', what: 'Not filed before', detail: 'This file has not appeared on any other day or job.' },
+        { verdict: 'pass', what: 'Long enough to show the work', detail: '2 min 23 s across the areas in scope.' }
+      ],
+      analysis: {
+        state: 'done',
+        materialChange: 'significant',
+        materialBecause: 'The tarp is gone and decking is exposed and dry across the north slope, which was covered in the before clip.',
+        summary: 'The north slope is stripped to decking and the temporary tarp has been removed. New underlayment is laid on roughly two thirds of the slope. Debris is bagged and staged at the driveway.',
+        changes: ['Tarp removed from the north slope', 'Decking exposed, no visible sheathing damage', 'Underlayment laid across approximately two thirds of the slope'],
+        scope: [
+          { title: 'Remove temporary tarp', verdict: 'appears_complete' },
+          { title: 'Strip north slope to decking', verdict: 'appears_complete' },
+          { title: 'Install synthetic underlayment', verdict: 'in_progress' },
+          { title: 'Replace damaged decking', verdict: 'not_visible' },
+          { title: 'DO NOT touch the skylights', verdict: 'not_visible' }
+        ],
+        couldNotTell: ['Whether any decking was replaced — no close footage of the sheathing.', 'Ridge and valley detail; the clip does not go above the mid-slope.']
+      },
+      custody: [
+        { action: 'uploaded', by: 'Hector Delgado, Delgado Roofing', role: 'subcontractor', at: '2026-08-05T20:51', detail: 'after · 2026-08-05' },
+        { action: 'analysed', by: 'Atmosphere', role: 'ai', at: '2026-08-05T20:55', detail: 'Frames read against 5 scope lines' },
+        { action: 'viewed', by: 'Priya Shah', role: 'general contractor', at: '2026-08-06T07:41', detail: 'signed URL minted' },
+        { action: 'accepted', by: 'Priya Shah', role: 'general contractor', at: '2026-08-06T07:44', detail: 'Day released for payment' }
+      ],
+      before: { wet: 0.55, cut: 0, gear: 0, seconds: 143 },
+      after: { wet: 0.1, cut: 0.65, gear: 0, seconds: 143 }
+    }),
+    ev({
+      id: 'EV-1038-0805-B', job: 'cedar', company: 'Delgado Roofing', person: 'Hector Delgado',
+      phase: 'before', workDate: '2026-08-05', capturedAt: '2026-08-05T07:12:00', uploadedAt: '2026-08-05T07:14:00',
+      duration: 96, bytes: 61_200_000, device: 'iPhone 15 · Atmosphere 2.4',
+      gps: { lat: 30.4413, lon: -97.7219, accuracy: 8, distanceFt: 52 },
+      hash: HASHES[1], tier: 2, integrity: 'pass',
+      checks: [
+        { verdict: 'pass', what: 'Filmed on site', detail: '52 ft from the recorded property centre, accuracy ±8 ft.' },
+        { verdict: 'pass', what: 'Filmed on the day claimed', detail: 'Device clock 07:12, received 07:14.' },
+        { verdict: 'pass', what: 'Not filed before', detail: 'This file has not appeared on any other day or job.' },
+        { verdict: 'pass', what: 'Long enough to show the work', detail: '1 min 36 s walking the affected slope.' }
+      ],
+      analysis: { state: 'paired', pairedWith: 'EV-1038-0805-A' },
+      custody: [
+        { action: 'uploaded', by: 'Hector Delgado, Delgado Roofing', role: 'subcontractor', at: '2026-08-05T07:14', detail: 'before · 2026-08-05' },
+        { action: 'analysed', by: 'Atmosphere', role: 'ai', at: '2026-08-05T20:55', detail: 'Read as the before half of 2026-08-05' }
+      ],
+      before: { wet: 0.6, cut: 0, gear: 0, seconds: 96 },
+      after: { wet: 0.55, cut: 0, gear: 0, seconds: 96 }
+    }),
+    ev({
+      id: 'EV-1038-0804-B', job: 'cedar', company: 'Delgado Roofing', person: 'Hector Delgado',
+      phase: 'before', workDate: '2026-08-04', capturedAt: '2026-08-04T07:31:00', uploadedAt: '2026-08-04T07:33:00',
+      duration: 74, bytes: 47_100_000, device: 'iPhone 15 · Atmosphere 2.4',
+      gps: { lat: 30.4692, lon: -97.7550, accuracy: 11, distanceFt: 11299 },
+      hash: HASHES[2], tier: 1, integrity: 'fail',
+      checks: [
+        { verdict: 'fail', what: 'Filmed on site', detail: 'Filmed 2.14 miles from the recorded property centre — outside the 0.25 mile radius. This is a different address.' },
+        { verdict: 'pass', what: 'Filmed on the day claimed', detail: 'Device clock 07:31, received 07:33.' },
+        { verdict: 'pass', what: 'Not filed before', detail: 'This file has not appeared on any other day or job.' },
+        { verdict: 'pass', what: 'Long enough to show the work', detail: '1 min 14 s.' }
+      ],
+      analysis: {
+        state: 'done',
+        materialChange: 'unclear',
+        materialBecause: 'The two clips do not appear to show the same building, so a comparison would not mean anything.',
+        summary: 'A roof slope with intact shingles and no visible storm damage. The structure, roof pitch and surrounding trees do not match the other footage filed against this job.',
+        changes: [],
+        scope: [
+          { title: 'Remove temporary tarp', verdict: 'not_visible' },
+          { title: 'Strip north slope to decking', verdict: 'not_visible' },
+          { title: 'Install synthetic underlayment', verdict: 'not_visible' }
+        ],
+        couldNotTell: ['Everything about the scope — this footage is of somewhere else.']
+      },
+      custody: [
+        { action: 'uploaded', by: 'Hector Delgado, Delgado Roofing', role: 'subcontractor', at: '2026-08-04T07:33', detail: 'before · 2026-08-04' },
+        { action: 'analysed', by: 'Atmosphere', role: 'ai', at: '2026-08-04T19:22', detail: 'Comparison abandoned — location mismatch' },
+        { action: 'viewed', by: 'Priya Shah', role: 'general contractor', at: '2026-08-04T19:40', detail: 'signed URL minted' },
+        { action: 'rejected', by: 'Priya Shah', role: 'general contractor', at: '2026-08-04T19:46', detail: 'Refilm requested; day not released' }
+      ],
+      before: { wet: 0, cut: 0, gear: 0, seconds: 74 },
+      after: { wet: 0, cut: 0, gear: 0, seconds: 74 }
+    }),
+    ev({
+      id: 'EV-1038-0801-A', job: 'cedar', company: 'Delgado Roofing', person: 'Hector Delgado',
+      phase: 'after', workDate: '2026-08-01', capturedAt: null, uploadedAt: '2026-08-01T18:20:00',
+      duration: 118, bytes: 70_900_000, device: 'Android · web upload',
+      gps: null,
+      hash: HASHES[3], tier: 1, integrity: 'unknown',
+      checks: [
+        { verdict: 'unknown', what: 'Filmed on site', detail: 'The device did not report a location. Nothing contradicts the claim; nothing supports it either.' },
+        { verdict: 'unknown', what: 'Filmed on the day claimed', detail: 'No capture time was reported, so only the upload time is known.' },
+        { verdict: 'pass', what: 'Not filed before', detail: 'This file has not appeared on any other day or job.' },
+        { verdict: 'pass', what: 'Long enough to show the work', detail: '1 min 58 s.' }
+      ],
+      analysis: {
+        state: 'done',
+        materialChange: 'significant',
+        materialBecause: 'Tarp coverage extends across the full slope in the after frames and only partially in the before.',
+        summary: 'Emergency tarp installed across the north and west slopes and battened at the eaves. No permanent repair visible.',
+        changes: ['Tarp extended to cover the west slope', 'Battens added along the eave line'],
+        scope: [{ title: 'Emergency tarp', verdict: 'appears_complete' }],
+        couldNotTell: ['Fastening detail under the battens.']
+      },
+      custody: [
+        { action: 'uploaded', by: 'Hector Delgado, Delgado Roofing', role: 'subcontractor', at: '2026-08-01T18:20', detail: 'after · 2026-08-01' },
+        { action: 'analysed', by: 'Atmosphere', role: 'ai', at: '2026-08-01T18:29', detail: 'Frames read against 1 scope line' },
+        { action: 'accepted', by: 'Priya Shah', role: 'general contractor', at: '2026-08-02T08:02', detail: 'Accepted on the strength of the site visit, not the footage' }
+      ],
+      before: { wet: 0.7, cut: 0, gear: 0, seconds: 118 },
+      after: { wet: 0.3, cut: 0, gear: 0, seconds: 118 }
+    }),
+    ev({
+      id: 'EV-1038-0806-B', job: 'cedar', company: 'Brightline Electric', person: 'Marisol Vega',
+      phase: 'before', workDate: '2026-08-06', capturedAt: '2026-08-06T08:02:00', uploadedAt: '2026-08-06T08:05:00',
+      duration: 52, bytes: 33_800_000, device: 'Pixel 8 · Atmosphere 2.4',
+      gps: { lat: 30.4414, lon: -97.7217, accuracy: 5, distanceFt: 37 },
+      hash: HASHES[4], tier: 1, integrity: 'pass',
+      checks: [
+        { verdict: 'pass', what: 'Filmed on site', detail: '37 ft from the recorded property centre.' },
+        { verdict: 'pass', what: 'Filmed on the day claimed', detail: 'Device clock 08:02, received 08:05.' },
+        { verdict: 'pass', what: 'Not filed before', detail: 'This file has not appeared on any other day or job.' },
+        { verdict: 'unknown', what: 'Long enough to show the work', detail: '52 s is short for a walkthrough; not a failure on its own.' }
+      ],
+      analysis: { state: 'skipped', reason: 'No after video has been filed for this day, so there is nothing to compare against.' },
+      custody: [
+        { action: 'uploaded', by: 'Marisol Vega, Brightline Electric', role: 'subcontractor', at: '2026-08-06T08:05', detail: 'before · 2026-08-06' }
+      ],
+      before: { wet: 0.2, cut: 0.2, gear: 0, seconds: 52 },
+      after: { wet: 0.2, cut: 0.2, gear: 0, seconds: 52 }
+    }),
+    ev({
+      id: 'EV-1041-0803-A', job: 'meridian', company: 'Coastal Drying LLC', person: 'Andre Boone',
+      phase: 'after', workDate: '2026-08-03', capturedAt: '2026-08-03T17:20:00', uploadedAt: '2026-08-03T17:26:00',
+      duration: 161, bytes: 96_700_000, device: 'iPhone 14 · Atmosphere 2.4',
+      gps: { lat: 30.2984, lon: -97.7431, accuracy: 7, distanceFt: 28 },
+      hash: HASHES[5], tier: 2, integrity: 'pass',
+      checks: [
+        { verdict: 'pass', what: 'Filmed on site', detail: '28 ft from the recorded property centre.' },
+        { verdict: 'pass', what: 'Filmed on the day claimed', detail: 'Device clock 17:20, received 17:26.' },
+        { verdict: 'pass', what: 'Not filed before', detail: 'This file has not appeared on any other day or job.' },
+        { verdict: 'pass', what: 'Long enough to show the work', detail: '2 min 41 s across three rooms.' }
+      ],
+      analysis: {
+        state: 'done',
+        materialChange: 'none',
+        materialBecause: 'The two clips look substantially the same. The equipment is in the same positions and no material has been removed or added.',
+        summary: 'Six air movers and one dehumidifier running in the same positions as the morning clip. No new demolition, no material removed, no change to the flood cut line.',
+        changes: [],
+        scope: [
+          { title: 'Monitor and adjust drying equipment', verdict: 'in_progress' },
+          { title: 'Remove wet insulation, master bedroom', verdict: 'not_visible' },
+          { title: 'Extend flood cut, hallway', verdict: 'not_visible' }
+        ],
+        couldNotTell: ['Whether readings were taken — a meter is never in frame.', 'The master bedroom cavity; the clip does not enter that room.']
+      },
+      custody: [
+        { action: 'uploaded', by: 'Andre Boone, Coastal Drying LLC', role: 'subcontractor', at: '2026-08-03T17:26', detail: 'after · 2026-08-03' },
+        { action: 'analysed', by: 'Atmosphere', role: 'ai', at: '2026-08-03T17:34', detail: 'Frames read against 3 scope lines' },
+        { action: 'viewed', by: 'Dana Ortiz', role: 'project manager', at: '2026-08-04T09:11', detail: 'signed URL minted' }
+      ],
+      before: { wet: 0.35, cut: 0.4, gear: 6, seconds: 161 },
+      after: { wet: 0.34, cut: 0.4, gear: 6, seconds: 161 }
+    }),
+    ev({
+      id: 'EV-1041-0802-PC', job: 'meridian', company: 'Coastal Drying LLC', person: 'Andre Boone',
+      phase: 'pre-conceal', workDate: '2026-08-02', capturedAt: '2026-08-02T15:44:00', uploadedAt: '2026-08-02T15:47:00',
+      duration: 208, bytes: 121_300_000, device: 'iPhone 14 · Atmosphere 2.4',
+      gps: { lat: 30.2984, lon: -97.7430, accuracy: 6, distanceFt: 33 },
+      hash: HASHES[6], tier: 3, integrity: 'pass',
+      hold: { on: true, reason: 'Carrier dispute over the extent of the flood cut — CLM-88412.', by: 'Dana Ortiz', at: '2026-08-06T10:02' },
+      checks: [
+        { verdict: 'pass', what: 'Filmed on site', detail: '33 ft from the recorded property centre.' },
+        { verdict: 'pass', what: 'Filmed on the day claimed', detail: 'Device clock 15:44, received 15:47.' },
+        { verdict: 'pass', what: 'Not filed before', detail: 'This file has not appeared on any other day or job.' },
+        { verdict: 'pass', what: 'Long enough to show the work', detail: '3 min 28 s, walking each cavity slowly.' }
+      ],
+      analysis: {
+        state: 'done',
+        materialChange: 'significant',
+        materialBecause: 'Cavities that were closed in the morning footage are open, with insulation removed and studs exposed to the cut line.',
+        summary: 'Every wall cavity on the affected run is open and readable. The cut line is consistent at roughly 24 inches and the moisture meter is in frame against the remaining board at three points.',
+        changes: ['Insulation removed from six cavities', 'Cut line squared at approximately 24 in', 'Meter readings taken on camera at three points'],
+        scope: [
+          { title: 'Flood cut to 24 in, affected run', verdict: 'appears_complete' },
+          { title: 'Remove wet insulation', verdict: 'appears_complete' },
+          { title: 'Record cavity readings before closing', verdict: 'appears_complete' }
+        ],
+        couldNotTell: ['The meter display values; the numbers are not legible at this distance.']
+      },
+      custody: [
+        { action: 'uploaded', by: 'Andre Boone, Coastal Drying LLC', role: 'subcontractor', at: '2026-08-02T15:47', detail: 'pre-conceal · 2026-08-02' },
+        { action: 'analysed', by: 'Atmosphere', role: 'ai', at: '2026-08-02T15:59', detail: 'Frames read against 3 scope lines' },
+        { action: 'viewed', by: 'Dana Ortiz', role: 'project manager', at: '2026-08-02T16:40', detail: 'signed URL minted' },
+        { action: 'held', by: 'Dana Ortiz', role: 'project manager', at: '2026-08-06T10:02', detail: 'Legal hold — carrier dispute CLM-88412' },
+        { action: 'viewed', by: 'R. Calloway', role: 'carrier adjuster', at: '2026-08-07T11:15', detail: 'External share link, expires in 7 days' }
+      ],
+      before: { wet: 0.5, cut: 0.05, gear: 4, seconds: 208 },
+      after: { wet: 0.25, cut: 0.7, gear: 6, seconds: 208 }
+    }),
+    ev({
+      id: 'EV-1044-0730-A', job: 'camden', company: 'Vantage Drywall', person: 'Luis Marte',
+      phase: 'after', workDate: '2026-07-30', capturedAt: '2026-07-30T16:55:00', uploadedAt: '2026-07-30T17:02:00',
+      duration: 132, bytes: 79_500_000, device: 'iPhone 13 · Atmosphere 2.3',
+      gps: { lat: 30.5083, lon: -97.6789, accuracy: 9, distanceFt: 64 },
+      hash: HASHES[7], tier: 2, integrity: 'pass',
+      checks: [
+        { verdict: 'pass', what: 'Filmed on site', detail: '64 ft from the recorded property centre.' },
+        { verdict: 'pass', what: 'Filmed on the day claimed', detail: 'Device clock 16:55, received 17:02.' },
+        { verdict: 'pass', what: 'Not filed before', detail: 'This file has not appeared on any other day or job.' },
+        { verdict: 'pass', what: 'Long enough to show the work', detail: '2 min 12 s.' }
+      ],
+      analysis: { state: 'queued', reason: 'Queued for analysis. Both halves of the day are filed; the model has not read them yet.' },
+      custody: [
+        { action: 'uploaded', by: 'Luis Marte, Vantage Drywall', role: 'subcontractor', at: '2026-07-30T17:02', detail: 'after · 2026-07-30' }
+      ],
+      before: { wet: 0.1, cut: 0.6, gear: 2, seconds: 132 },
+      after: { wet: 0.05, cut: 0.15, gear: 0, seconds: 132 }
+    }),
+    ev({
+      id: 'EV-1044-0729-A', job: 'camden', company: 'Vantage Drywall', person: 'Luis Marte',
+      phase: 'after', workDate: '2026-07-29', capturedAt: '2026-07-29T17:41:00', uploadedAt: '2026-07-29T22:10:00',
+      duration: 39, bytes: 21_400_000, device: 'iPhone 13 · Atmosphere 2.3',
+      gps: { lat: 30.5083, lon: -97.6791, accuracy: 14, distanceFt: 71 },
+      hash: HASHES[8], tier: 1, integrity: 'unknown',
+      checks: [
+        { verdict: 'pass', what: 'Filmed on site', detail: '71 ft from the recorded property centre, accuracy ±14 ft.' },
+        { verdict: 'unknown', what: 'Filmed on the day claimed', detail: 'Filmed 17:41, uploaded 22:10 — a four and a half hour gap. Not wrong, but not corroborated either.' },
+        { verdict: 'pass', what: 'Not filed before', detail: 'This file has not appeared on any other day or job.' },
+        { verdict: 'fail', what: 'Long enough to show the work', detail: '39 s for a day billed at eight hours across three rooms.' }
+      ],
+      analysis: {
+        state: 'done',
+        materialChange: 'minor',
+        materialBecause: 'One wall shows new board between the two clips; the rest of the framing looks unchanged.',
+        summary: 'A short pan of one room. Board is hung on a single wall. The other two rooms in scope do not appear in the footage.',
+        changes: ['Board hung on one wall of the front room'],
+        scope: [
+          { title: 'Hang board, front room', verdict: 'in_progress' },
+          { title: 'Hang board, corridor', verdict: 'not_visible' },
+          { title: 'Hang board, back office', verdict: 'not_visible' }
+        ],
+        couldNotTell: ['Two of the three rooms in scope are never shown.']
+      },
+      custody: [
+        { action: 'uploaded', by: 'Luis Marte, Vantage Drywall', role: 'subcontractor', at: '2026-07-29T22:10', detail: 'after · 2026-07-29' },
+        { action: 'analysed', by: 'Atmosphere', role: 'ai', at: '2026-07-29T22:18', detail: 'Frames read against 3 scope lines' },
+        { action: 'viewed', by: 'Dana Ortiz', role: 'project manager', at: '2026-07-30T08:30', detail: 'signed URL minted' }
+      ],
+      before: { wet: 0.05, cut: 0.7, gear: 0, seconds: 39 },
+      after: { wet: 0.05, cut: 0.55, gear: 0, seconds: 39 }
+    })
+  ];
+
+  // The before half of each analysed pair is not separately analysed; it is read
+  // as one half of the day. Rows say so rather than reading as "not analysed".
+
+  /* ------------------------------------------------------------------ *
+   * State
+   * ------------------------------------------------------------------ */
+
+  var state = { view: 'all', jobs: {}, companies: {}, phases: {}, q: '', sort: 'recent', open: null, frame: 0, playing: null };
+
+  var $ = function (sel) { return document.querySelector(sel); };
+  var rowsEl = $('#rows');
+
+  function money(n) { return n.toLocaleString('en-US'); }
+  function mb(bytes) { return (bytes / 1048576).toFixed(0) + ' MB'; }
+  function dur(s) {
+    var m = Math.floor(s / 60), r = s % 60;
+    return m + ':' + String(r).padStart(2, '0');
+  }
+  function dayLabel(iso) {
+    var d = new Date(iso + 'T12:00:00');
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+  function stamp(iso) {
+    if (!iso) return '—';
+    var d = new Date(iso);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
+      d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+
+  /** The overall integrity verdict, and the rule that governs the whole product. */
+  function integrityOf(item) {
+    var v = item.checks.map(function (c) { return c.verdict; });
+    if (v.indexOf('fail') > -1) return 'fail';
+    if (v.indexOf('unknown') > -1) return 'unknown';
+    return 'pass';
+  }
+
+  function analysisChip(item) {
+    var a = item.analysis || {};
+    if (a.state === 'queued') return { cls: 'neutral', text: 'Queued' };
+    if (a.state === 'skipped') return { cls: 'neutral', text: 'Waiting on the after' };
+    if (a.state === 'paired') return { cls: 'neutral', text: 'Read as the before half' };
+    if (a.state !== 'done') return { cls: 'neutral', text: 'Not analysed' };
+    if (a.materialChange === 'significant') return { cls: 'pass', text: 'Work changed' };
+    if (a.materialChange === 'minor') return { cls: 'unknown', text: 'Minor change' };
+    if (a.materialChange === 'none') return { cls: 'fail', text: 'No visible change' };
+    return { cls: 'unknown', text: 'Could not compare' };
+  }
+
+  function needsAttention(item) {
+    var a = item.analysis || {};
+    return integrityOf(item) !== 'pass' ||
+      (a.state === 'done' && (a.materialChange === 'none' || a.materialChange === 'unclear'));
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Filters and list
+   * ------------------------------------------------------------------ */
+
+  function buildFacet(el, values, group) {
+    el.innerHTML = values.map(function (v) {
+      return '<label><input type="checkbox" data-group="' + group + '" value="' + esc(v.key) + '" /> ' +
+        '<span>' + esc(v.label) + '</span><span class="n">' + v.n + '</span></label>';
+    }).join('');
+  }
+
+  function tally(fn) {
+    var out = {};
+    EVIDENCE.forEach(function (e) { var k = fn(e); out[k] = (out[k] || 0) + 1; });
+    return out;
+  }
+
+  function initFacets() {
+    var byJob = tally(function (e) { return e.job; });
+    buildFacet($('#facet-job'), Object.keys(byJob).map(function (k) {
+      return { key: k, label: JOBS[k].name.split('—')[0].trim() + ' · #' + JOBS[k].number, n: byJob[k] };
+    }), 'jobs');
+
+    var byCo = tally(function (e) { return e.company; });
+    buildFacet($('#facet-company'), Object.keys(byCo).map(function (k) {
+      return { key: k, label: k, n: byCo[k] };
+    }), 'companies');
+
+    var byPhase = tally(function (e) { return e.phase; });
+    buildFacet($('#facet-phase'), Object.keys(byPhase).map(function (k) {
+      return { key: k, label: k.charAt(0).toUpperCase() + k.slice(1), n: byPhase[k] };
+    }), 'phases');
+
+    document.querySelectorAll('.facet input').forEach(function (input) {
+      input.addEventListener('change', function () {
+        var group = state[input.dataset.group];
+        if (input.checked) group[input.value] = true; else delete group[input.value];
+        render();
+      });
+    });
+  }
+
+  function visible() {
+    var q = state.q.trim().toLowerCase();
+    return EVIDENCE.filter(function (e) {
+      if (state.view === 'flagged' && !needsAttention(e)) return false;
+      if (state.view === 'unanalysed' && (e.analysis || {}).state === 'done') return false;
+      if (state.view === 'hold' && !(e.hold && e.hold.on)) return false;
+      if (Object.keys(state.jobs).length && !state.jobs[e.job]) return false;
+      if (Object.keys(state.companies).length && !state.companies[e.company]) return false;
+      if (Object.keys(state.phases).length && !state.phases[e.phase]) return false;
+      if (q) {
+        var hay = [e.id, e.company, e.person, e.hash, JOBS[e.job].name, JOBS[e.job].number, e.phase].join(' ').toLowerCase();
+        if (hay.indexOf(q) === -1) return false;
+      }
+      return true;
+    }).sort(function (a, b) {
+      if (state.sort === 'risk') {
+        var d = (needsAttention(b) ? 1 : 0) - (needsAttention(a) ? 1 : 0);
+        if (d) return d;
+      }
+      return b.uploadedAt.localeCompare(a.uploadedAt);
+    });
+  }
+
+  function thumbFor(item) {
+    return frameSVG({
+      wet: item.after.wet, cut: item.after.cut, gear: item.after.gear,
+      night: false, label: null
+    });
+  }
+
+  function render() {
+    var list = visible();
+    $('#resultcount').textContent = list.length + ' of ' + EVIDENCE.length + ' clips';
+    $('#empty').hidden = list.length > 0;
+
+    rowsEl.innerHTML = list.map(function (e) {
+      var integ = integrityOf(e);
+      var chip = analysisChip(e);
+      var integLabel = integ === 'pass' ? 'Verified' : integ === 'fail' ? 'Failed' : 'Unverified';
+      return '' +
+        '<tr tabindex="0" data-id="' + e.id + '">' +
+          '<td><span class="thumb"><img alt="" src="' + thumbFor(e) + '" /><span class="dur">' + dur(e.duration) + '</span></span></td>' +
+          '<td class="titlecell">' +
+            '<div class="t">' + esc(JOBS[e.job].name.split('—')[0].trim()) + ' · ' + esc(e.phase) + '</div>' +
+            '<div class="s"><span class="id">' + esc(e.id) + '</span> · job #' + JOBS[e.job].number +
+              (e.hold && e.hold.on ? ' · <span class="chip hold"><span class="dot"></span>Legal hold</span>' : '') +
+            '</div>' +
+          '</td>' +
+          '<td><span class="chip ' + integ + '"><span class="dot"></span>' + integLabel + '</span></td>' +
+          '<td><span class="chip ' + chip.cls + '">' + esc(chip.text) + '</span></td>' +
+          '<td><span class="tier">T' + e.tier + '</span></td>' +
+          '<td class="when">' + dayLabel(e.workDate) + '<small>' + stamp(e.uploadedAt) + '</small></td>' +
+          '<td class="when">' + esc(e.person) + '<small>' + esc(e.company) + '</small></td>' +
+        '</tr>';
+    }).join('');
+
+    Array.prototype.forEach.call(rowsEl.querySelectorAll('tr'), function (tr) {
+      tr.addEventListener('click', function () { open(tr.dataset.id); });
+      tr.addEventListener('keydown', function (ev2) {
+        if (ev2.key === 'Enter' || ev2.key === ' ') { ev2.preventDefault(); open(tr.dataset.id); }
+      });
+    });
+  }
+
+  function counts() {
+    $('#n-all').textContent = EVIDENCE.length;
+    $('#n-flag').textContent = EVIDENCE.filter(needsAttention).length;
+    $('#n-unan').textContent = EVIDENCE.filter(function (e) { return (e.analysis || {}).state !== 'done'; }).length;
+    $('#n-hold').textContent = EVIDENCE.filter(function (e) { return e.hold && e.hold.on; }).length;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Detail
+   * ------------------------------------------------------------------ */
+
+  var VERDICT_WORD = {
+    appears_complete: ['pass', 'Appears complete'],
+    in_progress: ['unknown', 'In progress'],
+    not_visible: ['neutral', 'Not visible']
+  };
+
+  function open(id) {
+    var item = EVIDENCE.filter(function (e) { return e.id === id; })[0];
+    if (!item) return;
+    state.open = item;
+    state.frame = 0;
+    stopPlay();
+
+    $('#d-title').textContent = JOBS[item.job].name;
+    $('#d-meta').innerHTML =
+      '<span class="id">' + esc(item.id) + '</span> · ' + esc(item.phase) + ' · ' +
+      dayLabel(item.workDate) + ' · ' + esc(item.company) + ' · ' + dur(item.duration) + ' · ' + mb(item.bytes);
+
+    item._frames = frames(item.before, item.after, item.phase + ' · ' + item.workDate);
+
+    $('#d-scrub').innerHTML = item._frames.map(function (f, i) {
+      return '<button data-i="' + i + '" aria-pressed="' + (i === 0) + '" aria-label="Frame ' + (i + 1) + '"></button>';
+    }).join('');
+    Array.prototype.forEach.call($('#d-scrub').querySelectorAll('button'), function (b) {
+      b.addEventListener('click', function () { stopPlay(); setFrame(+b.dataset.i); });
+    });
+
+    setFrame(0);
+    renderAnalysis(item);
+    setTab('integrity');
+    $('#detail').setAttribute('data-open', '1');
+    $('#d-close').focus();
+  }
+
+  function setFrame(i) {
+    var item = state.open;
+    if (!item) return;
+    state.frame = i;
+    var f = item._frames[i];
+    $('#d-frame').innerHTML = '<img alt="Frame ' + (i + 1) + ' of the clip" src="' + f.src + '" />';
+    $('#d-time').textContent = 'frame ' + (i + 1) + ' / ' + item._frames.length + ' · ' + dur(f.at);
+    Array.prototype.forEach.call($('#d-scrub').querySelectorAll('button'), function (b) {
+      b.setAttribute('aria-pressed', String(+b.dataset.i === i));
+    });
+  }
+
+  function stopPlay() {
+    if (state.playing) { clearInterval(state.playing); state.playing = null; }
+  }
+
+  function renderAnalysis(item) {
+    var a = item.analysis || {};
+    var el = $('#d-analysis');
+
+    if (a.state === 'queued' || a.state === 'skipped' || a.state === 'paired') {
+      el.innerHTML = '<p style="color:var(--muted)">' + esc(
+        a.reason || (a.state === 'paired'
+          ? 'This clip is the before half of a day that was analysed as a pair. Open the after clip to read the comparison.'
+          : 'Not analysed.')
+      ) + '</p>' + (a.pairedWith
+        ? '<p><button class="navitem" style="width:auto;margin:6px 0 0;border:1px solid var(--line)" data-goto="' + a.pairedWith + '">Open ' + esc(a.pairedWith) + '</button></p>'
+        : '');
+      var goto = el.querySelector('[data-goto]');
+      if (goto) goto.addEventListener('click', function () { open(goto.dataset.goto); });
+      return;
+    }
+
+    var vl = a.materialChange === 'significant'
+      ? ['pass', 'Work materially changed between the two clips']
+      : a.materialChange === 'minor'
+        ? ['unknown', 'Minor visible change only']
+        : a.materialChange === 'none'
+          ? ['fail', 'No visible change between the two clips']
+          : ['unknown', 'Could not compare the two clips'];
+
+    var html = '<div class="verdictline ' + vl[0] + '">' + esc(vl[1]) + '</div>';
+    if (a.materialBecause) html += '<p style="font-size:12.5px;color:var(--muted)"><strong style="color:var(--ink-2)">Why:</strong> ' + esc(a.materialBecause) + '</p>';
+    html += '<p>' + esc(a.summary) + '</p>';
+
+    if (a.scope && a.scope.length) {
+      html += '<h5 style="margin:14px 0 6px;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)">Against the scope</h5><ul class="scopelist">';
+      a.scope.forEach(function (s) {
+        var w = VERDICT_WORD[s.verdict] || ['neutral', s.verdict];
+        html += '<li><span class="label">' + esc(s.title) + '</span><span class="chip ' + w[0] + '">' + esc(w[1]) + '</span></li>';
+      });
+      html += '</ul>';
+    }
+
+    if (a.couldNotTell && a.couldNotTell.length) {
+      html += '<h5 style="margin:14px 0 6px;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)">What it could not tell</h5>';
+      html += '<ul style="margin:0;padding-left:17px;font-size:12.5px;color:var(--muted);line-height:1.6">' +
+        a.couldNotTell.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>';
+    }
+
+    // Separated by a rule rather than spacing alone: this sentence is the one
+    // that keeps a model's reading from being mistaken for an inspection, and
+    // it should not read as the last bullet of the list above it.
+    html += '<p class="footnote" style="margin-top:14px;padding-top:11px;border-top:1px solid var(--line-soft)">' +
+      'This is a reading of the footage by a model, not an inspection. It is recorded as an analysis and ' +
+      'never as an acceptance — releasing money is a person\'s act.</p>';
+
+    el.innerHTML = html;
+  }
+
+  function setTab(tab) {
+    Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
+      b.setAttribute('aria-selected', String(b.dataset.tab === tab));
+    });
+    var item = state.open;
+    if (!item) return;
+    var el = $('#d-panel');
+
+    if (tab === 'integrity') {
+      var integ = integrityOf(item);
+      var head = integ === 'pass'
+        ? ['pass', 'Every check on this clip passed']
+        : integ === 'fail'
+          ? ['fail', 'A check failed — this clip does not stand as proof']
+          : ['unknown', 'Some checks could not run. Unverified is not the same as wrong.'];
+      var html = '<div class="verdictline ' + head[0] + '">' + esc(head[1]) + '</div>';
+      if (item.hold && item.hold.on) {
+        html += '<div class="banner hold"><div><strong>Legal hold.</strong> ' + esc(item.hold.reason) +
+          '<br />Placed by ' + esc(item.hold.by) + ' on ' + stamp(item.hold.at) +
+          '. Retention cannot delete this clip while the hold stands.</div></div>';
+      }
+      html += item.checks.map(function (c) {
+        return '<div class="checkrow"><span class="chip ' + c.verdict + '"><span class="dot"></span>' +
+          (c.verdict === 'pass' ? 'Pass' : c.verdict === 'fail' ? 'Fail' : 'Unknown') + '</span>' +
+          '<span><div class="what">' + esc(c.what) + '</div><div class="detail-txt">' + esc(c.detail) + '</div></span></div>';
+      }).join('');
+      html += '<p class="footnote">Checks run once, at upload, against what the device reported and what the ' +
+        'server observed. They are stored as findings rather than recomputed, so this is what was known when ' +
+        'somebody decided — not what today\'s code would conclude.</p>';
+      el.innerHTML = html;
+      return;
+    }
+
+    if (tab === 'custody') {
+      el.innerHTML = '<ul class="custody">' + item.custody.map(function (c) {
+        return '<li class="' + (c.role === 'ai' ? 'ai' : '') + '">' +
+          '<div><span class="act">' + esc(c.action) + '</span> <span class="by">· ' + esc(c.by) + '</span></div>' +
+          '<div class="at">' + stamp(c.at) + (c.detail ? ' · ' + esc(c.detail) : '') + '</div></li>';
+      }).join('') + '</ul>' +
+      '<p class="footnote">Every access is logged at the moment a viewing link is minted, including external ' +
+      'shares. The log is append-only: entries cannot be edited or removed, by anyone, including the account ' +
+      'that owns the job.</p>';
+      return;
+    }
+
+    var g = item.gps;
+    el.innerHTML = '<dl class="kv">' +
+      '<dt>Evidence ID</dt><dd class="mono">' + esc(item.id) + '</dd>' +
+      '<dt>Job</dt><dd>' + esc(JOBS[item.job].name) + '</dd>' +
+      '<dt>Address</dt><dd>' + esc(JOBS[item.job].address) + '</dd>' +
+      '<dt>Capture</dt><dd>' + esc(item.phase) + ' · ' + dayLabel(item.workDate) + '</dd>' +
+      '<dt>Filmed</dt><dd>' + (item.capturedAt ? stamp(item.capturedAt) : 'not reported by the device') + '</dd>' +
+      '<dt>Received</dt><dd>' + stamp(item.uploadedAt) + '</dd>' +
+      '<dt>Duration</dt><dd>' + dur(item.duration) + '</dd>' +
+      '<dt>Size</dt><dd>' + mb(item.bytes) + '</dd>' +
+      '<dt>Device</dt><dd>' + esc(item.device) + '</dd>' +
+      '<dt>Location</dt><dd>' + (g ? g.lat.toFixed(4) + ', ' + g.lon.toFixed(4) + ' (±' + g.accuracy + ' ft)' : 'not reported') + '</dd>' +
+      '<dt>From site</dt><dd>' + (g ? (g.distanceFt > 1000 ? (g.distanceFt / 5280).toFixed(2) + ' mi' : g.distanceFt + ' ft') : '—') + '</dd>' +
+      '<dt>SHA-256</dt><dd class="mono">' + esc(item.hash) + '</dd>' +
+      '<dt>Episode tier</dt><dd>Tier ' + item.tier + '</dd>' +
+      '</dl>' +
+      '<p class="footnote">The hash is of the original bytes as uploaded. Re-uploading the same file on another ' +
+      'day or another job is caught by it, which is the cheapest fraud there is and the cheapest to catch.</p>';
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Wiring
+   * ------------------------------------------------------------------ */
+
+  document.querySelectorAll('.navitem[data-view]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.view = b.dataset.view;
+      document.querySelectorAll('.navitem[data-view]').forEach(function (o) {
+        o.setAttribute('aria-current', String(o === b));
+      });
+      $('#viewtitle').textContent = b.textContent.replace(/\d+$/, '').trim();
+      render();
+    });
+  });
+
+  document.querySelectorAll('.seg button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.sort = b.dataset.sort;
+      document.querySelectorAll('.seg button').forEach(function (o) {
+        o.setAttribute('aria-pressed', String(o === b));
+      });
+      render();
+    });
+  });
+
+  document.querySelectorAll('.tabs button').forEach(function (b) {
+    b.addEventListener('click', function () { setTab(b.dataset.tab); });
+  });
+
+  $('#q').addEventListener('input', function (e) { state.q = e.target.value; render(); });
+
+  $('#d-close').addEventListener('click', function () {
+    stopPlay();
+    $('#detail').setAttribute('data-open', '0');
+    state.open = null;
+  });
+  $('#detail').addEventListener('click', function (e) {
+    if (e.target === $('#detail')) $('#d-close').click();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && state.open) $('#d-close').click();
+  });
+
+  $('#d-play').addEventListener('click', function () {
+    if (state.playing) { stopPlay(); return; }
+    state.playing = setInterval(function () {
+      var item = state.open;
+      if (!item) return stopPlay();
+      var next = state.frame + 1;
+      if (next >= item._frames.length) { stopPlay(); return; }
+      setFrame(next);
+    }, 700);
+  });
+
+  initFacets();
+  counts();
+  render();
+})();
+</script>
+</body>
+</html>
