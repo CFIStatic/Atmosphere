@@ -15,6 +15,7 @@ from pathlib import Path
 HERE = Path(__file__).parent
 PAGES = [
     ('home', 'index.html'),
+    ('verification', 'verification.html'),
     ('platform', 'platform.html'),
     ('sales', 'sales.html'),
     ('operations', 'operations.html'),
@@ -106,7 +107,7 @@ out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
       var el = document.getElementById('route-' + name);
       if (el) el.hidden = (name !== r);
     }});
-    var NAV_GROUP = {{ platform: 'platform', sales: 'platform', operations: 'platform',
+    var NAV_GROUP = {{ verification: 'platform', platform: 'platform', sales: 'platform', operations: 'platform',
       field: 'platform', manager: 'platform', security: 'resources', pricing: 'pricing',
       docs: 'resources', about: 'about', careers: 'about', contact: 'about',
       investors: 'about' }};
