@@ -391,8 +391,31 @@ function ProofSection({
   const [step, setStep] = useState('');
   const [problems, setProblems] = useState<string[]>([]);
   const [done, setDone] = useState<string | null>(null);
+  const [guide, setGuide] = useState<{
+    phase: string;
+    targetSeconds: number;
+    steps: Array<{ kind: string; instruction: string; why: string }>;
+  } | null>(null);
   const beforeInput = useRef<HTMLInputElement>(null);
   const afterInput = useRef<HTMLInputElement>(null);
+
+  // The shot list for whichever half of the day comes next. Fetched fresh when
+  // the phase flips, because the after's wording is different work.
+  const guidePhase = todaysDay?.hasBefore ? 'after' : 'before';
+  useEffect(() => {
+    let cancelled = false;
+    call<{ guide: typeof guide }>(`${API}/${token}/capture-guide?phase=${guidePhase}`)
+      .then((res) => {
+        if (!cancelled) setGuide(res.guide);
+      })
+      .catch(() => {
+        // No guide is a quieter page, not a broken one — the buttons still work.
+        if (!cancelled) setGuide(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, guidePhase]);
 
   async function upload(file: File, phase: 'before' | 'after') {
     setUploading(phase);
@@ -502,6 +525,37 @@ function ProofSection({
         One before you start, one when you finish. Walk the areas you worked on. Keep location
         turned on — it is what proves the footage is this site.
       </p>
+
+      {guide && guide.steps.length > 0 && (
+        <div className="mt-3 rounded-lg border border-brand-200 bg-brand-600/5 p-3">
+          <p className="text-xs font-semibold text-ink-900">
+            Film it like this{' '}
+            <span className="font-normal text-ink-500">
+              — the {guidePhase} video, about {Math.round(guide.targetSeconds / 60) || 1} min
+            </span>
+          </p>
+          <ol className="mt-2 space-y-2">
+            {guide.steps.map((s, i) => (
+              <li key={i} className="flex gap-2 text-xs">
+                <span
+                  className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                    s.kind === 'anchor' ? 'bg-brand-600 text-white' : 'bg-paper-200 text-ink-600'
+                  }`}
+                >
+                  {i + 1}
+                </span>
+                <span>
+                  <span className={s.kind === 'anchor' ? 'font-semibold text-ink-900' : 'text-ink-800'}>
+                    {s.kind === 'anchor' && <span className="text-brand-600">Start here: </span>}
+                    {s.instruction}
+                  </span>
+                  <span className="block text-[11px] text-ink-500">{s.why}</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
 
       <div className="mt-3 flex flex-col gap-2 sm:flex-row">
         <Button phase="before" filed={Boolean(todaysDay?.hasBefore)} />

@@ -36,6 +36,33 @@ test('a fenced code block is accepted rather than thrown away', () => {
   assert.deepEqual(parsed.changes, []);
 });
 
+test('the opening judgement parses, and anything malformed reads unclear', () => {
+  const good = parseAnalysis(
+    JSON.stringify({
+      summary: 'Work across the slope.',
+      opening: { before: 'exterior', after: 'not_exterior' },
+    }),
+  );
+  assert.ok(good);
+  assert.deepEqual(good.opening, { before: 'exterior', after: 'not_exterior' });
+
+  // Missing entirely: unclear, never a verdict either way.
+  const missing = parseAnalysis(JSON.stringify({ summary: 'Work across the slope.' }));
+  assert.ok(missing);
+  assert.deepEqual(missing.opening, { before: 'unclear', after: 'unclear' });
+
+  // An invented word must not survive as one — 'inside' is not in the
+  // vocabulary and a guess about filming habit is worse than no answer.
+  const invented = parseAnalysis(
+    JSON.stringify({
+      summary: 'Work across the slope.',
+      opening: { before: 'inside', after: 'outdoors probably' },
+    }),
+  );
+  assert.ok(invented);
+  assert.deepEqual(invented.opening, { before: 'unclear', after: 'unclear' });
+});
+
 test('prose instead of JSON comes back null', () => {
   assert.equal(parseAnalysis('It looks like they hung some drywall today.'), null);
   assert.equal(parseAnalysis(''), null);

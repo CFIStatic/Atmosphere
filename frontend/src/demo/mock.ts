@@ -911,6 +911,7 @@ const PROOF_DAYS: Record<string, any> = {
         ],
         aiSummary: 'The north slope is stripped to the deck in the before frames and fully dried-in with underlayment and new shingles across roughly two thirds of it in the after. Six sheets of new decking are visible in the valley where the before shows dark, delaminated sheathing.',
         aiFindings: {
+          opening: { before: 'exterior', after: 'exterior' },
           materialBecause: 'The before shows bare stripped deck; the after shows underlayment and shingles across two thirds of the slope, with new decking in the valley.',
           changes: [
             'North valley: dark delaminated decking replaced with new sheets',
@@ -950,6 +951,7 @@ const PROOF_DAYS: Record<string, any> = {
         ],
         aiSummary: 'The after frames show a different roof pitch and a different street elevation from the before. Both show roofing work in progress.',
         aiFindings: {
+          opening: { before: 'exterior', after: 'exterior' },
           materialBecause: 'The two videos do not appear to show the same building, so no before-and-after comparison is possible.',
           changes: [],
           cannotTell: ['The two videos do not appear to show the same building'],
@@ -997,6 +999,7 @@ const PROOF_DAYS: Record<string, any> = {
         ],
         aiSummary: 'Tear-off of the north slope, from intact shingles in the before to bare deck with the felt stripped in the after. Debris is in a dumpster on the driveway in both.',
         aiFindings: {
+          opening: { before: 'exterior', after: 'not_exterior' },
           changes: ['North slope stripped to bare deck', 'Old shingles cleared to the driveway dumpster'],
           cannotTell: ['No close view of the deck condition underneath'],
           scopeTouched: ['Tear off and replace roof — architectural shingle, 30yr'],
@@ -1278,7 +1281,7 @@ const CAMPAIGN_MEMBERS: Record<string, Array<Record<string, any>>> = {
 };
 
 /** Handlers that need the query string get it here, since Handler takes only the path match. */
-const LAST_QUERY: { leadId?: string; scope?: string } = {};
+const LAST_QUERY: { leadId?: string; scope?: string; phase?: string } = {};
 
 const COMPUTER_STATUS: ComputerStatus = {
   enabled: true,
@@ -1296,6 +1299,55 @@ const TECH_CAPABILITIES: TechnicianCapabilities = {
 };
 
 /** Symbility connection — stateful so the demo connect flow actually connects. */
+/** The filming shot list, phase-worded like the backend's captureGuide.ts. */
+function demoCaptureGuide(phase: string) {
+  const before = phase !== 'after';
+  return {
+    phase: before ? 'before' : 'after',
+    targetSeconds: 95,
+    steps: [
+      {
+        kind: 'anchor',
+        instruction:
+          'Start outside, facing the front of the building. Hold steady for a few seconds \u2014 get the house number, the mailbox, or anything that makes the property unmistakable.',
+        why: 'The first thing verification does is prove this footage is this site. A video that opens indoors could be any building anywhere, and every check after that is weaker for it.',
+      },
+      {
+        kind: 'scope',
+        instruction: before
+          ? 'Walk the area for \u201cStrip north slope to decking\u201d before touching it. Slow pan, arm\u2019s length, corners included.'
+          : 'Show the finished state of \u201cStrip north slope to decking\u201d. Slow pan across the whole area \u2014 the edges matter more than the middle.',
+        why: before
+          ? 'The before is the baseline the after gets compared against. An area skipped now cannot show change later.'
+          : 'The comparison can only credit what it can see. Work off-camera reads as work not done.',
+      },
+      {
+        kind: 'scope',
+        instruction: before
+          ? 'Walk the area for \u201cInstall synthetic underlayment\u201d before touching it. Slow pan, arm\u2019s length, corners included.'
+          : 'Show the finished state of \u201cInstall synthetic underlayment\u201d. Slow pan across the whole area \u2014 the edges matter more than the middle.',
+        why: before
+          ? 'The before is the baseline the after gets compared against. An area skipped now cannot show change later.'
+          : 'The comparison can only credit what it can see. Work off-camera reads as work not done.',
+      },
+      {
+        kind: 'exclusion',
+        instruction: 'Pass the excluded area \u2014 \u201cTouch the skylights\u201d \u2014 and film it untouched. (Carrier pulled them out of scope)',
+        why: 'The day somebody asks whether you touched it, the answer is this timestamped pan of it intact.',
+      },
+      {
+        kind: 'wrap',
+        instruction: before
+          ? 'Finish on anything unexpected you found \u2014 damage, water, access problems. Keep location on for the whole clip.'
+          : 'Finish on any meter or reading in use \u2014 numbers on camera count as documentation. Then stop recording before you leave the site.',
+        why: before
+          ? 'A surprise filmed at 7am is a change order. The same surprise mentioned at 5pm is an argument.'
+          : 'A reading in the video is evidence; a reading remembered later is a claim.',
+      },
+    ],
+  };
+}
+
 const SYMBILITY_STATE: {
   connected: boolean;
   username: string | null;
@@ -1768,6 +1820,12 @@ const routes: Array<[string, RegExp, Handler]> = [
   }],
 
   /* ------------------------------------------- the sub's job link */
+  ['GET', /^\/api\/job-share\/([\w-]+)\/capture-guide$/, () => ({
+    body: { guide: demoCaptureGuide(LAST_QUERY.phase ?? 'before') },
+  })],
+  ['GET', /^\/api\/operations\/shared\/([\w-]+)\/capture-guide$/, () => ({
+    body: { guide: demoCaptureGuide(LAST_QUERY.phase ?? 'before') },
+  })],
   ['GET', /^\/api\/job-share\/([\w-]+)$/, (m) => {
     const view = SHARE_VIEW[m[1]] ?? SHARE_VIEW['demo-token'];
     return { body: view };
@@ -2606,6 +2664,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   const query = new URLSearchParams((url.split('?')[1] ?? ''));
   LAST_QUERY.leadId = query.get('leadId') ?? undefined;
   LAST_QUERY.scope = query.get('scope') ?? undefined;
+  LAST_QUERY.phase = query.get('phase') ?? undefined;
 
   const method = (init?.method ?? 'GET').toUpperCase();
   let body: Record<string, unknown> = {};

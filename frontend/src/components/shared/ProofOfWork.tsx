@@ -36,6 +36,17 @@ import { SpinnerIcon } from '../icons';
  * a crew claimed a day and the footage shows nothing changed, which is the
  * sentence this feature exists to put in front of a project manager.
  */
+/**
+ * The opening-shot habit, in words. 'not_exterior' is stated plainly rather
+ * than styled as a failure — the checks that gate money live elsewhere; this
+ * is the filming habit the guide teaches, made visible so it improves.
+ */
+const OPENING_WORDS: Record<string, string> = {
+  exterior: 'at the property',
+  not_exterior: 'did not start outside',
+  unclear: 'could not tell',
+};
+
 const MATERIAL_CHIP: Record<string, { word: string; style: string }> = {
   significant: { word: 'work changed', style: 'bg-success-50 text-success-600' },
   minor: { word: 'small change', style: 'bg-paper-200/60 text-ink-600' },
@@ -299,6 +310,12 @@ export function ProofOfWork({ jobId }: { jobId: string }) {
                           <p className="mt-1 text-[11px] text-ink-600">
                             <span className="text-ink-500">Why: </span>
                             {day.aiFindings.materialBecause}
+                          </p>
+                        )}
+                        {day.aiFindings?.opening && (
+                          <p className="mt-1 text-[11px] text-ink-500">
+                            Opening shots — before: {OPENING_WORDS[day.aiFindings.opening.before]}
+                            {' · '}after: {OPENING_WORDS[day.aiFindings.opening.after]}
                           </p>
                         )}
                         {day.aiFindings?.changes?.length ? (

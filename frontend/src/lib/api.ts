@@ -732,9 +732,27 @@ export interface ProofDay {
     /** Per scope line, what the footage supports. */
     scopeVerdicts?: ScopeVerdict[];
     concerns?: string[];
+    /** Whether each clip opened at the property exterior, as the guide asks. */
+    opening?: { before: OpeningWord; after: OpeningWord };
   } | null;
   /** Ordered: before first, then after. */
   proofIds: string[];
+}
+
+export type OpeningWord = 'exterior' | 'not_exterior' | 'unclear';
+
+/* ---- Capture guide ---- */
+
+export interface CaptureStep {
+  kind: 'anchor' | 'scope' | 'exclusion' | 'wrap';
+  instruction: string;
+  why: string;
+}
+
+export interface CaptureGuide {
+  phase: 'before' | 'after';
+  steps: CaptureStep[];
+  targetSeconds: number;
 }
 
 export interface ScopeVerdict {
@@ -2386,6 +2404,12 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+
+  captureGuide: (jobId: string, phase: 'before' | 'after', partyId?: string) =>
+    request<{ guide: CaptureGuide }>(
+      `/api/operations/shared/${jobId}/capture-guide?phase=${phase}${partyId ? `&partyId=${partyId}` : ''}`,
+      { method: 'GET' },
+    ),
 
   reanalyseProofDay: (jobId: string, workDate: string, partyId: string) =>
     request<{ summary: string | null; findings: unknown; model: string | null }>(

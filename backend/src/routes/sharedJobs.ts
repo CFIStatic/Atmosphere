@@ -13,6 +13,7 @@ import {
   type Party,
   type ScopeItem,
 } from '../shared/jobRecord.js';
+import { buildCaptureGuide } from '../shared/captureGuide.js';
 import {
   createUploadUrl,
   recordProof,
@@ -557,6 +558,39 @@ async function partyForToken(token: string) {
   return { party: data as any, admin };
 }
 
+/**
+ * GET /api/job-share/:token/capture-guide?phase=before|after
+ *
+ * The shot list for today's video, built from this party's own scope. Served
+ * on the token so the crew reads it on the same screen they film from.
+ */
+jobShareRouter.get(
+  '/:token/capture-guide',
+  shareLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const phase = req.query.phase === 'after' ? 'after' : 'before';
+      const { party, admin } = await partyForToken(req.params.token);
+
+      const { data: scope } = await admin
+        .from('job_scope_items')
+        .select('title, state, reason, party_id, created_at')
+        .eq('job_id', party.job_id)
+        .order('created_at');
+
+      const mine = scopeForParty((scope ?? []) as any[], party.id);
+      res.json({
+        guide: buildCaptureGuide({
+          phase,
+          scope: mine.map((s: any) => ({ title: s.title, state: s.state, reason: s.reason })),
+        }),
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 /** GET /api/job-share/:token — the sub's view of the job. */
 jobShareRouter.get('/:token', shareLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -723,6 +757,45 @@ jobShareRouter.post(
 /* ---- Proof of work ------------------------------------------------------- */
 
 // The general contractor's side. Reading, deciding, and asking.
+/**
+ * GET /api/operations/shared/:jobId/capture-guide?phase=&partyId=
+ *
+ * The same shot list, through the org door — this is what the Field platform
+ * shows a crew before they film. Without a partyId it covers every line on
+ * the job, which is right for the org's own technicians: their day is not
+ * scoped to one company's slice.
+ */
+sharedJobsRouter.get(
+  '/shared/:jobId/capture-guide',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const phase = req.query.phase === 'after' ? 'after' : 'before';
+      const partyId = typeof req.query.partyId === 'string' ? req.query.partyId : null;
+      const { orgId, supabase } = await requireOrgContext(req);
+
+      const { data: scope, error } = await supabase
+        .from('job_scope_items')
+        .select('title, state, reason, party_id, created_at')
+        .eq('org_id', orgId)
+        .eq('job_id', req.params.jobId)
+        .order('created_at');
+      if (error) throw new HttpError(500, error.message, 'guide_failed');
+
+      const lines = partyId
+        ? scopeForParty((scope ?? []) as any[], partyId)
+        : ((scope ?? []) as any[]);
+      res.json({
+        guide: buildCaptureGuide({
+          phase,
+          scope: lines.map((s: any) => ({ title: s.title, state: s.state, reason: s.reason })),
+        }),
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 sharedJobsRouter.get('/shared/:jobId/proof', jobProofs);
 sharedJobsRouter.get('/shared/:jobId/proof/questions', proofQuestions);
 sharedJobsRouter.post('/shared/:jobId/proof/ask', askAboutProofs);

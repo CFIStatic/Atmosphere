@@ -212,6 +212,8 @@ export function serializeEvidence(input: {
               : [],
             couldNotTell: Array.isArray(findings.cannotTell) ? findings.cannotTell : [],
             concerns: Array.isArray(findings.concerns) ? findings.concerns : [],
+            /** Whether each clip opened at the property, as the guide asks. */
+            opening: findings.opening ?? null,
             model: proof.ai_model ?? null,
           }
         : null,

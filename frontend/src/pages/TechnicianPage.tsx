@@ -14,6 +14,7 @@ import { VoiceAssistantPanel } from '../components/technician/VoiceAssistantPane
 import { VideoCapturePanel } from '../components/technician/VideoCapturePanel';
 import { RecordingsPanel } from '../components/technician/RecordingsPanel';
 import { GaugeIcon, ScanIcon, SparkIcon, VideoIcon } from '../components/icons';
+import { CaptureGuidePanel } from '../components/field/CaptureGuidePanel';
 
 type View = 'capture' | 'recordings' | 'assistant';
 
@@ -253,6 +254,7 @@ export function TechnicianPage() {
                   hardware (and the browser's recording indicator) live. */}
               {view !== 'recordings' && (
                 <>
+                  <CaptureGuidePanel />
                   <VideoCapturePanel onSaved={handleSaved} onDetections={handleDetections} />
                   <AudioRecorderPanel onSaved={handleSaved} />
                 </>

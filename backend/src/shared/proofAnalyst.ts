@@ -62,6 +62,16 @@ export interface ScopeVerdict {
  */
 export type MaterialChange = 'significant' | 'minor' | 'none' | 'unclear';
 
+/**
+ * Where a clip's opening frames put the camera. Crews are told to start
+ * outside facing the building (see captureGuide.ts) because an exterior
+ * opening anchors the location and identity checks; this is the model saying
+ * whether they actually did. 'unclear' is the honest default and never counts
+ * against anyone — 'not_exterior' is the only word that says the instruction
+ * was skipped.
+ */
+export type OpeningWord = 'exterior' | 'not_exterior' | 'unclear';
+
 export interface ProofAnalysis {
   /** Two or three sentences a project manager can read at a glance. */
   summary: string;
@@ -78,6 +88,8 @@ export interface ProofAnalysis {
   scopeVerdicts: ScopeVerdict[];
   /** Anything visible that looks like work nobody asked for. */
   concerns: string[];
+  /** Whether each clip opens at the property exterior, as instructed. */
+  opening: { before: OpeningWord; after: OpeningWord };
   model: string | null;
 }
 
@@ -93,9 +105,10 @@ Your output is read by a project manager deciding whether to pay for that day. T
 6. Never mention money, hours, or whether the work seems worth paying for. You are not being asked.
 7. Give a verdict for every scope line you are shown, using its exact title. Use "appears_complete" only when the after frames show the finished state of that line. Use "in_progress" when work on it is visible but unfinished. Use "not_visible" when the frames simply do not cover it — that is the correct answer far more often than the other two, and choosing it costs nothing. Never mark a line complete because the other lines are.
 8. State whether the work area materially changed between the two videos. Use "significant" only when the after frames show the area in a clearly different state AND you have listed those differences under changes. Use "minor" for small visible differences. Use "none" when the frames look substantially the same — say it plainly; it is an important answer, not a failure. Use "unclear" when lighting, framing or coverage make the comparison unreliable. Never infer change from hours elapsed, from the scope, or from what a trade would normally have done.
+9. For each video separately, judge only its FIRST frame: does it open at the exterior of the property — building front, yard, driveway, street approach? Use "exterior" only when the first frame is clearly outdoors at a building. Use "not_exterior" when it is clearly indoors or of something else entirely. Use "unclear" whenever you cannot tell, and prefer it — this is a note about filming habit, not an accusation, and a guess is worse than no answer.
 
 Reply with JSON only, no prose around it:
-{"summary": string, "materialChange": "significant" | "minor" | "none" | "unclear", "materialBecause": string, "changes": string[], "cannotTell": string[], "scopeTouched": string[], "scopeVerdicts": [{"title": string, "verdict": "appears_complete" | "in_progress" | "not_visible", "because": string}], "concerns": string[]}`;
+{"summary": string, "materialChange": "significant" | "minor" | "none" | "unclear", "materialBecause": string, "changes": string[], "cannotTell": string[], "scopeTouched": string[], "scopeVerdicts": [{"title": string, "verdict": "appears_complete" | "in_progress" | "not_visible", "because": string}], "concerns": string[], "opening": {"before": "exterior" | "not_exterior" | "unclear", "after": "exterior" | "not_exterior" | "unclear"}}`;
 
 /** Frames get expensive fast; this is enough to see a room change. */
 const MAX_FRAMES_PER_VIDEO = 6;
@@ -186,6 +199,14 @@ export function parseAnalysis(text: string): Omit<ProofAnalysis, 'model'> | null
     materialBecause = 'The analysis did not say whether the work area changed.';
   }
 
+  // The opening judgement defaults to 'unclear' on anything malformed: an
+  // absent or invented word must never read as either compliance or a skip.
+  const openingWords = new Set<OpeningWord>(['exterior', 'not_exterior', 'unclear']);
+  const openingWord = (value: unknown): OpeningWord =>
+    typeof value === 'string' && openingWords.has(value as OpeningWord)
+      ? (value as OpeningWord)
+      : 'unclear';
+
   return {
     summary: parsed.summary.trim().slice(0, 2000),
     materialChange,
@@ -195,6 +216,10 @@ export function parseAnalysis(text: string): Omit<ProofAnalysis, 'model'> | null
     scopeTouched: list(parsed.scopeTouched),
     scopeVerdicts,
     concerns: list(parsed.concerns),
+    opening: {
+      before: openingWord(parsed.opening?.before),
+      after: openingWord(parsed.opening?.after),
+    },
   };
 }
 
