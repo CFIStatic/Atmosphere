@@ -269,6 +269,14 @@ export const config = {
     successUrl: process.env.STRIPE_SUCCESS_URL ?? `${frontendOrigins[0]}/billing?checkout=success`,
     cancelUrl: process.env.STRIPE_CANCEL_URL ?? `${frontendOrigins[0]}/billing?checkout=cancelled`,
     portalReturnUrl: process.env.STRIPE_PORTAL_RETURN_URL ?? `${frontendOrigins[0]}/billing`,
+    // Verifier evidence-download Checkout returns here. `{token}` and
+    // `{downloadId}` are substituted when the session is opened.
+    evidenceSuccessUrl:
+      process.env.STRIPE_EVIDENCE_SUCCESS_URL ??
+      `${frontendOrigins[0]}/verifier/?share={token}&checkout=success&download={downloadId}`,
+    evidenceCancelUrl:
+      process.env.STRIPE_EVIDENCE_CANCEL_URL ??
+      `${frontendOrigins[0]}/verifier/?share={token}&checkout=cancelled`,
   },
 
   pm: {

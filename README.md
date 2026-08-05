@@ -1135,6 +1135,7 @@ received and refreshes the balance once the webhook lands.
 | Buy credits | `POST /api/billing/purchases` → `checkoutUrl` | `checkout.session.completed` |
 | Start/change a plan | `POST /api/billing/checkout/subscription` | `customer.subscription.*` |
 | Cards, invoices, cancel | `POST /api/billing/portal` | Stripe's hosted portal |
+| Evidence download fee | `POST /api/verifier-share/:token/downloads/:id/pay` → `checkoutUrl` | `checkout.session.completed` (metadata `kind=evidence_download`) |
 
 Every handler is **replay-safe**, because Stripe guarantees at-least-once
 delivery and retries on any non-2xx. The event id is claimed before anything is
@@ -1164,20 +1165,20 @@ Note the two histories are deliberately separate: **payment history** is what wa
 
 ### Setting it up
 
-1. Create a product + recurring Price for each paid plan (monthly and annual),
-   then record the price ids:
-   ```sql
-   update public.billing_plans
-      set stripe_price_id_monthly = 'price_...', stripe_price_id_annual = 'price_...'
-    where code = 'pro';
-   ```
-   A plan with no price id returns a clear `price_not_configured` error rather
-   than a broken checkout.
-2. Set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and
+1. Set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and
    `SUPABASE_SERVICE_ROLE_KEY` (the webhook has no user session to act under).
+2. Create Products + Prices for every paid plan and link them into the catalog:
+   ```bash
+   cd backend && STRIPE_SECRET_KEY=sk_test_... npm run stripe:sync
+   ```
+   Apply the printed `UPDATE billing_plans …` SQL. A plan with no price id
+   returns a clear `price_not_configured` error rather than a broken checkout.
+   (You can still set price ids by hand if you prefer.)
 3. Point a webhook endpoint at `POST /api/webhooks/stripe` subscribed to
    `checkout.session.completed`, `invoice.paid`, `invoice.payment_failed`,
    `customer.subscription.created/updated/deleted` and `charge.refunded`.
+4. Apply `backend/supabase/migrations/20260812090000_stripe_evidence_downloads.sql`
+   so Verifier download fees can settle through the same webhook.
 
 Locally: `stripe listen --forward-to localhost:4000/api/webhooks/stripe`.
 

@@ -59,6 +59,9 @@ recorded in the custody entry for the share.
 Watching is free; keeping a copy is not. A download by an external account
 settles the sharing organization's fee first (their `evidence_download_policy`
 row; $25 by default), through an append-once ledger — no signed download URL
-exists until the ledger row reads paid or waived. The org's own members
-download their evidence free, but still through the ledger and the custody
-log, because "who holds a copy of this clip" should always be a query.
+exists until the ledger row reads paid or waived. With `STRIPE_SECRET_KEY` set,
+Pay opens hosted Checkout and the webhook marks the ledger paid; without it,
+production refuses rather than pretending, and local development settles as
+`dev`. The org's own members download their evidence free, but still through
+the ledger and the custody log, because "who holds a copy of this clip" should
+always be a query.

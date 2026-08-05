@@ -4543,7 +4543,7 @@ export interface Purchase {
  */
 export interface Payment {
   id: string;
-  kind: 'subscription' | 'credits' | 'refund';
+  kind: 'subscription' | 'credits' | 'refund' | 'evidence_download';
   status: 'pending' | 'succeeded' | 'failed' | 'refunded';
   amountCents: number;
   currency: string;
@@ -4564,6 +4564,7 @@ export const PAYMENT_KIND_LABELS: Record<Payment['kind'], string> = {
   subscription: 'Subscription',
   credits: 'Usage credits',
   refund: 'Refund',
+  evidence_download: 'Evidence download',
 };
 
 /* -------------------------------------------------------------- usage types */
