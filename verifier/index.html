@@ -235,6 +235,36 @@
   .when { font-size: 12px; color: var(--ink-2); white-space: nowrap; }
   .when small { display: block; color: var(--faint); font-size: 11px; }
 
+  /* ---------- row actions ---------- */
+  td.uploader .cellrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .kebab {
+    flex: none; width: 26px; height: 26px; border-radius: 6px; border: 1px solid transparent;
+    background: none; color: var(--faint); cursor: pointer; display: grid; place-items: center;
+  }
+  .kebab:hover, .kebab[aria-expanded="true"] { color: var(--ink); border-color: var(--line); background: var(--panel); }
+  .kebab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .rowmenu {
+    position: fixed; z-index: 60; min-width: 172px; padding: 5px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 9px;
+    box-shadow: 0 14px 36px -14px rgba(0,0,0,.4);
+  }
+  .rowmenu button {
+    display: flex; width: 100%; align-items: center; gap: 9px; padding: 7px 9px;
+    border: 0; background: none; border-radius: 6px; cursor: pointer;
+    font: inherit; font-size: 12.5px; font-weight: 550; color: var(--ink); text-align: left;
+  }
+  .rowmenu button:hover, .rowmenu button:focus-visible { background: var(--bg); outline: none; }
+  .rowmenu button svg { flex: none; color: var(--muted); }
+  .rowmenu button.danger { color: var(--fail); }
+  .rowmenu button.danger svg { color: currentColor; }
+  .toast {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(6px);
+    z-index: 70; padding: 9px 14px; border-radius: 9px; font-size: 12.5px; line-height: 1.45;
+    background: var(--ink); color: var(--panel); opacity: 0; pointer-events: none;
+    transition: opacity .18s, transform .18s; max-width: min(92vw, 460px); text-align: center;
+  }
+  .toast[data-on="1"] { opacity: 1; transform: translateX(-50%) translateY(0); }
+
   .empty { padding: 60px 20px; text-align: center; color: var(--muted); }
 
   /* ---------- detail ---------- */
@@ -435,6 +465,29 @@
     </div>
   </main>
 </div>
+
+<!-- One menu, repositioned to whichever row's dots opened it. Share, Delete,
+     Save, Export — in that order, the two that hand the clip onward flanking
+     the one that ends it. -->
+<div class="rowmenu" id="rowmenu" role="menu" aria-label="Clip actions" hidden>
+  <button role="menuitem" data-act="share">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="M8.4 10.8l7.2-3.6M8.4 13.2l7.2 3.6"/></svg>
+    Share
+  </button>
+  <button role="menuitem" data-act="delete" class="danger">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3.5 6h17M8.5 6V4.5A1.5 1.5 0 0 1 10 3h4a1.5 1.5 0 0 1 1.5 1.5V6M6 6l1 13.4A1.6 1.6 0 0 0 8.6 21h6.8a1.6 1.6 0 0 0 1.6-1.6L18 6M10 10.5v6M14 10.5v6"/></svg>
+    Delete
+  </button>
+  <button role="menuitem" data-act="save">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5V14M8 10.5l4 4 4-4M4.5 17.5v1.6A1.9 1.9 0 0 0 6.4 21h11.2a1.9 1.9 0 0 0 1.9-1.9v-1.6"/></svg>
+    Save
+  </button>
+  <button role="menuitem" data-act="export">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 3H7a1.8 1.8 0 0 0-1.8 1.8v14.4A1.8 1.8 0 0 0 7 21h10a1.8 1.8 0 0 0 1.8-1.8V8.3z"/><path d="M13.5 3v5.3h5.3"/></svg>
+    Export
+  </button>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <div class="detail" id="detail" role="dialog" aria-modal="true" aria-labelledby="d-title">
   <div class="sheet">
@@ -1010,7 +1063,10 @@
           '<td><span class="chip ' + chip.cls + '">' + esc(chip.text) + '</span></td>' +
           '<td><span class="tier">T' + e.tier + '</span></td>' +
           '<td class="when">' + dayLabel(e.workDate) + '<small>' + stamp(e.uploadedAt) + '</small></td>' +
-          '<td class="when">' + esc(e.person) + '<small>' + esc(e.company) + '</small></td>' +
+          '<td class="when uploader"><span class="cellrow"><span>' + esc(e.person) + '<small>' + esc(e.company) + '</small></span>' +
+            '<button class="kebab" aria-haspopup="menu" aria-expanded="false" aria-label="Actions for ' + esc(e.id) + '">' +
+              '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>' +
+            '</button></span></td>' +
         '</tr>';
     }).join('');
 
@@ -1019,6 +1075,11 @@
       tr.addEventListener('keydown', function (ev2) {
         if (ev2.key === 'Enter' || ev2.key === ' ') { ev2.preventDefault(); open(tr.dataset.id); }
       });
+      // The dots are on the row but not of the row: opening the menu must not
+      // open the clip, on click or on Enter.
+      var kb = tr.querySelector('.kebab');
+      kb.addEventListener('click', function (ev2) { ev2.stopPropagation(); toggleMenu(kb, tr.dataset.id); });
+      kb.addEventListener('keydown', function (ev2) { ev2.stopPropagation(); });
     });
   }
 
@@ -1027,6 +1088,148 @@
     $('#n-flag').textContent = EVIDENCE.filter(needsAttention).length;
     $('#n-unan').textContent = EVIDENCE.filter(function (e) { return (e.analysis || {}).state !== 'done'; }).length;
     $('#n-hold').textContent = EVIDENCE.filter(function (e) { return e.hold && e.hold.on; }).length;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Row actions
+   *
+   * One menu element, moved to whichever row's dots opened it — a menu per
+   * row is a hundred hidden nodes doing the job of one. Each action lands
+   * somewhere honest today: share hands over a reference and names where
+   * real shares come from, delete respects a legal hold before it respects
+   * a click, save routes to the download flow that settles the fee, and
+   * export produces the record itself.
+   * ------------------------------------------------------------------ */
+
+  var menuEl = $('#rowmenu');
+  var menuFor = null;   // clip id the open menu belongs to
+  var menuBtn = null;   // the dots that opened it, for focus return
+
+  function toggleMenu(btn, id) {
+    if (menuFor === id && !menuEl.hidden) { closeMenu(); return; }
+    closeMenu();
+    menuFor = id; menuBtn = btn;
+    btn.setAttribute('aria-expanded', 'true');
+    menuEl.hidden = false;
+    var r = btn.getBoundingClientRect();
+    var mw = menuEl.offsetWidth, mh = menuEl.offsetHeight;
+    var left = Math.max(8, Math.min(r.right - mw, window.innerWidth - mw - 8));
+    var top = r.bottom + 6;
+    if (top + mh > window.innerHeight - 8) top = r.top - mh - 6; // flip up near the bottom
+    menuEl.style.left = left + 'px';
+    menuEl.style.top = Math.max(8, top) + 'px';
+    menuEl.querySelector('button').focus();
+  }
+
+  function closeMenu() {
+    if (menuEl.hidden) return;
+    menuEl.hidden = true;
+    if (menuBtn) menuBtn.setAttribute('aria-expanded', 'false');
+    menuFor = null; menuBtn = null;
+  }
+
+  document.addEventListener('click', function (ev) {
+    if (!menuEl.hidden && !menuEl.contains(ev.target)) closeMenu();
+  });
+  document.addEventListener('keydown', function (ev) {
+    if (menuEl.hidden) return;
+    if (ev.key === 'Escape') { var b = menuBtn; closeMenu(); if (b) b.focus(); }
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      var items = Array.prototype.slice.call(menuEl.querySelectorAll('button'));
+      var i = items.indexOf(document.activeElement);
+      items[(ev.key === 'ArrowDown' ? i + 1 : i - 1 + items.length) % items.length].focus();
+    }
+  });
+  window.addEventListener('resize', closeMenu);
+  window.addEventListener('scroll', closeMenu, true);
+
+  var toastTimer = null;
+  function toast(msg) {
+    var t = $('#toast');
+    t.textContent = msg;
+    t.setAttribute('data-on', '1');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.removeAttribute('data-on'); }, 3600);
+  }
+
+  Array.prototype.forEach.call(menuEl.querySelectorAll('button'), function (b) {
+    b.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      var id = menuFor;
+      closeMenu();
+      var item = EVIDENCE.filter(function (e) { return e.id === id; })[0];
+      if (item) menuAction(b.dataset.act, item);
+    });
+  });
+
+  function menuAction(act, item) {
+    if (act === 'share') {
+      // Real shares are issued from the platform, to a named account — what
+      // this page can hand a colleague today is a reference to the clip.
+      var link = location.href.split('#')[0] + '#' + item.id;
+      var done = function () {
+        toast('Clip reference copied. A new reviewer gets their own link from the platform — shares are account-to-account.');
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(link).then(done, function () { window.prompt('Clip reference', link); done(); });
+      } else { window.prompt('Clip reference', link); done(); }
+      return;
+    }
+
+    if (act === 'delete') {
+      // The hold outranks the click, exactly as it outranks the retention
+      // schedule. The refusal is the feature.
+      if (item.hold && item.hold.on) {
+        toast('On legal hold — this clip cannot be deleted while the hold stands.');
+        return;
+      }
+      if (!window.confirm('Delete ' + item.id + '? The chain of custody keeps the record of its life either way.')) return;
+      EVIDENCE = EVIDENCE.filter(function (e) { return e.id !== item.id; });
+      render();
+      counts();
+      toast('Removed from this library view. Deletion on the record itself is wired next.');
+      return;
+    }
+
+    if (act === 'save') {
+      // Keeping a copy IS the download flow — it settles the fee and lands
+      // in the custody log, so the menu routes there rather than growing a
+      // second, quieter way to walk off with a file.
+      open(item.id, 'details');
+      toast('Saving a copy is the download on the Details tab — it settles the fee first and enters the custody log.');
+      return;
+    }
+
+    if (act === 'export') {
+      var record = {
+        exportedAt: new Date().toISOString(),
+        id: item.id,
+        job: (JOBS[item.job] || { name: item.jobName || 'Job' }).name,
+        phase: item.phase,
+        workDate: item.workDate,
+        capturedAt: item.capturedAt || null,
+        uploadedAt: item.uploadedAt || null,
+        durationSeconds: item.duration || null,
+        sha256: item.hash || null,
+        tier: item.tier || null,
+        integrity: integrityOf(item),
+        checks: item.checks || [],
+        analysis: item.analysis || null,
+        custody: item.custody || [],
+        note: 'Metadata export. The video file itself is obtained through the download flow, which settles the fee and enters the chain of custody.'
+      };
+      var blob = new Blob([JSON.stringify(record, null, 2)], { type: 'application/json' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'evidence-' + item.id + '.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
+      toast('Record exported: metadata, checks, analysis, custody. The video itself goes through the download flow.');
+      return;
+    }
   }
 
   /* ------------------------------------------------------------------ *
@@ -1039,19 +1242,19 @@
     not_visible: ['neutral', 'Not visible']
   };
 
-  function open(id) {
+  function open(id, tab) {
     var item = EVIDENCE.filter(function (e) { return e.id === id; })[0];
     if (!item) return;
     // Against a live backend the list is thin: custody and frames arrive when
     // a clip is opened, which is also the moment the access gets logged.
     if (item._remote && !item._loaded) {
-      fetchRemoteDetail(item).then(function () { openLoaded(item); });
+      fetchRemoteDetail(item).then(function () { openLoaded(item, tab); });
       return;
     }
-    openLoaded(item);
+    openLoaded(item, tab);
   }
 
-  function openLoaded(item) {
+  function openLoaded(item, tab) {
     state.open = item;
     state.frame = 0;
     stopPlay();
@@ -1076,7 +1279,7 @@
 
     setFrame(0);
     renderAnalysis(item);
-    setTab('integrity');
+    setTab(tab || 'integrity');
     $('#detail').setAttribute('data-open', '1');
     $('#d-close').focus();
   }
