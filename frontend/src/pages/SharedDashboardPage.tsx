@@ -11,6 +11,7 @@ import {
 import { SpinnerIcon } from '../components/icons';
 import { ProofOfWork } from '../components/shared/ProofOfWork';
 import { EvidenceLocker } from '../components/shared/EvidenceLocker';
+import { ShareEvidencePanel } from '../components/shared/ShareEvidencePanel';
 
 /**
  * One job, two companies, one record.
@@ -262,6 +263,10 @@ export function SharedDashboardPage() {
                       "what have we got, and who has seen it". */}
                   <ProofOfWork jobId={record.job.id} />
                   <EvidenceLocker jobId={record.job.id} />
+                  {/* Under the locker: first what we hold, then who outside
+                      can see it. A share is an act on the evidence, so it
+                      lives with the evidence, not in a settings screen. */}
+                  <ShareEvidencePanel jobId={record.job.id} />
 
                   <Thread record={record} onPosted={() => void openJob(record.job.id)} />
                 </>

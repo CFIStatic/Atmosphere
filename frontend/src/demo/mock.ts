@@ -1164,6 +1164,25 @@ const CUSTODY: Record<string, any[]> = {
   ],
 };
 
+/**
+ * Verifier shares: who outside holds a way into each job's evidence. One
+ * working link (opened, expiring), one revoked (the audit trail of an act),
+ * and Meridian's adjuster — the story the platform demo tells from the
+ * other side.
+ */
+const VERIFIER_SHARES: Array<Record<string, any>> = [
+  { id: 'vs-1', jobId: 'job-1038', label: 'M. Rhodes — TDI appraisal', recipientEmail: 'm.rhodes@tdi-appraisal.com', path: '/verifier/shared/demo-rhodes', createdAt: '2026-07-22T15:00:00Z', expiresAt: '2026-09-01T00:00:00Z', revokedAt: null, lastOpenedAt: '2026-08-03T10:15:00Z', openCount: 3, state: 'live' },
+  { id: 'vs-2', jobId: 'job-1038', label: 'Halcyon PA Group', recipientEmail: 'files@halcyonpa.com', path: '/verifier/shared/demo-halcyon', createdAt: '2026-07-18T09:00:00Z', expiresAt: null, revokedAt: '2026-07-30T16:40:00Z', lastOpenedAt: '2026-07-19T08:20:00Z', openCount: 1, state: 'revoked' },
+  { id: 'vs-3', jobId: 'job-1041', label: 'R. Calloway — Alliance Mutual', recipientEmail: 'r.calloway@alliancemutual.com', path: '/verifier/shared/demo-calloway', createdAt: '2026-07-28T12:00:00Z', expiresAt: '2026-09-06T00:00:00Z', revokedAt: null, lastOpenedAt: '2026-08-04T11:15:00Z', openCount: 5, state: 'live' },
+];
+
+/** Addresses the demo treats as already holding an Atmosphere account. */
+const KNOWN_ACCOUNTS = new Set([
+  'r.calloway@alliancemutual.com',
+  'm.rhodes@tdi-appraisal.com',
+  'priya@ortizrestoration.com',
+]);
+
 /** Invitations: one waiting, one answered, one withdrawn. */
 const ORG_INVITES: Array<Record<string, any>> = [
   { id: 'inv-1', email: 'kai.osei@example.com', role: 'field_technician', note: null, status: 'pending', createdAt: '2026-08-04T09:00:00Z', joinedAt: null, revokedAt: null },
@@ -1336,7 +1355,7 @@ const CAMPAIGN_MEMBERS: Record<string, Array<Record<string, any>>> = {
 };
 
 /** Handlers that need the query string get it here, since Handler takes only the path match. */
-const LAST_QUERY: { leadId?: string; scope?: string; phase?: string } = {};
+const LAST_QUERY: { leadId?: string; scope?: string; phase?: string; jobId?: string } = {};
 
 const COMPUTER_STATUS: ComputerStatus = {
   enabled: true,
@@ -1965,6 +1984,52 @@ const routes: Array<[string, RegExp, Handler]> = [
       detail: (b.reason as string) ?? null,
       occurred_at: new Date().toISOString(),
     });
+    return { body: { ok: true } };
+  }],
+
+  /* ------------------------------------------- verifier shares */
+  ['GET', /^\/api\/evidence-portal\/shares$/, () => ({
+    body: {
+      shares: LAST_QUERY.jobId
+        ? VERIFIER_SHARES.filter((s) => s.jobId === LAST_QUERY.jobId)
+        : VERIFIER_SHARES,
+    },
+  })],
+  ['POST', /^\/api\/evidence-portal\/shares$/, (_m, b) => {
+    const email = String(b.recipientEmail ?? '').toLowerCase();
+    const days = Number(b.expiresInDays ?? 30);
+    const share = {
+      id: `vs-${Date.now()}`,
+      jobId: String(b.jobId ?? ''),
+      label: String(b.label ?? ''),
+      recipientEmail: email,
+      path: `/verifier/shared/demo-${Date.now().toString(36)}`,
+      createdAt: new Date().toISOString(),
+      expiresAt: days === 0 ? null : new Date(Date.now() + days * 86_400_000).toISOString(),
+      revokedAt: null,
+      lastOpenedAt: null,
+      openCount: 0,
+      state: 'live',
+    };
+    VERIFIER_SHARES.unshift(share);
+    // "nomail" anywhere in the address shows the email-refused path — the
+    // fallback UI is part of the design, so the demo has to be able to reach it.
+    const emailed = !email.includes('nomail');
+    return {
+      status: 201,
+      body: {
+        share: { id: share.id, label: share.label, expiresAt: share.expiresAt, createdAt: share.createdAt, path: share.path },
+        emailed,
+        recipientHasAccount: KNOWN_ACCOUNTS.has(email),
+      },
+    };
+  }],
+  ['POST', /^\/api\/evidence-portal\/shares\/([\w-]+)\/revoke$/, (m) => {
+    const share = VERIFIER_SHARES.find((s) => s.id === m[1]);
+    if (share) {
+      share.revokedAt = new Date().toISOString();
+      share.state = 'revoked';
+    }
     return { body: { ok: true } };
   }],
 
@@ -2736,6 +2801,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   LAST_QUERY.leadId = query.get('leadId') ?? undefined;
   LAST_QUERY.scope = query.get('scope') ?? undefined;
   LAST_QUERY.phase = query.get('phase') ?? undefined;
+  LAST_QUERY.jobId = query.get('jobId') ?? undefined;
 
   const method = (init?.method ?? 'GET').toUpperCase();
   let body: Record<string, unknown> = {};

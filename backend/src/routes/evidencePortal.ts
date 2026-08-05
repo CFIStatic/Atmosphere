@@ -12,6 +12,8 @@ import {
   shareRecipientAllowed,
   shareState,
 } from '../verifier/library.js';
+import { shareEmail } from '../verifier/shareEmail.js';
+import { buildMailSender } from '../campaigns/mail/index.js';
 import { config } from '../config.js';
 
 /**
@@ -359,13 +361,15 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
         ? null
         : new Date(Date.now() + body.expiresInDays * 86_400_000).toISOString();
 
+    const recipientEmail = body.recipientEmail.toLowerCase();
+
     const { data: share, error } = await supabase
       .from('verifier_shares')
       .insert({
         org_id: orgId,
         job_id: body.jobId,
         label: body.label,
-        recipient_email: body.recipientEmail.toLowerCase(),
+        recipient_email: recipientEmail,
         created_by: userId,
         expires_at: expiresAt,
       })
@@ -373,8 +377,74 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
       .single();
     if (error) throw new HttpError(400, error.message, 'share_failed');
 
+    const sharePath = `/verifier/shared/${(share as any).access_token}`;
+    const admin = createAdminClient();
+
+    // Whether the pinned address already answers to an Atmosphere account
+    // decides which instructions the email gives — and it is handed back so
+    // the screen can say it too, because "will this open for them" is the
+    // question the sharer is standing there with.
+    let recipientHasAccount = false;
+    if (admin) {
+      const { data: existing } = await admin
+        .from('profiles')
+        .select('id')
+        .ilike('email', recipientEmail)
+        .limit(1)
+        .maybeSingle();
+      recipientHasAccount = Boolean(existing);
+    }
+
+    // Erasure tombstones outrank a share notification exactly as they outrank
+    // an invitation: an address that asked to be forgotten gets no email from
+    // this platform. The share itself stands — the link can be handed over
+    // any other way — and the reason stays generic, because "this address is
+    // on an erasure list" is itself a disclosure.
+    let erased = false;
+    if (admin) {
+      const { data } = await admin
+        .from('network_erasures')
+        .select('email')
+        .eq('email', recipientEmail)
+        .maybeSingle();
+      erased = Boolean(data);
+    }
+
+    let emailed = false;
+    if (!erased) {
+      try {
+        const sender = await buildMailSender(orgId);
+        if (sender) {
+          const [{ data: org }, sharerName] = await Promise.all([
+            supabase.from('orgs').select('name').eq('id', orgId).maybeSingle(),
+            actorLabelFor(supabase, userId),
+          ]);
+          const mail = shareEmail({
+            orgName: (org as any)?.name ?? 'An Atmosphere member',
+            sharerName,
+            jobTitle: (job as any).title ?? null,
+            recipientEmail,
+            recipientHasAccount,
+            origin: config.frontendOrigins?.[0] ?? null,
+            path: sharePath,
+            expiresAt,
+          });
+          const result = await sender.send({
+            to: recipientEmail,
+            subject: mail.subject,
+            text: mail.text,
+          });
+          emailed = result.ok;
+        }
+      } catch {
+        // The share stands; only the delivery failed, and the response's
+        // emailed:false is the honest report of that.
+      }
+    }
+
     // Sharing evidence is an act on the evidence, and it goes on the record
-    // under the sharer's name with the recipient's label in the detail.
+    // under the sharer's name — including whether the recipient was told,
+    // because "did they even know it existed" is a deposition question.
     await recordAccess(supabase, {
       orgId,
       jobId: body.jobId,
@@ -382,9 +452,9 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
       actorId: userId,
       actorLabel: await actorLabelFor(supabase, userId),
       actorRole: 'general_contractor',
-      detail: `Verifier link issued to ${body.label} <${body.recipientEmail.toLowerCase()}>${
+      detail: `Verifier link issued to ${body.label} <${recipientEmail}>${
         expiresAt ? `, expires ${expiresAt.slice(0, 10)}` : ', no expiry'
-      }`,
+      }${emailed ? ', emailed' : ', email not sent'}`,
     });
 
     res.status(201).json({
@@ -393,8 +463,10 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
         label: (share as any).label,
         expiresAt: (share as any).expires_at,
         createdAt: (share as any).created_at,
-        path: `/verifier/shared/${(share as any).access_token}`,
+        path: sharePath,
       },
+      emailed,
+      recipientHasAccount,
     });
   } catch (err) {
     next(err);
@@ -409,7 +481,7 @@ evidencePortalRouter.get('/shares', async (req: Request, res: Response, next: Ne
     let query = supabase
       .from('verifier_shares')
       .select(
-        'id, job_id, label, access_token, created_at, expires_at, revoked_at, last_opened_at, open_count',
+        'id, job_id, label, recipient_email, access_token, created_at, expires_at, revoked_at, last_opened_at, open_count',
       )
       .eq('org_id', orgId)
       .order('created_at', { ascending: false })
@@ -423,6 +495,7 @@ evidencePortalRouter.get('/shares', async (req: Request, res: Response, next: Ne
         id: row.id,
         jobId: row.job_id,
         label: row.label,
+        recipientEmail: row.recipient_email ?? null,
         path: `/verifier/shared/${row.access_token}`,
         createdAt: row.created_at,
         expiresAt: row.expires_at,

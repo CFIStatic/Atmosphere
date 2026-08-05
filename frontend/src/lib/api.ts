@@ -835,6 +835,35 @@ export interface CustodyEntry {
   occurred_at: string;
 }
 
+/** A Verifier link: one job's evidence, pinned to one recipient's account. */
+export interface EvidenceShare {
+  id: string;
+  jobId: string;
+  label: string;
+  recipientEmail: string | null;
+  path: string;
+  createdAt: string;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  lastOpenedAt: string | null;
+  openCount: number;
+  state: 'live' | 'expired' | 'revoked';
+}
+
+export interface CreateEvidenceShareResult {
+  share: {
+    id: string;
+    label: string;
+    expiresAt: string | null;
+    createdAt: string;
+    path: string;
+  };
+  /** Whether the notification actually left the org's connected mailbox. */
+  emailed: boolean;
+  /** Whether the pinned address already answers to an Atmosphere account. */
+  recipientHasAccount: boolean;
+}
+
 /* ---- Account structure --------------------------------------------------- */
 
 export interface AccountStructure {
@@ -2424,6 +2453,26 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+
+  evidenceShares: (jobId?: string) =>
+    request<{ shares: EvidenceShare[] }>(
+      `/api/evidence-portal/shares${jobId ? `?jobId=${jobId}` : ''}`,
+      { method: 'GET' },
+    ),
+
+  createEvidenceShare: (input: {
+    jobId: string;
+    label: string;
+    recipientEmail: string;
+    expiresInDays?: number;
+  }) =>
+    request<CreateEvidenceShareResult>('/api/evidence-portal/shares', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  revokeEvidenceShare: (id: string) =>
+    request<{ ok: boolean }>(`/api/evidence-portal/shares/${id}/revoke`, { method: 'POST' }),
 
   liveObserve: (
     jobId: string,

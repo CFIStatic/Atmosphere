@@ -48,6 +48,14 @@ a verified identity on every custody entry instead of "someone with the link",
 and is also why every adjuster and attorney who reviews evidence ends up with
 an Atmosphere account.
 
+The share itself travels by email, sent from the sharing org's own connected
+mailbox. The wording forks on whether the address already answers to an
+account — sign in, or create one with this exact address — because the link
+refuses any other account, forwarded or not. Erasure tombstones outrank the
+notification (an address that asked to be forgotten gets no mail; the link
+can be handed over any other way), and whether the email actually went out is
+recorded in the custody entry for the share.
+
 Watching is free; keeping a copy is not. A download by an external account
 settles the sharing organization's fee first (their `evidence_download_policy`
 row; $25 by default), through an append-once ledger — no signed download URL
