@@ -172,7 +172,9 @@ export function AppShell({ children, rail }: { children: ReactNode; rail?: React
 
             <div className="ml-auto flex items-center gap-3">
               <ThemeToggle />
-              {approvalCount > 0 && (
+              {/* Approvals are an office concern; the Field app's topbar
+                  carries capture, not a queue. */}
+              {approvalCount > 0 && platformId !== 'field' && (
                 <button
                   onClick={() => navigate('/approvals')}
                   className="hidden items-center gap-1.5 rounded-full border border-caution-200 bg-caution-50 px-3 py-1.5 text-xs font-semibold text-caution-600 transition hover:border-caution-600 sm:flex"

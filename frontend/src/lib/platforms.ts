@@ -211,7 +211,9 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
     homeBlurb:
       'Recording, a spoken assistant, and a camera that names what it sees — built for gloved hands and a phone in the rain.',
     Icon: MicIcon,
-    metrics: ['scheduledToday', 'crewOnJobs', 'openJobs', 'unscheduled', 'avgDaysDrying', 'agentActions24h'],
+    // Capture-only: no drying stats, no agent counters — a crew's numbers
+    // are where they are due and what is open.
+    metrics: ['scheduledToday', 'crewOnJobs', 'openJobs', 'unscheduled'],
     groups: [
       // Not OPERATE(): a crew's day is capture, not a work queue — My Work
       // and Approvals are office surfaces and stay off the truck.
