@@ -11,7 +11,6 @@ import {
   DecisionIcon,
   GaugeIcon,
   GlobeIcon,
-  HistoryIcon,
   MicIcon,
   SearchIcon,
   SettingsIcon,

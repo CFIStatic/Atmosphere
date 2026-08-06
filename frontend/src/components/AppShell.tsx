@@ -8,7 +8,6 @@ import { PLATFORMS, PLATFORM_HOME, VISIBLE_PLATFORM_IDS, platformOfPath } from '
 import { usePlatform } from '../lib/usePlatform';
 import { Logo } from './Logo';
 import {
-  AuditIcon,
   ChevronDownIcon,
   CloseIcon,
   GaugeIcon,
