@@ -208,14 +208,23 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
     Icon: MicIcon,
     metrics: ['scheduledToday', 'crewOnJobs', 'openJobs', 'unscheduled', 'avgDaysDrying', 'agentActions24h'],
     groups: [
-      OPERATE('/field', 'Today'),
+      // Not OPERATE(): a crew's day is capture, not a work queue — My Work
+      // and Approvals are office surfaces and stay off the truck.
+      {
+        label: 'Today',
+        items: [{ to: '/field', label: 'Overview', Icon: GaugeIcon }],
+      },
       {
         label: 'On site',
         items: [
           { to: '/technician', label: 'Capture', Icon: MicIcon },
-          { to: '/schedule', label: 'Route', Icon: HistoryIcon },
           { to: '/jobs', label: 'My jobs', Icon: BriefcaseIcon },
         ],
+      },
+      /* Later products — kept, not displayed while capture is the whole job.
+      {
+        label: 'On site (more)',
+        items: [{ to: '/schedule', label: 'Route', Icon: HistoryIcon }],
       },
       {
         label: 'Hand off',
@@ -224,6 +233,7 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
           { to: '/memory', label: 'What I logged', Icon: ThoughtIcon },
         ],
       },
+      */
       SYSTEM,
     ],
   },
