@@ -43,6 +43,7 @@ import { crmSyncRouter } from './routes/crmSync.js';
 import { scopeDocsRouter } from './routes/scopeDocs.js';
 import { jobIntakeRouter } from './routes/jobIntake.js';
 import { fieldIdentityRouter } from './routes/fieldIdentity.js';
+import { mediaVideoRouter } from './routes/mediaVideo.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
 import { verificationHook, pumpVerificationQueue } from './lib/verifierRunner.js';
@@ -170,6 +171,9 @@ export function createApp(): Express {
   // contractors into one list. They hold a session of their own, not a seat
   // in anybody's org, so no org middleware could apply.
   app.use('/api/field', fieldIdentityRouter);
+  // Any inbound video (proof, field capture, CRM, upload) can share one
+  // sparse+diversity+dictation pipeline without a job_proofs row.
+  app.use('/api/media/video', mediaVideoRouter);
   app.use('/api/web-access', webAccessRouter);
   app.use('/api/verifier', verifierRouter);
   // Before crmRouter, not after. crmRouter registers a generic GET

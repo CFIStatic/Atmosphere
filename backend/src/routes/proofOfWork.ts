@@ -24,7 +24,7 @@ import { labelsForProof } from '../verifier/library.js';
 import { buildCaptureGuide } from '../shared/captureGuide.js';
 import { scopeForParty } from '../shared/jobRecord.js';
 import { analyseLongRecording } from '../shared/longAnalyst.js';
-import { extractSparseFramesFromUrl } from '../shared/sparseExtract.js';
+import { prepareVideoFrames } from '../shared/videoIntelligence.js';
 import {
   narrateProofVideo,
   observeLiveFrame,
@@ -584,8 +584,9 @@ async function framesFor(admin: any, proofId: string) {
 
 /**
  * For a long recording with few or no device stills, stream-extract a sparse
- * set of JPEGs from the stored video via FFmpeg (signed URL in, hard-capped
- * frames out). Node never holds the multi‑GB file.
+ * set of JPEGs from the stored video via the shared video-intelligence
+ * pipeline (same path any inbound video can use). Node never holds the
+ * multi‑GB file.
  */
 async function ensureSparseFramesFromStorage(
   admin: any,
@@ -619,25 +620,22 @@ async function ensureSparseFramesFromStorage(
     throw new Error(signErr?.message ?? 'Could not mint a signed URL for sparse extract.');
   }
 
-  const extracted = await extractSparseFramesFromUrl({
+  // Same prepareVideoFrames call used by /api/media/video — proof is just
+  // one source kind among several.
+  const prepared = await prepareVideoFrames({
+    id: job.proofId,
+    source: 'proof_of_work',
     url: signed.signedUrl,
     durationSeconds,
-    maxFrames: config.verification.sparseMaxFrames,
-    candidateIntervalSeconds:
-      config.verification.sparseCandidateIntervalSeconds ||
-      config.verification.sparseFrameIntervalSeconds,
-    hammingThreshold: config.verification.sparseDiversityHamming,
-    coverageIntervalSeconds: config.verification.sparseCoverageIntervalSeconds,
-    ffmpegPath: config.verification.ffmpegPath,
   });
-  if (!extracted.length) return have;
+  if (!prepared.frames.length) return have;
 
   // Replace device samples with the diversity-filtered server timeline.
   if (have >= minWanted) {
     await admin.from('job_proof_frames').delete().eq('proof_id', job.proofId);
   }
 
-  for (const frame of extracted) {
+  for (const frame of prepared.frames) {
     const path = `${(proof as any).org_id}/${(proof as any).job_id}/${(proof as any).party_id}/${(proof as any).work_date}-${(proof as any).phase}-sf${Math.round(frame.atSeconds)}.jpg`;
     await admin.storage.from(PROOF_BUCKET).upload(path, frame.jpeg, {
       contentType: 'image/jpeg',
@@ -653,7 +651,7 @@ async function ensureSparseFramesFromStorage(
       { onConflict: 'proof_id,at_seconds' },
     );
   }
-  return extracted.length;
+  return prepared.frames.length;
 }
 
 async function performNarration(admin: any, job: NarrationJob): Promise<void> {
