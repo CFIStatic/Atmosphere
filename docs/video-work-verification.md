@@ -89,7 +89,24 @@ Migration: `20260812110000_llm_verifier_ontology_graph.sql`
 | POST | `/jobs/:jobId/outcomes` | Link estimate/claim/payment outcomes |
 | GET | `/ontology` | Work ontology catalog |
 
-See also `docs/video-work-verification-architecture.md`.
+See also `docs/video-work-verification-architecture.md` and
+`docs/physical-work-intelligence-architecture.md` (dataset layer / rights / privacy / exports).
+
+## Dataset vertical slice
+
+After LLM verification:
+
+1. `privacy_scan` — flag PII-like text in observations  
+2. `evaluate_dataset_eligibility` — rights + privacy + provenance + quality gates  
+3. `create_dataset_examples` — only when eligible  
+
+APIs:
+
+- `POST /api/verification/results/:resultId/dataset-example`
+- `POST /api/verification/datasets/versions/:versionId/export` (JSONL + checksum)
+- `GET /api/verification/datasets/versions/:versionId/examples`
+
+Released dataset versions are immutable. Split assignment is project-grouped to prevent leakage.
 
 ## Local development
 
