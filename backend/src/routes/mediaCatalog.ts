@@ -47,7 +47,8 @@ mediaCatalogRouter.get('/scale', (_req, res) => {
   res.json({
     maxDurationSecondsPerObject: config.verification.maxDurationSeconds,
     note:
-      'Each video object is capped near 24h. Fleet capacity is unbounded object count in hot/warm/cold storage, catalogued here by id — not one longer recording.',
+      'Each video object is capped near 24h. Fleet capacity is unbounded object count in hot/warm/cold storage, catalogued here by id — not one longer recording. Field day / proof objects must include a microphone track (video + audio).',
+    audiovisualRequired: ['field_day_video', 'proof_video'],
     backend: config.media.backend,
     hotBucket: config.media.hotBucket,
     archiveBucket: config.media.archiveBucket || null,
@@ -86,6 +87,8 @@ const beginSchema = z.object({
   refType: z.string().trim().max(64).optional(),
   refId: z.string().trim().max(128).optional(),
   preferMultipart: z.boolean().optional(),
+  /** Must be true for field_day_video / proof_video (mic + camera). */
+  hasAudio: z.boolean().optional(),
 });
 
 /**
@@ -109,6 +112,7 @@ const completeSchema = z.object({
   byteSize: z.number().int().positive().optional(),
   contentHash: z.string().trim().min(8).max(128).optional(),
   durationSeconds: z.number().positive().optional(),
+  hasAudio: z.boolean().optional(),
 });
 
 /** POST /api/media/catalog/uploads/complete */

@@ -44,6 +44,8 @@ create table if not exists public.media_objects (
   byte_size        bigint check (byte_size is null or byte_size > 0),
   content_hash     text,
   content_type     text,
+  -- Microphone track present in the container (required for day / proof video).
+  has_audio        boolean,
 
   backend          media_backend not null default 'supabase',
   bucket           text not null,

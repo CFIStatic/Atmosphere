@@ -8,6 +8,7 @@
 import { randomUUID } from 'node:crypto';
 import { config } from '../config.js';
 import { HttpError } from '../lib/errors.js';
+import { assertAudiovisualPolicy, kindRequiresAudio } from './capturePolicy.js';
 import { mediaDriverFor, mediaObjectKey, type MediaStorageDriver } from './driver.js';
 import { assertWithinQuotas, usageOf, type CatalogView } from './quotas.js';
 import type {
@@ -76,10 +77,18 @@ export async function beginMediaUpload(input: {
   refType?: string | null;
   refId?: string | null;
   preferMultipart?: boolean;
+  /**
+   * Client attestation that the recording includes a mic track.
+   * Defaults to true for audiovisual kinds (Field Capture always films A/V).
+   */
+  hasAudio?: boolean | null;
   /** Test / override hook — production uses config.media.backend. */
   driver?: MediaStorageDriver;
 }): Promise<{ media: MediaObject; session: MediaUploadSession }> {
   const duration = input.durationSeconds ?? null;
+  const hasAudio =
+    input.hasAudio ?? (kindRequiresAudio(input.kind) ? true : null);
+  assertAudiovisualPolicy({ kind: input.kind, hasAudio, strict: true });
   if (duration != null) {
     if (!Number.isFinite(duration) || duration <= 0) {
       throw new HttpError(400, 'durationSeconds must be positive', 'invalid_duration');
@@ -129,6 +138,7 @@ export async function beginMediaUpload(input: {
     byteSize: input.byteSize ?? null,
     contentHash: null,
     contentType: input.contentType,
+    hasAudio,
     backend: created.backend,
     bucket: created.bucket,
     objectKey: created.objectKey,
@@ -165,6 +175,7 @@ export function completeMediaUpload(input: {
   byteSize?: number | null;
   contentHash?: string | null;
   durationSeconds?: number | null;
+  hasAudio?: boolean | null;
 }): MediaObject {
   const session = sessions.get(input.sessionId);
   if (!session || session.orgId !== input.orgId) {
@@ -174,6 +185,13 @@ export function completeMediaUpload(input: {
   if (!media || media.orgId !== input.orgId) {
     throw new HttpError(404, 'Media object not found', 'media_not_found');
   }
+
+  if (input.hasAudio != null) media.hasAudio = input.hasAudio;
+  assertAudiovisualPolicy({
+    kind: media.kind,
+    hasAudio: media.hasAudio,
+    strict: true,
+  });
 
   if (input.durationSeconds != null) {
     if (input.durationSeconds > config.verification.maxDurationSeconds) {

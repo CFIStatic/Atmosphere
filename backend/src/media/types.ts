@@ -38,6 +38,11 @@ export type MediaObject = {
   byteSize: number | null;
   contentHash: string | null;
   contentType: string | null;
+  /**
+   * Whether the stored container includes a microphone/audio track.
+   * Required true for field_day_video / proof_video (see capturePolicy).
+   */
+  hasAudio: boolean | null;
   backend: MediaBackend;
   bucket: string;
   objectKey: string;

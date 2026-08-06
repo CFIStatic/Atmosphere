@@ -5,8 +5,9 @@
 | Concern | Rule |
 |---|---|
 | **One video** | At most ~**24 hours** of timeline (`PROOF_MAX_DURATION_SECONDS`, default 86400). A field day is one object. |
+| **Audio** | Field day / proof objects are **video + microphone** in one container (`has_audio`). Stills for AI are extracted separately; the stored film keeps the soundtrack. |
 | **The platform** | Retains **many** such objects across orgs — toward **billions of hours** in aggregate — in **object storage**. |
-| **Postgres** | Holds the **catalog** (`media_objects`: id, bytes, duration, tier, key). Never the bytes. |
+| **Postgres** | Holds the **catalog** (`media_objects`: id, bytes, duration, tier, key, has_audio). Never the bytes. |
 | **API** | Mints signed upload/read URLs (or multipart plans). Never streams multi‑GB bodies through Express. |
 
 We do **not** stretch one file past 24h to grow capacity. Capacity is **object count × tiering × retention**.

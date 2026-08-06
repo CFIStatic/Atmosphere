@@ -48,6 +48,10 @@ scale comes from the device (or DocuSketch), not from inventing feet out of
 RGB frames. Web Field Capture stays the product face; the App Store app is
 the measuring instrument.
 
+**Video always includes audio.** The day film is camera + microphone in one
+file. The office can hear the site; AI stills are extracted without stripping
+the soundtrack. Silent day uploads are rejected (`has_audio` required).
+
 **Same tokens as the Verifier.** Paper, warm ink, one terracotta accent,
 monospace as the record's voice. The film a crew makes and the evidence it
 becomes should look like one product, because they are one record.

@@ -107,6 +107,22 @@ test('S3 stub plans multipart for large day files', async () => {
   assert.equal(created.multipart!.parts.length, created.multipart!.partCount);
 });
 
+test('field day video without audio is rejected', async () => {
+  resetMediaCatalogForTests();
+  await assert.rejects(
+    () =>
+      beginMediaUpload({
+        orgId: 'org-1',
+        kind: 'field_day_video',
+        contentType: 'video/mp4',
+        durationSeconds: 60,
+        hasAudio: false,
+        driver: new MemoryMediaStorage(),
+      }),
+    (e: unknown) => e instanceof HttpError && e.code === 'audio_required',
+  );
+});
+
 test('assertWithinQuotas allows unlimited when ceilings are null', () => {
   assert.doesNotThrow(() =>
     assertWithinQuotas({
