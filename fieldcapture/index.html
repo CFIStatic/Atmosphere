@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Atmosphere Field Capture</title>
-<meta name="description" content="Two short videos a day — one before you start, one when you finish. Filmed against the scope, checked at the door, filed to the job." />
+<meta name="description" content="One button. Start it when you get to work, finish it when you're done for the day. Everything else happens to the footage, not to you." />
 <style>
   /* ---------------------------------------------------------------------
      The Verifier's design tokens, on a phone.
@@ -96,11 +96,8 @@
   .brand .sub { font-weight: 600; color: var(--muted); font-size: 12px; margin-left: 2px; }
   .who { margin-left: auto; text-align: right; font-size: 11.5px; color: var(--muted); line-height: 1.35; }
   .who b { display: block; color: var(--ink); font-size: 12.5px; font-weight: 650; }
-  .backbtn {
-    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
-    border-radius: 9px; width: 40px; height: 40px; flex: none;
-    display: grid; place-items: center;
-  }
+  /* No back button: the app is one button and the two screens it moves
+     between. There is nowhere to go back to. */
 
   /* ---------- screens ---------- */
   .screen { flex: 1; display: none; flex-direction: column; }
@@ -110,36 +107,6 @@
   .daterow { font-size: 12px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 650; }
   .h1 { font-size: 22px; font-weight: 750; letter-spacing: -0.02em; margin-top: 4px; }
   .lede { color: var(--ink-2); font-size: 13.5px; margin-top: 6px; }
-
-  /* ---------- job cards ---------- */
-  .jobcard {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
-    padding: 16px; margin-top: 14px;
-  }
-  .jobcard .num { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
-  .jobcard h2 { font-size: 16.5px; font-weight: 700; letter-spacing: -0.015em; margin-top: 2px; }
-  .jobcard .addr { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
-  .phases { display: flex; gap: 8px; margin-top: 12px; }
-  .phase {
-    flex: 1; border: 1px solid var(--line-soft); border-radius: 10px;
-    padding: 8px 10px; font-size: 12px; color: var(--muted);
-  }
-  .phase b { display: block; font-size: 11px; letter-spacing: 0.07em; font-weight: 700; color: var(--faint); }
-  .phase.done { background: var(--pass-soft); border-color: transparent; color: var(--pass); }
-  .phase.done b { color: var(--pass); }
-  .phase .mono { font-size: 11.5px; }
-
-  .cta {
-    display: flex; align-items: center; justify-content: center; gap: 9px;
-    width: 100%; margin-top: 12px; padding: 15px;
-    border: 0; border-radius: 12px;
-    background: var(--accent); color: #fff;
-    font-size: 15.5px; font-weight: 700; letter-spacing: -0.01em;
-  }
-  .cta.done { background: var(--pass-soft); color: var(--pass); cursor: default; }
-  .cta:active { transform: translateY(1px); }
-
-  .homenote { font-size: 12px; color: var(--faint); margin-top: 16px; line-height: 1.6; }
 
   /* ---------- this week ---------- */
   .week { margin-top: 22px; }
@@ -158,44 +125,83 @@
   .chip.pass { background: var(--pass-soft); color: var(--pass); }
   .chip.warm { background: var(--accent-soft); color: var(--accent); }
 
-  /* ---------- capture: the shot list ---------- */
-  .jobhead { padding: 16px 18px 0; }
-  .phasepill {
-    display: inline-block; margin-top: 8px; padding: 4px 11px; border-radius: 999px;
-    background: var(--accent-soft); color: var(--accent);
-    font-family: var(--mono); font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em;
-  }
-  .guide { padding: 6px 18px 14px; }
-  .guide h3 { font-size: 15px; font-weight: 750; letter-spacing: -0.01em; margin-top: 14px; }
-  .guide .why { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
-  .steps { list-style: none; padding: 0; margin: 14px 0 0; position: relative; }
-  .steps::before {
-    content: ''; position: absolute; left: 15px; top: 14px; bottom: 14px;
-    border-left: 2px solid var(--line-soft);
-  }
-  .step { position: relative; display: flex; gap: 14px; padding: 9px 0; }
-  .step .dotn {
-    position: relative; z-index: 1; flex: none;
-    width: 32px; height: 32px; border-radius: 50%;
-    display: grid; place-items: center;
-    background: var(--panel); border: 2px solid var(--line);
-    font-family: var(--mono); font-size: 12.5px; font-weight: 700; color: var(--ink-2);
-  }
-  .step.anchor .dotn { border-color: var(--accent); color: var(--accent); }
-  .step.exclusion .dotn { border-color: var(--warn); color: var(--warn); }
-  .step .t { font-size: 14px; font-weight: 600; padding-top: 5px; }
-  .step .s { display: block; font-size: 12px; font-weight: 400; color: var(--muted); margin-top: 1px; }
-  .step.exclusion .t { color: var(--warn); }
-
+  /* ---------- the one button ----------
+     There is exactly one control in this app, and it lives in the same
+     place on both screens so the hand learns it once: tap it when you get
+     to work, hold it when you are done. Everything between those two
+     presses is the system's problem, not the crew's. */
   .recwrap { padding: 6px 18px 26px; margin-top: auto; text-align: center; }
-  .recbtn {
-    width: 84px; height: 84px; border-radius: 50%;
-    border: 4px solid var(--line); background: var(--panel);
-    display: inline-grid; place-items: center;
+  .daybtn {
+    position: relative; overflow: hidden;
+    width: 100%; padding: 20px 18px;
+    border: 0; border-radius: 16px;
+    background: var(--accent); color: #fff;
+    font-size: 17px; font-weight: 750; letter-spacing: -0.01em;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
   }
-  .recbtn .core { width: 56px; height: 56px; border-radius: 50%; background: var(--rec); transition: border-radius .15s; }
-  .recbtn:active .core { transform: scale(.95); }
-  .rechint { font-size: 12px; color: var(--faint); margin-top: 9px; }
+  .daybtn:active { transform: translateY(1px); }
+  .daybtn .lbl { position: relative; z-index: 1; }
+  .daybtn .ico { position: relative; z-index: 1; display: grid; place-items: center; }
+  /* Finishing is a hold, not a tap. Starting early costs nothing; ending
+     the day by accident with the phone in a pocket loses the day, so the
+     two presses are deliberately not equally easy. Still one button. */
+  .daybtn[data-state="rec"] {
+    background: transparent; color: #F1EFEB;
+    border: 2px solid rgba(241, 239, 235, .6);
+  }
+  .daybtn .fill {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 0%;
+    background: var(--rec); z-index: 0;
+  }
+  .daybtn[data-holding="1"] .fill { transition: width 1.5s linear; width: 100%; }
+  .recsquare { width: 15px; height: 15px; border-radius: 4px; background: currentColor; }
+
+  .rechint { font-size: 12px; color: var(--faint); margin-top: 10px; line-height: 1.5; }
+
+  /* ---------- today's expected work (passive) ----------
+     Listed, never tapped. The crew does not choose a job — they drive to
+     one and film. Which job the footage belongs to is decided from where
+     the phone was and when, which is the one answer a person standing in
+     the rain should never be asked to type. */
+  .expect { margin-top: 18px; }
+  .expect h3 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); font-weight: 750; }
+  .erow {
+    display: flex; align-items: baseline; gap: 10px;
+    padding: 11px 2px; border-bottom: 1px solid var(--line-soft);
+  }
+  .erow:last-child { border-bottom: 0; }
+  .erow .t { flex: 1; min-width: 0; }
+  .erow .t b { display: block; font-size: 13.5px; font-weight: 650; letter-spacing: -0.01em; }
+  .erow .t span { display: block; font-size: 12px; color: var(--muted); }
+  .erow .at { font-family: var(--mono); font-size: 11.5px; color: var(--faint); white-space: nowrap; }
+  .erow .warnpin { font-size: 11px; color: var(--warn); }
+
+  /* ---------- the day, while it runs ---------- */
+  .dayclock {
+    font-family: var(--mono); font-size: 44px; font-weight: 700; letter-spacing: -0.02em;
+    color: #F1EFEB; line-height: 1;
+  }
+  .dayclock small { display: block; font-family: Inter, sans-serif; font-size: 12px; font-weight: 600; color: rgba(241,239,235,.6); letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 7px; }
+  .clockwrap { position: absolute; left: 18px; right: 18px; top: 52px; }
+  .sitestrip {
+    margin-top: 18px; display: inline-flex; align-items: center; gap: 8px;
+    padding: 7px 12px; border-radius: 999px;
+    background: rgba(241,239,235,.12); color: #F1EFEB;
+    font-size: 12.5px; font-weight: 600;
+  }
+  .sitestrip.unsure { background: rgba(217, 180, 91, .18); color: #E8C87C; }
+  .sitestrip .pin { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* ---------- the door: what the day became ---------- */
+  .tl { margin-top: 16px; border-left: 2px solid var(--line); padding-left: 14px; }
+  .tlrow { position: relative; padding: 9px 0; }
+  .tlrow::before {
+    content: ''; position: absolute; left: -20px; top: 15px;
+    width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+  }
+  .tlrow b { display: block; font-size: 13.5px; font-weight: 650; }
+  .tlrow span { display: block; font-size: 12px; color: var(--muted); }
+  .tlrow .mono { font-size: 11.5px; color: var(--faint); }
 
   /* ---------- recording ---------- */
   .finder {
@@ -233,12 +239,6 @@
   .live b { color: #F8B588; font-weight: 650; }
   .live .k { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.09em; color: rgba(241,239,235,.55); display: block; margin-bottom: 2px; }
   .stopwrap { position: absolute; left: 0; right: 0; bottom: 18px; text-align: center; }
-  .stopbtn {
-    width: 76px; height: 76px; border-radius: 50%;
-    border: 4px solid rgba(241,239,235,.75); background: transparent;
-    display: inline-grid; place-items: center;
-  }
-  .stopbtn .core { width: 30px; height: 30px; border-radius: 7px; background: var(--rec); }
 
   /* ---------- the door ---------- */
   .door { padding: 18px; }
@@ -280,9 +280,6 @@
 
   <!-- ================= header ================= -->
   <div class="top">
-    <button class="backbtn" id="back" hidden aria-label="Back">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
-    </button>
     <span class="brand">
       <svg width="18" height="18" viewBox="0 0 22 22" aria-hidden="true"><rect y="0" width="22" height="2.8" fill="#A8A29E"/><rect y="4.8" width="22" height="2.8" fill="#78716C"/><rect y="9.6" width="22" height="2.8" fill="#57534E"/><rect y="14.4" width="22" height="2.8" fill="currentColor"/><rect y="19.2" width="22" height="2.8" fill="#F2670C"/></svg>
       Atmosphere <span class="sub">Field Capture</span>
@@ -290,82 +287,99 @@
     <span class="who"><b>Andre Boone</b>Coastal Drying LLC</span>
   </div>
 
-  <!-- ================= HOME: today ================= -->
+  <!-- ================= HOME: before the day starts ================= -->
   <div class="screen" id="s-home" data-on="1">
     <div class="pad">
       <div class="daterow mono" id="today-date">TODAY</div>
-      <h1 class="h1">Film the proof</h1>
-      <p class="lede">Two short videos per job: one before you start, one when you finish. That's the whole job — everything after happens to the footage, not to you.</p>
-      <div id="jobs"></div>
+      <h1 class="h1">Start it and go to work</h1>
+      <p class="lede">
+        One button, once a day. Tap it when you get to your first job and hold it when you are
+        done. You never pick a job, tag a video, or say what you filmed — the footage carries
+        where it was and when, and the office works it out from that.
+      </p>
+
+      <div class="expect">
+        <h3>What today expects of you</h3>
+        <div id="expect"></div>
+      </div>
+
       <div class="week">
-        <h3>This week — what your films became</h3>
+        <h3>This week — what your days became</h3>
         <div id="week"></div>
       </div>
-      <p class="homenote">
-        Your phone's location and clock ride along with each video and are checked at the door —
-        that is what makes your film proof instead of footage. Nothing to fill in, nothing to tag.
+    </div>
+
+    <div class="recwrap">
+      <button class="daybtn" id="daybtn" data-state="idle">
+        <span class="ico" aria-hidden="true">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3.5l5 4v-11z"/></svg>
+        </span>
+        <span class="lbl">Start the day</span>
+      </button>
+      <p class="rechint" id="btnhint">
+        Your location and clock ride along with the footage and are checked at the door — that is
+        what makes it proof instead of video.
       </p>
     </div>
   </div>
 
-  <!-- ================= CAPTURE: the shot list ================= -->
-  <div class="screen" id="s-capture">
-    <div class="jobhead">
-      <div class="num mono" id="c-num"></div>
-      <h2 class="h1" id="c-name" style="font-size:19px"></h2>
-      <span class="phasepill" id="c-phase"></span>
-    </div>
-    <div class="guide">
-      <h3>Film it like this</h3>
-      <p class="why">One steady walk, about a minute. The list is built from this job's scope — filming it is agreeing to it, on camera.</p>
-      <ol class="steps" id="c-steps"></ol>
-    </div>
-    <div class="recwrap">
-      <button class="recbtn" id="rec" aria-label="Start recording"><span class="core"></span></button>
-      <p class="rechint">Hold the phone sideways. Start wide, then walk.</p>
-    </div>
-  </div>
-
-  <!-- ================= RECORDING ================= -->
+  <!-- ================= THE DAY, RUNNING ================= -->
   <div class="screen" id="s-rec">
     <div class="finder">
       <div class="scene" id="scene"></div>
       <div class="grain"></div>
       <div class="recbar">
-        <span class="recdot"></span> REC <span id="clock">0:00</span>
-        <span style="margin-left:auto" id="rec-job"></span>
+        <span class="recdot"></span> RECORDING THE DAY
+        <span style="margin-left:auto" class="mono" id="rec-since"></span>
       </div>
+
+      <div class="clockwrap">
+        <div class="dayclock"><small>Filming for</small><span id="clock">0:00</span></div>
+        <div class="sitestrip" id="sitestrip"><span class="pin"></span><span id="site-text">Getting your bearings…</span></div>
+      </div>
+
       <div class="live" id="live">
         <span class="k">ATMOSPHERE IS WATCHING WITH YOU</span>
         <span id="live-text">Getting your bearings…</span>
       </div>
-      <div class="stopwrap">
-        <button class="stopbtn" id="stop" aria-label="Stop recording"><span class="core"></span></button>
+
+      <div class="stopwrap" style="left:18px;right:18px">
+        <button class="daybtn" id="stopbtn" data-state="rec">
+          <span class="fill" aria-hidden="true"></span>
+          <span class="ico" aria-hidden="true"><span class="recsquare"></span></span>
+          <span class="lbl">Hold to finish the day</span>
+        </button>
       </div>
     </div>
   </div>
 
-  <!-- ================= THE DOOR ================= -->
+  <!-- ================= THE DOOR: end of day ================= -->
   <div class="screen" id="s-door">
     <div class="door">
       <h2>Checked at the door</h2>
-      <p class="sub">Before anyone watches it, your film is checked as evidence. You get to see the same checks the office sees.</p>
+      <p class="sub">Before anyone watches it, your day is checked as evidence. You see the same checks the office sees.</p>
       <div class="ledger" id="ledger">
         <div class="lrow" id="l1"><span>Filmed on site</span><em id="l1-d"></em><span class="ok">✓</span></div>
-        <div class="lrow" id="l2"><span>Filmed just now — not from your gallery</span><span class="ok">✓</span></div>
+        <div class="lrow" id="l2"><span>Filmed live — not from your gallery</span><span class="ok">✓</span></div>
         <div class="lrow" id="l3"><span>Sealed</span><em>SHA-256 into the record</em><span class="ok">✓</span></div>
-        <div class="lrow" id="l4"><span>Filed to</span><em id="l4-d"></em><span class="ok">→</span></div>
+        <div class="lrow" id="l4"><span>Split across</span><em id="l4-d"></em><span class="ok">→</span></div>
       </div>
+
+      <h3 style="margin-top:22px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:750">
+        Your day, as the office will read it
+      </h3>
+      <div class="tl" id="daytl"></div>
+
       <div class="doneline" id="doneline">
         Your part is done.
-        <small>The assistant reads the footage against the scope next and writes the day's report into the job file. If anything could not be seen, the office hears it as a named step — not a guess.</small>
+        <small>The assistant reads the day against each job's scope next and writes the report into the job file. Anything it could not see, the office hears as a named gap — never as a guess.</small>
       </div>
       <button class="donebtn" id="donebtn">Back to today</button>
     </div>
   </div>
 
   <div class="foot">
-    Uploads finish themselves when signal returns — never delete a clip to "help". A film that
+    Uploading finishes itself when signal returns — never delete anything to "help". A day that
     fails a check is still filed and still counts; it is just marked for a person to look at.
   </div>
 </div>
@@ -380,66 +394,58 @@
      guide per phase, upload, and the stored door checks.
      ------------------------------------------------------------------ */
 
+  // Today's expected work. The crew never selects from this — it is shown so
+  // they know what the day holds, and so a job the office forgot to give an
+  // address is visible as a warning here rather than as a surprise in the
+  // report tonight.
   var JOBS = [
     {
       id: 'j1041', num: '#1041', name: 'Meridian Ave — water loss, Class 3',
-      addr: '1841 Meridian Ave, Austin', distanceFt: 28,
-      before: { done: true, at: '7:04 AM' }, after: { done: false, at: null },
-      guides: {
-        before: [
-          { kind: 'anchor', t: 'Start outside, facing the front', s: 'Ten seconds wide — this is the shot that proves the address.' },
-          { kind: 'scope', t: 'Walk the drying equipment', s: '“Monitor drying equipment — 6 air movers, 1 dehu”' },
-          { kind: 'scope', t: 'Master bedroom subfloor', s: 'Slow pass over the exposed subfloor and the meter reading.' },
-          { kind: 'exclusion', t: 'The kitchen cabinets — film them untouched', s: 'Out of scope: the owner is handling cabinetry. Untouched on film is your protection.' },
-          { kind: 'wrap', t: 'Finish on anything unexpected', s: 'New damage, standing water, anything that was not in the plan.' }
-        ],
-        after: [
-          { kind: 'anchor', t: 'Start outside, facing the front', s: 'Same wide shot — the pair of anchors brackets your day.' },
-          { kind: 'scope', t: 'Walk the drying equipment again', s: 'Same path as this morning, so the two films compare.' },
-          { kind: 'scope', t: 'Master bedroom — today’s readings', s: 'The meter on camera. A reading on film is evidence; one remembered later is a claim.' },
-          { kind: 'exclusion', t: 'The kitchen cabinets — still untouched', s: 'Ten seconds. “We never touched them” is worth more with film of them.' },
-          { kind: 'wrap', t: 'Finish on anything that changed', s: 'What you found, what you could not finish, what tomorrow needs.' }
-        ]
-      }
+      addr: '1841 Meridian Ave, Austin', at: '7:00 AM', placed: true
     },
     {
       id: 'j1038', num: '#1038', name: 'Cedar Ridge — storm damage, roof tarp',
-      addr: '4118 Cedar Ridge Dr, Austin', distanceFt: 41,
-      before: { done: false, at: null }, after: { done: false, at: null },
-      guides: {
-        before: [
-          { kind: 'anchor', t: 'Start in the driveway, whole roofline in frame', s: 'The shot that proves the address.' },
-          { kind: 'scope', t: 'North slope, eave to ridge', s: '“Strip north slope to decking” — the state of it before you start.' },
-          { kind: 'scope', t: 'The valley and the tarps', s: 'Where the water came in. Slow.' },
-          { kind: 'exclusion', t: 'The skylights — film them untouched', s: 'Out of scope by carrier decision. Untouched on film protects you.' },
-          { kind: 'wrap', t: 'Finish on anything unexpected', s: 'Rot, prior repairs, anything not in the plan.' }
-        ],
-        after: [
-          { kind: 'anchor', t: 'Start in the driveway, same framing', s: 'The matching anchor.' },
-          { kind: 'scope', t: 'North slope — what got done today', s: 'Eave to ridge again, same path.' },
-          { kind: 'scope', t: 'New decking in the valley', s: 'Count the sheets on camera.' },
-          { kind: 'exclusion', t: 'The skylights — still untouched', s: 'Ten seconds.' },
-          { kind: 'wrap', t: 'Finish on the day’s loose ends', s: 'What is tarped for tonight, what tomorrow starts with.' }
-        ]
-      }
+      addr: '4118 Cedar Ridge Dr, Austin', at: '11:30 AM', placed: true
+    },
+    {
+      id: 'j1052', num: '#1052', name: 'Alder St — make-safe',
+      addr: 'Address not on the job yet', at: '3:00 PM', placed: false
     }
   ];
 
   var WEEK = [
-    { what: 'Meridian Ave · before · Tue', chip: ['pass', 'Verified'] },
-    { what: 'Meridian Ave · after · Tue', chip: ['pass', 'Verified · read by the assistant'] },
-    { what: 'Camden Court · after · Mon', chip: ['warm', 'Waiting on a person'] }
+    { what: 'Tuesday · 8h 12m · 2 jobs', chip: ['pass', 'Verified'] },
+    { what: 'Monday · 7h 40m · 3 jobs', chip: ['pass', 'Verified · read by the assistant'] },
+    { what: 'Friday · 6h 05m · 2 jobs', chip: ['warm', 'Waiting on a person'] }
+  ];
+
+  // What the day looks like from the phone's point of view: where it was,
+  // and what the watcher made of it. In the live app this is the GPS track
+  // plus the cheap model's per-window reading; here it plays out on a timer
+  // so the whole shape of a day is visible in a demo.
+  var DAY_SCRIPT = [
+    { at: 0,  job: 'j1041', site: 'Meridian Ave · 28 ft from the property', live: 'Wide shot of the front — the address is on film.' },
+    { at: 6,  job: 'j1041', site: 'Meridian Ave · on site',                 live: 'Drying equipment in frame — six air movers, one dehu.' },
+    { at: 12, job: null,    site: 'Between jobs — driving',                 live: 'Nothing to read while you drive. Still rolling.' },
+    { at: 18, job: 'j1038', site: 'Cedar Ridge · 41 ft from the property',  live: 'Roofline in frame — second job of the day starts here.' },
+    { at: 24, job: 'j1038', site: 'Cedar Ridge · on site',                  live: 'North slope stripped to decking; two chutes running.' },
+    { at: 30, job: 'j1038', site: 'Cedar Ridge · on site',                  live: 'Skylights passed untouched — that is the exclusion, filmed.' },
+    { at: 36, job: null,    site: 'Not sure which job — the office will sort it', live: 'No address on this job, so this stretch cannot be placed.', unsure: true }
   ];
 
   /* ------------------------------------------------------------------ */
 
   function $(s) { return document.querySelector(s); }
-  var state = { job: null, phase: 'before', timer: null, seconds: 0, liveTimer: null };
+  var state = {
+    running: false, seconds: 0, startedAt: null,
+    timer: null, liveTimer: null, cursor: 0,
+    // Which jobs the day actually touched, in order, built as it runs.
+    visited: []
+  };
 
-  var SCREENS = ['s-home', 's-capture', 's-rec', 's-door'];
+  var SCREENS = ['s-home', 's-rec', 's-door'];
   function show(id) {
     SCREENS.forEach(function (s) { $('#' + s).setAttribute('data-on', s === id ? '1' : '0'); });
-    $('#back').hidden = (id === '#s-home' || id === 's-home' || id === 's-rec' || id === 's-door');
     window.scrollTo(0, 0);
   }
 
@@ -450,56 +456,24 @@
   $('#today-date').textContent = DAYS[now.getDay()] + ' · ' + MONTHS[now.getMonth()] + ' ' + now.getDate();
 
   function renderHome() {
-    $('#jobs').innerHTML = JOBS.map(function (j) {
-      var next = !j.before.done ? 'before' : (!j.after.done ? 'after' : null);
+    // Passive rows, not buttons. Nothing here is a choice — it is the day,
+    // and the one job with no address is flagged where it can still be fixed.
+    $('#expect').innerHTML = JOBS.map(function (j) {
       return '' +
-        '<div class="jobcard" data-id="' + j.id + '">' +
-          '<div class="num mono">' + j.num + '</div>' +
-          '<h2>' + j.name + '</h2>' +
-          '<div class="addr">' + j.addr + '</div>' +
-          '<div class="phases">' +
-            '<div class="phase' + (j.before.done ? ' done' : '') + '"><b>BEFORE</b>' +
-              (j.before.done ? '<span class="mono">filmed ' + j.before.at + ' ✓</span>' : 'not filmed yet') + '</div>' +
-            '<div class="phase' + (j.after.done ? ' done' : '') + '"><b>AFTER</b>' +
-              (j.after.done ? '<span class="mono">filmed ' + j.after.at + ' ✓</span>' : (j.before.done ? 'when you finish' : 'after the before')) + '</div>' +
-          '</div>' +
-          (next
-            ? '<button class="cta" data-go="' + j.id + '" data-phase="' + next + '">' +
-                '<svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17 10.5V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3.5l5 4v-11z"/></svg>' +
-                'Film the ' + next + '</button>'
-            : '<button class="cta done">Done for today ✓</button>') +
+        '<div class="erow" data-id="' + j.id + '">' +
+          '<span class="t"><b>' + j.name + '</b>' +
+            '<span>' + j.addr +
+            (j.placed ? '' : ' <span class="warnpin">· cannot be placed from GPS</span>') +
+            '</span></span>' +
+          '<span class="at">' + j.at + '</span>' +
         '</div>';
     }).join('');
-
-    Array.prototype.forEach.call(document.querySelectorAll('[data-go]'), function (b) {
-      b.addEventListener('click', function () { openCapture(b.dataset.go, b.dataset.phase); });
-    });
 
     $('#week').innerHTML = WEEK.map(function (w) {
       return '<div class="weekrow"><span class="what">' + w.what + '</span>' +
         '<span class="chip ' + w.chip[0] + '"><span class="dot"></span>' + w.chip[1] + '</span></div>';
     }).join('');
   }
-
-  /* ---------- capture ---------- */
-  function openCapture(id, phase) {
-    var job = JOBS.filter(function (j) { return j.id === id; })[0];
-    if (!job) return;
-    state.job = job; state.phase = phase;
-    $('#c-num').textContent = job.num;
-    $('#c-name').textContent = job.name;
-    $('#c-phase').textContent = phase.toUpperCase() + ' · ' + (phase === 'before' ? 'FILM IT AS YOU FOUND IT' : 'FILM WHAT GOT DONE');
-    var steps = job.guides[phase];
-    $('#c-steps').innerHTML = steps.map(function (s, i) {
-      return '<li class="step ' + s.kind + '">' +
-        '<span class="dotn">' + (s.kind === 'exclusion' ? '✕' : (i + 1)) + '</span>' +
-        '<span class="t">' + s.t + '<span class="s">' + s.s + '</span></span></li>';
-    }).join('');
-    show('s-capture');
-    $('#back').hidden = false;
-  }
-
-  $('#back').addEventListener('click', function () { show('s-home'); $('#back').hidden = true; });
 
   /* ---------- recording ---------- */
   function sceneBars() {
@@ -514,47 +488,130 @@
     return html;
   }
 
-  function fmt(sec) { return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'); }
+  // A workday is hours long, so the clock reads h:mm:ss once past an hour.
+  function fmt(sec) {
+    var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    return h > 0
+      ? h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0')
+      : m + ':' + String(s).padStart(2, '0');
+  }
 
-  $('#rec').addEventListener('click', function () {
+  function clockTime(d) {
+    return ((d.getHours() % 12) || 12) + ':' + String(d.getMinutes()).padStart(2, '0') +
+      ' ' + (d.getHours() < 12 ? 'AM' : 'PM');
+  }
+
+  /* ---------- start: one tap ---------- */
+  function startDay() {
+    state.running = true;
+    state.seconds = 0;
+    state.cursor = 0;
+    state.visited = [];
+    state.startedAt = new Date();
+
     show('s-rec');
     $('#scene').innerHTML = sceneBars();
-    $('#rec-job').textContent = state.job.num + ' · ' + state.phase.toUpperCase();
-    state.seconds = 0;
+    $('#rec-since').textContent = 'since ' + clockTime(state.startedAt);
     $('#clock').textContent = '0:00';
+
     state.timer = setInterval(function () {
       state.seconds += 1;
       $('#clock').textContent = fmt(state.seconds);
     }, 1000);
 
-    // The live watcher: the same stage reading the office sees, spoken to
-    // the person holding the phone. Cheap model, closed vocabulary — it
-    // names the current step or says it cannot tell, never invents one.
-    var steps = state.job.guides[state.phase];
-    var k = 0;
-    function speak() {
-      var s = steps[Math.min(k, steps.length - 1)];
-      $('#live-text').innerHTML = 'Step ' + Math.min(k + 1, steps.length) + ' of ' + steps.length +
-        ' — <b>' + s.t + '</b>' + (s.kind === 'exclusion' ? ' · untouched, ten seconds is plenty' : '');
-      k += 1;
-    }
-    speak();
-    state.liveTimer = setInterval(function () {
-      if (k >= steps.length) { $('#live-text').innerHTML = 'Shot list covered — <b>finish and stop when ready</b>'; return; }
-      speak();
-    }, 2600);
+    // The watcher, and the phone's own sense of where it is. Both are
+    // read-only to the crew: nothing here asks them to confirm anything,
+    // because a question on this screen is a question asked of someone
+    // holding a ladder.
+    advance();
+    state.liveTimer = setInterval(advance, 2400);
+  }
+
+  function advance() {
+    var step = DAY_SCRIPT[Math.min(state.cursor, DAY_SCRIPT.length - 1)];
+    $('#live-text').innerHTML = step.live;
+    $('#site-text').textContent = step.site;
+    $('#sitestrip').className = 'sitestrip' + (step.unsure ? ' unsure' : '');
+
+    if (step.job && state.visited.indexOf(step.job) === -1) state.visited.push(step.job);
+    if (step.unsure && state.visited.indexOf('unplaced') === -1) state.visited.push('unplaced');
+    state.cursor += 1;
+  }
+
+  /* ---------- finish: one hold ----------
+     Deliberately not a tap. Starting the day early costs nothing; ending it
+     by accident with the phone in a pocket loses the day's evidence, and
+     those two are not the same risk. It is still the same single button. */
+  var holdTimer = null;
+  var stopBtn = $('#stopbtn');
+
+  function beginHold(e) {
+    if (e && e.cancelable) e.preventDefault();
+    if (!state.running || holdTimer) return;
+    stopBtn.setAttribute('data-holding', '1');
+    stopBtn.querySelector('.lbl').textContent = 'Keep holding…';
+    holdTimer = setTimeout(finishDay, 1500);
+  }
+
+  function cancelHold() {
+    if (!holdTimer) return;
+    clearTimeout(holdTimer);
+    holdTimer = null;
+    stopBtn.removeAttribute('data-holding');
+    stopBtn.querySelector('.lbl').textContent = 'Hold to finish the day';
+  }
+
+  stopBtn.addEventListener('pointerdown', beginHold);
+  stopBtn.addEventListener('pointerup', cancelHold);
+  stopBtn.addEventListener('pointerleave', cancelHold);
+  stopBtn.addEventListener('pointercancel', cancelHold);
+  // Keyboard and assistive tech get a plain activation rather than a hold
+  // they cannot perform.
+  stopBtn.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); finishDay(); }
   });
 
-  $('#stop').addEventListener('click', function () {
-    clearInterval(state.timer); clearInterval(state.liveTimer);
+  function finishDay() {
+    if (!state.running) return;
+    cancelHold();
+    state.running = false;
+    clearInterval(state.timer);
+    clearInterval(state.liveTimer);
     openDoor();
-  });
+  }
 
-  /* ---------- the door ---------- */
+  $('#daybtn').addEventListener('click', startDay);
+
+  /* ---------- the door: what one recording became ----------
+     The crew pressed one button twice. What comes back is the day already
+     split by job, because that split is the system's work and showing it
+     here is how the crew learns the machine is actually doing it. The
+     unplaced stretch is shown as a gap with a name, never quietly dropped
+     into whichever job happens to be nearest. */
   function openDoor() {
     show('s-door');
-    $('#l1-d').textContent = state.job.distanceFt + ' ft from the property';
-    $('#l4-d').textContent = 'job ' + state.job.num + ' · ' + state.phase;
+
+    var placed = state.visited.filter(function (v) { return v !== 'unplaced'; });
+    var unplaced = state.visited.indexOf('unplaced') !== -1;
+
+    $('#l1-d').textContent = placed.length
+      ? 'at ' + placed.length + (placed.length === 1 ? ' property' : ' properties')
+      : 'no property matched';
+    $('#l4-d').textContent = placed.length + (placed.length === 1 ? ' job' : ' jobs') +
+      (unplaced ? ' + 1 unplaced stretch' : '');
+
+    $('#daytl').innerHTML = placed.map(function (id) {
+      var job = JOBS.filter(function (j) { return j.id === id; })[0];
+      if (!job) return '';
+      return '<div class="tlrow"><b>' + job.name + '</b>' +
+        '<span>' + job.addr + '</span>' +
+        '<span class="mono">matched by location · ' + job.num + '</span></div>';
+    }).join('') + (unplaced
+      ? '<div class="tlrow" style="opacity:.85"><b>One stretch could not be placed</b>' +
+        '<span>The job it probably belongs to has no address on it, so the office is asked rather than guessed at.</span>' +
+        '<span class="mono">flagged for a person</span></div>'
+      : '');
+
     ['l1', 'l2', 'l3', 'l4'].forEach(function (id, i) {
       var el = $('#' + id);
       el.classList.remove('on');
@@ -567,12 +624,17 @@
   }
 
   $('#donebtn').addEventListener('click', function () {
-    var t = new Date();
-    var stamp = ((t.getHours() % 12) || 12) + ':' + String(t.getMinutes()).padStart(2, '0') + ' ' + (t.getHours() < 12 ? 'AM' : 'PM');
-    state.job[state.phase] = { done: true, at: stamp };
+    var hours = Math.max(1, Math.round(state.seconds / 3600 * 10) / 10);
+    var placed = state.visited.filter(function (v) { return v !== 'unplaced'; }).length;
+    WEEK.unshift({
+      what: 'Today · ' + fmt(state.seconds) + ' · ' + placed + (placed === 1 ? ' job' : ' jobs'),
+      chip: ['warm', 'Reading the day…']
+    });
     renderHome();
     show('s-home');
-    $('#back').hidden = true;
+    // Back to the resting state: the same button, ready for tomorrow.
+    $('#daybtn').setAttribute('data-state', 'idle');
+    $('#daybtn').querySelector('.lbl').textContent = 'Start the day';
   });
 
   renderHome();

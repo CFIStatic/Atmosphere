@@ -7,35 +7,45 @@ the Verifier is where evidence is read; this is where it is made.
 
 ## The principles
 
-**One question, answered instantly.** A crew member opens this on a job site,
-wearing gloves, in glare, in a hurry. The only question that matters is
-"what do I film right now?" — so the home screen is today's jobs with
-before/after status and one button each. No dashboard, no feed, no menu.
+**One button, twice a day.** A crew member opens this on a job site, wearing
+gloves, in glare, in a hurry. Asking them which job this is, whether it is a
+before or an after, or what they just filmed is asking questions of someone
+holding a ladder. So there is exactly one control: tap it when you get to
+work, hold it when you are done. Everything between those two presses is the
+system's problem.
 
-**One action per screen.** Today → shot list → record → checked at the door →
-done. Each screen does one thing and leads to exactly one next thing. Back
-exists; branching does not.
+**Attribution is derived, never typed.** One recording spans the whole day
+and several jobs. Which stretch belongs to which job is decided from where
+the phone was and when — which is why a job's address matters, and why a job
+without one shows up on the home screen as *cannot be placed from GPS* while
+there is still time to fix it. A stretch that cannot be placed is flagged for
+a person, never quietly filed to whichever job happened to be nearest.
 
-**The system's needs ride inside the crew's flow.** Verification needs an
-anchor shot, the scope walked, exclusions filmed untouched, GPS and clock
-attached, a hash sealed. None of that is a form. The shot list *is* the
-scope; the door checks happen *to* the footage while the crew watches; the
-labels write themselves. Evidence-grade capture costs the crew zero taps
-beyond record and stop.
+**The two presses carry different risk, so they are not equally easy.**
+Starting the day early costs nothing. Ending it by accident with the phone in
+a pocket loses the day's evidence. So starting is a tap and finishing is a
+hold — still one button, in the same place, with the label saying which is
+which.
 
-**Show the crew what the office sees.** The live watcher names the step being
-filmed in plain words, and the door screen replays the same integrity checks
-the Verifier will show a reviewer. A crew that can see their film passing
-checks films better — and trusts the system that is, after all, watching
-them work.
+**The system's needs ride inside the crew's flow.** Verification needs
+location, a clock, frames sampled across the day, and a sealed hash. None of
+that is a form. The door checks happen *to* the footage while the crew
+watches; the labels write themselves. Evidence-grade capture costs the crew
+two presses.
+
+**Show the crew what the office sees.** The live strip names the site the
+phone thinks it is at and what the watcher is reading, and the end-of-day
+screen shows the single recording already split by job — the system's work,
+shown back. A crew that can see their day passing checks films better, and
+trusts the thing that is, after all, watching them work.
 
 **Same tokens as the Verifier.** Paper, warm ink, one terracotta accent,
 monospace as the record's voice. The film a crew makes and the evidence it
 becomes should look like one product, because they are one record.
 
 **Phone-shaped, honestly.** One centered column at phone width, targets sized
-for gloves, the record button where a thumb lands. On a desktop it does not
-stretch to pretend otherwise.
+for gloves, the one button full-width where a thumb lands. On a desktop it
+does not stretch to pretend otherwise.
 
 ## What is in here
 
@@ -44,24 +54,27 @@ it can be served from any static host, opened from disk, or embedded in the
 demo artifact as the Field Capture view.
 
 Against a live backend the screens hydrate from the proof endpoints that
-already exist — today's assignments, `capture-guide` per phase, the upload
-flow, the stored door checks, and `live-observe` for the watcher. The React
-Field platform in `frontend/` remains the fully wired implementation; this
-page is the product's face and its design source of truth.
+already exist — today's assignments, the upload flow, the stored door checks,
+and `live-observe` for the watcher. A day-length recording is read by the
+long-form path in `backend/src/shared/longAnalyst.ts`: frames grouped into
+time windows, each window read on the cheap model, one synthesis over the
+window readings. The React Field platform in `frontend/` remains the fully
+wired implementation; this page is the product's face and its design source
+of truth.
 
 ## The flow
 
-1. **Today** — jobs assigned to this crew, each with before/after status and
-   one call to action. A "this week" strip shows what earlier films became
-   (verified, read, waiting on a person), closing the loop that most capture
-   tools leave open.
-2. **Film it like this** — the shot list built from the job's own scope:
-   anchor first (proves the address), each scope line, exclusions filmed
-   untouched (the crew's protection, and labeled that way), a wrap for
-   anything unexpected.
-3. **Recording** — viewfinder with the live watcher naming the current step.
-   Closed vocabulary: it names a step or says it cannot tell; it never
-   invents one.
-4. **Checked at the door** — the integrity ledger animates in: filmed on
-   site (distance in feet), filmed just now, sealed, filed to the job. Then
-   the honest handoff line: your part is done; the assistant reads it next.
+1. **Today** — one button, and beneath it what the day expects: the jobs
+   assigned to this crew, listed passively because none of them is a choice.
+   A job with no address is marked *cannot be placed from GPS* here, where
+   the office can still fix it. A "this week" strip shows what earlier days
+   became, closing the loop most capture tools leave open.
+2. **The day, running** — elapsed time, the site the phone believes it is at,
+   and the watcher's plain-words reading. The site strip turns amber and says
+   *not sure which job* rather than guessing. Closed vocabulary throughout:
+   it names what it sees or says it cannot tell.
+3. **Checked at the door** — the integrity ledger animates in: filmed on
+   site, filmed live, sealed, split across N jobs. Below it, the day already
+   segmented by job — including any stretch that could not be placed, shown
+   as a named gap. Then the handoff: your part is done; the assistant reads
+   it next.
