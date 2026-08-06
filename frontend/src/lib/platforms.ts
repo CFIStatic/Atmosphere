@@ -162,24 +162,27 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
     Icon: DecisionIcon,
     metrics: ['openJobs', 'crewOnJobs', 'awaitingApproval', 'scheduledToday', 'blockedJobs', 'atRiskProjects'],
     groups: [
+      // The platform IS the Verifier: one surface, the evidence library,
+      // looking and working exactly as the standalone portal does — because
+      // it is the standalone portal. Settings stays because connecting a
+      // CRM or a mailbox is account plumbing, not a product surface.
+      {
+        label: 'Evidence',
+        items: [{ to: '/verifier-library', label: 'Verifier', Icon: ShieldIcon }],
+      },
+      /* Earlier workspace surfaces — kept, not displayed. The routes still
+         answer; restore by moving groups back.
       OPERATE('/operations', 'Run the day'),
       {
         label: 'The record',
         items: [
           { to: '/jobs', label: 'Jobs', Icon: BriefcaseIcon },
-          // The core surface: the job file — scope, subs, proof days,
-          // evidence locker, and the shares that hand it outward.
           { to: '/shared', label: 'Job files', Icon: UsersIcon },
           { to: '/schedule', label: 'Schedule', Icon: HistoryIcon },
           { to: '/team', label: 'Crew', Icon: UsersIcon },
         ],
       },
-      {
-        // At the bottom of the rail, above System: the reviewer's screen,
-        // inside the platform — read the record exactly as a share shows it.
-        label: 'Evidence',
-        items: [{ to: '/verifier-library', label: 'Verifier', Icon: ShieldIcon }],
-      },
+      */
       /* Later products — built, kept, not displayed while the Work
          Verification Platform is the sole focus. Restore by moving items
          back into a visible group.
@@ -288,7 +291,9 @@ export const VISIBLE_PLATFORM_IDS: PlatformId[] = ['operations', 'field'];
 
 export const PLATFORM_HOME: Record<PlatformId, string> = {
   sales: '/sales',
-  operations: '/operations',
+  // The Verification platform opens on the Verifier — the platform is the
+  // portal. The old overview still answers at /operations, unlisted.
+  operations: '/verifier-library',
   field: '/field',
   manager: '/manager',
 };

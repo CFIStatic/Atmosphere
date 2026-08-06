@@ -1504,11 +1504,14 @@
       '</dl>' +
       '<p class="footnote">The hash is of the original bytes as uploaded. Re-uploading the same file on another ' +
       'day or another job is caught by it, which is the cheapest fraud there is and the cheapest to catch.</p>' +
-      (item._remote && SHARE_TOKEN
+      (item._remote && (SHARE_TOKEN || ORG_MODE)
         ? '<div id="dl-block" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line-soft)">' +
           '<button id="dl-btn" class="navitem" style="width:auto;border:1px solid var(--line);font-weight:600">Download original file</button>' +
-          '<p id="dl-msg" class="footnote" style="margin-top:8px">Viewing is free. Keeping a copy carries the sharing organization\u2019s download fee, and every download is on the access log.</p>' +
-          '</div>'
+          '<p id="dl-msg" class="footnote" style="margin-top:8px">' +
+          (ORG_MODE
+            ? 'Free for your organization \u2014 the download still lands on the access log, because "who holds a copy" should always be a query.'
+            : 'Viewing is free. Keeping a copy carries the sharing organization\u2019s download fee, and every download is on the access log.') +
+          '</p></div>'
         : '');
 
     var dlBtn = document.getElementById('dl-btn');
@@ -1523,6 +1526,21 @@
   function requestDownload(item, downloadId) {
     var msg = document.getElementById('dl-msg');
     var btn = document.getElementById('dl-btn');
+    if (ORG_MODE) {
+      // The org's own copy of its own evidence: no fee, same ledger.
+      fetch('/api/evidence-portal/evidence/' + encodeURIComponent(item.id) + '/download', { credentials: 'include' })
+        .then(function (r) { return r.json().then(function (body) { return { status: r.status, body: body }; }); })
+        .then(function (res) {
+          if (res.status >= 400) {
+            if (msg) msg.textContent = (res.body && res.body.error) || 'The download could not be prepared.';
+            return;
+          }
+          if (msg) msg.textContent = 'Ready — the link is good for ten minutes, and this download is now on the access log.';
+          window.open(res.body.url, '_blank');
+        })
+        .catch(function () { if (msg) msg.textContent = 'The download could not be prepared.'; });
+      return;
+    }
     var base = '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN);
     fetch(base + '/evidence/' + encodeURIComponent(item.id) + '/download', { method: 'POST', credentials: 'include' })
       .then(function (r) { return r.json().then(function (body) { return { status: r.status, body: body }; }); })
@@ -1626,12 +1644,15 @@
    * ------------------------------------------------------------------ */
 
   var SHARE_TOKEN = new URLSearchParams(location.search).get('share');
+  // Inside the platform the same page hydrates with the org's whole library —
+  // no token, the signed-in session is the credential.
+  var ORG_MODE = false;
 
-  function mapRemoteItem(raw) {
+  function mapRemoteItem(raw, jobKey) {
     return {
       _remote: true,
       id: raw.id,
-      job: 'shared',
+      job: jobKey || 'shared',
       jobName: raw.jobName,
       company: raw.company || '—',
       person: raw.person || raw.company || '—',
@@ -1672,7 +1693,10 @@
   }
 
   function fetchRemoteDetail(item) {
-    return fetch('/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id), { credentials: 'include' })
+    var detailUrl = ORG_MODE
+      ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id)
+      : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id);
+    return fetch(detailUrl, { credentials: 'include' })
       .then(function (r) { if (!r.ok) throw new Error('detail'); return r.json(); })
       .then(function (payload) {
         item.custody = (payload.custody || []).map(function (c) {
@@ -1749,7 +1773,7 @@
             address: payload.job && payload.job.claimNumber ? 'Claim ' + payload.job.claimNumber : ''
           }
         };
-        EVIDENCE = (payload.items || []).map(mapRemoteItem);
+        EVIDENCE = (payload.items || []).map(function (raw) { return mapRemoteItem(raw); });
         if (payload.share) {
           // Its own element — #resultcount belongs to render() and would
           // overwrite anything written there on the next filter change.
@@ -1764,7 +1788,31 @@
       })
       .catch(function () { deadLink(0, null); });
   } else {
-    boot();
+    // No token: this is the platform's own view of the record. Ask the
+    // backend for the whole library; a static or demo context (no session,
+    // no API) falls back to the built-in record, silently — the page must
+    // never look broken for lacking a server.
+    fetch('/api/evidence-portal/library', { credentials: 'include' })
+      .then(function (r) { if (!r.ok) throw new Error('no library'); return r.json(); })
+      .then(function (payload) {
+        if (payload && payload.items && payload.items.length) {
+          ORG_MODE = true;
+          JOBS = {};
+          payload.items.forEach(function (raw) {
+            if (raw.jobId && !JOBS[raw.jobId]) {
+              JOBS[raw.jobId] = {
+                key: raw.jobId,
+                name: raw.jobName || 'Job',
+                number: raw.jobNumber != null ? raw.jobNumber : null,
+                address: ''
+              };
+            }
+          });
+          EVIDENCE = payload.items.map(function (raw) { return mapRemoteItem(raw, raw.jobId); });
+        }
+        boot();
+      })
+      .catch(function () { boot(); });
   }
 })();
 </script>
