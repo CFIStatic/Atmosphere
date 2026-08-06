@@ -144,7 +144,9 @@ export const config = {
     // honest about its own coverage.
     longFormSeconds: Number(process.env.LONG_FORM_SECONDS ?? 900),
     windowMaxFrames: Number(process.env.LONG_FORM_WINDOW_FRAMES ?? 12),
-    windowMaxSeconds: Number(process.env.LONG_FORM_WINDOW_SECONDS ?? 1200),
+    // One hour per window keeps a 24h sparse sample (~144 frames at 10 min)
+    // near ~24 cheap reads + one synthesis, not dozens of tiny windows.
+    windowMaxSeconds: Number(process.env.LONG_FORM_WINDOW_SECONDS ?? 3600),
     // The synthesis reads no pixels — it composes a day report out of window
     // summaries that were already written, and the verdict caps that matter
     // are applied in code afterward, not asked of the model. That is a
@@ -152,6 +154,16 @@ export const config = {
     // assistant's flagship, so the expensive leg of the pipeline stays the
     // one that actually looks at frames.
     synthesisModel: process.env.LONG_FORM_SYNTHESIS_MODEL ?? 'claude-sonnet-5',
+    // Day-length / overnight recordings. The phone may leave the camera
+    // running for a whole shift (and sometimes longer); intake accepts up to
+    // this many seconds, then the server sparsely extracts stills rather
+    // than trusting the device to ship hundreds of base64 frames.
+    maxDurationSeconds: Number(process.env.PROOF_MAX_DURATION_SECONDS ?? 24 * 60 * 60),
+    // One still every N seconds across a long file. 10 minutes → 144 frames
+    // for 24h, well inside the vision budget once windowed.
+    sparseFrameIntervalSeconds: Number(process.env.PROOF_SPARSE_FRAME_INTERVAL_SECONDS ?? 600),
+    sparseMaxFrames: Number(process.env.PROOF_SPARSE_MAX_FRAMES ?? 180),
+    ffmpegPath: process.env.FFMPEG_PATH ?? 'ffmpeg',
   },
 
   crmSync: {

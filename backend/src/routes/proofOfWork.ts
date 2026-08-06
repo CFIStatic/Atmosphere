@@ -24,6 +24,7 @@ import { labelsForProof } from '../verifier/library.js';
 import { buildCaptureGuide } from '../shared/captureGuide.js';
 import { scopeForParty } from '../shared/jobRecord.js';
 import { analyseLongRecording } from '../shared/longAnalyst.js';
+import { extractSparseFramesFromUrl } from '../shared/sparseExtract.js';
 import {
   narrateProofVideo,
   observeLiveFrame,
@@ -140,7 +141,14 @@ const recordSchema = z.object({
   phase: z.enum(['before', 'after']),
   storagePath: z.string().min(1).max(500),
   byteSize: z.number().int().positive().optional(),
-  durationSeconds: z.number().min(0).max(60 * 60).optional(),
+  // Day-length / overnight recordings are first-class. The hard ceiling is
+  // config.verification.maxDurationSeconds (default 24h); above that the
+  // phone must split the day rather than ship an unbounded file.
+  durationSeconds: z
+    .number()
+    .min(0)
+    .max(config.verification.maxDurationSeconds)
+    .optional(),
   /** SHA-256 hex, computed on the device before upload. */
   contentHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   capturedAt: z.string().datetime().optional(),
@@ -247,7 +255,15 @@ export async function recordProof(party: any, admin: any, body: unknown) {
   // the moment this clip lands — its report rides the clip. The comparison is
   // per-day and waits for its pair. Neither is awaited: a vision call does not
   // belong inside a phone's POST on a truck's signal.
-  if (input.frames?.length) {
+  //
+  // Day-length recordings often arrive with zero device frames (the phone
+  // cannot honestly sample 24h into a JSON body). Those still queue: the
+  // worker sparsely extracts stills from storage with FFmpeg before reading.
+  const durationSeconds = input.durationSeconds ?? 0;
+  const longForm =
+    durationSeconds > config.verification.longFormSeconds ||
+    (input.byteSize ?? 0) > 80_000_000;
+  if (input.frames?.length || longForm) {
     await queueNarration(admin, party, (proof as any).id, input.phase, input.workDate);
   } else {
     await admin
@@ -544,9 +560,9 @@ async function guideStepsFor(admin: any, jobId: string, partyId: string, phase: 
 }
 
 /**
- * Read one video's stored frames back out of the bucket. The device already
- * extracted and uploaded them at filing time, so narration needs no video
- * toolchain — just the JPEGs it was always going to read.
+ * Read one video's stored frames back out of the bucket. Short clips still
+ * arrive with device-extracted JPEGs; day-length clips are filled in by
+ * ensureSparseFramesFromStorage when the device sent none.
  */
 async function framesFor(admin: any, proofId: string) {
   const { data: rows } = await admin
@@ -566,6 +582,77 @@ async function framesFor(admin: any, proofId: string) {
   return frames;
 }
 
+/**
+ * For a long recording with few or no device stills, stream-extract a sparse
+ * set of JPEGs from the stored video via FFmpeg (signed URL in, hard-capped
+ * frames out). Node never holds the multi‑GB file.
+ */
+async function ensureSparseFramesFromStorage(
+  admin: any,
+  job: NarrationJob,
+  durationSeconds: number,
+): Promise<number> {
+  const { data: existing } = await admin
+    .from('job_proof_frames')
+    .select('id')
+    .eq('proof_id', job.proofId);
+  const have = (existing ?? []).length;
+  // A short guided clip with a handful of device frames is already enough.
+  // A workday needs a real sample across the timeline.
+  const minWanted = Math.min(
+    12,
+    Math.max(4, Math.floor(durationSeconds / config.verification.sparseFrameIntervalSeconds)),
+  );
+  if (have >= minWanted) return have;
+
+  const { data: proof } = await admin
+    .from('job_proofs')
+    .select('storage_path, org_id, job_id, party_id, work_date, phase')
+    .eq('id', job.proofId)
+    .maybeSingle();
+  if (!proof?.storage_path) return have;
+
+  const { data: signed, error: signErr } = await admin.storage
+    .from(PROOF_BUCKET)
+    .createSignedUrl((proof as any).storage_path, 60 * 60);
+  if (signErr || !signed?.signedUrl) {
+    throw new Error(signErr?.message ?? 'Could not mint a signed URL for sparse extract.');
+  }
+
+  const extracted = await extractSparseFramesFromUrl({
+    url: signed.signedUrl,
+    durationSeconds,
+    intervalSeconds: config.verification.sparseFrameIntervalSeconds,
+    maxFrames: config.verification.sparseMaxFrames,
+    ffmpegPath: config.verification.ffmpegPath,
+  });
+  if (!extracted.length) return have;
+
+  // Replace thin device samples with the server timeline so window math
+  // reflects the whole day, not six frames clustered at the start.
+  if (have > 0 && have < minWanted) {
+    await admin.from('job_proof_frames').delete().eq('proof_id', job.proofId);
+  }
+
+  for (const frame of extracted) {
+    const path = `${(proof as any).org_id}/${(proof as any).job_id}/${(proof as any).party_id}/${(proof as any).work_date}-${(proof as any).phase}-sf${Math.round(frame.atSeconds)}.jpg`;
+    await admin.storage.from(PROOF_BUCKET).upload(path, frame.jpeg, {
+      contentType: 'image/jpeg',
+      upsert: true,
+    });
+    await admin.from('job_proof_frames').upsert(
+      {
+        org_id: (proof as any).org_id,
+        proof_id: job.proofId,
+        at_seconds: frame.atSeconds,
+        storage_path: path,
+      },
+      { onConflict: 'proof_id,at_seconds' },
+    );
+  }
+  return extracted.length;
+}
+
 async function performNarration(admin: any, job: NarrationJob): Promise<void> {
   await admin.from('job_proofs').update({ narration_status: 'running' }).eq('id', job.proofId);
 
@@ -577,13 +664,29 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
     return;
   }
 
+  const { data: proofRow } = await admin
+    .from('job_proofs')
+    .select('duration_seconds, byte_size')
+    .eq('id', job.proofId)
+    .maybeSingle();
+  const durationSeconds = Number((proofRow as any)?.duration_seconds ?? 0);
+  const longForm =
+    durationSeconds > config.verification.longFormSeconds ||
+    Number((proofRow as any)?.byte_size ?? 0) > 80_000_000;
+
+  if (longForm) {
+    await ensureSparseFramesFromStorage(admin, job, durationSeconds || 24 * 60 * 60);
+  }
+
   const frames = await framesFor(admin, job.proofId);
   if (!frames.length) {
-    // Honest and terminal: a clip whose device could not extract frames has
-    // nothing for the model to read, and retrying will not change that.
+    // Honest and terminal for short clips. Long clips already tried FFmpeg;
+    // if that produced nothing the binary or the file is the problem.
     await write({
       narration_status: 'skipped',
-      narration_error: 'The device uploaded no frames for this clip.',
+      narration_error: longForm
+        ? 'Could not extract frames from this long recording for analysis.'
+        : 'The device uploaded no frames for this clip.',
     });
     return;
   }
@@ -591,14 +694,13 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
   // A workday-length recording is a different reading problem from a guided
   // walk: hours of frames go through windows on the cheap model, then one
   // synthesis on the strong one, with verdicts capped by actual sightings.
-  const { data: proofRow } = await admin
-    .from('job_proofs')
-    .select('duration_seconds')
-    .eq('id', job.proofId)
-    .maybeSingle();
-  const durationSeconds = Number((proofRow as any)?.duration_seconds ?? 0);
-  if (durationSeconds > config.verification.longFormSeconds) {
-    await performLongFormAnalysis(admin, job, frames, durationSeconds);
+  if (longForm) {
+    await performLongFormAnalysis(
+      admin,
+      job,
+      frames,
+      durationSeconds || frames[frames.length - 1]?.atSeconds || 0,
+    );
     return;
   }
 

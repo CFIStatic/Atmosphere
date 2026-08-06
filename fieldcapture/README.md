@@ -56,12 +56,13 @@ demo artifact as the Field Capture view.
 
 Against a live backend the screens hydrate from the proof endpoints that
 already exist — today's assignments, the upload flow, the stored door checks,
-and `live-observe` for the watcher. A day-length recording is read by the
-long-form path in `backend/src/shared/longAnalyst.ts`: frames grouped into
-time windows, each window read on the cheap model, one synthesis over the
-window readings. The React Field platform in `frontend/` remains the fully
-wired implementation; this page is the product's face and its design source
-of truth.
+and location status while rolling. A day-length (up to **24 hour**) recording
+uploads as video only; the server sparsely extracts stills with FFmpeg and
+the long-form path in `backend/src/shared/longAnalyst.ts` reads them in time
+windows on the cheap model, then one synthesis for the office AI dictation.
+The phone never ships hundreds of base64 frames. The React Field platform in
+`frontend/` remains the fully wired shell; this page is the product's face
+and its design source of truth.
 
 ## The flow
 
