@@ -215,6 +215,9 @@ function PlatformSwitcher({
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const platform = PLATFORMS[active];
+  // One visible platform means there is nothing to switch to: the chip is
+  // identity, not a control, and a dropdown with one option is a lie.
+  const switchable = VISIBLE_PLATFORM_IDS.length > 1;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -231,6 +234,22 @@ function PlatformSwitcher({
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [open]);
+
+  if (!switchable) {
+    return (
+      <div className="flex w-full items-center gap-2.5 rounded-lg glass-card px-2.5 py-2">
+        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-brand-50 text-brand-700">
+          <platform.Icon width={14} height={14} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] font-semibold text-ink-900">
+            {platform.short}
+          </span>
+          <span className="block truncate text-[11px] text-ink-500">{platform.tagline}</span>
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div ref={wrapRef} className="relative">
