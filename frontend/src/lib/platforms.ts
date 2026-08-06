@@ -290,13 +290,19 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
 export const PLATFORM_IDS: PlatformId[] = ['sales', 'operations', 'field', 'manager'];
 
 /**
- * What the switcher offers. The app IS the Field capture app: the Verifier
- * lives as its own property (the portal, with its own tab and its own
- * sidebar), and Sales, Operations and Manager are later products — fully
- * wired, reachable by URL, and deliberately absent from every menu until
- * they are current again.
+ * What the switcher offers, office first.
+ *
+ * The Verification platform IS the office's view, and its home is the
+ * Verifier — so it leads, and a fresh device lands there. Field is the same
+ * product from the truck. Sales and Manager are later products: fully wired,
+ * reachable by URL, and deliberately absent from every menu until they are
+ * current again.
+ *
+ * Verification has to be listed, not merely be the default. Leaving it out
+ * made it a one-way door: the office landed on the Verifier, switched to
+ * Field once, and had no way back to the product they had just been using.
  */
-export const VISIBLE_PLATFORM_IDS: PlatformId[] = ['field'];
+export const VISIBLE_PLATFORM_IDS: PlatformId[] = ['operations', 'field'];
 
 export const PLATFORM_HOME: Record<PlatformId, string> = {
   sales: '/sales',
