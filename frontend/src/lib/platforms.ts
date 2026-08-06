@@ -162,14 +162,10 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
     Icon: DecisionIcon,
     metrics: ['openJobs', 'crewOnJobs', 'awaitingApproval', 'scheduledToday', 'blockedJobs', 'atRiskProjects'],
     groups: [
-      // The platform IS the Verifier: one surface, the evidence library,
-      // looking and working exactly as the standalone portal does — because
-      // it is the standalone portal. Settings stays because connecting a
-      // CRM or a mailbox is account plumbing, not a product surface.
-      {
-        label: 'Evidence',
-        items: [{ to: '/verifier-library', label: 'Verifier', Icon: ShieldIcon }],
-      },
+      // The platform IS the Verifier, full screen with its own sidebar — so
+      // this rail carries no duplicate entry for it. Settings remains for
+      // the shell pages (the portal's sidebar links to it), and the wordmark
+      // and switcher both lead back to the portal.
       /* Earlier workspace surfaces — kept, not displayed. The routes still
          answer; restore by moving groups back.
       OPERATE('/operations', 'Run the day'),

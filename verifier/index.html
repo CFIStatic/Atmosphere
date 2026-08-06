@@ -444,6 +444,15 @@
 
     <h3>Capture</h3>
     <div class="facet" id="facet-phase"></div>
+
+    <!-- Shown only when the portal IS the platform: the one piece of app
+         chrome that still matters lives at the bottom of this sidebar. -->
+    <div id="embed-nav" hidden>
+      <h3>System</h3>
+      <button class="navitem" id="nav-settings" style="gap:8px;justify-content:flex-start">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09A1.7 1.7 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09A1.7 1.7 0 0 0 20.91 10H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></svg><span>Settings</span>
+      </button>
+    </div>
   </aside>
 
   <main class="main">
@@ -1582,6 +1591,22 @@
       render();
     });
   });
+
+  // When the portal is the platform's whole screen, Settings appears at the
+  // bottom of this sidebar and hands navigation back to the shell — the
+  // portal itself stays a page that knows nothing about the app around it.
+  var EMBEDDED = document.body.hasAttribute('data-atm-embed') ||
+    new URLSearchParams(location.search).get('embed') === '1';
+  if (EMBEDDED) {
+    var embedNav = document.getElementById('embed-nav');
+    if (embedNav) embedNav.hidden = false;
+    var navSettings = document.getElementById('nav-settings');
+    if (navSettings) {
+      navSettings.addEventListener('click', function () {
+        window.parent.postMessage({ atmosphere: 'navigate', to: '/settings' }, '*');
+      });
+    }
+  }
 
   // Each segment control is its own group: pressing a sort button must not
   // unpress the arrange buttons, and vice versa.
