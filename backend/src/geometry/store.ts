@@ -6,6 +6,7 @@
  * room-graph shape are what native and web clients integrate against.
  */
 import { randomUUID } from 'node:crypto';
+import { persistTwin } from './persist.js';
 import type {
   GeometryCaptureSession,
   PropertyDigitalTwin,
@@ -46,6 +47,7 @@ export function createTwin(input: {
     updatedAt: now,
   };
   twins.set(twin.id, twin);
+  void persistTwin(twin);
   return twin;
 }
 
@@ -62,6 +64,7 @@ export function listTwinsForOrg(orgId: string): PropertyDigitalTwin[] {
 export function saveTwin(twin: PropertyDigitalTwin): PropertyDigitalTwin {
   twin.updatedAt = new Date().toISOString();
   twins.set(twin.id, twin);
+  void persistTwin(twin);
   return twin;
 }
 

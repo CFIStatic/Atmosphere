@@ -1,0 +1,12 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>capture-core smoke</title>
+<script src="capture-core.js"></script>
+<script>
+  // Browser smoke — open manually. Asserts API surface exists.
+  var ok = window.FieldCaptureCore
+    && typeof FieldCaptureCore.recordDayFilm === 'function'
+    && typeof FieldCaptureCore.uploadDayFilm === 'function'
+    && typeof FieldCaptureCore.todayISO === 'function';
+  document.body.textContent = ok ? 'capture-core OK' : 'capture-core MISSING';
+</script>

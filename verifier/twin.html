@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Atmosphere · Property twins</title>
+<style>
+  :root {
+    --bg: #FBFAF7; --panel: #fff; --line: #E3DED4; --ink: #1C1917;
+    --muted: #57534E; --faint: #A8A29E; --accent: #BC4508;
+    --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font: 15px/1.5 Inter, system-ui, sans-serif;
+    background: var(--bg); color: var(--ink);
+    min-height: 100vh;
+  }
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  header strong { font-weight: 800; letter-spacing: -0.02em; }
+  header a { margin-left: auto; color: var(--muted); font-size: 13px; text-decoration: none; }
+  header a:hover { color: var(--accent); }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 20px 48px; display: grid; grid-template-columns: 280px 1fr; gap: 20px; }
+  @media (max-width: 800px) { .wrap { grid-template-columns: 1fr; } }
+  .list, .detail {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px;
+  }
+  .list h2, .detail h2 {
+    font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); margin-bottom: 12px;
+  }
+  .twin-row {
+    display: block; width: 100%; text-align: left;
+    padding: 12px; border: 0; border-radius: 8px; background: transparent;
+    cursor: pointer; font: inherit; color: inherit; margin-bottom: 6px;
+  }
+  .twin-row:hover, .twin-row.on { background: #F5F2EB; }
+  .twin-row b { display: block; font-size: 14px; }
+  .twin-row span { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .empty { color: var(--muted); padding: 24px 8px; }
+  .rooms { display: grid; gap: 8px; margin-top: 12px; }
+  .room {
+    display: flex; justify-content: space-between; gap: 12px;
+    padding: 10px 12px; background: var(--bg); border-radius: 8px;
+    font-family: var(--mono); font-size: 12.5px;
+  }
+  .meta { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin: 14px 0; }
+  .meta div { padding: 10px; background: var(--bg); border-radius: 8px; }
+  .meta kbd { display: block; font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  .meta b { font-size: 16px; }
+  .plan {
+    margin-top: 16px; min-height: 220px; border-radius: 10px;
+    background:
+      linear-gradient(90deg, rgba(28,25,23,.06) 1px, transparent 1px) 0 0 / 24px 24px,
+      linear-gradient(rgba(28,25,23,.06) 1px, transparent 1px) 0 0 / 24px 24px,
+      #F7F4ED;
+    position: relative; overflow: hidden; border: 1px solid var(--line);
+  }
+  .plan .box {
+    position: absolute; border: 2px solid var(--ink); background: rgba(188,69,8,.08);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 11px; color: var(--ink); text-align: center; padding: 4px;
+  }
+  .work { margin-top: 16px; }
+  .work li { margin: 6px 0; font-size: 13.5px; color: var(--muted); }
+  .err { color: #B4361D; padding: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <strong>Atmosphere</strong>
+  <span style="color:var(--muted);font-size:13px">Property twins</span>
+  <a href="index.html">← Evidence library</a>
+</header>
+<div class="wrap">
+  <aside class="list">
+    <h2>Twins</h2>
+    <div id="twin-list"><p class="empty">Loading…</p></div>
+  </aside>
+  <section class="detail" id="detail">
+    <h2>Selected twin</h2>
+    <p class="empty" id="detail-empty">Pick a twin to see measured rooms and work overlays. Data comes from <span class="mono">GET /api/geometry/twins</span> — not demo fixtures.</p>
+    <div id="detail-body" hidden></div>
+  </section>
+</div>
+<script>
+(function () {
+  'use strict';
+  var listEl = document.getElementById('twin-list');
+  var detailEmpty = document.getElementById('detail-empty');
+  var detailBody = document.getElementById('detail-body');
+  var twins = [];
+
+  function fmtSf(n) {
+    return (Math.round((n || 0) * 10) / 10) + ' SF';
+  }
+
+  function renderList() {
+    if (!twins.length) {
+      listEl.innerHTML = '<p class="empty">No twins yet. App Store Field Capture posts RoomPlan rooms here after a day film.</p>';
+      return;
+    }
+    listEl.innerHTML = twins.map(function (row, i) {
+      var t = row.twin;
+      var s = row.summary || {};
+      return '<button type="button" class="twin-row" data-i="' + i + '">' +
+        '<b>' + escapeHtml(t.label || 'Twin') + '</b>' +
+        '<span>' + (s.roomCount || 0) + ' rooms · ' + fmtSf(s.totalFloorSqFt) +
+        (s.metric ? ' · metric' : ' · needs measure') + '</span></button>';
+    }).join('');
+    listEl.querySelectorAll('.twin-row').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        listEl.querySelectorAll('.twin-row').forEach(function (b) { b.classList.remove('on'); });
+        btn.classList.add('on');
+        showTwin(twins[Number(btn.getAttribute('data-i'))]);
+      });
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function showTwin(row) {
+    var t = row.twin;
+    var s = row.summary || {};
+    detailEmpty.hidden = true;
+    detailBody.hidden = false;
+    var rooms = t.rooms || [];
+    var work = t.work || [];
+    var videos = t.videos || [];
+
+    // Simple proportional floor plan from L×W when present.
+    var planBoxes = '';
+    var x = 12;
+    rooms.forEach(function (r, idx) {
+      var w = Math.max(48, Math.min(160, (r.perimeterLf ? r.perimeterLf * 2 : Math.sqrt(r.floorAreaSqFt || 100) * 8)));
+      var h = Math.max(40, Math.min(120, (r.ceilingHeightFt || 8) * 8));
+      var left = 16 + (idx % 3) * 170;
+      var top = 16 + Math.floor(idx / 3) * 130;
+      planBoxes += '<div class="box" style="left:' + left + 'px;top:' + top + 'px;width:' + w + 'px;height:' + h + 'px">' +
+        escapeHtml(r.name) + '<br>' + fmtSf(r.floorAreaSqFt) + '</div>';
+    });
+
+    detailBody.innerHTML =
+      '<h3 style="font-size:22px;font-weight:750;letter-spacing:-0.02em">' + escapeHtml(t.label) + '</h3>' +
+      '<p style="color:var(--muted);margin-top:4px;font-size:13px">Source <span class="mono">' + escapeHtml(t.primarySource) +
+      '</span> · status <span class="mono">' + escapeHtml(t.status) + '</span></p>' +
+      '<div class="meta">' +
+        '<div><kbd>Rooms</kbd><b>' + (s.roomCount || 0) + '</b></div>' +
+        '<div><kbd>Floor</kbd><b>' + fmtSf(s.totalFloorSqFt) + '</b></div>' +
+        '<div><kbd>Mesh</kbd><b>' + (s.hasMesh ? 'yes' : 'no') + '</b></div>' +
+        '<div><kbd>Videos</kbd><b>' + (s.videoCount || videos.length || 0) + '</b></div>' +
+        '<div><kbd>Metric</kbd><b>' + (s.metric ? 'yes' : 'no') + '</b></div>' +
+      '</div>' +
+      (rooms.length ? '<div class="plan">' + planBoxes + '</div>' : '') +
+      '<h2 style="margin-top:18px">Rooms</h2>' +
+      '<div class="rooms">' + (rooms.length ? rooms.map(function (r) {
+        return '<div class="room"><span><b>' + escapeHtml(r.name) + '</b></span><span>' +
+          fmtSf(r.floorAreaSqFt) + ' · wall ' + fmtSf(r.wallAreaSqFt) +
+          (r.ceilingHeightFt ? ' · ' + r.ceilingHeightFt + ' ft' : '') + '</span></div>';
+      }).join('') : '<p class="empty">No measured rooms — video evidence may still be attached.</p>') + '</div>' +
+      (work.length ? '<div class="work"><h2>Work overlays</h2><ul>' + work.map(function (w) {
+        return '<li><strong>' + escapeHtml(w.label) + '</strong> · ' + escapeHtml(w.status) +
+          (w.scopeTitle ? ' · ' + escapeHtml(w.scopeTitle) : '') + '</li>';
+      }).join('') + '</ul></div>' : '') +
+      (videos.length ? '<div class="work"><h2>Linked video</h2><ul>' + videos.map(function (v) {
+        return '<li class="mono">' + escapeHtml(v.videoRef) +
+          (v.dictationSummary ? ' — ' + escapeHtml(v.dictationSummary) : '') + '</li>';
+      }).join('') + '</ul></div>' : '') +
+      (t.mesh && t.mesh.url ? '<p style="margin-top:14px;font-size:13px">Mesh: <a href="' + escapeHtml(t.mesh.url) + '">' +
+        escapeHtml(t.mesh.format || 'file') + '</a></p>' : '');
+  }
+
+  fetch('/api/geometry/twins', { credentials: 'include' })
+    .then(function (r) {
+      if (r.status === 401 || r.status === 403) {
+        listEl.innerHTML = '<p class="err">Sign in to load twins for your organisation.</p>';
+        return null;
+      }
+      if (!r.ok) throw new Error('Failed to load twins');
+      return r.json();
+    })
+    .then(function (payload) {
+      if (!payload) return;
+      twins = payload.twins || [];
+      renderList();
+      if (twins.length) {
+        listEl.querySelector('.twin-row').classList.add('on');
+        showTwin(twins[0]);
+      }
+    })
+    .catch(function (err) {
+      listEl.innerHTML = '<p class="err">' + escapeHtml(err.message) + '</p>';
+    });
+})();
+</script>
+</body>
+</html>

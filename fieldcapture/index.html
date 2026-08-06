@@ -324,19 +324,12 @@
         <div id="expect"></div>
       </div>
 
-      <div class="week">
+      <div class="week" id="week-wrap" hidden>
         <h3>This week — what your days became</h3>
         <div id="week"></div>
       </div>
 
-      <div class="twin" id="twin-home">
-        <h3>Property twin · App Store</h3>
-        <p>
-          On the <strong>iPhone Field app</strong>, the same day film also measures the rooms
-          you walk (LiDAR / RoomPlan). The office gets a <strong>3D digital twin</strong> of
-          the property and the work — you still only press one button.
-        </p>
-      </div>
+      <p class="lede" id="live-status" style="margin-top:14px;font-size:13px;color:var(--muted)"></p>
     </div>
 
     <div class="recwrap">
@@ -353,10 +346,22 @@
     </div>
   </div>
 
+  <!-- ================= BLOCKED: no token, not demo ================= -->
+  <div class="screen" id="s-blocked">
+    <div class="pad" style="padding-top:48px">
+      <h1 class="h1">Open your job link</h1>
+      <p class="lede" id="blocked-msg">
+        Field Capture files a real day film (video + audio) through a job share link.
+        It does not invent a demo day when the link is missing.
+      </p>
+    </div>
+  </div>
+
   <!-- ================= THE DAY, RUNNING ================= -->
   <div class="screen" id="s-rec">
     <div class="finder">
-      <div class="scene" id="scene"></div>
+      <video id="preview" playsinline muted style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#111"></video>
+      <div class="scene" id="scene" hidden></div>
       <div class="grain"></div>
       <div class="recbar">
         <span class="recdot"></span> RECORDING THE DAY
@@ -400,19 +405,9 @@
       </h3>
       <div class="tl" id="daytl"></div>
 
-      <div class="twin" id="twin-door">
-        <h3>Measured for the twin</h3>
-        <p>
-          While you filmed, the App Store build captured room dimensions from the space.
-          The office opens the <strong>digital twin</strong> beside the video — floors, walls,
-          and where the work landed.
-        </p>
-        <div class="rooms" id="twin-rooms"></div>
-      </div>
-
       <div class="doneline" id="doneline">
         Your part is done.
-        <small>You just record. The office opens the Verifier to watch the video with an AI dictation of what took place — against each job's scope — and the property twin built from the measurements. Anything the model could not see shows up there as a named gap, never as a guess on your phone.</small>
+        <small>You just record. The office opens the Verifier to watch and hear the day film with an AI dictation against the scope. Anything the model could not see shows up there as a named gap, never as a guess on your phone.</small>
       </div>
       <button class="donebtn" id="donebtn">Back to today</button>
     </div>
@@ -424,273 +419,7 @@
   </div>
 </div>
 
-<script>
-(function () {
-  'use strict';
-
-  /* ------------------------------------------------------------------
-     Demo record. Against the live backend this hydrates from the same
-     proof endpoints the crew link uses: today's assignments, the capture
-     guide per phase, upload, and the stored door checks.
-     ------------------------------------------------------------------ */
-
-  // Today's expected work. The crew never selects from this — it is shown so
-  // they know what the day holds, and so a job the office forgot to give an
-  // address is visible as a warning here rather than as a surprise in the
-  // report tonight.
-  var JOBS = [
-    {
-      id: 'j1041', num: '#1041', name: 'Meridian Ave — water loss, Class 3',
-      addr: '1841 Meridian Ave, Austin', at: '7:00 AM', placed: true
-    },
-    {
-      id: 'j1038', num: '#1038', name: 'Cedar Ridge — storm damage, roof tarp',
-      addr: '4118 Cedar Ridge Dr, Austin', at: '11:30 AM', placed: true
-    },
-    {
-      id: 'j1052', num: '#1052', name: 'Alder St — make-safe',
-      addr: 'Address not on the job yet', at: '3:00 PM', placed: false
-    }
-  ];
-
-  var WEEK = [
-    { what: 'Tuesday · 8h 12m · 2 jobs', chip: ['pass', 'Verified'] },
-    { what: 'Monday · 7h 40m · 3 jobs', chip: ['pass', 'Verified · read by the assistant'] },
-    { what: 'Friday · 6h 05m · 2 jobs', chip: ['warm', 'Waiting on a person'] }
-  ];
-
-  // What the day looks like from the phone's point of view: where it was,
-  // and where the phone thinks it is. In the live app this is the GPS track
-  // plus the cheap model's per-window reading; here it plays out on a timer
-  // so the whole shape of a day is visible in a demo.
-  var DAY_SCRIPT = [
-    { at: 0,  job: 'j1041', site: 'Meridian Ave · 28 ft from the property', live: 'Recording · location attached.' },
-    { at: 6,  job: 'j1041', site: 'Meridian Ave · on site',                 live: 'Still on Meridian Ave — keep filming.' },
-    { at: 12, job: null,    site: 'Between jobs — driving',                 live: 'Between jobs — still rolling.' },
-    { at: 18, job: 'j1038', site: 'Cedar Ridge · 41 ft from the property',  live: 'Recording · second property of the day.' },
-    { at: 24, job: 'j1038', site: 'Cedar Ridge · on site',                  live: 'Still on Cedar Ridge — keep filming.' },
-    { at: 30, job: 'j1038', site: 'Cedar Ridge · on site',                  live: 'Still rolling — office will read this later.' },
-    { at: 36, job: null,    site: 'Not sure which job — the office will sort it', live: 'No address on this job — stretch flagged for the office.', unsure: true }
-  ];
-
-  // Demo rooms the App Store LiDAR / RoomPlan pass would post to
-  // POST /api/geometry/sessions/:id/ingest after the day film uploads.
-  var TWIN_ROOMS = [
-    { name: 'Living', sf: 192, source: '16×12×8 ft' },
-    { name: 'Kitchen', sf: 140, source: 'floor 140 SF · 8 ft' },
-    { name: 'Hall bath', sf: 48, dim: '8×6×8 ft' }
-  ];
-
-  /* ------------------------------------------------------------------ */
-
-  function $(s) { return document.querySelector(s); }
-  var state = {
-    running: false, seconds: 0, startedAt: null,
-    timer: null, liveTimer: null, cursor: 0,
-    // Which jobs the day actually touched, in order, built as it runs.
-    visited: []
-  };
-
-  var SCREENS = ['s-home', 's-rec', 's-door'];
-  function show(id) {
-    SCREENS.forEach(function (s) { $('#' + s).setAttribute('data-on', s === id ? '1' : '0'); });
-    window.scrollTo(0, 0);
-  }
-
-  /* ---------- home ---------- */
-  var DAYS = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
-  var MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-  var now = new Date();
-  $('#today-date').textContent = DAYS[now.getDay()] + ' · ' + MONTHS[now.getMonth()] + ' ' + now.getDate();
-
-  function renderHome() {
-    // Passive rows, not buttons. Nothing here is a choice — it is the day,
-    // and the one job with no address is flagged where it can still be fixed.
-    $('#expect').innerHTML = JOBS.map(function (j) {
-      return '' +
-        '<div class="erow" data-id="' + j.id + '">' +
-          '<span class="t"><b>' + j.name + '</b>' +
-            '<span>' + j.addr +
-            (j.placed ? '' : ' <span class="warnpin">· cannot be placed from GPS</span>') +
-            '</span></span>' +
-          '<span class="at">' + j.at + '</span>' +
-        '</div>';
-    }).join('');
-
-    $('#week').innerHTML = WEEK.map(function (w) {
-      return '<div class="weekrow"><span class="what">' + w.what + '</span>' +
-        '<span class="chip ' + w.chip[0] + '"><span class="dot"></span>' + w.chip[1] + '</span></div>';
-    }).join('');
-  }
-
-  /* ---------- recording ---------- */
-  function sceneBars() {
-    var html = '';
-    for (var i = 0; i < 10; i++) {
-      var w = 24 + Math.round(60 * ((i * 37) % 10) / 10);
-      var l = ((i * 53) % 90);
-      var t = 22 + ((i * 29) % 60);
-      var h = 3 + ((i * 13) % 5);
-      html += '<i style="left:' + l + '%;top:' + t + '%;width:' + w + 'px;height:' + h + 'px;animation-delay:' + (i * -0.9) + 's"></i>';
-    }
-    return html;
-  }
-
-  // A workday is hours long, so the clock reads h:mm:ss once past an hour.
-  function fmt(sec) {
-    var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
-    return h > 0
-      ? h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0')
-      : m + ':' + String(s).padStart(2, '0');
-  }
-
-  function clockTime(d) {
-    return ((d.getHours() % 12) || 12) + ':' + String(d.getMinutes()).padStart(2, '0') +
-      ' ' + (d.getHours() < 12 ? 'AM' : 'PM');
-  }
-
-  /* ---------- start: one tap ---------- */
-  function startDay() {
-    state.running = true;
-    state.seconds = 0;
-    state.cursor = 0;
-    state.visited = [];
-    state.startedAt = new Date();
-
-    show('s-rec');
-    $('#scene').innerHTML = sceneBars();
-    $('#rec-since').textContent = 'since ' + clockTime(state.startedAt);
-    $('#clock').textContent = '0:00';
-
-    state.timer = setInterval(function () {
-      state.seconds += 1;
-      $('#clock').textContent = fmt(state.seconds);
-    }, 1000);
-
-    // Location only — the AI dictation is an office act in the Verifier.
-    // read-only to the crew: nothing here asks them to confirm anything,
-    // because a question on this screen is a question asked of someone
-    // holding a ladder.
-    advance();
-    state.liveTimer = setInterval(advance, 2400);
-  }
-
-  function advance() {
-    var step = DAY_SCRIPT[Math.min(state.cursor, DAY_SCRIPT.length - 1)];
-    $('#live-text').innerHTML = step.live;
-    $('#site-text').textContent = step.site;
-    $('#sitestrip').className = 'sitestrip' + (step.unsure ? ' unsure' : '');
-
-    if (step.job && state.visited.indexOf(step.job) === -1) state.visited.push(step.job);
-    if (step.unsure && state.visited.indexOf('unplaced') === -1) state.visited.push('unplaced');
-    state.cursor += 1;
-  }
-
-  /* ---------- finish: one hold ----------
-     Deliberately not a tap. Starting the day early costs nothing; ending it
-     by accident with the phone in a pocket loses the day's evidence, and
-     those two are not the same risk. It is still the same single button. */
-  var holdTimer = null;
-  var stopBtn = $('#stopbtn');
-
-  function beginHold(e) {
-    if (e && e.cancelable) e.preventDefault();
-    if (!state.running || holdTimer) return;
-    stopBtn.setAttribute('data-holding', '1');
-    stopBtn.querySelector('.lbl').textContent = 'Keep holding…';
-    holdTimer = setTimeout(finishDay, 1500);
-  }
-
-  function cancelHold() {
-    if (!holdTimer) return;
-    clearTimeout(holdTimer);
-    holdTimer = null;
-    stopBtn.removeAttribute('data-holding');
-    stopBtn.querySelector('.lbl').textContent = 'Hold to finish the day';
-  }
-
-  stopBtn.addEventListener('pointerdown', beginHold);
-  stopBtn.addEventListener('pointerup', cancelHold);
-  stopBtn.addEventListener('pointerleave', cancelHold);
-  stopBtn.addEventListener('pointercancel', cancelHold);
-  // Keyboard and assistive tech get a plain activation rather than a hold
-  // they cannot perform.
-  stopBtn.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); finishDay(); }
-  });
-
-  function finishDay() {
-    if (!state.running) return;
-    cancelHold();
-    state.running = false;
-    clearInterval(state.timer);
-    clearInterval(state.liveTimer);
-    openDoor();
-  }
-
-  $('#daybtn').addEventListener('click', startDay);
-
-  /* ---------- the door: what one recording became ----------
-     The crew pressed one button twice. What comes back is the day already
-     split by job, because that split is the system's work and showing it
-     here is how the crew learns the machine is actually doing it. The
-     unplaced stretch is shown as a gap with a name, never quietly dropped
-     into whichever job happens to be nearest. */
-  function openDoor() {
-    show('s-door');
-
-    var placed = state.visited.filter(function (v) { return v !== 'unplaced'; });
-    var unplaced = state.visited.indexOf('unplaced') !== -1;
-
-    $('#l1-d').textContent = placed.length
-      ? 'at ' + placed.length + (placed.length === 1 ? ' property' : ' properties')
-      : 'no property matched';
-    $('#l4-d').textContent = placed.length + (placed.length === 1 ? ' job' : ' jobs') +
-      (unplaced ? ' + 1 unplaced stretch' : '');
-
-    $('#daytl').innerHTML = placed.map(function (id) {
-      var job = JOBS.filter(function (j) { return j.id === id; })[0];
-      if (!job) return '';
-      return '<div class="tlrow"><b>' + job.name + '</b>' +
-        '<span>' + job.addr + '</span>' +
-        '<span class="mono">matched by location · ' + job.num + '</span></div>';
-    }).join('') + (unplaced
-      ? '<div class="tlrow" style="opacity:.85"><b>One stretch could not be placed</b>' +
-        '<span>The job it probably belongs to has no address on it, so the office is asked rather than guessed at.</span>' +
-        '<span class="mono">flagged for a person</span></div>'
-      : '');
-
-    $('#twin-rooms').innerHTML = TWIN_ROOMS.map(function (r) {
-      return '<span><b>' + r.name + '</b><em>' + r.dim + ' · ' + r.sf + ' SF</em></span>';
-    }).join('');
-
-    ['l1', 'l2', 'l3', 'l4'].forEach(function (id, i) {
-      var el = $('#' + id);
-      el.classList.remove('on');
-      setTimeout(function () { el.classList.add('on'); }, 350 + i * 500);
-    });
-    $('#doneline').classList.remove('on');
-    $('#donebtn').classList.remove('on');
-    setTimeout(function () { $('#doneline').classList.add('on'); }, 350 + 4 * 500);
-    setTimeout(function () { $('#donebtn').classList.add('on'); }, 600 + 4 * 500);
-  }
-
-  $('#donebtn').addEventListener('click', function () {
-    var hours = Math.max(1, Math.round(state.seconds / 3600 * 10) / 10);
-    var placed = state.visited.filter(function (v) { return v !== 'unplaced'; }).length;
-    WEEK.unshift({
-      what: 'Today · ' + fmt(state.seconds) + ' · ' + placed + (placed === 1 ? ' job' : ' jobs'),
-      chip: ['warm', 'Reading the day…']
-    });
-    renderHome();
-    show('s-home');
-    // Back to the resting state: the same button, ready for tomorrow.
-    $('#daybtn').setAttribute('data-state', 'idle');
-    $('#daybtn').querySelector('.lbl').textContent = 'Start the day';
-  });
-
-  renderHome();
-})();
-</script>
+<script src="js/capture-core.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>

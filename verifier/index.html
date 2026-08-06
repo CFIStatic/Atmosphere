@@ -2056,27 +2056,67 @@
     // backend for the whole library; a static or demo context (no session,
     // no API) falls back to the built-in record, silently — the page must
     // never look broken for lacking a server.
+    var wantDemo = new URLSearchParams(location.search).get('demo') === '1';
     fetch('/api/evidence-portal/library', { credentials: 'include' })
-      .then(function (r) { if (!r.ok) throw new Error('no library'); return r.json(); })
-      .then(function (payload) {
-        if (payload && payload.items && payload.items.length) {
-          ORG_MODE = true;
-          JOBS = {};
-          payload.items.forEach(function (raw) {
-            if (raw.jobId && !JOBS[raw.jobId]) {
-              JOBS[raw.jobId] = {
-                key: raw.jobId,
-                name: raw.jobName || 'Job',
-                number: raw.jobNumber != null ? raw.jobNumber : null,
-                address: ''
-              };
-            }
-          });
-          EVIDENCE = payload.items.map(function (raw) { return mapRemoteItem(raw, raw.jobId); });
+      .then(function (r) {
+        if (r.status === 401 || r.status === 403) {
+          if (wantDemo) { boot(); return null; }
+          ORG_MODE = false;
+          EVIDENCE = [];
+          boot();
+          var main = document.querySelector('main') || document.getElementById('list');
+          if (main) {
+            var note = document.createElement('div');
+            note.className = 'empty';
+            note.style.padding = '48px 24px';
+            note.innerHTML =
+              '<p style="font-size:16px;font-weight:650">Sign in to open the evidence library.</p>' +
+              '<p style="margin-top:8px;color:var(--muted)">Demo clips load only with <span class="mono">?demo=1</span>. Production never invents a library.</p>' +
+              '<p style="margin-top:16px"><a href="/twin.html" style="color:var(--accent)">Property twins</a></p>';
+            main.prepend(note);
+          }
+          return null;
         }
-        boot();
+        if (!r.ok) throw new Error('no library');
+        return r.json();
       })
-      .catch(function () { boot(); });
+      .then(function (payload) {
+        if (!payload) return;
+        ORG_MODE = true;
+        JOBS = {};
+        (payload.items || []).forEach(function (raw) {
+          if (raw.jobId && !JOBS[raw.jobId]) {
+            JOBS[raw.jobId] = {
+              key: raw.jobId,
+              name: raw.jobName || 'Job',
+              number: raw.jobNumber != null ? raw.jobNumber : null,
+              address: ''
+            };
+          }
+        });
+        EVIDENCE = (payload.items || []).map(function (raw) { return mapRemoteItem(raw, raw.jobId); });
+        boot();
+        if (!EVIDENCE.length) {
+          var host = document.getElementById('list') || document.querySelector('main');
+          if (host) {
+            var empty = document.createElement('div');
+            empty.className = 'empty';
+            empty.style.padding = '40px 20px';
+            empty.innerHTML =
+              '<p style="font-size:16px;font-weight:650">No evidence filed yet.</p>' +
+              '<p style="margin-top:8px;color:var(--muted)">When Field Capture uploads a day film, clips and AI dictation land here. This is not a demo library.</p>' +
+              '<p style="margin-top:16px"><a href="twin.html" style="color:var(--accent)">Open property twins</a></p>';
+            host.appendChild(empty);
+          }
+        }
+      })
+      .catch(function () {
+        if (wantDemo) boot();
+        else {
+          EVIDENCE = [];
+          boot();
+        }
+      });
   }
 })();
 </script>

@@ -10,6 +10,7 @@ import { config } from '../config.js';
 import { HttpError } from '../lib/errors.js';
 import { assertAudiovisualPolicy, kindRequiresAudio } from './capturePolicy.js';
 import { mediaDriverFor, mediaObjectKey, type MediaStorageDriver } from './driver.js';
+import { persistMediaObject, persistOrgQuota } from './persist.js';
 import { assertWithinQuotas, usageOf, type CatalogView } from './quotas.js';
 import type {
   MediaKind,
@@ -45,6 +46,7 @@ function view(): CatalogView {
 
 export function setOrgQuota(quota: OrgMediaQuota): void {
   quotas.set(quota.orgId, quota);
+  void persistOrgQuota(quota);
 }
 
 export function getOrgQuota(orgId: string): OrgMediaQuota {
@@ -152,6 +154,7 @@ export async function beginMediaUpload(input: {
     updatedAt: now,
   };
   objects.set(media.id, media);
+  void persistMediaObject(media);
 
   const session: MediaUploadSession = {
     id: randomUUID(),
@@ -209,6 +212,7 @@ export function completeMediaUpload(input: {
   media.state = 'ready';
   media.updatedAt = new Date().toISOString();
   objects.set(media.id, media);
+  void persistMediaObject(media);
 
   const add = media.durationSeconds ?? 0;
   if (add > 0) {
@@ -237,6 +241,7 @@ export function markTier(mediaId: string, orgId: string, tier: MediaObject['tier
   media.tier = tier;
   media.updatedAt = new Date().toISOString();
   objects.set(media.id, media);
+  void persistMediaObject(media);
   return media;
 }
 
