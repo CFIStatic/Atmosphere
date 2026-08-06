@@ -332,6 +332,46 @@
   .framenote { margin-top: 8px; font-size: 11.5px; color: var(--muted); }
 
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-top: 14px; }
+  /* Office product: the clip on the left, the AI dictation reading it aloud
+     on the right of the stage column. Crew never sees this — Field Capture
+     only records; this is the office view of what took place. */
+  .dictation {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    margin-top: 14px;
+    overflow: hidden;
+  }
+  .dictation > .dhead {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+    padding: 11px 14px 0;
+  }
+  .dictation > .dhead h4 {
+    margin: 0; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--faint); font-weight: 750;
+  }
+  .dictation > .dhead .livepill {
+    font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--accent); background: var(--accent-soft);
+    padding: 2px 8px; border-radius: 999px;
+  }
+  .dictation > .dbody {
+    padding: 10px 14px 14px;
+    font-size: 14.5px; line-height: 1.6; color: var(--ink);
+  }
+  .dictation > .dbody p { margin: 0 0 10px; }
+  .dictation > .dbody p:last-child { margin-bottom: 0; }
+  .dictation .entries { margin: 12px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line-soft); }
+  .dictation .entries li {
+    display: grid; grid-template-columns: 52px 1fr; gap: 10px;
+    padding: 9px 0; border-bottom: 1px solid var(--line-soft);
+    font-size: 12.5px; color: var(--ink-2);
+  }
+  .dictation .entries li:last-child { border-bottom: 0; }
+  .dictation .entries .t { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  .player video {
+    display: block; width: 100%; max-height: 360px; background: #1A1815; border-radius: 8px;
+  }
   .card > h4 {
     margin: 0; padding: 11px 14px; font-size: 12px; letter-spacing: .04em;
     text-transform: uppercase; color: var(--faint); font-weight: 700;
@@ -550,8 +590,17 @@
           These are the frames the analysis actually read, evenly spaced across the clip. The original
           file is untouched and downloadable; nothing shown here has been re-encoded.
         </p>
+        <div class="dictation" id="d-dictation-wrap">
+          <div class="dhead">
+            <h4>AI dictation</h4>
+            <span class="livepill" id="d-dictation-pill">Reading the footage</span>
+          </div>
+          <div class="dbody" id="d-dictation">
+            <p style="color:var(--muted)">Open a clip to hear what the assistant saw.</p>
+          </div>
+        </div>
         <div class="card">
-          <h4>Analysis</h4>
+          <h4>Against the scope</h4>
           <div class="body" id="d-analysis"></div>
         </div>
       </section>
@@ -701,6 +750,12 @@
         materialChange: 'significant',
         materialBecause: 'The tarp is gone and decking is exposed and dry across the north slope, which was covered in the before clip.',
         summary: 'The north slope is stripped to decking and the temporary tarp has been removed. New underlayment is laid on roughly two thirds of the slope. Debris is bagged and staged at the driveway.',
+        dictation: 'Looking at the after clip against the morning before: the temporary tarp is gone from the north slope, the decking is bare and dry, and new underlayment covers roughly two thirds of what was filmed. Debris is bagged at the driveway. The camera never gets close enough to judge sheathing replacement or the ridge.',
+        dictationEntries: [
+          { atSeconds: 12, text: 'Opens on the north slope — tarp gone, deck exposed.' },
+          { atSeconds: 48, text: 'Underlayment rows visible mid-slope; debris staged below.' },
+          { atSeconds: 110, text: 'Driveway bags and ladder; no close pass on the ridge.' }
+        ],
         changes: ['Tarp removed from the north slope', 'Decking exposed, no visible sheathing damage', 'Underlayment laid across approximately two thirds of the slope'],
         scope: [
           { title: 'Remove temporary tarp', verdict: 'appears_complete' },
@@ -743,6 +798,14 @@
         materialChange: null,
         materialBecause: null,
         summary: 'The day opens with tarp removal and tear-off on the north slope (7:00–9:40), decking repair in the valley through late morning — six new sheets go down between 10:20 and 11:45 — then underlayment across the afternoon. The skylights are passed four times and touched in none of them. The final hour is cleanup and magnetic sweep of the drive.',
+        dictation: 'The day opens with tarp removal and tear-off on the north slope from about seven to nine-forty. Through late morning the crew repairs decking in the valley — six new sheets go down between ten-twenty and eleven-forty-five — then underlayment runs across the afternoon. The skylights are passed four times and touched in none of them. The final hour is cleanup and a magnetic sweep of the drive.',
+        dictationEntries: [
+          { atSeconds: 0, text: 'Setup; tarp unclipped and rolled; harnesses on.' },
+          { atSeconds: 4620, text: 'Tear-off mid-slope; two chutes running to the trailer.' },
+          { atSeconds: 11930, text: 'First decking sheets cut and fastened in the valley.' },
+          { atSeconds: 17150, text: 'Underlayment rows laid up-slope; skylights passed untouched.' },
+          { atSeconds: 23290, text: 'Cleanup; magnetic sweep of the driveway; ladders down.' }
+        ],
         changes: [],
         scope: [
           { title: 'Remove temporary tarp', verdict: 'appears_complete', because: 'Tarp comes off in the first window and never returns.', seenInWindows: [0, 1] },
@@ -1408,24 +1471,86 @@
       '<span class="id">' + esc(item.id) + '</span> · ' + esc(item.phase) + ' · ' +
       dayLabel(item.workDate) + ' · ' + esc(item.company) + ' · ' + dur(item.duration) + ' · ' + mb(item.bytes);
 
-    item._frames = item._remoteFrames && item._remoteFrames.length
-      ? item._remoteFrames
-      : frames(item.before || { wet: 0.3, cut: 0.1, gear: 0 },
-               item.after || { wet: 0.2, cut: 0.3, gear: 0, seconds: item.duration || 120 },
-               item.phase + ' · ' + item.workDate);
+    // Prefer the real file when the portal minted a URL. Frames remain the
+    // fallback for the demo artifact and for clips whose file URL expired.
+    if (item._videoUrl) {
+      $('#d-frame').innerHTML =
+        '<video controls playsinline preload="metadata" src="' + esc(item._videoUrl) + '"></video>';
+      $('#d-scrub').innerHTML = '';
+      $('#d-time').textContent = 'full clip · ' + dur(item.duration);
+      var note = document.querySelector('.framenote');
+      if (note) {
+        note.textContent =
+          'The original recording. The AI dictation below describes what is taking place — it is a reading of this footage, not an acceptance.';
+      }
+    } else {
+      item._frames = item._remoteFrames && item._remoteFrames.length
+        ? item._remoteFrames
+        : frames(item.before || { wet: 0.3, cut: 0.1, gear: 0 },
+                 item.after || { wet: 0.2, cut: 0.3, gear: 0, seconds: item.duration || 120 },
+                 item.phase + ' · ' + item.workDate);
 
-    $('#d-scrub').innerHTML = item._frames.map(function (f, i) {
-      return '<button data-i="' + i + '" aria-pressed="' + (i === 0) + '" aria-label="Frame ' + (i + 1) + '"></button>';
-    }).join('');
-    Array.prototype.forEach.call($('#d-scrub').querySelectorAll('button'), function (b) {
-      b.addEventListener('click', function () { stopPlay(); setFrame(+b.dataset.i); });
-    });
+      $('#d-scrub').innerHTML = item._frames.map(function (f, i) {
+        return '<button data-i="' + i + '" aria-pressed="' + (i === 0) + '" aria-label="Frame ' + (i + 1) + '"></button>';
+      }).join('');
+      Array.prototype.forEach.call($('#d-scrub').querySelectorAll('button'), function (b) {
+        b.addEventListener('click', function () { stopPlay(); setFrame(+b.dataset.i); });
+      });
+      setFrame(0);
+      var note2 = document.querySelector('.framenote');
+      if (note2) {
+        note2.textContent =
+          'These are the frames the analysis actually read, evenly spaced across the clip. The original file is untouched and downloadable; nothing shown here has been re-encoded.';
+      }
+    }
 
-    setFrame(0);
+    renderDictation(item);
     renderAnalysis(item);
     setTab(tab || 'integrity');
     $('#detail').setAttribute('data-open', '1');
     $('#d-close').focus();
+  }
+
+  function renderDictation(item) {
+    var a = item.analysis || {};
+    var el = $('#d-dictation');
+    var pill = $('#d-dictation-pill');
+    if (!el) return;
+
+    if (a.state === 'queued') {
+      if (pill) pill.textContent = 'Writing…';
+      el.innerHTML = '<p style="color:var(--muted)">The assistant is reading this clip now. The dictation will land here when it finishes.</p>';
+      return;
+    }
+    if (a.state === 'failed') {
+      if (pill) pill.textContent = 'Failed';
+      el.innerHTML = '<p style="color:var(--fail)">The dictation failed after retries. The footage itself is unaffected and can be re-read from the platform.</p>';
+      return;
+    }
+    if (a.state === 'paired' || a.state === 'skipped' || a.state === 'none' || !a.state) {
+      if (pill) pill.textContent = 'Not yet';
+      el.innerHTML = '<p style="color:var(--muted)">' + esc(
+        a.reason || (a.state === 'paired'
+          ? 'This is the before half of a day. Open the after clip for the dictation of what changed.'
+          : 'No AI dictation on this clip yet.')
+      ) + '</p>';
+      return;
+    }
+
+    if (pill) {
+      pill.textContent = a.longForm ? 'Workday reading' : 'Clip reading';
+    }
+
+    var text = a.dictation || a.summary || '';
+    var html = '<p>' + esc(text) + '</p>';
+    if (a.dictationEntries && a.dictationEntries.length) {
+      html += '<ul class="entries">' + a.dictationEntries.map(function (e) {
+        var t = e.atSeconds != null ? dur(e.atSeconds) : (e.t || '');
+        var body = e.text || e.summary || '';
+        return '<li><span class="t">' + esc(String(t)) + '</span><span>' + esc(body) + '</span></li>';
+      }).join('') + '</ul>';
+    }
+    el.innerHTML = html;
   }
 
   function setFrame(i) {
@@ -1445,19 +1570,20 @@
   }
 
   function renderAnalysis(item) {
+    // Scope / timeline / gaps — the structured reading under the dictation.
+    // The spoken description itself lives in renderDictation.
     var a = item.analysis || {};
     var el = $('#d-analysis');
 
     if (a.state === 'failed') {
-      el.innerHTML = '<p style="color:var(--fail)">The analysis failed and gave up after retries. ' +
-        'It can be run again from the platform; the footage itself is unaffected.</p>';
+      el.innerHTML = '<p style="color:var(--fail)">Scope reading failed with the dictation. Re-run from the platform; the footage is unaffected.</p>';
       return;
     }
-    if (a.state === 'queued' || a.state === 'skipped' || a.state === 'paired') {
+    if (a.state === 'queued' || a.state === 'skipped' || a.state === 'paired' || a.state === 'none' || !a.state) {
       el.innerHTML = '<p style="color:var(--muted)">' + esc(
         a.reason || (a.state === 'paired'
-          ? 'This clip is the before half of a day that was analysed as a pair. Open the after clip to read the comparison.'
-          : 'Not analysed.')
+          ? 'Open the after clip for the scope reading of this day.'
+          : 'No scope reading on this clip yet.')
       ) + '</p>' + (a.pairedWith
         ? '<p><button class="navitem" style="width:auto;margin:6px 0 0;border:1px solid var(--line)" data-goto="' + a.pairedWith + '">Open ' + esc(a.pairedWith) + '</button></p>'
         : '');
@@ -1468,9 +1594,6 @@
 
     var vl;
     if (a.longForm) {
-      // A workday, not a before/after pair: the headline is what was read,
-      // with the coverage stated as arithmetic — windows read over windows
-      // total — never as an adjective.
       var hours = item.duration ? (item.duration / 3600).toFixed(1) : '?';
       vl = ['pass', 'A ' + hours + '-hour workday, read in ' +
         (a.windowsRead != null ? a.windowsRead : '?') + ' of ' +
@@ -1486,11 +1609,13 @@
     }
 
     var html = '<div class="verdictline ' + vl[0] + '">' + esc(vl[1]) + '</div>';
-    if (a.materialBecause) html += '<p style="font-size:12.5px;color:var(--muted)"><strong style="color:var(--ink-2)">Why:</strong> ' + esc(a.materialBecause) + '</p>';
-    html += '<p>' + esc(a.summary) + '</p>';
+    if (a.materialBecause) {
+      html += '<p style="font-size:12.5px;color:var(--muted)"><strong style="color:var(--ink-2)">Why:</strong> ' +
+        esc(a.materialBecause) + '</p>';
+    }
 
     if (a.scope && a.scope.length) {
-      html += '<h5 style="margin:14px 0 6px;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)">Against the scope</h5><ul class="scopelist">';
+      html += '<ul class="scopelist">';
       a.scope.forEach(function (s) {
         var w = VERDICT_WORD[s.verdict] || ['neutral', s.verdict];
         html += '<li><span class="label">' + esc(s.title) +
@@ -1500,6 +1625,8 @@
           '</span><span class="chip ' + w[0] + '">' + esc(w[1]) + '</span></li>';
       });
       html += '</ul>';
+    } else {
+      html += '<p style="color:var(--muted);font-size:12.5px">No agreed scope lines were attached to this reading.</p>';
     }
 
     if (a.longForm && a.timeline && a.timeline.length) {
@@ -1520,9 +1647,6 @@
         a.couldNotTell.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>';
     }
 
-    // Separated by a rule rather than spacing alone: this sentence is the one
-    // that keeps a model's reading from being mistaken for an inspection, and
-    // it should not read as the last bullet of the list above it.
     html += '<p class="footnote" style="margin-top:14px;padding-top:11px;border-top:1px solid var(--line-soft)">' +
       'This is a reading of the footage by a model, not an inspection. It is recorded as an analysis and ' +
       'never as an acceptance — releasing money is a person\'s act.</p>';
@@ -1788,6 +1912,8 @@
             materialChange: raw.analysis && raw.analysis.materialChange,
             materialBecause: raw.analysis && raw.analysis.materialBecause,
             summary: (raw.analysis && raw.analysis.summary) || '',
+            dictation: (raw.analysis && (raw.analysis.dictation || raw.analysis.summary)) || '',
+            dictationEntries: (raw.analysis && raw.analysis.dictationEntries) || [],
             changes: (raw.analysis && raw.analysis.changes) || [],
             scope: (raw.analysis && raw.analysis.scope) || [],
             couldNotTell: (raw.analysis && raw.analysis.couldNotTell) || [],
@@ -1814,9 +1940,28 @@
     var detailUrl = ORG_MODE
       ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id)
       : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id);
-    return fetch(detailUrl, { credentials: 'include' })
-      .then(function (r) { if (!r.ok) throw new Error('detail'); return r.json(); })
-      .then(function (payload) {
+    var videoUrl = ORG_MODE
+      ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id) + '/video'
+      : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id) + '/video';
+    return Promise.all([
+      fetch(detailUrl, { credentials: 'include' }).then(function (r) {
+        if (!r.ok) throw new Error('detail');
+        return r.json();
+      }),
+      fetch(videoUrl, { credentials: 'include' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .catch(function () { return null; })
+    ])
+      .then(function (parts) {
+        var payload = parts[0];
+        var video = parts[1];
+        // Prefer the freshest analysis/dictation from the detail payload.
+        if (payload.item) {
+          var mapped = mapRemoteItem(payload.item, item.job);
+          item.analysis = mapped.analysis;
+          item.checks = mapped.checks;
+          item.hold = mapped.hold;
+        }
         item.custody = (payload.custody || []).map(function (c) {
           return {
             action: c.action,
@@ -1829,6 +1974,7 @@
         item._remoteFrames = (payload.frames || []).map(function (f) {
           return { at: f.atSeconds, src: f.url };
         });
+        item._videoUrl = video && video.url ? video.url : null;
         item._loaded = true;
       })
       .catch(function () {

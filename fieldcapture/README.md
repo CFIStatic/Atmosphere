@@ -33,11 +33,12 @@ that is a form. The door checks happen *to* the footage while the crew
 watches; the labels write themselves. Evidence-grade capture costs the crew
 two presses.
 
-**Show the crew what the office sees.** The live strip names the site the
-phone thinks it is at and what the watcher is reading, and the end-of-day
-screen shows the single recording already split by job — the system's work,
-shown back. A crew that can see their day passing checks films better, and
-trusts the thing that is, after all, watching them work.
+**Crew records; the office reads.** Field Capture never shows an AI report.
+The live strip only names the site the phone thinks it is at. The AI
+dictation — a spoken-style description of what is taking place — lives in
+the Verifier next to the video. The end-of-day screen shows door checks and
+how the day split by job so the crew knows the capture counted; the reading
+itself is an office act.
 
 **Same tokens as the Verifier.** Paper, warm ink, one terracotta accent,
 monospace as the record's voice. The film a crew makes and the evidence it

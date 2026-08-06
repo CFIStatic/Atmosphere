@@ -339,7 +339,7 @@
       </div>
 
       <div class="live" id="live">
-        <span class="k">ATMOSPHERE IS WATCHING WITH YOU</span>
+        <span class="k">ON THE RECORD</span>
         <span id="live-text">Getting your bearings…</span>
       </div>
 
@@ -372,7 +372,7 @@
 
       <div class="doneline" id="doneline">
         Your part is done.
-        <small>The assistant reads the day against each job's scope next and writes the report into the job file. Anything it could not see, the office hears as a named gap — never as a guess.</small>
+        <small>You just record. The office opens the Verifier to watch the video with an AI dictation of what took place — against each job's scope. Anything the model could not see shows up there as a named gap, never as a guess on your phone.</small>
       </div>
       <button class="donebtn" id="donebtn">Back to today</button>
     </div>
@@ -420,17 +420,17 @@
   ];
 
   // What the day looks like from the phone's point of view: where it was,
-  // and what the watcher made of it. In the live app this is the GPS track
+  // and where the phone thinks it is. In the live app this is the GPS track
   // plus the cheap model's per-window reading; here it plays out on a timer
   // so the whole shape of a day is visible in a demo.
   var DAY_SCRIPT = [
-    { at: 0,  job: 'j1041', site: 'Meridian Ave · 28 ft from the property', live: 'Wide shot of the front — the address is on film.' },
-    { at: 6,  job: 'j1041', site: 'Meridian Ave · on site',                 live: 'Drying equipment in frame — six air movers, one dehu.' },
-    { at: 12, job: null,    site: 'Between jobs — driving',                 live: 'Nothing to read while you drive. Still rolling.' },
-    { at: 18, job: 'j1038', site: 'Cedar Ridge · 41 ft from the property',  live: 'Roofline in frame — second job of the day starts here.' },
-    { at: 24, job: 'j1038', site: 'Cedar Ridge · on site',                  live: 'North slope stripped to decking; two chutes running.' },
-    { at: 30, job: 'j1038', site: 'Cedar Ridge · on site',                  live: 'Skylights passed untouched — that is the exclusion, filmed.' },
-    { at: 36, job: null,    site: 'Not sure which job — the office will sort it', live: 'No address on this job, so this stretch cannot be placed.', unsure: true }
+    { at: 0,  job: 'j1041', site: 'Meridian Ave · 28 ft from the property', live: 'Recording · location attached.' },
+    { at: 6,  job: 'j1041', site: 'Meridian Ave · on site',                 live: 'Still on Meridian Ave — keep filming.' },
+    { at: 12, job: null,    site: 'Between jobs — driving',                 live: 'Between jobs — still rolling.' },
+    { at: 18, job: 'j1038', site: 'Cedar Ridge · 41 ft from the property',  live: 'Recording · second property of the day.' },
+    { at: 24, job: 'j1038', site: 'Cedar Ridge · on site',                  live: 'Still on Cedar Ridge — keep filming.' },
+    { at: 30, job: 'j1038', site: 'Cedar Ridge · on site',                  live: 'Still rolling — office will read this later.' },
+    { at: 36, job: null,    site: 'Not sure which job — the office will sort it', live: 'No address on this job — stretch flagged for the office.', unsure: true }
   ];
 
   /* ------------------------------------------------------------------ */
@@ -519,7 +519,7 @@
       $('#clock').textContent = fmt(state.seconds);
     }, 1000);
 
-    // The watcher, and the phone's own sense of where it is. Both are
+    // Location only — the AI dictation is an office act in the Verifier.
     // read-only to the crew: nothing here asks them to confirm anything,
     // because a question on this screen is a question asked of someone
     // holding a ladder.

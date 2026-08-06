@@ -75,6 +75,8 @@ export function analysisStateOf(input: {
   hasAiSummary: boolean;
   /** Does the same party/day have an after clip filed? */
   dayHasAfter: boolean;
+  /** Per-clip AI dictation status — office reads this next to the video. */
+  narrationStatus?: string | null;
 }): AnalysisState {
   if (input.phase === 'before') {
     // The before's own row never carries the reading. Where the day stands is
@@ -92,9 +94,14 @@ export function analysisStateOf(input: {
     case 'skipped':
       return 'skipped';
     default:
-      // Rows written before the pipeline existed: the summary says whether a
-      // reading happened, and its absence is honest 'none', not a failure.
-      return input.hasAiSummary ? 'done' : 'none';
+      // A finished dictation is enough for the office view even when the
+      // day-comparison pipeline has not written analysis_status yet.
+      if (input.narrationStatus === 'done' || input.hasAiSummary) return 'done';
+      if (input.narrationStatus === 'queued' || input.narrationStatus === 'running') {
+        return 'queued';
+      }
+      if (input.narrationStatus === 'failed') return 'failed';
+      return 'none';
   }
 }
 
@@ -167,9 +174,19 @@ export function serializeEvidence(input: {
     analysisStatus: proof.analysis_status ?? null,
     hasAiSummary: Boolean(proof.ai_summary),
     dayHasAfter: input.dayHasAfter,
+    narrationStatus: proof.narration_status ?? null,
   });
   const integrity = integrityOf(checks);
   const materialChange = proof.ai_material_change ?? findings.materialChange ?? null;
+  // The office product is video + AI dictation. Dictation is the per-clip
+  // narrated report; summary is the shorter day-comparison headline.
+  const dictation =
+    (typeof proof.narration_text === 'string' && proof.narration_text.trim()
+      ? proof.narration_text.trim()
+      : null) ??
+    (typeof findings.narrative === 'string' && findings.narrative.trim()
+      ? findings.narrative.trim()
+      : null);
 
   return {
     id: proof.id,
@@ -205,6 +222,10 @@ export function serializeEvidence(input: {
       analysis === 'done'
         ? {
             summary: proof.ai_summary ?? findings.summary ?? null,
+            /** Spoken-style description for the office player — primary reading. */
+            dictation: dictation ?? proof.ai_summary ?? findings.summary ?? null,
+            dictationStatus: proof.narration_status ?? (dictation ? 'done' : null),
+            dictationEntries: Array.isArray(proof.narration?.entries) ? proof.narration.entries : [],
             materialChange,
             materialBecause: findings.materialBecause ?? null,
             changes: Array.isArray(findings.changes) ? findings.changes : [],
@@ -226,7 +247,7 @@ export function serializeEvidence(input: {
             timeline: Array.isArray(findings.timeline) ? findings.timeline : null,
             windowsTotal: findings.windowsTotal ?? null,
             windowsRead: findings.windowsRead ?? null,
-            model: proof.ai_model ?? null,
+            model: proof.ai_model ?? proof.narration?.model ?? null,
           }
         : null,
   };
