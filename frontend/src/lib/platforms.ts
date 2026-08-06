@@ -165,6 +165,17 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
       // this rail carries no duplicate entry for it. Settings remains for
       // the shell pages (the portal's sidebar links to it), and the wordmark
       // and switcher both lead back to the portal.
+      //
+      // Job files is the one exception, not a resurrection of the old rail:
+      // it is where a job's scope gets set (typed or read from a document),
+      // where readiness says what the footage will be able to prove, and
+      // where a subcontractor is invited — office work the Verifier has no
+      // screen for. Its own sidebar links here exactly the way it already
+      // links to Settings.
+      {
+        label: 'Set up',
+        items: [{ to: '/shared', label: 'Job files', Icon: UsersIcon }],
+      },
       /* Earlier workspace surfaces — kept, not displayed. The routes still
          answer; restore by moving groups back.
       OPERATE('/operations', 'Run the day'),
@@ -172,7 +183,6 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
         label: 'The record',
         items: [
           { to: '/jobs', label: 'Jobs', Icon: BriefcaseIcon },
-          { to: '/shared', label: 'Job files', Icon: UsersIcon },
           { to: '/schedule', label: 'Schedule', Icon: HistoryIcon },
           { to: '/team', label: 'Crew', Icon: UsersIcon },
         ],
