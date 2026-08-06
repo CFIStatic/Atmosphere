@@ -5,8 +5,9 @@ Native iPhone client: **one button to film the day (video + microphone)**, plus
 
 Branch focus: `cursor/field-capture-app-build-out-2764` (“Field Capture App Build out”).
 
-The web `fieldcapture/` prototype remains the product face and demo; this app
-is what ships on the App Store.
+The web `fieldcapture/` app is production with `?token=` (live MediaRecorder →
+job-share proof upload). This Swift app is what ships on the App Store with
+RoomPlan + the same audiovisual day film contract.
 
 ## Audiovisual day film (required)
 
