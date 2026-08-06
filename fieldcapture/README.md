@@ -64,18 +64,18 @@ demo artifact as the Field Capture view.
 
 Against a live backend the screens hydrate from the proof endpoints that
 already exist — today's assignments, the upload flow, the stored door checks,
-and location status while rolling. A day-length (up to **24 hour**) recording
-uploads as video only; the server sparsely extracts candidate stills with
+and location status while rolling. A day-length recording is **one video object up to 24 hours**. The phone
+uploads that object only; the server sparsely extracts candidate stills with
 FFmpeg, then **keeps only frames that look different** (perceptual hash) so a
 static camera does not waste the model on the same picture for hours. That
 pipeline lives in `backend/src/shared/videoIntelligence.ts` and is
-**source-agnostic** — proof uploads, this Field Capture day file, CRM clips,
-or any other fetchable video hit the same prepare+dictate path (also exposed
-as `POST /api/media/video/process`). Proof rows still run the scope-aware
-long-form analyst afterward; other ingresses get office dictation without a
-`job_proofs` row. The phone never ships hundreds of base64 frames. The React
-Field platform in `frontend/` remains the fully wired shell; this page is the
-product's face and its design source of truth.
+**source-agnostic**. Fleet retention of **many** such days (toward billions of
+hours across customers) is object storage + the media catalog
+(`docs/media-storage.md`, `/api/media/catalog`) — not one endless file.
+Proof rows still run the scope-aware long-form analyst afterward. The phone
+never ships hundreds of base64 frames. The React Field platform in
+`frontend/` remains the fully wired shell; this page is the product's face
+and its design source of truth.
 
 ## The flow
 

@@ -182,6 +182,37 @@ export const config = {
     ffmpegPath: process.env.FFMPEG_PATH ?? 'ffmpeg',
   },
 
+  /**
+   * Fleet media: many ≤24h objects in object storage.
+   * Postgres catalogs identity; bytes never live in the API or DB.
+   */
+  media: {
+    // supabase = today's hot bucket; s3 = multipart/lifecycle-ready stub;
+    // memory = unit tests only.
+    backend: (process.env.MEDIA_BACKEND === 's3'
+      ? 's3'
+      : process.env.MEDIA_BACKEND === 'memory'
+        ? 'memory'
+        : 'supabase') as 'supabase' | 's3' | 'memory',
+    hotBucket: process.env.MEDIA_HOT_BUCKET ?? 'job-proofs',
+    archiveBucket: process.env.MEDIA_ARCHIVE_BUCKET ?? '',
+    // Above this expected size, prefer multipart when the driver supports it.
+    multipartThresholdBytes: Number(
+      process.env.MEDIA_MULTIPART_THRESHOLD_BYTES ?? 64 * 1024 * 1024,
+    ),
+    multipartPartBytes: Number(process.env.MEDIA_MULTIPART_PART_BYTES ?? 16 * 1024 * 1024),
+    // Soft defaults when an org has no row in org_media_quotas (null = unlimited).
+    defaultMaxHotBytes: optionalPositiveInt(process.env.MEDIA_DEFAULT_MAX_HOT_BYTES),
+    defaultMaxTotalBytes: optionalPositiveInt(process.env.MEDIA_DEFAULT_MAX_TOTAL_BYTES),
+    defaultMaxIngestSecondsPerDay: optionalPositiveInt(
+      process.env.MEDIA_DEFAULT_MAX_INGEST_SECONDS_PER_DAY,
+    ),
+    // ~3 GB/hour × 24h ≈ 72 GB — generous single-object ceiling for a day file.
+    defaultMaxObjectBytes: Number(
+      process.env.MEDIA_DEFAULT_MAX_OBJECT_BYTES ?? 80 * 1024 * 1024 * 1024,
+    ),
+  },
+
   crmSync: {
     // Job files from the customer's own CRM. 'mock' by default so the whole
     // connect-and-sync pipeline is exercisable without vendor credentials;
@@ -881,6 +912,14 @@ export const config = {
     maxRetries: Number(process.env.ESTIMATOR_MAX_RETRIES ?? 3),
   },
 } as const;
+
+/** Positive int from env, or null when unset / invalid (means “unlimited”). */
+function optionalPositiveInt(value: string | undefined): number | null {
+  if (value == null || value.trim() === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.floor(n);
+}
 
 function parseSlaSource(value: string | undefined): 'manual' | 'portal' | 'mock' {
   return value === 'portal' || value === 'mock' ? value : 'manual';

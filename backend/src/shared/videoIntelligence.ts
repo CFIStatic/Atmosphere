@@ -7,6 +7,10 @@
  *   1. prepareVideoFrames — sparse sample + diversity filter (incl. ~24h)
  *   2. dictatePreparedFrames — office-facing AI dictation over those frames
  *
+ * One processed object is at most ~24h. Fleet retention of many such objects
+ * (billions of hours aggregate) is the media catalog + object storage
+ * (`docs/media-storage.md`) — this module only needs a signed URL.
+ *
  * Persistence stays in the caller. New ingress points only need a fetchable
  * URL, a duration, and optional context text — not a proof row.
  */

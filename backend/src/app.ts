@@ -44,6 +44,7 @@ import { scopeDocsRouter } from './routes/scopeDocs.js';
 import { jobIntakeRouter } from './routes/jobIntake.js';
 import { fieldIdentityRouter } from './routes/fieldIdentity.js';
 import { mediaVideoRouter } from './routes/mediaVideo.js';
+import { mediaCatalogRouter } from './routes/mediaCatalog.js';
 import { geometryRouter } from './routes/geometry.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
@@ -175,6 +176,8 @@ export function createApp(): Express {
   // Any inbound video (proof, field capture, CRM, upload) can share one
   // sparse+diversity+dictation pipeline without a job_proofs row.
   app.use('/api/media/video', mediaVideoRouter);
+  // Fleet catalog: many ≤24h objects in object storage (hot/warm/cold).
+  app.use('/api/media/catalog', mediaCatalogRouter);
   // App Store Field Capture: RoomPlan/ARKit/LiDAR rooms + video → property twin.
   app.use('/api/geometry', geometryRouter);
   app.use('/api/web-access', webAccessRouter);

@@ -40,7 +40,10 @@ export type TwinMeshAsset = {
 /** A stretch of field video that belongs to a room or work area on the twin. */
 export type TwinVideoEvidence = {
   id: string;
-  /** Storage path or media id from proof / field capture / media pipeline. */
+  /**
+   * Prefer `media_objects.id` from /api/media/catalog (fleet catalog).
+   * Legacy: raw storage path from proof / field upload.
+   */
   videoRef: string;
   roomId?: string;
   startSeconds?: number;
