@@ -273,6 +273,27 @@
   .donebtn.on { opacity: 1; transition: opacity .4s; }
 
   .foot { padding: 10px 18px 20px; font-size: 11px; color: var(--faint); line-height: 1.6; }
+
+  /* Property twin — App Store Field measures while filming; office gets the 3D model. */
+  .twin {
+    margin-top: 18px; padding: 14px 15px;
+    border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+  }
+  .twin h3 {
+    font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--faint); font-weight: 750; margin-bottom: 6px;
+  }
+  .twin p { font-size: 13.5px; color: var(--ink-2); line-height: 1.45; }
+  .twin p strong { color: var(--ink); font-weight: 650; }
+  .twin .rooms {
+    margin-top: 10px; display: grid; gap: 6px;
+    font-family: var(--mono); font-size: 12px; color: var(--ink-2);
+  }
+  .twin .rooms span {
+    display: flex; justify-content: space-between; gap: 10px;
+    padding: 7px 10px; border-radius: 8px; background: var(--bg);
+  }
+  .twin .rooms b { color: var(--ink); font-weight: 650; }
 </style>
 </head>
 <body>
@@ -306,6 +327,15 @@
       <div class="week">
         <h3>This week — what your days became</h3>
         <div id="week"></div>
+      </div>
+
+      <div class="twin" id="twin-home">
+        <h3>Property twin · App Store</h3>
+        <p>
+          On the <strong>iPhone Field app</strong>, the same day film also measures the rooms
+          you walk (LiDAR / RoomPlan). The office gets a <strong>3D digital twin</strong> of
+          the property and the work — you still only press one button.
+        </p>
       </div>
     </div>
 
@@ -370,9 +400,19 @@
       </h3>
       <div class="tl" id="daytl"></div>
 
+      <div class="twin" id="twin-door">
+        <h3>Measured for the twin</h3>
+        <p>
+          While you filmed, the App Store build captured room dimensions from the space.
+          The office opens the <strong>digital twin</strong> beside the video — floors, walls,
+          and where the work landed.
+        </p>
+        <div class="rooms" id="twin-rooms"></div>
+      </div>
+
       <div class="doneline" id="doneline">
         Your part is done.
-        <small>You just record. The office opens the Verifier to watch the video with an AI dictation of what took place — against each job's scope. Anything the model could not see shows up there as a named gap, never as a guess on your phone.</small>
+        <small>You just record. The office opens the Verifier to watch the video with an AI dictation of what took place — against each job's scope — and the property twin built from the measurements. Anything the model could not see shows up there as a named gap, never as a guess on your phone.</small>
       </div>
       <button class="donebtn" id="donebtn">Back to today</button>
     </div>
@@ -431,6 +471,14 @@
     { at: 24, job: 'j1038', site: 'Cedar Ridge · on site',                  live: 'Still on Cedar Ridge — keep filming.' },
     { at: 30, job: 'j1038', site: 'Cedar Ridge · on site',                  live: 'Still rolling — office will read this later.' },
     { at: 36, job: null,    site: 'Not sure which job — the office will sort it', live: 'No address on this job — stretch flagged for the office.', unsure: true }
+  ];
+
+  // Demo rooms the App Store LiDAR / RoomPlan pass would post to
+  // POST /api/geometry/sessions/:id/ingest after the day film uploads.
+  var TWIN_ROOMS = [
+    { name: 'Living', sf: 192, source: '16×12×8 ft' },
+    { name: 'Kitchen', sf: 140, source: 'floor 140 SF · 8 ft' },
+    { name: 'Hall bath', sf: 48, dim: '8×6×8 ft' }
   ];
 
   /* ------------------------------------------------------------------ */
@@ -611,6 +659,10 @@
         '<span>The job it probably belongs to has no address on it, so the office is asked rather than guessed at.</span>' +
         '<span class="mono">flagged for a person</span></div>'
       : '');
+
+    $('#twin-rooms').innerHTML = TWIN_ROOMS.map(function (r) {
+      return '<span><b>' + r.name + '</b><em>' + r.dim + ' · ' + r.sf + ' SF</em></span>';
+    }).join('');
 
     ['l1', 'l2', 'l3', 'l4'].forEach(function (id, i) {
       var el = $('#' + id);

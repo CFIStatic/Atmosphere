@@ -40,6 +40,14 @@ the Verifier next to the video. The end-of-day screen shows door checks and
 how the day split by job so the crew knows the capture counted; the reading
 itself is an office act.
 
+**App Store Field measures the space.** The iPhone build (see
+`apps/field-ios/`) uses LiDAR / RoomPlan / ARKit while the day is filmed so
+the office gets a **3D digital twin** of the property — room dimensions,
+optional USDZ mesh, and the work video linked onto those spaces. Metric
+scale comes from the device (or DocuSketch), not from inventing feet out of
+RGB frames. Web Field Capture stays the product face; the App Store app is
+the measuring instrument.
+
 **Same tokens as the Verifier.** Paper, warm ink, one terracotta accent,
 monospace as the record's voice. The film a crew makes and the evidence it
 becomes should look like one product, because they are one record.
