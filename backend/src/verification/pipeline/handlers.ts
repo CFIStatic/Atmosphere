@@ -52,6 +52,24 @@ export function createGenerateVerificationsHandler(): (
   ctx: PipelineContext,
 ) => Promise<{ output: Record<string, unknown> }> {
   return async (ctx) => {
+    // Prefer LLM verifier results. This stage only backfills when the LLM stage
+    // was skipped (older pipeline) and no results exist yet.
+    const { count: llmCount } = await ctx.supabase
+      .from('llm_verification_runs')
+      .select('id', { count: 'exact', head: true })
+      .eq('video_id', ctx.videoId);
+    if ((llmCount ?? 0) > 0) {
+      return { output: { skipped: true, reason: 'llm_verifier_already_ran' } };
+    }
+
+    const { count: resultCount } = await ctx.supabase
+      .from('verification_results')
+      .select('id', { count: 'exact', head: true })
+      .eq('video_id', ctx.videoId);
+    if ((resultCount ?? 0) > 0) {
+      return { output: { skipped: true, reason: 'results_exist' } };
+    }
+
     const rules = await loadRules(ctx.supabase, ctx.orgId);
     const { data: events, error } = await ctx.supabase
       .from('temporal_change_events')
@@ -176,7 +194,7 @@ export function createGenerateVerificationsHandler(): (
       eventType: 'verification.results_generated',
       entityType: 'verification_video',
       entityId: ctx.videoId,
-      payload: { created },
+      payload: { created, legacy: true },
     });
 
     return { output: { results: created } };

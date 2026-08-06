@@ -2,14 +2,8 @@
  * Video work-verification pipeline.
  *
  * Extends the existing proof-of-work media layer (`job_proofs`) with a durable
- * multi-stage analysis pipeline: ingestion → FFmpeg frames → quality/dedup →
- * scenes → AI observations → temporal comparison → rules → confidence →
- * human review → reporting.
- *
- * Entry points:
- *   - HTTP: `verificationRouter` mounted at `/api/verification`
- *   - Programmatic: `getVerificationOrchestrator().enqueue(...)`
- *   - From proof uploads: `linkProofAsVerificationVideo` + enqueue
+ * multi-stage analysis pipeline. Visual models propose observations; the LLM
+ * is the primary verifier/reviewer; humans are exception-only.
  */
 
 export * from './types.js';
@@ -57,8 +51,19 @@ export {
   type VisionAnalyzer,
 } from './ai/analyzer.js';
 export {
+  MockVerificationProvider,
+  MockEscalationProvider,
+  createDefaultVerifier,
+  shouldEscalateVerification,
+  workEventVerificationResultSchema,
+  type VerificationProvider,
+  type WorkEventVerificationResult,
+} from './ai/llmVerifier.js';
+export {
   getProjectVerificationReport,
   getVideoProcessingStatus,
   groupTimelineByRoom,
 } from './reporting/report.js';
+export { linkOutcome } from './timeline/graph.js';
 export { parseModelJson, frameObservationSchema } from './schemas.js';
+export { VERIFIER_PROMPT_KEY, VERIFIER_PROMPT_VERSION, getPrompt } from './prompts/registry.js';

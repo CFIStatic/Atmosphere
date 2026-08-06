@@ -126,6 +126,33 @@ export const humanReviewDecisionSchema = z.object({
   finalStatus: z.enum(VERIFICATION_STATUSES).optional().nullable(),
 });
 
+export const linkOutcomeSchema = z.object({
+  timelineEventId: z.string().uuid().optional().nullable(),
+  resultId: z.string().uuid().optional().nullable(),
+  outcomeType: z.enum([
+    'estimate_line',
+    'invoice_line',
+    'claim_approval',
+    'claim_denial',
+    'payment',
+    'supplement',
+    'customer_complaint',
+    'warranty_issue',
+    'rework',
+    'callback',
+    'inspection_result',
+    'project_completion',
+    'schedule_performance',
+    'gross_margin',
+    'insurer_decision',
+    'lender_decision',
+  ]),
+  externalRef: z.string().max(200).optional().nullable(),
+  amountCents: z.number().int().optional().nullable(),
+  occurredAt: z.string().datetime().optional().nullable(),
+  payload: z.record(z.unknown()).optional(),
+});
+
 export const roomCorrectionSchema = z.object({
   roomType: z.enum(ROOM_TYPES).or(z.string().min(1).max(80)),
   label: z.string().max(120).optional().nullable(),

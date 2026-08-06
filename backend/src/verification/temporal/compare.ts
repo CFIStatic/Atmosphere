@@ -249,6 +249,10 @@ export function createCompareTimelineHandler(): (
         evidence: event.evidence,
         conflicting_evidence: event.conflictingEvidence,
         verification_status: event.verificationStatus,
+        activity_ontology_id: event.inferredActivity,
+        candidate_status: 'proposed',
+        scene_match_confidence: 0.7,
+        evidence_quality_score: event.confidence,
       });
     }
 

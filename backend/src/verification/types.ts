@@ -21,13 +21,17 @@ export type VideoStatus = (typeof VIDEO_STATUSES)[number];
 export const PROCESSING_STAGES = [
   'validate_video',
   'extract_metadata',
+  'transcode_video',
   'extract_frames',
   'score_frame_quality',
   'deduplicate_frames',
   'classify_scenes',
   'analyze_frames',
   'compare_timeline',
+  'llm_verify_evidence',
   'generate_verifications',
+  'generate_verified_events',
+  'update_project_graph',
   'calculate_confidence',
   'finalize_report',
 ] as const;
@@ -46,6 +50,7 @@ export type StepStatus = (typeof STEP_STATUSES)[number];
 export const VERIFICATION_STATUSES = [
   'verified',
   'likely_verified',
+  'partially_verified',
   'uncertain',
   'contradicted',
   'rejected',

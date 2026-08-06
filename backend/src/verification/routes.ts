@@ -28,8 +28,9 @@ import {
 } from './reporting/report.js';
 import { listOpenReviewTasks, recordReviewDecision } from './review/queue.js';
 import { correctSceneRoom } from './scenes/group.js';
-import { roomCorrectionSchema } from './schemas.js';
+import { linkOutcomeSchema, roomCorrectionSchema } from './schemas.js';
 import { monthSpendUsd } from './cost/tracker.js';
+import { linkOutcome } from './timeline/graph.js';
 
 export const verificationRouter = Router();
 
@@ -250,6 +251,89 @@ verificationRouter.get('/usage', async (req, res, next) => {
       .eq('org_id', orgId)
       .maybeSingle();
     res.json({ spentUsd: spent, limits: limits ?? null });
+  } catch (err) {
+    next(toHttp(err));
+  }
+});
+
+/** GET /api/verification/jobs/:jobId/timeline */
+verificationRouter.get('/jobs/:jobId/timeline', async (req, res, next) => {
+  try {
+    const { orgId, supabase } = orgReq(req);
+    const jobId = z.string().uuid().parse(req.params.jobId);
+    const { data, error } = await supabase
+      .from('project_timeline_events')
+      .select(
+        'id, occurred_at, title, summary, status, completion_state, room_or_area, activity_id, system_confidence, confidence_breakdown, evidence_frame_ids, evidence_clip_ids, result_id, llm_run_id, provenance',
+      )
+      .eq('org_id', orgId)
+      .eq('job_id', jobId)
+      .order('occurred_at', { ascending: true, nullsFirst: false });
+    if (error) throw new Error(error.message);
+    res.json({ jobId, events: data ?? [] });
+  } catch (err) {
+    next(toHttp(err));
+  }
+});
+
+/** GET /api/verification/jobs/:jobId/workflow */
+verificationRouter.get('/jobs/:jobId/workflow', async (req, res, next) => {
+  try {
+    const { orgId, supabase } = orgReq(req);
+    const jobId = z.string().uuid().parse(req.params.jobId);
+    const { data, error } = await supabase
+      .from('workflow_relationships')
+      .select('id, from_event_id, to_event_id, relation, confidence, provenance, created_at')
+      .eq('org_id', orgId)
+      .eq('job_id', jobId);
+    if (error) throw new Error(error.message);
+    res.json({ jobId, relationships: data ?? [] });
+  } catch (err) {
+    next(toHttp(err));
+  }
+});
+
+/** POST /api/verification/jobs/:jobId/outcomes */
+verificationRouter.post('/jobs/:jobId/outcomes', async (req, res, next) => {
+  try {
+    const { orgId, supabase } = orgReq(req);
+    const jobId = z.string().uuid().parse(req.params.jobId);
+    const body = linkOutcomeSchema.parse(req.body);
+    const id = await linkOutcome(supabase, {
+      orgId,
+      jobId,
+      timelineEventId: body.timelineEventId,
+      resultId: body.resultId,
+      outcomeType: body.outcomeType,
+      externalRef: body.externalRef,
+      amountCents: body.amountCents,
+      occurredAt: body.occurredAt,
+      payload: body.payload,
+    });
+    res.status(201).json({ id });
+  } catch (err) {
+    next(toHttp(err));
+  }
+});
+
+/** GET /api/verification/ontology */
+verificationRouter.get('/ontology', async (req, res, next) => {
+  try {
+    const { supabase } = orgReq(req);
+    const [activities, states, materials, equipment, damage] = await Promise.all([
+      supabase.from('work_ontology_activities').select('id, trade_id, name, description, version'),
+      supabase.from('work_ontology_states').select('id, name, kind, version'),
+      supabase.from('work_ontology_materials').select('id, name, version'),
+      supabase.from('work_ontology_equipment').select('id, name, version'),
+      supabase.from('work_ontology_damage_types').select('id, name, version'),
+    ]);
+    res.json({
+      activities: activities.data ?? [],
+      states: states.data ?? [],
+      materials: materials.data ?? [],
+      equipment: equipment.data ?? [],
+      damageTypes: damage.data ?? [],
+    });
   } catch (err) {
     next(toHttp(err));
   }
