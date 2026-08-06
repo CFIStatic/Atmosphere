@@ -599,11 +599,11 @@ async function ensureSparseFramesFromStorage(
   const have = (existing ?? []).length;
   // A short guided clip with a handful of device frames is already enough.
   // A workday needs a real sample across the timeline.
-  const minWanted = Math.min(
-    12,
-    Math.max(4, Math.floor(durationSeconds / config.verification.sparseFrameIntervalSeconds)),
-  );
-  if (have >= minWanted) return have;
+  // Device stills (≤12) are never enough for a workday. Always re-extract
+  // sparsely + diversely for long-form so we do not narrate six near-identical
+  // phone thumbnails.
+  const minWanted = 1;
+  if (have >= config.verification.sparseMaxFrames) return have;
 
   const { data: proof } = await admin
     .from('job_proofs')
@@ -622,15 +622,18 @@ async function ensureSparseFramesFromStorage(
   const extracted = await extractSparseFramesFromUrl({
     url: signed.signedUrl,
     durationSeconds,
-    intervalSeconds: config.verification.sparseFrameIntervalSeconds,
     maxFrames: config.verification.sparseMaxFrames,
+    candidateIntervalSeconds:
+      config.verification.sparseCandidateIntervalSeconds ||
+      config.verification.sparseFrameIntervalSeconds,
+    hammingThreshold: config.verification.sparseDiversityHamming,
+    coverageIntervalSeconds: config.verification.sparseCoverageIntervalSeconds,
     ffmpegPath: config.verification.ffmpegPath,
   });
   if (!extracted.length) return have;
 
-  // Replace thin device samples with the server timeline so window math
-  // reflects the whole day, not six frames clustered at the start.
-  if (have > 0 && have < minWanted) {
+  // Replace device samples with the diversity-filtered server timeline.
+  if (have >= minWanted) {
     await admin.from('job_proof_frames').delete().eq('proof_id', job.proofId);
   }
 

@@ -1,11 +1,11 @@
 /**
- * Sparse frame extraction for day-length (and overnight) recordings.
+ * Sparse, diversity-aware frame extraction for day-length recordings.
  *
  * A 24-hour phone file cannot ride into the API as base64 stills, and it
  * cannot be loaded whole into Node either. FFmpeg reads the signed storage
- * URL and writes a hard-capped set of JPEGs — one every N minutes — so the
- * long-form window reader has something honest to look at without ever
- * holding the video in RAM.
+ * URL and writes candidate JPEGs; we then keep only stills that look
+ * different (perceptual hash) so a static camera does not waste the model
+ * budget on the same frame for hours.
  */
 
 import { spawn } from 'node:child_process';
@@ -13,6 +13,7 @@ import { mkdir, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { selectDiverseFrames } from './frameDiversity.js';
 
 export type CommandRunner = (
   bin: string,
@@ -35,10 +36,8 @@ export const defaultRunner: CommandRunner = (bin, args) =>
   });
 
 /**
- * Evenly spaced sample times across a recording, hard-capped.
- *
- * Pure: same duration + knobs → same timestamps. Used by tests and by the
- * extractor so the planned times and the stored at_seconds agree.
+ * Candidate sample times — denser than the final keep budget so diversity
+ * filtering has something to choose from.
  */
 export function planSparseTimestamps(
   durationSeconds: number,
@@ -49,8 +48,6 @@ export function planSparseTimestamps(
   const interval = Math.max(1, Math.floor(opts.intervalSeconds));
   const maxFrames = Math.max(1, Math.floor(opts.maxFrames));
 
-  // Prefer interval spacing; if that would exceed the budget, widen the gap
-  // so a 24h file never produces more than maxFrames stills.
   const natural = Math.max(1, Math.floor(duration / interval));
   const count = Math.min(maxFrames, natural);
   if (count === 1) return [Math.min(duration * 0.5, duration)];
@@ -58,8 +55,6 @@ export function planSparseTimestamps(
   const step = duration / count;
   const times: number[] = [];
   for (let i = 0; i < count; i += 1) {
-    // Nudge off the exact ends — first/last moments are often a pocket or
-    // a thumb over the lens.
     const at = Math.min(duration - 0.25, Math.max(0, step * (i + 0.5)));
     times.push(Math.round(at * 100) / 100);
   }
@@ -67,8 +62,7 @@ export function planSparseTimestamps(
 }
 
 /**
- * Cost / coverage math for operators: how many frames and windows a day of
- * a given length will produce under the current knobs.
+ * Cost / coverage math for operators after diversity filtering.
  */
 export function longFormBudget(input: {
   durationSeconds: number;
@@ -81,8 +75,6 @@ export function longFormBudget(input: {
     intervalSeconds: input.intervalSeconds,
     maxFrames: input.maxFrames,
   });
-  // Same grouping rule as segmentFrames, without importing to keep this
-  // module free of config side effects in tests.
   let windows = 0;
   let start = 0;
   let lastAt = 0;
@@ -97,32 +89,49 @@ export function longFormBudget(input: {
     lastAt = at;
   }
   if (n) windows += 1;
-  return { frameCount: timestamps.length, approxWindows: windows, timestamps: timestamps.length ? timestamps : [lastAt] };
+  return {
+    frameCount: timestamps.length,
+    approxWindows: windows,
+    timestamps: timestamps.length ? timestamps : [lastAt],
+  };
 }
 
 export async function extractSparseFramesFromUrl(input: {
   url: string;
   durationSeconds: number;
-  intervalSeconds: number;
+  /** Final keep budget after diversity filtering. */
   maxFrames: number;
+  /**
+   * Spacing for candidate stills before diversity. Defaults to denser than
+   * the keep budget (e.g. every 2 minutes) so we can drop near-duplicates.
+   */
+  candidateIntervalSeconds?: number;
+  hammingThreshold?: number;
+  coverageIntervalSeconds?: number;
   ffmpegPath?: string;
   runner?: CommandRunner;
-}): Promise<Array<{ atSeconds: number; jpeg: Buffer }>> {
+}): Promise<Array<{ atSeconds: number; jpeg: Buffer; reason?: string }>> {
   const runner = input.runner ?? defaultRunner;
   const ffmpeg = input.ffmpegPath ?? process.env.FFMPEG_PATH ?? 'ffmpeg';
+  const maxFrames = Math.max(1, Math.floor(input.maxFrames));
+  // Oversample ~3× the keep budget (floor at 60s) so a static hour collapses
+  // to one frame and an active hour keeps many distinct ones.
+  const candidateInterval = Math.max(
+    60,
+    Math.floor(input.candidateIntervalSeconds ?? Math.max(60, Math.floor((input.durationSeconds || 1) / (maxFrames * 3)))),
+  );
+  // Hard cap candidates so a 24h file at 60s never means 1440 JPEGs on disk.
+  const maxCandidates = Math.min(720, Math.max(maxFrames * 4, maxFrames));
   const timestamps = planSparseTimestamps(input.durationSeconds, {
-    intervalSeconds: input.intervalSeconds,
-    maxFrames: input.maxFrames,
+    intervalSeconds: candidateInterval,
+    maxFrames: maxCandidates,
   });
   if (!timestamps.length) return [];
 
   const workDir = join(tmpdir(), `atm-sparse-${randomUUID()}`);
   await mkdir(workDir, { recursive: true });
   try {
-    // fps=1/N samples once per interval; -frames:v enforces the hard cap.
-    // Input is a signed HTTPS URL — FFmpeg streams it; Node never holds the
-    // multi‑GB file. Use a rational fps expression so 600s stays exact.
-    const interval = Math.max(1, Math.floor(input.intervalSeconds));
+    const interval = Math.max(1, candidateInterval);
     const args = [
       '-y',
       '-hide_banner',
@@ -146,12 +155,22 @@ export async function extractSparseFramesFromUrl(input: {
     const names = (await readdir(workDir))
       .filter((n) => n.endsWith('.jpg'))
       .sort();
-    const out: Array<{ atSeconds: number; jpeg: Buffer }> = [];
+    const candidates: Array<{ atSeconds: number; jpeg: Buffer }> = [];
     for (let i = 0; i < names.length; i += 1) {
-      const at = timestamps[Math.min(i, timestamps.length - 1)] ?? i * input.intervalSeconds;
-      out.push({ atSeconds: at, jpeg: await readFile(join(workDir, names[i])) });
+      const at = timestamps[Math.min(i, timestamps.length - 1)] ?? i * interval;
+      candidates.push({ atSeconds: at, jpeg: await readFile(join(workDir, names[i])) });
     }
-    return out;
+
+    const diverse = selectDiverseFrames(candidates, {
+      maxFrames,
+      hammingThreshold: input.hammingThreshold,
+      coverageIntervalSeconds: input.coverageIntervalSeconds,
+    });
+    return diverse.map((f) => ({
+      atSeconds: f.atSeconds,
+      jpeg: f.jpeg,
+      reason: f.reason,
+    }));
   } finally {
     await rm(workDir, { recursive: true, force: true }).catch(() => undefined);
   }

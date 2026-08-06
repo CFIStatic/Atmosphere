@@ -159,10 +159,26 @@ export const config = {
     // this many seconds, then the server sparsely extracts stills rather
     // than trusting the device to ship hundreds of base64 frames.
     maxDurationSeconds: Number(process.env.PROOF_MAX_DURATION_SECONDS ?? 24 * 60 * 60),
-    // One still every N seconds across a long file. 10 minutes → 144 frames
-    // for 24h, well inside the vision budget once windowed.
-    sparseFrameIntervalSeconds: Number(process.env.PROOF_SPARSE_FRAME_INTERVAL_SECONDS ?? 600),
+    // Final keep budget after diversity filtering (distinct scenes, not
+    // clock ticks). A static camera collapses; an active day keeps more.
     sparseMaxFrames: Number(process.env.PROOF_SPARSE_MAX_FRAMES ?? 180),
+    // Candidate spacing before diversity (denser than the keep budget).
+    sparseCandidateIntervalSeconds: Number(
+      process.env.PROOF_SPARSE_CANDIDATE_INTERVAL_SECONDS ?? 120,
+    ),
+    // Perceptual-hash Hamming distance at or below this = "same frame".
+    sparseDiversityHamming: Number(process.env.PROOF_SPARSE_DIVERSITY_HAMMING ?? 8),
+    // Even when nothing changes, keep one temporal anchor this often.
+    sparseCoverageIntervalSeconds: Number(
+      process.env.PROOF_SPARSE_COVERAGE_INTERVAL_SECONDS ?? 3600,
+    ),
+    // Legacy alias used by older docs/tests — treated as candidate spacing
+    // when the dedicated candidate knob is unset above.
+    sparseFrameIntervalSeconds: Number(
+      process.env.PROOF_SPARSE_FRAME_INTERVAL_SECONDS ??
+        process.env.PROOF_SPARSE_CANDIDATE_INTERVAL_SECONDS ??
+        120,
+    ),
     ffmpegPath: process.env.FFMPEG_PATH ?? 'ffmpeg',
   },
 
