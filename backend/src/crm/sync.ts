@@ -487,6 +487,24 @@ export async function applyPlan(input: {
       if ((linkError as any).code === '23505') continue;
       throw new CrmSyncError(linkError.message, 'link_create_failed');
     }
+
+    // Provenance. Written after the link survives, because a job whose link
+    // was unwound above no longer exists to have a source. Not fatal on
+    // failure: a job file that works but reports "source unknown" beats
+    // failing a sync over a bookkeeping row.
+    await admin
+      .from('job_intake')
+      .insert({
+        job_id: (job as any).id,
+        org_id: orgId,
+        source: 'crm_sync',
+        source_detail: { system, externalId: external.externalId },
+        entered_by: input.createdBy ?? null,
+      })
+      .then(
+        () => undefined,
+        () => undefined,
+      );
   }
 
   for (const update of plan.updates) {

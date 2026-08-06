@@ -40,6 +40,7 @@ import { SharedDashboardPage } from './pages/SharedDashboardPage';
 import { VerifierLibraryPage } from './pages/VerifierLibraryPage';
 import { PurchaseOrdersPage } from './pages/PurchaseOrdersPage';
 import { JobSharePage } from './pages/JobSharePage';
+import { MyJobsPage } from './pages/MyJobsPage';
 import { getPlatform } from './lib/usePlatform';
 
 function FullScreenSpinner() {
@@ -140,6 +141,13 @@ export default function App() {
               none of them, and a shared job record that requires signing in is
               not shared. The token in the path is the whole credential. */}
           <Route path="/shared/:token" element={<JobSharePage />} />
+
+          {/* The same person, one level up. A sub who has proved they control
+              a phone or an inbox gets every job across every general
+              contractor on one screen — which is why this route is outside
+              the org guards too: the list spans organizations the sub is a
+              member of none of. */}
+          <Route path="/my-jobs" element={<MyJobsPage />} />
 
           {/* Recovery routes stay outside ProtectedRoute: a locked-out user has
               no session, and the reset link must work in a fresh browser. */}

@@ -13,6 +13,7 @@ import { ProofOfWork } from '../components/shared/ProofOfWork';
 import { EvidenceLocker } from '../components/shared/EvidenceLocker';
 import { ShareEvidencePanel } from '../components/shared/ShareEvidencePanel';
 import { ScopeDocPanel } from '../components/shared/ScopeDocPanel';
+import { JobReadinessPanel } from '../components/shared/JobReadinessPanel';
 
 /**
  * One job, two companies, one record.
@@ -85,6 +86,7 @@ export function SharedDashboardPage() {
   const [record, setRecord] = useState<SharedJobRecord | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [readinessKey, setReadinessKey] = useState(0);
 
   async function loadList() {
     try {
@@ -256,10 +258,25 @@ export function SharedDashboardPage() {
                     }}
                   />
 
+                  {/* First, because it is the only thing on this page that
+                      is cheap now and expensive later. Everything below is a
+                      thing you do to a job; this is whether the job is worth
+                      doing them to yet. */}
+                  <JobReadinessPanel jobId={record.job.id} refreshKey={readinessKey} />
+
                   {/* Above the scope list, because it is where the scope
                       comes from: the document is read, a person confirms,
                       the lines below appear. */}
-                  <ScopeDocPanel jobId={record.job.id} onChanged={() => void openJob(record.job.id)} />
+                  <ScopeDocPanel
+                    jobId={record.job.id}
+                    onChanged={() => {
+                      void openJob(record.job.id);
+                      // Confirming a document is the single most common way a
+                      // job stops being unverifiable, so the forecast above
+                      // has to move at the same moment.
+                      setReadinessKey((k) => k + 1);
+                    }}
+                  />
 
                   <ScopeList record={record} onDecide={decide} onChanged={() => void openJob(record.job.id)} />
 

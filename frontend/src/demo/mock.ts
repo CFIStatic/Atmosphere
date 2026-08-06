@@ -1202,6 +1202,221 @@ const SCOPE_DOC_PROPOSAL = {
   couldNotRead: ['Page 4 is a photograph of a handwritten change order — illegible in the scan.'],
 };
 
+/* ---- Job intake and readiness ---------------------------------------------
+ *
+ * The demo's default job is deliberately not perfect: it has scope and an
+ * address, but the address was typed and never resolved to a point, so
+ * readiness reports "work only — no location" rather than a clean pass. A
+ * demo where everything is already green teaches nothing about the one thing
+ * this panel exists to say.
+ */
+const MANUAL_JOBS: Record<string, any> = {};
+
+const DEMO_JOB_FACTS: Record<string, any> = {
+  default: {
+    hasAddress: true,
+    hasCoordinates: false,
+    scopeLineCount: 6,
+    scheduledStart: '2026-08-14T13:00:00Z',
+    source: 'crm_sync',
+  },
+};
+
+const SOURCE_WORD: Record<string, string> = {
+  crm_sync: 'synced from your CRM',
+  scope_document: 'read from an uploaded document',
+  manual: 'entered by hand',
+};
+
+/**
+ * The same rules the backend applies, in miniature.
+ *
+ * Kept deliberately small: the real logic lives in one tested module on the
+ * server, and a demo that reimplements it in full would drift from it. What
+ * this needs to reproduce is the shape — a ceiling, gaps that name their
+ * price, and the fact that nothing here ever stops a crew filming.
+ */
+function readinessFor(jobId: string) {
+  const scopeDoc = Object.values(SCOPE_DOCS).find((d: any) => d?.status === 'confirmed');
+  const base = MANUAL_JOBS[jobId] ?? {
+    ...DEMO_JOB_FACTS.default,
+    scopeLineCount: DEMO_JOB_FACTS.default.scopeLineCount + (scopeDoc ? 4 : 0),
+    source: scopeDoc ? 'scope_document' : DEMO_JOB_FACTS.default.source,
+  };
+
+  const gaps: Array<Record<string, any>> = [];
+  const strengths: string[] = [];
+
+  if (!base.scopeLineCount) {
+    gaps.push({
+      key: 'scope',
+      what: 'No scope of work',
+      costs: 'Footage will be sealed and filed, but nothing is judged — there is no agreed list of work to check it against.',
+      fix: 'Upload the work order or estimate, or type the lines. Either one takes a minute and unlocks every verdict.',
+      severity: 'blocking',
+    });
+  } else {
+    strengths.push(`${base.scopeLineCount} scope line${base.scopeLineCount === 1 ? '' : 's'}`);
+  }
+
+  if (!base.hasAddress) {
+    gaps.push({
+      key: 'address',
+      what: 'No site address',
+      costs: 'Every clip will read "location unknown" — the on-site check cannot run without somewhere to check against.',
+      fix: 'Add the address. If the job came from your CRM, the property record may already have one.',
+      severity: 'weakening',
+    });
+  } else if (!base.hasCoordinates) {
+    gaps.push({
+      key: 'coordinates',
+      what: 'Address not placed on the map',
+      costs: 'The on-site check needs coordinates, not a street line, so it will not run and clips will read "location unknown".',
+      fix: 'Confirm the address so it can be resolved to a point.',
+      severity: 'weakening',
+    });
+  } else {
+    strengths.push('Address placed, so on-site can be checked');
+  }
+
+  if (!base.scheduledStart) {
+    gaps.push({
+      key: 'schedule',
+      what: 'Not scheduled',
+      costs: "The job will not appear in anyone's day, so a crew has to be told about it some other way.",
+      fix: 'Set a start date.',
+      severity: 'weakening',
+    });
+  } else {
+    strengths.push("Scheduled, so it shows up in the crew's day");
+  }
+
+  const blocked = gaps.some((g) => g.severity === 'blocking');
+  const placeKnown = base.hasAddress && base.hasCoordinates;
+  const ceiling = blocked ? 'filed_only' : placeKnown ? 'full' : 'work_only';
+  const provenance = base.source ? ` This job was ${SOURCE_WORD[base.source]}.` : '';
+
+  const headline = blocked
+    ? `Film it — the footage will be sealed and filed. Nothing will be verified yet, because this job has no scope to check against.${provenance}`
+    : placeKnown && !gaps.length
+      ? `Ready to verify. Footage can establish the work, the place and the time.${provenance}`
+      : `Film it — the work can be verified. What is missing is the place, so clips will read "location unknown".${provenance}`;
+
+  return {
+    level: blocked ? 'blocked' : gaps.length ? 'limited' : 'ready',
+    ceiling,
+    headline,
+    gaps,
+    strengths,
+    source: base.source ?? null,
+  };
+}
+
+/* ---- The subcontractor across general contractors -------------------------
+ *
+ * The point of the fixture is the shape of the problem: this crew works for
+ * three different GCs, and two of those jobs are today. That is the pile of
+ * text messages the feature replaces.
+ */
+const FIELD_DEMO_CODE = '204815';
+const FIELD_CLAIM: { contact: string | null; session: string | null } = { contact: null, session: null };
+
+function todayAt(hour: number): string {
+  const d = new Date();
+  d.setHours(hour, 0, 0, 0);
+  return d.toISOString();
+}
+
+function inDays(days: number, hour: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  d.setHours(hour, 0, 0, 0);
+  return d.toISOString();
+}
+
+function fieldJobList() {
+  const jobs = [
+    {
+      partyId: 'fp-1',
+      accessToken: 'demo-token',
+      orgId: 'org-brightwater',
+      orgName: 'Brightwater Restoration',
+      jobId: 'job-anderson',
+      jobTitle: 'Anderson residence — roof',
+      jobNumber: 4471,
+      address: '18 Larkspur Ln, Cedar Park',
+      scheduledStart: todayAt(7),
+      status: 'in_progress',
+      trade: 'roofing',
+      revoked: false,
+    },
+    {
+      partyId: 'fp-2',
+      accessToken: 'demo-token',
+      orgId: 'org-kestrel',
+      orgName: 'Kestrel Builders',
+      jobId: 'job-holloway',
+      jobTitle: 'Holloway duplex — water damage',
+      jobNumber: 209,
+      address: '4402 Sunfield Dr, Round Rock',
+      scheduledStart: todayAt(13),
+      status: 'in_progress',
+      trade: 'drywall',
+      revoked: false,
+    },
+    {
+      partyId: 'fp-3',
+      accessToken: 'demo-token',
+      orgId: 'org-brightwater',
+      orgName: 'Brightwater Restoration',
+      jobId: 'job-pell',
+      jobTitle: 'Pell warehouse — interior',
+      jobNumber: 4488,
+      address: '1200 Commerce Way, Austin',
+      scheduledStart: inDays(2, 8),
+      status: 'scheduled',
+      trade: 'drywall',
+      revoked: false,
+    },
+    {
+      partyId: 'fp-4',
+      accessToken: 'demo-token',
+      orgId: 'org-tallgrass',
+      orgName: 'Tallgrass General',
+      jobId: 'job-mercer',
+      jobTitle: 'Mercer remodel — phase 2',
+      jobNumber: 88,
+      address: '77 Verbena St, Georgetown',
+      scheduledStart: inDays(5, 9),
+      status: 'scheduled',
+      trade: 'drywall',
+      revoked: false,
+    },
+  ];
+
+  const byOrg = new Map<string, any>();
+  for (const job of jobs) {
+    if (!byOrg.has(job.orgId)) byOrg.set(job.orgId, { orgId: job.orgId, orgName: job.orgName, jobs: [] });
+    byOrg.get(job.orgId).jobs.push(job);
+  }
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start.getTime() + 86400000);
+
+  return {
+    identity: {
+      displayName: "Mike's Drywall",
+      contact: FIELD_CLAIM.contact ?? 'mike@mikesdrywall.co',
+      channel: (FIELD_CLAIM.contact ?? '').includes('@') || !FIELD_CLAIM.contact ? 'email' : 'sms',
+    },
+    generalContractors: [...byOrg.values()],
+    today: jobs.filter((j) => {
+      const t = new Date(j.scheduledStart).getTime();
+      return t >= start.getTime() && t < end.getTime();
+    }),
+  };
+}
+
 /** Invitations: one waiting, one answered, one withdrawn. */
 const ORG_INVITES: Array<Record<string, any>> = [
   { id: 'inv-1', email: 'kai.osei@example.com', role: 'field_technician', note: null, status: 'pending', createdAt: '2026-08-04T09:00:00Z', joinedAt: null, revokedAt: null },
@@ -2085,6 +2300,69 @@ const routes: Array<[string, RegExp, Handler]> = [
     }
     SCOPE_DOCS[m[1]] = { ...doc, status: 'confirmed', confirmedAt: new Date().toISOString() };
     return { body: { ok: true, created: lines.length } };
+  }],
+
+  /* ------------------------------------------- job readiness + intake */
+  ['GET', /^\/api\/operations\/jobs\/([\w-]+)\/readiness$/, (m) => ({
+    body: { readiness: readinessFor(m[1]) },
+  })],
+  ['POST', /^\/api\/operations\/jobs\/quick-start$/, (_m, b) => {
+    const id = `job-manual-${Date.now()}`;
+    const scope = Array.isArray(b.scope) ? b.scope : [];
+    MANUAL_JOBS[id] = {
+      hasAddress: Boolean(b.address),
+      // The demo mirrors the real thing: an address that was typed has not
+      // been resolved to a point yet, so on-site still cannot be checked.
+      hasCoordinates: false,
+      scopeLineCount: scope.length,
+      scheduledStart: b.scheduledStart ?? null,
+      source: 'manual',
+    };
+    return {
+      status: 201,
+      body: {
+        job: { id, title: String(b.title ?? 'New job'), jobNumber: null },
+        scopeSaved: scope.length,
+        readiness: readinessFor(id),
+      },
+    };
+  }],
+  ['GET', /^\/api\/operations\/intake-mix$/, () => ({
+    body: { counts: { crm_sync: 21, scope_document: 3, manual: 6 }, total: 30 },
+  })],
+
+  /* ------------------------------------------- the sub's own list */
+  ['POST', /^\/api\/field\/claim\/start$/, (_m, b) => {
+    const contact = String(b.contact ?? '');
+    if (!contact.includes('@') && contact.replace(/\D/g, '').length < 10) {
+      return {
+        status: 400,
+        body: { error: 'That does not look like a phone number or an email address.', code: 'bad_contact' },
+      };
+    }
+    const email = contact.includes('@');
+    FIELD_CLAIM.contact = contact;
+    return {
+      body: {
+        sentTo: email ? contact : `···${contact.replace(/\D/g, '').slice(-4)}`,
+        channel: email ? 'email' : 'sms',
+        // Honest in the demo too: the SMS leg is not wired anywhere.
+        delivered: email,
+        deliveryNote: email ? null : 'Text messages are not switched on yet — use an email address instead.',
+      },
+    };
+  }],
+  ['POST', /^\/api\/field\/claim\/verify$/, (_m, b) => {
+    if (String(b.code ?? '') !== FIELD_DEMO_CODE) {
+      return { status: 400, body: { error: 'That code is not right.', code: 'wrong' } };
+    }
+    FIELD_CLAIM.session = 'demo-field-session';
+    return { body: { session: FIELD_CLAIM.session, ...fieldJobList() } };
+  }],
+  ['GET', /^\/api\/field\/jobs$/, () => ({ body: fieldJobList() })],
+  ['POST', /^\/api\/field\/signout$/, () => {
+    FIELD_CLAIM.session = null;
+    return { body: { ok: true } };
   }],
 
   /* ------------------------------------------- verifier shares */

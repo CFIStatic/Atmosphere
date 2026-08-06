@@ -872,6 +872,64 @@ export interface ScopeDocument {
   createdAt: string;
 }
 
+/* ---- Job intake and readiness -------------------------------------------- */
+
+export type IntakeSource = 'crm_sync' | 'scope_document' | 'manual';
+export type ReadinessCeiling = 'filed_only' | 'work_only' | 'full';
+export type ReadinessLevel = 'blocked' | 'limited' | 'ready';
+
+export interface ReadinessGap {
+  key: 'scope' | 'address' | 'coordinates' | 'schedule';
+  what: string;
+  costs: string;
+  fix: string;
+  severity: 'blocking' | 'weakening';
+}
+
+export interface JobReadiness {
+  level: ReadinessLevel;
+  ceiling: ReadinessCeiling;
+  headline: string;
+  gaps: ReadinessGap[];
+  strengths: string[];
+  source: IntakeSource | null;
+}
+
+/* ---- The subcontractor's own list ---------------------------------------- */
+
+export interface ClaimedJob {
+  partyId: string;
+  accessToken: string;
+  orgId: string;
+  orgName: string;
+  jobId: string;
+  jobTitle: string;
+  jobNumber: number | null;
+  address: string | null;
+  scheduledStart: string | null;
+  status: string | null;
+  trade: string | null;
+  revoked: boolean;
+}
+
+export interface GeneralContractorGroup {
+  orgId: string;
+  orgName: string;
+  jobs: ClaimedJob[];
+}
+
+export interface FieldIdentity {
+  displayName: string | null;
+  contact: string;
+  channel: 'sms' | 'email';
+}
+
+export interface FieldJobList {
+  identity: FieldIdentity;
+  generalContractors: GeneralContractorGroup[];
+  today: ClaimedJob[];
+}
+
 /* ---- CRM job sync -------------------------------------------------------- */
 
 export type CrmSyncSystem = 'jobnimbus' | 'acculynx' | 'dash' | 'servicetitan';
@@ -2574,6 +2632,59 @@ export const api = {
       `/api/operations/shared/${jobId}/scope-doc/${docId}/confirm`,
       { method: 'POST', body: JSON.stringify(input) },
     ),
+
+  // ---- Job intake and readiness ----
+  jobReadiness: (jobId: string) =>
+    request<{ readiness: JobReadiness }>(`/api/operations/jobs/${jobId}/readiness`, {
+      method: 'GET',
+    }),
+
+  quickStartJob: (input: {
+    title: string;
+    workType?: 'mitigation' | 'construction';
+    address: string;
+    city?: string;
+    postalCode?: string;
+    scheduledStart?: string;
+    scope?: Array<{ title: string; state: 'included' | 'excluded'; reason?: string }>;
+  }) =>
+    request<{
+      job: { id: string; title: string; jobNumber: number | null };
+      scopeSaved: number;
+      readiness: JobReadiness;
+    }>('/api/operations/jobs/quick-start', { method: 'POST', body: JSON.stringify(input) }),
+
+  intakeMix: () =>
+    request<{ counts: Record<IntakeSource, number>; total: number }>('/api/operations/intake-mix', {
+      method: 'GET',
+    }),
+
+  // ---- The subcontractor's own list ----
+  // These carry a session the sub holds rather than an org cookie, because a
+  // sub has no seat in any of the organizations whose jobs they can see.
+  fieldClaimStart: (input: { token: string; contact: string }) =>
+    request<{ sentTo: string; channel: 'sms' | 'email'; delivered: boolean; deliveryNote: string | null }>(
+      '/api/field/claim/start',
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+
+  fieldClaimVerify: (input: { token: string; contact: string; code: string }) =>
+    request<FieldJobList & { session: string }>('/api/field/claim/verify', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  fieldJobs: (session: string) =>
+    request<FieldJobList>('/api/field/jobs', {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${session}` },
+    }),
+
+  fieldSignOut: (session: string) =>
+    request<{ ok: boolean }>('/api/field/signout', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session}` },
+    }),
 
   // ---- CRM job sync ----
   crmSyncStatus: () => request<CrmSyncStatus>('/api/crm-sync/status', { method: 'GET' }),

@@ -41,6 +41,8 @@ import { xactimateRouter } from './routes/xactimate.js';
 import { symbilityRouter } from './routes/symbility.js';
 import { crmSyncRouter } from './routes/crmSync.js';
 import { scopeDocsRouter } from './routes/scopeDocs.js';
+import { jobIntakeRouter } from './routes/jobIntake.js';
+import { fieldIdentityRouter } from './routes/fieldIdentity.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
 import { verificationHook, pumpVerificationQueue } from './lib/verifierRunner.js';
@@ -151,6 +153,7 @@ export function createApp(): Express {
   app.use('/api/webhooks', webhookRouter);
   app.use('/api/pm', pmRouter);
   app.use('/api/operations', scopeDocsRouter);
+  app.use('/api/operations', jobIntakeRouter);
   app.use('/api/operations', sharedJobsRouter);
   app.use('/api/purchasing', purchasingRouter);
   app.use('/api/episodes', episodesRouter);
@@ -162,6 +165,11 @@ export function createApp(): Express {
   // reason: the person clicking is a subcontractor who never had an account,
   // and a shared job record that requires signing in is not shared.
   app.use('/api/job-share', jobShareRouter);
+  // Also outside auth, and for a sharper version of the same reason: this is
+  // where a subcontractor turns a pile of per-job links from several general
+  // contractors into one list. They hold a session of their own, not a seat
+  // in anybody's org, so no org middleware could apply.
+  app.use('/api/field', fieldIdentityRouter);
   app.use('/api/web-access', webAccessRouter);
   app.use('/api/verifier', verifierRouter);
   // Before crmRouter, not after. crmRouter registers a generic GET

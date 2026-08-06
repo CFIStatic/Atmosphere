@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { SpinnerIcon } from '../components/icons';
 import { readCapture, todayISO } from '../lib/proofCapture';
 import { CaptureGuideSteps } from '../components/shared/CaptureGuideSteps';
+import { ClaimInvitationPanel } from '../components/shared/ClaimInvitationPanel';
+import { readFieldSession, writeFieldSession } from './MyJobsPage';
 import type { CaptureGuide } from '../lib/api';
 
 /**
@@ -85,6 +87,9 @@ export function JobSharePage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [question, setQuestion] = useState('');
   const [extra, setExtra] = useState('');
+  // Seeded from the stored session rather than from the server: a sub who has
+  // already claimed some other GC's link should not be asked again here.
+  const [claimed, setClaimed] = useState(() => Boolean(readFieldSession()));
 
   const load = useCallback(async () => {
     try {
@@ -317,6 +322,37 @@ export function JobSharePage() {
                 ))}
               </ol>
             </section>
+          )}
+
+          {/* Above the pitch and below the work. Claiming is about this sub's
+              other general contractors, so it belongs after everything to do
+              with the job in front of them — and before the pitch, because
+              collecting their own links is a smaller ask than buying
+              something. */}
+          {claimed ? (
+            <section className="mt-5 rounded-xl glass-card p-5">
+              <h2 className="text-base font-semibold text-ink-900">This job is on your list</h2>
+              <p className="mt-1 text-xs text-ink-600">
+                Every job a general contractor invites you to now shows up in one place.
+              </p>
+              <Link
+                to="/my-jobs"
+                className="mt-3 inline-block rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-ink-900"
+              >
+                See all your jobs
+              </Link>
+            </section>
+          ) : (
+            <div className="mt-5">
+              <ClaimInvitationPanel
+                token={token ?? ''}
+                company={view.you.company}
+                onClaimed={(session) => {
+                  writeFieldSession(session);
+                  setClaimed(true);
+                }}
+              />
+            </div>
           )}
 
           <AtmospherePitch company={view.you.company} />

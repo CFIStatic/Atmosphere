@@ -263,6 +263,29 @@ scopeDocsRouter.post(
         .update({ status: 'confirmed', confirmed_by: userId, confirmed_at: new Date().toISOString() })
         .eq('id', (doc as any).id);
 
+      // Provenance for a job that has none. `ignoreDuplicates` rather than an
+      // upsert that overwrites: a job that was synced or typed already has a
+      // truthful origin, and confirming a document later does not change how
+      // the job got here. This only fills the gap for jobs that predate
+      // intake tracking, where this document is the earliest recorded thing
+      // we know about where the job's information came from.
+      await admin
+        .from('job_intake')
+        .upsert(
+          {
+            job_id: req.params.jobId,
+            org_id: orgId,
+            source: 'scope_document',
+            source_detail: { documentId: (doc as any).id, filename: (doc as any).filename },
+            entered_by: userId,
+          },
+          { onConflict: 'job_id', ignoreDuplicates: true },
+        )
+        .then(
+          () => undefined,
+          () => undefined,
+        );
+
       // On the record: the scope the footage will be judged against was set
       // from this document, by this person.
       await recordAccess(supabase, {
