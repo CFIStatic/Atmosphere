@@ -110,7 +110,7 @@ async function handleEvent(event: Stripe.Event, admin: any): Promise<void> {
   }
 }
 
-/** A completed checkout: credits are granted here, against the purchase we opened. */
+/** A completed checkout: credits or an evidence download are settled here. */
 async function onCheckoutCompleted(session: Stripe.Checkout.Session, admin: any): Promise<void> {
   const orgId = await resolveOrgId(admin, session.metadata, session.customer as string | null);
   if (!orgId) {
@@ -121,10 +121,19 @@ async function onCheckoutCompleted(session: Stripe.Checkout.Session, admin: any)
   if (session.mode !== 'payment') return; // subscriptions settle via invoice.paid
 
   const purchaseId = session.metadata?.purchase_id;
+  const downloadId = session.metadata?.download_id;
+  const kind = session.metadata?.kind;
   const paymentIntentId =
     typeof session.payment_intent === 'string'
       ? session.payment_intent
       : (session.payment_intent?.id ?? null);
+
+  // Evidence download fees: mark the ledger paid before recording history, so a
+  // failed payment-history write still retries and the reviewer can download.
+  if (downloadId || kind === 'evidence_download') {
+    await settleEvidenceDownload(session, admin, orgId, downloadId, paymentIntentId);
+    return;
+  }
 
   // Credits first: a failure here must retry, so it happens before anything
   // that could swallow the error.
@@ -162,6 +171,74 @@ async function onCheckoutCompleted(session: Stripe.Checkout.Session, admin: any)
     p_purchase_id: purchaseId ?? null,
   });
   if (paymentError) throw new Error(`payment record failed: ${paymentError.message}`);
+}
+
+/**
+ * Settle a Verifier evidence-download fee. The signed URL is minted later by
+ * the download endpoint once the ledger reads paid — this only flips the row.
+ */
+async function settleEvidenceDownload(
+  session: Stripe.Checkout.Session,
+  admin: any,
+  orgId: string,
+  downloadId: string | null | undefined,
+  paymentIntentId: string | null,
+): Promise<void> {
+  if (!downloadId) {
+    console.warn(`[stripe] evidence checkout ${session.id} missing download_id`);
+    return;
+  }
+
+  const { data: ledger, error: lookupError } = await admin
+    .from('evidence_downloads')
+    .select('id, status, org_id, fee_cents')
+    .eq('id', downloadId)
+    .maybeSingle();
+  if (lookupError) throw new Error(`download lookup failed: ${lookupError.message}`);
+  if (!ledger || ledger.org_id !== orgId) {
+    console.warn(`[stripe] evidence checkout ${session.id} download ${downloadId} not found for org`);
+    return;
+  }
+
+  if (ledger.status === 'pending_payment') {
+    const { error } = await admin
+      .from('evidence_downloads')
+      .update({
+        status: 'paid',
+        paid_via: 'stripe',
+        paid_at: new Date().toISOString(),
+        stripe_checkout_session_id: session.id,
+        stripe_payment_intent_id: paymentIntentId,
+      })
+      .eq('id', downloadId)
+      .eq('status', 'pending_payment');
+    if (error) throw new Error(`download settle failed: ${error.message}`);
+  }
+
+  let charge: Stripe.Charge | null = null;
+  if (paymentIntentId) {
+    const intent = await stripeClient().paymentIntents.retrieve(paymentIntentId, {
+      expand: ['latest_charge'],
+    });
+    charge = (intent.latest_charge as Stripe.Charge) ?? null;
+  }
+  const card = cardDetails(charge);
+
+  const { error: paymentError } = await admin.rpc('record_payment', {
+    p_org: orgId,
+    p_kind: 'evidence_download',
+    p_status: 'succeeded',
+    p_amount_cents: session.amount_total ?? ledger.fee_cents ?? 0,
+    p_currency: session.currency ?? 'usd',
+    p_description: 'Evidence download',
+    p_payment_intent_id: paymentIntentId,
+    p_charge_id: charge?.id ?? null,
+    p_receipt_url: charge?.receipt_url ?? null,
+    p_receipt_email: session.customer_details?.email ?? charge?.receipt_email ?? null,
+    p_card_brand: card.brand,
+    p_card_last4: card.last4,
+  });
+  if (paymentError) throw new Error(`evidence payment record failed: ${paymentError.message}`);
 }
 
 /** Subscription invoices: the receipt trail and the period roll-forward. */

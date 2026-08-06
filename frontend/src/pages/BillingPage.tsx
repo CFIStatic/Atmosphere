@@ -179,8 +179,8 @@ export function BillingPage() {
       <div className="animate-fade-in-up">
         <h1 className="text-3xl font-bold tracking-tight text-ink-900">Plans &amp; billing</h1>
         <p className="mt-2 max-w-2xl text-ink-600">
-          Your plan includes usage credits each month. Buy extra credits any time — they never
-          expire, and they&apos;re only used once your monthly allowance runs out.
+          Seats are $199.99 per user / month and do not include usage. Load prepaid credits
+          before agents run — they never expire, and work pauses at a zero balance.
         </p>
 
         {error && (
@@ -286,8 +286,8 @@ export function BillingPage() {
         <section className="mt-10">
           <h2 className="text-lg font-semibold text-ink-900">Buy usage credits</h2>
           <p className="mt-1 text-sm text-ink-600">
-            1 credit = $1 of usage. Purchased credits never expire and are used after your monthly
-            allowance.
+            1 credit = $1 of usage at the published rate card (5× model cost). Purchased credits
+            never expire.
           </p>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-4">

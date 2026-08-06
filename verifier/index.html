@@ -1517,8 +1517,9 @@
 
   /**
    * Watching is free; keeping a copy settles a fee first. The 402 carries the
-   * price and the ledger row; Pay settles it (Stripe in production, the dev
-   * path here) and the retry mints the real file.
+   * price and the ledger row; Pay opens Stripe Checkout (or the local dev
+   * settle). Credits of entitlement arrive via the webhook — returning from
+   * Checkout only triggers a retry of the download.
    */
   function requestDownload(item, downloadId) {
     var msg = document.getElementById('dl-msg');
@@ -1532,10 +1533,31 @@
           if (btn) {
             btn.textContent = 'Pay $' + (res.body.feeCents / 100).toFixed(2) + ' and download';
             btn.onclick = function () {
+              if (btn) { btn.disabled = true; btn.textContent = 'Opening checkout\u2026'; }
               fetch(base + '/downloads/' + encodeURIComponent(res.body.downloadId) + '/pay', { method: 'POST', credentials: 'include' })
-                .then(function (r2) { return r2.json(); })
-                .then(function () { requestDownload(item, res.body.downloadId); })
-                .catch(function () { if (msg) msg.textContent = 'Payment did not go through. Try again.'; });
+                .then(function (r2) { return r2.json().then(function (body) { return { status: r2.status, body: body }; }); })
+                .then(function (pay) {
+                  if (pay.status >= 400) {
+                    if (msg) msg.textContent = (pay.body && pay.body.error) || 'Payment did not go through. Try again.';
+                    if (btn) {
+                      btn.disabled = false;
+                      btn.textContent = 'Pay $' + (res.body.feeCents / 100).toFixed(2) + ' and download';
+                    }
+                    return;
+                  }
+                  if (pay.body.checkoutUrl) {
+                    window.location.assign(pay.body.checkoutUrl);
+                    return;
+                  }
+                  requestDownload(item, res.body.downloadId);
+                })
+                .catch(function () {
+                  if (msg) msg.textContent = 'Payment did not go through. Try again.';
+                  if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Pay $' + (res.body.feeCents / 100).toFixed(2) + ' and download';
+                  }
+                });
             };
           }
           return;
@@ -1625,7 +1647,18 @@
    * code and cannot drift apart.
    * ------------------------------------------------------------------ */
 
-  var SHARE_TOKEN = new URLSearchParams(location.search).get('share');
+  var SHARE_PARAMS = new URLSearchParams(location.search);
+  var SHARE_TOKEN = SHARE_PARAMS.get('share');
+  var CHECKOUT_OUTCOME = SHARE_PARAMS.get('checkout');
+
+  // Returning from Stripe Checkout. The fee itself settles on the webhook;
+  // this only tells the reviewer what happened and cleans the URL.
+  if (CHECKOUT_OUTCOME === 'success' || CHECKOUT_OUTCOME === 'cancelled') {
+    SHARE_PARAMS.delete('checkout');
+    SHARE_PARAMS.delete('download');
+    var cleaned = location.pathname + (SHARE_PARAMS.toString() ? '?' + SHARE_PARAMS.toString() : '');
+    window.history.replaceState({}, '', cleaned);
+  }
 
   function mapRemoteItem(raw) {
     return {
@@ -1761,6 +1794,25 @@
           anchor.parentNode.insertBefore(badge, anchor.nextSibling);
         }
         boot();
+        if (CHECKOUT_OUTCOME === 'success') {
+          var note = document.createElement('p');
+          note.className = 'result';
+          note.setAttribute('role', 'status');
+          note.style.cssText = 'margin:12px 0 0;color:var(--ink)';
+          note.textContent = 'Payment received. Open the clip and download again — the file unlocks as soon as settlement lands.';
+          var list = document.getElementById('resultcount');
+          if (list && list.parentNode) list.parentNode.insertBefore(note, list);
+        } else if (CHECKOUT_OUTCOME === 'cancelled') {
+          var cancelNote = document.createElement('p');
+          cancelNote.className = 'result';
+          cancelNote.setAttribute('role', 'status');
+          cancelNote.style.cssText = 'margin:12px 0 0;color:var(--ink)';
+          cancelNote.textContent = 'Checkout cancelled — nothing was charged. Viewing remains free.';
+          var cancelAnchor = document.getElementById('resultcount');
+          if (cancelAnchor && cancelAnchor.parentNode) {
+            cancelAnchor.parentNode.insertBefore(cancelNote, cancelAnchor);
+          }
+        }
       })
       .catch(function () { deadLink(0, null); });
   } else {

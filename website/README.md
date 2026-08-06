@@ -17,7 +17,7 @@ written to appeal to contractors of every trade.
 | `field.html`      | Field Platform — capture on site, with a capture-log hero   |
 | `manager.html`    | Manager Platform — job costing, accounting, business insights |
 | `security.html`   | Security — architecture diagram and six structural claims   |
-| `pricing.html`    | Pricing — the 30-day test, seat plans, and the flat rate    |
+| `pricing.html`    | Pricing — $199.99/user seat plus prepaid usage at 5× cost |
 | `docs.html`       | Resources hub — documentation index, guides, troubleshooting |
 | `doc-*.html`      | Eight resource pages: getting started, recipes, troubleshooting, estimators, web access, computer use, field, billing |
 | `about.html`      | About — story and principles                                |
@@ -37,43 +37,17 @@ dark themes) and `assets/site.js` (receipt replay + the careers form).
 
 `pricing.html` sells one model across all four products:
 
-- **A 30-day test plan**, not a free tier. Full platform, one seat, usage billed
-  at the ordinary rate.
-- **Seat plans** — Pro ($20/$17 annual), Max 5x ($100), Max 20x ($200), Team
-  ($30/seat, 5 seat minimum, $25 annual), Enterprise (contact). The seat price
-  buys access and the throughput multiplier, nothing else.
-- **Usage is prepaid credits at one flat rate**, on every plan. Customers buy
-  credits (the `credit_packs` seed, bonuses included) before agents spend them,
-  and work pauses at a zero balance. There is **no bundled allowance and no
-  postpaid usage** — the page must never imply either. Reload behavior is a
-  per-organization setting (`PATCH /api/billing/settings`: `autoReloadEnabled`
-  + threshold + amount, surfaced in the app's Billing page); auto-reload off
-  *is* manual reload.
+- **Pro seat — $199.99 per user / month.** Access only. No included usage.
+- **Enterprise** — custom terms, 25 seat minimum.
+- **Usage is prepaid credits at 5× model cost**, published per model on the
+  rate card (Apex $50/$250, Pro $25/$125, Core $15/$75, Lite $5/$25 per MTok).
+  Customers buy credits before agents spend them; work pauses at a zero balance.
+  Reload behavior is a per-organization setting
+  (`PATCH /api/billing/settings`).
 
-  This ordering is the margin guarantee: every token is sold at 2× list and
-  paid for before it is spent, so usage can never be served at a loss or go
-  uncollected.
-
-**The rate is flat and internally derived.** The flagship entry in
-`backend/src/ai/catalog.ts` lists $15/$75 per million tokens; doubled, that is
-the $30/$150 the page quotes, charged for *every* token regardless of which
-model ran the task. Raise the flagship in the catalog and this number moves
-with it. **The derivation is internal only**: customer-facing copy quotes the
-two numbers and never names the underlying model, the provider, or the 2×
-multiple — keep it that way when editing.
-
-That flat rate constrains the copy: the site must never claim routing makes a
-customer's bill cheaper, because it cannot. What it may claim — and what is
-true — is that a fixed rate leaves us no incentive to route work to a weaker
-model, and that better routing lands as better output rather than a smaller
-invoice.
-
-Two things to keep straight. The `billing_plans` seed in
-`supabase/migrations/20260727124743_billing_pricing_metering.sql` still carries
-a `free` plan and `included_credits_nanos` values from an earlier model — the
-site deliberately does **not** follow it on those two points, and the migration
-is the thing that needs updating. And the API key a customer supplies is for
-computer use, which is a setup step, never a billing arrangement.
+Catalog and markup live in the billing migrations
+(`backend/supabase/migrations/20260812100000_pricing_seat_and_5x_markup.sql`
+updates live projects). Keep the marketing page aligned with that catalog.
 
 ## Resources
 

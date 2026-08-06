@@ -1037,9 +1037,11 @@ Anthropic and OpenAI use.
   the penny is worthless — and never cents, because one cached-read token on the
   cheapest model costs 200 nanodollars and would round to zero, letting a
   customer read cache for free.
-- **Sell price = 2 × cost.** The markup lives in one column
+- **Sell price = 5 × cost.** The markup lives in one column
   (`private.model_costs.markup`). Change it there and the customer-facing rate
   card is regenerated; nothing else needs editing.
+- **Seats do not include usage.** The Pro seat is **$199.99 per user / month**.
+  Token usage is prepaid credits only.
 - **Margin never reaches the browser.** What we pay sits in `private.model_costs`,
   in a schema PostgREST does not expose. What we charge sits in
   `public.model_rate_card`, projected through the markup by
@@ -1047,30 +1049,23 @@ Anthropic and OpenAI use.
   read the cost basis.
 
 Rates carry the provider's own structure, so the ratio holds across every
-component: cache writes cost 1.25× the input rate (5-minute TTL) or 2× (1-hour),
-cached reads 0.1×, and batch requests are half price.
+component: cache writes, cache reads, and batch all take the same 5× markup on
+the underlying cost multipliers.
 
-| Model | We pay (in/out per MTok) | We charge |
-| ----- | ------------------------ | --------- |
-| Atmosphere Apex  | $10 / $50 | $20 / $100 |
-| Atmosphere Pro   | $5 / $25  | $10 / $50  |
-| Atmosphere Core  | $3 / $15  | $6 / $30   |
-| Atmosphere Lite  | $1 / $5   | $2 / $10   |
+| Model | We pay (in/out per MTok) | We charge (5×) |
+| ----- | ------------------------ | -------------- |
+| Atmosphere Apex  | $10 / $50 | $50 / $250 |
+| Atmosphere Pro   | $5 / $25  | $25 / $125 |
+| Atmosphere Core  | $3 / $15  | $15 / $75  |
+| Atmosphere Lite  | $1 / $5   | $5 / $25   |
 
 ### Plans
 
-`rate_multiplier` is what "5x" and "20x" mean — throughput relative to Pro.
-Included credits sit at 1.25× the plan price, so an allowance burned to the last
-credit still clears a **37.5% gross margin** at a 2× markup.
-
-| Plan | Price | Included credits | Throughput |
-| ---- | ----- | ---------------- | ---------- |
-| Free    | $0             | $3/mo          | 0.2× |
-| Pro     | $20 ($17 annual) | $25/mo       | 1×   |
-| Max 5x  | $100           | $125/mo        | 5×   |
-| Max 20x | $200           | $250/mo        | 20×  |
-| Team    | $30/seat ($25 annual) | $40/seat/mo | 5× |
-| Enterprise | custom      | custom         | —    |
+| Plan | Price | Included usage |
+| ---- | ----- | -------------- |
+| Free       | $0 | None — buy credits when ready |
+| Pro        | **$199.99 / user / month** | None |
+| Enterprise | Custom (25 seat min) | Custom |
 
 ### How a request gets billed
 
@@ -1135,6 +1130,7 @@ received and refreshes the balance once the webhook lands.
 | Buy credits | `POST /api/billing/purchases` → `checkoutUrl` | `checkout.session.completed` |
 | Start/change a plan | `POST /api/billing/checkout/subscription` | `customer.subscription.*` |
 | Cards, invoices, cancel | `POST /api/billing/portal` | Stripe's hosted portal |
+| Evidence download fee | `POST /api/verifier-share/:token/downloads/:id/pay` → `checkoutUrl` | `checkout.session.completed` (metadata `kind=evidence_download`) |
 
 Every handler is **replay-safe**, because Stripe guarantees at-least-once
 delivery and retries on any non-2xx. The event id is claimed before anything is
@@ -1164,20 +1160,20 @@ Note the two histories are deliberately separate: **payment history** is what wa
 
 ### Setting it up
 
-1. Create a product + recurring Price for each paid plan (monthly and annual),
-   then record the price ids:
-   ```sql
-   update public.billing_plans
-      set stripe_price_id_monthly = 'price_...', stripe_price_id_annual = 'price_...'
-    where code = 'pro';
-   ```
-   A plan with no price id returns a clear `price_not_configured` error rather
-   than a broken checkout.
-2. Set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and
+1. Set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and
    `SUPABASE_SERVICE_ROLE_KEY` (the webhook has no user session to act under).
+2. Create Products + Prices for every paid plan and link them into the catalog:
+   ```bash
+   cd backend && STRIPE_SECRET_KEY=sk_test_... npm run stripe:sync
+   ```
+   Apply the printed `UPDATE billing_plans …` SQL. A plan with no price id
+   returns a clear `price_not_configured` error rather than a broken checkout.
+   (You can still set price ids by hand if you prefer.)
 3. Point a webhook endpoint at `POST /api/webhooks/stripe` subscribed to
    `checkout.session.completed`, `invoice.paid`, `invoice.payment_failed`,
    `customer.subscription.created/updated/deleted` and `charge.refunded`.
+4. Apply `backend/supabase/migrations/20260812090000_stripe_evidence_downloads.sql`
+   so Verifier download fees can settle through the same webhook.
 
 Locally: `stripe listen --forward-to localhost:4000/api/webhooks/stripe`.
 

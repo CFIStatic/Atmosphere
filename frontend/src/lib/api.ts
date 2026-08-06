@@ -4543,7 +4543,7 @@ export interface Purchase {
  */
 export interface Payment {
   id: string;
-  kind: 'subscription' | 'credits' | 'refund';
+  kind: 'subscription' | 'credits' | 'refund' | 'evidence_download';
   status: 'pending' | 'succeeded' | 'failed' | 'refunded';
   amountCents: number;
   currency: string;
@@ -4564,6 +4564,7 @@ export const PAYMENT_KIND_LABELS: Record<Payment['kind'], string> = {
   subscription: 'Subscription',
   credits: 'Usage credits',
   refund: 'Refund',
+  evidence_download: 'Evidence download',
 };
 
 /* -------------------------------------------------------------- usage types */
@@ -4624,7 +4625,7 @@ export interface UsageDay {
   priceNanos: number;
 }
 
-export const PLAN_ORDER: PlanCode[] = ['free', 'pro', 'max_5x', 'max_20x', 'team', 'enterprise'];
+export const PLAN_ORDER: PlanCode[] = ['free', 'pro', 'enterprise'];
 
 export const LEDGER_LABELS: Record<LedgerEntry['entryType'], string> = {
   plan_grant: 'Plan credits',

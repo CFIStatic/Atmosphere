@@ -15,6 +15,7 @@ import {
 import { shareEmail } from '../verifier/shareEmail.js';
 import { buildMailSender } from '../campaigns/mail/index.js';
 import { config } from '../config.js';
+import { isStripeConfigured, stripeClient } from '../lib/stripe.js';
 
 /**
  * The evidence portal's backend: two doors into one record.
@@ -843,11 +844,16 @@ evidenceShareRouter.post(
 /**
  * POST /api/verifier-share/:token/downloads/:downloadId/pay
  *
- * Settlement. In production this endpoint refuses — a real charge settles
- * through Stripe checkout landing on the webhooks router, the same path the
- * billing credits already use — and the refusal names that, so nobody ships
- * a build where "pay" is a button that pretends. Outside production it
- * settles as 'dev' so the whole flow is exercisable end to end.
+ * Opens settlement for a pending download fee.
+ *
+ * With Stripe configured this returns a hosted Checkout URL. Credits of
+ * entitlement (the signed download URL) are minted only when the webhook sees
+ * `checkout.session.completed` — landing back on the success URL proves
+ * nothing, so nothing is granted here.
+ *
+ * Without Stripe: refused in production (a "pay" button that pretends would
+ * be worse than no button); outside production it settles as `dev` so the
+ * whole flow is exercisable end to end.
  */
 evidenceShareRouter.post(
   '/:token/downloads/:downloadId/pay',
@@ -855,17 +861,11 @@ evidenceShareRouter.post(
     try {
       const { share, admin, viewer } = await shareForToken(req.params.token, req);
 
-      if (config.isProduction) {
-        throw new HttpError(
-          501,
-          'Card payment for downloads is not wired on this server yet. The charge will settle through Stripe checkout; until then, ask the sharing organization to waive the fee.',
-          'payment_not_wired',
-        );
-      }
-
       const { data: ledger } = await admin
         .from('evidence_downloads')
-        .select('id, status, requested_by, org_id')
+        .select(
+          'id, status, requested_by, org_id, fee_cents, stripe_checkout_session_id',
+        )
         .eq('id', req.params.downloadId)
         .maybeSingle();
       if (!ledger || (ledger as any).org_id !== share.org_id) {
@@ -877,6 +877,84 @@ evidenceShareRouter.post(
       if ((ledger as any).status !== 'pending_payment') {
         res.json({ ok: true, alreadySettled: true });
         return;
+      }
+
+      if (config.billing.paymentProvider === 'stripe' && isStripeConfigured()) {
+        const existingSessionId = (ledger as any).stripe_checkout_session_id as string | null;
+        if (existingSessionId) {
+          const existing = await stripeClient().checkout.sessions.retrieve(existingSessionId);
+          if (existing.status === 'open' && existing.url) {
+            res.json({ checkoutUrl: existing.url });
+            return;
+          }
+          if (existing.payment_status === 'paid') {
+            // Webhook may still be in flight; the client should retry download.
+            res.json({ ok: true, alreadySettled: true });
+            return;
+          }
+        }
+
+        const token = req.params.token;
+        const downloadId = (ledger as any).id as string;
+        const successUrl = config.stripe.evidenceSuccessUrl
+          .replaceAll('{token}', encodeURIComponent(token))
+          .replaceAll('{downloadId}', encodeURIComponent(downloadId));
+        const cancelUrl = config.stripe.evidenceCancelUrl
+          .replaceAll('{token}', encodeURIComponent(token))
+          .replaceAll('{downloadId}', encodeURIComponent(downloadId));
+
+        const session = await stripeClient().checkout.sessions.create({
+          mode: 'payment',
+          customer_email: viewer.email ?? undefined,
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+          client_reference_id: share.org_id,
+          metadata: {
+            org_id: share.org_id,
+            download_id: downloadId,
+            kind: 'evidence_download',
+          },
+          payment_intent_data: {
+            metadata: {
+              org_id: share.org_id,
+              download_id: downloadId,
+              kind: 'evidence_download',
+            },
+            receipt_email: viewer.email ?? undefined,
+            description: 'Atmosphere evidence download',
+          },
+          line_items: [
+            {
+              quantity: 1,
+              price_data: {
+                currency: 'usd',
+                unit_amount: (ledger as any).fee_cents as number,
+                product_data: {
+                  name: 'Evidence download',
+                  description: 'Original file download from Atmosphere Verifier',
+                },
+              },
+            },
+          ],
+        });
+
+        const { error: linkError } = await admin
+          .from('evidence_downloads')
+          .update({ stripe_checkout_session_id: session.id })
+          .eq('id', downloadId)
+          .eq('status', 'pending_payment');
+        if (linkError) throw new HttpError(500, linkError.message, 'session_link_failed');
+
+        res.json({ checkoutUrl: session.url });
+        return;
+      }
+
+      if (config.isProduction) {
+        throw new HttpError(
+          501,
+          'Card payment for downloads is not configured on this server. Set STRIPE_SECRET_KEY, or ask the sharing organization to waive the fee.',
+          'payment_not_wired',
+        );
       }
 
       const { error } = await admin
