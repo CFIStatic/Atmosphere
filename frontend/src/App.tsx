@@ -37,6 +37,7 @@ import { ProfilerPage } from './pages/ProfilerPage';
 import { TerritoriesPage } from './pages/TerritoriesPage';
 import { SalesWorkPage } from './pages/SalesWorkPage';
 import { SharedDashboardPage } from './pages/SharedDashboardPage';
+import { VerifierLibraryPage } from './pages/VerifierLibraryPage';
 import { PurchaseOrdersPage } from './pages/PurchaseOrdersPage';
 import { JobSharePage } from './pages/JobSharePage';
 import { getPlatform } from './lib/usePlatform';
@@ -220,6 +221,14 @@ export default function App() {
               element: (
                 <RequirePlatform platform="operations">
                   <SharedDashboardPage />
+                </RequirePlatform>
+              ),
+            },
+            {
+              path: '/verifier-library',
+              element: (
+                <RequirePlatform platform="operations">
+                  <VerifierLibraryPage />
                 </RequirePlatform>
               ),
             },

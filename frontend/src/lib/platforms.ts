@@ -174,6 +174,12 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
           { to: '/team', label: 'Crew', Icon: UsersIcon },
         ],
       },
+      {
+        // At the bottom of the rail, above System: the reviewer's screen,
+        // inside the platform — read the record exactly as a share shows it.
+        label: 'Evidence',
+        items: [{ to: '/verifier-library', label: 'Verifier', Icon: ShieldIcon }],
+      },
       /* Later products — built, kept, not displayed while the Work
          Verification Platform is the sole focus. Restore by moving items
          back into a visible group.
