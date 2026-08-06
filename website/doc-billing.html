@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="The 30-day test, seat plans, and how the one flat token rate is set and metered." />
+  <meta name="description" content="$199.99 per user seats, prepaid credits, and the 5× usage rate card." />
   <meta name="theme-color" content="#FBFAF7" />
-  <title>Billing & the flat rate · Atmosphere Docs</title>
-  <meta property="og:title" content="Billing & the flat rate · Atmosphere Docs" />
-  <meta property="og:description" content="The 30-day test, seat plans, and how the one flat token rate is set and metered." />
+  <title>Billing · Atmosphere Docs</title>
+  <meta property="og:title" content="Billing · Atmosphere Docs" />
+  <meta property="og:description" content="$199.99 per user seats, prepaid credits, and the 5× usage rate card." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Atmosphere" />
   <meta property="og:image" content="/assets/og.png" />
@@ -106,45 +106,43 @@
       <a href="doc-computer-use.html">Computer use</a>
       <a href="doc-field.html">The Field Platform</a>
       <div class="grp mono">Account</div>
-      <a class="active" href="doc-billing.html">Billing &amp; the flat rate</a>
+      <a class="active" href="doc-billing.html">Billing</a>
   </aside>
   <article class="docs-prose">
     <div class="eyebrow mono">Resources · Account</div>
-    <h1>Billing &amp; the flat rate</h1>
-    <p class="lede">The 30-day test, seat plans, and how the one flat token rate is set and metered.</p>
+    <h1>Billing</h1>
+    <p class="lede">$199.99 per user per month for the seat, plus prepaid usage at five times model cost.</p>
 
-<h2>The 30-day test</h2>
-<p>Every organization starts with thirty days of the full platform — no feature held back, one seat. Usage during the test is billed at the same flat rate as everyone else, so what you spend testing is what the thing would actually cost you. Nothing auto-upgrades when the thirty days end: you pick a plan, or you stop.</p>
 <h2>Seats</h2>
-<p>The seat price buys access and a throughput ceiling, nothing else:</p>
+<p>The seat buys platform access for one user. It does <strong>not</strong> include usage credits.</p>
 <table>
-<tr><th>Plan</th><th>Monthly</th><th>Annual</th><th>Throughput</th></tr>
-<tr><td>Pro</td><td>$20 / person</td><td>$17 / person</td><td>1×</td></tr>
-<tr><td>Max 5x</td><td>$100 / person</td><td>$100 / person</td><td>5×</td></tr>
-<tr><td>Max 20x</td><td>$200 / person</td><td>$200 / person</td><td>20×</td></tr>
-<tr><td>Team</td><td>$30 / seat, 5 min</td><td>$25 / seat</td><td>5×</td></tr>
-<tr><td>Enterprise</td><td colspan="2">Annual, 25 seats minimum</td><td>Custom</td></tr>
+<tr><th>Plan</th><th>Price</th><th>Notes</th></tr>
+<tr><td>Pro</td><td>$199.99 / user / month</td><td>No included usage</td></tr>
+<tr><td>Enterprise</td><td>Custom</td><td>25 seats minimum · contact sales</td></tr>
 </table>
-<p>All four platforms — Sales, Operations, Field, Manager — are bought separately at these same tiers.</p>
-<h2>The flat rate</h2>
-<p>Usage is billed per token at one simple rate:</p>
-<pre><code>Input   $30  per million tokens
-Output  $150 per million tokens</code></pre>
-<p>Every token is billed at that rate <strong>whichever model actually ran the task</strong> — your job always goes to the model that does it best, and the bill stays two numbers you can check against the token counts in your audit trail.</p>
+<p>Sales, Operations, Field, and Manager use this same seat price.</p>
+<h2>Usage rates (5× cost)</h2>
+<p>Atmosphere pays the “We pay” column. Customers are charged five times that amount. One credit is one dollar of sell-side usage.</p>
+<table>
+<tr><th>Model</th><th>We pay (in / out per MTok)</th><th>You pay (in / out per MTok)</th></tr>
+<tr><td>Apex</td><td>$10 / $50</td><td>$50 / $250</td></tr>
+<tr><td>Pro</td><td>$5 / $25</td><td>$25 / $125</td></tr>
+<tr><td>Core</td><td>$3 / $15</td><td>$15 / $75</td></tr>
+<tr><td>Lite</td><td>$1 / $5</td><td>$5 / $25</td></tr>
+</table>
+<p>Cache writes, cache reads, and batch requests use the same 5× markup on the underlying cost multipliers.</p>
 <h2>Credits: prepaid, always</h2>
-<p>Usage is prepaid. You buy credits — one credit is one dollar of usage at the flat rate — and agents draw the balance down as they work. Nothing ever runs on an unpaid balance, which is also why there is never a surprise bill: what you loaded is the most you can spend.</p>
-<p>Credits come in packs from $10 to $1,000, and the larger packs carry a volume bonus ($100 buys $103 of usage; $1,000 buys $1,075).</p>
+<p>Usage is prepaid. You buy credits and agents draw the balance down as they work. Nothing runs on an unpaid balance.</p>
+<p>Credits come in packs from $10 to $1,000; larger packs carry a volume bonus ($100 buys $103 of usage; $1,000 buys $1,075).</p>
 <h2>Auto-reload or manual reload</h2>
-<p>In <strong>Settings &rarr; Billing</strong> you choose how the balance stays topped up:</p>
+<p>In <strong>Settings → Billing</strong> you choose how the balance stays topped up:</p>
 <ul>
-<li><strong>Auto-reload on</strong> — set a threshold and an amount; when the balance dips below the threshold, a reload purchases itself. The defaults are a $25 reload when the balance falls under $5.</li>
-<li><strong>Auto-reload off (manual)</strong> — every purchase is one you made. When the balance reaches zero, new runs pause and resume the moment you top up; nothing in your record is lost while paused.</li>
+<li><strong>Auto-reload on</strong> — set a threshold and an amount; defaults are a $25 reload when the balance falls under $5.</li>
+<li><strong>Auto-reload off (manual)</strong> — every purchase is one you made. At zero, new runs pause until you top up.</li>
 </ul>
-<p>Either way, an organization-level <strong>monthly spend cap</strong> is available, and no reload — automatic or manual — will carry usage past it.</p>
+<p>An organization-level <strong>monthly spend cap</strong> is available either way.</p>
 <h2>How usage is counted</h2>
-<p>Token counts come from the model provider's own response, never from the browser — what you are billed is what was actually spent. Every grant, charge, and adjustment lands in an append-only ledger you can read by run, by agent, and by platform.</p>
-<h2>There is no bundled allowance</h2>
-<p>Plans include no free usage — the seat buys access and throughput, and every token comes out of credits you loaded. A quiet week costs you the seat and nothing more; unused credits just wait.</p>
+<p>Token counts come from the model provider’s own response, never from the browser. Every grant, charge, and adjustment lands in an append-only ledger.</p>
 
     <div class="doc-pager">
       <a class="prev" href="doc-field.html"><span class="dir mono">&larr; PREVIOUS</span>The Field Platform</a>

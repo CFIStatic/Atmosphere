@@ -348,11 +348,32 @@ const RUN_DETAIL_STEPS: AuditStep[] = [
 
 const CATALOG: Catalog = {
   plans: [
-    { code: 'pro', name: 'Pro', tagline: 'For individual estimators and PMs', monthlyPriceCents: 2000, annualPriceCents: 1700, includedCreditsNanos: 0, perSeat: false, minSeats: 1, rateMultiplier: 1, features: ['Priority model access', 'Usage analytics', 'Email support'], isContactSales: false },
-    { code: 'max_5x', name: 'Max 5x', tagline: 'Heavier daily workloads', monthlyPriceCents: 10000, annualPriceCents: null, includedCreditsNanos: 0, perSeat: false, minSeats: 1, rateMultiplier: 5, features: ['5× Pro throughput', 'Batch processing', 'Priority support'], isContactSales: false },
-    { code: 'max_20x', name: 'Max 20x', tagline: 'Power users running all day', monthlyPriceCents: 20000, annualPriceCents: null, includedCreditsNanos: 0, perSeat: false, minSeats: 1, rateMultiplier: 20, features: ['20× Pro throughput', 'Batch processing', 'Priority support'], isContactSales: false },
-    { code: 'team', name: 'Team', tagline: 'Shared billing across the crew', monthlyPriceCents: 3000, annualPriceCents: 2500, includedCreditsNanos: 0, perSeat: true, minSeats: 5, rateMultiplier: 5, features: ['One pooled bill', 'Central spend limits', 'Role-based billing access', '5× Pro throughput'], isContactSales: false },
-    { code: 'enterprise', name: 'Enterprise', tagline: 'Custom volume and terms', monthlyPriceCents: 0, annualPriceCents: null, includedCreditsNanos: 0, perSeat: true, minSeats: 25, rateMultiplier: 5, features: ['Volume rates on usage', 'SSO and audit logs', 'Dedicated support'], isContactSales: true },
+    {
+      code: 'pro',
+      name: 'Pro',
+      tagline: 'Full platform access, billed per user',
+      monthlyPriceCents: 19999,
+      annualPriceCents: null,
+      includedCreditsNanos: 0,
+      perSeat: true,
+      minSeats: 1,
+      rateMultiplier: 1,
+      features: ['$199.99 per user / month', 'No included usage — load credits separately', 'Full platform access', 'Usage analytics', 'Email support'],
+      isContactSales: false,
+    },
+    {
+      code: 'enterprise',
+      name: 'Enterprise',
+      tagline: 'Custom volume and terms',
+      monthlyPriceCents: 0,
+      annualPriceCents: null,
+      includedCreditsNanos: 0,
+      perSeat: true,
+      minSeats: 25,
+      rateMultiplier: 1,
+      features: ['Custom seat and usage terms', 'Volume pricing', 'SSO and audit logs', 'Dedicated support'],
+      isContactSales: true,
+    },
   ],
   packs: [
     { code: 'starter', name: 'Starter', priceCents: 1000, creditsNanos: 10_000_000_000, bonusNanos: 0 },
@@ -362,7 +383,10 @@ const CATALOG: Catalog = {
     { code: 'max', name: 'Max', priceCents: 100000, creditsNanos: 1_000_000_000_000, bonusNanos: 100_000_000_000 },
   ],
   rateCard: [
-    { modelId: 'atmosphere-core', displayName: 'Atmosphere', family: 'atmosphere', inputPerMTok: 30, outputPerMTok: 150, cacheWrite5mPerMTok: 37.5, cacheWrite1hPerMTok: 60, cacheReadPerMTok: 3, batchDiscountPct: 50, contextWindow: 200000, maxOutputTokens: 64000 },
+    { modelId: 'claude-fable-5', displayName: 'Atmosphere Apex', family: 'apex', inputPerMTok: 50, outputPerMTok: 250, cacheWrite5mPerMTok: 62.5, cacheWrite1hPerMTok: 100, cacheReadPerMTok: 5, batchDiscountPct: 50, contextWindow: 1000000, maxOutputTokens: 128000 },
+    { modelId: 'claude-opus-5', displayName: 'Atmosphere Pro', family: 'pro', inputPerMTok: 25, outputPerMTok: 125, cacheWrite5mPerMTok: 31.25, cacheWrite1hPerMTok: 50, cacheReadPerMTok: 2.5, batchDiscountPct: 50, contextWindow: 1000000, maxOutputTokens: 128000 },
+    { modelId: 'claude-sonnet-5', displayName: 'Atmosphere Core', family: 'core', inputPerMTok: 15, outputPerMTok: 75, cacheWrite5mPerMTok: 18.75, cacheWrite1hPerMTok: 30, cacheReadPerMTok: 1.5, batchDiscountPct: 50, contextWindow: 1000000, maxOutputTokens: 128000 },
+    { modelId: 'claude-haiku-4-5', displayName: 'Atmosphere Lite', family: 'lite', inputPerMTok: 5, outputPerMTok: 25, cacheWrite5mPerMTok: 6.25, cacheWrite1hPerMTok: 10, cacheReadPerMTok: 0.5, batchDiscountPct: 50, contextWindow: 200000, maxOutputTokens: 64000 },
   ],
   paymentProvider: 'dev',
 };
@@ -374,11 +398,10 @@ const balance = () => ({
 
 const OVERVIEW = (): BillingOverview => ({
   subscription: {
-    planCode: 'team', planName: 'Team', billingInterval: 'monthly', seats: 7, status: 'active',
+    planCode: 'pro', planName: 'Pro', billingInterval: 'monthly', seats: 7, status: 'active',
     periodStart: '2026-07-15T00:00:00Z', periodEnd: '2026-08-15T00:00:00Z', cancelAtPeriodEnd: false,
-    // Per-seat plan: 7 × $30. The overview carries the computed total, which
-    // is what the RPC returns — the invoice below has always said the same.
-    monthlyPriceCents: 21000, includedCreditsNanos: 0, rateMultiplier: 5,
+    // Per-seat plan: 7 × $199.99.
+    monthlyPriceCents: 139993, includedCreditsNanos: 0, rateMultiplier: 1,
   },
   settings: state.settings,
   balance: balance(),
@@ -404,10 +427,10 @@ const PURCHASES = [
 ];
 
 const PAYMENTS = [
-  { id: 'pay-1', kind: 'subscription' as const, status: 'succeeded' as const, amountCents: 21000, currency: 'usd', description: 'Team — 7 seats, July 15 to August 15', receiptUrl: null, hostedInvoiceUrl: 'about:blank#demo-invoice', invoicePdfUrl: 'about:blank#demo-invoice-pdf', receiptEmail: 'elena@ortizrestoration.com', cardBrand: 'visa', cardLast4: '4242', periodStart: '2026-07-15T00:00:00Z', periodEnd: '2026-08-15T00:00:00Z', failureReason: null, createdAt: '2026-07-15T00:05:00Z' },
+  { id: 'pay-1', kind: 'subscription' as const, status: 'succeeded' as const, amountCents: 139993, currency: 'usd', description: 'Pro — 7 seats, July 15 to August 15', receiptUrl: null, hostedInvoiceUrl: 'about:blank#demo-invoice', invoicePdfUrl: 'about:blank#demo-invoice-pdf', receiptEmail: 'elena@ortizrestoration.com', cardBrand: 'visa', cardLast4: '4242', periodStart: '2026-07-15T00:00:00Z', periodEnd: '2026-08-15T00:00:00Z', failureReason: null, createdAt: '2026-07-15T00:05:00Z' },
   { id: 'pay-2', kind: 'credits' as const, status: 'succeeded' as const, amountCents: 10000, currency: 'usd', description: 'Pro credit pack', receiptUrl: null, hostedInvoiceUrl: null, invoicePdfUrl: null, receiptEmail: 'elena@ortizrestoration.com', cardBrand: 'visa', cardLast4: '4242', periodStart: null, periodEnd: null, failureReason: null, createdAt: '2026-07-28T14:00:05Z' },
   { id: 'pay-3', kind: 'credits' as const, status: 'succeeded' as const, amountCents: 10000, currency: 'usd', description: 'Pro credit pack — auto-reload', receiptUrl: null, hostedInvoiceUrl: null, invoicePdfUrl: null, receiptEmail: 'elena@ortizrestoration.com', cardBrand: 'visa', cardLast4: '4242', periodStart: null, periodEnd: null, failureReason: null, createdAt: '2026-07-18T03:20:04Z' },
-  { id: 'pay-4', kind: 'subscription' as const, status: 'failed' as const, amountCents: 21000, currency: 'usd', description: 'Team — 7 seats, June 15 to July 15', receiptUrl: null, hostedInvoiceUrl: null, invoicePdfUrl: null, receiptEmail: 'elena@ortizrestoration.com', cardBrand: 'visa', cardLast4: '4242', periodStart: '2026-06-15T00:00:00Z', periodEnd: '2026-07-15T00:00:00Z', failureReason: 'Card declined — insufficient funds. Retried successfully two days later.', createdAt: '2026-06-15T00:04:00Z' },
+  { id: 'pay-4', kind: 'subscription' as const, status: 'failed' as const, amountCents: 139993, currency: 'usd', description: 'Pro — 7 seats, June 15 to July 15', receiptUrl: null, hostedInvoiceUrl: null, invoicePdfUrl: null, receiptEmail: 'elena@ortizrestoration.com', cardBrand: 'visa', cardLast4: '4242', periodStart: '2026-06-15T00:00:00Z', periodEnd: '2026-07-15T00:00:00Z', failureReason: 'Card declined — insufficient funds. Retried successfully two days later.', createdAt: '2026-06-15T00:04:00Z' },
 ];
 
 /* ------------------------------------------------------------------ usage */

@@ -23,7 +23,7 @@ const DEMO_PREFIX = 'Demo · ';
 const DEMO_DOMAIN = 'atmosphere.invalid';
 const MONTHS = 18;
 
-type PlanCode = 'free' | 'pro' | 'team' | 'max_5x' | 'max_20x';
+type PlanCode = 'free' | 'pro';
 type Interval = 'monthly' | 'annual';
 
 interface DemoOrg {
@@ -40,27 +40,27 @@ interface DemoOrg {
 }
 
 /**
- * A deliberately mixed book of business: early adopters on annual Team plans,
- * later self-serve Pro accounts, one upgrade, one churn, and a couple of free
- * accounts that never converted. Flat, uniform demo data makes every chart look
- * fine and teaches you nothing.
+ * A deliberately mixed book of business: self-serve Pro seats at $199.99/user,
+ * one upgrade in seat count, one churn, and a couple of free accounts that never
+ * converted. Flat, uniform demo data makes every chart look fine and teaches
+ * you nothing.
  */
 const DEMO_ORGS: DemoOrg[] = [
-  { name: 'Northwind Restoration', ageMonths: 17, plan: 'team', interval: 'annual', seats: 12, members: 9 },
-  { name: 'Harbor Mitigation Co', ageMonths: 15, plan: 'team', interval: 'annual', seats: 8, members: 7 },
+  { name: 'Northwind Restoration', ageMonths: 17, plan: 'pro', interval: 'monthly', seats: 12, members: 9 },
+  { name: 'Harbor Mitigation Co', ageMonths: 15, plan: 'pro', interval: 'monthly', seats: 8, members: 7 },
   { name: 'Cedar Ridge Builders', ageMonths: 13, plan: 'pro', interval: 'monthly', seats: 1, members: 3,
-    upgrade: { atMonthsAgo: 5, plan: 'team', seats: 6 } },
-  { name: 'Gulf Coast Drying', ageMonths: 11, plan: 'max_5x', interval: 'monthly', seats: 1, members: 4 },
-  { name: 'Summit Contracting', ageMonths: 9, plan: 'team', interval: 'monthly', seats: 15, members: 12 },
-  { name: 'Blue Line Water Damage', ageMonths: 8, plan: 'pro', interval: 'monthly', seats: 1, members: 2 },
-  { name: 'Ironclad Construction', ageMonths: 7, plan: 'team', interval: 'annual', seats: 25, members: 21 },
-  { name: 'Lakeshore Property Care', ageMonths: 6, plan: 'pro', interval: 'monthly', seats: 1, members: 2,
+    upgrade: { atMonthsAgo: 5, plan: 'pro', seats: 6 } },
+  { name: 'Gulf Coast Drying', ageMonths: 11, plan: 'pro', interval: 'monthly', seats: 4, members: 4 },
+  { name: 'Summit Contracting', ageMonths: 9, plan: 'pro', interval: 'monthly', seats: 15, members: 12 },
+  { name: 'Blue Line Water Damage', ageMonths: 8, plan: 'pro', interval: 'monthly', seats: 2, members: 2 },
+  { name: 'Ironclad Construction', ageMonths: 7, plan: 'pro', interval: 'monthly', seats: 25, members: 21 },
+  { name: 'Lakeshore Property Care', ageMonths: 6, plan: 'pro', interval: 'monthly', seats: 2, members: 2,
     churnedMonthsAgo: 1 },
-  { name: 'Pinnacle Remediation', ageMonths: 5, plan: 'max_20x', interval: 'annual', seats: 1, members: 6 },
-  { name: 'Riverbend Services', ageMonths: 4, plan: 'team', interval: 'monthly', seats: 9, members: 8 },
-  { name: 'Stonegate Restoration', ageMonths: 3, plan: 'pro', interval: 'monthly', seats: 1, members: 3 },
+  { name: 'Pinnacle Remediation', ageMonths: 5, plan: 'pro', interval: 'monthly', seats: 6, members: 6 },
+  { name: 'Riverbend Services', ageMonths: 4, plan: 'pro', interval: 'monthly', seats: 9, members: 8 },
+  { name: 'Stonegate Restoration', ageMonths: 3, plan: 'pro', interval: 'monthly', seats: 3, members: 3 },
   { name: 'Willow Creek Builders', ageMonths: 2, plan: 'free', interval: 'monthly', seats: 1, members: 2 },
-  { name: 'Copper Peak Mitigation', ageMonths: 1, plan: 'team', interval: 'monthly', seats: 5, members: 5 },
+  { name: 'Copper Peak Mitigation', ageMonths: 1, plan: 'pro', interval: 'monthly', seats: 5, members: 5 },
   { name: 'Foxglove Interiors', ageMonths: 1, plan: 'free', interval: 'monthly', seats: 1, members: 1 },
 ];
 
@@ -87,10 +87,7 @@ const FEATURE_WEIGHTS: Record<string, number> = {
 
 const PLAN_PRICES: Record<PlanCode, { monthly: number; annual: number; perSeat: boolean }> = {
   free: { monthly: 0, annual: 0, perSeat: false },
-  pro: { monthly: 2000, annual: 1700, perSeat: false },
-  max_5x: { monthly: 10000, annual: 10000, perSeat: false },
-  max_20x: { monthly: 20000, annual: 20000, perSeat: false },
-  team: { monthly: 3000, annual: 2500, perSeat: true },
+  pro: { monthly: 19999, annual: 19999, perSeat: true },
 };
 
 const MEMBER_ROLES = ['project_manager', 'field_technician', 'accountant', 'office_manager', 'sales'] as const;

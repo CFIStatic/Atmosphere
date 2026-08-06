@@ -1037,9 +1037,11 @@ Anthropic and OpenAI use.
   the penny is worthless — and never cents, because one cached-read token on the
   cheapest model costs 200 nanodollars and would round to zero, letting a
   customer read cache for free.
-- **Sell price = 2 × cost.** The markup lives in one column
+- **Sell price = 5 × cost.** The markup lives in one column
   (`private.model_costs.markup`). Change it there and the customer-facing rate
   card is regenerated; nothing else needs editing.
+- **Seats do not include usage.** The Pro seat is **$199.99 per user / month**.
+  Token usage is prepaid credits only.
 - **Margin never reaches the browser.** What we pay sits in `private.model_costs`,
   in a schema PostgREST does not expose. What we charge sits in
   `public.model_rate_card`, projected through the markup by
@@ -1047,30 +1049,23 @@ Anthropic and OpenAI use.
   read the cost basis.
 
 Rates carry the provider's own structure, so the ratio holds across every
-component: cache writes cost 1.25× the input rate (5-minute TTL) or 2× (1-hour),
-cached reads 0.1×, and batch requests are half price.
+component: cache writes, cache reads, and batch all take the same 5× markup on
+the underlying cost multipliers.
 
-| Model | We pay (in/out per MTok) | We charge |
-| ----- | ------------------------ | --------- |
-| Atmosphere Apex  | $10 / $50 | $20 / $100 |
-| Atmosphere Pro   | $5 / $25  | $10 / $50  |
-| Atmosphere Core  | $3 / $15  | $6 / $30   |
-| Atmosphere Lite  | $1 / $5   | $2 / $10   |
+| Model | We pay (in/out per MTok) | We charge (5×) |
+| ----- | ------------------------ | -------------- |
+| Atmosphere Apex  | $10 / $50 | $50 / $250 |
+| Atmosphere Pro   | $5 / $25  | $25 / $125 |
+| Atmosphere Core  | $3 / $15  | $15 / $75  |
+| Atmosphere Lite  | $1 / $5   | $5 / $25   |
 
 ### Plans
 
-`rate_multiplier` is what "5x" and "20x" mean — throughput relative to Pro.
-Included credits sit at 1.25× the plan price, so an allowance burned to the last
-credit still clears a **37.5% gross margin** at a 2× markup.
-
-| Plan | Price | Included credits | Throughput |
-| ---- | ----- | ---------------- | ---------- |
-| Free    | $0             | $3/mo          | 0.2× |
-| Pro     | $20 ($17 annual) | $25/mo       | 1×   |
-| Max 5x  | $100           | $125/mo        | 5×   |
-| Max 20x | $200           | $250/mo        | 20×  |
-| Team    | $30/seat ($25 annual) | $40/seat/mo | 5× |
-| Enterprise | custom      | custom         | —    |
+| Plan | Price | Included usage |
+| ---- | ----- | -------------- |
+| Free       | $0 | None — buy credits when ready |
+| Pro        | **$199.99 / user / month** | None |
+| Enterprise | Custom (25 seat min) | Custom |
 
 ### How a request gets billed
 

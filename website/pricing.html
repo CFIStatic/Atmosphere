@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Atmosphere pricing — 30 days to test, then one simple rate for the tokens your agents use. Prepaid credits, auto or manual reload, on all four platforms."  />
+  <meta name="description" content="Atmosphere pricing — $199.99 per user per month for the seat, plus prepaid usage credits billed at five times model cost." />
   <meta name="theme-color" content="#FBFAF7" />
   <title>Pricing · Atmosphere</title>
   <meta property="og:title" content="Pricing · Atmosphere" />
-  <meta property="og:description" content="Atmosphere pricing — 30 days to test, then one simple rate for the tokens your agents use. Prepaid credits, auto or manual reload, on all four platforms." />
+  <meta property="og:description" content="Atmosphere pricing — $199.99 per user per month for the seat, plus prepaid usage credits billed at five times model cost." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Atmosphere" />
   <meta property="og:image" content="/assets/og.png" />
@@ -15,7 +15,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect width='22' height='2.8' fill='%23A8A29E'/%3E%3Crect y='4.8' width='22' height='2.8' fill='%2378716C'/%3E%3Crect y='9.6' width='22' height='2.8' fill='%2357534E'/%3E%3Crect y='14.4' width='22' height='2.8' fill='%23292524'/%3E%3Crect y='19.2' width='22' height='2.8' fill='%23F2670C'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="assets/site.css" />
   <script>try{var t=localStorage.getItem('atm-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What happens after the 30 days?","acceptedAnswer":{"@type":"Answer","text":"You pick a plan and keep going, or you stop — nothing auto-upgrades in the dark. The work you did during the trial stays in your audit trail either way."}},{"@type":"Question","name":"Is the trial limited?","acceptedAnswer":{"@type":"Answer","text":"Not in features. You get the whole platform for thirty days, and usage is billed at the same flat rate as everyone else — so what you spend testing is what it would actually cost you."}},{"@type":"Question","name":"Why one flat rate?","acceptedAnswer":{"@type":"Answer","text":"So the math stays simple: two numbers and the token counts in your audit trail. And because a token is not the product — the rate covers the agents doing the work, the Verifier's second pass over it, and the record you can replay. None of that comes from a model provider."}},{"@type":"Question","name":"Do I have to buy all four platforms?","acceptedAnswer":{"@type":"Answer","text":"No. They are four products — take the one that hurts most today. They read the same record, so adding another later has nothing to import."}},{"@type":"Question","name":"What happens when the balance hits zero?","acceptedAnswer":{"@type":"Answer","text":"New runs pause — Atmosphere never spends money you haven't loaded. Turn on auto-reload and the balance tops itself up before that point; keep it manual and one click resumes work. Either way, nothing already in your record is lost."}},{"@type":"Question","name":"Where do I choose auto or manual reload?","acceptedAnswer":{"@type":"Answer","text":"Settings &rarr; Billing. Auto-reload takes a threshold and an amount; leaving it off means every purchase is one you made yourself. You can also set a monthly spend cap that neither mode will cross."}},{"@type":"Question","name":"What do the throughput multipliers mean?","acceptedAnswer":{"@type":"Answer","text":"They are ceilings on how much work you can push through at once, relative to Pro. Max 5× and Max 20× exist for people running agents continuously rather than a few times a day."}},{"@type":"Question","name":"Does Atmosphere train on our data?","acceptedAnswer":{"@type":"Answer","text":"The learning layer scores your organization's own runs and improves how work is routed for you. Your data stays inside your organization, behind Row-Level Security — another org's agents cannot see it, at the database layer."}}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What does the $199.99 seat include?","acceptedAnswer":{"@type":"Answer","text":"Platform access for that user. It does not include usage credits — you load those separately before agents run."}},{"@type":"Question","name":"How is usage priced?","acceptedAnswer":{"@type":"Answer","text":"Each model has a published sell rate equal to five times what Atmosphere pays per million tokens. Agents draw prepaid credits at those rates."}},{"@type":"Question","name":"What happens when the balance hits zero?","acceptedAnswer":{"@type":"Answer","text":"New runs pause. Atmosphere never spends money you have not loaded. Auto-reload or a manual top-up resumes work; nothing already in your record is lost."}},{"@type":"Question","name":"Do I have to buy all four platforms?","acceptedAnswer":{"@type":"Answer","text":"No. Take the product you need today. They share one record, so adding another later has nothing to import."}}]}</script>
 </head>
 <body>
 
@@ -97,115 +97,56 @@
 <header class="page-hero">
   <div class="wrap">
     <div class="eyebrow mono">Pricing</div>
-    <h1>Thirty days to test. Then you pay for what it uses.</h1>
+    <h1>$199.99 per user. Usage bought separately.</h1>
     <p class="lede">
-      Sales, Operations, Field, and Manager are bought separately and priced identically —
-      a seat on the platform, plus usage credits you buy up front and your agents draw down at
-      one flat rate. Nothing runs on an unpaid balance, nothing expires unused, and nothing is
-      priced differently because of which model or which platform did the work.
+      A seat is platform access for one person. Token usage is prepaid credits, billed at
+      five times what Atmosphere pays the model — published per model below. Nothing runs
+      on an unpaid balance.
     </p>
   </div>
 </header>
 
 <nav class="subnav mono" aria-label="On this page">
   <div class="subnav-inner">
-    <a href="#plans">PLANS</a>
-    <a href="#usage">USAGE</a>
-    <a href="#rates">THE RATE</a>
-    <a href="#credits">CREDITS &amp; RELOAD</a>
+    <a href="#seat">SEAT</a>
+    <a href="#rates">USAGE RATES</a>
+    <a href="#credits">CREDITS</a>
     <a href="#faq">FAQ</a>
   </div>
 </nav>
 
-<section class="section" id="plans">
+<section class="section" id="seat">
   <div class="wrap">
     <div class="prod-strip">
-      <span class="prod-lbl mono">SAME PLANS ON</span>
+      <span class="prod-lbl mono">SAME PRICE ON</span>
       <a href="sales.html">Sales</a>
       <a href="operations.html">Operations</a>
       <a href="field.html">Field</a>
       <a href="manager.html">Manager</a>
     </div>
 
-    <div class="billing-toggle">
-      <div class="seg" id="billing-seg" role="group" aria-label="Billing period">
-        <button type="button" class="on" data-period="monthly">Monthly</button>
-        <button type="button" data-period="annual">Annual <span class="save">save up to 17%</span></button>
-      </div>
-    </div>
-
-    <div class="plans plans-6">
-      <div class="plan">
-        <span class="flag mono">30 DAYS</span>
-        <div class="plan-name mono">Test</div>
-        <div class="price"><span class="amt">$0</span></div>
-        <p class="per">for 30 days · then pick a plan</p>
-        <p class="plan-desc">Thirty days to put it on real jobs</p>
-        <ul class="checks">
-          <li>Full platform, no feature held back</li>
-          <li>Usage billed at the same flat rate</li>
-          <li>1 seat</li>
-          <li>Every run in the audit trail</li>
-        </ul>
-        <a class="btn-outline plan-cta" href="signup.html">Start your 30 days</a>
-      </div>
+    <div class="plans" style="grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); max-width: 720px;">
       <div class="plan plan-featured">
-        <span class="flag mono">MOST PEOPLE</span>
+        <span class="flag mono">PER USER</span>
         <div class="plan-name mono">Pro</div>
-        <div class="price"><span class="amt" data-monthly="$20" data-annual="$17">$20</span></div>
-        <p class="per">per person / month</p>
-        <p class="plan-desc">For individual estimators and PMs</p>
+        <div class="price"><span class="amt">$199.99</span></div>
+        <p class="per">per user / month</p>
+        <p class="plan-desc">Full platform access. No usage included.</p>
         <ul class="checks">
-          <li>Priority model access</li>
-          <li>Usage analytics</li>
+          <li>One seat = one user</li>
+          <li>Audit trail and Verifier included</li>
+          <li>Usage credits purchased separately</li>
           <li>Email support</li>
         </ul>
-        <a class="btn plan-cta" href="signup.html">Choose Pro</a>
-      </div>
-      <div class="plan">
-        <div class="plan-name mono">Max 5x</div>
-        <div class="price"><span class="amt" data-monthly="$100" data-annual="$100">$100</span></div>
-        <p class="per">per person / month</p>
-        <p class="plan-desc">Heavier daily workloads</p>
-        <ul class="checks">
-          <li>5× Pro throughput</li>
-          <li>Batch processing</li>
-          <li>Priority support</li>
-        </ul>
-        <a class="btn-outline plan-cta" href="signup.html">Choose Max 5x</a>
-      </div>
-      <div class="plan">
-        <div class="plan-name mono">Max 20x</div>
-        <div class="price"><span class="amt" data-monthly="$200" data-annual="$200">$200</span></div>
-        <p class="per">per person / month</p>
-        <p class="plan-desc">Power users running all day</p>
-        <ul class="checks">
-          <li>20× Pro throughput</li>
-          <li>Batch processing</li>
-          <li>Priority support</li>
-        </ul>
-        <a class="btn-outline plan-cta" href="signup.html">Choose Max 20x</a>
-      </div>
-      <div class="plan">
-        <div class="plan-name mono">Team</div>
-        <div class="price"><span class="amt" data-monthly="$30" data-annual="$25">$30</span></div>
-        <p class="per">per seat / month · 5 seats minimum</p>
-        <p class="plan-desc">Shared billing across the crew</p>
-        <ul class="checks">
-          <li>One pooled bill for the organization</li>
-          <li>Central spend limits</li>
-          <li>Role-based billing access</li>
-          <li>5× Pro throughput</li>
-        </ul>
-        <a class="btn-outline plan-cta" href="signup.html">Choose Team</a>
+        <a class="btn plan-cta" href="signup.html">Get started</a>
       </div>
       <div class="plan">
         <div class="plan-name mono">Enterprise</div>
         <div class="price"><span class="amt">Custom</span></div>
-        <p class="per">annual · 25 seats minimum</p>
-        <p class="plan-desc">Custom volume and terms</p>
+        <p class="per">volume · 25 seats minimum</p>
+        <p class="plan-desc">Custom seat and usage terms</p>
         <ul class="checks">
-          <li>Volume rates on usage</li>
+          <li>Volume pricing</li>
           <li>SSO and audit logs</li>
           <li>Dedicated support</li>
         </ul>
@@ -213,99 +154,61 @@
       </div>
     </div>
     <p class="plans-note">
-      Every plan includes the audit trail and the Verifier — proof is never an upgrade. The
-      seat price buys access and throughput; token usage is billed separately on every plan,
-      at the flat rate below. Annual billing is shown as the equivalent monthly rate.
+      The seat does not include token usage. Load prepaid credits before agents run;
+      a quiet month costs seats only.
     </p>
-  </div>
-</section>
-
-<section class="section" id="usage">
-  <div class="wrap">
-    <div class="section-head">
-      <div class="eyebrow mono">Usage</div>
-      <h2>You pay for tokens, and only for tokens</h2>
-      <p>
-        No bundled allowance, no postpaid tab. You load credits, agents draw them down
-        as they work, and a quiet week costs you the seat and nothing more — unused
-        credits just wait.
-      </p>
-    </div>
-    <div class="sec-grid">
-      <div class="sec-card">
-        <span class="kbd mono">prepaid</span>
-        <h3>Credits first, tokens second</h3>
-        <p>You buy usage credits before agents spend them. One credit is one dollar of usage at the flat rate — so there is never a surprise bill at month end, on either side of the table.</p>
-      </div>
-      <div class="sec-card">
-        <span class="kbd mono">metered</span>
-        <h3>Counted by the provider, not by us</h3>
-        <p>Every token drawn from your balance is counted from the model provider's own response, never from the browser — and lands in an append-only ledger you can read by run, agent, and platform.</p>
-      </div>
-      <div class="sec-card">
-        <span class="kbd mono">zero</span>
-        <h3>At zero, work pauses — never runs a tab</h3>
-        <p>An empty balance pauses new runs rather than billing past it. Auto-reload tops you up before that ever happens, or reload manually if you'd rather approve every dollar.</p>
-      </div>
-    </div>
   </div>
 </section>
 
 <section class="section" id="rates">
   <div class="wrap">
     <div class="section-head">
-      <div class="eyebrow mono">The rate</div>
-      <h2>One simple rate, whatever the job takes</h2>
+      <div class="eyebrow mono">Usage rates</div>
+      <h2>Five times model cost, shown plainly</h2>
       <p>
-        Every token your agents spend is billed at the same rate — whether the job needed
-        deep reasoning or a quick read. No tiers to compare, no menu of models to price,
-        no math beyond the two numbers below.
+        Atmosphere pays the rates in the “We pay” column. You are charged five times that
+        amount. One credit is one dollar of sell-side usage.
       </p>
     </div>
 
-    <div class="rate-hero">
-      <div class="rate-cell">
-        <div class="rate-lbl mono">INPUT</div>
-        <div class="rate-big mono">$30</div>
-        <div class="rate-unit mono">PER MILLION TOKENS</div>
+    <div class="packs" style="margin-top: 1.5rem;">
+      <div class="pack-head mono">
+        <span>MODEL</span><span>WE PAY (IN / OUT)</span><span>YOU PAY (IN / OUT)</span>
       </div>
-      <div class="rate-cell">
-        <div class="rate-lbl mono">OUTPUT</div>
-        <div class="rate-big mono">$150</div>
-        <div class="rate-unit mono">PER MILLION TOKENS</div>
+      <div class="pack-row">
+        <span class="pack-price mono">Apex</span>
+        <span class="pack-credits">$10 / $50 per MTok</span>
+        <span class="pack-bonus mono">$50 / $250 per MTok</span>
       </div>
-      <div class="rate-basis">
-        <div class="tag mono">What it covers</div>
-        <p>
-          Everything behind a run — the frontier models doing the work, the Verifier's
-          second pass, and the record you can replay. These two numbers are the whole
-          price list.
-        </p>
+      <div class="pack-row">
+        <span class="pack-price mono">Pro</span>
+        <span class="pack-credits">$5 / $25 per MTok</span>
+        <span class="pack-bonus mono">$25 / $125 per MTok</span>
+      </div>
+      <div class="pack-row">
+        <span class="pack-price mono">Core</span>
+        <span class="pack-credits">$3 / $15 per MTok</span>
+        <span class="pack-bonus mono">$15 / $75 per MTok</span>
+      </div>
+      <div class="pack-row">
+        <span class="pack-price mono">Lite</span>
+        <span class="pack-credits">$1 / $5 per MTok</span>
+        <span class="pack-bonus mono">$5 / $25 per MTok</span>
       </div>
     </div>
 
-    <div class="quiet-row">
+    <div class="quiet-row" style="margin-top: 2rem;">
       <div class="quiet-item">
-        <h3>You can estimate the bill yourself</h3>
-        <p>
-          Two numbers and the token counts in your audit trail. No model mix to work out,
-          no per-agent table to reconcile at month end.
-        </p>
+        <h3>Prepaid only</h3>
+        <p>Buy credits first. Agents draw them down from the provider’s own token counts — never from the browser.</p>
       </div>
       <div class="quiet-item">
-        <h3>You always get our best</h3>
-        <p>
-          The rate is the same whichever model does the work, so every job simply goes to
-          whatever handles it best. There is never a reason for your work to get anything
-          less.
-        </p>
+        <h3>At zero, work pauses</h3>
+        <p>No postpaid tab. Auto-reload or a manual top-up resumes; nothing in your record is lost while paused.</p>
       </div>
       <div class="quiet-item">
-        <h3>Better routing shows up as better work</h3>
-        <p>
-          The learning layer improves which model handles what, run over run. On a flat
-          rate that lands in the estimates you send, not in a fluctuating invoice.
-        </p>
+        <h3>Cache and batch</h3>
+        <p>Cache writes, cache reads, and batch follow the same 5× markup on the underlying cost multipliers.</p>
       </div>
     </div>
   </div>
@@ -314,11 +217,11 @@
 <section class="section" id="credits">
   <div class="wrap">
     <div class="section-head">
-      <div class="eyebrow mono">Credits &amp; reload</div>
-      <h2>Load the balance your way</h2>
+      <div class="eyebrow mono">Credits</div>
+      <h2>Load usage when you need it</h2>
       <p>
-        Buy credits in packs — larger packs carry a volume bonus — and choose how the
-        balance stays topped up. Both controls live in Settings &rarr; Billing.
+        Packs from $10 to $1,000. Larger packs include a volume bonus. Manage auto-reload
+        and spend caps in Settings → Billing.
       </p>
     </div>
 
@@ -334,32 +237,6 @@
       <div class="pack-row"><span class="pack-price mono">$500</span><span class="pack-credits">$525 of usage</span><span class="pack-bonus mono">+$25</span></div>
       <div class="pack-row"><span class="pack-price mono">$1,000</span><span class="pack-credits">$1,075 of usage</span><span class="pack-bonus mono">+$75</span></div>
     </div>
-
-    <div class="quiet-row">
-      <div class="quiet-item">
-        <h3>Auto-reload</h3>
-        <p>
-          Set a threshold and an amount, and when the balance dips below the line a
-          reload buys itself — a Friday-afternoon estimate never stops halfway. Defaults:
-          reload $25 when the balance falls under $5.
-        </p>
-      </div>
-      <div class="quiet-item">
-        <h3>Manual reload</h3>
-        <p>
-          Leave auto-reload off and every dollar is one you approved. Work pauses at
-          zero and resumes the moment you top up — nothing in your record is lost while
-          paused.
-        </p>
-      </div>
-      <div class="quiet-item">
-        <h3>A spend cap, either way</h3>
-        <p>
-          Set a monthly spend limit on the organization and no reload — automatic or
-          manual — will carry usage past it.
-        </p>
-      </div>
-    </div>
   </div>
 </section>
 
@@ -371,66 +248,37 @@
     </div>
     <div class="faq">
       <details>
-        <summary>What happens after the 30 days?</summary>
+        <summary>What does the $199.99 seat include?</summary>
         <p>
-          You pick a plan and keep going, or you stop — nothing auto-upgrades in the dark.
-          The work you did during the trial stays in your audit trail either way.
+          Platform access for that user — not usage. Load prepaid credits before agents run.
         </p>
       </details>
       <details>
-        <summary>Is the trial limited?</summary>
+        <summary>How is usage priced?</summary>
         <p>
-          Not in features. You get the whole platform for thirty days, and usage is billed at
-          the same flat rate as everyone else — so what you spend testing is what it would
-          actually cost you.
-        </p>
-      </details>
-      <details>
-        <summary>Why one flat rate?</summary>
-        <p>
-          So the math stays simple: two numbers and the token counts in your audit trail.
-          And because a token is not the product — the rate covers the agents doing the
-          work, the Verifier's second pass over it, and the record you can replay. None of
-          that comes from a model provider.
-        </p>
-      </details>
-      <details>
-        <summary>Do I have to buy all four platforms?</summary>
-        <p>
-          No. They are four products — take the one that hurts most today. They read the same
-          record, so adding another later has nothing to import.
+          Five times what Atmosphere pays per million tokens for each model. The table above
+          is the full sell-side rate card.
         </p>
       </details>
       <details>
         <summary>What happens when the balance hits zero?</summary>
         <p>
-          New runs pause — Atmosphere never spends money you haven't loaded. Turn on
-          auto-reload and the balance tops itself up before that point; keep it manual
-          and one click resumes work. Either way, nothing already in your record is lost.
+          New runs pause. Auto-reload or a manual top-up resumes work; nothing already in
+          your record is lost.
         </p>
       </details>
       <details>
-        <summary>Where do I choose auto or manual reload?</summary>
+        <summary>Do I have to buy all four platforms?</summary>
         <p>
-          Settings &rarr; Billing. Auto-reload takes a threshold and an amount; leaving
-          it off means every purchase is one you made yourself. You can also set a
-          monthly spend cap that neither mode will cross.
-        </p>
-      </details>
-      <details>
-        <summary>What do the throughput multipliers mean?</summary>
-        <p>
-          They are ceilings on how much work you can push through at once, relative to Pro.
-          Max 5× and Max 20× exist for people running agents continuously rather than a few
-          times a day.
+          No. Take the product you need today. They share one record, so adding another
+          later has nothing to import.
         </p>
       </details>
       <details>
         <summary>Does Atmosphere train on our data?</summary>
         <p>
-          The learning layer scores your organization's own runs and improves how work is
-          routed for you. Your data stays inside your organization, behind Row-Level Security
-          — another org's agents cannot see it, at the database layer.
+          The learning layer scores your organization’s own runs and improves routing for
+          you. Your data stays inside your organization, behind Row-Level Security.
         </p>
       </details>
     </div>
@@ -441,12 +289,12 @@
   <div class="wrap">
     <div class="cta-band">
       <div>
-        <h2>Take thirty days on a real job</h2>
-        <p>Not a sandbox — your scan, your claim, your carrier. That is the only test that tells you anything.</p>
+        <h2>Put it on a real job</h2>
+        <p>Your scan, your claim, your carrier — priced per user, with usage you load yourself.</p>
       </div>
       <div class="cta-actions">
-        <a class="btn btn-lg" href="signup.html">Start your 30 days</a>
-        <a class="btn-quiet" href="contact.html">Rather ask a person first?&nbsp;→</a>
+        <a class="btn btn-lg" href="signup.html">Get started</a>
+        <a class="btn-quiet" href="contact.html">Talk to us&nbsp;→</a>
       </div>
     </div>
   </div>

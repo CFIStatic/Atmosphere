@@ -4625,7 +4625,7 @@ export interface UsageDay {
   priceNanos: number;
 }
 
-export const PLAN_ORDER: PlanCode[] = ['free', 'pro', 'max_5x', 'max_20x', 'team', 'enterprise'];
+export const PLAN_ORDER: PlanCode[] = ['free', 'pro', 'enterprise'];
 
 export const LEDGER_LABELS: Record<LedgerEntry['entryType'], string> = {
   plan_grant: 'Plan credits',
