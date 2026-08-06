@@ -31,6 +31,8 @@ import { correctSceneRoom } from './scenes/group.js';
 import { linkOutcomeSchema, roomCorrectionSchema } from './schemas.js';
 import { monthSpendUsd } from './cost/tracker.js';
 import { linkOutcome } from './timeline/graph.js';
+import { createDatasetExampleFromResult } from './dataset/examples.js';
+import { exportDatasetVersionJsonl } from './dataset/exportJsonl.js';
 
 export const verificationRouter = Router();
 
@@ -334,6 +336,91 @@ verificationRouter.get('/ontology', async (req, res, next) => {
       equipment: equipment.data ?? [],
       damageTypes: damage.data ?? [],
     });
+  } catch (err) {
+    next(toHttp(err));
+  }
+});
+
+const rightsBodySchema = z.object({
+  category: z.enum([
+    'operational_only',
+    'internal_improvement',
+    'evaluation_allowed',
+    'training_allowed',
+    'restricted',
+    'pending_review',
+    'revoked',
+  ]),
+  operationalProcessing: z.boolean().optional(),
+  internalImprovement: z.boolean().optional(),
+  evaluationAllowed: z.boolean().optional(),
+  trainingAllowed: z.boolean().optional(),
+  policyVersion: z.string().optional(),
+});
+
+/** POST /api/verification/results/:resultId/dataset-example */
+verificationRouter.post('/results/:resultId/dataset-example', async (req, res, next) => {
+  try {
+    const { orgId, supabase } = orgReq(req);
+    const resultId = z.string().uuid().parse(req.params.resultId);
+    const rights = rightsBodySchema.parse(req.body?.rights ?? req.body);
+    const purpose = z
+      .enum(['training', 'evaluation', 'internal_improvement'])
+      .optional()
+      .parse(req.body?.purpose);
+    const out = await createDatasetExampleFromResult(supabase, {
+      orgId,
+      resultId,
+      rights,
+      purpose,
+      datasetName: req.body?.datasetName,
+      datasetVersion: req.body?.datasetVersion,
+    });
+    if (!out.eligible) {
+      res.status(422).json({ eligible: false, reasons: out.reasons });
+      return;
+    }
+    res.status(201).json(out);
+  } catch (err) {
+    next(toHttp(err));
+  }
+});
+
+/** POST /api/verification/datasets/versions/:versionId/export */
+verificationRouter.post('/datasets/versions/:versionId/export', async (req, res, next) => {
+  try {
+    const { orgId, supabase } = orgReq(req);
+    const versionId = z.string().uuid().parse(req.params.versionId);
+    const splitFilter = req.body?.split
+      ? z
+          .enum(['train', 'validation', 'test', 'benchmark', 'holdout', 'private_evaluation'])
+          .parse(req.body.split)
+      : null;
+    const result = await exportDatasetVersionJsonl(supabase, {
+      orgId,
+      datasetVersionId: versionId,
+      splitFilter,
+      writeLocal: process.env.NODE_ENV !== 'production',
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    next(toHttp(err));
+  }
+});
+
+/** GET /api/verification/datasets/versions/:versionId/examples */
+verificationRouter.get('/datasets/versions/:versionId/examples', async (req, res, next) => {
+  try {
+    const { orgId, supabase } = orgReq(req);
+    const versionId = z.string().uuid().parse(req.params.versionId);
+    const { data, error } = await supabase
+      .from('dataset_examples')
+      .select('id, split, task_type, quality_score, privacy_status, canonical, created_at')
+      .eq('org_id', orgId)
+      .eq('dataset_version_id', versionId)
+      .order('created_at', { ascending: true });
+    if (error) throw new Error(error.message);
+    res.json({ examples: data ?? [] });
   } catch (err) {
     next(toHttp(err));
   }

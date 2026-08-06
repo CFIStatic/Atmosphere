@@ -67,3 +67,14 @@ export {
 export { linkOutcome } from './timeline/graph.js';
 export { parseModelJson, frameObservationSchema } from './schemas.js';
 export { VERIFIER_PROMPT_KEY, VERIFIER_PROMPT_VERSION, getPrompt } from './prompts/registry.js';
+export {
+  evaluateDatasetEligibility,
+  type RightsManifestInput,
+} from './dataset/eligibility.js';
+export { scanTextForPrivacy, privacyStatusFromFindings } from './dataset/privacy.js';
+export { assignSplit } from './dataset/splits.js';
+export {
+  createDatasetExampleFromResult,
+  canonicalDatasetExampleSchema,
+} from './dataset/examples.js';
+export { exportDatasetVersionJsonl, assertNoSplitLeakage } from './dataset/exportJsonl.js';

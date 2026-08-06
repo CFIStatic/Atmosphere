@@ -39,6 +39,11 @@ import {
   createGenerateVerifiedEventsHandler,
   createUpdateProjectGraphHandler,
 } from './timeline/graph.js';
+import {
+  createPrivacyScanHandler,
+  createEvaluateDatasetEligibilityHandler,
+  createDatasetExamplesHandler,
+} from './dataset/handlers.js';
 import { verificationConfig } from './config.js';
 import type { PipelineContext } from './pipeline/orchestrator.js';
 
@@ -114,6 +119,9 @@ export function createVerificationOrchestrator(opts?: {
       generate_verified_events: createGenerateVerifiedEventsHandler(),
       update_project_graph: createUpdateProjectGraphHandler(),
       calculate_confidence: createCalculateConfidenceHandler(),
+      privacy_scan: createPrivacyScanHandler(),
+      evaluate_dataset_eligibility: createEvaluateDatasetEligibilityHandler(),
+      create_dataset_examples: createDatasetExamplesHandler(),
       finalize_report: createFinalizeReportHandler(),
     },
   });

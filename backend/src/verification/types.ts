@@ -33,6 +33,9 @@ export const PROCESSING_STAGES = [
   'generate_verified_events',
   'update_project_graph',
   'calculate_confidence',
+  'privacy_scan',
+  'evaluate_dataset_eligibility',
+  'create_dataset_examples',
   'finalize_report',
 ] as const;
 export type ProcessingStage = (typeof PROCESSING_STAGES)[number];
