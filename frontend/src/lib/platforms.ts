@@ -279,11 +279,13 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
 export const PLATFORM_IDS: PlatformId[] = ['sales', 'operations', 'field', 'manager'];
 
 /**
- * What the switcher offers. Sales and Manager are later products: fully
+ * What the switcher offers. The app IS the Field capture app: the Verifier
+ * lives as its own property (the portal, with its own tab and its own
+ * sidebar), and Sales, Operations and Manager are later products — fully
  * wired, reachable by URL, and deliberately absent from every menu until
  * they are current again.
  */
-export const VISIBLE_PLATFORM_IDS: PlatformId[] = ['operations', 'field'];
+export const VISIBLE_PLATFORM_IDS: PlatformId[] = ['field'];
 
 export const PLATFORM_HOME: Record<PlatformId, string> = {
   sales: '/sales',
