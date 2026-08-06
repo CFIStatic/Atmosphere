@@ -137,6 +137,14 @@ export const config = {
     encryptionKey: process.env.SYMBILITY_ENC_KEY ?? process.env.XACTIMATE_ENC_KEY ?? '',
   },
 
+  crmSync: {
+    // Job files from the customer's own CRM. 'mock' by default so the whole
+    // connect-and-sync pipeline is exercisable without vendor credentials;
+    // 'api' turns on the per-vendor clients once a deployment configures
+    // them. Which driver runs is a deployment decision, never per-request.
+    driver: (process.env.CRM_SYNC_DRIVER === 'api' ? 'api' : 'mock') as 'mock' | 'api',
+  },
+
   sla: {
     // Where carrier program agreements come from. 'manual' is the default and
     // the only source guaranteed to match what the franchise actually signed —

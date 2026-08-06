@@ -850,6 +850,60 @@ export interface EvidenceShare {
   state: 'live' | 'expired' | 'revoked';
 }
 
+/* ---- CRM job sync -------------------------------------------------------- */
+
+export type CrmSyncSystem = 'jobnimbus' | 'acculynx' | 'dash' | 'servicetitan';
+
+export interface CrmSyncSummary {
+  created: number;
+  updated: number;
+  conflicts: number;
+  archived: number;
+  unchanged: number;
+}
+
+export interface CrmSyncSystemStatus {
+  system: CrmSyncSystem;
+  label: string;
+  connected: boolean;
+  accountLabel: string | null;
+  connectedAt: string | null;
+  lastSyncAt: string | null;
+  lastSummary: CrmSyncSummary | null;
+}
+
+export interface CrmSyncStatus {
+  driver: 'mock' | 'api';
+  conflictsPending: number;
+  systems: CrmSyncSystemStatus[];
+}
+
+/** A change sync refused to make on its own — an address move under evidence. */
+export interface CrmSyncConflict {
+  linkId: string;
+  system: CrmSyncSystem;
+  systemLabel: string;
+  externalId: string;
+  jobId: string;
+  jobTitle: string | null;
+  jobNumber: number | null;
+  kind: string;
+  incoming: {
+    title: string;
+    claimNumber: string | null;
+    address: {
+      line1: string;
+      line2?: string | null;
+      city: string | null;
+      region: string | null;
+      postalCode: string | null;
+      lat: number | null;
+      lon: number | null;
+    } | null;
+  };
+  seenAt: string;
+}
+
 export interface CreateEvidenceShareResult {
   share: {
     id: string;
@@ -2473,6 +2527,36 @@ export const api = {
 
   revokeEvidenceShare: (id: string) =>
     request<{ ok: boolean }>(`/api/evidence-portal/shares/${id}/revoke`, { method: 'POST' }),
+
+  // ---- CRM job sync ----
+  crmSyncStatus: () => request<CrmSyncStatus>('/api/crm-sync/status', { method: 'GET' }),
+
+  connectCrmSync: (input: { system: CrmSyncSystem; apiKey: string }) =>
+    request<{ status: string; system: CrmSyncSystem; accountLabel: string }>(
+      '/api/crm-sync/connect',
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+
+  disconnectCrmSync: (system: CrmSyncSystem) =>
+    request<{ ok: boolean }>('/api/crm-sync/disconnect', {
+      method: 'POST',
+      body: JSON.stringify({ system }),
+    }),
+
+  runCrmSync: (system: CrmSyncSystem) =>
+    request<{ summary: CrmSyncSummary }>('/api/crm-sync/sync', {
+      method: 'POST',
+      body: JSON.stringify({ system }),
+    }),
+
+  crmSyncConflicts: () =>
+    request<{ conflicts: CrmSyncConflict[] }>('/api/crm-sync/conflicts', { method: 'GET' }),
+
+  resolveCrmSyncConflict: (linkId: string, decision: 'accept_new_address' | 'keep_current') =>
+    request<{ ok: boolean }>(`/api/crm-sync/conflicts/${linkId}`, {
+      method: 'POST',
+      body: JSON.stringify({ decision }),
+    }),
 
   liveObserve: (
     jobId: string,

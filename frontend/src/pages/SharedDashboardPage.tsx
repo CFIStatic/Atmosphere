@@ -151,7 +151,7 @@ export function SharedDashboardPage() {
         <div className="mt-6">
           <EmptyState
             title="No shared records yet"
-            hint="Start one on a job with subs on it. Publish the facts, write down what is out of scope, and send each sub their link."
+            hint="Start one on a job with subs on it — or connect your CRM in Settings → Connected apps, and every job you already run becomes a job file here without retyping a thing."
           />
         </div>
       ) : (

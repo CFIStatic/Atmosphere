@@ -87,13 +87,16 @@ async function siteLocation(supabase: any, orgId: string, jobId: string) {
     .maybeSingle();
 
   if ((job as any)?.property_id) {
+    // The columns are latitude/longitude — selecting the wrong names here
+    // silently returned null and left every on-site check "unknown", which
+    // blocks payment honestly but wrongly. The names are load-bearing.
     const { data: property } = await supabase
       .from('crm_properties')
-      .select('lat, lon')
+      .select('latitude, longitude')
       .eq('id', (job as any).property_id)
       .maybeSingle();
-    const lat = (property as any)?.lat;
-    const lon = (property as any)?.lon;
+    const lat = (property as any)?.latitude;
+    const lon = (property as any)?.longitude;
     if (lat !== null && lat !== undefined && lon !== null && lon !== undefined) {
       return { lat: Number(lat), lon: Number(lon) };
     }

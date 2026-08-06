@@ -18,6 +18,9 @@ import {
   WORK_TYPE_LABELS,
   type ContractorType,
   type CrmConnections,
+  type CrmSyncConflict,
+  type CrmSyncStatus,
+  type CrmSyncSystem,
   type MailStatus,
   type Diagnosis,
   type Integration,
@@ -1371,6 +1374,251 @@ function TestLookupCard() {
  * like a person. It is a real risk they are taking deliberately, so the card
  * says that in those words rather than dressing it as "connecting".
  */
+/**
+ * Job files from the CRM the customer already runs.
+ *
+ * Most companies that buy work verification keep their jobs somewhere else,
+ * and the job file should exist before the first video without anybody
+ * retyping an address. The card states the deal plainly: the CRM supplies
+ * identity — titles, claim numbers, addresses — and nothing else. Evidence,
+ * scope and custody never sync.
+ *
+ * The conflicts block is the one human decision sync refuses to make on its
+ * own: the CRM moved an address on a job that already holds footage. The
+ * geofence every clip was measured against hangs off that address, so the
+ * change waits here for a person, with both choices spelled out.
+ */
+function JobSourceCard() {
+  const [status, setStatus] = useState<CrmSyncStatus | null>(null);
+  const [conflicts, setConflicts] = useState<CrmSyncConflict[]>([]);
+  const [system, setSystem] = useState<CrmSyncSystem>('jobnimbus');
+  const [apiKey, setApiKey] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const [s, c] = await Promise.all([api.crmSyncStatus(), api.crmSyncConflicts()]);
+      setStatus(s);
+      setConflicts(c.conflicts);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load the job source.');
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function connect(event: FormEvent) {
+    event.preventDefault();
+    setBusy('connect');
+    setError(null);
+    setNote(null);
+    try {
+      const res = await api.connectCrmSync({ system, apiKey });
+      setNote(`Connected — ${res.accountLabel}. Run the first sync to create your job files.`);
+      setApiKey('');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not connect.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function sync(target: CrmSyncSystem) {
+    setBusy(`sync-${target}`);
+    setError(null);
+    setNote(null);
+    try {
+      const { summary } = await api.runCrmSync(target);
+      const parts = [
+        summary.created > 0 && `${summary.created} job file${summary.created === 1 ? '' : 's'} created`,
+        summary.updated > 0 && `${summary.updated} updated`,
+        summary.conflicts > 0 && `${summary.conflicts} waiting on you`,
+        summary.archived > 0 && `${summary.archived} archived`,
+        summary.unchanged > 0 && `${summary.unchanged} unchanged`,
+      ].filter(Boolean);
+      setNote(`Synced. ${parts.length ? parts.join(' · ') : 'Nothing to do.'}`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sync failed.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function disconnect(target: CrmSyncSystem) {
+    setBusy(`disconnect-${target}`);
+    setError(null);
+    try {
+      await api.disconnectCrmSync(target);
+      setNote('Disconnected. Job files already created stay yours — only the connection is gone.');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not disconnect.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function resolve(conflict: CrmSyncConflict, decision: 'accept_new_address' | 'keep_current') {
+    setBusy(`resolve-${conflict.linkId}`);
+    setError(null);
+    try {
+      await api.resolveCrmSyncConflict(conflict.linkId, decision);
+      setNote(
+        decision === 'accept_new_address'
+          ? 'Address updated. Clips already on file keep the verdicts they were checked with — new footage measures against the new address.'
+          : "Kept the current address. The CRM's version was dismissed.",
+      );
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not record that decision.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const connected = (status?.systems ?? []).filter((s) => s.connected);
+  const connectable = (status?.systems ?? []).filter((s) => !s.connected);
+
+  // The select renders only unconnected systems, so after a connect the
+  // controlled value can name a system that has no option — the browser
+  // would then SHOW the first option while the form POSTs the hidden value,
+  // silently overwriting the connection that just succeeded.
+  useEffect(() => {
+    if (connectable.length && !connectable.some((s) => s.system === system)) {
+      setSystem(connectable[0].system);
+    }
+  }, [connectable, system]);
+
+  return (
+    <Card
+      title="Job files from your CRM"
+      description="Connect the CRM you already run and every job becomes a job file before the first video — titles, claim numbers and addresses sync in, read-only. Evidence, scope and custody never sync out."
+    >
+      {!status ? (
+        <p className="text-sm text-ink-600">Loading…</p>
+      ) : (
+        <div className="space-y-4">
+          {connected.map((row) => (
+            <div key={row.system} className="rounded-lg glass-card p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-ink-900">{row.label}</h3>
+                  <p className="mt-1 text-xs text-success-600">
+                    Connected{row.accountLabel ? ` — ${row.accountLabel}` : ''}
+                  </p>
+                  <p className="mt-0.5 text-xs text-ink-500">
+                    {row.lastSyncAt
+                      ? `Last sync ${new Date(row.lastSyncAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}${
+                          row.lastSummary
+                            ? ` · ${row.lastSummary.created} created, ${row.lastSummary.updated} updated, ${row.lastSummary.unchanged} unchanged`
+                            : ''
+                        }`
+                      : 'Never synced — run the first one to create your job files.'}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <PrimaryButton onClick={() => void sync(row.system)} busy={busy === `sync-${row.system}`}>
+                    Sync now
+                  </PrimaryButton>
+                  <button
+                    onClick={() => void disconnect(row.system)}
+                    disabled={busy === `disconnect-${row.system}`}
+                    className="rounded-lg border border-line px-3 py-2 text-xs font-medium text-ink-700 transition hover:bg-paper-200/50 disabled:opacity-50"
+                  >
+                    Disconnect
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {connectable.length > 0 && (
+            <form onSubmit={connect} className="flex flex-wrap items-center gap-2">
+              <select
+                value={system}
+                onChange={(e) => setSystem(e.target.value as CrmSyncSystem)}
+                className="rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+              >
+                {connectable.map((s) => (
+                  <option key={s.system} value={s.system}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                required
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="API key"
+                className="min-w-[12rem] flex-1 rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+              />
+              <PrimaryButton busy={busy === 'connect'}>Connect</PrimaryButton>
+            </form>
+          )}
+
+          {conflicts.length > 0 && (
+            <div className="rounded-lg border border-caution-200 bg-caution-50/60 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-caution-600">
+                Waiting on you
+              </p>
+              <ul className="mt-2 space-y-3">
+                {conflicts.map((conflict) => (
+                  <li key={conflict.linkId}>
+                    <p className="text-sm font-medium text-ink-900">
+                      {conflict.jobNumber !== null && (
+                        <span className="tabular-nums text-ink-500">#{conflict.jobNumber} </span>
+                      )}
+                      {conflict.jobTitle ?? conflict.incoming.title}
+                    </p>
+                    <p className="mt-0.5 text-xs text-ink-700">
+                      {conflict.systemLabel} moved this job's address
+                      {conflict.incoming.address
+                        ? ` to ${conflict.incoming.address.line1}${conflict.incoming.address.city ? `, ${conflict.incoming.address.city}` : ''}`
+                        : ''}
+                      . This job already holds footage checked against the current address, so the
+                      change won't apply itself.
+                    </p>
+                    <div className="mt-1.5 flex gap-2">
+                      <button
+                        onClick={() => void resolve(conflict, 'accept_new_address')}
+                        disabled={busy === `resolve-${conflict.linkId}`}
+                        className="rounded-lg bg-brand-600 px-2.5 py-1 text-[11px] font-semibold text-ink-900 disabled:opacity-50"
+                      >
+                        Accept the new address
+                      </button>
+                      <button
+                        onClick={() => void resolve(conflict, 'keep_current')}
+                        disabled={busy === `resolve-${conflict.linkId}`}
+                        className="rounded-lg glass-card px-2.5 py-1 text-[11px] font-medium text-ink-700 disabled:opacity-50"
+                      >
+                        Keep the current one
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {note && <p className="text-sm text-success-600">{note}</p>}
+          <ErrorText message={error} />
+
+          <p className="text-xs text-ink-500">
+            Sync is one-way, into Atmosphere. A job deleted in your CRM archives its link and
+            nothing else — a job file that holds footage is never deleted by a sync.
+          </p>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function IntegrationsSection() {
   const [state, setState] = useState<CrmConnections | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -1456,6 +1704,8 @@ function IntegrationsSection() {
 
   return (
     <div className="space-y-5">
+      <JobSourceCard />
+
       <Card
         title="Your CRM"
         description="Mirror the customers, contacts and opportunities you already have, so prospecting knows who you know and never sells you a contact you own."

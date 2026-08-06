@@ -39,6 +39,7 @@ import { contactRouter } from './routes/contact.js';
 import { mitigationRouter } from './routes/mitigation.js';
 import { xactimateRouter } from './routes/xactimate.js';
 import { symbilityRouter } from './routes/symbility.js';
+import { crmSyncRouter } from './routes/crmSync.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
 import { verificationHook, pumpVerificationQueue } from './lib/verifierRunner.js';
@@ -132,6 +133,7 @@ export function createApp(): Express {
   app.use('/api/mitigation', mitigationRouter);
   app.use('/api/xactimate', xactimateRouter);
   app.use('/api/symbility', symbilityRouter);
+  app.use('/api/crm-sync', crmSyncRouter);
   app.use('/api/jobs', jobsRouter);
   app.use('/api/memory', memoryRouter);
   app.use('/api/technician', technicianRouter);

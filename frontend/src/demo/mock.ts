@@ -1429,6 +1429,39 @@ const SYMBILITY_STATE: {
   grantedAt: string;
 } = { connected: false, username: null, scopes: [], grantedAt: '' };
 
+/**
+ * CRM job sync: connect the CRM the customer already runs, and job files
+ * create themselves. The first sync seeds three new job files and one
+ * address conflict on Cedar Ridge — a job that already holds footage, so
+ * the change waits for a person. Stateful, like the symbility connect.
+ */
+const CRM_SYNC_SYSTEMS_DEMO = [
+  ['jobnimbus', 'JobNimbus'],
+  ['acculynx', 'AccuLynx'],
+  ['dash', 'CoreLogic Dash'],
+  ['servicetitan', 'ServiceTitan'],
+] as const;
+
+const CRM_SYNC_STATE: {
+  connected: Record<string, { accountLabel: string; connectedAt: string; lastSyncAt: string | null; lastSummary: any }>;
+  conflicts: any[];
+  seeded: boolean;
+} = { connected: {}, conflicts: [], seeded: false };
+
+function emptySharedRecord(jobId: string, jobNumber: number, title: string, claimNumber: string | null) {
+  return {
+    job: { id: jobId, jobNumber, title, status: 'in_progress', claimNumber },
+    brief: null,
+    revisions: [],
+    currentRevision: null,
+    parties: [],
+    scope: [],
+    messages: [],
+    risks: [],
+    money: { approved: 0, pending: 0 },
+  };
+}
+
 const XACTIMATE_STATUS: XactimateStatus = {
   connected: false, sessionActive: false, driver: 'mock', storageAvailable: true,
   webAutomationEnabled: false, username: null, scopes: [], storageMode: 'session',
@@ -2787,6 +2820,92 @@ const routes: Array<[string, RegExp, Handler]> = [
     SYMBILITY_STATE.connected = false;
     SYMBILITY_STATE.username = null;
     return { body: { ok: true } };
+  }],
+
+  /* ------------------------------------------- CRM job sync */
+  ['GET', /^\/api\/crm-sync\/status$/, () => ({
+    body: {
+      driver: 'mock',
+      conflictsPending: CRM_SYNC_STATE.conflicts.length,
+      systems: CRM_SYNC_SYSTEMS_DEMO.map(([system, label]) => {
+        const c = CRM_SYNC_STATE.connected[system];
+        return {
+          system,
+          label,
+          connected: Boolean(c),
+          accountLabel: c?.accountLabel ?? null,
+          connectedAt: c?.connectedAt ?? null,
+          lastSyncAt: c?.lastSyncAt ?? null,
+          lastSummary: c?.lastSummary ?? null,
+        };
+      }),
+    },
+  })],
+  ['POST', /^\/api\/crm-sync\/connect$/, (_m, b) => {
+    const key = String(b.apiKey ?? '');
+    const system = String(b.system ?? 'jobnimbus');
+    const label = CRM_SYNC_SYSTEMS_DEMO.find(([s]) => s === system)?.[1] ?? system;
+    if (!key.trim() || key.includes('bad')) {
+      return { status: 401, body: { error: `${label} did not accept that API key.`, code: 'invalid_credentials' } };
+    }
+    CRM_SYNC_STATE.connected[system] = {
+      accountLabel: `${label} · key …${key.trim().slice(-4)}`,
+      connectedAt: new Date().toISOString(),
+      lastSyncAt: null,
+      lastSummary: null,
+    };
+    return { status: 201, body: { status: 'connected', system, accountLabel: CRM_SYNC_STATE.connected[system].accountLabel } };
+  }],
+  ['POST', /^\/api\/crm-sync\/disconnect$/, (_m, b) => {
+    delete CRM_SYNC_STATE.connected[String(b.system)];
+    return { body: { ok: true } };
+  }],
+  ['POST', /^\/api\/crm-sync\/sync$/, (_m, b) => {
+    const system = String(b.system ?? 'jobnimbus');
+    const connection = CRM_SYNC_STATE.connected[system];
+    if (!connection) return { status: 409, body: { error: 'Not connected.', code: 'not_connected' } };
+    let summary;
+    if (!CRM_SYNC_STATE.seeded) {
+      CRM_SYNC_STATE.seeded = true;
+      const incoming: Array<[string, number, string, string | null]> = [
+        ['job-1051', 1051, 'Kessler Rd — hail, roof replacement', 'CLM-90112'],
+        ['job-1052', 1052, 'Barton Creek — water loss, kitchen', 'CLM-90144'],
+        ['job-1053', 1053, 'Pine Hollow — fire rebuild, unit 3', null],
+      ];
+      incoming.forEach(([id, num, title, claim]) => {
+        (SHARED_JOBS as any[]).push({ jobId: id, jobNumber: num, title, status: 'in_progress', parties: 0, currentRevision: null, behind: 0, awaiting: 0, exclusions: 0 });
+        SHARED_RECORDS[id] = emptySharedRecord(id, num, title, claim);
+      });
+      // The one change sync refuses to make itself: Cedar Ridge already
+      // holds footage, and its CRM row just moved house.
+      CRM_SYNC_STATE.conflicts.push({
+        linkId: 'cl-1',
+        system,
+        systemLabel: CRM_SYNC_SYSTEMS_DEMO.find(([s]) => s === system)?.[1] ?? system,
+        externalId: `${system}-1180`,
+        jobId: 'job-1038',
+        jobTitle: 'Cedar Ridge — storm damage, roof tarp + rebuild',
+        jobNumber: 1038,
+        kind: 'address_moved',
+        incoming: {
+          title: 'Cedar Ridge — storm damage, roof tarp + rebuild',
+          claimNumber: 'CLM-88396',
+          address: { line1: '2218 Cedar Ridge Dr', city: 'Round Rock', region: 'TX', postalCode: '78681', lat: 30.51, lon: -97.68 },
+        },
+        seenAt: new Date().toISOString(),
+      });
+      summary = { created: 3, updated: 0, conflicts: 1, archived: 0, unchanged: 0 };
+    } else {
+      summary = { created: 0, updated: 0, conflicts: CRM_SYNC_STATE.conflicts.length, archived: 0, unchanged: 3 };
+    }
+    connection.lastSyncAt = new Date().toISOString();
+    connection.lastSummary = summary;
+    return { body: { summary } };
+  }],
+  ['GET', /^\/api\/crm-sync\/conflicts$/, () => ({ body: { conflicts: CRM_SYNC_STATE.conflicts } })],
+  ['POST', /^\/api\/crm-sync\/conflicts\/([\w-]+)$/, (m, b) => {
+    CRM_SYNC_STATE.conflicts = CRM_SYNC_STATE.conflicts.filter((c) => c.linkId !== m[1]);
+    return { body: { ok: true, decision: b.decision ?? 'keep_current' } };
   }],
 ];
 
