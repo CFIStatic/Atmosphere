@@ -147,7 +147,9 @@ test('serialization: labels attached, integrity computed, flag derived', () => {
   assert.equal(item.durationSeconds, 143);
   assert.equal(item.tier, 2);
   assert.equal(item.analysis?.materialBecause, 'The tarp is gone.');
-  assert.deepEqual(item.analysis?.scope, [{ title: 'Remove tarp', verdict: 'appears_complete' }]);
+  assert.deepEqual(item.analysis?.scope, [
+    { title: 'Remove tarp', verdict: 'appears_complete', because: null, seenInWindows: undefined },
+  ]);
   assert.deepEqual(item.analysis?.couldNotTell, ['Ridge detail']);
 });
 

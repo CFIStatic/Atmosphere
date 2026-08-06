@@ -40,6 +40,7 @@ import { mitigationRouter } from './routes/mitigation.js';
 import { xactimateRouter } from './routes/xactimate.js';
 import { symbilityRouter } from './routes/symbility.js';
 import { crmSyncRouter } from './routes/crmSync.js';
+import { scopeDocsRouter } from './routes/scopeDocs.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
 import { verificationHook, pumpVerificationQueue } from './lib/verifierRunner.js';
@@ -149,6 +150,7 @@ export function createApp(): Express {
   // Server-to-server: no session cookie, authenticated by Stripe's signature.
   app.use('/api/webhooks', webhookRouter);
   app.use('/api/pm', pmRouter);
+  app.use('/api/operations', scopeDocsRouter);
   app.use('/api/operations', sharedJobsRouter);
   app.use('/api/purchasing', purchasingRouter);
   app.use('/api/episodes', episodesRouter);

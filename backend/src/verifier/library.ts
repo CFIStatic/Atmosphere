@@ -209,12 +209,23 @@ export function serializeEvidence(input: {
             materialBecause: findings.materialBecause ?? null,
             changes: Array.isArray(findings.changes) ? findings.changes : [],
             scope: Array.isArray(findings.scopeVerdicts)
-              ? findings.scopeVerdicts.map((v: any) => ({ title: v.title, verdict: v.verdict }))
+              ? findings.scopeVerdicts.map((v: any) => ({
+                  title: v.title,
+                  verdict: v.verdict,
+                  because: v.because ?? null,
+                  seenInWindows: Array.isArray(v.seenInWindows) ? v.seenInWindows : undefined,
+                }))
               : [],
             couldNotTell: Array.isArray(findings.cannotTell) ? findings.cannotTell : [],
             concerns: Array.isArray(findings.concerns) ? findings.concerns : [],
             /** Whether each clip opened at the property, as the guide asks. */
             opening: findings.opening ?? null,
+            // The workday shape: a recording read in windows carries its
+            // hour-by-hour timeline, and the counts coverage is computed from.
+            longForm: Boolean(findings.longForm),
+            timeline: Array.isArray(findings.timeline) ? findings.timeline : null,
+            windowsTotal: findings.windowsTotal ?? null,
+            windowsRead: findings.windowsRead ?? null,
             model: proof.ai_model ?? null,
           }
         : null,

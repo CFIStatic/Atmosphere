@@ -23,6 +23,7 @@ import { DailyBudget } from '../shared/liveBudget.js';
 import { labelsForProof } from '../verifier/library.js';
 import { buildCaptureGuide } from '../shared/captureGuide.js';
 import { scopeForParty } from '../shared/jobRecord.js';
+import { analyseLongRecording } from '../shared/longAnalyst.js';
 import {
   narrateProofVideo,
   observeLiveFrame,
@@ -587,6 +588,20 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
     return;
   }
 
+  // A workday-length recording is a different reading problem from a guided
+  // walk: hours of frames go through windows on the cheap model, then one
+  // synthesis on the strong one, with verdicts capped by actual sightings.
+  const { data: proofRow } = await admin
+    .from('job_proofs')
+    .select('duration_seconds')
+    .eq('id', job.proofId)
+    .maybeSingle();
+  const durationSeconds = Number((proofRow as any)?.duration_seconds ?? 0);
+  if (durationSeconds > config.verification.longFormSeconds) {
+    await performLongFormAnalysis(admin, job, frames, durationSeconds);
+    return;
+  }
+
   const { steps, scopeTitles } = await guideStepsFor(admin, job.jobId, job.partyId, job.phase);
   const narration = await narrateProofVideo({
     frames,
@@ -627,6 +642,116 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
     action: 'analysed',
     actorLabel: 'Atmosphere',
     detail: `narrated · ${job.phase} · ${job.workDate}`,
+  });
+}
+
+/**
+ * The workday path: hours of footage, read honestly. Windows on the cheap
+ * model (kept as job_proof_segments — the timeline is stored evidence, not
+ * prose), one synthesis on the strong model, and per-scope-line verdicts
+ * whose strength is capped by how many windows actually saw the line worked.
+ */
+async function performLongFormAnalysis(
+  admin: any,
+  job: NarrationJob,
+  frames: Array<{ atSeconds: number; base64: string }>,
+  durationSeconds: number,
+): Promise<void> {
+  const write = (patch: Record<string, unknown>) =>
+    admin.from('job_proofs').update(patch).eq('id', job.proofId);
+
+  const { data: scopeRows } = await admin
+    .from('job_scope_items')
+    .select('id, party_id, title, state')
+    .eq('job_id', job.jobId);
+  const mine = scopeForParty((scopeRows ?? []) as any[], job.partyId);
+  const scopeTitles = mine
+    .filter((s: any) => s.state === 'included' || s.state === 'approved')
+    .map((s: any) => s.title as string);
+  if (!scopeTitles.length) {
+    // A recording with no agreed scope has nothing to be judged against —
+    // said plainly rather than inventing a rubric.
+    await write({
+      narration_status: 'skipped',
+      narration_error: 'No agreed scope lines to judge this recording against. Set the scope, then re-run analysis.',
+      analysis_status: 'skipped',
+    });
+    return;
+  }
+
+  const result = await analyseLongRecording({ frames, scopeTitles, durationSeconds });
+  if (!result) throw new Error('The model reply was not usable.');
+
+  // Replace, not append: a re-run is a new reading of the same recording.
+  await admin.from('job_proof_segments').delete().eq('proof_id', job.proofId);
+  for (const window of result.windows) {
+    await admin.from('job_proof_segments').insert({
+      org_id: job.orgId,
+      proof_id: job.proofId,
+      idx: window.idx,
+      start_seconds: window.startSeconds,
+      end_seconds: window.endSeconds,
+      frame_count: window.frameCount,
+      reading: window.reading,
+      model: config.technician.assistant.liveModel,
+    });
+  }
+
+  const timeline = result.windows.map((window) => ({
+    idx: window.idx,
+    startSeconds: window.startSeconds,
+    endSeconds: window.endSeconds,
+    summary: window.reading ? window.reading.summary : 'This window could not be read.',
+    scopeTouched: window.reading?.scopeTouched ?? [],
+  }));
+
+  const activities = [
+    ...new Set(result.windows.flatMap((w) => w.reading?.activity ?? [])),
+  ].slice(0, 12);
+  const { data: partyRow } = await admin
+    .from('job_parties')
+    .select('trade')
+    .eq('id', job.partyId)
+    .maybeSingle();
+  const trade = ((partyRow as any)?.trade ?? '').trim().toLowerCase();
+
+  await write({
+    ai_summary: result.report.narrative.slice(0, 500),
+    ai_findings: {
+      longForm: true,
+      summary: result.report.narrative,
+      materialChange: null,
+      materialBecause: null,
+      changes: [],
+      cannotTell: result.report.couldNotTell,
+      scopeVerdicts: result.report.verdicts.map((v) => ({
+        title: v.title,
+        verdict: v.verdict,
+        because: v.because,
+        seenInWindows: v.seenInWindows,
+      })),
+      concerns: [],
+      timeline,
+      windowsTotal: result.windows.length,
+      windowsRead: result.windows.filter((w) => w.reading).length,
+    },
+    ai_model: result.report.model,
+    analysis_status: 'done',
+    narration: { entries: [], coverage: [], model: result.report.model },
+    narration_text: result.report.narrative,
+    narration_status: 'done',
+    narration_error: null,
+    narrated_at: new Date().toISOString(),
+    labels: [job.phase, trade || null, 'workday', ...activities].filter(Boolean).slice(0, 24),
+  });
+
+  await recordAccess(admin, {
+    orgId: job.orgId,
+    jobId: job.jobId,
+    proofId: job.proofId,
+    action: 'analysed',
+    actorLabel: 'Atmosphere',
+    detail: `workday read · ${(durationSeconds / 3600).toFixed(1)}h · ${result.windows.length} windows · ${scopeTitles.length} scope lines`,
   });
 }
 

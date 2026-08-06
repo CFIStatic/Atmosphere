@@ -850,6 +850,28 @@ export interface EvidenceShare {
   state: 'live' | 'expired' | 'revoked';
 }
 
+/* ---- Scope documents ----------------------------------------------------- */
+
+export interface ProposedScopeLine {
+  title: string;
+  state: 'included' | 'excluded';
+  reason: string | null;
+  amount: number | null;
+  note: string | null;
+}
+
+export interface ScopeDocument {
+  id: string;
+  filename: string;
+  mediaType: string;
+  byteSize: number | null;
+  status: 'uploaded' | 'extracting' | 'extracted' | 'failed' | 'confirmed';
+  extracted: { lines: ProposedScopeLine[]; couldNotRead: string[] } | null;
+  extractionError: string | null;
+  confirmedAt: string | null;
+  createdAt: string;
+}
+
 /* ---- CRM job sync -------------------------------------------------------- */
 
 export type CrmSyncSystem = 'jobnimbus' | 'acculynx' | 'dash' | 'servicetitan';
@@ -2527,6 +2549,31 @@ export const api = {
 
   revokeEvidenceShare: (id: string) =>
     request<{ ok: boolean }>(`/api/evidence-portal/shares/${id}/revoke`, { method: 'POST' }),
+
+  // ---- Scope documents ----
+  scopeDocument: (jobId: string) =>
+    request<{ doc: ScopeDocument | null }>(`/api/operations/shared/${jobId}/scope-doc`, {
+      method: 'GET',
+    }),
+
+  uploadScopeDocument: (
+    jobId: string,
+    input: { filename: string; mediaType: 'application/pdf' | 'text/plain'; contentBase64: string },
+  ) =>
+    request<{ doc: ScopeDocument }>(`/api/operations/shared/${jobId}/scope-doc`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  confirmScopeDocument: (
+    jobId: string,
+    docId: string,
+    input: { lines: Array<{ title: string; state: 'included' | 'excluded'; reason?: string | null; amount?: number | null }> },
+  ) =>
+    request<{ ok: boolean; created: number }>(
+      `/api/operations/shared/${jobId}/scope-doc/${docId}/confirm`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
 
   // ---- CRM job sync ----
   crmSyncStatus: () => request<CrmSyncStatus>('/api/crm-sync/status', { method: 'GET' }),

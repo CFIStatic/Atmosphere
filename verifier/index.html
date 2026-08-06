@@ -717,6 +717,54 @@
       after: { wet: 0.1, cut: 0.65, gear: 0, seconds: 143 }
     }),
     ev({
+      // The workday: the crew left the camera running. Hours of footage,
+      // read in time windows, judged line by line against the scope that
+      // was confirmed from the uploaded work order.
+      id: 'EV-1038-0807-W', job: 'cedar', company: 'Delgado Roofing', person: 'Hector Delgado',
+      phase: 'workday', workDate: '2026-08-07', capturedAt: '2026-08-07T07:02:00', uploadedAt: '2026-08-07T14:11:00',
+      duration: 24480, bytes: 6_830_000_000, device: 'iPhone 15 · Atmosphere 2.4 · chest mount',
+      gps: { lat: 30.4413, lon: -97.7218, accuracy: 7, distanceFt: 38 },
+      hash: HASHES[2], tier: 2, integrity: 'pass',
+      checks: [
+        { verdict: 'pass', what: 'Filmed on site', detail: '38 ft from the recorded property centre for the whole recording.' },
+        { verdict: 'pass', what: 'Filmed on the day claimed', detail: 'Rolling clock 07:02–13:50, received 14:11.' },
+        { verdict: 'pass', what: 'Not filed before', detail: 'This file has not appeared on any other day or job.' },
+        { verdict: 'pass', what: 'Long enough to show the work', detail: '6 h 48 min of continuous footage.' }
+      ],
+      analysis: {
+        state: 'done',
+        longForm: true,
+        windowsTotal: 21,
+        windowsRead: 20,
+        materialChange: null,
+        materialBecause: null,
+        summary: 'The day opens with tarp removal and tear-off on the north slope (7:00–9:40), decking repair in the valley through late morning — six new sheets go down between 10:20 and 11:45 — then underlayment across the afternoon. The skylights are passed four times and touched in none of them. The final hour is cleanup and magnetic sweep of the drive.',
+        changes: [],
+        scope: [
+          { title: 'Remove temporary tarp', verdict: 'appears_complete', because: 'Tarp comes off in the first window and never returns.', seenInWindows: [0, 1] },
+          { title: 'Strip north slope to decking', verdict: 'appears_complete', because: 'Tear-off runs 7:20–9:40; the slope reads bare deck from window 8 on.', seenInWindows: [1, 2, 3, 4, 5, 6, 7] },
+          { title: 'Replace damaged decking', verdict: 'appears_complete', because: 'Six sheets counted going down in the valley, 10:20–11:45.', seenInWindows: [9, 10, 11] },
+          { title: 'Install synthetic underlayment', verdict: 'in_progress', because: 'Rows laid across the afternoon; the ridge course is not seen finished.', seenInWindows: [13, 14, 15, 16, 17] },
+          { title: 'DO NOT touch the skylights', verdict: 'not_visible', because: 'Passed in four windows, worked in none — filmed untouched, as the scope requires.', seenInWindows: [] }
+        ],
+        timeline: [
+          { idx: 0, startSeconds: 0, endSeconds: 1190, summary: 'Setup; tarp unclipped and rolled; harnesses on.', scopeTouched: [0] },
+          { idx: 3, startSeconds: 4620, endSeconds: 5810, summary: 'Tear-off mid-slope; two chutes running to the trailer.', scopeTouched: [1] },
+          { idx: 9, startSeconds: 11930, endSeconds: 13100, summary: 'First decking sheets cut and fastened in the valley.', scopeTouched: [2] },
+          { idx: 14, startSeconds: 17150, endSeconds: 18320, summary: 'Underlayment rows laid up-slope; skylights passed untouched.', scopeTouched: [3] },
+          { idx: 20, startSeconds: 23290, endSeconds: 24480, summary: 'Cleanup; magnetic sweep of the driveway; ladders down.', scopeTouched: [] }
+        ],
+        couldNotTell: ['Fastener pattern on the new decking — never close enough to count.', 'Window 12 (12:30–12:50) was unreadable: lens rain-spotted through lunch.']
+      },
+      custody: [
+        { action: 'uploaded', by: 'Hector Delgado, Delgado Roofing', role: 'subcontractor', at: '2026-08-07T14:11', detail: 'workday · 2026-08-07 · 6 h 48 min' },
+        { action: 'analysed', by: 'Atmosphere', role: 'ai', at: '2026-08-07T14:38', detail: 'Workday read · 21 windows · 5 scope lines from "Cedar Ridge SOW.pdf"' },
+        { action: 'viewed', by: 'Priya Shah', role: 'general contractor', at: '2026-08-07T15:02', detail: 'signed URL minted' }
+      ],
+      before: { wet: 0.5, cut: 0.1, gear: 0.3, seconds: 24480 },
+      after: { wet: 0.05, cut: 0.7, gear: 0.2, seconds: 24480 }
+    }),
+    ev({
       id: 'EV-1038-0805-B', job: 'cedar', company: 'Delgado Roofing', person: 'Hector Delgado',
       phase: 'before', workDate: '2026-08-05', capturedAt: '2026-08-05T07:12:00', uploadedAt: '2026-08-05T07:14:00',
       duration: 96, bytes: 61_200_000, device: 'iPhone 15 · Atmosphere 2.4',
@@ -986,6 +1034,7 @@
     if (a.state === 'paired') return { cls: 'neutral', text: 'Read as the before half' };
     if (a.state === 'failed') return { cls: 'fail', text: 'Analysis failed' };
     if (a.state !== 'done') return { cls: 'neutral', text: 'Not analysed' };
+    if (a.longForm) return { cls: 'pass', text: 'Workday read' };
     if (a.materialChange === 'significant') return { cls: 'pass', text: 'Work changed' };
     if (a.materialChange === 'minor') return { cls: 'unknown', text: 'Minor change' };
     if (a.materialChange === 'none') return { cls: 'fail', text: 'No visible change' };
@@ -1413,13 +1462,24 @@
       return;
     }
 
-    var vl = a.materialChange === 'significant'
-      ? ['pass', 'Work materially changed between the two clips']
-      : a.materialChange === 'minor'
-        ? ['unknown', 'Minor visible change only']
-        : a.materialChange === 'none'
-          ? ['fail', 'No visible change between the two clips']
-          : ['unknown', 'Could not compare the two clips'];
+    var vl;
+    if (a.longForm) {
+      // A workday, not a before/after pair: the headline is what was read,
+      // with the coverage stated as arithmetic — windows read over windows
+      // total — never as an adjective.
+      var hours = item.duration ? (item.duration / 3600).toFixed(1) : '?';
+      vl = ['pass', 'A ' + hours + '-hour workday, read in ' +
+        (a.windowsRead != null ? a.windowsRead : '?') + ' of ' +
+        (a.windowsTotal != null ? a.windowsTotal : '?') + ' time windows'];
+    } else {
+      vl = a.materialChange === 'significant'
+        ? ['pass', 'Work materially changed between the two clips']
+        : a.materialChange === 'minor'
+          ? ['unknown', 'Minor visible change only']
+          : a.materialChange === 'none'
+            ? ['fail', 'No visible change between the two clips']
+            : ['unknown', 'Could not compare the two clips'];
+    }
 
     var html = '<div class="verdictline ' + vl[0] + '">' + esc(vl[1]) + '</div>';
     if (a.materialBecause) html += '<p style="font-size:12.5px;color:var(--muted)"><strong style="color:var(--ink-2)">Why:</strong> ' + esc(a.materialBecause) + '</p>';
@@ -1429,9 +1489,25 @@
       html += '<h5 style="margin:14px 0 6px;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)">Against the scope</h5><ul class="scopelist">';
       a.scope.forEach(function (s) {
         var w = VERDICT_WORD[s.verdict] || ['neutral', s.verdict];
-        html += '<li><span class="label">' + esc(s.title) + '</span><span class="chip ' + w[0] + '">' + esc(w[1]) + '</span></li>';
+        html += '<li><span class="label">' + esc(s.title) +
+          (s.because ? '<span style="display:block;font-size:11.5px;color:var(--muted);font-weight:400;margin-top:1px">' + esc(s.because) +
+            (s.seenInWindows && s.seenInWindows.length ? ' <span class="mono" style="color:var(--faint)">· seen in ' + s.seenInWindows.length + ' window' + (s.seenInWindows.length === 1 ? '' : 's') + '</span>' : '') +
+            '</span>' : '') +
+          '</span><span class="chip ' + w[0] + '">' + esc(w[1]) + '</span></li>';
       });
       html += '</ul>';
+    }
+
+    if (a.longForm && a.timeline && a.timeline.length) {
+      var hhmm = function (s) {
+        var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+        return h + ':' + String(m).padStart(2, '0');
+      };
+      html += '<h5 style="margin:14px 0 6px;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)">The day, hour by hour</h5>';
+      html += '<ul class="custody" style="margin-top:4px">' + a.timeline.map(function (t) {
+        return '<li><div><span class="act mono" style="font-size:11.5px">' + hhmm(t.startSeconds) + '–' + hhmm(t.endSeconds) + '</span> ' +
+          '<span class="by">' + esc(t.summary) + '</span></div></li>';
+      }).join('') + '</ul>';
     }
 
     if (a.couldNotTell && a.couldNotTell.length) {
@@ -1701,7 +1777,11 @@
             summary: (raw.analysis && raw.analysis.summary) || '',
             changes: (raw.analysis && raw.analysis.changes) || [],
             scope: (raw.analysis && raw.analysis.scope) || [],
-            couldNotTell: (raw.analysis && raw.analysis.couldNotTell) || []
+            couldNotTell: (raw.analysis && raw.analysis.couldNotTell) || [],
+            longForm: Boolean(raw.analysis && raw.analysis.longForm),
+            timeline: (raw.analysis && raw.analysis.timeline) || null,
+            windowsTotal: raw.analysis ? raw.analysis.windowsTotal : null,
+            windowsRead: raw.analysis ? raw.analysis.windowsRead : null
           }
         : raw.analysisState === 'paired'
           ? { state: 'paired' }

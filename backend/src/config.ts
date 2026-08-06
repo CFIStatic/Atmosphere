@@ -137,6 +137,23 @@ export const config = {
     encryptionKey: process.env.SYMBILITY_ENC_KEY ?? process.env.XACTIMATE_ENC_KEY ?? '',
   },
 
+  verification: {
+    // Above this duration a clip is a workday, not a walkthrough, and the
+    // analysis goes hierarchical: windows on the cheap model, synthesis on
+    // the strong one. 15 minutes is where a single-look read stops being
+    // honest about its own coverage.
+    longFormSeconds: Number(process.env.LONG_FORM_SECONDS ?? 900),
+    windowMaxFrames: Number(process.env.LONG_FORM_WINDOW_FRAMES ?? 12),
+    windowMaxSeconds: Number(process.env.LONG_FORM_WINDOW_SECONDS ?? 1200),
+    // The synthesis reads no pixels — it composes a day report out of window
+    // summaries that were already written, and the verdict caps that matter
+    // are applied in code afterward, not asked of the model. That is a
+    // mid-tier job. It gets its own knob rather than borrowing the
+    // assistant's flagship, so the expensive leg of the pipeline stays the
+    // one that actually looks at frames.
+    synthesisModel: process.env.LONG_FORM_SYNTHESIS_MODEL ?? 'claude-sonnet-5',
+  },
+
   crmSync: {
     // Job files from the customer's own CRM. 'mock' by default so the whole
     // connect-and-sync pipeline is exercisable without vendor credentials;

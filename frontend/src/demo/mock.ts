@@ -1183,6 +1183,25 @@ const KNOWN_ACCOUNTS = new Set([
   'priya@ortizrestoration.com',
 ]);
 
+/**
+ * Scope documents: upload → the model reads → a person confirms. The demo
+ * extraction lands after a beat, with one line the reader should distrust
+ * (a hedge in the note) and one thing it could not read — because the
+ * honest failure modes are part of the design.
+ */
+const SCOPE_DOCS: Record<string, any> = {};
+
+const SCOPE_DOC_PROPOSAL = {
+  lines: [
+    { title: 'Remove temporary roof tarp', state: 'included', reason: null, amount: 450, note: null },
+    { title: 'Strip north slope to decking', state: 'included', reason: null, amount: 4800, note: 'p.2 — "as required"' },
+    { title: 'Replace damaged decking', state: 'included', reason: null, amount: 1860, note: 'quantity given as "up to 8 sheets"' },
+    { title: 'Install synthetic underlayment', state: 'included', reason: null, amount: 1240, note: null },
+    { title: 'Skylights', state: 'excluded', reason: 'Carrier declined — owner handling separately', amount: null, note: null },
+  ],
+  couldNotRead: ['Page 4 is a photograph of a handwritten change order — illegible in the scan.'],
+};
+
 /** Invitations: one waiting, one answered, one withdrawn. */
 const ORG_INVITES: Array<Record<string, any>> = [
   { id: 'inv-1', email: 'kai.osei@example.com', role: 'field_technician', note: null, status: 'pending', createdAt: '2026-08-04T09:00:00Z', joinedAt: null, revokedAt: null },
@@ -2018,6 +2037,54 @@ const routes: Array<[string, RegExp, Handler]> = [
       occurred_at: new Date().toISOString(),
     });
     return { body: { ok: true } };
+  }],
+
+  /* ------------------------------------------- scope documents */
+  ['GET', /^\/api\/operations\/shared\/([\w-]+)\/scope-doc$/, (m) => ({
+    body: { doc: SCOPE_DOCS[m[1]] ?? null },
+  })],
+  ['POST', /^\/api\/operations\/shared\/([\w-]+)\/scope-doc$/, (m, b) => {
+    const doc = {
+      id: `sd-${Date.now()}`,
+      filename: String(b.filename ?? 'scope.pdf'),
+      mediaType: String(b.mediaType ?? 'application/pdf'),
+      byteSize: null,
+      status: 'extracting',
+      extracted: null,
+      extractionError: null,
+      confirmedAt: null,
+      createdAt: new Date().toISOString(),
+    };
+    SCOPE_DOCS[m[1]] = doc;
+    // The model "reads" for a beat, then the proposal lands.
+    setTimeout(() => {
+      if (SCOPE_DOCS[m[1]]?.id === doc.id) {
+        SCOPE_DOCS[m[1]] = { ...doc, status: 'extracted', extracted: SCOPE_DOC_PROPOSAL };
+      }
+    }, 2200);
+    return { status: 201, body: { doc } };
+  }],
+  ['POST', /^\/api\/operations\/shared\/([\w-]+)\/scope-doc\/([\w-]+)\/confirm$/, (m, b) => {
+    const doc = SCOPE_DOCS[m[1]];
+    if (!doc || doc.id !== m[2]) return { status: 404, body: { error: 'No such document.', code: 'not_found' } };
+    if (doc.status !== 'extracted') return { status: 409, body: { error: 'Not ready.', code: 'not_extracted' } };
+    const lines = Array.isArray(b.lines) ? b.lines : [];
+    const record = SHARED_RECORDS[m[1]];
+    if (record) {
+      lines.forEach((line: any, i: number) => {
+        record.scope.push({
+          id: `sc-doc-${Date.now()}-${i}`,
+          title: String(line.title),
+          state: line.state === 'excluded' ? 'excluded' : 'included',
+          reason: line.reason ?? null,
+          detail: `From "${doc.filename}"`,
+          amount: line.amount ?? null,
+          created_at: new Date().toISOString(),
+        });
+      });
+    }
+    SCOPE_DOCS[m[1]] = { ...doc, status: 'confirmed', confirmedAt: new Date().toISOString() };
+    return { body: { ok: true, created: lines.length } };
   }],
 
   /* ------------------------------------------- verifier shares */

@@ -12,6 +12,7 @@ import { SpinnerIcon } from '../components/icons';
 import { ProofOfWork } from '../components/shared/ProofOfWork';
 import { EvidenceLocker } from '../components/shared/EvidenceLocker';
 import { ShareEvidencePanel } from '../components/shared/ShareEvidencePanel';
+import { ScopeDocPanel } from '../components/shared/ScopeDocPanel';
 
 /**
  * One job, two companies, one record.
@@ -254,6 +255,11 @@ export function SharedDashboardPage() {
                       void loadList();
                     }}
                   />
+
+                  {/* Above the scope list, because it is where the scope
+                      comes from: the document is read, a person confirms,
+                      the lines below appear. */}
+                  <ScopeDocPanel jobId={record.job.id} onChanged={() => void openJob(record.job.id)} />
 
                   <ScopeList record={record} onDecide={decide} onChanged={() => void openJob(record.job.id)} />
 
