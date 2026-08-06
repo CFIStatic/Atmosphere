@@ -63,7 +63,33 @@ Proof uploads also optionally enqueue this pipeline (`VERIFICATION_PIPELINE_FROM
 
 ## Processing stages
 
-`validate_video` → `extract_metadata` → `extract_frames` → `score_frame_quality` → `deduplicate_frames` → `classify_scenes` → `analyze_frames` → `compare_timeline` → `generate_verifications` → `calculate_confidence` → `finalize_report`
+`validate_video` → `extract_metadata` → `transcode_video` → `extract_frames` → `score_frame_quality` → `deduplicate_frames` → `classify_scenes` → `analyze_frames` → `compare_timeline` → **`llm_verify_evidence`** → `generate_verifications` (legacy fallback) → `generate_verified_events` → `update_project_graph` → `calculate_confidence` → `finalize_report`
+
+**Critical design:** visual observations and temporal candidates are proposals. The **LLM is the primary verifier**. Rules supply a checklist. Humans are exception-only. LLM runs are append-only.
+
+## Additional schema (LLM / ontology / graph)
+
+Migration: `20260812110000_llm_verifier_ontology_graph.sql`
+
+- Work ontology tables (stable activity/state/material IDs)
+- `verification_prompts` (versioned)
+- `video_clips`
+- `llm_verification_runs` (append-only)
+- `project_timeline_events` + `workflow_relationships`
+- `outcome_records`
+- `verification_eval_examples`
+- Data-rights columns (`training_consent`, `data_owner`, …)
+
+## Additional APIs
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/jobs/:jobId/timeline` | Structured project timeline |
+| GET | `/jobs/:jobId/workflow` | Workflow graph edges |
+| POST | `/jobs/:jobId/outcomes` | Link estimate/claim/payment outcomes |
+| GET | `/ontology` | Work ontology catalog |
+
+See also `docs/video-work-verification-architecture.md`.
 
 ## Local development
 
