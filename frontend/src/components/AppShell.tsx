@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { api, ROLE_LABELS } from '../lib/api';
 import { displayName, initials } from '../lib/display';
 import { setPreference, usePreferences } from '../lib/preferences';
-import { PLATFORMS, PLATFORM_HOME, PLATFORM_IDS, platformOfPath } from '../lib/platforms';
+import { PLATFORMS, PLATFORM_HOME, VISIBLE_PLATFORM_IDS, platformOfPath } from '../lib/platforms';
 import { usePlatform } from '../lib/usePlatform';
 import { Logo } from './Logo';
 import {
@@ -22,10 +22,13 @@ import {
   SunIcon,
 } from './icons';
 
-/** Every destination the jump palette can reach, across all four platforms. */
+/**
+ * Every destination the jump palette can reach — visible platforms only.
+ * A palette that jumps into hidden products would quietly resurrect them.
+ */
 const JUMP_TARGETS = (() => {
   const seen = new Map<string, { to: string; label: string; Icon: typeof GaugeIcon }>();
-  for (const id of PLATFORM_IDS) {
+  for (const id of VISIBLE_PLATFORM_IDS) {
     for (const group of PLATFORMS[id].groups) {
       for (const item of group.items) {
         const key = `${item.to}:${item.label}`;
@@ -33,7 +36,7 @@ const JUMP_TARGETS = (() => {
       }
     }
   }
-  seen.set('/audit:Audit trail', { to: '/audit', label: 'Audit trail', Icon: AuditIcon });
+  // Later product (agent runs): seen.set('/audit:Audit trail', { to: '/audit', label: 'Audit trail', Icon: AuditIcon });
   seen.set('/technician:Field capture', { to: '/technician', label: 'Field capture', Icon: MicIcon });
   return [...seen.values()];
 })();
@@ -254,7 +257,9 @@ function PlatformSwitcher({
           role="listbox"
           className="absolute left-0 right-0 top-full z-40 mt-1.5 overflow-hidden rounded-xl glass-panel"
         >
-          {PLATFORM_IDS.map((id) => {
+          {/* Later products stay off the menu entirely — a greyed-out entry
+              would advertise what is deliberately not being sold yet. */}
+          {VISIBLE_PLATFORM_IDS.map((id) => {
             const p = PLATFORMS[id];
             return (
               <button

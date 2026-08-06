@@ -13,7 +13,6 @@ import {
   GlobeIcon,
   HistoryIcon,
   MicIcon,
-  MonitorIcon,
   SearchIcon,
   SettingsIcon,
   ShieldIcon,
@@ -23,12 +22,14 @@ import {
 } from '../components/icons';
 
 /**
- * The four products, as the website sells them.
+ * The platforms — one current product and the later ones.
  *
- * Each platform is a different job of work — win it, run it, capture it,
- * account for it — but they share one console: the same shell, the same
- * layout, the same audit trail underneath. Switching platforms changes the
- * navigation and the home screen, never the shape of the UI.
+ * The Work Verification Platform is the product; Field is its capture side.
+ * Sales and Manager are built, kept, and deliberately not displayed: they
+ * are later products, and a switcher that offers four things dilutes the one
+ * being sold. VISIBLE_PLATFORM_IDS is the curtain — everything behind it
+ * stays wired (routes, pages, data) so unveiling a platform later is a
+ * one-line change, not a resurrection.
  *
  * Everything here is the single source of truth for the switcher, the
  * sidebar, and each platform's home page. Adding a screen means adding it to
@@ -147,29 +148,40 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
     ],
   },
 
+  // The operations workspace, rebranded as what it now is: the home of the
+  // Work Verification Platform. The id stays 'operations' so routes, stored
+  // preferences, and the demo boot value all keep working — the brand is the
+  // display fields, not the key.
   operations: {
     id: 'operations',
-    name: 'Operations Platform',
-    short: 'Operations',
-    tagline: 'Run the work',
+    name: 'Work Verification Platform',
+    short: 'Verification',
+    tagline: 'Prove the work',
     homeBlurb:
-      'Project management, estimating, and assistance — nineteen rules watching every open job so nothing waits on someone remembering.',
+      'Every day of work filmed against the scope, checked at the door, read by the assistant, and held in a chain of custody — job files that create themselves from your CRM.',
     Icon: DecisionIcon,
-    metrics: ['openJobs', 'blockedJobs', 'atRiskProjects', 'avgDaysDrying', 'awaitingApproval', 'agentActions24h'],
+    metrics: ['openJobs', 'crewOnJobs', 'awaitingApproval', 'scheduledToday', 'blockedJobs', 'atRiskProjects'],
     groups: [
       OPERATE('/operations', 'Run the day'),
       {
-        label: 'Delivery',
+        label: 'The record',
         items: [
           { to: '/jobs', label: 'Jobs', Icon: BriefcaseIcon },
-          { to: '/pm', label: 'Project board', Icon: DecisionIcon },
-          // Operations' alone: it is the general contractor's record of what a
-          // sub was told, and neither Sales nor Field is a party to that.
-          { to: '/shared', label: 'Shared Dashboard', Icon: UsersIcon },
+          // The core surface: the job file — scope, subs, proof days,
+          // evidence locker, and the shares that hand it outward.
+          { to: '/shared', label: 'Job files', Icon: UsersIcon },
           { to: '/schedule', label: 'Schedule', Icon: HistoryIcon },
+          { to: '/team', label: 'Crew', Icon: UsersIcon },
+        ],
+      },
+      /* Later products — built, kept, not displayed while the Work
+         Verification Platform is the sole focus. Restore by moving items
+         back into a visible group.
+      {
+        label: 'Delivery',
+        items: [
+          { to: '/pm', label: 'Project board', Icon: DecisionIcon },
           { to: '/mitigation', label: 'Estimating', Icon: ArtifactIcon },
-          // Directly below Estimating because that is where its numbers come
-          // from: the estimate's quantities become the shopping list.
           { to: '/purchase-orders', label: 'Purchase orders', Icon: CreditCardIcon },
         ],
       },
@@ -177,11 +189,11 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
         label: 'Automation',
         items: [
           { to: '/web-access', label: 'Web access', Icon: GlobeIcon },
-          { to: '/computer-use', label: 'Computer use', Icon: MonitorIcon },
+          { to: '/computer-use', label: 'Computer use', Icon: MonitorIcon },  // re-import MonitorIcon when restoring
           { to: '/audit', label: 'Agent runs', Icon: BoltIcon },
-          { to: '/team', label: 'Crew', Icon: UsersIcon },
         ],
       },
+      */
       SYSTEM,
     ],
   },
@@ -250,6 +262,13 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
 };
 
 export const PLATFORM_IDS: PlatformId[] = ['sales', 'operations', 'field', 'manager'];
+
+/**
+ * What the switcher offers. Sales and Manager are later products: fully
+ * wired, reachable by URL, and deliberately absent from every menu until
+ * they are current again.
+ */
+export const VISIBLE_PLATFORM_IDS: PlatformId[] = ['operations', 'field'];
 
 export const PLATFORM_HOME: Record<PlatformId, string> = {
   sales: '/sales',

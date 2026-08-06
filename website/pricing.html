@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Atmosphere pricing — 30 days to test, then one simple rate for the tokens your agents use. Prepaid credits, auto or manual reload, on all four platforms."  />
+  <meta name="description" content="Atmosphere pricing — 30 days to test, then one simple rate for the tokens your agents use. Prepaid credits, auto or manual reload, on the Work Verification Platform."  />
   <meta name="theme-color" content="#FBFAF7" />
   <title>Pricing · Atmosphere</title>
   <meta property="og:title" content="Pricing · Atmosphere" />
-  <meta property="og:description" content="Atmosphere pricing — 30 days to test, then one simple rate for the tokens your agents use. Prepaid credits, auto or manual reload, on all four platforms." />
+  <meta property="og:description" content="Atmosphere pricing — 30 days to test, then one simple rate for the tokens your agents use. Prepaid credits, auto or manual reload, on the Work Verification Platform." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Atmosphere" />
   <meta property="og:image" content="/assets/og.png" />
@@ -15,7 +15,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect width='22' height='2.8' fill='%23A8A29E'/%3E%3Crect y='4.8' width='22' height='2.8' fill='%2378716C'/%3E%3Crect y='9.6' width='22' height='2.8' fill='%2357534E'/%3E%3Crect y='14.4' width='22' height='2.8' fill='%23292524'/%3E%3Crect y='19.2' width='22' height='2.8' fill='%23F2670C'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="assets/site.css" />
   <script>try{var t=localStorage.getItem('atm-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What happens after the 30 days?","acceptedAnswer":{"@type":"Answer","text":"You pick a plan and keep going, or you stop — nothing auto-upgrades in the dark. The work you did during the trial stays in your audit trail either way."}},{"@type":"Question","name":"Is the trial limited?","acceptedAnswer":{"@type":"Answer","text":"Not in features. You get the whole platform for thirty days, and usage is billed at the same flat rate as everyone else — so what you spend testing is what it would actually cost you."}},{"@type":"Question","name":"Why one flat rate?","acceptedAnswer":{"@type":"Answer","text":"So the math stays simple: two numbers and the token counts in your audit trail. And because a token is not the product — the rate covers the agents doing the work, the Verifier's second pass over it, and the record you can replay. None of that comes from a model provider."}},{"@type":"Question","name":"Do I have to buy all four platforms?","acceptedAnswer":{"@type":"Answer","text":"No. They are four products — take the one that hurts most today. They read the same record, so adding another later has nothing to import."}},{"@type":"Question","name":"What happens when the balance hits zero?","acceptedAnswer":{"@type":"Answer","text":"New runs pause — Atmosphere never spends money you haven't loaded. Turn on auto-reload and the balance tops itself up before that point; keep it manual and one click resumes work. Either way, nothing already in your record is lost."}},{"@type":"Question","name":"Where do I choose auto or manual reload?","acceptedAnswer":{"@type":"Answer","text":"Settings &rarr; Billing. Auto-reload takes a threshold and an amount; leaving it off means every purchase is one you made yourself. You can also set a monthly spend cap that neither mode will cross."}},{"@type":"Question","name":"What do the throughput multipliers mean?","acceptedAnswer":{"@type":"Answer","text":"They are ceilings on how much work you can push through at once, relative to Pro. Max 5× and Max 20× exist for people running agents continuously rather than a few times a day."}},{"@type":"Question","name":"Does Atmosphere train on our data?","acceptedAnswer":{"@type":"Answer","text":"The learning layer scores your organization's own runs and improves how work is routed for you. Your data stays inside your organization, behind Row-Level Security — another org's agents cannot see it, at the database layer."}}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What happens after the 30 days?","acceptedAnswer":{"@type":"Answer","text":"You pick a plan and keep going, or you stop — nothing auto-upgrades in the dark. The work you did during the trial stays in your audit trail either way."}},{"@type":"Question","name":"Is the trial limited?","acceptedAnswer":{"@type":"Answer","text":"Not in features. You get the whole platform for thirty days, and usage is billed at the same flat rate as everyone else — so what you spend testing is what it would actually cost you."}},{"@type":"Question","name":"Why one flat rate?","acceptedAnswer":{"@type":"Answer","text":"So the math stays simple: two numbers and the token counts in your audit trail. And because a token is not the product — the rate covers the agents doing the work, the Verifier's second pass over it, and the record you can replay. None of that comes from a model provider."}},{"@type":"Question","name":"Is there more to buy later?","acceptedAnswer":{"@type":"Answer","text":"The Work Verification Platform and its field capture are the product, on one rate. More products are coming; they will read the same record, so adding one later has nothing to import."}},{"@type":"Question","name":"What happens when the balance hits zero?","acceptedAnswer":{"@type":"Answer","text":"New runs pause — Atmosphere never spends money you haven't loaded. Turn on auto-reload and the balance tops itself up before that point; keep it manual and one click resumes work. Either way, nothing already in your record is lost."}},{"@type":"Question","name":"Where do I choose auto or manual reload?","acceptedAnswer":{"@type":"Answer","text":"Settings &rarr; Billing. Auto-reload takes a threshold and an amount; leaving it off means every purchase is one you made yourself. You can also set a monthly spend cap that neither mode will cross."}},{"@type":"Question","name":"What do the throughput multipliers mean?","acceptedAnswer":{"@type":"Answer","text":"They are ceilings on how much work you can push through at once, relative to Pro. Max 5× and Max 20× exist for people running agents continuously rather than a few times a day."}},{"@type":"Question","name":"Does Atmosphere train on our data?","acceptedAnswer":{"@type":"Answer","text":"The learning layer scores your organization's own runs and improves how work is routed for you. Your data stays inside your organization, behind Row-Level Security — another org's agents cannot see it, at the database layer."}}]}</script>
 </head>
 <body>
 
@@ -27,14 +27,12 @@
     </a>
     <div class="nav-links">
       <div class="nav-item">
-        <a href="platform.html" data-nav="platform">Platform <span class="caret" aria-hidden="true"></span></a>
+        <a href="verification.html" data-nav="platform">Product <span class="caret" aria-hidden="true"></span></a>
         <div class="menu">
-          <a href="verification.html">Work Verification <span>The main product — film, check, hold</span></a>
-          <a href="platform.html">Platform overview <span>How it all fits together</span></a>
-          <a href="sales.html">Sales Platform <span>Win the work</span></a>
-          <a href="operations.html">Operations Platform <span>Run the work</span></a>
-          <a href="field.html">Field Platform <span>Capture the job site</span></a>
-          <a href="manager.html">Manager Platform <span>Run the business</span></a>
+          <a href="verification.html">Work Verification <span>The product — film, check, hold, share</span></a>
+          <a href="field.html">Field Platform <span>Capture on site</span></a>
+          <!-- Later products, pages kept and deliberately unlisted:
+               platform.html · sales.html · operations.html · manager.html -->
         </div>
       </div>
       <a href="pricing.html" data-nav="pricing">Pricing</a>
@@ -68,13 +66,10 @@
     </div>
   </div>
   <div class="nav-panel" id="nav-panel">
-    <div class="grp mono">Platform</div>
+    <div class="grp mono">Product</div>
     <a class="sub" href="verification.html">Work Verification</a>
-    <a class="sub" href="platform.html">Platform overview</a>
-    <a class="sub" href="sales.html">Sales Platform</a>
-    <a class="sub" href="operations.html">Operations Platform</a>
     <a class="sub" href="field.html">Field Platform</a>
-    <a class="sub" href="manager.html">Manager Platform</a>
+    <!-- Later products: platform.html · sales.html · operations.html · manager.html -->
     <a href="pricing.html">Pricing</a>
     <div class="grp mono">Resources</div>
     <a class="sub" href="docs.html">Documentation</a>
@@ -395,10 +390,11 @@
         </p>
       </details>
       <details>
-        <summary>Do I have to buy all four platforms?</summary>
+        <summary>Is there more to buy later?</summary>
         <p>
-          No. They are four products — take the one that hurts most today. They read the same
-          record, so adding another later has nothing to import.
+          The Work Verification Platform and its field capture are the product, on one rate.
+          More products are coming; they will read the same record, so adding one later has
+          nothing to import.
         </p>
       </details>
       <details>
@@ -467,11 +463,8 @@
       <div class="foot-col">
         <h4>Product</h4>
         <a href="verification.html">Work Verification</a>
-        <a href="platform.html">Platform overview</a>
-        <a href="sales.html">Sales Platform</a>
-        <a href="operations.html">Operations Platform</a>
         <a href="field.html">Field Platform</a>
-        <a href="manager.html">Manager Platform</a>
+        <!-- Later products: platform.html · sales.html · operations.html · manager.html -->
       </div>
       <div class="foot-col">
         <h4>Resources</h4>

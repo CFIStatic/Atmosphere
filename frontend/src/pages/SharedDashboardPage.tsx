@@ -134,8 +134,8 @@ export function SharedDashboardPage() {
   return (
     <AppShell>
       <PageHeader
-        eyebrow="Operations Platform"
-        title="Shared dashboard"
+        eyebrow="Work Verification Platform"
+        title="Job files"
         description="One record per job, shared with the subs on it. What to do, what not to do, and every decision in writing — so nothing gets built on somebody's memory of a phone call."
       />
 
