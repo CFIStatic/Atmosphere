@@ -85,12 +85,16 @@ authRouter.post('/signup', authLimiter, async (req: Request, res: Response, next
       // Log the real cause server-side, but return a generic message so we do
       // not reveal whether the email is already registered (account enumeration).
       console.warn('[signup] supabase error:', error.status, error.message);
-      const status = error.status === 429 ? 429 : 400;
+      if (error.status === 429) {
+        throw new HttpError(
+          429,
+          'Too many sign-up attempts right now. Please wait a few minutes and try again.',
+          'rate_limited',
+        );
+      }
       throw new HttpError(
-        status,
-        status === 429
-          ? 'Too many attempts. Please try again later.'
-          : 'Unable to create an account with those details. If you already have an account, try signing in.',
+        400,
+        'Unable to create an account with those details. If you already have an account, try signing in.',
         'signup_failed',
       );
     }
