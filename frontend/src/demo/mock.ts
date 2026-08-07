@@ -2327,6 +2327,97 @@ const routes: Array<[string, RegExp, Handler]> = [
       },
     };
   }],
+  ['POST', /^\/api\/operations\/intake\/propose$/, (_m, b) => {
+    const text = String(b.text ?? '');
+    const lines = text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => /^(\d+[.)]\s+|[-*•]\s+|do\s*not)/i.test(l))
+      .slice(0, 20)
+      .map((l) => {
+        const excluded = /^do\s*not/i.test(l);
+        const title = l
+          .replace(/^(\d+[.)]\s+|[-*•]\s+)/, '')
+          .replace(/^do\s*not\s*[:\-–]?\s*/i, '')
+          .trim();
+        return {
+          title: title || l,
+          state: excluded ? 'excluded' : 'included',
+          reason: excluded ? 'Called out as exclusion in the source text.' : undefined,
+        };
+      });
+    const claim = text.match(/claim\s*#?\s*([A-Z0-9-]+)/i)?.[1] ?? 'AM-DEMO';
+    const addressLine = text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .find((l) => /\d{1,5}\s+\w+/.test(l) && /(Ave|St|Street|Rd|Road|Blvd|Dr)\b/i.test(l));
+    const address = (addressLine ?? '1842 Meridian Ave')
+      .replace(/^(property|address|site)\s*[:\-]\s*/i, '')
+      .slice(0, 200);
+    return {
+      body: {
+        proposal: {
+          title: `Work at ${address}`,
+          workType: /mitigat|water|flood/i.test(text) ? 'mitigation' : 'construction',
+          address,
+          city: 'Austin',
+          postalCode: '78702',
+          claimNumber: claim,
+          briefNote:
+            'First published facts for the crew. Edit anything that looks wrong before you approve.',
+          facts: { 'Claim #': claim, Site: address, Source: 'Scope / claim text (office intake)' },
+          scope: lines.length
+            ? lines
+            : [{ title: 'Confirm scope with the office', state: 'included' }],
+          party: {
+            company: 'Rio Grande Mitigation',
+            trade: 'mitigation',
+            contactName: 'Alex Rivera',
+          },
+          source: 'heuristic',
+          summary: `${lines.length || 1} scope lines drafted from your paste. Nothing is live until you approve.`,
+        },
+      },
+    };
+  }],
+  ['POST', /^\/api\/operations\/intake\/approve$/, (_m, b) => {
+    const id = `job-intake-${Date.now()}`;
+    const scope = Array.isArray(b.scope) ? b.scope : [];
+    const party = (b.party ?? {}) as { company?: string };
+    const company = String(party.company ?? 'Crew');
+    const token = `demo-intake-${Date.now().toString(36)}`;
+    MANUAL_JOBS[id] = {
+      hasAddress: Boolean(b.address),
+      hasCoordinates: false,
+      scopeLineCount: scope.length,
+      scheduledStart: null,
+      source: 'scope_document',
+    };
+    // Surface on the Job files list in this demo session.
+    SHARED_JOBS.unshift({
+      jobId: id,
+      jobNumber: 9000 + (SHARED_JOBS.length % 900),
+      title: String(b.title ?? 'New job'),
+      status: 'scheduled',
+      parties: 1,
+      currentRevision: 1,
+      behind: 0,
+      awaiting: 1,
+      exclusions: scope.filter((s: { state?: string }) => s.state === 'excluded').length,
+    });
+    return {
+      status: 201,
+      body: {
+        job: { id, title: String(b.title ?? 'New job'), jobNumber: null },
+        briefRevision: 1,
+        scopeSaved: scope.length,
+        party: { id: `party-${token}`, company },
+        sharePath: `/shared/${token}`,
+        fieldCapturePath: `/fieldcapture/index.html?token=${encodeURIComponent(token)}`,
+        readiness: readinessFor(id),
+      },
+    };
+  }],
   ['GET', /^\/api\/operations\/intake-mix$/, () => ({
     body: { counts: { crm_sync: 21, scope_document: 3, manual: 6 }, total: 30 },
   })],

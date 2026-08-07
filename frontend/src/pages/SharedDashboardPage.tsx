@@ -80,6 +80,7 @@ function ago(iso: string | null): string {
 }
 
 export function SharedDashboardPage() {
+  const navigate = useNavigate();
   const [list, setList] = useState<SharedJobSummary[] | null>(null);
   const [counts, setCounts] = useState({ jobs: 0, parties: 0, blockers: 0, awaiting: 0 });
   const [openId, setOpenId] = useState<string | null>(null);
@@ -140,6 +141,15 @@ export function SharedDashboardPage() {
         eyebrow="Work Verification Platform"
         title="Job files"
         description="One record per job, shared with the subs on it. What to do, what not to do, and every decision in writing — so nothing gets built on somebody's memory of a phone call."
+        action={
+          <button
+            type="button"
+            onClick={() => navigate('/intake')}
+            className="rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-semibold text-ink-900"
+          >
+            Start a job
+          </button>
+        }
       />
 
       {error && (
@@ -154,8 +164,17 @@ export function SharedDashboardPage() {
         <div className="mt-6">
           <EmptyState
             title="No shared records yet"
-            hint="Start one on a job with subs on it — or connect your CRM in Settings → Connected apps, and every job you already run becomes a job file here without retyping a thing."
+            hint="Paste a scope to draft a job and invite the crew in one approve — or connect your CRM in Settings → Connected apps."
           />
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => navigate('/intake')}
+              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900"
+            >
+              Start a job from scope
+            </button>
+          </div>
         </div>
       ) : (
         <>

@@ -2,8 +2,9 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
-import { HttpError } from '../lib/errors.js';
+import { HttpError, badRequest } from '../lib/errors.js';
 import { assessReadiness, type IntakeSource, type JobFacts } from '../verifier/readiness.js';
+import { proposeIntakeFromText } from '../verifier/intakePropose.js';
 import { recordAccess } from './proofOfWork.js';
 
 /**
@@ -239,6 +240,188 @@ jobIntakeRouter.get('/intake-mix', async (req: Request, res: Response, next: Nex
     }
     const total = Object.values(counts).reduce((a, b) => a + b, 0);
     res.json({ counts, total, recorded: total });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* ------------------------------------------------------------------ *
+ * AI-first intake package (no money)
+ * ------------------------------------------------------------------ *
+ * Paste / drop scope → editable proposal → one Approve & invite.
+ * Creates job + scope lines + published brief + party token together,
+ * so the crew is never stranded with lines but no revision.
+ */
+
+const proposeSchema = z.object({
+  text: z.string().trim().min(20).max(80_000),
+});
+
+jobIntakeRouter.post('/intake/propose', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await requireOrgContext(req);
+    const { text } = proposeSchema.parse(req.body ?? {});
+    try {
+      const proposal = proposeIntakeFromText(text);
+      res.json({ proposal });
+    } catch (err) {
+      throw badRequest(err instanceof Error ? err.message : 'Could not read that text.', 'propose_failed');
+    }
+  } catch (err) {
+    next(err);
+  }
+});
+
+const approveSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  workType: z.enum(['mitigation', 'construction']).default('mitigation'),
+  address: z.string().trim().min(1).max(200),
+  city: z.string().trim().max(120).optional(),
+  postalCode: z.string().trim().max(20).optional(),
+  claimNumber: z.string().trim().max(80).optional(),
+  briefNote: z.string().trim().max(2000).nullable().optional(),
+  facts: z.record(z.string().max(80), z.string().max(2000)).optional(),
+  scope: z
+    .array(
+      z.object({
+        title: z.string().trim().min(1).max(300),
+        state: z.enum(['included', 'excluded']).default('included'),
+        reason: z.string().max(500).optional(),
+      }),
+    )
+    .min(1)
+    .max(60),
+  party: z.object({
+    company: z.string().trim().min(1).max(160),
+    trade: z.string().trim().max(60).optional(),
+    contactName: z.string().trim().max(120).optional(),
+  }),
+});
+
+/**
+ * POST /api/operations/intake/approve
+ * One approval: job file + scope + published brief + crew invite link.
+ */
+jobIntakeRouter.post('/intake/approve', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { orgId, supabase, userId } = await requireOrgContext(req);
+    const input = approveSchema.parse(req.body ?? {});
+
+    const { data: property, error: propertyError } = await supabase
+      .from('crm_properties')
+      .insert({
+        org_id: orgId,
+        address_line1: input.address,
+        city: input.city ?? null,
+        postal_code: input.postalCode ?? null,
+      })
+      .select('id')
+      .single();
+    if (propertyError || !property) {
+      throw new HttpError(500, 'Could not save the address.', 'property_failed');
+    }
+
+    const { data: job, error: jobError } = await supabase
+      .from('crm_jobs')
+      .insert({
+        org_id: orgId,
+        title: input.title,
+        work_type: input.workType,
+        property_id: (property as any).id,
+        claim_number: input.claimNumber || null,
+        status: 'scheduled',
+        created_by: userId,
+      })
+      .select('id, title, job_number')
+      .single();
+    if (jobError || !job) throw new HttpError(500, 'Could not create the job.', 'job_failed');
+    const jobId = (job as any).id as string;
+
+    await supabase.from('job_intake').insert({
+      job_id: jobId,
+      org_id: orgId,
+      source: 'scope_document' satisfies IntakeSource,
+      source_detail: { enteredFrom: 'intake_package' },
+      entered_by: userId,
+    });
+
+    const { data: brief, error: briefError } = await supabase
+      .from('job_briefs')
+      .insert({
+        org_id: orgId,
+        job_id: jobId,
+        revision: 0, // trigger assigns next revision
+        facts: input.facts ?? {},
+        note: input.briefNote ?? null,
+        created_by: userId,
+      })
+      .select('id, revision')
+      .single();
+    if (briefError || !brief) {
+      throw new HttpError(500, 'Could not publish the brief.', 'brief_failed');
+    }
+    const revision = (brief as any).revision ?? 1;
+
+    const { data: scopeRows, error: scopeError } = await supabase
+      .from('job_scope_items')
+      .insert(
+        input.scope.map((line) => ({
+          org_id: orgId,
+          job_id: jobId,
+          title: line.title,
+          state: line.state,
+          reason: line.reason ?? null,
+          revision,
+          created_by: userId,
+        })),
+      )
+      .select('id');
+    if (scopeError) throw new HttpError(500, 'Could not save scope lines.', 'scope_failed');
+
+    const { data: party, error: partyError } = await supabase
+      .from('job_parties')
+      .insert({
+        org_id: orgId,
+        job_id: jobId,
+        company: input.party.company,
+        trade: input.party.trade ?? null,
+        contact_name: input.party.contactName || null,
+        role: 'subcontractor',
+        invited_at: new Date().toISOString(),
+        created_by: userId,
+      })
+      .select('id, company, access_token')
+      .single();
+    if (partyError || !party) {
+      throw new HttpError(500, 'Could not invite the company.', 'party_failed');
+    }
+
+    await recordAccess(supabase, {
+      orgId,
+      jobId,
+      action: 'job_created',
+      actorId: userId,
+      actorLabel: 'Office',
+      detail: `Intake package approved — ${(scopeRows ?? []).length} scope lines, brief r${revision}, invite ready`,
+    }).catch(() => undefined);
+
+    const facts = await factsFor(supabase, jobId);
+    res.status(201).json({
+      job: {
+        id: jobId,
+        title: (job as any).title,
+        jobNumber: (job as any).job_number ?? null,
+      },
+      briefRevision: revision,
+      scopeSaved: (scopeRows ?? []).length,
+      party: {
+        id: (party as any).id,
+        company: (party as any).company,
+      },
+      sharePath: `/shared/${(party as any).access_token}`,
+      fieldCapturePath: `/fieldcapture/index.html?token=${encodeURIComponent((party as any).access_token)}`,
+      readiness: assessReadiness(facts),
+    });
   } catch (err) {
     next(err);
   }

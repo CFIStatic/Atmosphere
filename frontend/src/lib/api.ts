@@ -895,6 +895,45 @@ export interface JobReadiness {
   source: IntakeSource | null;
 }
 
+/** Editable package from POST /api/operations/intake/propose (no money fields). */
+export interface IntakeProposal {
+  title: string;
+  workType: 'mitigation' | 'construction';
+  address: string;
+  city: string;
+  postalCode: string;
+  claimNumber: string;
+  briefNote: string;
+  facts: Record<string, string>;
+  scope: Array<{ title: string; state: 'included' | 'excluded'; reason?: string }>;
+  party: { company: string; trade: string; contactName: string };
+  source: 'heuristic' | 'model';
+  summary: string;
+}
+
+export type IntakeApproveInput = {
+  title: string;
+  workType?: 'mitigation' | 'construction';
+  address: string;
+  city?: string;
+  postalCode?: string;
+  claimNumber?: string;
+  briefNote?: string | null;
+  facts?: Record<string, string>;
+  scope: IntakeProposal['scope'];
+  party: { company: string; trade?: string; contactName?: string };
+};
+
+export type IntakeApproveResult = {
+  job: { id: string; title: string; jobNumber: number | null };
+  briefRevision: number;
+  scopeSaved: number;
+  party: { id: string; company: string };
+  sharePath: string;
+  fieldCapturePath: string;
+  readiness: JobReadiness;
+};
+
 /* ---- The subcontractor's own list ---------------------------------------- */
 
 export interface ClaimedJob {
@@ -2653,6 +2692,18 @@ export const api = {
       scopeSaved: number;
       readiness: JobReadiness;
     }>('/api/operations/jobs/quick-start', { method: 'POST', body: JSON.stringify(input) }),
+
+  proposeIntake: (input: { text: string }) =>
+    request<{ proposal: IntakeProposal }>('/api/operations/intake/propose', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  approveIntake: (input: IntakeApproveInput) =>
+    request<IntakeApproveResult>('/api/operations/intake/approve', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
 
   intakeMix: () =>
     request<{ counts: Record<IntakeSource, number>; total: number }>('/api/operations/intake-mix', {

@@ -174,7 +174,10 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
       // links to Settings.
       {
         label: 'Set up',
-        items: [{ to: '/shared', label: 'Job files', Icon: UsersIcon }],
+        items: [
+          { to: '/intake', label: 'Start a job', Icon: BoltIcon },
+          { to: '/shared', label: 'Job files', Icon: UsersIcon },
+        ],
       },
       /* Earlier workspace surfaces — kept, not displayed. The routes still
          answer; restore by moving groups back.

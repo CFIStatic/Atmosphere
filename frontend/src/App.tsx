@@ -37,6 +37,7 @@ import { ProfilerPage } from './pages/ProfilerPage';
 import { TerritoriesPage } from './pages/TerritoriesPage';
 import { SalesWorkPage } from './pages/SalesWorkPage';
 import { SharedDashboardPage } from './pages/SharedDashboardPage';
+import { JobIntakePage } from './pages/JobIntakePage';
 import { VerifierLibraryPage } from './pages/VerifierLibraryPage';
 import { PurchaseOrdersPage } from './pages/PurchaseOrdersPage';
 import { JobSharePage } from './pages/JobSharePage';
@@ -229,6 +230,14 @@ export default function App() {
               element: (
                 <RequirePlatform platform="operations">
                   <SharedDashboardPage />
+                </RequirePlatform>
+              ),
+            },
+            {
+              path: '/intake',
+              element: (
+                <RequirePlatform platform="operations">
+                  <JobIntakePage />
                 </RequirePlatform>
               ),
             },
