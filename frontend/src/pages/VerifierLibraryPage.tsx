@@ -22,8 +22,6 @@ export function VerifierLibraryPage() {
   const [frameReady, setFrameReady] = useState(false);
 
   useEffect(() => {
-    setFrameReady(false);
-  }, [srcDoc]);
     const inline = document.getElementById('atm-verify-src');
     if (inline?.textContent) {
       setSrcDoc(
@@ -35,6 +33,10 @@ export function VerifierLibraryPage() {
       );
     }
   }, []);
+
+  useEffect(() => {
+    setFrameReady(false);
+  }, [srcDoc]);
 
   useEffect(() => {
     function onMessage(event: MessageEvent) {
