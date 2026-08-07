@@ -41,7 +41,13 @@ jobs:
       - name: Stamp absolute URLs with the Pages origin
         run: |
           base="${{ steps.pages.outputs.base_url }}"
-          sed -i "s|https://REPLACE-WITH-YOUR-DOMAIN|${base}|g" website/sitemap.xml website/robots.txt
+          # Canonical and og:url live in every page's head and carry the same
+          # token, so the substitution has to reach the HTML too — not just
+          # sitemap and robots. A canonical left pointing at the placeholder
+          # is worse than no canonical at all: it tells crawlers the real page
+          # lives at a host that does not exist.
+          sed -i "s|https://REPLACE-WITH-YOUR-DOMAIN|${base}|g" \
+            website/sitemap.xml website/robots.txt website/*.html
           sed -i "s|content=\"/assets/og.png\"|content=\"${base}/assets/og.png\"|g" website/*.html
 
       # The careers and contact forms post to the backend. On a static host

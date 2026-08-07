@@ -163,11 +163,17 @@ python3 website/build-preview.py preview.html
 
 ## SEO & sharing
 
-Every page carries Open Graph / Twitter meta; `assets/og.png` is the share
-card. `sitemap.xml` and `robots.txt` use the placeholder
+Every page carries Open Graph / Twitter meta plus a `rel="canonical"` and an
+`og:url`; `assets/og.png` is the share card. `sitemap.xml`, `robots.txt`, and
+the canonical/`og:url` tags in every page all use the placeholder
 `https://REPLACE-WITH-YOUR-DOMAIN` — the deploy workflow substitutes the real
 origin (and absolutizes the `og:image` URL) at publish time, so the repo never
 hard-codes a host. Pricing embeds its FAQ as JSON-LD.
+
+If you host this anywhere other than the Pages workflow, substituting the
+token in the HTML is not optional: a canonical left pointing at the
+placeholder tells crawlers the real page lives on a host that does not exist,
+which is worse than shipping no canonical at all.
 
 ## Hosting
 

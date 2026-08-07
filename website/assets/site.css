@@ -875,8 +875,25 @@ a { color: inherit; }
 
 /* ---------- 404 ---------- */
 .notfound { min-height: 62vh; display: grid; place-items: center; padding: 80px 0; }
-.notfound .receipt { width: min(480px, 100%); }
+.notfound > div { width: min(480px, 100%); }
+.notfound .receipt { width: 100%; }
+.notfound-title {
+  font-size: clamp(26px, 4vw, 34px); line-height: 1.15; letter-spacing: -0.02em;
+  font-weight: 700; text-align: center;
+}
+.notfound-lede {
+  margin: 12px auto 28px; text-align: center; color: var(--ink-soft);
+  font-size: 15px; line-height: 1.6; max-width: 42ch;
+}
 .notfound-actions { margin-top: 28px; text-align: center; }
+/* A dead end should offer the places people were most likely heading, not
+   just the front door. */
+.notfound-links {
+  margin-top: 20px; display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 8px 20px; font-size: 13.5px;
+}
+.notfound-links a { color: var(--ink-faint); }
+.notfound-links a:hover { color: var(--accent); }
 
 /* ---------- Footer ---------- */
 footer { border-top: 1px solid var(--line); padding: 56px 0 48px; }
