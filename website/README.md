@@ -18,7 +18,7 @@ written to appeal to contractors of every trade.
 | `operations.html` | Redirect → home (legacy) |
 | `manager.html`    | Redirect → home (legacy) |
 | `security.html`   | Security — architecture diagram and six structural claims   |
-| `pricing.html`    | Pricing — Field Capture, Evidence Platform, and the flat rate |
+| `pricing.html`    | Pricing — Work Verification bundle ($599.98/mo) and the flat rate |
 | `docs.html`       | Resources hub — documentation index, guides, troubleshooting |
 | `doc-*.html`      | Resource pages: getting started, recipes, troubleshooting, field capture, verifier, billing |
 | `about.html`      | About — the Work Verification company, story and principles |
@@ -36,12 +36,12 @@ dark themes) and `assets/site.js` (receipt replay + the careers form).
 
 ## Pricing
 
-`pricing.html` sells two products, each with a flat monthly fee plus usage:
+`pricing.html` sells one bundled subscription plus usage:
 
-- **Field Capture** — $99.99/month. On-site capture and verification as work happens.
-- **Evidence Platform** — $499.99/month. The full record — Verifier, audit trail,
-  durable storage, replay, and sharing.
-- **Usage is prepaid credits at one flat rate**, on both products. Customers buy
+- **Work Verification** — $599.98/month. Includes Field Capture (on-site film and
+  check) and the Evidence Platform (Verifier, audit trail, storage, replay, sharing).
+  Both parts are required; they are not sold separately.
+- **Usage is prepaid credits at one flat rate**, on the subscription. Customers buy
   credits (the `credit_packs` seed, bonuses included) before agents spend them,
   and work pauses at a zero balance. There is **no bundled allowance and no
   postpaid usage** — the page must never imply either. Reload behavior is a
