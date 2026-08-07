@@ -9,18 +9,18 @@ written to appeal to contractors of every trade.
 
 | File              | Page                                                        |
 | ----------------- | ----------------------------------------------------------- |
-| `index.html`      | Home — Work Verification Platform thesis, replayable clip record |
-| `verification.html` | Work Verification Platform — the product: film, check, read, hold, share |
+| `index.html`      | Home — Work Verification for contractors, two-product overview |
+| `verification.html` | Evidence Platform — record, verify, store, and share |
 | `how-it-works.html` | How it works — the full Work Verification pipeline, end to end |
-| `field.html`      | Field Platform — capture on site, with a capture-log hero   |
-| `platform.html`   | LATER PRODUCT (unlisted) — platform hub for the four-platform suite |
-| `sales.html`      | LATER PRODUCT (unlisted) — Sales Platform                   |
-| `operations.html` | LATER PRODUCT (unlisted) — Operations Platform              |
-| `manager.html`    | LATER PRODUCT (unlisted) — Manager Platform                 |
+| `field.html`      | Field Capture — film and check work on site |
+| `platform.html`   | Redirect → home (legacy four-platform page) |
+| `sales.html`      | Redirect → home (legacy) |
+| `operations.html` | Redirect → home (legacy) |
+| `manager.html`    | Redirect → home (legacy) |
 | `security.html`   | Security — architecture diagram and six structural claims   |
 | `pricing.html`    | Pricing — Field Capture, Evidence Platform, and the flat rate |
 | `docs.html`       | Resources hub — documentation index, guides, troubleshooting |
-| `doc-*.html`      | Eight resource pages: getting started, recipes, troubleshooting, estimators, web access, computer use, field, billing |
+| `doc-*.html`      | Resource pages: getting started, recipes, troubleshooting, field capture, verifier, billing |
 | `about.html`      | About — the Work Verification company, story and principles |
 | `careers.html`    | Careers — roles, hiring process, and a working application form |
 | `contact.html`    | Contact — sales/support blocks and an intake form           |
