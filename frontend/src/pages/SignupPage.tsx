@@ -52,6 +52,7 @@ export function SignupPage() {
   );
 
   // Step 1 — account
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState(() => searchParams.get('email') ?? '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -132,6 +133,7 @@ export function SignupPage() {
   }
 
   const signInHref = loginHref(redirectTo);
+  const nameValid = fullName.trim().length >= 2;
   const emailValid = EMAIL_RE.test(email.trim());
   const passwordValid = password.length >= 8;
   const orgStepValid =
@@ -142,7 +144,7 @@ export function SignupPage() {
     e.preventDefault();
     setError(null);
     setAccountNotice(null);
-    if (!emailValid || !passwordValid || accountSubmitting) return;
+    if (!nameValid || !emailValid || !passwordValid || accountSubmitting) return;
 
     setAccountSubmitting(true);
     try {
@@ -153,6 +155,10 @@ export function SignupPage() {
         );
         setPassword('');
         return;
+      }
+      if (fullName.trim()) {
+        await api.updateProfile(fullName.trim());
+        await refreshMembership();
       }
       setStep(2);
     } catch (err) {
@@ -262,6 +268,20 @@ export function SignupPage() {
           {error && <Alert>{error}</Alert>}
 
           <form onSubmit={handleAccountSubmit} noValidate className="mt-6 space-y-4">
+            <Field label="Your name" htmlFor="signup-name">
+              <input
+                id="signup-name"
+                type="text"
+                autoComplete="name"
+                required
+                minLength={2}
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="First and last name"
+                className={inputClass}
+              />
+            </Field>
+
             <Field label="Work email" htmlFor="signup-email">
               <input
                 id="signup-email"
@@ -303,7 +323,7 @@ export function SignupPage() {
               </div>
             </Field>
 
-            <PrimaryButton disabled={!emailValid || !passwordValid || accountSubmitting} loading={accountSubmitting}>
+            <PrimaryButton disabled={!nameValid || !emailValid || !passwordValid || accountSubmitting} loading={accountSubmitting}>
               {accountSubmitting ? 'Creating account…' : 'Continue to step 2'}
             </PrimaryButton>
           </form>

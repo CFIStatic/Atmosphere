@@ -1,6 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SpinnerIcon } from '../components/icons';
+import { useAuth } from '../context/AuthContext';
+import { ROLE_LABELS } from '../lib/api';
+import { displayName, initials } from '../lib/display';
 
 /**
  * The Work Verification Platform's surface IS the Verifier.
@@ -18,6 +21,8 @@ import { SpinnerIcon } from '../components/icons';
  */
 export function VerifierLibraryPage() {
   const navigate = useNavigate();
+  const { user, profile, membership, logout } = useAuth();
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const [srcDoc, setSrcDoc] = useState<string | null>(null);
   const [frameReady, setFrameReady] = useState(false);
 
@@ -38,16 +43,50 @@ export function VerifierLibraryPage() {
     setFrameReady(false);
   }, [srcDoc]);
 
+  const postSession = useCallback(() => {
+    if (!user) return;
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+
+    win.postMessage(
+      {
+        atmosphere: 'session',
+        user: {
+          name: displayName(profile?.fullName, user.email),
+          email: profile?.email ?? user.email ?? '',
+          initials: initials(profile?.fullName, user.email),
+          orgName: membership?.org?.name ?? null,
+          roleLabel: membership ? ROLE_LABELS[membership.role] : null,
+        },
+      },
+      '*',
+    );
+  }, [membership, profile, user]);
+
+  useEffect(() => {
+    if (frameReady) postSession();
+  }, [frameReady, postSession]);
+
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       const data = event.data as { atmosphere?: string; to?: string } | null;
-      if (data && data.atmosphere === 'navigate' && typeof data.to === 'string') {
+      if (!data?.atmosphere) return;
+
+      if (data.atmosphere === 'navigate' && typeof data.to === 'string') {
         navigate(data.to);
+        return;
+      }
+      if (data.atmosphere === 'request-session') {
+        postSession();
+        return;
+      }
+      if (data.atmosphere === 'sign-out') {
+        void logout().then(() => navigate('/login', { replace: true }));
       }
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [navigate]);
+  }, [logout, navigate, postSession]);
 
   const frameClass = 'fixed inset-0 h-full w-full border-0';
   const frameSrc = srcDoc ? undefined : '/verifier/?embed=1';
@@ -61,6 +100,7 @@ export function VerifierLibraryPage() {
       )}
       {srcDoc ? (
         <iframe
+          ref={iframeRef}
           title="Verifier"
           srcDoc={srcDoc}
           className={frameClass}
@@ -68,6 +108,7 @@ export function VerifierLibraryPage() {
         />
       ) : (
         <iframe
+          ref={iframeRef}
           title="Verifier"
           src={frameSrc}
           className={frameClass}

@@ -131,13 +131,38 @@
   .search svg { position: absolute; left: 9px; top: 10px; color: var(--faint); }
 
   .topbar .spacer { flex: 1; }
-  .who { display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--ink-2); }
+  .who-wrap { position: relative; }
+  .who {
+    display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--ink-2);
+    background: none; border: 0; cursor: pointer; padding: 4px 6px; border-radius: 8px;
+    font: inherit; text-align: left;
+  }
+  .who:hover, .who[aria-expanded="true"] { background: var(--line-soft); }
   .who .avatar {
     width: 28px; height: 28px; border-radius: 50%; background: var(--accent);
     display: grid; place-items: center;
-    font-size: 11px; font-weight: 700; color: #FFFFFF;
+    font-size: 11px; font-weight: 700; color: #FFFFFF; flex: none;
   }
   .who .role { color: var(--faint); font-size: 11.5px; }
+  .who-menu {
+    position: absolute; right: 0; top: calc(100% + 6px); z-index: 80;
+    min-width: 220px; padding: 5px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 9px;
+    box-shadow: 0 14px 36px -14px rgba(0,0,0,.4);
+  }
+  .who-menu-head {
+    padding: 8px 9px 10px; border-bottom: 1px solid var(--line); margin-bottom: 4px;
+  }
+  .who-menu-head .name { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .who-menu-head .email { font-size: 11.5px; color: var(--faint); margin-top: 2px; word-break: break-all; }
+  .who-menu-head .meta { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+  .who-menu button {
+    display: flex; width: 100%; align-items: center; gap: 9px; padding: 7px 9px;
+    border: 0; background: none; border-radius: 6px; cursor: pointer;
+    font: inherit; font-size: 12.5px; font-weight: 550; color: var(--ink); text-align: left;
+  }
+  .who-menu button:hover, .who-menu button:focus-visible { background: var(--bg); outline: none; }
+  .who-menu button.danger { color: var(--fail); border-top: 1px solid var(--line); margin-top: 4px; border-radius: 0 0 6px 6px; }
 
   /* ---------- layout ---------- */
   .shell { display: grid; grid-template-columns: 236px minmax(0, 1fr); height: calc(100% - 52px); }
@@ -459,12 +484,26 @@
     <input id="q" type="search" placeholder="Search by job, company, evidence ID, or hash" aria-label="Search evidence" />
   </div>
   <div class="spacer"></div>
-  <div class="who">
-    <div>
-      <div>Dana Ortiz</div>
-      <div class="role">Ortiz Restoration · reviewer</div>
+  <div class="who-wrap" id="who-wrap">
+    <button type="button" class="who" id="who-btn" aria-haspopup="menu" aria-expanded="false">
+      <div>
+        <div id="who-name">Your account</div>
+        <div class="role" id="who-sub">Loading…</div>
+      </div>
+      <div class="avatar" id="who-avatar">—</div>
+    </button>
+    <div class="who-menu" id="who-menu" role="menu" aria-label="Account" hidden>
+      <div class="who-menu-head">
+        <div class="name" id="menu-name">Your account</div>
+        <div class="email" id="menu-email"></div>
+        <div class="meta" id="menu-meta"></div>
+      </div>
+      <button type="button" role="menuitem" id="menu-settings">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09A1.7 1.7 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09A1.7 1.7 0 0 0 20.91 10H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></svg>
+        Settings
+      </button>
+      <button type="button" role="menuitem" id="menu-signout" class="danger">Sign out</button>
     </div>
-    <div class="avatar">DO</div>
   </div>
 </header>
 
@@ -1804,7 +1843,85 @@
   // inviting a subcontractor.
   var EMBEDDED = document.body.hasAttribute('data-atm-embed') ||
     new URLSearchParams(location.search).get('embed') === '1';
+
+  function applySession(payload) {
+    if (!payload || !payload.user) return;
+    var u = payload.user;
+    var name = u.name || 'Teammate';
+    var email = u.email || '';
+    var init = u.initials || '??';
+    var meta = [u.orgName, u.roleLabel].filter(Boolean).join(' · ');
+    var sub = meta || email || 'Atmosphere';
+
+    var whoName = document.getElementById('who-name');
+    var whoSub = document.getElementById('who-sub');
+    var whoAvatar = document.getElementById('who-avatar');
+    var menuName = document.getElementById('menu-name');
+    var menuEmail = document.getElementById('menu-email');
+    var menuMeta = document.getElementById('menu-meta');
+    if (whoName) whoName.textContent = name;
+    if (whoSub) whoSub.textContent = sub;
+    if (whoAvatar) whoAvatar.textContent = init;
+    if (menuName) menuName.textContent = name;
+    if (menuEmail) menuEmail.textContent = email;
+    if (menuMeta) menuMeta.textContent = meta;
+  }
+
+  function initAccountMenu() {
+    var btn = document.getElementById('who-btn');
+    var menu = document.getElementById('who-menu');
+    if (!btn || !menu) return;
+
+    function closeMenu() {
+      menu.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+    }
+
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var open = !menu.hidden;
+      if (open) closeMenu();
+      else {
+        menu.hidden = false;
+        btn.setAttribute('aria-expanded', 'true');
+      }
+    });
+
+    document.addEventListener('click', function (e) {
+      if (!menu.hidden && !menu.contains(e.target) && e.target !== btn) closeMenu();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeMenu();
+    });
+
+    var menuSettings = document.getElementById('menu-settings');
+    if (menuSettings) {
+      menuSettings.addEventListener('click', function () {
+        closeMenu();
+        if (EMBEDDED) window.parent.postMessage({ atmosphere: 'navigate', to: '/settings' }, '*');
+        else location.href = '/settings';
+      });
+    }
+
+    var menuSignout = document.getElementById('menu-signout');
+    if (menuSignout) {
+      menuSignout.addEventListener('click', function () {
+        closeMenu();
+        if (EMBEDDED) window.parent.postMessage({ atmosphere: 'sign-out' }, '*');
+        else location.href = '/login';
+      });
+    }
+  }
+
+  initAccountMenu();
+
+  window.addEventListener('message', function (e) {
+    var d = e.data;
+    if (d && d.atmosphere === 'session') applySession(d);
+  });
+
   if (EMBEDDED) {
+    window.parent.postMessage({ atmosphere: 'request-session' }, '*');
     var embedNav = document.getElementById('embed-nav');
     if (embedNav) embedNav.hidden = false;
     var navJobFiles = document.getElementById('nav-jobfiles');
