@@ -110,7 +110,7 @@ export function AppShell({
           </button>
         </div>
 
-        <div className="shrink-0 px-3 pb-1">
+        <div className="shrink-0 px-3 pb-1" data-tour="platform-switcher">
           <PlatformSwitcher
             active={platformId}
             onSelect={(next) => {
@@ -128,10 +128,14 @@ export function AppShell({
                 {group.label}
               </p>
               <div className="space-y-0.5">
-                {group.items.map(({ to, label, Icon }) => (
+                {group.items.map(({ to, label, Icon }) => {
+                  const tourTarget =
+                    to === '/intake' ? 'nav-start-job' : to === '/shared' ? 'nav-job-files' : undefined;
+                  return (
                   <NavLink
                     key={`${group.label}-${to}`}
                     to={to}
+                    data-tour={tourTarget}
                     onClick={() => setMobileOpen(false)}
                     className={({ isActive }) =>
                       `flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13.5px] font-medium transition-colors ${
@@ -149,7 +153,8 @@ export function AppShell({
                       </span>
                     )}
                   </NavLink>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}

@@ -256,7 +256,7 @@ export function TechnicianPage() {
                   camera and mic — a hidden-but-mounted preview would keep the
                   hardware (and the browser's recording indicator) live. */}
               {view !== 'recordings' && (
-                <>
+                <div data-tour="capture-panel" className="space-y-4">
                   <CaptureGuidePanel onContext={setGuideContext} />
                   <VideoCapturePanel
                     onSaved={handleSaved}
@@ -264,7 +264,7 @@ export function TechnicianPage() {
                     liveContext={guideContext}
                   />
                   <AudioRecorderPanel onSaved={handleSaved} />
-                </>
+                </div>
               )}
 
               {view === 'recordings' && (
