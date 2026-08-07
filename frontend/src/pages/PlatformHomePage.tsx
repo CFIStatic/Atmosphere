@@ -221,15 +221,21 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
     manager: 'Money in play',
   };
 
+  // The Field app is capture, nothing more: no assistant rail, no approvals,
+  // no agent feed. Those belong to the office platforms, current or later.
+  const captureOnly = platformId === 'field';
+
   return (
     <AppShell
       rail={
-        <AtmosphereRail
-          context={platform.name}
-          alerts={pm?.alerts ?? []}
-          escalations={escalations}
-          onResolved={loadEscalations}
-        />
+        captureOnly ? undefined : (
+          <AtmosphereRail
+            context={platform.name}
+            alerts={pm?.alerts ?? []}
+            escalations={escalations}
+            onResolved={loadEscalations}
+          />
+        )
       }
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -240,7 +246,7 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-ink-600">{platform.homeBlurb}</p>
         </div>
-        {escalations && escalations.length > 0 && (
+        {!captureOnly && escalations && escalations.length > 0 && (
           <Link
             to="/approvals"
             className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-400"
@@ -303,7 +309,7 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
         )}
 
         {platformId !== 'sales' && (
-        <section className="rounded-xl glass-card lg:col-span-3">
+        <section className={`rounded-xl glass-card ${captureOnly ? 'lg:col-span-5' : 'lg:col-span-3'}`}>
           <header className="flex items-baseline justify-between border-b border-line px-5 py-4">
             <div>
               <h2 className="text-[15px] font-semibold text-ink-900">{ATTENTION_TITLE[platformId]}</h2>
@@ -326,6 +332,7 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
         </section>
         )}
 
+        {!captureOnly && (
         <section className="rounded-xl glass-card lg:col-span-2">
           <header className="flex items-baseline justify-between border-b border-line px-5 py-4">
             <div>
@@ -347,6 +354,7 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
             )}
           </div>
         </section>
+        )}
 
         {/* Sales only: this is the platform that sends, so this is where
             "who are we writing to?" has to be answerable. Operations and Field

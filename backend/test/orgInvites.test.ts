@@ -41,7 +41,7 @@ test('a revoked invite stays revoked even when the person joins anyway', () => {
   assert.deepEqual(answered, []);
 });
 
-test('the email leads with who and where, and the code stands on its own line', () => {
+test('the email is from Atmosphere, names the org, and the code stands alone', () => {
   const mail = inviteEmail({
     orgName: 'Ortiz Restoration',
     inviterName: 'Dana Ortiz',
@@ -49,7 +49,9 @@ test('the email leads with who and where, and the code stands on its own line', 
     origin: 'https://app.atmosphere.example',
   });
 
-  assert.equal(mail.subject, 'Dana Ortiz added you to Ortiz Restoration on Atmosphere');
+  assert.equal(mail.subject, 'Atmosphere: invite to join Ortiz Restoration');
+  assert.ok(mail.text.startsWith('Atmosphere invited you to join Ortiz Restoration.'));
+  assert.ok(mail.text.includes('Requested by: Dana Ortiz'));
   // Read off a phone, typed into a laptop: the code must sit alone.
   assert.ok(
     mail.text.split('\n').some((line) => line.trim() === 'ORTIZ-4481'),
@@ -63,7 +65,8 @@ test('the email leads with who and where, and the code stands on its own line', 
 test('no configured origin still yields usable steps', () => {
   const mail = inviteEmail({ orgName: 'Ortiz', inviterName: null, joinCode: 'X-1', origin: null });
   assert.match(mail.text, /Open Atmosphere and create an account/);
-  assert.match(mail.subject, /^Your team added you/);
+  assert.equal(mail.subject, 'Atmosphere: invite to join Ortiz');
+  assert.ok(!mail.text.includes('Requested by:'));
 });
 
 test('a note from the inviter is quoted, not paraphrased', () => {

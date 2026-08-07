@@ -847,6 +847,215 @@ export interface EvidenceShare {
   state: 'live' | 'expired' | 'revoked';
 }
 
+/* ---- Scope documents ----------------------------------------------------- */
+
+export interface ProposedScopeLine {
+  title: string;
+  state: 'included' | 'excluded';
+  reason: string | null;
+  amount: number | null;
+  note: string | null;
+}
+
+export interface ScopeDocument {
+  id: string;
+  filename: string;
+  mediaType: string;
+  byteSize: number | null;
+  status: 'uploaded' | 'extracting' | 'extracted' | 'failed' | 'confirmed';
+  extracted: { lines: ProposedScopeLine[]; couldNotRead: string[] } | null;
+  extractionError: string | null;
+  confirmedAt: string | null;
+  createdAt: string;
+}
+
+/* ---- Job intake and readiness -------------------------------------------- */
+
+export type IntakeSource = 'crm_sync' | 'scope_document' | 'manual';
+export type ReadinessCeiling = 'filed_only' | 'work_only' | 'full';
+export type ReadinessLevel = 'blocked' | 'limited' | 'ready';
+
+export interface ReadinessGap {
+  key: 'scope' | 'address' | 'coordinates' | 'schedule';
+  what: string;
+  costs: string;
+  fix: string;
+  severity: 'blocking' | 'weakening';
+}
+
+export interface JobReadiness {
+  level: ReadinessLevel;
+  ceiling: ReadinessCeiling;
+  headline: string;
+  gaps: ReadinessGap[];
+  strengths: string[];
+  source: IntakeSource | null;
+}
+
+/** Editable package from POST /api/operations/intake/propose (no money fields). */
+export interface IntakeProposal {
+  title: string;
+  workType: 'mitigation' | 'construction';
+  address: string;
+  city: string;
+  postalCode: string;
+  claimNumber: string;
+  briefNote: string;
+  facts: Record<string, string>;
+  scope: Array<{ title: string; state: 'included' | 'excluded'; reason?: string }>;
+  /** Stub; invites come from captureTeam, not free-text party fields. */
+  party?: { company: string; trade: string; contactName: string };
+  source: 'heuristic' | 'model';
+  summary: string;
+}
+
+/** Org Field Capture teammates returned with propose — pre-selected to invite. */
+export type CaptureTeamMember = {
+  userId: string;
+  fullName: string;
+  email: string | null;
+  role: string;
+  workType: string | null;
+  selected: boolean;
+};
+
+export type IntakeInvitee = {
+  userId?: string;
+  fullName: string;
+  company?: string;
+  email?: string | null;
+  trade?: string;
+  /** Outside the org — mainly subcontractors invited by email. */
+  external?: boolean;
+};
+
+export type IntakeApproveInput = {
+  title: string;
+  workType?: 'mitigation' | 'construction';
+  address: string;
+  city?: string;
+  postalCode?: string;
+  claimNumber?: string;
+  briefNote?: string | null;
+  facts?: Record<string, string>;
+  scope: IntakeProposal['scope'];
+  invitees: IntakeInvitee[];
+};
+
+export type IntakeCaptureInvite = {
+  id: string;
+  name: string;
+  email: string | null;
+  sharePath: string;
+  fieldCapturePath: string;
+  token: string;
+  external?: boolean;
+  emailed?: boolean;
+  recipientHasAccount?: boolean;
+  attachedToAccount?: boolean;
+};
+
+export type IntakeApproveResult = {
+  job: { id: string; title: string; jobNumber: number | null };
+  briefRevision: number;
+  scopeSaved: number;
+  invites: IntakeCaptureInvite[];
+  /** First invitee — back-compat with older UI. */
+  party: { id: string; company: string };
+  sharePath: string;
+  fieldCapturePath: string;
+  readiness: JobReadiness;
+};
+
+/* ---- The subcontractor's own list ---------------------------------------- */
+
+export interface ClaimedJob {
+  partyId: string;
+  accessToken: string;
+  orgId: string;
+  orgName: string;
+  jobId: string;
+  jobTitle: string;
+  jobNumber: number | null;
+  address: string | null;
+  scheduledStart: string | null;
+  status: string | null;
+  trade: string | null;
+  revoked: boolean;
+}
+
+export interface GeneralContractorGroup {
+  orgId: string;
+  orgName: string;
+  jobs: ClaimedJob[];
+}
+
+export interface FieldIdentity {
+  displayName: string | null;
+  contact: string;
+  channel: 'sms' | 'email';
+}
+
+export interface FieldJobList {
+  identity: FieldIdentity;
+  generalContractors: GeneralContractorGroup[];
+  today: ClaimedJob[];
+}
+
+/* ---- CRM job sync -------------------------------------------------------- */
+
+export type CrmSyncSystem = 'jobnimbus' | 'acculynx' | 'dash' | 'servicetitan';
+
+export interface CrmSyncSummary {
+  created: number;
+  updated: number;
+  conflicts: number;
+  archived: number;
+  unchanged: number;
+}
+
+export interface CrmSyncSystemStatus {
+  system: CrmSyncSystem;
+  label: string;
+  connected: boolean;
+  accountLabel: string | null;
+  connectedAt: string | null;
+  lastSyncAt: string | null;
+  lastSummary: CrmSyncSummary | null;
+}
+
+export interface CrmSyncStatus {
+  driver: 'mock' | 'api';
+  conflictsPending: number;
+  systems: CrmSyncSystemStatus[];
+}
+
+/** A change sync refused to make on its own — an address move under evidence. */
+export interface CrmSyncConflict {
+  linkId: string;
+  system: CrmSyncSystem;
+  systemLabel: string;
+  externalId: string;
+  jobId: string;
+  jobTitle: string | null;
+  jobNumber: number | null;
+  kind: string;
+  incoming: {
+    title: string;
+    claimNumber: string | null;
+    address: {
+      line1: string;
+      line2?: string | null;
+      city: string | null;
+      region: string | null;
+      postalCode: string | null;
+      lat: number | null;
+      lon: number | null;
+    } | null;
+  };
+  seenAt: string;
+}
+
 export interface CreateEvidenceShareResult {
   share: {
     id: string;
@@ -2751,6 +2960,129 @@ export const api = {
 
   revokeEvidenceShare: (id: string) =>
     request<{ ok: boolean }>(`/api/evidence-portal/shares/${id}/revoke`, { method: 'POST' }),
+
+  // ---- Scope documents ----
+  scopeDocument: (jobId: string) =>
+    request<{ doc: ScopeDocument | null }>(`/api/operations/shared/${jobId}/scope-doc`, {
+      method: 'GET',
+    }),
+
+  uploadScopeDocument: (
+    jobId: string,
+    input: { filename: string; mediaType: 'application/pdf' | 'text/plain'; contentBase64: string },
+  ) =>
+    request<{ doc: ScopeDocument }>(`/api/operations/shared/${jobId}/scope-doc`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  confirmScopeDocument: (
+    jobId: string,
+    docId: string,
+    input: { lines: Array<{ title: string; state: 'included' | 'excluded'; reason?: string | null; amount?: number | null }> },
+  ) =>
+    request<{ ok: boolean; created: number }>(
+      `/api/operations/shared/${jobId}/scope-doc/${docId}/confirm`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+
+  // ---- Job intake and readiness ----
+  jobReadiness: (jobId: string) =>
+    request<{ readiness: JobReadiness }>(`/api/operations/jobs/${jobId}/readiness`, {
+      method: 'GET',
+    }),
+
+  quickStartJob: (input: {
+    title: string;
+    workType?: 'mitigation' | 'construction';
+    address: string;
+    city?: string;
+    postalCode?: string;
+    scheduledStart?: string;
+    scope?: Array<{ title: string; state: 'included' | 'excluded'; reason?: string }>;
+  }) =>
+    request<{
+      job: { id: string; title: string; jobNumber: number | null };
+      scopeSaved: number;
+      readiness: JobReadiness;
+    }>('/api/operations/jobs/quick-start', { method: 'POST', body: JSON.stringify(input) }),
+
+  proposeIntake: (input: { text: string }) =>
+    request<{ proposal: IntakeProposal; captureTeam: CaptureTeamMember[] }>(
+      '/api/operations/intake/propose',
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+    ),
+
+  approveIntake: (input: IntakeApproveInput) =>
+    request<IntakeApproveResult>('/api/operations/intake/approve', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  intakeMix: () =>
+    request<{ counts: Record<IntakeSource, number>; total: number }>('/api/operations/intake-mix', {
+      method: 'GET',
+    }),
+
+  // ---- The subcontractor's own list ----
+  // These carry a session the sub holds rather than an org cookie, because a
+  // sub has no seat in any of the organizations whose jobs they can see.
+  fieldClaimStart: (input: { token: string; contact: string }) =>
+    request<{ sentTo: string; channel: 'sms' | 'email'; delivered: boolean; deliveryNote: string | null }>(
+      '/api/field/claim/start',
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+
+  fieldClaimVerify: (input: { token: string; contact: string; code: string }) =>
+    request<FieldJobList & { session: string }>('/api/field/claim/verify', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  fieldJobs: (session: string) =>
+    request<FieldJobList>('/api/field/jobs', {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${session}` },
+    }),
+
+  fieldSignOut: (session: string) =>
+    request<{ ok: boolean }>('/api/field/signout', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session}` },
+    }),
+
+  // ---- CRM job sync ----
+  crmSyncStatus: () => request<CrmSyncStatus>('/api/crm-sync/status', { method: 'GET' }),
+
+  connectCrmSync: (input: { system: CrmSyncSystem; apiKey: string }) =>
+    request<{ status: string; system: CrmSyncSystem; accountLabel: string }>(
+      '/api/crm-sync/connect',
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+
+  disconnectCrmSync: (system: CrmSyncSystem) =>
+    request<{ ok: boolean }>('/api/crm-sync/disconnect', {
+      method: 'POST',
+      body: JSON.stringify({ system }),
+    }),
+
+  runCrmSync: (system: CrmSyncSystem) =>
+    request<{ summary: CrmSyncSummary }>('/api/crm-sync/sync', {
+      method: 'POST',
+      body: JSON.stringify({ system }),
+    }),
+
+  crmSyncConflicts: () =>
+    request<{ conflicts: CrmSyncConflict[] }>('/api/crm-sync/conflicts', { method: 'GET' }),
+
+  resolveCrmSyncConflict: (linkId: string, decision: 'accept_new_address' | 'keep_current') =>
+    request<{ ok: boolean }>(`/api/crm-sync/conflicts/${linkId}`, {
+      method: 'POST',
+      body: JSON.stringify({ decision }),
+    }),
 
   liveObserve: (
     jobId: string,

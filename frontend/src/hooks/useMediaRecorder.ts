@@ -16,6 +16,8 @@ export interface CapturedClip {
  * own default is what makes the recorder work on an iPhone at all.
  */
 const AUDIO_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+// Prefer containers that mux video + Opus/AAC so Field / proof day film
+// always keeps the microphone track (office playback + future transcription).
 const VIDEO_TYPES = [
   'video/webm;codecs=vp9,opus',
   'video/webm;codecs=vp8,opus',
@@ -96,6 +98,14 @@ export function useMediaRecorder({ kind, onComplete }: Options): UseMediaRecorde
 
       if (!recorderSupported()) {
         setError("This browser can't record media. Try Chrome, Edge, or Safari 15 and up.");
+        return;
+      }
+
+      // Day film is audiovisual: camera + microphone in one container.
+      if (kind === 'video' && stream.getAudioTracks().length === 0) {
+        setError(
+          'Microphone is required for Field Capture video. Enable mic permission and try again.',
+        );
         return;
       }
 

@@ -12,6 +12,8 @@ import { SpinnerIcon } from '../components/icons';
 import { ProofOfWork } from '../components/shared/ProofOfWork';
 import { EvidenceLocker } from '../components/shared/EvidenceLocker';
 import { ShareEvidencePanel } from '../components/shared/ShareEvidencePanel';
+import { ScopeDocPanel } from '../components/shared/ScopeDocPanel';
+import { JobReadinessPanel } from '../components/shared/JobReadinessPanel';
 
 /**
  * One job, two companies, one record.
@@ -78,12 +80,14 @@ function ago(iso: string | null): string {
 }
 
 export function SharedDashboardPage() {
+  const navigate = useNavigate();
   const [list, setList] = useState<SharedJobSummary[] | null>(null);
   const [counts, setCounts] = useState({ jobs: 0, parties: 0, blockers: 0, awaiting: 0 });
   const [openId, setOpenId] = useState<string | null>(null);
   const [record, setRecord] = useState<SharedJobRecord | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [readinessKey, setReadinessKey] = useState(0);
 
   async function loadList() {
     try {
@@ -134,9 +138,18 @@ export function SharedDashboardPage() {
   return (
     <AppShell>
       <PageHeader
-        eyebrow="Operations Platform"
-        title="Shared dashboard"
+        eyebrow="Work Verification Platform"
+        title="Job files"
         description="One record per job, shared with the subs on it. What to do, what not to do, and every decision in writing — so nothing gets built on somebody's memory of a phone call."
+        action={
+          <button
+            type="button"
+            onClick={() => navigate('/intake')}
+            className="rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-semibold text-ink-900"
+          >
+            Start a job
+          </button>
+        }
       />
 
       {error && (
@@ -151,8 +164,17 @@ export function SharedDashboardPage() {
         <div className="mt-6">
           <EmptyState
             title="No shared records yet"
-            hint="Start one on a job with subs on it. Publish the facts, write down what is out of scope, and send each sub their link."
+            hint="Paste a scope to draft a job and invite the crew in one approve — or connect your CRM in Settings → Connected apps."
           />
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => navigate('/intake')}
+              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900"
+            >
+              Start a job from scope
+            </button>
+          </div>
         </div>
       ) : (
         <>
@@ -252,6 +274,26 @@ export function SharedDashboardPage() {
                     onChanged={() => {
                       void openJob(record.job.id);
                       void loadList();
+                    }}
+                  />
+
+                  {/* First, because it is the only thing on this page that
+                      is cheap now and expensive later. Everything below is a
+                      thing you do to a job; this is whether the job is worth
+                      doing them to yet. */}
+                  <JobReadinessPanel jobId={record.job.id} refreshKey={readinessKey} />
+
+                  {/* Above the scope list, because it is where the scope
+                      comes from: the document is read, a person confirms,
+                      the lines below appear. */}
+                  <ScopeDocPanel
+                    jobId={record.job.id}
+                    onChanged={() => {
+                      void openJob(record.job.id);
+                      // Confirming a document is the single most common way a
+                      // job stops being unverifiable, so the forecast above
+                      // has to move at the same moment.
+                      setReadinessKey((k) => k + 1);
                     }}
                   />
 

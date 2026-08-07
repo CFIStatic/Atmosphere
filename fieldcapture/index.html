@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Atmosphere Field Capture</title>
+<meta name="description" content="One button. Start it when you get to work, finish it when you're done for the day. Everything else happens to the footage, not to you." />
+<style>
+  /* ---------------------------------------------------------------------
+     The Verifier's design tokens, on a phone.
+
+     Same paper, same ink, same terracotta, same mono-as-record voice — the
+     film a crew makes and the evidence it becomes are one product. What
+     changes is the form factor: one column, one action per screen, targets
+     sized for gloves.
+     --------------------------------------------------------------------- */
+  :root {
+    --bg: #FBFAF7;
+    --panel: #FFFFFF;
+    --line: #E3DED4;
+    --line-soft: #EFEBE3;
+    --ink: #1C1917;
+    --ink-2: #57534E;
+    --muted: #57534E;
+    --faint: #A8A29E;
+    --accent: #BC4508;
+    --accent-soft: #FDF4EE;
+    --pass: #3F7D4C;
+    --pass-soft: #F0F7F1;
+    --fail: #B4361D;
+    --fail-soft: #FDF2F0;
+    --warn: #8A6A16;
+    --warn-soft: #FAF5E6;
+    --rec: #D92D20;
+    --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141311; --panel: #1D1B18; --line: #2A2825; --line-soft: #242220;
+      --ink: #F1EFEB; --ink-2: #A09C93; --muted: #A09C93; --faint: #6B675F;
+      --accent: #F26E22; --accent-soft: #31190C;
+      --pass: #7CC98D; --pass-soft: #12261A;
+      --fail: #F07A62; --fail-soft: #301412;
+      --warn: #D9B45B; --warn-soft: #2A2210;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #FBFAF7; --panel: #FFFFFF; --line: #E3DED4; --line-soft: #EFEBE3;
+    --ink: #1C1917; --ink-2: #57534E; --muted: #57534E; --faint: #A8A29E;
+    --accent: #BC4508; --accent-soft: #FDF4EE;
+    --pass: #3F7D4C; --pass-soft: #F0F7F1;
+    --fail: #B4361D; --fail-soft: #FDF2F0;
+    --warn: #8A6A16; --warn-soft: #FAF5E6;
+  }
+  :root[data-theme="dark"] {
+    --bg: #141311; --panel: #1D1B18; --line: #2A2825; --line-soft: #242220;
+    --ink: #F1EFEB; --ink-2: #A09C93; --muted: #A09C93; --faint: #6B675F;
+    --accent: #F26E22; --accent-soft: #31190C;
+    --pass: #7CC98D; --pass-soft: #12261A;
+    --fail: #F07A62; --fail-soft: #301412;
+    --warn: #D9B45B; --warn-soft: #2A2210;
+  }
+
+  * { box-sizing: border-box; margin: 0; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 16px/1.5 Inter, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: var(--mono); }
+  button { font: inherit; color: inherit; cursor: pointer; }
+
+  /* One column, phone-width, centered on any screen. The app is a phone
+     app; pretending otherwise on a desktop would just stretch the truth. */
+  .app {
+    max-width: 480px; margin: 0 auto; min-height: 100vh;
+    display: flex; flex-direction: column;
+    background: var(--bg);
+  }
+  @media (min-width: 540px) {
+    .app { border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+  }
+
+  /* ---------- header ---------- */
+  .top {
+    display: flex; align-items: center; gap: 10px;
+    padding: 14px 18px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 800; font-size: 15.5px; letter-spacing: -0.02em; }
+  .brand svg { display: block; color: var(--ink); }
+  .brand .sub { font-weight: 600; color: var(--muted); font-size: 12px; margin-left: 2px; }
+  .who { margin-left: auto; text-align: right; font-size: 11.5px; color: var(--muted); line-height: 1.35; }
+  .who b { display: block; color: var(--ink); font-size: 12.5px; font-weight: 650; }
+  /* No back button: the app is one button and the two screens it moves
+     between. There is nowhere to go back to. */
+
+  /* ---------- screens ---------- */
+  .screen { flex: 1; display: none; flex-direction: column; }
+  .screen[data-on="1"] { display: flex; }
+  .pad { padding: 18px; }
+
+  .daterow { font-size: 12px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 650; }
+  .h1 { font-size: 22px; font-weight: 750; letter-spacing: -0.02em; margin-top: 4px; }
+  .lede { color: var(--ink-2); font-size: 13.5px; margin-top: 6px; }
+
+  /* ---------- this week ---------- */
+  .week { margin-top: 22px; }
+  .week h3 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); font-weight: 750; }
+  .weekrow {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 2px; border-bottom: 1px solid var(--line-soft); font-size: 12.5px;
+  }
+  .weekrow:last-child { border-bottom: 0; }
+  .weekrow .what { flex: 1; min-width: 0; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2.5px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 700; white-space: nowrap;
+  }
+  .chip .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+  .chip.pass { background: var(--pass-soft); color: var(--pass); }
+  .chip.warm { background: var(--accent-soft); color: var(--accent); }
+
+  /* ---------- the one button ----------
+     There is exactly one control in this app, and it lives in the same
+     place on both screens so the hand learns it once: tap it when you get
+     to work, hold it when you are done. Everything between those two
+     presses is the system's problem, not the crew's. */
+  .recwrap { padding: 6px 18px 26px; margin-top: auto; text-align: center; }
+  .daybtn {
+    position: relative; overflow: hidden;
+    width: 100%; padding: 20px 18px;
+    border: 0; border-radius: 16px;
+    background: var(--accent); color: #fff;
+    font-size: 17px; font-weight: 750; letter-spacing: -0.01em;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  .daybtn:active { transform: translateY(1px); }
+  .daybtn .lbl { position: relative; z-index: 1; }
+  .daybtn .ico { position: relative; z-index: 1; display: grid; place-items: center; }
+  /* Finishing is a hold, not a tap. Starting early costs nothing; ending
+     the day by accident with the phone in a pocket loses the day, so the
+     two presses are deliberately not equally easy. Still one button. */
+  .daybtn[data-state="rec"] {
+    background: transparent; color: #F1EFEB;
+    border: 2px solid rgba(241, 239, 235, .6);
+  }
+  .daybtn .fill {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 0%;
+    background: var(--rec); z-index: 0;
+  }
+  .daybtn[data-holding="1"] .fill { transition: width 1.5s linear; width: 100%; }
+  .recsquare { width: 15px; height: 15px; border-radius: 4px; background: currentColor; }
+
+  .rechint { font-size: 12px; color: var(--faint); margin-top: 10px; line-height: 1.5; }
+
+  /* ---------- today's expected work (passive) ----------
+     Listed, never tapped. The crew does not choose a job — they drive to
+     one and film. Which job the footage belongs to is decided from where
+     the phone was and when, which is the one answer a person standing in
+     the rain should never be asked to type. */
+  .expect { margin-top: 18px; }
+  .expect h3 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); font-weight: 750; }
+  .erow {
+    display: flex; align-items: baseline; gap: 10px;
+    padding: 11px 2px; border-bottom: 1px solid var(--line-soft);
+  }
+  .erow:last-child { border-bottom: 0; }
+  .erow .t { flex: 1; min-width: 0; }
+  .erow .t b { display: block; font-size: 13.5px; font-weight: 650; letter-spacing: -0.01em; }
+  .erow .t span { display: block; font-size: 12px; color: var(--muted); }
+  .erow .at { font-family: var(--mono); font-size: 11.5px; color: var(--faint); white-space: nowrap; }
+  .erow .warnpin { font-size: 11px; color: var(--warn); }
+
+  /* ---------- the day, while it runs ---------- */
+  .dayclock {
+    font-family: var(--mono); font-size: 44px; font-weight: 700; letter-spacing: -0.02em;
+    color: #F1EFEB; line-height: 1;
+  }
+  .dayclock small { display: block; font-family: Inter, sans-serif; font-size: 12px; font-weight: 600; color: rgba(241,239,235,.6); letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 7px; }
+  .clockwrap { position: absolute; left: 18px; right: 18px; top: 52px; }
+  .sitestrip {
+    margin-top: 18px; display: inline-flex; align-items: center; gap: 8px;
+    padding: 7px 12px; border-radius: 999px;
+    background: rgba(241,239,235,.12); color: #F1EFEB;
+    font-size: 12.5px; font-weight: 600;
+  }
+  .sitestrip.unsure { background: rgba(217, 180, 91, .18); color: #E8C87C; }
+  .sitestrip .pin { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* ---------- the door: what the day became ---------- */
+  .tl { margin-top: 16px; border-left: 2px solid var(--line); padding-left: 14px; }
+  .tlrow { position: relative; padding: 9px 0; }
+  .tlrow::before {
+    content: ''; position: absolute; left: -20px; top: 15px;
+    width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+  }
+  .tlrow b { display: block; font-size: 13.5px; font-weight: 650; }
+  .tlrow span { display: block; font-size: 12px; color: var(--muted); }
+  .tlrow .mono { font-size: 11.5px; color: var(--faint); }
+
+  /* ---------- recording ---------- */
+  .finder {
+    position: relative; flex: 1; min-height: 340px; overflow: hidden;
+    background:
+      radial-gradient(120% 90% at 50% 0%, #3E3A35 0%, #2A2723 55%, #201D1A 100%);
+  }
+  .finder .scene { position: absolute; inset: 0; }
+  .finder .scene i {
+    position: absolute; display: block; background: #57534E; opacity: .55; border-radius: 2px;
+    animation: drift 7s ease-in-out infinite alternate;
+  }
+  @keyframes drift { from { transform: translateX(-6px); } to { transform: translateX(6px); } }
+  .finder .grain {
+    position: absolute; inset: 0; opacity: .06; pointer-events: none;
+    background-image: repeating-linear-gradient(0deg, #fff 0 1px, transparent 1px 3px);
+    animation: flick .4s steps(2) infinite;
+  }
+  @keyframes flick { 50% { opacity: .09; } }
+  .recbar {
+    position: absolute; top: 0; left: 0; right: 0;
+    display: flex; align-items: center; gap: 9px;
+    padding: 12px 16px; color: #F1EFEB; font-family: var(--mono); font-size: 12.5px;
+    background: linear-gradient(rgba(0,0,0,.45), transparent);
+  }
+  .recdot { width: 10px; height: 10px; border-radius: 50%; background: var(--rec); animation: blink 1.1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+  .live {
+    position: absolute; left: 14px; right: 14px; bottom: 96px;
+    background: rgba(20, 19, 17, .82); color: #F1EFEB;
+    border: 1px solid rgba(241, 239, 235, .16);
+    border-radius: 11px; padding: 10px 13px; font-size: 12.5px; line-height: 1.45;
+    backdrop-filter: blur(3px);
+  }
+  .live b { color: #F8B588; font-weight: 650; }
+  .live .k { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.09em; color: rgba(241,239,235,.55); display: block; margin-bottom: 2px; }
+  .stopwrap { position: absolute; left: 0; right: 0; bottom: 18px; text-align: center; }
+
+  /* ---------- the door ---------- */
+  .door { padding: 18px; }
+  .door h2 { font-size: 18px; font-weight: 750; letter-spacing: -0.015em; }
+  .door .sub { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .ledger {
+    margin-top: 16px; border: 1px solid var(--line); border-radius: 13px;
+    background: var(--panel); overflow: hidden;
+  }
+  .lrow {
+    display: flex; align-items: baseline; gap: 11px;
+    padding: 12px 15px; border-bottom: 1px solid var(--line-soft);
+    font-family: var(--mono); font-size: 12.5px; color: var(--ink-2);
+    opacity: 0; transform: translateY(4px);
+  }
+  .lrow.on { opacity: 1; transform: none; transition: opacity .3s, transform .3s; }
+  .lrow:last-child { border-bottom: 0; }
+  .lrow .ok { color: var(--pass); font-weight: 700; margin-left: auto; }
+  .lrow em { color: var(--ink); font-style: normal; }
+  .doneline {
+    margin-top: 16px; padding: 13px 15px; border-radius: 11px;
+    background: var(--pass-soft); color: var(--pass); font-size: 13.5px; font-weight: 650;
+    opacity: 0;
+  }
+  .doneline.on { opacity: 1; transition: opacity .4s; }
+  .doneline small { display: block; font-weight: 500; font-size: 12px; margin-top: 3px; opacity: .85; }
+  .donebtn {
+    display: block; width: 100%; margin-top: 16px; padding: 15px;
+    border: 0; border-radius: 12px; background: var(--ink); color: var(--bg);
+    font-size: 15px; font-weight: 700; opacity: 0;
+  }
+  .donebtn.on { opacity: 1; transition: opacity .4s; }
+
+  .foot { padding: 10px 18px 20px; font-size: 11px; color: var(--faint); line-height: 1.6; }
+
+  /* Property twin — App Store Field measures while filming; office gets the 3D model. */
+  .twin {
+    margin-top: 18px; padding: 14px 15px;
+    border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+  }
+  .twin h3 {
+    font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--faint); font-weight: 750; margin-bottom: 6px;
+  }
+  .twin p { font-size: 13.5px; color: var(--ink-2); line-height: 1.45; }
+  .twin p strong { color: var(--ink); font-weight: 650; }
+  .twin .rooms {
+    margin-top: 10px; display: grid; gap: 6px;
+    font-family: var(--mono); font-size: 12px; color: var(--ink-2);
+  }
+  .twin .rooms span {
+    display: flex; justify-content: space-between; gap: 10px;
+    padding: 7px 10px; border-radius: 8px; background: var(--bg);
+  }
+  .twin .rooms b { color: var(--ink); font-weight: 650; }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- ================= header ================= -->
+  <div class="top">
+    <span class="brand">
+      <svg width="18" height="18" viewBox="0 0 22 22" aria-hidden="true"><rect y="0" width="22" height="2.8" fill="#A8A29E"/><rect y="4.8" width="22" height="2.8" fill="#78716C"/><rect y="9.6" width="22" height="2.8" fill="#57534E"/><rect y="14.4" width="22" height="2.8" fill="currentColor"/><rect y="19.2" width="22" height="2.8" fill="#F2670C"/></svg>
+      Atmosphere <span class="sub">Field Capture</span>
+    </span>
+    <span class="who"><b>Andre Boone</b>Coastal Drying LLC</span>
+  </div>
+
+  <!-- ================= HOME: before the day starts ================= -->
+  <div class="screen" id="s-home" data-on="1">
+    <div class="pad">
+      <div class="daterow mono" id="today-date">TODAY</div>
+      <h1 class="h1">Start it and go to work</h1>
+      <p class="lede">
+        One button, once a day. Tap it when you get to your first job and hold it when you are
+        done. You never pick a job, tag a video, or say what you filmed — the footage carries
+        where it was and when, and the office works it out from that.
+      </p>
+
+      <div class="expect">
+        <h3>What today expects of you</h3>
+        <div id="expect"></div>
+      </div>
+
+      <div class="week" id="week-wrap" hidden>
+        <h3>This week — what your days became</h3>
+        <div id="week"></div>
+      </div>
+
+      <p class="lede" id="live-status" style="margin-top:14px;font-size:13px;color:var(--muted)"></p>
+    </div>
+
+    <div class="recwrap">
+      <button class="daybtn" id="daybtn" data-state="idle">
+        <span class="ico" aria-hidden="true">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3.5l5 4v-11z"/></svg>
+        </span>
+        <span class="lbl">Start the day</span>
+      </button>
+      <p class="rechint" id="btnhint">
+        Your location, clock, video, and microphone ride along with the footage and are checked at
+        the door — that is what makes it proof instead of silent video.
+      </p>
+    </div>
+  </div>
+
+  <!-- ================= BLOCKED: no token, not demo ================= -->
+  <div class="screen" id="s-blocked">
+    <div class="pad" style="padding-top:48px">
+      <h1 class="h1">Open your job link</h1>
+      <p class="lede" id="blocked-msg">
+        Field Capture files a real day film (video + audio) through a job share link.
+        It does not invent a demo day when the link is missing.
+      </p>
+    </div>
+  </div>
+
+  <!-- ================= THE DAY, RUNNING ================= -->
+  <div class="screen" id="s-rec">
+    <div class="finder">
+      <video id="preview" playsinline muted style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#111"></video>
+      <div class="scene" id="scene" hidden></div>
+      <div class="grain"></div>
+      <div class="recbar">
+        <span class="recdot"></span> RECORDING THE DAY
+        <span style="margin-left:auto" class="mono" id="rec-since"></span>
+      </div>
+
+      <div class="clockwrap">
+        <div class="dayclock"><small>Filming for</small><span id="clock">0:00</span></div>
+        <div class="sitestrip" id="sitestrip"><span class="pin"></span><span id="site-text">Getting your bearings…</span></div>
+      </div>
+
+      <div class="live" id="live">
+        <span class="k">ON THE RECORD · VIDEO + AUDIO</span>
+        <span id="live-text">Getting your bearings…</span>
+      </div>
+
+      <div class="stopwrap" style="left:18px;right:18px">
+        <button class="daybtn" id="stopbtn" data-state="rec">
+          <span class="fill" aria-hidden="true"></span>
+          <span class="ico" aria-hidden="true"><span class="recsquare"></span></span>
+          <span class="lbl">Hold to finish the day</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= THE DOOR: end of day ================= -->
+  <div class="screen" id="s-door">
+    <div class="door">
+      <h2>Checked at the door</h2>
+      <p class="sub">Before anyone watches it, your day is checked as evidence. You see the same checks the office sees.</p>
+      <div class="ledger" id="ledger">
+        <div class="lrow" id="l1"><span>Filmed on site</span><em id="l1-d"></em><span class="ok">✓</span></div>
+        <div class="lrow" id="l2"><span>Filmed live — not from your gallery</span><span class="ok">✓</span></div>
+        <div class="lrow" id="l3"><span>Sealed</span><em>SHA-256 into the record</em><span class="ok">✓</span></div>
+        <div class="lrow" id="l4"><span>Split across</span><em id="l4-d"></em><span class="ok">→</span></div>
+      </div>
+
+      <h3 style="margin-top:22px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:750">
+        Your day, as the office will read it
+      </h3>
+      <div class="tl" id="daytl"></div>
+
+      <div class="doneline" id="doneline">
+        Your part is done.
+        <small>You just record. The office opens the Verifier to watch and hear the day film with an AI dictation against the scope. Anything the model could not see shows up there as a named gap, never as a guess on your phone.</small>
+      </div>
+      <button class="donebtn" id="donebtn">Back to today</button>
+    </div>
+  </div>
+
+  <div class="foot">
+    Uploading finishes itself when signal returns — never delete anything to "help". A day that
+    fails a check is still filed and still counts; it is just marked for a person to look at.
+  </div>
+</div>
+
+<script src="js/capture-core.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

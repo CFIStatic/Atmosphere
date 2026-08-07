@@ -147,8 +147,60 @@ test('serialization: labels attached, integrity computed, flag derived', () => {
   assert.equal(item.durationSeconds, 143);
   assert.equal(item.tier, 2);
   assert.equal(item.analysis?.materialBecause, 'The tarp is gone.');
-  assert.deepEqual(item.analysis?.scope, [{ title: 'Remove tarp', verdict: 'appears_complete' }]);
+  assert.deepEqual(item.analysis?.scope, [
+    { title: 'Remove tarp', verdict: 'appears_complete', because: null, seenInWindows: undefined },
+  ]);
   assert.deepEqual(item.analysis?.couldNotTell, ['Ridge detail']);
+  // Without a separate narration_text, dictation falls back to the summary —
+  // the office always has something to read next to the video.
+  assert.equal(item.analysis?.dictation, 'The slope is stripped.');
+});
+
+test('serialization: office dictation prefers narration_text over the day summary', () => {
+  const item = serializeEvidence({
+    proof: {
+      id: 'p-dictation',
+      job_id: 'j1',
+      party_id: 'pt1',
+      phase: 'after',
+      work_date: '2026-08-07',
+      captured_at: '2026-08-07T14:00:00Z',
+      received_at: '2026-08-07T14:11:00Z',
+      duration_seconds: '240',
+      byte_size: '2000',
+      lat: 30.44,
+      lon: -97.72,
+      accuracy_m: 6,
+      content_hash: 'def',
+      state: 'checked',
+      checks: [{ key: 'on_site', verdict: 'pass', detail: 'on site' }],
+      ai_summary: 'Short headline.',
+      ai_findings: { longForm: true, timeline: [] },
+      ai_material_change: null,
+      ai_model: 'claude',
+      analysis_status: null,
+      narration_status: 'done',
+      narration_text:
+        'The crew strips the north slope through the morning, then lays underlayment after lunch.',
+      narration: { entries: [{ atSeconds: 0, text: 'Tear-off begins.' }], model: 'claude' },
+      legal_hold: false,
+      retention_until: null,
+    },
+    jobName: 'Cedar Ridge',
+    jobNumber: 1038,
+    company: 'Delgado Roofing',
+    contactName: 'Hector Delgado',
+    tier: 2,
+    dayHasAfter: true,
+  });
+
+  assert.equal(item.analysisState, 'done', 'finished dictation alone is enough for the office view');
+  assert.equal(
+    item.analysis?.dictation,
+    'The crew strips the north slope through the morning, then lays underlayment after lunch.',
+  );
+  assert.equal(item.analysis?.dictationStatus, 'done');
+  assert.equal(item.analysis?.summary, 'Short headline.');
 });
 
 test('serialization: a wrong-house clip arrives flagged with no analysis body', () => {

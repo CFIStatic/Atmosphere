@@ -35,14 +35,12 @@ export function invitesAnsweredBy(invites: InviteRow[], memberEmails: string[]):
 /**
  * The invitation email.
  *
- * Plain text, short, and built around the one thing the recipient has to do:
- * sign up and type the code. No unsubscribe footer and no postal block — this
- * is a workplace invitation from a named colleague, not commercial mail, and
- * dressing it as marketing would make it read like phishing.
+ * Sent by Atmosphere (platform SMTP). The org and requester are named in the
+ * body so the recipient knows who asked — but the mail does not come from
+ * their inbox.
  *
- * The code appears on its own line because it will be read off a phone screen
- * and typed into a laptop, and burying it mid-sentence is how it gets typed
- * wrong.
+ * Plain text, short, built around sign up + join code. The code appears on its
+ * own line because it will be read off a phone and typed into a laptop.
  */
 export function inviteEmail(input: {
   orgName: string;
@@ -52,11 +50,14 @@ export function inviteEmail(input: {
   origin?: string | null;
   note?: string | null;
 }): { subject: string; text: string } {
-  const inviter = input.inviterName?.trim() || 'Your team';
+  const inviter = input.inviterName?.trim() || null;
+  const org = input.orgName.trim() || 'a team';
   const lines: string[] = [
-    `${inviter} added you to ${input.orgName} on Atmosphere.`,
+    `Atmosphere invited you to join ${org}.`,
     '',
   ];
+
+  if (inviter) lines.push(`Requested by: ${inviter}`, '');
 
   if (input.note?.trim()) {
     lines.push(`"${input.note.trim()}"`, '');
@@ -71,12 +72,12 @@ export function inviteEmail(input: {
   lines.push('  2. Choose "Join an organization" and enter this code:', '');
   lines.push(`      ${input.joinCode}`, '');
   lines.push(
-    'The code is the same for everyone joining your company, so there is nothing',
+    'The code is the same for everyone joining this company, so there is nothing',
     'personal in this link to lose. If you were not expecting this, you can ignore it.',
   );
 
   return {
-    subject: `${inviter} added you to ${input.orgName} on Atmosphere`,
+    subject: `Atmosphere: invite to join ${org}`,
     text: lines.join('\n'),
   };
 }

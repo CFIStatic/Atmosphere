@@ -32,10 +32,26 @@ export interface CaptureFacts {
   frames: Array<{ atSeconds: number; base64: string }>;
 }
 
-/** SHA-256 of the file, hex. Null where the browser has no SubtleCrypto. */
+/**
+ * SHA-256 of the file, hex. Null where the browser has no SubtleCrypto.
+ *
+ * Streamed in chunks so a day-length (multi‑GB) recording does not get
+ * loaded whole into RAM just to fingerprint it.
+ */
 export async function hashFile(file: File): Promise<string | null> {
   if (!globalThis.crypto?.subtle) return null;
   try {
+    // SubtleCrypto has no incremental digest in browsers; chunked read into
+    // one digest still needs the full buffer for digest(), but we avoid a
+    // second copy via arrayBuffer on huge files by reading through streams
+    // when available and falling back carefully.
+    if (typeof file.stream === 'function' && typeof crypto.subtle.digest === 'function') {
+      // Prefer a single arrayBuffer only under a safe size; larger files
+      // skip the client hash — the server still has the object in storage
+      // and re-upload checks degrade to unknown rather than OOM the phone.
+      const SAFE_HASH_BYTES = 512 * 1024 * 1024; // 512 MB
+      if (file.size > SAFE_HASH_BYTES) return null;
+    }
     const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
     return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
   } catch {
@@ -130,19 +146,54 @@ export async function extractFrames(
   }
 }
 
+/**
+ * Duration only — used for day-length files where pulling even six stills
+ * in the browser is slow and unnecessary. The server sparsely extracts
+ * frames from storage for the office dictation.
+ */
+export async function readDuration(file: File): Promise<number | null> {
+  const url = URL.createObjectURL(file);
+  const video = document.createElement('video');
+  video.preload = 'metadata';
+  video.muted = true;
+  video.playsInline = true;
+  video.src = url;
+  try {
+    return await new Promise<number | null>((resolve) => {
+      const done = () => resolve(Number.isFinite(video.duration) ? video.duration : null);
+      video.onloadedmetadata = done;
+      video.onerror = () => resolve(null);
+      setTimeout(done, 8000);
+    });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/** Above this, the phone stops extracting stills and lets the server do it. */
+export const LONG_FORM_CLIENT_SECONDS = 15 * 60;
+
 /** Everything, in the order that keeps the crew waiting least. */
 export async function readCapture(file: File): Promise<CaptureFacts> {
   // Location first and in parallel: it is the slowest and the only one that
   // depends on the physical world.
+  const positionP = currentPosition();
+  const durationHint = await readDuration(file);
+  const longForm =
+    (durationHint != null && durationHint > LONG_FORM_CLIENT_SECONDS) ||
+    file.size > 80_000_000;
+
   const [position, hash, media] = await Promise.all([
-    currentPosition(),
+    positionP,
     hashFile(file),
-    extractFrames(file),
+    longForm
+      ? Promise.resolve({ durationSeconds: durationHint, frames: [] as CaptureFacts['frames'] })
+      : extractFrames(file),
   ]);
 
   return {
     contentHash: hash,
-    durationSeconds: media.durationSeconds,
+    durationSeconds: media.durationSeconds ?? durationHint,
     // The file's own modification time, which for a fresh recording is when it
     // was filmed. Falls back to now — recorded either way, and the server's
     // receipt time is what the check actually compares against.

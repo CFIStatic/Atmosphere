@@ -48,6 +48,13 @@ import { salesRouter } from './routes/sales.js';
 import { emailMarketingRouter } from './routes/emailMarketing.js';
 import { cyberRouter } from './routes/cyber.js';
 import { symbilityRouter } from './routes/symbility.js';
+import { crmSyncRouter } from './routes/crmSync.js';
+import { scopeDocsRouter } from './routes/scopeDocs.js';
+import { jobIntakeRouter } from './routes/jobIntake.js';
+import { fieldIdentityRouter } from './routes/fieldIdentity.js';
+import { mediaVideoRouter } from './routes/mediaVideo.js';
+import { mediaCatalogRouter } from './routes/mediaCatalog.js';
+import { geometryRouter } from './routes/geometry.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { cyberMonitor } from './cyber/index.js';
 import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
@@ -156,6 +163,7 @@ export function createApp(): Express {
   app.use('/api/mitigation', mitigationRouter);
   app.use('/api/xactimate', xactimateRouter);
   app.use('/api/symbility', symbilityRouter);
+  app.use('/api/crm-sync', crmSyncRouter);
   app.use('/api/jobs', jobsRouter);
   app.use('/api/memory', memoryRouter);
   app.use('/api/technician', technicianRouter);
@@ -171,6 +179,8 @@ export function createApp(): Express {
   // Server-to-server: no session cookie, authenticated by Stripe's signature.
   app.use('/api/webhooks', webhookRouter);
   app.use('/api/pm', pmRouter);
+  app.use('/api/operations', scopeDocsRouter);
+  app.use('/api/operations', jobIntakeRouter);
   app.use('/api/operations', sharedJobsRouter);
   app.use('/api/purchasing', purchasingRouter);
   app.use('/api/episodes', episodesRouter);
@@ -187,6 +197,18 @@ export function createApp(): Express {
   // HomeOwner Report: staff management + tokenized guest access.
   app.use('/api/portal', portalRouter);
   app.use('/api/finance', financeRouter);
+  // Also outside auth, and for a sharper version of the same reason: this is
+  // where a subcontractor turns a pile of per-job links from several general
+  // contractors into one list. They hold a session of their own, not a seat
+  // in anybody's org, so no org middleware could apply.
+  app.use('/api/field', fieldIdentityRouter);
+  // Any inbound video (proof, field capture, CRM, upload) can share one
+  // sparse+diversity+dictation pipeline without a job_proofs row.
+  app.use('/api/media/video', mediaVideoRouter);
+  // Fleet catalog: many ≤24h objects in object storage (hot/warm/cold).
+  app.use('/api/media/catalog', mediaCatalogRouter);
+  // App Store Field Capture: RoomPlan/ARKit/LiDAR rooms + video → property twin.
+  app.use('/api/geometry', geometryRouter);
   app.use('/api/web-access', webAccessRouter);
   app.use('/api/connectors', connectorsRouter);
   app.use('/api/verifier', verifierRouter);

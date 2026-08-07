@@ -1,0 +1,105 @@
+import SwiftUI
+
+struct TodayView: View {
+    @EnvironmentObject private var session: FieldDaySession
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text(Date.now, format: .dateTime.weekday(.wide).month(.abbreviated).day())
+                        .font(FieldTheme.mono)
+                        .foregroundStyle(FieldTheme.faint)
+                        .textCase(.uppercase)
+
+                    Text("Start it and go to work")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundStyle(FieldTheme.ink)
+
+                    Text(
+                        "One button, once a day. Tap when you get to your first job and hold when you are done. The film is video + audio — the office hears the site as well as sees it."
+                    )
+                    .font(.system(size: 15))
+                    .foregroundStyle(FieldTheme.muted)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("What today expects of you")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(FieldTheme.faint)
+                            .textCase(.uppercase)
+                        ForEach(session.jobs) { job in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(job.name).font(.system(size: 14, weight: .semibold))
+                                    Text(job.address)
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(FieldTheme.muted)
+                                }
+                                Spacer()
+                                Text(job.at)
+                                    .font(FieldTheme.mono)
+                                    .foregroundStyle(FieldTheme.faint)
+                            }
+                            .padding(12)
+                            .background(FieldTheme.panel)
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
+                            .cornerRadius(10)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Property twin · App Store")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(FieldTheme.faint)
+                            .textCase(.uppercase)
+                        Text(
+                            "While you film, LiDAR / RoomPlan can measure rooms. The office gets a 3D twin of the property and the work — you still only press one button."
+                        )
+                        .font(.system(size: 13.5))
+                        .foregroundStyle(FieldTheme.muted)
+                    }
+                    .padding(14)
+                    .background(FieldTheme.panel)
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(FieldTheme.line))
+                    .cornerRadius(12)
+
+                    if let err = session.lastError {
+                        Text(err)
+                            .font(.system(size: 13))
+                            .foregroundStyle(FieldTheme.rec)
+                    }
+                }
+                .padding(18)
+            }
+
+            Button {
+                Task { await session.startDay() }
+            } label: {
+                Label("Start the day", systemImage: "video.fill")
+                    .font(.system(size: 17, weight: .bold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(FieldTheme.ink)
+                    .foregroundStyle(FieldTheme.bg)
+                    .cornerRadius(12)
+            }
+            .padding(18)
+        }
+    }
+
+    private var header: some View {
+        HStack {
+            Text("Atmosphere")
+                .font(.system(size: 16, weight: .heavy))
+            Text("Field Capture")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(FieldTheme.muted)
+            Spacer()
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .background(FieldTheme.panel)
+        .overlay(alignment: .bottom) { FieldTheme.line.frame(height: 1) }
+    }
+}

@@ -11,9 +11,8 @@ import { SpinnerIcon } from '../icons';
  * turned up, and a way to withdraw an ask that went to the wrong address.
  *
  * The email is best-effort and the panel is built to make that unremarkable.
- * On day one nobody has connected a mailbox, so "we could not email it" is the
- * common case, not an error — the code appears right there for sending over
- * text, which is how job-site invitations actually travel anyway.
+ * If Atmosphere mail is not configured on the server, "we could not email it"
+ * is the common case — the code appears right there for sending over text.
  */
 
 const ROLES: MemberRole[] = [
@@ -73,8 +72,8 @@ export function InvitePanel() {
       const res = await api.createOrgInvite({ email, role });
       setOutcome(
         res.emailed
-          ? `Invited — the code went to ${email}.`
-          : `Invited. No mailbox is connected, so send them the code yourself — it is below.`,
+          ? `Invited — Atmosphere emailed ${email}.`
+          : `Invited. Atmosphere could not email them, so send the code yourself — it is below.`,
       );
       setEmail('');
       await load();

@@ -23,6 +23,8 @@ import { DailyBudget } from '../shared/liveBudget.js';
 import { labelsForProof } from '../verifier/library.js';
 import { buildCaptureGuide } from '../shared/captureGuide.js';
 import { scopeForParty } from '../shared/jobRecord.js';
+import { analyseLongRecording } from '../shared/longAnalyst.js';
+import { prepareVideoFrames } from '../shared/videoIntelligence.js';
 import {
   narrateProofVideo,
   observeLiveFrame,
@@ -87,13 +89,16 @@ async function siteLocation(supabase: any, orgId: string, jobId: string) {
     .maybeSingle();
 
   if ((job as any)?.property_id) {
+    // The columns are latitude/longitude — selecting the wrong names here
+    // silently returned null and left every on-site check "unknown", which
+    // blocks payment honestly but wrongly. The names are load-bearing.
     const { data: property } = await supabase
       .from('crm_properties')
-      .select('lat, lon')
+      .select('latitude, longitude')
       .eq('id', (job as any).property_id)
       .maybeSingle();
-    const lat = (property as any)?.lat;
-    const lon = (property as any)?.lon;
+    const lat = (property as any)?.latitude;
+    const lon = (property as any)?.longitude;
     if (lat !== null && lat !== undefined && lon !== null && lon !== undefined) {
       return { lat: Number(lat), lon: Number(lon) };
     }
@@ -111,7 +116,7 @@ export async function createUploadUrl(
   party: any,
   admin: any,
   body: unknown,
-): Promise<{ path: string; token: string }> {
+): Promise<{ path: string; token: string; uploadUrl: string }> {
   const input = z
     .object({
       workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -127,8 +132,11 @@ export async function createUploadUrl(
   const { data, error } = await admin.storage.from(PROOF_BUCKET).createSignedUploadUrl(path, {
     upsert: true,
   });
-  if (error) throw new HttpError(500, error.message, 'upload_url_failed');
-  return { path, token: (data as any).token };
+  if (error || !(data as { signedUrl?: string } | null)?.signedUrl) {
+    throw new HttpError(500, error?.message ?? 'Could not mint upload URL', 'upload_url_failed');
+  }
+  const signed = data as { signedUrl: string; token: string };
+  return { path, token: signed.token, uploadUrl: signed.signedUrl };
 }
 
 const recordSchema = z.object({
@@ -136,7 +144,14 @@ const recordSchema = z.object({
   phase: z.enum(['before', 'after']),
   storagePath: z.string().min(1).max(500),
   byteSize: z.number().int().positive().optional(),
-  durationSeconds: z.number().min(0).max(60 * 60).optional(),
+  // Day-length / overnight recordings are first-class. The hard ceiling is
+  // config.verification.maxDurationSeconds (default 24h); above that the
+  // phone must split the day rather than ship an unbounded file.
+  durationSeconds: z
+    .number()
+    .min(0)
+    .max(config.verification.maxDurationSeconds)
+    .optional(),
   /** SHA-256 hex, computed on the device before upload. */
   contentHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   capturedAt: z.string().datetime().optional(),
@@ -243,7 +258,15 @@ export async function recordProof(party: any, admin: any, body: unknown) {
   // the moment this clip lands — its report rides the clip. The comparison is
   // per-day and waits for its pair. Neither is awaited: a vision call does not
   // belong inside a phone's POST on a truck's signal.
-  if (input.frames?.length) {
+  //
+  // Day-length recordings often arrive with zero device frames (the phone
+  // cannot honestly sample 24h into a JSON body). Those still queue: the
+  // worker sparsely extracts stills from storage with FFmpeg before reading.
+  const durationSeconds = input.durationSeconds ?? 0;
+  const longForm =
+    durationSeconds > config.verification.longFormSeconds ||
+    (input.byteSize ?? 0) > 80_000_000;
+  if (input.frames?.length || longForm) {
     await queueNarration(admin, party, (proof as any).id, input.phase, input.workDate);
   } else {
     await admin
@@ -576,9 +599,9 @@ async function guideStepsFor(admin: any, jobId: string, partyId: string, phase: 
 }
 
 /**
- * Read one video's stored frames back out of the bucket. The device already
- * extracted and uploaded them at filing time, so narration needs no video
- * toolchain — just the JPEGs it was always going to read.
+ * Read one video's stored frames back out of the bucket. Short clips still
+ * arrive with device-extracted JPEGs; day-length clips are filled in by
+ * ensureSparseFramesFromStorage when the device sent none.
  */
 async function framesFor(admin: any, proofId: string) {
   const { data: rows } = await admin
@@ -598,6 +621,78 @@ async function framesFor(admin: any, proofId: string) {
   return frames;
 }
 
+/**
+ * For a long recording with few or no device stills, stream-extract a sparse
+ * set of JPEGs from the stored video via the shared video-intelligence
+ * pipeline (same path any inbound video can use). Node never holds the
+ * multi‑GB file.
+ */
+async function ensureSparseFramesFromStorage(
+  admin: any,
+  job: NarrationJob,
+  durationSeconds: number,
+): Promise<number> {
+  const { data: existing } = await admin
+    .from('job_proof_frames')
+    .select('id')
+    .eq('proof_id', job.proofId);
+  const have = (existing ?? []).length;
+  // A short guided clip with a handful of device frames is already enough.
+  // A workday needs a real sample across the timeline.
+  // Device stills (≤12) are never enough for a workday. Always re-extract
+  // sparsely + diversely for long-form so we do not narrate six near-identical
+  // phone thumbnails.
+  const minWanted = 1;
+  if (have >= config.verification.sparseMaxFrames) return have;
+
+  const { data: proof } = await admin
+    .from('job_proofs')
+    .select('storage_path, org_id, job_id, party_id, work_date, phase')
+    .eq('id', job.proofId)
+    .maybeSingle();
+  if (!proof?.storage_path) return have;
+
+  const { data: signed, error: signErr } = await admin.storage
+    .from(PROOF_BUCKET)
+    .createSignedUrl((proof as any).storage_path, 60 * 60);
+  if (signErr || !signed?.signedUrl) {
+    throw new Error(signErr?.message ?? 'Could not mint a signed URL for sparse extract.');
+  }
+
+  // Same prepareVideoFrames call used by /api/media/video — proof is just
+  // one source kind among several.
+  const prepared = await prepareVideoFrames({
+    id: job.proofId,
+    source: 'proof_of_work',
+    url: signed.signedUrl,
+    durationSeconds,
+  });
+  if (!prepared.frames.length) return have;
+
+  // Replace device samples with the diversity-filtered server timeline.
+  if (have >= minWanted) {
+    await admin.from('job_proof_frames').delete().eq('proof_id', job.proofId);
+  }
+
+  for (const frame of prepared.frames) {
+    const path = `${(proof as any).org_id}/${(proof as any).job_id}/${(proof as any).party_id}/${(proof as any).work_date}-${(proof as any).phase}-sf${Math.round(frame.atSeconds)}.jpg`;
+    await admin.storage.from(PROOF_BUCKET).upload(path, frame.jpeg, {
+      contentType: 'image/jpeg',
+      upsert: true,
+    });
+    await admin.from('job_proof_frames').upsert(
+      {
+        org_id: (proof as any).org_id,
+        proof_id: job.proofId,
+        at_seconds: frame.atSeconds,
+        storage_path: path,
+      },
+      { onConflict: 'proof_id,at_seconds' },
+    );
+  }
+  return prepared.frames.length;
+}
+
 async function performNarration(admin: any, job: NarrationJob): Promise<void> {
   await admin.from('job_proofs').update({ narration_status: 'running' }).eq('id', job.proofId);
 
@@ -609,14 +704,43 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
     return;
   }
 
+  const { data: proofRow } = await admin
+    .from('job_proofs')
+    .select('duration_seconds, byte_size')
+    .eq('id', job.proofId)
+    .maybeSingle();
+  const durationSeconds = Number((proofRow as any)?.duration_seconds ?? 0);
+  const longForm =
+    durationSeconds > config.verification.longFormSeconds ||
+    Number((proofRow as any)?.byte_size ?? 0) > 80_000_000;
+
+  if (longForm) {
+    await ensureSparseFramesFromStorage(admin, job, durationSeconds || 24 * 60 * 60);
+  }
+
   const frames = await framesFor(admin, job.proofId);
   if (!frames.length) {
-    // Honest and terminal: a clip whose device could not extract frames has
-    // nothing for the model to read, and retrying will not change that.
+    // Honest and terminal for short clips. Long clips already tried FFmpeg;
+    // if that produced nothing the binary or the file is the problem.
     await write({
       narration_status: 'skipped',
-      narration_error: 'The device uploaded no frames for this clip.',
+      narration_error: longForm
+        ? 'Could not extract frames from this long recording for analysis.'
+        : 'The device uploaded no frames for this clip.',
     });
+    return;
+  }
+
+  // A workday-length recording is a different reading problem from a guided
+  // walk: hours of frames go through windows on the cheap model, then one
+  // synthesis on the strong one, with verdicts capped by actual sightings.
+  if (longForm) {
+    await performLongFormAnalysis(
+      admin,
+      job,
+      frames,
+      durationSeconds || frames[frames.length - 1]?.atSeconds || 0,
+    );
     return;
   }
 
@@ -660,6 +784,116 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
     action: 'analysed',
     actorLabel: 'Atmosphere',
     detail: `narrated · ${job.phase} · ${job.workDate}`,
+  });
+}
+
+/**
+ * The workday path: hours of footage, read honestly. Windows on the cheap
+ * model (kept as job_proof_segments — the timeline is stored evidence, not
+ * prose), one synthesis on the strong model, and per-scope-line verdicts
+ * whose strength is capped by how many windows actually saw the line worked.
+ */
+async function performLongFormAnalysis(
+  admin: any,
+  job: NarrationJob,
+  frames: Array<{ atSeconds: number; base64: string }>,
+  durationSeconds: number,
+): Promise<void> {
+  const write = (patch: Record<string, unknown>) =>
+    admin.from('job_proofs').update(patch).eq('id', job.proofId);
+
+  const { data: scopeRows } = await admin
+    .from('job_scope_items')
+    .select('id, party_id, title, state')
+    .eq('job_id', job.jobId);
+  const mine = scopeForParty((scopeRows ?? []) as any[], job.partyId);
+  const scopeTitles = mine
+    .filter((s: any) => s.state === 'included' || s.state === 'approved')
+    .map((s: any) => s.title as string);
+  if (!scopeTitles.length) {
+    // A recording with no agreed scope has nothing to be judged against —
+    // said plainly rather than inventing a rubric.
+    await write({
+      narration_status: 'skipped',
+      narration_error: 'No agreed scope lines to judge this recording against. Set the scope, then re-run analysis.',
+      analysis_status: 'skipped',
+    });
+    return;
+  }
+
+  const result = await analyseLongRecording({ frames, scopeTitles, durationSeconds });
+  if (!result) throw new Error('The model reply was not usable.');
+
+  // Replace, not append: a re-run is a new reading of the same recording.
+  await admin.from('job_proof_segments').delete().eq('proof_id', job.proofId);
+  for (const window of result.windows) {
+    await admin.from('job_proof_segments').insert({
+      org_id: job.orgId,
+      proof_id: job.proofId,
+      idx: window.idx,
+      start_seconds: window.startSeconds,
+      end_seconds: window.endSeconds,
+      frame_count: window.frameCount,
+      reading: window.reading,
+      model: config.technician.assistant.liveModel,
+    });
+  }
+
+  const timeline = result.windows.map((window) => ({
+    idx: window.idx,
+    startSeconds: window.startSeconds,
+    endSeconds: window.endSeconds,
+    summary: window.reading ? window.reading.summary : 'This window could not be read.',
+    scopeTouched: window.reading?.scopeTouched ?? [],
+  }));
+
+  const activities = [
+    ...new Set(result.windows.flatMap((w) => w.reading?.activity ?? [])),
+  ].slice(0, 12);
+  const { data: partyRow } = await admin
+    .from('job_parties')
+    .select('trade')
+    .eq('id', job.partyId)
+    .maybeSingle();
+  const trade = ((partyRow as any)?.trade ?? '').trim().toLowerCase();
+
+  await write({
+    ai_summary: result.report.narrative.slice(0, 500),
+    ai_findings: {
+      longForm: true,
+      summary: result.report.narrative,
+      materialChange: null,
+      materialBecause: null,
+      changes: [],
+      cannotTell: result.report.couldNotTell,
+      scopeVerdicts: result.report.verdicts.map((v) => ({
+        title: v.title,
+        verdict: v.verdict,
+        because: v.because,
+        seenInWindows: v.seenInWindows,
+      })),
+      concerns: [],
+      timeline,
+      windowsTotal: result.windows.length,
+      windowsRead: result.windows.filter((w) => w.reading).length,
+    },
+    ai_model: result.report.model,
+    analysis_status: 'done',
+    narration: { entries: [], coverage: [], model: result.report.model },
+    narration_text: result.report.narrative,
+    narration_status: 'done',
+    narration_error: null,
+    narrated_at: new Date().toISOString(),
+    labels: [job.phase, trade || null, 'workday', ...activities].filter(Boolean).slice(0, 24),
+  });
+
+  await recordAccess(admin, {
+    orgId: job.orgId,
+    jobId: job.jobId,
+    proofId: job.proofId,
+    action: 'analysed',
+    actorLabel: 'Atmosphere',
+    detail: `workday read · ${(durationSeconds / 3600).toFixed(1)}h · ${result.windows.length} windows · ${scopeTitles.length} scope lines`,
   });
 }
 
