@@ -27,16 +27,6 @@ export function TourSimulationPanel({ kind }: { kind: TourSimulation }) {
           <SimRow label="Meridian HVAC — RTU swap" meta="2 clips · scope gap flagged" status="Flagged" />
         </div>
       );
-    case 'platform-switch':
-      return (
-        <div className="rounded-xl border border-line bg-paper-0 p-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-500">Platform</p>
-          <div className="mt-2 space-y-1">
-            <SimPill active>Verification</SimPill>
-            <SimPill>Field</SimPill>
-          </div>
-        </div>
-      );
     case 'field-capture':
       return (
         <div className="space-y-3 rounded-xl border border-line bg-paper-0 p-4">

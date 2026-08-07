@@ -6,7 +6,6 @@
 export type TourSimulation =
   | 'welcome'
   | 'verification-library'
-  | 'platform-switch'
   | 'field-capture'
   | 'job-intake'
   | 'job-files'
@@ -52,15 +51,6 @@ export const WORK_VERIFICATION_TOUR: ProductTourDefinition = {
       route: '/verifier-library',
       simulation: 'verification-library',
       placement: 'center',
-    },
-    {
-      id: 'platform-switch',
-      title: 'Switch between office and field',
-      body: 'Use the platform switcher to move between Verification (office) and Field (on site). Both sides write to the same job record.',
-      route: '/intake',
-      target: 'platform-switcher',
-      simulation: 'platform-switch',
-      placement: 'right',
     },
     {
       id: 'start-job',
