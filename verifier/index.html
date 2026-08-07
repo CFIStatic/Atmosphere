@@ -167,8 +167,27 @@
   .who-menu button.danger { color: var(--fail); border-top: 1px solid var(--line); margin-top: 4px; border-radius: 0 0 6px 6px; }
 
   /* ---------- layout ---------- */
-  .shell { display: grid; grid-template-columns: minmax(0, 1fr); height: calc(100% - 52px); }
-  .shell.has-app-rail { grid-template-columns: 196px minmax(0, 1fr); }
+  .app-frame {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    height: 100vh;
+    min-height: 0;
+  }
+  .app-frame.has-app-rail {
+    grid-template-columns: var(--app-rail-w, 196px) minmax(0, 1fr);
+  }
+  .app-body {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .shell {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
   .app-rail {
     background: var(--panel); border-right: 1px solid var(--line);
     overflow-y: auto; padding: 14px 0 40px;
@@ -204,9 +223,12 @@
     font-size: 12.5px; cursor: pointer; white-space: nowrap;
   }
   .mywork-record:hover { filter: brightness(1.05); }
+  @media (max-width: 1100px) {
+    .app-frame.has-app-rail { --app-rail-w: 168px; }
+    .screen-dashboard { grid-template-columns: 200px minmax(0, 1fr); }
+  }
   @media (max-width: 900px) {
-    .shell.has-app-rail { grid-template-columns: 1fr; }
-    .app-rail { display: none; }
+    .app-frame.has-app-rail { --app-rail-w: 152px; }
     .screen-dashboard { grid-template-columns: 1fr; }
     .rail { display: none; }
   }
@@ -511,6 +533,21 @@
 </head>
 <body>
 
+<div class="app-frame" id="app-frame">
+  <nav class="app-rail" id="app-rail" hidden aria-label="Platform navigation">
+    <h3>Work Verification</h3>
+    <button type="button" class="navitem app-nav" data-screen="dashboard" aria-current="true">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <span>Dashboard</span>
+    </button>
+    <button type="button" class="navitem app-nav" data-screen="my-work">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      <span>My Work</span>
+      <span class="count" id="n-mywork">0</span>
+    </button>
+  </nav>
+
+  <div class="app-body">
 <header class="topbar">
   <button type="button" class="brand" id="brand-home" aria-label="Atmosphere home">
     <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
@@ -551,19 +588,6 @@
 </header>
 
 <div class="shell" id="shell">
-  <nav class="app-rail" id="app-rail" hidden aria-label="Platform navigation">
-    <h3>Work Verification</h3>
-    <button type="button" class="navitem app-nav" data-screen="dashboard" aria-current="true">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-      <span>Dashboard</span>
-    </button>
-    <button type="button" class="navitem app-nav" data-screen="my-work">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-      <span>My Work</span>
-      <span class="count" id="n-mywork">0</span>
-    </button>
-  </nav>
-
   <div class="screen screen-dashboard" id="screen-dashboard">
   <aside class="rail">
     <h3>Evidence</h3>
@@ -648,6 +672,8 @@
         and film the proof the verification library expects.
       </p>
     </main>
+  </div>
+</div>
   </div>
 </div>
 
@@ -2089,9 +2115,9 @@
 
   if (EMBEDDED) {
     window.parent.postMessage({ atmosphere: 'request-session' }, '*');
-    var shell = document.getElementById('shell');
+    var appFrame = document.getElementById('app-frame');
     var appRail = document.getElementById('app-rail');
-    if (shell) shell.classList.add('has-app-rail');
+    if (appFrame) appFrame.classList.add('has-app-rail');
     if (appRail) appRail.hidden = false;
     document.querySelectorAll('.app-nav').forEach(function (btn) {
       btn.addEventListener('click', function () { setScreen(btn.dataset.screen); });
