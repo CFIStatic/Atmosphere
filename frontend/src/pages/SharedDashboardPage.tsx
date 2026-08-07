@@ -135,7 +135,6 @@ export function SharedDashboardPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Work Verification Platform"
         title="Job Progress"
         description="See where each job stands — what's done, what's happening on site, and what needs a decision."
         action={
