@@ -57,6 +57,7 @@ export function VerifierLibraryPage() {
           initials: initials(profile?.fullName, user.email),
           orgName: membership?.org?.name ?? null,
           roleLabel: membership ? ROLE_LABELS[membership.role] : null,
+          role: membership?.role ?? null,
         },
       },
       '*',

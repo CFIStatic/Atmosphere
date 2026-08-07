@@ -1646,7 +1646,7 @@ const CAMPAIGN_MEMBERS: Record<string, Array<Record<string, any>>> = {
 };
 
 /** Handlers that need the query string get it here, since Handler takes only the path match. */
-const LAST_QUERY: { leadId?: string; scope?: string; phase?: string; jobId?: string } = {};
+const LAST_QUERY: { leadId?: string; scope?: string; phase?: string; jobId?: string; mine?: string; status?: string } = {};
 
 const COMPUTER_STATUS: ComputerStatus = {
   enabled: true,
@@ -1815,7 +1815,16 @@ const routes: Array<[string, RegExp, Handler]> = [
     m[1] === 'job-1041'
       ? { body: JOB_DETAIL }
       : { status: 404, body: { error: 'Only job #1041 carries full detail in the demo — open Meridian Ave.', code: 'not_found' } }],
-  ['GET', /^\/api\/jobs$/, () => ({ body: { jobs: JOBS } })],
+  ['GET', /^\/api\/jobs$/, () => {
+    let jobs = JOBS;
+    if (LAST_QUERY.mine === '1') {
+      jobs = jobs.filter((job) => job.ownerId === user().id);
+    }
+    if (LAST_QUERY.status === 'in_progress') {
+      jobs = jobs.filter((job) => job.status === 'in_progress');
+    }
+    return { body: { jobs } };
+  }],
 
   ['GET', /^\/api\/memory\/stats$/, () => ({ body: MEMORY_STATS })],
   ['GET', /^\/api\/memory\/agents\/([\w-]+)$/, (m) => ({
@@ -3476,6 +3485,8 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   LAST_QUERY.scope = query.get('scope') ?? undefined;
   LAST_QUERY.phase = query.get('phase') ?? undefined;
   LAST_QUERY.jobId = query.get('jobId') ?? undefined;
+  LAST_QUERY.mine = query.get('mine') ?? undefined;
+  LAST_QUERY.status = query.get('status') ?? undefined;
 
   const method = (init?.method ?? 'GET').toUpperCase();
   let body: Record<string, unknown> = {};
