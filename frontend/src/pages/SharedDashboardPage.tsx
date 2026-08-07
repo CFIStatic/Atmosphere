@@ -10,6 +10,7 @@ import {
 } from '../lib/api';
 import { SpinnerIcon } from '../components/icons';
 import { JobProgressPanel } from '../components/shared/JobProgressPanel';
+import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPanel';
 import { ScopeDocPanel } from '../components/shared/ScopeDocPanel';
 import { JobReadinessPanel } from '../components/shared/JobReadinessPanel';
 
@@ -265,6 +266,8 @@ export function SharedDashboardPage() {
                   )}
 
                   <JobProgressPanel jobId={record.job.id} record={record} />
+
+                  <ShareJobProgressPanel jobId={record.job.id} />
 
                   <details className="rounded-xl glass-card group">
                     <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-ink-900 marker:content-none [&::-webkit-details-marker]:hidden">

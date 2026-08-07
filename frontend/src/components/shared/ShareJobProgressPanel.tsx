@@ -3,23 +3,8 @@ import { api, type CreateEvidenceShareResult, type EvidenceShare } from '../../l
 import { SpinnerIcon } from '../icons';
 
 /**
- * Handing the record to somebody outside.
- *
- * The form asks for two things about a person, because a share is issued to a
- * person: who they are (the label that will appear in the chain of custody)
- * and the email their Atmosphere account answers to. The link opens for that
- * account and no other — which the panel says before the button is pressed,
- * because the alternative is the sharer finding out from the adjuster's
- * annoyed phone call.
- *
- * After creating, the panel reports the two facts the sharer is actually
- * standing there wondering: did the email go out (their mailbox, so no is a
- * real possibility and gets the copy-the-link fallback shown immediately, not
- * hunted for), and does the recipient already have an account or are they
- * about to be walked through making one.
- *
- * The list underneath is the outstanding-links audit: who holds a live way
- * into this job's evidence, have they used it, and the revoke that ends it.
+ * Share the job progress dashboard with third parties — homeowners, attorneys,
+ * banks, insurance adjusters — via a read-only link that opens without login.
  */
 
 const STATE_STYLE: Record<EvidenceShare['state'], string> = {
@@ -33,7 +18,7 @@ const when = (iso: string | null) =>
     ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
     : null;
 
-export function ShareEvidencePanel({ jobId }: { jobId: string }) {
+export function ShareJobProgressPanel({ jobId }: { jobId: string }) {
   const [shares, setShares] = useState<EvidenceShare[] | null>(null);
   const [creating, setCreating] = useState(false);
   const [label, setLabel] = useState('');
@@ -45,7 +30,7 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
 
   async function load() {
     try {
-      const res = await api.evidenceShares(jobId, 'evidence');
+      const res = await api.evidenceShares(jobId, 'progress');
       setShares(res.shares);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load the outstanding links.');
@@ -65,10 +50,10 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
     setBusy(true);
     setError(null);
     try {
-      const res = await api.createEvidenceShare({
+      const res = await api.createProgressShare({
         jobId,
         label,
-        recipientEmail: email,
+        recipientEmail: email.trim() || undefined,
         expiresInDays: days,
       });
       setMade(res);
@@ -102,10 +87,11 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
     <section className="rounded-xl glass-card p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <h2 className="text-base font-semibold text-ink-900">Share with a reviewer</h2>
+          <h2 className="text-base font-semibold text-ink-900">Share job progress</h2>
           <p className="mt-0.5 text-xs text-ink-500">
-            An adjuster, examiner or attorney gets this job's evidence in the Verifier — viewing
-            free, every view on the record under their name.
+            Send a read-only link to a homeowner, attorney, bank or insurance company — scope
+            completion, verified field days, and day-by-day work history. No Atmosphere account
+            required.
           </p>
         </div>
         <button
@@ -115,7 +101,7 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
           }}
           className="text-xs font-medium text-brand-600 hover:text-brand-700"
         >
-          {creating ? 'Cancel' : 'Share this job'}
+          {creating ? 'Cancel' : 'Share progress'}
         </button>
       </div>
 
@@ -132,15 +118,14 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
               required
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              placeholder="Who — e.g. R. Calloway — Alliance Mutual"
+              placeholder="Who — e.g. Cedar Ridge HOA — homeowner"
               className="min-w-[14rem] flex-1 rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
             />
             <input
-              required
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Their email"
+              placeholder="Email (optional — for notification)"
               className="min-w-[12rem] flex-1 rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
             />
             <select
@@ -154,11 +139,9 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
               <option value={0}>No expiry — until revoked</option>
             </select>
           </div>
-          {/* The pin, stated before the button: it changes what "share" means. */}
           <p className="text-[11px] text-ink-500">
-            The link is emailed to them and opens only for an Atmosphere account signed in with
-            that address — forwarded, it refuses. Watching is free; keeping a copy settles your
-            download fee first.
+            The link opens without login. Add an email to notify them, or copy the link and send it
+            yourself — by text, portal upload, or counsel letter.
           </p>
           <button
             type="submit"
@@ -166,7 +149,7 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
             className="flex items-center gap-2 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-ink-900 disabled:opacity-50"
           >
             {busy && <SpinnerIcon className="animate-spin" width={12} height={12} />}
-            Email them the link
+            {email.trim() ? 'Email them the link' : 'Create link'}
           </button>
         </form>
       )}
@@ -175,12 +158,8 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
         <div className="mt-3 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2">
           <p className="text-xs font-semibold text-brand-700">
             {made.emailed
-              ? `Emailed. ${
-                  made.recipientHasAccount
-                    ? 'They already have an Atmosphere account — the link opens as soon as they sign in.'
-                    : 'No Atmosphere account under that address yet — the email walks them through creating one with it.'
-                }`
-              : 'Share created, but the email did not go out — no mailbox is connected, or it refused. Send the link yourself:'}
+              ? 'Emailed. They can open the link directly — no account needed.'
+              : 'Link created. Copy it and send it yourself:'}
           </p>
           {!made.emailed && (
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
@@ -200,7 +179,7 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
         <p className="mt-3 text-xs text-ink-500">Loading…</p>
       ) : shares.length === 0 ? (
         <p className="mt-3 text-xs text-ink-500">
-          Nobody outside has a link to this job's evidence.
+          Nobody outside has a progress link for this job yet.
         </p>
       ) : (
         <ul className="mt-3 space-y-2">
@@ -212,7 +191,7 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
               <div className="min-w-0">
                 <p className="text-sm font-medium text-ink-800">{share.label}</p>
                 <p className="text-[11px] text-ink-500">
-                  {share.recipientEmail ?? 'any account'}
+                  {share.recipientEmail ?? 'link only'}
                   {share.openCount > 0
                     ? ` · opened ${share.openCount}×${when(share.lastOpenedAt) ? `, last ${when(share.lastOpenedAt)}` : ''}`
                     : ' · never opened'}
@@ -250,8 +229,7 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
 
       {live.length > 0 && (
         <p className="mt-2 text-[10.5px] text-ink-400">
-          {live.length} live link{live.length === 1 ? '' : 's'}. Revoking is immediate and goes in
-          the chain of custody, like the share did.
+          {live.length} live link{live.length === 1 ? '' : 's'}. Revoking is immediate.
         </p>
       )}
     </section>

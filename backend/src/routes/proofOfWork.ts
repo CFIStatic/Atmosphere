@@ -1024,93 +1024,91 @@ function proofReport(row: any) {
 
 /* ---- The general contractor's side --------------------------------------- */
 
+/** Assemble proof-of-work days for one job — shared by org routes and progress shares. */
+export async function buildJobProofPayload(supabase: any, orgId: string, jobId: string) {
+  const [{ data: proofRows }, { data: partyRows }, site] = await Promise.all([
+    supabase
+      .from('job_proofs')
+      .select(PROOF_SELECT)
+      .eq('org_id', orgId)
+      .eq('job_id', jobId)
+      .order('work_date', { ascending: false })
+      .limit(200),
+    supabase.from('job_parties').select('id, company, trade').eq('job_id', jobId),
+    siteLocation(supabase, orgId, jobId),
+  ]);
+
+  const rows = (proofRows ?? []) as any[];
+  const company = new Map(((partyRows ?? []) as any[]).map((p) => [p.id, p.company]));
+
+  // Grouped by party and day, because a day is what gets paid.
+  const grouped = new Map<string, any[]>();
+  for (const row of rows) {
+    const key = `${row.party_id}|${row.work_date}`;
+    const list = grouped.get(key) ?? [];
+    list.push(row);
+    grouped.set(key, list);
+  }
+
+  const days = [...grouped.entries()].map(([key, list]) => {
+    const [partyId, workDate] = key.split('|');
+    const before = list.find((r) => r.phase === 'before');
+    const after = list.find((r) => r.phase === 'after');
+    const verdict = verifyDay({
+      workDate,
+      before: before ? asUpload(before) : null,
+      after: after ? asUpload(after) : null,
+      site,
+    });
+    const pay = payable(verdict);
+
+    return {
+      partyId,
+      company: company.get(partyId) ?? 'Company',
+      workDate,
+      hasBefore: verdict.hasBefore,
+      hasAfter: verdict.hasAfter,
+      checks: verdict.checks,
+      contradicted: verdict.contradicted,
+      summary: verdict.summary,
+      // Kept separate from the summary on purpose. "Looks fine" and "safe to
+      // pay against" are different claims and only one of them moves money.
+      payable: pay.ok,
+      payableBecause: pay.because,
+      accepted: list.every((r) => r.state === 'accepted'),
+      rejected: list.some((r) => r.state === 'rejected'),
+      aiSummary: after?.ai_summary ?? null,
+      aiFindings: after?.ai_findings ?? null,
+      materialChange: after?.ai_material_change ?? null,
+      analysisStatus: after?.analysis_status ?? null,
+      analysisError: after?.analysis_error ?? null,
+      reports: {
+        before: proofReport(before),
+        after: proofReport(after),
+      },
+      proofIds: list.map((r) => r.id),
+    };
+  });
+
+  days.sort((a, b) => b.workDate.localeCompare(a.workDate));
+
+  return {
+    days,
+    counts: {
+      days: days.length,
+      payable: days.filter((d) => d.payable && !d.accepted).length,
+      contradicted: days.filter((d) => d.contradicted).length,
+      awaitingAfter: days.filter((d) => d.hasBefore && !d.hasAfter).length,
+    },
+    siteKnown: Boolean(site),
+  };
+}
+
 /** GET /api/operations/shared/:jobId/proof */
 export async function jobProofs(req: Request, res: Response, next: NextFunction) {
   try {
     const { orgId, supabase } = await requireOrgContext(req);
-    const jobId = req.params.jobId;
-
-    const [{ data: proofRows }, { data: partyRows }, site] = await Promise.all([
-      supabase
-        .from('job_proofs')
-        .select(PROOF_SELECT)
-        .eq('org_id', orgId)
-        .eq('job_id', jobId)
-        .order('work_date', { ascending: false })
-        .limit(200),
-      supabase.from('job_parties').select('id, company, trade').eq('job_id', jobId),
-      siteLocation(supabase, orgId, jobId),
-    ]);
-
-    const rows = (proofRows ?? []) as any[];
-    const company = new Map(((partyRows ?? []) as any[]).map((p) => [p.id, p.company]));
-
-    // Grouped by party and day, because a day is what gets paid.
-    const grouped = new Map<string, any[]>();
-    for (const row of rows) {
-      const key = `${row.party_id}|${row.work_date}`;
-      const list = grouped.get(key) ?? [];
-      list.push(row);
-      grouped.set(key, list);
-    }
-
-    const days = [...grouped.entries()].map(([key, list]) => {
-      const [partyId, workDate] = key.split('|');
-      const before = list.find((r) => r.phase === 'before');
-      const after = list.find((r) => r.phase === 'after');
-      const verdict = verifyDay({
-        workDate,
-        before: before ? asUpload(before) : null,
-        after: after ? asUpload(after) : null,
-        site,
-      });
-      const pay = payable(verdict);
-
-      return {
-        partyId,
-        company: company.get(partyId) ?? 'Company',
-        workDate,
-        hasBefore: verdict.hasBefore,
-        hasAfter: verdict.hasAfter,
-        checks: verdict.checks,
-        contradicted: verdict.contradicted,
-        summary: verdict.summary,
-        // Kept separate from the summary on purpose. "Looks fine" and "safe to
-        // pay against" are different claims and only one of them moves money.
-        payable: pay.ok,
-        payableBecause: pay.because,
-        accepted: list.every((r) => r.state === 'accepted'),
-        rejected: list.some((r) => r.state === 'rejected'),
-        aiSummary: after?.ai_summary ?? null,
-        aiFindings: after?.ai_findings ?? null,
-        // The verdict and the lifecycle, told apart. "No visible change" is an
-        // answer; "failed" is a breakage with a retry; "skipped" says why.
-        materialChange: after?.ai_material_change ?? null,
-        analysisStatus: after?.analysis_status ?? null,
-        analysisError: after?.analysis_error ?? null,
-        // The per-video reports, one for each half of the day. Independent of
-        // the comparison above: a before's narration exists hours before any
-        // after arrives.
-        reports: {
-          before: proofReport(before),
-          after: proofReport(after),
-        },
-        proofIds: list.map((r) => r.id),
-      };
-    });
-
-    days.sort((a, b) => b.workDate.localeCompare(a.workDate));
-
-    res.json({
-      days,
-      counts: {
-        days: days.length,
-        payable: days.filter((d) => d.payable && !d.accepted).length,
-        contradicted: days.filter((d) => d.contradicted).length,
-        awaitingAfter: days.filter((d) => d.hasBefore && !d.hasAfter).length,
-      },
-      siteKnown: Boolean(site),
-    });
+    res.json(await buildJobProofPayload(supabase, orgId, req.params.jobId));
   } catch (err) {
     next(err);
   }

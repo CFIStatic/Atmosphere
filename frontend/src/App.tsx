@@ -116,6 +116,9 @@ const IntegrationsPage = lazy(() =>
 const HomeownerReportPage = lazy(() =>
   import('./pages/HomeownerReportPage').then((m) => ({ default: m.HomeownerReportPage })),
 );
+const JobProgressGuestPage = lazy(() =>
+  import('./pages/JobProgressGuestPage').then((m) => ({ default: m.JobProgressGuestPage })),
+);
 
 function FullScreenSpinner() {
   return (
@@ -276,6 +279,8 @@ export default function App() {
 
           {/* Tokenized HomeOwner Report — no staff session required. */}
           <Route path="/report/:token" element={<HomeownerReportPage />} />
+          {/* Read-only job progress for homeowners, counsel, banks — no login. */}
+          <Route path="/progress/:token" element={<JobProgressGuestPage />} />
           {/* Third-party financial dataroom — token in the URL is the credential. */}
           <Route path="/share/finance/:token" element={<FinanceSharePage />} />
 

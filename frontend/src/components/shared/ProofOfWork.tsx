@@ -77,9 +77,15 @@ function label(key: string): string {
 export function ProofOfWork({
   jobId,
   heading = 'Proof of work',
+  readOnly = false,
+  initialData,
+  videoFetcher,
 }: {
-  jobId: string;
+  jobId?: string;
   heading?: string;
+  readOnly?: boolean;
+  initialData?: ProofResponse;
+  videoFetcher?: (proofId: string) => Promise<{ url: string }>;
 }) {
   const [data, setData] = useState<ProofResponse | null>(null);
   const [openDay, setOpenDay] = useState<string | null>(null);
@@ -90,10 +96,17 @@ export function ProofOfWork({
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
+    if (initialData) {
+      setData(initialData);
+      return;
+    }
+    if (!jobId) return;
     try {
       const [proofs, qs] = await Promise.all([
         api.jobProofs(jobId),
-        api.proofQuestions(jobId).catch(() => ({ questions: [] as ProofQuestion[] })),
+        readOnly
+          ? Promise.resolve({ questions: [] as ProofQuestion[] })
+          : api.proofQuestions(jobId).catch(() => ({ questions: [] as ProofQuestion[] })),
       ]);
       setData(proofs);
       setQuestions(qs.questions);
@@ -108,9 +121,10 @@ export function ProofOfWork({
     setOpenDay(null);
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobId]);
+  }, [jobId, initialData]);
 
   async function decide(day: ProofDay, decision: 'accepted' | 'rejected') {
+    if (!jobId) return;
     try {
       await api.decideProofDay(jobId, day.workDate, { partyId: day.partyId, decision });
       await load();
@@ -121,7 +135,7 @@ export function ProofOfWork({
 
   async function ask(event: FormEvent) {
     event.preventDefault();
-    if (!question.trim()) return;
+    if (!question.trim() || !jobId) return;
     setAsking(true);
     setError(null);
     try {
@@ -136,9 +150,11 @@ export function ProofOfWork({
   }
 
   async function reanalyse(day: ProofDay) {
+    const id = jobId;
+    if (!id) return;
     setBusy(`${day.partyId}|${day.workDate}`);
     try {
-      await api.reanalyseProofDay(jobId, day.workDate, day.partyId);
+      await api.reanalyseProofDay(id, day.workDate, day.partyId);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not read the videos.');
@@ -439,10 +455,16 @@ export function ProofOfWork({
                         it rather than one tab away. */}
                     <div className="mt-3 grid gap-2 sm:grid-cols-2">
                       {day.proofIds.map((id, i) => (
-                        <ProofVideo key={id} proofId={id} label={i === 0 ? 'Before' : 'After'} />
+                        <ProofVideo
+                          key={id}
+                          proofId={id}
+                          label={i === 0 ? 'Before' : 'After'}
+                          videoFetcher={videoFetcher}
+                        />
                       ))}
                     </div>
 
+                    {!readOnly && (
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button
                         onClick={() => void reanalyse(day)}
@@ -481,6 +503,7 @@ export function ProofOfWork({
                         </>
                       )}
                     </div>
+                    )}
                   </div>
                 )}
               </li>
@@ -491,7 +514,7 @@ export function ProofOfWork({
 
       {/* Asking the record. Forty jobs and eighty videos a day is nobody's
           afternoon; a question against the summaries is. */}
-      {data && data.days.length > 0 && (
+      {!readOnly && data && data.days.length > 0 && (
         <div className="mt-4 border-t border-line pt-3">
           <form onSubmit={ask} className="flex gap-2">
             <input
@@ -549,7 +572,15 @@ export function ProofOfWork({
  * usually black, and a black rectangle reads as a broken video rather than one
  * that has not been asked for yet.
  */
-function ProofVideo({ proofId, label }: { proofId: string; label: string }) {
+function ProofVideo({
+  proofId,
+  label,
+  videoFetcher,
+}: {
+  proofId: string;
+  label: string;
+  videoFetcher?: (proofId: string) => Promise<{ url: string }>;
+}) {
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -557,7 +588,9 @@ function ProofVideo({ proofId, label }: { proofId: string; label: string }) {
   async function open() {
     setLoading(true);
     try {
-      const res = await api.proofVideoUrl(proofId);
+      const res = videoFetcher
+        ? await videoFetcher(proofId)
+        : await api.proofVideoUrl(proofId);
       setUrl(res.url);
     } catch {
       setFailed(true);
