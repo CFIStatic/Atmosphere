@@ -18,7 +18,7 @@ written to appeal to contractors of every trade.
 | `operations.html` | Redirect → home (legacy) |
 | `manager.html`    | Redirect → home (legacy) |
 | `security.html`   | Security — architecture diagram and six structural claims   |
-| `pricing.html`    | Pricing — Work Verification bundle ($599.98/mo) and the flat rate |
+| `pricing.html`    | Pricing — Work Verification bundle ($599/mo) and the flat rate |
 | `docs.html`       | Resources hub — documentation index, guides, troubleshooting |
 | `doc-*.html`      | Resource pages: getting started, recipes, troubleshooting, field capture, verifier, billing |
 | `about.html`      | About — the Work Verification company, story and principles |
@@ -38,7 +38,7 @@ dark themes) and `assets/site.js` (receipt replay + the careers form).
 
 `pricing.html` sells one bundled subscription plus usage:
 
-- **Work Verification** — $599.98/month. Includes Field Capture (on-site film and
+- **Work Verification** — $599/month. Includes Field Capture (on-site film and
   check) and the Evidence Platform (Verifier, audit trail, storage, replay, sharing).
   Both parts are required; they are not sold separately.
 - **Usage is prepaid credits at one flat rate**, on the subscription. Customers buy
