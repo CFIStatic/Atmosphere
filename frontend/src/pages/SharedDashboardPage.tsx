@@ -9,9 +9,7 @@ import {
   type ScopeState,
 } from '../lib/api';
 import { SpinnerIcon } from '../components/icons';
-import { ProofOfWork } from '../components/shared/ProofOfWork';
-import { EvidenceLocker } from '../components/shared/EvidenceLocker';
-import { ShareEvidencePanel } from '../components/shared/ShareEvidencePanel';
+import { JobProgressPanel } from '../components/shared/JobProgressPanel';
 import { ScopeDocPanel } from '../components/shared/ScopeDocPanel';
 import { JobReadinessPanel } from '../components/shared/JobReadinessPanel';
 
@@ -139,8 +137,8 @@ export function SharedDashboardPage() {
     <>
       <PageHeader
         eyebrow="Work Verification Platform"
-        title="Job files"
-        description="One record per job, shared with the subs on it. What to do, what not to do, and every decision in writing — so nothing gets built on somebody's memory of a phone call."
+        title="Job Progress"
+        description="Track how work is advancing on each job — scope completion, verified field days, and a day-by-day history of what crews filmed on site."
         action={
           <button
             type="button"
@@ -163,8 +161,8 @@ export function SharedDashboardPage() {
       ) : list.length === 0 ? (
         <div className="mt-6">
           <EmptyState
-            title="No shared records yet"
-            hint="Paste a scope to draft a job and invite the crew in one approve — or connect your CRM in Settings → Connected apps."
+            title="No jobs yet"
+            hint="Start a job to set scope and invite the crew — field capture will build the work history here."
           />
           <div className="mt-4">
             <button
@@ -180,10 +178,10 @@ export function SharedDashboardPage() {
         <>
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              { label: 'Shared jobs', value: counts.jobs, tone: '' },
-              { label: 'Companies on them', value: counts.parties, tone: '' },
-              { label: 'Working from old facts', value: counts.blockers, tone: 'danger' },
-              { label: 'Waiting on you', value: counts.awaiting, tone: 'caution' },
+              { label: 'Active jobs', value: counts.jobs, tone: '' },
+              { label: 'Crews on site', value: counts.parties, tone: '' },
+              { label: 'Behind on scope', value: counts.blockers, tone: 'danger' },
+              { label: 'Awaiting capture', value: counts.awaiting, tone: 'caution' },
             ].map((tile) => (
               <div key={tile.label} className="rounded-xl glass-card px-4 py-3">
                 <p className="text-xs font-medium uppercase tracking-wide text-ink-500">
@@ -252,7 +250,6 @@ export function SharedDashboardPage() {
                 <p className="text-sm text-ink-600">Pick a job.</p>
               ) : (
                 <>
-                  {/* What is wrong, before anything else on the page. */}
                   {record.risks.length > 0 && (
                     <ul className="space-y-2">
                       {record.risks.map((risk) => (
@@ -267,50 +264,37 @@ export function SharedDashboardPage() {
                     </ul>
                   )}
 
-                  <SharedFacts record={record} onPublished={() => void openJob(record.job.id)} />
+                  <JobProgressPanel jobId={record.job.id} record={record} />
 
-                  <PartyList
-                    record={record}
-                    onChanged={() => {
-                      void openJob(record.job.id);
-                      void loadList();
-                    }}
-                  />
-
-                  {/* First, because it is the only thing on this page that
-                      is cheap now and expensive later. Everything below is a
-                      thing you do to a job; this is whether the job is worth
-                      doing them to yet. */}
-                  <JobReadinessPanel jobId={record.job.id} refreshKey={readinessKey} />
-
-                  {/* Above the scope list, because it is where the scope
-                      comes from: the document is read, a person confirms,
-                      the lines below appear. */}
-                  <ScopeDocPanel
-                    jobId={record.job.id}
-                    onChanged={() => {
-                      void openJob(record.job.id);
-                      // Confirming a document is the single most common way a
-                      // job stops being unverifiable, so the forecast above
-                      // has to move at the same moment.
-                      setReadinessKey((k) => k + 1);
-                    }}
-                  />
-
-                  <ScopeList record={record} onDecide={decide} onChanged={() => void openJob(record.job.id)} />
-
-                  {/* Below the scope, because proof only means anything once
-                      there is an agreed scope to be proof of. The day view
-                      answers "can I pay for Tuesday"; the locker answers
-                      "what have we got, and who has seen it". */}
-                  <ProofOfWork jobId={record.job.id} />
-                  <EvidenceLocker jobId={record.job.id} />
-                  {/* Under the locker: first what we hold, then who outside
-                      can see it. A share is an act on the evidence, so it
-                      lives with the evidence, not in a settings screen. */}
-                  <ShareEvidencePanel jobId={record.job.id} />
-
-                  <Thread record={record} onPosted={() => void openJob(record.job.id)} />
+                  <details className="rounded-xl glass-card group">
+                    <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-ink-900 marker:content-none [&::-webkit-details-marker]:hidden">
+                      <span className="flex items-center justify-between gap-2">
+                        Job record — scope, crew &amp; decisions
+                        <span className="text-xs font-normal text-ink-500 group-open:hidden">Show</span>
+                        <span className="hidden text-xs font-normal text-ink-500 group-open:inline">Hide</span>
+                      </span>
+                    </summary>
+                    <div className="space-y-4 border-t border-line px-5 pb-5 pt-4">
+                      <SharedFacts record={record} onPublished={() => void openJob(record.job.id)} />
+                      <PartyList
+                        record={record}
+                        onChanged={() => {
+                          void openJob(record.job.id);
+                          void loadList();
+                        }}
+                      />
+                      <JobReadinessPanel jobId={record.job.id} refreshKey={readinessKey} />
+                      <ScopeDocPanel
+                        jobId={record.job.id}
+                        onChanged={() => {
+                          void openJob(record.job.id);
+                          setReadinessKey((k) => k + 1);
+                        }}
+                      />
+                      <ScopeList record={record} onDecide={decide} onChanged={() => void openJob(record.job.id)} />
+                      <Thread record={record} onPosted={() => void openJob(record.job.id)} />
+                    </div>
+                  </details>
                 </>
               )}
             </div>

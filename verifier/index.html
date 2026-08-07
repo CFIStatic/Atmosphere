@@ -598,9 +598,9 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
         <span>Start a job</span>
       </button>
-      <button type="button" class="navitem nav-icon" id="nav-jobfiles" data-tour="nav-job-files">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>
-        <span>Job files</span>
+      <button type="button" class="navitem nav-icon" id="nav-jobprogress" data-tour="nav-job-progress">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+        <span>Job Progress</span>
       </button>
       <button type="button" class="navitem nav-icon" id="nav-settings">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09A1.7 1.7 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09A1.7 1.7 0 0 0 20.91 10H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></svg>
@@ -1931,12 +1931,11 @@
     document.querySelectorAll('#platform-nav .navitem').forEach(function (btn) {
       var active = false;
       if (btn.id === 'nav-start-job') active = activeRoute === '/intake';
-      else if (btn.id === 'nav-jobfiles') active = activeRoute === '/shared';
+      else if (btn.id === 'nav-jobprogress') active = activeRoute === '/shared';
+      else if (btn.id === 'nav-settings') active = activeRoute === '/settings';
       else if (btn.dataset.screen === 'dashboard') active = activeRoute === '/verifier-library';
       btn.setAttribute('aria-current', String(active));
     });
-    var settings = document.getElementById('nav-settings');
-    if (settings) settings.setAttribute('aria-current', String(activeRoute === '/settings'));
     if (activeRoute !== '/verifier-library') {
       document.querySelectorAll('.navitem[data-view]').forEach(function (btn) {
         btn.removeAttribute('aria-current');
@@ -2100,9 +2099,9 @@
         window.parent.postMessage({ atmosphere: 'navigate', to: '/intake' }, '*');
       });
     }
-    var navJobFiles = document.getElementById('nav-jobfiles');
-    if (navJobFiles) {
-      navJobFiles.addEventListener('click', function () {
+    var navJobProgress = document.getElementById('nav-jobprogress');
+    if (navJobProgress) {
+      navJobProgress.addEventListener('click', function () {
         window.parent.postMessage({ atmosphere: 'navigate', to: '/shared' }, '*');
       });
     }

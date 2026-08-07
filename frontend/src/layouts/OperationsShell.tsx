@@ -3,7 +3,7 @@ import { VerifierFrame } from '../components/VerifierFrame';
 
 /**
  * Operations routes share one persistent Verifier iframe. The library fills
- * the screen; intake and job files render beside the same rail.
+ * the screen; intake and job progress render beside the same rail.
  */
 export function OperationsShell() {
   const { pathname } = useLocation();

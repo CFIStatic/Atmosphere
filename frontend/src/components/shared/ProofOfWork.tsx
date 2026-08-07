@@ -74,7 +74,13 @@ function label(key: string): string {
   return which ? `${which}: ${words[bare] ?? bare}` : (words[bare] ?? bare);
 }
 
-export function ProofOfWork({ jobId }: { jobId: string }) {
+export function ProofOfWork({
+  jobId,
+  heading = 'Proof of work',
+}: {
+  jobId: string;
+  heading?: string;
+}) {
   const [data, setData] = useState<ProofResponse | null>(null);
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [questions, setQuestions] = useState<ProofQuestion[]>([]);
@@ -144,7 +150,7 @@ export function ProofOfWork({ jobId }: { jobId: string }) {
   return (
     <section className="rounded-xl glass-card p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-base font-semibold text-ink-900">Proof of work</h2>
+        <h2 className="text-base font-semibold text-ink-900">{heading}</h2>
         {data && (
           <span className="flex flex-wrap gap-3 text-xs">
             {data.counts.payable > 0 && (
