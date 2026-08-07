@@ -4,14 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import {
   api,
   ApiError,
-  CONTRACTOR_TYPE_LABELS,
-  ROLE_LABELS,
-  WORK_TYPE_LABELS,
-  type ContractorType,
   type MemberRole,
   type Org,
-  type UsageIntent,
-  type WorkType,
 } from '../lib/api';
 import { loginHref, resolveAuthRedirect } from '../lib/authRedirect';
 import { PLATFORM_HOME } from '../lib/platforms';
@@ -23,36 +17,17 @@ import {
   initialSetupStep,
   type SetupWizardStep,
 } from '../components/setup/setupWizard';
+import {
+  SERVICE_TRADE_OPTIONS,
+  VERIFIER_ROLE_OPTIONS,
+  resolveVerifierSetup,
+  type ServiceTrade,
+} from '../components/setup/verifierSetupOptions';
 import { EyeIcon, EyeOffIcon, SpinnerIcon, CheckIcon } from '../components/icons';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type OrgMode = 'create' | 'join';
-
-const ROLE_OPTIONS: { value: MemberRole; blurb: string }[] = [
-  { value: 'project_manager', blurb: 'Runs jobs end to end and coordinates the crew.' },
-  { value: 'field_technician', blurb: 'On-site work — film, verify, and sign off in the field.' },
-  { value: 'accountant', blurb: 'Invoicing, payments, job cost, and the books.' },
-  { value: 'office_manager', blurb: 'Scheduling, dispatch, and back office.' },
-  { value: 'sales', blurb: 'Estimates, bids, and winning new work.' },
-];
-
-const WORK_OPTIONS: { value: WorkType; blurb: string }[] = [
-  { value: 'mitigation', blurb: 'Emergency response, water/fire/mold mitigation and drying.' },
-  { value: 'construction', blurb: 'Rebuild and reconstruction after mitigation.' },
-];
-
-const CONTRACTOR_OPTIONS: { value: ContractorType; blurb: string }[] = [
-  {
-    value: 'restoration',
-    blurb: 'Water, fire, mold, and related restoration — mitigation through rebuild.',
-  },
-  { value: 'roofing', blurb: 'Roofing installs, repairs, and storm work.' },
-  { value: 'general_contractor', blurb: 'General contracting across trades and scopes.' },
-  { value: 'other', blurb: 'HVAC, plumbing, electrical, cleaning, facilities, or another trade.' },
-];
-
-export function SignupPage() {
   const { user, loading, membership, signup, refreshMembership, logout } = useAuth();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -83,10 +58,9 @@ export function SignupPage() {
   const [orgName, setOrgName] = useState('');
   const [joinCode, setJoinCode] = useState('');
 
-  // Step 3 — role & trade
+  // Step 3 — role & trade (Work Verification)
   const [role, setRole] = useState<MemberRole | null>(null);
-  const [workType, setWorkType] = useState<WorkType | null>(null);
-  const [contractorType, setContractorType] = useState<ContractorType | null>(null);
+  const [serviceTrade, setServiceTrade] = useState<ServiceTrade | null>(null);
 
   // Step 4 — result
   const [createdOrg, setCreatedOrg] = useState<Org | null>(null);
@@ -125,7 +99,7 @@ export function SignupPage() {
   const passwordValid = password.length >= 8;
   const orgStepValid =
     mode === 'create' ? orgName.trim().length >= 2 : /^[A-Za-z0-9]{6,12}$/.test(joinCode.trim());
-  const roleStepValid = role !== null && workType !== null && (mode === 'join' || contractorType !== null);
+  const roleStepValid = role !== null && serviceTrade !== null;
 
   async function handleAccountSubmit(e: FormEvent) {
     e.preventDefault();
@@ -156,25 +130,28 @@ export function SignupPage() {
     setError(null);
     try {
       const resolvedRole = useDefaults ? SETUP_DEFAULTS.role : role!;
-      const resolvedWork = useDefaults ? SETUP_DEFAULTS.workType : workType!;
-      const resolvedContractor = useDefaults ? SETUP_DEFAULTS.contractorType : contractorType!;
-      const usageIntents: UsageIntent[] = SETUP_DEFAULTS.usageIntents;
+      const resolvedTrade = useDefaults ? SETUP_DEFAULTS.trade : serviceTrade!;
+      const { role: finalRole, workType, contractorType, usageIntents } = resolveVerifierSetup(
+        resolvedRole,
+        resolvedTrade,
+        useDefaults,
+      );
 
       let org: Org;
       if (mode === 'create') {
         const res = await api.createOrg(
           orgName.trim(),
-          resolvedRole,
-          resolvedWork,
-          resolvedContractor,
+          finalRole,
+          workType,
+          contractorType,
           usageIntents,
         );
         org = res.org;
       } else {
         const res = await api.joinOrg(
           joinCode.trim().toUpperCase(),
-          resolvedRole,
-          resolvedWork,
+          finalRole,
+          workType,
           usageIntents,
         );
         org = res.org;
@@ -378,20 +355,24 @@ export function SignupPage() {
       {step === 3 && (
         <SetupStepCard
           step={3}
-          title="Role and trade"
-          subtitle="Pick what fits today — or skip and we will use sensible defaults."
+          title="Your role on the verification record"
+          subtitle="Field Capture films on site. The Evidence Platform checks, reads, and holds that work — pick where you sit in that pipeline."
         >
           {error && <Alert>{error}</Alert>}
 
           <div className="mt-5 space-y-6">
             <section>
-              <h3 className="text-sm font-semibold text-ink-900">Your role</h3>
+              <h3 className="text-sm font-semibold text-ink-900">Who are you in Work Verification?</h3>
+              <p className="mt-1 text-xs text-ink-500">
+                Both sides of every check — crew proof and customer certainty — live in the same record.
+              </p>
               <div className="mt-3 space-y-2">
-                {ROLE_OPTIONS.map((opt) => (
+                {VERIFIER_ROLE_OPTIONS.map((opt) => (
                   <OptionCard
                     key={opt.value}
                     selected={role === opt.value}
-                    title={ROLE_LABELS[opt.value]}
+                    title={opt.label}
+                    tag={opt.tag}
                     blurb={opt.blurb}
                     onClick={() => setRole(opt.value)}
                   />
@@ -399,33 +380,19 @@ export function SignupPage() {
               </div>
             </section>
 
-            {mode === 'create' && (
-              <section>
-                <h3 className="text-sm font-semibold text-ink-900">Kind of contractor</h3>
-                <div className="mt-3 space-y-2">
-                  {CONTRACTOR_OPTIONS.map((opt) => (
-                    <OptionCard
-                      key={opt.value}
-                      selected={contractorType === opt.value}
-                      title={CONTRACTOR_TYPE_LABELS[opt.value]}
-                      blurb={opt.blurb}
-                      onClick={() => setContractorType(opt.value)}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
-
             <section>
-              <h3 className="text-sm font-semibold text-ink-900">Primary work type</h3>
+              <h3 className="text-sm font-semibold text-ink-900">Kind of service work</h3>
+              <p className="mt-1 text-xs text-ink-500">
+                HVAC, plumbing, electrical, cleaning, facilities, or another service trade.
+              </p>
               <div className="mt-3 space-y-2">
-                {WORK_OPTIONS.map((opt) => (
+                {SERVICE_TRADE_OPTIONS.map((opt) => (
                   <OptionCard
                     key={opt.value}
-                    selected={workType === opt.value}
-                    title={WORK_TYPE_LABELS[opt.value]}
+                    selected={serviceTrade === opt.value}
+                    title={opt.label}
                     blurb={opt.blurb}
-                    onClick={() => setWorkType(opt.value)}
+                    onClick={() => setServiceTrade(opt.value)}
                   />
                 ))}
               </div>
@@ -601,11 +568,13 @@ function ModeTab({
 function OptionCard({
   selected,
   title,
+  tag,
   blurb,
   onClick,
 }: {
   selected: boolean;
   title: string;
+  tag?: string;
   blurb: string;
   onClick: () => void;
 }) {
@@ -628,7 +597,14 @@ function OptionCard({
         {selected && <CheckIcon width={14} height={14} />}
       </span>
       <span>
-        <span className="block font-semibold text-ink-900">{title}</span>
+        <span className="flex flex-wrap items-center gap-2">
+          <span className="block font-semibold text-ink-900">{title}</span>
+          {tag ? (
+            <span className="rounded-full bg-paper-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink-500">
+              {tag}
+            </span>
+          ) : null}
+        </span>
         <span className="mt-0.5 block text-sm text-ink-600">{blurb}</span>
       </span>
     </button>

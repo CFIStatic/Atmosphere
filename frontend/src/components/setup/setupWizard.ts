@@ -1,4 +1,5 @@
 import type { ContractorType, MemberRole, UsageIntent, WorkType } from '../../lib/api';
+import type { ServiceTrade } from './verifierSetupOptions';
 
 export type SetupWizardStep = 1 | 2 | 3 | 4;
 
@@ -16,7 +17,7 @@ export const SETUP_WIZARD_STEPS = [
   {
     step: 3 as const,
     title: 'Pick your role and trade',
-    detail: 'So Field Capture and the Evidence Platform open with the right defaults.',
+    detail: 'Crew Lead, Field Technician, Project Manager, or Reviewer — doing HVAC, plumbing, electrical, or other service work.',
   },
   {
     step: 4 as const,
@@ -26,10 +27,11 @@ export const SETUP_WIZARD_STEPS = [
 ] as const;
 
 export const SETUP_DEFAULTS = {
-  role: 'project_manager' as MemberRole,
-  workType: 'mitigation' as WorkType,
+  role: 'field_technician' as MemberRole,
+  workType: 'construction' as WorkType,
   contractorType: 'other' as ContractorType,
-  usageIntents: ['exploring'] as UsageIntent[],
+  trade: 'other' as ServiceTrade,
+  usageIntents: ['field_work', 'exploring'] as UsageIntent[],
 };
 
 export function initialSetupStep(options: {
