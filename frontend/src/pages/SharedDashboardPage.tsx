@@ -87,6 +87,14 @@ export function SharedDashboardPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [readinessKey, setReadinessKey] = useState(0);
+  const [shareFormOpen, setShareFormOpen] = useState(false);
+
+  function openShare() {
+    setShareFormOpen(true);
+    requestAnimationFrame(() => {
+      document.getElementById('share-job-progress')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
 
   async function loadList() {
     try {
@@ -102,6 +110,7 @@ export function SharedDashboardPage() {
 
   async function openJob(jobId: string) {
     setOpenId(jobId);
+    setShareFormOpen(false);
     setLoading(true);
     try {
       setRecord(await api.sharedJob(jobId));
@@ -141,13 +150,15 @@ export function SharedDashboardPage() {
         title="Job Progress"
         description="Track how work is advancing on each job — scope completion, verified field days, and a day-by-day history of what crews filmed on site."
         action={
-          <button
-            type="button"
-            onClick={() => navigate('/intake')}
-            className="rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-semibold text-ink-900"
-          >
-            Start a job
-          </button>
+          record ? (
+            <button
+              type="button"
+              onClick={openShare}
+              className="rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-semibold text-ink-900"
+            >
+              Share
+            </button>
+          ) : null
         }
       />
 
@@ -267,7 +278,11 @@ export function SharedDashboardPage() {
 
                   <JobProgressPanel jobId={record.job.id} record={record} />
 
-                  <ShareJobProgressPanel jobId={record.job.id} />
+                  <ShareJobProgressPanel
+                    jobId={record.job.id}
+                    creating={shareFormOpen}
+                    onCreatingChange={setShareFormOpen}
+                  />
 
                   <details className="rounded-xl glass-card group">
                     <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-ink-900 marker:content-none [&::-webkit-details-marker]:hidden">

@@ -18,9 +18,23 @@ const when = (iso: string | null) =>
     ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
     : null;
 
-export function ShareJobProgressPanel({ jobId }: { jobId: string }) {
+export function ShareJobProgressPanel({
+  jobId,
+  creating: creatingProp,
+  onCreatingChange,
+}: {
+  jobId: string;
+  creating?: boolean;
+  onCreatingChange?: (open: boolean) => void;
+}) {
   const [shares, setShares] = useState<EvidenceShare[] | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [creatingInternal, setCreatingInternal] = useState(false);
+  const creating = creatingProp ?? creatingInternal;
+
+  function setCreating(open: boolean) {
+    if (onCreatingChange) onCreatingChange(open);
+    else setCreatingInternal(open);
+  }
   const [label, setLabel] = useState('');
   const [email, setEmail] = useState('');
   const [days, setDays] = useState(30);
@@ -84,7 +98,7 @@ export function ShareJobProgressPanel({ jobId }: { jobId: string }) {
   const live = (shares ?? []).filter((s) => s.state === 'live');
 
   return (
-    <section className="rounded-xl glass-card p-5">
+    <section id="share-job-progress" className="rounded-xl glass-card p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h2 className="text-base font-semibold text-ink-900">Share job progress</h2>
@@ -96,12 +110,12 @@ export function ShareJobProgressPanel({ jobId }: { jobId: string }) {
         </div>
         <button
           onClick={() => {
-            setCreating((v) => !v);
+            setCreating(!creating);
             setMade(null);
           }}
           className="text-xs font-medium text-brand-600 hover:text-brand-700"
         >
-          {creating ? 'Cancel' : 'Share progress'}
+          {creating ? 'Cancel' : 'Share'}
         </button>
       </div>
 
