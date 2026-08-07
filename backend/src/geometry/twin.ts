@@ -52,15 +52,15 @@ export function summarizeTwin(twin: PropertyDigitalTwin): TwinSummary {
  * Video alone never marks the twin metric — rooms must arrive from a
  * measuring source.
  */
-export function ingestMeasurementsOntoTwin(
+export async function ingestMeasurementsOntoTwin(
   twinId: string,
   ingest: DeviceGeometryIngest,
-): PropertyDigitalTwin {
-  const twin = getTwin(twinId);
+): Promise<PropertyDigitalTwin> {
+  const twin = await getTwin(twinId);
   if (!twin) throw new HttpError(404, 'Digital twin not found', 'twin_not_found');
 
   const rooms = ingestDeviceGeometry(ingest);
-  applyRooms(twin, rooms, {
+  await applyRooms(twin, rooms, {
     mesh: ingest.mesh ?? twin.mesh,
     primarySource: ingest.source,
   });
@@ -72,12 +72,12 @@ export function ingestMeasurementsOntoTwin(
       capturedAt: ingest.capturedAt ?? new Date().toISOString(),
       dictationSummary: ingest.dictationSummary ?? null,
     };
-    attachVideo(twin, evidence);
+    await attachVideo(twin, evidence);
   }
 
   const now = new Date().toISOString();
   for (const w of ingest.work ?? []) {
-    upsertWork(twin, {
+    await upsertWork(twin, {
       id: w.id ?? randomUUID(),
       roomId: w.roomId,
       label: w.label,
@@ -91,23 +91,23 @@ export function ingestMeasurementsOntoTwin(
 
   if (!rooms.length) {
     twin.status = 'needs_review';
-    saveTwin(twin);
+    await saveTwin(twin);
   }
 
-  return twin;
+  return (await getTwin(twinId)) ?? twin;
 }
 
 /**
  * Attach field-day video evidence without claiming new measurements.
  * Used when the crew filmed but LiDAR/RoomPlan was unavailable.
  */
-export function attachVideoEvidenceOnly(
+export async function attachVideoEvidenceOnly(
   twinId: string,
   video: Omit<TwinVideoEvidence, 'id'> & { id?: string },
-): PropertyDigitalTwin {
-  const twin = getTwin(twinId);
+): Promise<PropertyDigitalTwin> {
+  const twin = await getTwin(twinId);
   if (!twin) throw new HttpError(404, 'Digital twin not found', 'twin_not_found');
-  attachVideo(twin, {
+  await attachVideo(twin, {
     id: video.id ?? randomUUID(),
     videoRef: video.videoRef,
     roomId: video.roomId,

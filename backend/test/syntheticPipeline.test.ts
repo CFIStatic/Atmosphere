@@ -19,6 +19,9 @@ import {
   probeHasVideo,
 } from './helpers/syntheticAv.js';
 
+process.env.MEDIA_STORE = 'memory';
+process.env.GEOMETRY_STORE = 'memory';
+
 test('synthetic fixture contains video + audio tracks', async () => {
   const clip = await makeSyntheticDayClip({ durationSeconds: 8, withAudio: true });
   assert.equal(await probeHasVideo(clip.path), true);
@@ -73,7 +76,7 @@ test('media catalog accepts A/V day film and rejects silent field_day_video', as
     hasAudio: true,
     driver,
   });
-  const ready = completeMediaUpload({
+  const ready = await completeMediaUpload({
     orgId: 'org-synth',
     sessionId: ok.session.id,
     byteSize: 120_000,
@@ -100,13 +103,13 @@ test('media catalog accepts A/V day film and rejects silent field_day_video', as
 
 test('twin ingest from synthetic measure + video ref is metric and ready', async () => {
   resetGeometryStoreForTests();
-  const twin = createTwin({
+  const twin = await createTwin({
     orgId: 'org-synth',
     jobId: 'job-synth',
     label: 'Synthetic site',
     primarySource: 'roomplan',
   });
-  const updated = ingestMeasurementsOntoTwin(twin.id, {
+  const updated = await ingestMeasurementsOntoTwin(twin.id, {
     source: 'roomplan',
     rooms: [
       { name: 'Room A', lengthFt: 12, widthFt: 10, heightFt: 8, confidence: 0.9 },

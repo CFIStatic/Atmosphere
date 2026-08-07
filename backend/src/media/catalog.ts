@@ -1,17 +1,22 @@
 /**
- * In-process media catalog for the foundation surface.
- *
- * Durable rows live in `media_objects` (migration). This store lets upload
- * sessions, quota checks, and twin/proof wiring land against a stable API
- * before every path is cut over from `job_proofs.storage_path`.
+ * Media catalog — Supabase Postgres is primary (same project as job_proofs).
+ * Set MEDIA_STORE=memory for unit tests without a service role.
  */
 import { randomUUID } from 'node:crypto';
 import { config } from '../config.js';
 import { HttpError } from '../lib/errors.js';
+import { useMemoryMediaStore } from '../lib/adminClient.js';
 import { assertAudiovisualPolicy, kindRequiresAudio } from './capturePolicy.js';
 import { mediaDriverFor, mediaObjectKey, type MediaStorageDriver } from './driver.js';
-import { bindMediaObjectMap, hydrateMediaForOrg, resetMediaHydrationForTests } from './hydrate.js';
-import { persistMediaObject, persistOrgQuota } from './persist.js';
+import {
+  fetchMediaForOrg,
+  fetchMediaObject,
+  fetchOrgQuota,
+  fetchUploadSession,
+  persistMediaObject,
+  persistOrgQuota,
+  persistUploadSession,
+} from './persist.js';
 import { assertWithinQuotas, usageOf, type CatalogView } from './quotas.js';
 import type {
   MediaKind,
@@ -22,10 +27,8 @@ import type {
 } from './types.js';
 
 const objects = new Map<string, MediaObject>();
-bindMediaObjectMap(objects);
 const sessions = new Map<string, MediaUploadSession>();
 const quotas = new Map<string, OrgMediaQuota>();
-/** Ingest seconds keyed by orgId → YYYY-MM-DD (UTC). */
 const ingestDay = new Map<string, number>();
 
 export function resetMediaCatalogForTests(): void {
@@ -33,7 +36,6 @@ export function resetMediaCatalogForTests(): void {
   sessions.clear();
   quotas.clear();
   ingestDay.clear();
-  resetMediaHydrationForTests();
 }
 
 function dayKey(orgId: string, at = new Date()): string {
@@ -47,31 +49,37 @@ function view(): CatalogView {
   };
 }
 
-export function setOrgQuota(quota: OrgMediaQuota): void {
+export async function setOrgQuota(quota: OrgMediaQuota): Promise<void> {
   quotas.set(quota.orgId, quota);
-  void persistOrgQuota(quota);
+  await persistOrgQuota(quota);
 }
 
-export function getOrgQuota(orgId: string): OrgMediaQuota {
-  return (
-    quotas.get(orgId) ?? {
-      orgId,
-      maxHotBytes: config.media.defaultMaxHotBytes,
-      maxTotalBytes: config.media.defaultMaxTotalBytes,
-      maxIngestSecondsPerDay: config.media.defaultMaxIngestSecondsPerDay,
-      maxObjectBytes: config.media.defaultMaxObjectBytes,
-    }
-  );
+export async function getOrgQuota(orgId: string): Promise<OrgMediaQuota> {
+  const cached = quotas.get(orgId);
+  if (cached) return cached;
+  const fromDb = await fetchOrgQuota(orgId);
+  if (fromDb) {
+    quotas.set(orgId, fromDb);
+    return fromDb;
+  }
+  return {
+    orgId,
+    maxHotBytes: config.media.defaultMaxHotBytes,
+    maxTotalBytes: config.media.defaultMaxTotalBytes,
+    maxIngestSecondsPerDay: config.media.defaultMaxIngestSecondsPerDay,
+    maxObjectBytes: config.media.defaultMaxObjectBytes,
+  };
 }
 
 export function orgUsage(orgId: string): OrgMediaUsage {
   return usageOf(orgId, view());
 }
 
-/**
- * Open an upload session for one object (≤ ~24h video).
- * Enforces per-object duration/bytes and soft org quotas before minting URLs.
- */
+export async function orgUsageHydrated(orgId: string): Promise<OrgMediaUsage> {
+  await listMediaForOrgHydrated(orgId);
+  return orgUsage(orgId);
+}
+
 export async function beginMediaUpload(input: {
   orgId: string;
   kind: MediaKind;
@@ -82,17 +90,11 @@ export async function beginMediaUpload(input: {
   refType?: string | null;
   refId?: string | null;
   preferMultipart?: boolean;
-  /**
-   * Client attestation that the recording includes a mic track.
-   * Defaults to true for audiovisual kinds (Field Capture always films A/V).
-   */
   hasAudio?: boolean | null;
-  /** Test / override hook — production uses config.media.backend. */
   driver?: MediaStorageDriver;
 }): Promise<{ media: MediaObject; session: MediaUploadSession }> {
   const duration = input.durationSeconds ?? null;
-  const hasAudio =
-    input.hasAudio ?? (kindRequiresAudio(input.kind) ? true : null);
+  const hasAudio = input.hasAudio ?? (kindRequiresAudio(input.kind) ? true : null);
   assertAudiovisualPolicy({ kind: input.kind, hasAudio, strict: true });
   if (duration != null) {
     if (!Number.isFinite(duration) || duration <= 0) {
@@ -107,7 +109,8 @@ export async function beginMediaUpload(input: {
     }
   }
 
-  const quota = getOrgQuota(input.orgId);
+  await listMediaForOrgHydrated(input.orgId);
+  const quota = await getOrgQuota(input.orgId);
   assertWithinQuotas({
     quota,
     usage: orgUsage(input.orgId),
@@ -126,13 +129,17 @@ export async function beginMediaUpload(input: {
     ext,
   });
 
-  const driver = input.driver ?? mediaDriverFor();
+  // Production: Supabase storage (job-proofs / MEDIA_HOT_BUCKET). Tests pass memory driver.
+  const driver =
+    input.driver
+    ?? (useMemoryMediaStore() ? mediaDriverFor('memory') : mediaDriverFor(config.media.backend));
   const created = await driver.createUpload({
     orgId: input.orgId,
     objectKey,
     contentType: input.contentType,
     byteSize: input.byteSize,
-    preferMultipart: input.preferMultipart ?? (input.byteSize ?? 0) >= config.media.multipartThresholdBytes,
+    preferMultipart:
+      input.preferMultipart ?? (input.byteSize ?? 0) >= config.media.multipartThresholdBytes,
   });
 
   const media: MediaObject = {
@@ -157,7 +164,7 @@ export async function beginMediaUpload(input: {
     updatedAt: now,
   };
   objects.set(media.id, media);
-  void persistMediaObject(media);
+  await persistMediaObject(media);
 
   const session: MediaUploadSession = {
     id: randomUUID(),
@@ -172,22 +179,27 @@ export async function beginMediaUpload(input: {
     createdAt: now,
   };
   sessions.set(session.id, session);
+  await persistUploadSession(session);
   return { media, session };
 }
 
-export function completeMediaUpload(input: {
+export async function completeMediaUpload(input: {
   orgId: string;
   sessionId: string;
   byteSize?: number | null;
   contentHash?: string | null;
   durationSeconds?: number | null;
   hasAudio?: boolean | null;
-}): MediaObject {
-  const session = sessions.get(input.sessionId);
+}): Promise<MediaObject> {
+  let session = sessions.get(input.sessionId) ?? null;
+  if (!session) session = await fetchUploadSession(input.sessionId);
   if (!session || session.orgId !== input.orgId) {
     throw new HttpError(404, 'Upload session not found', 'upload_session_not_found');
   }
-  const media = objects.get(session.mediaId);
+  sessions.set(session.id, session);
+
+  let media = objects.get(session.mediaId) ?? null;
+  if (!media) media = await fetchMediaObject(session.mediaId);
   if (!media || media.orgId !== input.orgId) {
     throw new HttpError(404, 'Media object not found', 'media_not_found');
   }
@@ -215,7 +227,7 @@ export function completeMediaUpload(input: {
   media.state = 'ready';
   media.updatedAt = new Date().toISOString();
   objects.set(media.id, media);
-  void persistMediaObject(media);
+  await persistMediaObject(media);
 
   const add = media.durationSeconds ?? 0;
   if (add > 0) {
@@ -226,8 +238,12 @@ export function completeMediaUpload(input: {
   return media;
 }
 
-export function getMedia(id: string): MediaObject | null {
-  return objects.get(id) ?? null;
+export async function getMedia(id: string): Promise<MediaObject | null> {
+  const cached = objects.get(id);
+  if (cached) return cached;
+  const fromDb = await fetchMediaObject(id);
+  if (fromDb) objects.set(fromDb.id, fromDb);
+  return fromDb;
 }
 
 export function listMediaForOrg(orgId: string): MediaObject[] {
@@ -236,21 +252,27 @@ export function listMediaForOrg(orgId: string): MediaObject[] {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-/** Prefer this from HTTP handlers so restarts still see catalogued objects. */
 export async function listMediaForOrgHydrated(orgId: string): Promise<MediaObject[]> {
-  await hydrateMediaForOrg(orgId);
+  if (!useMemoryMediaStore()) {
+    const rows = await fetchMediaForOrg(orgId);
+    for (const m of rows) objects.set(m.id, m);
+  }
   return listMediaForOrg(orgId);
 }
 
-export function markTier(mediaId: string, orgId: string, tier: MediaObject['tier']): MediaObject {
-  const media = objects.get(mediaId);
+export async function markTier(
+  mediaId: string,
+  orgId: string,
+  tier: MediaObject['tier'],
+): Promise<MediaObject> {
+  const media = await getMedia(mediaId);
   if (!media || media.orgId !== orgId) {
     throw new HttpError(404, 'Media object not found', 'media_not_found');
   }
   media.tier = tier;
   media.updatedAt = new Date().toISOString();
   objects.set(media.id, media);
-  void persistMediaObject(media);
+  await persistMediaObject(media);
   return media;
 }
 

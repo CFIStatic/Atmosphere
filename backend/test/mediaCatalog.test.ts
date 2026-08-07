@@ -12,6 +12,8 @@ import { MemoryMediaStorage, S3MediaStorageStub } from '../src/media/driver.js';
 import { assertWithinQuotas, formatDurationHours } from '../src/media/quotas.js';
 import { HttpError } from '../src/lib/errors.js';
 
+process.env.MEDIA_STORE = 'memory';
+
 test('one object cannot exceed the ~24h duration cap', async () => {
   resetMediaCatalogForTests();
   const over = config.verification.maxDurationSeconds + 1;
@@ -42,7 +44,7 @@ test('a 24h object uploads, completes, and counts toward fleet hours', async () 
   assert.equal(media.state, 'pending_upload');
   assert.ok(session.uploadUrl?.startsWith('memory://'));
 
-  const ready = completeMediaUpload({
+  const ready = await completeMediaUpload({
     orgId: 'org-1',
     sessionId: session.id,
     byteSize: 12_000_000_000,
@@ -60,7 +62,7 @@ test('a 24h object uploads, completes, and counts toward fleet hours', async () 
 
 test('soft hot quota rejects another large object', async () => {
   resetMediaCatalogForTests();
-  setOrgQuota({
+  await setOrgQuota({
     orgId: 'org-1',
     maxHotBytes: 5_000,
     maxTotalBytes: null,
@@ -75,7 +77,7 @@ test('soft hot quota rejects another large object', async () => {
     byteSize: 4_000,
     driver: new MemoryMediaStorage(),
   });
-  completeMediaUpload({ orgId: 'org-1', sessionId: session.id, byteSize: 4_000 });
+  await completeMediaUpload({ orgId: 'org-1', sessionId: session.id, byteSize: 4_000 });
 
   await assert.rejects(
     () =>

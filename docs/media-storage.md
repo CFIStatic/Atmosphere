@@ -22,13 +22,28 @@ We do **not** stretch one file past 24h to grow capacity. Capacity is **object c
 
 Lifecycle rules in the bucket move bytes; the catalog’s `tier` column tracks what the product believes.
 
+## Supabase is primary (same project as proofs)
+
+Catalog rows (`media_objects`, `org_media_quotas`, `media_upload_sessions`) and
+property twins (`property_twins`, `geometry_capture_sessions`) persist through
+the **service-role admin client** — the same Supabase project as `job_proofs`
+(`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`). Bytes stay in Storage
+(`job-proofs` / `MEDIA_HOT_BUCKET`); Postgres never holds the film.
+
+Production must **not** set `MEDIA_STORE` / `GEOMETRY_STORE`. Those flags are
+for unit tests and offline smoke (`=memory`) when no service role is available.
+
+Apply migrations under `backend/supabase/migrations/` (including media catalog,
+`has_audio`, upload sessions, property twins, geometry sessions) to the live
+project before relying on durable catalog/twin reads across restarts.
+
 ## Drivers
 
 `MediaStorageDriver` (`backend/src/media/driver.ts`):
 
 - **supabase** — today’s hot path (signed upload/read on `job-proofs` / `MEDIA_HOT_BUCKET`)
 - **s3** — multipart-oriented stub for App Store / day-length uploads + archive bucket
-- **memory** — unit tests only
+- **memory** — unit tests only (`MEDIA_STORE=memory`)
 
 Proof upload and twin `videoRef` should converge on `media_objects.id` so intelligence (`/api/media/video/process`) only needs a signed read URL.
 

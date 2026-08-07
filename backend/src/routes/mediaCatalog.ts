@@ -11,7 +11,7 @@ import {
   getMedia,
   listMediaForOrgHydrated,
   markTier,
-  orgUsage,
+  orgUsageHydrated,
   setOrgQuota,
   getOrgQuota,
 } from '../media/catalog.js';
@@ -66,10 +66,10 @@ mediaCatalogRouter.get('/scale', (_req, res) => {
 mediaCatalogRouter.get('/usage', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { orgId } = await requireOrgContext(req);
-    const usage = orgUsage(orgId);
+    const usage = await orgUsageHydrated(orgId);
     res.json({
       usage,
-      quota: getOrgQuota(orgId),
+      quota: await getOrgQuota(orgId),
       totalHoursRetained: formatDurationHours(usage.totalDurationSeconds),
       ingestHoursToday: formatDurationHours(usage.ingestDurationSecondsToday),
     });
@@ -122,7 +122,7 @@ mediaCatalogRouter.post(
     try {
       const { orgId } = await requireOrgContext(req);
       const body = completeSchema.parse(req.body ?? {});
-      const media = completeMediaUpload({ orgId, ...body });
+      const media = await completeMediaUpload({ orgId, ...body });
       res.json({ media });
     } catch (err) {
       if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid request'));
@@ -147,7 +147,7 @@ mediaCatalogRouter.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { orgId } = await requireOrgContext(req);
-      const media = getMedia(String(req.params.id));
+      const media = await getMedia(String(req.params.id));
       if (!media || media.orgId !== orgId) throw notFound('Media object not found');
       res.json({ media });
     } catch (err) {
@@ -162,7 +162,7 @@ mediaCatalogRouter.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { orgId } = await requireOrgContext(req);
-      const media = getMedia(String(req.params.id));
+      const media = await getMedia(String(req.params.id));
       if (!media || media.orgId !== orgId) throw notFound('Media object not found');
       if (media.state !== 'ready') {
         throw badRequest('Media is not ready for read', 'media_not_ready');
@@ -189,7 +189,7 @@ mediaCatalogRouter.post(
     try {
       const { orgId } = await requireOrgContext(req);
       const body = tierSchema.parse(req.body ?? {});
-      const media = markTier(String(req.params.id), orgId, body.tier);
+      const media = await markTier(String(req.params.id), orgId, body.tier);
       res.json({ media });
     } catch (err) {
       if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid request'));
@@ -207,13 +207,13 @@ const quotaSchema = z.object({
 
 /**
  * PUT /api/media/catalog/quota
- * Set soft org ceilings (foundation: in-memory; durable via org_media_quotas).
+ * Soft org ceilings — durable in org_media_quotas on the same Supabase project.
  */
 mediaCatalogRouter.put('/quota', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { orgId } = await requireOrgContext(req);
     const body = quotaSchema.parse(req.body ?? {});
-    const current = getOrgQuota(orgId);
+    const current = await getOrgQuota(orgId);
     const nextQuota = {
       orgId,
       maxHotBytes: body.maxHotBytes === undefined ? current.maxHotBytes : body.maxHotBytes,
@@ -224,8 +224,9 @@ mediaCatalogRouter.put('/quota', async (req: Request, res: Response, next: NextF
           : body.maxIngestSecondsPerDay,
       maxObjectBytes: body.maxObjectBytes === undefined ? current.maxObjectBytes : body.maxObjectBytes,
     };
-    setOrgQuota(nextQuota);
-    res.json({ quota: nextQuota, usage: orgUsage(orgId) });
+    await setOrgQuota(nextQuota);
+    const usage = await orgUsageHydrated(orgId);
+    res.json({ quota: nextQuota, usage });
   } catch (err) {
     if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid request'));
     else next(err);

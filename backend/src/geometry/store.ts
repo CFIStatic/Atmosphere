@@ -1,12 +1,16 @@
 /**
- * In-process twin store for the foundation surface.
- *
- * Durable persistence (Postgres / storage) lands with the App Store client
- * once sessions are production traffic; until then the API contract and
- * room-graph shape are what native and web clients integrate against.
+ * Property twin store — Supabase Postgres primary (property_twins).
+ * GEOMETRY_STORE=memory for unit tests without a service role.
  */
 import { randomUUID } from 'node:crypto';
-import { persistTwin } from './persist.js';
+import { useMemoryGeometryStore } from '../lib/adminClient.js';
+import {
+  fetchGeometrySession,
+  fetchTwin,
+  fetchTwinsForOrg,
+  persistGeometrySession,
+  persistTwin,
+} from './persist.js';
 import type {
   GeometryCaptureSession,
   PropertyDigitalTwin,
@@ -24,12 +28,12 @@ export function resetGeometryStoreForTests(): void {
   sessions.clear();
 }
 
-export function createTwin(input: {
+export async function createTwin(input: {
   orgId: string;
   jobId?: string | null;
   label: string;
   primarySource: PropertyDigitalTwin['primarySource'];
-}): PropertyDigitalTwin {
+}): Promise<PropertyDigitalTwin> {
   const now = new Date().toISOString();
   const twin: PropertyDigitalTwin = {
     id: randomUUID(),
@@ -47,12 +51,16 @@ export function createTwin(input: {
     updatedAt: now,
   };
   twins.set(twin.id, twin);
-  void persistTwin(twin);
+  await persistTwin(twin);
   return twin;
 }
 
-export function getTwin(id: string): PropertyDigitalTwin | null {
-  return twins.get(id) ?? null;
+export async function getTwin(id: string): Promise<PropertyDigitalTwin | null> {
+  const cached = twins.get(id);
+  if (cached) return cached;
+  const fromDb = await fetchTwin(id);
+  if (fromDb) twins.set(fromDb.id, fromDb);
+  return fromDb;
 }
 
 export function listTwinsForOrg(orgId: string): PropertyDigitalTwin[] {
@@ -62,23 +70,25 @@ export function listTwinsForOrg(orgId: string): PropertyDigitalTwin[] {
 }
 
 export async function listTwinsForOrgHydrated(orgId: string): Promise<PropertyDigitalTwin[]> {
-  const { hydrateTwinsForOrg } = await import('./hydrate.js');
-  await hydrateTwinsForOrg(orgId);
+  if (!useMemoryGeometryStore()) {
+    const rows = await fetchTwinsForOrg(orgId);
+    for (const t of rows) twins.set(t.id, t);
+  }
   return listTwinsForOrg(orgId);
 }
 
-export function saveTwin(twin: PropertyDigitalTwin): PropertyDigitalTwin {
+export async function saveTwin(twin: PropertyDigitalTwin): Promise<PropertyDigitalTwin> {
   twin.updatedAt = new Date().toISOString();
   twins.set(twin.id, twin);
-  void persistTwin(twin);
+  await persistTwin(twin);
   return twin;
 }
 
-export function applyRooms(
+export async function applyRooms(
   twin: PropertyDigitalTwin,
   rooms: TwinRoom[],
   opts?: { mesh?: TwinMeshAsset | null; primarySource?: PropertyDigitalTwin['primarySource'] },
-): PropertyDigitalTwin {
+): Promise<PropertyDigitalTwin> {
   twin.rooms = rooms;
   if (opts?.mesh !== undefined) twin.mesh = opts.mesh;
   if (opts?.primarySource) twin.primarySource = opts.primarySource;
@@ -86,26 +96,26 @@ export function applyRooms(
   return saveTwin(twin);
 }
 
-export function attachVideo(
+export async function attachVideo(
   twin: PropertyDigitalTwin,
   video: TwinVideoEvidence,
-): PropertyDigitalTwin {
+): Promise<PropertyDigitalTwin> {
   const without = twin.videos.filter((v) => v.id !== video.id);
   twin.videos = [...without, video];
   return saveTwin(twin);
 }
 
-export function upsertWork(
+export async function upsertWork(
   twin: PropertyDigitalTwin,
   overlay: TwinWorkOverlay,
-): PropertyDigitalTwin {
+): Promise<PropertyDigitalTwin> {
   const idx = twin.work.findIndex((w) => w.id === overlay.id);
   if (idx >= 0) twin.work[idx] = overlay;
   else twin.work.push(overlay);
   return saveTwin(twin);
 }
 
-export function createSession(input: {
+export async function createSession(input: {
   orgId: string;
   jobId?: string | null;
   twinId: string;
@@ -113,7 +123,7 @@ export function createSession(input: {
   measureApi?: GeometryCaptureSession['measureApi'];
   lidarAvailable?: boolean;
   videoRef?: string | null;
-}): GeometryCaptureSession {
+}): Promise<GeometryCaptureSession> {
   const now = new Date().toISOString();
   const session: GeometryCaptureSession = {
     id: randomUUID(),
@@ -130,15 +140,21 @@ export function createSession(input: {
     updatedAt: now,
   };
   sessions.set(session.id, session);
+  await persistGeometrySession(session);
   return session;
 }
 
-export function getSession(id: string): GeometryCaptureSession | null {
-  return sessions.get(id) ?? null;
+export async function getSession(id: string): Promise<GeometryCaptureSession | null> {
+  const cached = sessions.get(id);
+  if (cached) return cached;
+  const fromDb = await fetchGeometrySession(id);
+  if (fromDb) sessions.set(fromDb.id, fromDb);
+  return fromDb;
 }
 
-export function saveSession(session: GeometryCaptureSession): GeometryCaptureSession {
+export async function saveSession(session: GeometryCaptureSession): Promise<GeometryCaptureSession> {
   session.updatedAt = new Date().toISOString();
   sessions.set(session.id, session);
+  await persistGeometrySession(session);
   return session;
 }

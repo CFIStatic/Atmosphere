@@ -100,7 +100,7 @@ geometryRouter.post('/twins', async (req: Request, res: Response, next: NextFunc
   try {
     const { orgId } = await requireOrgContext(req);
     const body = createTwinSchema.parse(req.body ?? {});
-    const twin = createTwin({
+    const twin = await createTwin({
       orgId,
       jobId: body.jobId,
       label: body.label,
@@ -131,7 +131,7 @@ geometryRouter.get('/twins', async (req: Request, res: Response, next: NextFunct
 geometryRouter.get('/twins/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { orgId } = await requireOrgContext(req);
-    const twin = getTwin(String(req.params.id));
+    const twin = await getTwin(String(req.params.id));
     if (!twin || twin.orgId !== orgId) throw notFound('Digital twin not found');
     res.json({ twin, summary: summarizeTwin(twin) });
   } catch (err) {
@@ -157,10 +157,10 @@ geometryRouter.post('/sessions', async (req: Request, res: Response, next: NextF
   try {
     const { orgId } = await requireOrgContext(req);
     const body = sessionSchema.parse(req.body ?? {});
-    let twin = body.twinId ? getTwin(body.twinId) : null;
+    let twin = body.twinId ? await getTwin(body.twinId) : null;
     if (twin && twin.orgId !== orgId) throw notFound('Digital twin not found');
     if (!twin) {
-      twin = createTwin({
+      twin = await createTwin({
         orgId,
         jobId: body.jobId,
         label: body.label ?? 'Field capture twin',
@@ -168,9 +168,9 @@ geometryRouter.post('/sessions', async (req: Request, res: Response, next: NextF
           body.measureApi === 'none' ? 'video_evidence' : (body.measureApi ?? 'roomplan'),
       });
       twin.status = 'measuring';
-      saveTwin(twin);
+      await saveTwin(twin);
     }
-    const session = createSession({
+    const session = await createSession({
       orgId,
       jobId: body.jobId ?? twin.jobId,
       twinId: twin.id,
@@ -218,7 +218,7 @@ geometryRouter.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { orgId } = await requireOrgContext(req);
-      const session = getSession(String(req.params.id));
+      const session = await getSession(String(req.params.id));
       if (!session || session.orgId !== orgId) {
         throw notFound('Capture session not found');
       }
@@ -226,7 +226,7 @@ geometryRouter.post(
       if (!body.rooms.length) {
         throw badRequest('At least one measured room is required for metric ingest.', 'no_rooms');
       }
-      const twin = ingestMeasurementsOntoTwin(session.twinId, {
+      const twin = await ingestMeasurementsOntoTwin(session.twinId, {
         source: body.source,
         rooms: body.rooms,
         mesh: body.mesh ?? null,
@@ -238,7 +238,7 @@ geometryRouter.post(
       session.status = 'ingested';
       session.error = null;
       if (body.videoRef) session.videoRef = body.videoRef;
-      saveSession(session);
+      await saveSession(session);
       res.json({ session, twin, summary: summarizeTwin(twin) });
     } catch (err) {
       if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid request'));
@@ -265,10 +265,10 @@ geometryRouter.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { orgId } = await requireOrgContext(req);
-      const twin = getTwin(String(req.params.id));
+      const twin = await getTwin(String(req.params.id));
       if (!twin || twin.orgId !== orgId) throw notFound('Digital twin not found');
       const body = videoOnlySchema.parse(req.body ?? {});
-      const updated = attachVideoEvidenceOnly(twin.id, body);
+      const updated = await attachVideoEvidenceOnly(twin.id, body);
       res.json({ twin: updated, summary: summarizeTwin(updated) });
     } catch (err) {
       if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid request'));

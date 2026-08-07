@@ -7,6 +7,10 @@
  *   5. Twin ingest with rooms + videoRef
  *
  * Usage:  npx tsx scripts/smokeSyntheticPipeline.ts
+ *
+ * Uses MEDIA_STORE=memory / GEOMETRY_STORE=memory so this runs without a
+ * service role. Production API paths persist to the same Supabase project
+ * as job_proofs when SUPABASE_SERVICE_ROLE_KEY is set.
  */
 import {
   makeSyntheticDayClip,
@@ -25,6 +29,9 @@ import {
   resetGeometryStoreForTests,
 } from '../src/geometry/store.js';
 import { ingestMeasurementsOntoTwin, summarizeTwin } from '../src/geometry/twin.js';
+
+process.env.MEDIA_STORE ??= 'memory';
+process.env.GEOMETRY_STORE ??= 'memory';
 
 async function main() {
   console.log('[smoke] generating synthetic A/V clip…');
@@ -55,7 +62,7 @@ async function main() {
     hasAudio: true,
     driver: new MemoryMediaStorage(),
   });
-  const ready = completeMediaUpload({
+  const ready = await completeMediaUpload({
     orgId: 'smoke-org',
     sessionId: session.id,
     byteSize: 250_000,
@@ -66,13 +73,13 @@ async function main() {
   console.log(`[smoke] media=${ready.id} state=${ready.state} hasAudio=${ready.hasAudio}`);
 
   resetGeometryStoreForTests();
-  const twin = createTwin({
+  const twin = await createTwin({
     orgId: 'smoke-org',
     jobId: 'smoke-job',
     label: 'Smoke site',
     primarySource: 'roomplan',
   });
-  const updated = ingestMeasurementsOntoTwin(twin.id, {
+  const updated = await ingestMeasurementsOntoTwin(twin.id, {
     source: 'roomplan',
     rooms: [
       { name: 'Living', lengthFt: 14, widthFt: 12, heightFt: 8 },
