@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SpinnerIcon } from './icons';
 import { useAuth } from '../context/AuthContext';
@@ -6,16 +6,16 @@ import { ROLE_LABELS } from '../lib/api';
 import { displayName, initials } from '../lib/display';
 
 /**
- * The Verifier portal iframe — full viewport on the library route, or a
- * fixed-width rail beside React pages (intake, job files) so the sidebar
- * never swaps out for AppShell.
+ * The Verifier portal iframe — one persistent instance per operations shell.
+ * Layout toggles between full viewport and sidebar-only via postMessage so
+ * route changes never reload the frame.
  */
 export function VerifierFrame({
-  mode = 'full',
+  railOnly = false,
   className,
   style,
 }: {
-  mode?: 'full' | 'rail';
+  railOnly?: boolean;
   className?: string;
   style?: CSSProperties;
 }) {
@@ -25,56 +25,48 @@ export function VerifierFrame({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [srcDoc, setSrcDoc] = useState<string | null>(null);
   const [frameReady, setFrameReady] = useState(false);
-  const railOnly = mode === 'rail';
 
   useEffect(() => {
     const inline = document.getElementById('atm-verify-src');
     if (inline?.textContent) {
-      let html = inline.textContent.replace(/<\\\/script/gi, '</script');
-      html = html.replace('<body>', '<body data-atm-embed="1">');
-      if (railOnly) html = html.replace('<body data-atm-embed="1">', '<body data-atm-embed="1" data-atm-rail-only="1">');
-      setSrcDoc(html);
+      setSrcDoc(
+        inline.textContent
+          .replace(/<\\\/script/gi, '</script')
+          .replace('<body>', '<body data-atm-embed="1">'),
+      );
     }
-  }, [railOnly]);
+  }, []);
 
-  useEffect(() => {
-    setFrameReady(false);
-  }, [srcDoc, mode]);
+  const postToFrame = useCallback((payload: Record<string, unknown>) => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage(payload, '*');
+  }, []);
 
   const postSession = useCallback(() => {
     if (!user) return;
-    const win = iframeRef.current?.contentWindow;
-    if (!win) return;
-
-    win.postMessage(
-      {
-        atmosphere: 'session',
-        user: {
-          name: displayName(profile?.fullName, user.email),
-          email: profile?.email ?? user.email ?? '',
-          initials: initials(profile?.fullName, user.email),
-          orgName: membership?.org?.name ?? null,
-          roleLabel: membership ? ROLE_LABELS[membership.role] : null,
-          role: membership?.role ?? null,
-        },
+    postToFrame({
+      atmosphere: 'session',
+      user: {
+        name: displayName(profile?.fullName, user.email),
+        email: profile?.email ?? user.email ?? '',
+        initials: initials(profile?.fullName, user.email),
+        orgName: membership?.org?.name ?? null,
+        roleLabel: membership ? ROLE_LABELS[membership.role] : null,
+        role: membership?.role ?? null,
       },
-      '*',
-    );
-  }, [membership, profile, user]);
+    });
+  }, [membership, postToFrame, profile, user]);
 
-  const postActiveRoute = useCallback(() => {
-    const win = iframeRef.current?.contentWindow;
-    if (!win) return;
-    win.postMessage({ atmosphere: 'active-route', path: location.pathname }, '*');
-  }, [location.pathname]);
+  const syncFrame = useCallback(() => {
+    postToFrame({ atmosphere: 'layout', railOnly });
+    postToFrame({ atmosphere: 'active-route', path: location.pathname });
+    postSession();
+  }, [location.pathname, postSession, postToFrame, railOnly]);
 
-  useEffect(() => {
-    if (frameReady) postSession();
-  }, [frameReady, postSession]);
-
-  useEffect(() => {
-    if (frameReady) postActiveRoute();
-  }, [frameReady, postActiveRoute]);
+  useLayoutEffect(() => {
+    if (frameReady) syncFrame();
+  }, [frameReady, syncFrame]);
 
   useEffect(() => {
     function onMessage(event: MessageEvent) {
@@ -97,16 +89,13 @@ export function VerifierFrame({
     return () => window.removeEventListener('message', onMessage);
   }, [logout, navigate, postSession]);
 
-  const frameClass =
-    mode === 'full'
-      ? 'fixed inset-0 h-full w-full border-0'
-      : 'h-full w-full border-0';
-  const frameSrc = srcDoc ? undefined : `/verifier/?embed=1${railOnly ? '&rail=1' : ''}`;
+  const frameClass = 'h-full w-full border-0';
+  const frameSrc = srcDoc ? undefined : '/verifier/?embed=1';
 
   return (
     <div className={className} style={style}>
-      {!frameReady && mode === 'full' && (
-        <div className="fixed inset-0 z-10 grid place-items-center bg-paper-100 text-brand-600">
+      {!frameReady && !railOnly && (
+        <div className="absolute inset-0 z-10 grid place-items-center bg-paper-100 text-brand-600">
           <SpinnerIcon className="animate-spin" width={28} height={28} />
         </div>
       )}

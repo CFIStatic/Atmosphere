@@ -225,7 +225,8 @@
   body[data-atm-rail-only] .app-frame.has-sidebar .shell {
     grid-template-columns: minmax(0, 1fr);
   }
-  body[data-atm-rail-only] .rail { height: 100%; border-right: 0; }
+  body[data-atm-rail-only] .rail { height: 100%; border-right: 0; overflow-x: hidden; }
+  body[data-atm-rail-only] .app-frame { overflow: hidden; }
   .navitem.nav-icon { justify-content: flex-start; gap: 8px; }
   .navitem.nav-icon svg { flex: none; color: var(--muted); }
   .navitem.nav-icon[aria-current="true"] svg { color: var(--accent); }
@@ -1941,6 +1942,21 @@
     });
     var settings = document.getElementById('nav-settings');
     if (settings) settings.setAttribute('aria-current', String(activeRoute === '/settings'));
+    if (activeRoute !== '/verifier-library') {
+      document.querySelectorAll('.navitem[data-view]').forEach(function (btn) {
+        btn.removeAttribute('aria-current');
+      });
+    } else {
+      var view = state.view || 'all';
+      document.querySelectorAll('.navitem[data-view]').forEach(function (btn) {
+        btn.setAttribute('aria-current', String(btn.dataset.view === view));
+      });
+    }
+  }
+
+  function setRailOnly(on) {
+    if (on) document.body.setAttribute('data-atm-rail-only', '1');
+    else document.body.removeAttribute('data-atm-rail-only');
   }
 
   document.querySelectorAll('.navitem[data-view]').forEach(function (b) {
@@ -2062,6 +2078,7 @@
     var d = e.data;
     if (d && d.atmosphere === 'session') applySession(d);
     if (d && d.atmosphere === 'active-route') setActiveRoute(d.path);
+    if (d && d.atmosphere === 'layout') setRailOnly(!!d.railOnly);
   });
 
   var appFrame = document.getElementById('app-frame');
