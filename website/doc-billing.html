@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="The 30-day test, seat plans, and how the one flat token rate is set and metered." />
+  <meta name="description" content="Field Capture and Evidence Platform pricing, plus how the one flat token rate is set and metered." />
   <meta name="theme-color" content="#FBFAF7" />
   <title>Billing & the flat rate · Atmosphere Docs</title>
   <meta property="og:title" content="Billing & the flat rate · Atmosphere Docs" />
-  <meta property="og:description" content="The 30-day test, seat plans, and how the one flat token rate is set and metered." />
+  <meta property="og:description" content="Field Capture and Evidence Platform pricing, plus how the one flat token rate is set and metered." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Atmosphere" />
   <meta property="og:image" content="/assets/og.png" />
@@ -108,21 +108,16 @@
   <article class="docs-prose">
     <div class="eyebrow mono">Resources · Account</div>
     <h1>Billing &amp; the flat rate</h1>
-    <p class="lede">The 30-day test, seat plans, and how the one flat token rate is set and metered.</p>
+    <p class="lede">Field Capture and Evidence Platform pricing, plus how the one flat token rate is set and metered.</p>
 
-<h2>The 30-day test</h2>
-<p>Every organization starts with thirty days of the full platform — no feature held back, one seat. Usage during the test is billed at the same flat rate as everyone else, so what you spend testing is what the thing would actually cost you. Nothing auto-upgrades when the thirty days end: you pick a plan, or you stop.</p>
-<h2>Seats</h2>
-<p>The seat price buys access and a throughput ceiling, nothing else:</p>
+<h2>Two products</h2>
+<p>Atmosphere sells two products, each with a flat monthly fee plus usage at the flat token rate:</p>
 <table>
-<tr><th>Plan</th><th>Monthly</th><th>Annual</th><th>Throughput</th></tr>
-<tr><td>Pro</td><td>$20 / person</td><td>$17 / person</td><td>1×</td></tr>
-<tr><td>Max 5x</td><td>$100 / person</td><td>$100 / person</td><td>5×</td></tr>
-<tr><td>Max 20x</td><td>$200 / person</td><td>$200 / person</td><td>20×</td></tr>
-<tr><td>Team</td><td>$30 / seat, 5 min</td><td>$25 / seat</td><td>5×</td></tr>
-<tr><td>Enterprise</td><td colspan="2">Annual, 25 seats minimum</td><td>Custom</td></tr>
+<tr><th>Product</th><th>Monthly fee</th><th>What it covers</th></tr>
+<tr><td>Field Capture</td><td>$99.99</td><td>On-site capture — film, voice, and camera — and verification as work happens</td></tr>
+<tr><td>Evidence Platform</td><td>$499.99</td><td>The full record — Verifier, audit trail, durable storage, replay, and sharing</td></tr>
 </table>
-<p>All four platforms — Sales, Operations, Field, Manager — are bought separately at these same tiers.</p>
+<p>Most organizations subscribe to both. You can start with either product; usage is billed the same way on both.</p>
 <h2>The flat rate</h2>
 <p>Usage is billed per token at one simple rate:</p>
 <pre><code>Input   $30  per million tokens
@@ -141,7 +136,7 @@ Output  $150 per million tokens</code></pre>
 <h2>How usage is counted</h2>
 <p>Token counts come from the model provider's own response, never from the browser — what you are billed is what was actually spent. Every grant, charge, and adjustment lands in an append-only ledger you can read by run, by agent, and by platform.</p>
 <h2>There is no bundled allowance</h2>
-<p>Plans include no free usage — the seat buys access and throughput, and every token comes out of credits you loaded. A quiet week costs you the seat and nothing more; unused credits just wait.</p>
+<p>Products include no free usage — the monthly fee buys access, and every token comes out of credits you loaded. A quiet week costs you the subscription and nothing more; unused credits just wait.</p>
 
     <div class="doc-pager">
       <a class="prev" href="doc-field.html"><span class="dir mono">&larr; PREVIOUS</span>The Field Platform</a>

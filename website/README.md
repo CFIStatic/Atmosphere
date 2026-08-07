@@ -18,7 +18,7 @@ written to appeal to contractors of every trade.
 | `operations.html` | LATER PRODUCT (unlisted) — Operations Platform              |
 | `manager.html`    | LATER PRODUCT (unlisted) — Manager Platform                 |
 | `security.html`   | Security — architecture diagram and six structural claims   |
-| `pricing.html`    | Pricing — the 30-day test, seat plans, and the flat rate    |
+| `pricing.html`    | Pricing — Field Capture, Evidence Platform, and the flat rate |
 | `docs.html`       | Resources hub — documentation index, guides, troubleshooting |
 | `doc-*.html`      | Eight resource pages: getting started, recipes, troubleshooting, estimators, web access, computer use, field, billing |
 | `about.html`      | About — the Work Verification company, story and principles |
@@ -36,14 +36,12 @@ dark themes) and `assets/site.js` (receipt replay + the careers form).
 
 ## Pricing
 
-`pricing.html` sells one model across all four products:
+`pricing.html` sells two products, each with a flat monthly fee plus usage:
 
-- **A 30-day test plan**, not a free tier. Full platform, one seat, usage billed
-  at the ordinary rate.
-- **Seat plans** — Pro ($20/$17 annual), Max 5x ($100), Max 20x ($200), Team
-  ($30/seat, 5 seat minimum, $25 annual), Enterprise (contact). The seat price
-  buys access and the throughput multiplier, nothing else.
-- **Usage is prepaid credits at one flat rate**, on every plan. Customers buy
+- **Field Capture** — $99.99/month. On-site capture and verification as work happens.
+- **Evidence Platform** — $499.99/month. The full record — Verifier, audit trail,
+  durable storage, replay, and sharing.
+- **Usage is prepaid credits at one flat rate**, on both products. Customers buy
   credits (the `credit_packs` seed, bonuses included) before agents spend them,
   and work pauses at a zero balance. There is **no bundled allowance and no
   postpaid usage** — the page must never imply either. Reload behavior is a

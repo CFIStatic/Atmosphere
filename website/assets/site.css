@@ -565,6 +565,8 @@ a { color: inherit; }
 .plan ul.checks a:hover { color: var(--ink); border-color: var(--accent); }
 .plan .plan-cta { margin-top: auto; text-align: center; }
 /* Six plans read as one rate card, not six offers. */
+.plans-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 880px; margin-inline: auto; }
+@media (max-width: 720px) { .plans-2 { grid-template-columns: 1fr; } }
 .plans-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 1000px) { .plans-6 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 620px)  { .plans-6 { grid-template-columns: 1fr; } }
