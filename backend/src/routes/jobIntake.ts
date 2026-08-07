@@ -6,7 +6,7 @@ import { HttpError, badRequest } from '../lib/errors.js';
 import { assessReadiness, type IntakeSource, type JobFacts } from '../verifier/readiness.js';
 import { proposeIntakeFromText } from '../verifier/intakePropose.js';
 import { partyInviteEmail } from '../verifier/partyInviteEmail.js';
-import { buildMailSender } from '../campaigns/mail/index.js';
+import { sendSystemMail } from '../lib/systemMail.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { config } from '../config.js';
 import { recordAccess } from './proofOfWork.js';
@@ -431,36 +431,30 @@ async function deliverPartyInvite(input: {
 
   let emailed = false;
   if (!erased) {
-    try {
-      const sender = await buildMailSender(input.orgId);
-      if (sender) {
-        const [{ data: org }, inviterName] = await Promise.all([
-          input.supabase.from('orgs').select('name').eq('id', input.orgId).maybeSingle(),
-          actorLabelFor(input.supabase, input.userId),
-        ]);
-        const emailParam = encodeURIComponent(email);
-        const sharePath = `/shared/${input.token}?email=${emailParam}`;
-        const mail = partyInviteEmail({
-          orgName: (org as any)?.name ?? 'An Atmosphere member',
-          inviterName,
-          jobTitle: input.jobTitle,
-          recipientName: input.contactName || input.company,
-          recipientEmail: email,
-          recipientHasAccount,
-          origin: config.frontendOrigins?.[0] ?? null,
-          path: sharePath,
-          signupPath: `/login?mode=signup&email=${emailParam}`,
-        });
-        const result = await sender.send({
-          to: email,
-          subject: mail.subject,
-          text: mail.text,
-        });
-        emailed = result.ok;
-      }
-    } catch {
-      // Invite stands; emailed:false is the honest report.
-    }
+    const [{ data: org }, inviterName] = await Promise.all([
+      input.supabase.from('orgs').select('name').eq('id', input.orgId).maybeSingle(),
+      actorLabelFor(input.supabase, input.userId),
+    ]);
+    const emailParam = encodeURIComponent(email);
+    const sharePath = `/shared/${input.token}?email=${emailParam}`;
+    const mail = partyInviteEmail({
+      orgName: (org as any)?.name ?? 'a contractor',
+      inviterName,
+      jobTitle: input.jobTitle,
+      recipientName: input.contactName || input.company,
+      recipientEmail: email,
+      recipientHasAccount,
+      origin: config.frontendOrigins?.[0] ?? null,
+      path: sharePath,
+      signupPath: `/login?mode=signup&email=${emailParam}`,
+    });
+    // Atmosphere sends — not the org's connected Gmail/Microsoft.
+    const result = await sendSystemMail({
+      to: email,
+      subject: mail.subject,
+      text: mail.text,
+    });
+    emailed = result.ok;
   }
 
   return { emailed, recipientHasAccount, attachedToAccount };

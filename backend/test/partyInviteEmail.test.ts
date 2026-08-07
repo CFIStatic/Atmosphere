@@ -28,6 +28,14 @@ test('without an origin the path still goes out rather than nothing', () => {
   assert.ok(text.includes('\n  /shared/tok123?email=alex%40riogrande.example\n'));
 });
 
+test('Atmosphere sends the invite; the org is named, not the From party', () => {
+  const { text, subject } = partyInviteEmail(base);
+  assert.ok(text.startsWith('Atmosphere invited you to capture a job for Ortiz Restoration.'));
+  assert.ok(text.includes('Requested by: Dana Ortiz'));
+  assert.equal(subject, 'Atmosphere: invite to capture 1842 Meridian Ave — water loss');
+  assert.ok(!subject.includes('Dana Ortiz at'));
+});
+
 test('an existing account gets sign-in; a missing one gets create-with-this-address', () => {
   const has = partyInviteEmail(base).text;
   assert.ok(has.includes('You already have an Atmosphere account'));
@@ -39,17 +47,6 @@ test('an existing account gets sign-in; a missing one gets create-with-this-addr
   assert.ok(not.includes('this exact address'));
   assert.ok(not.includes('https://app.atmosphere.example/login?mode=signup'));
   assert.ok(!not.includes('You already have an Atmosphere account'));
-});
-
-test('the subject names the inviter and the job', () => {
-  assert.equal(
-    partyInviteEmail(base).subject,
-    'Dana Ortiz at Ortiz Restoration invited you to capture 1842 Meridian Ave — water loss on Atmosphere',
-  );
-  assert.equal(
-    partyInviteEmail({ ...base, inviterName: null, jobTitle: null }).subject,
-    'Ortiz Restoration invited you to capture a job on Atmosphere',
-  );
 });
 
 test('no unsubscribe footer — and the ignore path is stated', () => {

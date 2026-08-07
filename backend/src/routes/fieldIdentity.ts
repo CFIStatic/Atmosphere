@@ -3,7 +3,7 @@ import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { createAdminClient } from '../lib/supabase.js';
 import { HttpError } from '../lib/errors.js';
-import { buildMailSender } from '../campaigns/mail/index.js';
+import { sendSystemMail, systemMailConfigured } from '../lib/systemMail.js';
 import { recordAccess } from './proofOfWork.js';
 import {
   normalizeContact,
@@ -179,28 +179,24 @@ async function deliverCode(
     return { ok: false, why: 'Text messages are not switched on yet — use an email address instead.' };
   }
 
-  try {
-    const sender = await buildMailSender(input.orgId);
-    if (!sender) return { ok: false, why: 'This general contractor has not connected a mailbox yet.' };
-
-    const { data: org } = await db.from('orgs').select('name').eq('id', input.orgId).maybeSingle();
-    const orgName = (org as any)?.name ?? 'Your general contractor';
-
-    const result = await sender.send({
-      to: input.contact.address,
-      subject: `${input.code} is your code for ${orgName}`,
-      text: [
-        `${input.code}`,
-        '',
-        `Use this code to sign in and see every job ${orgName} has invited ${input.company} to.`,
-        '',
-        'It expires in ten minutes. If you did not ask for it, nothing has happened and you can ignore this.',
-      ].join('\n'),
-    });
-    return result.ok ? { ok: true } : { ok: false, why: 'The email could not be sent.' };
-  } catch {
-    return { ok: false, why: 'The email could not be sent.' };
+  if (!systemMailConfigured()) {
+    return { ok: false, why: 'Atmosphere mail is not configured yet — ask the office for your link.' };
   }
+
+  const { data: org } = await db.from('orgs').select('name').eq('id', input.orgId).maybeSingle();
+  const orgName = (org as any)?.name ?? 'your general contractor';
+
+  return sendSystemMail({
+    to: input.contact.address,
+    subject: `${input.code} is your Atmosphere code`,
+    text: [
+      `${input.code}`,
+      '',
+      `Use this code to sign in and see every job ${orgName} has invited ${input.company} to on Atmosphere.`,
+      '',
+      'It expires in ten minutes. If you did not ask for it, nothing has happened and you can ignore this.',
+    ].join('\n'),
+  });
 }
 
 /* ------------------------------------------------------------------ *

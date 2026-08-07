@@ -509,8 +509,9 @@ export function JobIntakePage() {
           <div className="rounded-xl glass-card p-5">
             <h2 className="text-base font-semibold text-ink-900">Invite a subcontractor</h2>
             <p className="mt-1 text-sm text-ink-600">
-              Outside your company — email invite. If they already have an Atmosphere account, the
-              job shows there. If not, the email walks them through creating one with that address.
+              Outside your company — Atmosphere emails them the invite. If they already have an
+              account, the job shows there. If not, the email walks them through creating one with
+              that address.
             </p>
             <div className="mt-3 grid gap-2 sm:grid-cols-3">
               <label className="block text-xs font-medium text-ink-600">
@@ -638,8 +639,8 @@ export function JobIntakePage() {
           <div className="rounded-xl glass-card p-5">
             <h3 className="text-sm font-semibold text-ink-900">Invites</h3>
             <p className="mt-1 text-sm text-ink-600">
-              Teammates get a capture link. Subcontractors get an email — if they already have an
-              Atmosphere account the job shows there; if not, the email prompts them to create one.
+              Teammates get a capture link. Subcontractors get an Atmosphere email — if they already
+              have an account the job shows there; if not, the email prompts them to create one.
             </p>
             <ul className="mt-4 space-y-3">
               {invites.map((inv) => (
@@ -654,10 +655,10 @@ export function JobIntakePage() {
                   <p className="mt-1 text-xs text-ink-500">
                     {inv.emailed
                       ? inv.recipientHasAccount
-                        ? 'Emailed — they already have an Atmosphere account; the job will show when they sign in.'
-                        : 'Emailed — no account yet; the email walks them through creating one with this address.'
+                        ? 'Atmosphere emailed them — they already have an account; the job will show when they sign in.'
+                        : 'Atmosphere emailed them — no account yet; the email walks them through creating one with this address.'
                       : inv.email
-                        ? 'Email not sent (no mailbox connected) — copy the link below.'
+                        ? 'Invite created, but Atmosphere mail did not send — copy the link below.'
                         : 'Copy their capture link below.'}
                     {inv.attachedToAccount ? ' Already on their My jobs list.' : ''}
                   </p>

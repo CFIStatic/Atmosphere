@@ -1,15 +1,12 @@
 /**
  * The Field Capture / subcontractor job invitation email.
  *
- * Pure, like shareEmail and inviteEmail: the words are the part that can read
- * wrong in ways a type checker cannot see, so they are built where a test can
- * read them.
+ * Sent by Atmosphere (platform SMTP), not from the inviting company's mailbox.
+ * The org is named in the body so the recipient knows who the job is for.
  *
  * Two audiences, one address. Someone who already has an Atmosphere account
  * under this inbox needs "sign in — the job is waiting." Someone who does not
- * needs "create a free account with this exact address." Telling both people
- * both things reads as boilerplate, which is how instructions stop being
- * followed.
+ * needs "create a free account with this exact address."
  *
  * The capture link itself still opens without a login — a signup wall in front
  * of the scope is how a subcontractor decides this software is the GC's
@@ -30,8 +27,8 @@ export function partyInviteEmail(input: {
   /** Optional signup URL when the recipient has no account yet. */
   signupPath?: string | null;
 }): { subject: string; text: string } {
+  const org = input.orgName.trim() || 'a contractor';
   const inviter = input.inviterName?.trim() || null;
-  const from = inviter ? `${inviter} at ${input.orgName}` : input.orgName;
   const job = input.jobTitle?.trim() || null;
   const who = input.recipientName?.trim() || null;
   const link = input.origin ? `${input.origin}${input.path}` : input.path;
@@ -43,9 +40,10 @@ export function partyInviteEmail(input: {
       : null;
 
   const lines: string[] = [
-    `${from} invited you to capture a job on Atmosphere.`,
+    `Atmosphere invited you to capture a job for ${org}.`,
     '',
   ];
+  if (inviter) lines.push(`Requested by: ${inviter}`, '');
   if (who) lines.push(`For: ${who}`, '');
   if (job) lines.push(`Job: ${job}`, '');
 
@@ -77,7 +75,9 @@ export function partyInviteEmail(input: {
   );
 
   return {
-    subject: `${from} invited you to capture${job ? ` ${job}` : ' a job'} on Atmosphere`,
+    subject: job
+      ? `Atmosphere: invite to capture ${job}`
+      : `Atmosphere: invite to capture a job for ${org}`,
     text: lines.join('\n'),
   };
 }
