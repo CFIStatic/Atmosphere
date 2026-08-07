@@ -69,7 +69,7 @@ for route, fname in PAGES:
                        f'{reroute(extract(fname))}\n</div>')
 
 
-out = f'''<title>Atmosphere — AI for Restoration &amp; Construction</title>
+out = f'''<title>Atmosphere — AI for Service Contractors</title>
 <style>
 {css}
 /* ---------- Preview-only chrome ---------- */

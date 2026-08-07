@@ -2,14 +2,13 @@
 
 The marketing site for Atmosphere — a static, dependency-free suite of pages that
 extends the product's design language (paper surfaces, warm ink, one terracotta
-accent, monospace as the "audit record" voice). Positioned restoration-first, but
-written to appeal to contractors of every trade.
+accent, monospace as the "audit record" voice). Positioned written for service contractors of every trade.
 
 ## Pages
 
 | File              | Page                                                        |
 | ----------------- | ----------------------------------------------------------- |
-| `index.html`      | Home — Work Verification for contractors, two-product overview |
+| `index.html`      | Home — Work Verification for service contractors, two-product overview |
 | `verification.html` | Evidence Platform — record, verify, store, and share |
 | `how-it-works.html` | How it works — the full Work Verification pipeline, end to end |
 | `field.html`      | Field Capture — film and check work on site |
