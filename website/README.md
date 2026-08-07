@@ -2,25 +2,24 @@
 
 The marketing site for Atmosphere — a static, dependency-free suite of pages that
 extends the product's design language (paper surfaces, warm ink, one terracotta
-accent, monospace as the "audit record" voice). Positioned restoration-first, but
-written to appeal to contractors of every trade.
+accent, monospace as the "audit record" voice). Positioned written for service contractors of every trade.
 
 ## Pages
 
 | File              | Page                                                        |
 | ----------------- | ----------------------------------------------------------- |
-| `index.html`      | Home — Work Verification Platform thesis, replayable clip record |
-| `verification.html` | Work Verification Platform — the product: film, check, read, hold, share |
+| `index.html`      | Home — Work Verification for service contractors, two-product overview |
+| `verification.html` | Evidence Platform — record, verify, store, and share |
 | `how-it-works.html` | How it works — the full Work Verification pipeline, end to end |
-| `field.html`      | Field Platform — capture on site, with a capture-log hero   |
-| `platform.html`   | LATER PRODUCT (unlisted) — platform hub for the four-platform suite |
-| `sales.html`      | LATER PRODUCT (unlisted) — Sales Platform                   |
-| `operations.html` | LATER PRODUCT (unlisted) — Operations Platform              |
-| `manager.html`    | LATER PRODUCT (unlisted) — Manager Platform                 |
+| `field.html`      | Field Capture — film and check work on site |
+| `platform.html`   | Redirect → home (legacy four-platform page) |
+| `sales.html`      | Redirect → home (legacy) |
+| `operations.html` | Redirect → home (legacy) |
+| `manager.html`    | Redirect → home (legacy) |
 | `security.html`   | Security — architecture diagram and six structural claims   |
-| `pricing.html`    | Pricing — the 30-day test, seat plans, and the flat rate    |
+| `pricing.html`    | Pricing — Work Verification bundle ($599/mo) and the flat rate |
 | `docs.html`       | Resources hub — documentation index, guides, troubleshooting |
-| `doc-*.html`      | Eight resource pages: getting started, recipes, troubleshooting, estimators, web access, computer use, field, billing |
+| `doc-*.html`      | Resource pages: getting started, recipes, troubleshooting, field capture, verifier, billing |
 | `about.html`      | About — the Work Verification company, story and principles |
 | `careers.html`    | Careers — roles, hiring process, and a working application form |
 | `contact.html`    | Contact — sales/support blocks and an intake form           |
@@ -36,14 +35,12 @@ dark themes) and `assets/site.js` (receipt replay + the careers form).
 
 ## Pricing
 
-`pricing.html` sells one model across all four products:
+`pricing.html` sells one bundled subscription plus usage:
 
-- **A 30-day test plan**, not a free tier. Full platform, one seat, usage billed
-  at the ordinary rate.
-- **Seat plans** — Pro ($20/$17 annual), Max 5x ($100), Max 20x ($200), Team
-  ($30/seat, 5 seat minimum, $25 annual), Enterprise (contact). The seat price
-  buys access and the throughput multiplier, nothing else.
-- **Usage is prepaid credits at one flat rate**, on every plan. Customers buy
+- **Work Verification** — $599/month. Includes Field Capture (on-site film and
+  check) and the Evidence Platform (Verifier, audit trail, storage, replay, sharing).
+  Both parts are required; they are not sold separately.
+- **Usage is prepaid credits at one flat rate**, on the subscription. Customers buy
   credits (the `credit_packs` seed, bonuses included) before agents spend them,
   and work pauses at a zero balance. There is **no bundled allowance and no
   postpaid usage** — the page must never imply either. Reload behavior is a
