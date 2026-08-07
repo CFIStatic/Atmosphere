@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AppShell, PageHeader } from '../components/AppShell';
+import { PageHeader } from '../components/AppShell';
 import {
   api,
   type CaptureTeamMember,
@@ -222,7 +222,7 @@ export function JobIntakePage() {
       : [];
 
   return (
-    <AppShell>
+    <>
       <PageHeader
         eyebrow="Work Verification Platform"
         title="Start a job"
@@ -728,6 +728,6 @@ export function JobIntakePage() {
           </div>
         </div>
       )}
-    </AppShell>
+    </>
   );
 }

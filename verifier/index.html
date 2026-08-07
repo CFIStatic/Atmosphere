@@ -216,6 +216,16 @@
   .rail-head .brand { font-size: 15px; }
   .rail-section { padding-top: 6px; }
   .app-frame.has-sidebar .topbar .brand-fallback { display: none; }
+  /* Rail-only embed: sidebar beside a React page — hide top bar and main pane. */
+  body[data-atm-rail-only] .topbar,
+  body[data-atm-rail-only] .shell-main { display: none !important; }
+  body[data-atm-rail-only] .app-frame,
+  body[data-atm-rail-only] .app-body,
+  body[data-atm-rail-only] .shell { height: 100%; min-height: 0; }
+  body[data-atm-rail-only] .app-frame.has-sidebar .shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  body[data-atm-rail-only] .rail { height: 100%; border-right: 0; }
   .navitem.nav-icon { justify-content: flex-start; gap: 8px; }
   .navitem.nav-icon svg { flex: none; color: var(--muted); }
   .navitem.nav-icon[aria-current="true"] svg { color: var(--accent); }
@@ -1914,9 +1924,31 @@
 
   var EMBEDDED = document.body.hasAttribute('data-atm-embed') ||
     new URLSearchParams(location.search).get('embed') === '1';
+  var RAIL_ONLY = document.body.hasAttribute('data-atm-rail-only') ||
+    new URLSearchParams(location.search).get('rail') === '1';
+  if (RAIL_ONLY) document.body.setAttribute('data-atm-rail-only', '1');
+
+  var activeRoute = '/verifier-library';
+
+  function setActiveRoute(path) {
+    activeRoute = path || '/verifier-library';
+    document.querySelectorAll('#platform-nav .navitem').forEach(function (btn) {
+      var active = false;
+      if (btn.id === 'nav-start-job') active = activeRoute === '/intake';
+      else if (btn.id === 'nav-jobfiles') active = activeRoute === '/shared';
+      else if (btn.dataset.screen === 'dashboard') active = activeRoute === '/verifier-library';
+      btn.setAttribute('aria-current', String(active));
+    });
+    var settings = document.getElementById('nav-settings');
+    if (settings) settings.setAttribute('aria-current', String(activeRoute === '/settings'));
+  }
 
   document.querySelectorAll('.navitem[data-view]').forEach(function (b) {
     b.addEventListener('click', function () {
+      if (EMBEDDED && RAIL_ONLY) {
+        window.parent.postMessage({ atmosphere: 'navigate', to: '/verifier-library' }, '*');
+        return;
+      }
       if (EMBEDDED) setScreen('dashboard');
       state.view = b.dataset.view;
       document.querySelectorAll('.navitem[data-view]').forEach(function (o) {
@@ -1934,7 +1966,7 @@
   // for: setting a job's scope, seeing whether it can be verified yet, and
   // inviting a subcontractor.
   function setScreen(name) {
-    document.querySelectorAll('.app-nav').forEach(function (btn) {
+    document.querySelectorAll('.app-nav[data-screen]').forEach(function (btn) {
       btn.setAttribute('aria-current', String(btn.dataset.screen === name));
     });
     var dash = document.getElementById('screen-dashboard');
@@ -2029,6 +2061,7 @@
   window.addEventListener('message', function (e) {
     var d = e.data;
     if (d && d.atmosphere === 'session') applySession(d);
+    if (d && d.atmosphere === 'active-route') setActiveRoute(d.path);
   });
 
   var appFrame = document.getElementById('app-frame');
@@ -2041,7 +2074,13 @@
     if (railHead) railHead.hidden = false;
     if (platformNav) platformNav.hidden = false;
     document.querySelectorAll('.app-nav[data-screen]').forEach(function (btn) {
-      btn.addEventListener('click', function () { setScreen(btn.dataset.screen); });
+      btn.addEventListener('click', function () {
+        if (EMBEDDED) {
+          window.parent.postMessage({ atmosphere: 'navigate', to: '/verifier-library' }, '*');
+          return;
+        }
+        setScreen(btn.dataset.screen);
+      });
     });
     var embedNav = document.getElementById('embed-nav');
     if (embedNav) embedNav.hidden = false;

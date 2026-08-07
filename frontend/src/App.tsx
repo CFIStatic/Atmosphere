@@ -26,7 +26,7 @@ import { TerritoriesPage } from './pages/TerritoriesPage';
 import { SalesWorkPage } from './pages/SalesWorkPage';
 import { SharedDashboardPage } from './pages/SharedDashboardPage';
 import { JobIntakePage } from './pages/JobIntakePage';
-import { VerifierLibraryPage } from './pages/VerifierLibraryPage';
+import { OperationsShell } from './layouts/OperationsShell';
 import { PurchaseOrdersPage } from './pages/PurchaseOrdersPage';
 import { JobSharePage } from './pages/JobSharePage';
 import { PlatformHomePage } from './pages/PlatformHomePage';
@@ -350,30 +350,6 @@ export default function App() {
               ),
             },
             {
-              path: '/shared',
-              element: (
-                <RequirePlatform platform="operations">
-                  <SharedDashboardPage />
-                </RequirePlatform>
-              ),
-            },
-            {
-              path: '/intake',
-              element: (
-                <RequirePlatform platform="operations">
-                  <JobIntakePage />
-                </RequirePlatform>
-              ),
-            },
-            {
-              path: '/verifier-library',
-              element: (
-                <RequirePlatform platform="operations">
-                  <VerifierLibraryPage />
-                </RequirePlatform>
-              ),
-            },
-            {
               path: '/purchase-orders',
               element: (
                 <RequirePlatform platform="operations">
@@ -393,6 +369,22 @@ export default function App() {
               }
             />
           ))}
+
+          <Route
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <RequirePlatform platform="operations">
+                    <OperationsShell />
+                  </RequirePlatform>
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          >
+            <Route path="/verifier-library" element={null} />
+            <Route path="/intake" element={<JobIntakePage />} />
+            <Route path="/shared" element={<SharedDashboardPage />} />
+          </Route>
 
           {/* Growth analytics. Onboarding is required — every figure is scoped to
               a signed-in staff member, and the guards inside re-check access. */}

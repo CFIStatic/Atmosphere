@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AppShell, EmptyState, PageHeader } from '../components/AppShell';
+import { PageHeader, EmptyState } from '../components/AppShell';
 import {
   api,
   type SharedJobSummary,
@@ -136,7 +136,7 @@ export function SharedDashboardPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <PageHeader
         eyebrow="Work Verification Platform"
         title="Job files"
@@ -317,7 +317,7 @@ export function SharedDashboardPage() {
           </div>
         </>
       )}
-    </AppShell>
+    </>
   );
 }
 
