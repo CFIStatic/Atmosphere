@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react
 import { useAuth } from '../context/AuthContext';
 import { api, ApiError } from '../lib/api';
 import { PLATFORM_HOME } from '../lib/platforms';
+import { postAuthDestination } from '../lib/postAuth';
 import { getPlatform } from '../lib/usePlatform';
 import { Logo } from '../components/Logo';
 import { PinPad } from '../components/PinPad';
@@ -95,8 +96,8 @@ export function LoginPage() {
     setPinSubmitting(true);
     setPinError(null);
     try {
-      await unlockWithPin(entered);
-      navigate(redirectTo, { replace: true });
+      const membership = await unlockWithPin(entered);
+      navigate(postAuthDestination(membership, redirectTo), { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
         rejectPin(err.message);
@@ -123,8 +124,8 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       if (isLogin) {
-        await login(email.trim(), password);
-        navigate(redirectTo, { replace: true });
+        const membership = await login(email.trim(), password);
+        navigate(postAuthDestination(membership, redirectTo), { replace: true });
       } else {
         const res = await signup(email.trim(), password);
         if (res.needsEmailConfirmation) {
@@ -132,7 +133,7 @@ export function LoginPage() {
           setMode('login');
           setPassword('');
         } else {
-          navigate(redirectTo, { replace: true });
+          navigate(postAuthDestination(res.membership, redirectTo), { replace: true });
         }
       }
     } catch (err) {

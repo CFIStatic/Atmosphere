@@ -2,6 +2,9 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, ApiError, type RecoveryCredential } from '../lib/api';
+import { postAuthDestination } from '../lib/postAuth';
+import { PLATFORM_HOME } from '../lib/platforms';
+import { getPlatform } from '../lib/usePlatform';
 import { Logo } from '../components/Logo';
 import { EyeIcon, EyeOffIcon, SpinnerIcon } from '../components/icons';
 
@@ -79,8 +82,8 @@ export function ResetPasswordPage() {
       const { user } = await api.resetPassword(credential, password);
       // The backend has already set fresh session cookies, so land the user
       // straight in the app rather than making them sign in again.
-      await adoptUser(user);
-      navigate('/dashboard', { replace: true });
+      const membership = await adoptUser(user);
+      navigate(postAuthDestination(membership, PLATFORM_HOME[getPlatform()]), { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {
