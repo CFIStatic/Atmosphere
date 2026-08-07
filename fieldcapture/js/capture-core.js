@@ -359,12 +359,15 @@
         })
         .then(function (slot) {
           onStep('Uploading video + audio…');
+          // Prefer the absolute signed URL from the API so localhost / static
+          // hosts do not PUT to the wrong origin. Fall back to storageBase + path.
           var putUrl =
+            slot.uploadUrl ||
             (storageBase || '') +
-            '/storage/v1/object/upload/sign/job-proofs/' +
-            slot.path +
-            '?token=' +
-            encodeURIComponent(slot.token);
+              '/storage/v1/object/upload/sign/job-proofs/' +
+              slot.path +
+              '?token=' +
+              encodeURIComponent(slot.token);
           return fetch(putUrl, {
             method: 'PUT',
             body: file,

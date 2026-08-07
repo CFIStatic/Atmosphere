@@ -461,17 +461,21 @@ function ProofSection({
 
       setStep('Getting somewhere to put it…');
       const extension = (file.name.split('.').pop() ?? 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '');
-      const slot = await call<{ path: string; token: string }>(`${API}/${token}/proof/upload-url`, {
+      const slot = await call<{ path: string; token: string; uploadUrl?: string }>(`${API}/${token}/proof/upload-url`, {
         method: 'POST',
         body: JSON.stringify({ workDate: today, phase, extension: extension || 'mp4' }),
       });
 
       setStep('Uploading…');
-      // Straight to storage with the one-time token, not through the API.
-      const put = await fetch(
-        `/storage/v1/object/upload/sign/job-proofs/${slot.path}?token=${encodeURIComponent(slot.token)}`,
-        { method: 'PUT', body: file, headers: { 'Content-Type': file.type || 'video/mp4' } },
-      );
+      // Prefer absolute signed URL from the API (works without a Vite storage proxy).
+      const putUrl =
+        slot.uploadUrl ||
+        `/storage/v1/object/upload/sign/job-proofs/${slot.path}?token=${encodeURIComponent(slot.token)}`;
+      const put = await fetch(putUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': file.type || 'video/mp4' },
+      });
       if (!put.ok) throw new Error('The upload did not go through. Try again on a better signal.');
 
       setStep('Filing it…');

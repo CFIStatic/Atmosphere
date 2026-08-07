@@ -8,16 +8,17 @@ Production crew app: **one button**, **video + microphone**, filed through a
 Serve this folder next to the API (same origin or pass `?api=`):
 
 ```
-/fieldcapture/index.html?token=<job-share-token>
+/fieldcapture/index.html?token=<job-share-token>&api=http://localhost:4000
 ```
 
-Optional:
+The API returns an absolute `uploadUrl` for Storage, so you do **not** need
+`?storage=` for uploads on localhost. Optional:
 
 | Query | Meaning |
 |---|---|
 | `token` | Job share access token (required for live) |
-| `api` | API origin if not same-host (e.g. `https://api.example.com`) |
-| `storage` | Supabase storage origin if signed PUT is cross-origin |
+| `api` | API origin if not same-host (e.g. `http://localhost:4000`) |
+| `storage` | Legacy fallback Storage origin if `uploadUrl` is absent |
 | `demo=1` | Explicit scripted demo only — does **not** upload |
 
 ## What live mode does

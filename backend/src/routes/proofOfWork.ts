@@ -116,7 +116,7 @@ export async function createUploadUrl(
   party: any,
   admin: any,
   body: unknown,
-): Promise<{ path: string; token: string }> {
+): Promise<{ path: string; token: string; uploadUrl: string }> {
   const input = z
     .object({
       workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -132,8 +132,11 @@ export async function createUploadUrl(
   const { data, error } = await admin.storage.from(PROOF_BUCKET).createSignedUploadUrl(path, {
     upsert: true,
   });
-  if (error) throw new HttpError(500, error.message, 'upload_url_failed');
-  return { path, token: (data as any).token };
+  if (error || !(data as { signedUrl?: string } | null)?.signedUrl) {
+    throw new HttpError(500, error?.message ?? 'Could not mint upload URL', 'upload_url_failed');
+  }
+  const signed = data as { signedUrl: string; token: string };
+  return { path, token: signed.token, uploadUrl: signed.signedUrl };
 }
 
 const recordSchema = z.object({
