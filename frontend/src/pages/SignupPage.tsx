@@ -12,6 +12,7 @@ import { PLATFORM_HOME } from '../lib/platforms';
 import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
 import { getPlatform } from '../lib/usePlatform';
 import { SetupStepCard, SetupWizardShell } from '../components/setup/SetupWizardShell';
+import { SetupBillingStep } from '../components/setup/SetupBillingStep';
 import {
   SETUP_DEFAULTS,
   initialSetupStep,
@@ -70,6 +71,11 @@ export function SignupPage() {
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [billingGate, setBillingGate] = useState<'loading' | 'pending' | 'complete'>('loading');
+
+  const checkoutOutcome = searchParams.get('checkout');
+  const checkoutParam =
+    checkoutOutcome === 'success' || checkoutOutcome === 'cancelled' ? checkoutOutcome : null;
 
   useEffect(() => {
     document.title = 'Create your organization · Atmosphere';
@@ -84,7 +90,34 @@ export function SignupPage() {
     }
   }, [loading, user, membership, step]);
 
-  if (loading) {
+  useEffect(() => {
+    if (loading || !user || !membership) {
+      if (!membership) setBillingGate('complete');
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const status = await api.getBillingOnboarding();
+        if (cancelled) return;
+        const needsBilling = status.required && !status.complete;
+        setBillingGate(needsBilling ? 'pending' : 'complete');
+        const stepParam = searchParams.get('step');
+        if (needsBilling && (stepParam === '5' || checkoutParam)) {
+          setStep(5);
+        }
+      } catch {
+        if (!cancelled) setBillingGate('complete');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, user, membership, searchParams, checkoutParam]);
+
+  if (loading || (user && membership && billingGate === 'loading')) {
     return (
       <div className="cx-aurora grid min-h-screen place-items-center bg-paper-100 text-brand-600">
         <SpinnerIcon className="animate-spin" width={28} height={28} />
@@ -92,7 +125,7 @@ export function SignupPage() {
     );
   }
 
-  if (user && membership) {
+  if (user && membership && billingGate === 'complete' && step !== 5) {
     return <Navigate to={redirectTo} replace />;
   }
 
@@ -465,10 +498,28 @@ export function SignupPage() {
 
           <div className="mt-7 flex flex-wrap items-center justify-between gap-3">
             <span className="text-xs text-ink-500">You can change role and trade anytime in Settings.</span>
-            <PrimaryButton onClick={enterApp}>
-              {mode === 'create' ? 'Enter Atmosphere' : 'Continue to Atmosphere'}
+            <PrimaryButton onClick={() => setStep(5)}>
+              {mode === 'create' ? 'Continue to billing' : 'Continue'}
             </PrimaryButton>
           </div>
+        </SetupStepCard>
+      )}
+
+      {step === 5 && membership && (
+        <SetupBillingStep
+          redirectTo={redirectTo}
+          checkoutOutcome={checkoutParam}
+          onComplete={enterApp}
+        />
+      )}
+
+      {step === 5 && !membership && (
+        <SetupStepCard
+          step={5}
+          title="Set up billing"
+          subtitle="Finish organization setup on step 2 first."
+        >
+          <PrimaryButton onClick={() => setStep(2)}>Back to organization setup</PrimaryButton>
         </SetupStepCard>
       )}
 

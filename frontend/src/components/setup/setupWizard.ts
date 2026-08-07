@@ -1,7 +1,7 @@
 import type { ContractorType, MemberRole, UsageIntent, WorkType } from '../../lib/api';
 import type { ServiceTrade } from './verifierSetupOptions';
 
-export type SetupWizardStep = 1 | 2 | 3 | 4;
+export type SetupWizardStep = 1 | 2 | 3 | 4 | 5;
 
 export const SETUP_WIZARD_STEPS = [
   {
@@ -24,6 +24,11 @@ export const SETUP_WIZARD_STEPS = [
     title: 'Invite your crew',
     detail: 'Every organization gets one join code. Hand it to a teammate and they are in.',
   },
+  {
+    step: 5 as const,
+    title: 'Set up billing',
+    detail: 'Add your payment method in Stripe — $599/mo platform fee, then you are in.',
+  },
 ] as const;
 
 export const SETUP_DEFAULTS = {
@@ -40,7 +45,7 @@ export function initialSetupStep(options: {
   stepParam: string | null;
 }): SetupWizardStep {
   const parsed = options.stepParam ? Number.parseInt(options.stepParam, 10) : NaN;
-  if (parsed >= 1 && parsed <= 4) return parsed as SetupWizardStep;
+  if (parsed >= 1 && parsed <= 5) return parsed as SetupWizardStep;
   if (options.user && !options.membership) return 2;
   return 1;
 }

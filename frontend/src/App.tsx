@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import {
   BrowserRouter,
   MemoryRouter,
@@ -10,6 +10,7 @@ import {
 } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { api } from './lib/api';
 import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
@@ -138,6 +139,40 @@ function RequireOnboarded({ children }: { children: ReactNode }) {
     return (
       <Navigate
         to={`/signup?step=2&next=${encodeURIComponent(returnPath)}`}
+        replace
+      />
+    );
+  }
+  return <RequireBillingSetup>{children}</RequireBillingSetup>;
+}
+
+/** Org creators must finish Stripe before the dashboard; joiners skip when not required. */
+function RequireBillingSetup({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  const [gate, setGate] = useState<'loading' | 'ready' | 'blocked'>('loading');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const status = await api.getBillingOnboarding();
+        if (cancelled) return;
+        setGate(status.required && !status.complete ? 'blocked' : 'ready');
+      } catch {
+        if (!cancelled) setGate('ready');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (gate === 'loading') return <FullScreenSpinner />;
+  if (gate === 'blocked') {
+    const returnPath = `${location.pathname}${location.search}${location.hash}`;
+    return (
+      <Navigate
+        to={`/signup?step=5&next=${encodeURIComponent(returnPath)}`}
         replace
       />
     );

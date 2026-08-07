@@ -17,6 +17,7 @@ import {
 import {
   billingSettingsSchema,
   completePurchaseSchema,
+  onboardingCheckoutSchema,
   setPlanSchema,
   startPurchaseSchema,
 } from '../lib/validation.js';
@@ -429,6 +430,164 @@ billingRouter.get('/payments', async (req: Request, res: Response, next: NextFun
     next(err);
   }
 });
+
+/**
+ * GET /api/billing/onboarding
+ * Whether the caller must finish Stripe setup before using the product.
+ * Required only for the org creator when Stripe is configured; joiners inherit
+ * the org's subscription and teammates skip this step.
+ */
+billingRouter.get('/onboarding', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const supabase = createUserClient(req.accessToken!);
+    const status = await loadBillingOnboardingStatus(supabase, req.orgId!, req.user!.id);
+    res.json(status);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/billing/checkout/onboarding
+ * Hosted Stripe Checkout for the Work Verification platform subscription.
+ * Applied by the subscription webhook — the browser only opens the session.
+ */
+billingRouter.post('/checkout/onboarding', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (config.billing.paymentProvider !== 'stripe') {
+      throw badRequest('Stripe is not configured on this server.', 'stripe_unconfigured');
+    }
+
+    const { returnPath } = onboardingCheckoutSchema.parse(req.body ?? {});
+    const supabase = createUserClient(req.accessToken!);
+    const status = await loadBillingOnboardingStatus(supabase, req.orgId!, req.user!.id);
+
+    if (!status.required) {
+      throw badRequest('Billing setup is not required for this account.', 'billing_not_required');
+    }
+    if (status.complete) {
+      throw badRequest('Billing is already set up for this organization.', 'billing_already_complete');
+    }
+
+    const priceId = await resolveOnboardingPriceId(supabase, req.orgId!);
+    if (!priceId) {
+      throw badRequest(
+        'No Stripe price is configured for onboarding. Set metering_plan_versions.stripe_price_id or STRIPE_ONBOARDING_PRICE_ID.',
+        'price_not_configured',
+      );
+    }
+
+    const customerId = await ensureCustomer(supabase, req.orgId!, {
+      email: req.user!.email,
+      orgName: await orgName(supabase, req.orgId!),
+    });
+
+    const session = await stripeClient().checkout.sessions.create({
+      mode: 'subscription',
+      customer: customerId,
+      success_url: onboardingReturnUrl('success', returnPath),
+      cancel_url: onboardingReturnUrl('cancelled', returnPath),
+      client_reference_id: req.orgId,
+      metadata: { org_id: req.orgId!, onboarding: 'true' },
+      subscription_data: { metadata: { org_id: req.orgId!, onboarding: 'true' } },
+      line_items: [{ price: priceId, quantity: 1 }],
+    });
+
+    res.status(201).json({ checkoutUrl: session.url });
+  } catch (err) {
+    next(err);
+  }
+});
+
+async function loadBillingOnboardingStatus(
+  supabase: ReturnType<typeof createUserClient>,
+  orgId: string,
+  userId: string,
+) {
+  const paymentProvider = config.billing.paymentProvider;
+
+  const [{ data: org }, { data: billing }] = await Promise.all([
+    supabase.from('orgs').select('created_by').eq('id', orgId).maybeSingle(),
+    supabase
+      .from('org_billing')
+      .select('stripe_subscription_id, status')
+      .eq('org_id', orgId)
+      .maybeSingle(),
+  ]);
+
+  const isCreator = org?.created_by === userId;
+  const hasSubscription =
+    Boolean(billing?.stripe_subscription_id) &&
+    ['active', 'trialing'].includes(String(billing?.status ?? ''));
+
+  let planName = 'Work Verification';
+  let baseMonthlyFeeCents = 59900;
+  let includedJobs = 50;
+  let additionalJobPriceCents = 3000;
+
+  const { data: meteringRow } = await supabase
+    .from('org_metering')
+    .select(
+      'plan_version_id, metering_plan_versions(base_monthly_fee_cents, included_jobs, additional_job_price_cents, metering_plans(name))',
+    )
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  const version = Array.isArray((meteringRow as any)?.metering_plan_versions)
+    ? (meteringRow as any).metering_plan_versions[0]
+    : (meteringRow as any)?.metering_plan_versions;
+
+  if (version) {
+    baseMonthlyFeeCents = version.base_monthly_fee_cents ?? baseMonthlyFeeCents;
+    includedJobs = version.included_jobs ?? includedJobs;
+    additionalJobPriceCents = version.additional_job_price_cents ?? additionalJobPriceCents;
+    const plan = Array.isArray(version.metering_plans)
+      ? version.metering_plans[0]
+      : version.metering_plans;
+    if (plan?.name) planName = plan.name;
+  }
+
+  const required = paymentProvider === 'stripe' && isCreator;
+  const complete = !required || hasSubscription;
+
+  return {
+    paymentProvider,
+    required,
+    complete,
+    isCreator,
+    hasSubscription,
+    plan: {
+      name: planName,
+      baseMonthlyFeeCents,
+      includedJobs,
+      additionalJobPriceCents,
+    },
+  };
+}
+
+async function resolveOnboardingPriceId(
+  supabase: ReturnType<typeof createUserClient>,
+  orgId: string,
+): Promise<string | null> {
+  const { data: meteringRow } = await supabase
+    .from('org_metering')
+    .select('metering_plan_versions(stripe_price_id)')
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  const version = Array.isArray((meteringRow as any)?.metering_plan_versions)
+    ? (meteringRow as any).metering_plan_versions[0]
+    : (meteringRow as any)?.metering_plan_versions;
+  const fromPlan = (version?.stripe_price_id as string | undefined) ?? null;
+  if (fromPlan) return fromPlan;
+  return config.stripe.onboardingPriceId || null;
+}
+
+function onboardingReturnUrl(kind: 'success' | 'cancelled', returnPath?: string) {
+  const params = new URLSearchParams({ step: '5', checkout: kind });
+  if (returnPath) params.set('next', returnPath);
+  return `${config.stripe.onboardingReturnBase}?${params.toString()}`;
+}
 
 /** Organization name, for the Stripe customer record. */
 async function orgName(supabase: ReturnType<typeof createUserClient>, orgId: string) {

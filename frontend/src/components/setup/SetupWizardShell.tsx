@@ -41,7 +41,7 @@ export function SetupWizardShell({
                 Create your organization
               </h1>
               <p className="mt-3 max-w-md text-base text-ink-600">
-                Four quick steps — about two minutes from account to your first job.
+                Five quick steps — about two minutes from account to your first job.
               </p>
 
               <ol className="mt-10 space-y-5">

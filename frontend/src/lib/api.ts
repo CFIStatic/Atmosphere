@@ -3356,6 +3356,15 @@ export const api = {
   openBillingPortal: () =>
     request<{ portalUrl: string }>('/api/billing/portal', { method: 'POST' }),
 
+  getBillingOnboarding: () =>
+    request<BillingOnboardingStatus>('/api/billing/onboarding', { method: 'GET' }),
+
+  startOnboardingCheckout: (returnPath?: string) =>
+    request<{ checkoutUrl: string | null }>('/api/billing/checkout/onboarding', {
+      method: 'POST',
+      body: JSON.stringify(returnPath ? { returnPath } : {}),
+    }),
+
   getPayments: (limit = 50) =>
     request<{ payments: Payment[] }>(`/api/billing/payments?limit=${limit}`, { method: 'GET' }),
 
@@ -4855,6 +4864,20 @@ export interface CustomerMeteringSummary {
   jobOverageChargeCents: number;
   videoProcessingChargeCents: number;
   estimatedUpcomingBillCents: number;
+}
+
+export interface BillingOnboardingStatus {
+  paymentProvider: 'stripe' | 'dev' | 'manual';
+  required: boolean;
+  complete: boolean;
+  isCreator: boolean;
+  hasSubscription: boolean;
+  plan: {
+    name: string;
+    baseMonthlyFeeCents: number;
+    includedJobs: number;
+    additionalJobPriceCents: number;
+  };
 }
 
 export interface SetPlanResult {

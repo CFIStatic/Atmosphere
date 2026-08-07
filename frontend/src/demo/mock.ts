@@ -1773,6 +1773,21 @@ const routes: Array<[string, RegExp, Handler]> = [
   ['GET', /^\/api\/memory$/, () => ({ body: { events: EVENTS, nextCursor: null } })],
 
   ['GET', /^\/api\/billing\/catalog$/, () => ({ body: CATALOG })],
+  ['GET', /^\/api\/billing\/onboarding$/, () => ({
+    body: {
+      paymentProvider: CATALOG.paymentProvider,
+      required: false,
+      complete: true,
+      isCreator: true,
+      hasSubscription: false,
+      plan: {
+        name: 'Work Verification',
+        baseMonthlyFeeCents: 59900,
+        includedJobs: 50,
+        additionalJobPriceCents: 3000,
+      },
+    },
+  })],
   ['GET', /^\/api\/billing\/overview$/, () => ({ body: OVERVIEW() })],
   ['GET', /^\/api\/billing\/ledger$/, () => ({ body: { entries: LEDGER } })],
   ['GET', /^\/api\/billing\/purchases$/, () => ({ body: { purchases: PURCHASES } })],
