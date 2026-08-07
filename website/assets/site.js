@@ -19,6 +19,7 @@
   // light the Platform menu; company-family pages light Company.
   var page = location.pathname.split('/').pop() || 'index.html';
   var NAV_GROUP = {
+    'verification.html': 'platform', 'how-it-works.html': 'platform',
     'platform.html': 'platform', 'sales.html': 'platform', 'operations.html': 'platform',
     'field.html': 'platform', 'manager.html': 'platform',
     'security.html': 'resources', 'pricing.html': 'pricing', 'docs.html': 'resources',

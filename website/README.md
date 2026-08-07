@@ -11,6 +11,7 @@ written to appeal to contractors of every trade.
 | ----------------- | ----------------------------------------------------------- |
 | `index.html`      | Home — Work Verification Platform thesis, replayable clip record |
 | `verification.html` | Work Verification Platform — the product: film, check, read, hold, share |
+| `how-it-works.html` | How it works — the full Work Verification pipeline, end to end |
 | `field.html`      | Field Platform — capture on site, with a capture-log hero   |
 | `platform.html`   | LATER PRODUCT (unlisted) — platform hub for the four-platform suite |
 | `sales.html`      | LATER PRODUCT (unlisted) — Sales Platform                   |
@@ -20,7 +21,7 @@ written to appeal to contractors of every trade.
 | `pricing.html`    | Pricing — the 30-day test, seat plans, and the flat rate    |
 | `docs.html`       | Resources hub — documentation index, guides, troubleshooting |
 | `doc-*.html`      | Eight resource pages: getting started, recipes, troubleshooting, estimators, web access, computer use, field, billing |
-| `about.html`      | About — story and principles                                |
+| `about.html`      | About — the Work Verification company, story and principles |
 | `careers.html`    | Careers — roles, hiring process, and a working application form |
 | `contact.html`    | Contact — sales/support blocks and an intake form           |
 | `signin.html`     | Sign in — email/password plus the device-bound PIN          |
