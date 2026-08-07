@@ -2400,7 +2400,7 @@ const routes: Array<[string, RegExp, Handler]> = [
         : [{ fullName: 'Field Capture', email: null, external: false }];
     const stamp = Date.now().toString(36);
     const knownAccounts = new Set(
-      MEMBERS.map((m) => m.email.toLowerCase()),
+      MEMBERS.map((m) => m.email?.toLowerCase()).filter((e): e is string => Boolean(e)),
     );
     const invites = people.map(
       (
