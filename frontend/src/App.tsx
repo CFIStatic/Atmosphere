@@ -5,6 +5,7 @@ import {
   Navigate,
   Route,
   Routes,
+  useLocation,
   useNavigate,
 } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -129,8 +130,17 @@ function FullScreenSpinner() {
 /** Requires the user to have completed onboarding; otherwise send to /onboarding. */
 function RequireOnboarded({ children }: { children: ReactNode }) {
   const { membership, membershipLoading } = useAuth();
+  const location = useLocation();
   if (membershipLoading) return <FullScreenSpinner />;
-  if (!membership) return <Navigate to="/onboarding" replace />;
+  if (!membership) {
+    const returnPath = `${location.pathname}${location.search}${location.hash}`;
+    return (
+      <Navigate
+        to={`/onboarding?next=${encodeURIComponent(returnPath)}`}
+        replace
+      />
+    );
+  }
   return <>{children}</>;
 }
 

@@ -1,12 +1,14 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { loginHref } from '../lib/authRedirect';
 import { SpinnerIcon } from './icons';
 
 /** Guards routes that require an authenticated user. */
 export function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   const location = useLocation();
+  const returnPath = `${location.pathname}${location.search}${location.hash}`;
 
   if (loading) {
     return (
@@ -22,8 +24,14 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   }
 
   if (!user) {
-    // Remember where they were headed so we can send them back after login.
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+    // ?next= survives refresh and links from the marketing site; state.from is a fallback.
+    return (
+      <Navigate
+        to={loginHref(returnPath)}
+        replace
+        state={{ from: returnPath }}
+      />
+    );
   }
 
   return <>{children}</>;

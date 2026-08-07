@@ -635,6 +635,40 @@ a { color: inherit; }
 
 .plans-note { margin: 28px 0 0; font-size: 14px; color: var(--ink-faint); max-width: 46em; }
 
+/* Pricing: sample invoice and clarity callouts */
+.pricing-invoice {
+  border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+  box-shadow: var(--shadow-card); background: var(--card);
+}
+.pricing-invoice-head {
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 24px;
+  padding: 22px 28px; border-bottom: 1px solid var(--line); align-items: baseline;
+}
+.pricing-invoice-head h3 { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
+.pricing-invoice-head p { margin: 4px 0 0; font-size: 13.5px; color: var(--ink-soft); }
+.pricing-line {
+  display: grid; grid-template-columns: 1fr auto; gap: 8px 24px;
+  padding: 14px 28px; border-top: 1px solid var(--line); font-size: 14.5px;
+}
+.pricing-line:first-of-type { border-top: none; }
+.pricing-line .lbl { color: var(--ink-soft); }
+.pricing-line .amt { font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.pricing-line.total {
+  background: var(--paper-50, var(--card));
+  border-top: 1px solid var(--line-strong);
+  font-size: 15.5px; font-weight: 700;
+}
+.pricing-line.total .lbl { color: var(--ink); }
+.pricing-callout {
+  border: 1px solid var(--line); border-left: 3px solid var(--accent);
+  border-radius: 10px; background: var(--card); padding: 20px 24px; max-width: 46em;
+}
+.pricing-callout h3 { margin: 0 0 8px; font-size: 15.5px; font-weight: 700; }
+.pricing-callout p { margin: 0; font-size: 14.5px; color: var(--ink-soft); }
+.pricing-callout ul { margin: 10px 0 0; padding-left: 1.2em; font-size: 14.5px; color: var(--ink-soft); }
+.pricing-callout li + li { margin-top: 6px; }
+.pricing-cta-row { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; margin-top: 24px; }
+
 /* ---------- FAQ ---------- */
 .faq { max-width: 46em; }
 .faq details { border-top: 1px solid var(--line); }

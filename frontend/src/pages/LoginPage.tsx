@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, ApiError } from '../lib/api';
+import { resolveAuthRedirect } from '../lib/authRedirect';
 import { PLATFORM_HOME } from '../lib/platforms';
 import { postAuthDestination } from '../lib/postAuth';
 import { getPlatform } from '../lib/usePlatform';
@@ -18,7 +19,11 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const redirectTo = (location.state as { from?: string } | null)?.from ?? PLATFORM_HOME[getPlatform()];
+  const redirectTo = resolveAuthRedirect(
+    searchParams.get('next'),
+    (location.state as { from?: string } | null)?.from,
+    PLATFORM_HOME[getPlatform()],
+  );
 
   // The corporate site deep-links here (…/login?mode=signup&email=…) so its
   // "Create your organization" CTAs open the create-account form directly.

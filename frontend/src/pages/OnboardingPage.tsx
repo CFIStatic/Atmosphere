@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { resolveAuthRedirect } from '../lib/authRedirect';
 import {
   api,
   ApiError,
@@ -65,6 +66,12 @@ function stepsFor(mode: OrgMode): string[] {
 export function OnboardingPage() {
   const { user, refreshMembership, logout } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const postOnboarding = resolveAuthRedirect(
+    searchParams.get('next'),
+    null,
+    PLATFORM_HOME[getPlatform()],
+  );
   // Onboarding time is only attributable once the user has an org, so the first
   // heartbeats here land after the org is created — which is the honest answer.
   useFeatureTimer('onboarding');
@@ -136,7 +143,7 @@ export function OnboardingPage() {
         await api.joinOrg(joinCode.trim().toUpperCase(), role, workType, usageIntents);
       }
       await refreshMembership();
-      navigate(PLATFORM_HOME[getPlatform()], { replace: true });
+      navigate(postOnboarding, { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
       // Send the user back to the org step if the join code was the problem.

@@ -179,10 +179,29 @@
     return null;
   }
 
-  function authUrl(kind) {
+  function authUrl(kind, nextPath) {
     var origin = appOrigin();
     if (!origin) return null;
-    return kind === 'signup' ? origin + '/login?mode=signup' : origin + '/login';
+    var base = kind === 'signup' ? origin + '/login?mode=signup' : origin + '/login';
+    if (!nextPath) return base;
+    var safe = nextPath.charAt(0) === '/' ? nextPath : '/' + nextPath;
+    return base + (base.indexOf('?') === -1 ? '?' : '&') + 'next=' + encodeURIComponent(safe);
+  }
+
+  function appPath(path) {
+    var origin = appOrigin();
+    if (!origin) return null;
+    var safe = path.charAt(0) === '/' ? path : '/' + path;
+    return origin + '/login?next=' + encodeURIComponent(safe);
+  }
+
+  function wireAppLinks() {
+    document.querySelectorAll('[data-app-path]').forEach(function (a) {
+      var path = a.getAttribute('data-app-path');
+      if (!path) return;
+      var target = appPath(path);
+      if (target) a.setAttribute('href', target);
+    });
   }
 
   function wireAuthLinks() {
@@ -194,6 +213,7 @@
       if (href === 'signin.html' || href === './signin.html') a.setAttribute('href', signin);
       else if (href === 'signup.html' || href === './signup.html') a.setAttribute('href', signup);
     });
+    wireAppLinks();
   }
 
   wireAuthLinks();
