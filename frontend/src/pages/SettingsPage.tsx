@@ -27,7 +27,6 @@ import {
   type WorkType,
 } from '../lib/api';
 import { usageIntentsForRole } from '../components/setup/verifierSetupOptions';
-import { AppShell } from '../components/AppShell';
 import { PinSetupCard } from '../components/PinSetupCard';
 import { BillingSection } from '../components/settings/BillingSection';
 import { displayName, initials } from '../lib/display';
@@ -143,8 +142,8 @@ export function SettingsPage() {
   }
 
   return (
-    <AppShell>
-      <div className="mx-auto max-w-5xl">
+    <div className="min-h-screen bg-paper-100">
+      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:py-10">
         <header>
           <h1 className="text-3xl font-bold tracking-tight text-ink-900">Settings</h1>
           <p className="mt-1.5 text-sm text-ink-600">
@@ -152,46 +151,42 @@ export function SettingsPage() {
           </p>
         </header>
 
-        <div className="mt-8 flex flex-col gap-8 lg:flex-row lg:gap-10">
-          {/* Section nav: a rail beside the content on wide screens, a row of
-              tabs above it on narrow ones. */}
-          <nav className="lg:w-60 lg:shrink-0">
-            <ul className="flex gap-2 overflow-x-auto pb-2 lg:flex-col lg:gap-1 lg:overflow-visible lg:pb-0">
-              {visible.map((section) => {
-                const isActive = section.id === active;
-                return (
-                  <li key={section.id} className="shrink-0 lg:shrink">
-                    <button
-                      onClick={() => select(section.id)}
-                      aria-current={isActive ? 'page' : undefined}
-                      className={`flex w-full items-center gap-3 rounded-lg px-3.5 py-2.5 text-sm font-medium transition ${
-                        isActive
-                          ? 'bg-brand-50 text-brand-700'
-                          : 'text-ink-600 hover:bg-paper-200/50 hover:text-ink-900'
-                      }`}
-                    >
-                      <section.icon width={18} height={18} />
-                      {section.label}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </nav>
+        <nav className="mt-8 border-b border-line" aria-label="Settings sections">
+          <ul className="flex gap-1 overflow-x-auto pb-px">
+            {visible.map((section) => {
+              const isActive = section.id === active;
+              return (
+                <li key={section.id} className="shrink-0">
+                  <button
+                    onClick={() => select(section.id)}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={`flex items-center gap-2 rounded-t-lg px-3.5 py-2.5 text-sm font-medium transition ${
+                      isActive
+                        ? 'border border-b-0 border-line bg-paper-0 text-brand-700'
+                        : 'text-ink-600 hover:bg-paper-200/50 hover:text-ink-900'
+                    }`}
+                  >
+                    <section.icon width={18} height={18} />
+                    {section.label}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
 
-          <div className="min-w-0 flex-1 space-y-6">
-            {active === 'profile' && <ProfileSection />}
-            {active === 'security' && <SecuritySection />}
-            {active === 'organization' && <OrganizationSection />}
-            {active === 'billing' && <BillingSection />}
-            {active === 'integrations' && <IntegrationsSection />}
-            {active === 'sending' && <SendingSection />}
-            {active === 'contactdata' && <ContactDataSection />}
-            {active === 'preferences' && <PreferencesSection />}
-          </div>
+        <div className="mt-8 min-w-0 space-y-6">
+          {active === 'profile' && <ProfileSection />}
+          {active === 'security' && <SecuritySection />}
+          {active === 'organization' && <OrganizationSection />}
+          {active === 'billing' && <BillingSection />}
+          {active === 'integrations' && <IntegrationsSection />}
+          {active === 'sending' && <SendingSection />}
+          {active === 'contactdata' && <ContactDataSection />}
+          {active === 'preferences' && <PreferencesSection />}
         </div>
       </div>
-    </AppShell>
+    </div>
   );
 }
 
