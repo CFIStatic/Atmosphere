@@ -248,28 +248,79 @@ jobIntakeRouter.get('/intake-mix', async (req: Request, res: Response, next: Nex
 /* ------------------------------------------------------------------ *
  * AI-first intake package (no money)
  * ------------------------------------------------------------------ *
- * Paste / drop scope → editable proposal → one Approve & invite.
- * Creates job + scope lines + published brief + party token together,
- * so the crew is never stranded with lines but no revision.
+ * Paste / drop scope → editable proposal → invite Field Capture team
+ * (preloaded from org field technicians) → one Approve.
+ * Creates job + scope + published brief + capture invite links together.
  */
 
 const proposeSchema = z.object({
   text: z.string().trim().min(20).max(80_000),
 });
 
+type CaptureTeamMember = {
+  userId: string;
+  fullName: string;
+  email: string | null;
+  role: string;
+  workType: string | null;
+  /** Pre-selected for invite on this job. */
+  selected: boolean;
+};
+
+async function loadCaptureTeam(supabase: any, orgId: string): Promise<CaptureTeamMember[]> {
+  const { data, error } = await supabase
+    .from('org_members')
+    .select('user_id, role, work_type, usage_intents, status, profiles(email, full_name)')
+    .eq('org_id', orgId)
+    .eq('status', 'active');
+  if (error) throw new HttpError(500, 'Could not load the Field Capture team.', 'team_read_failed');
+
+  const rows = (data ?? []) as any[];
+  const fieldTechs = rows.filter((r) => r.role === 'field_technician');
+  const fieldAdjacent = rows.filter(
+    (r) =>
+      (Array.isArray(r.usage_intents) && r.usage_intents.includes('field_work'))
+      || r.work_type === 'mitigation'
+      || r.work_type === 'construction',
+  );
+  // Prefer field technicians; if none, fall back to people marked for field work.
+  const pool = fieldTechs.length > 0 ? fieldTechs : fieldAdjacent;
+
+  return pool.map((r) => {
+    const p = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles;
+    return {
+      userId: String(r.user_id),
+      fullName: String(p?.full_name || p?.email || 'Field technician'),
+      email: (p?.email as string) ?? null,
+      role: String(r.role),
+      workType: (r.work_type as string) ?? null,
+      selected: true,
+    };
+  });
+}
+
 jobIntakeRouter.post('/intake/propose', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    await requireOrgContext(req);
+    const { orgId, supabase } = await requireOrgContext(req);
     const { text } = proposeSchema.parse(req.body ?? {});
+    let proposal;
     try {
-      const proposal = proposeIntakeFromText(text);
-      res.json({ proposal });
+      proposal = proposeIntakeFromText(text);
     } catch (err) {
       throw badRequest(err instanceof Error ? err.message : 'Could not read that text.', 'propose_failed');
     }
+    const captureTeam = await loadCaptureTeam(supabase, orgId);
+    res.json({ proposal, captureTeam });
   } catch (err) {
     next(err);
   }
+});
+
+const inviteeSchema = z.object({
+  userId: z.string().trim().min(1).max(80).optional(),
+  fullName: z.string().trim().min(1).max(120),
+  email: z.string().trim().email().max(200).nullable().optional(),
+  trade: z.string().trim().max(60).optional(),
 });
 
 const approveSchema = z.object({
@@ -291,16 +342,13 @@ const approveSchema = z.object({
     )
     .min(1)
     .max(60),
-  party: z.object({
-    company: z.string().trim().min(1).max(160),
-    trade: z.string().trim().max(60).optional(),
-    contactName: z.string().trim().max(120).optional(),
-  }),
+  /** Field Capture team members invited to film this job. */
+  invitees: z.array(inviteeSchema).min(1).max(20),
 });
 
 /**
  * POST /api/operations/intake/approve
- * One approval: job file + scope + published brief + crew invite link.
+ * One approval: job file + scope + published brief + Field Capture invites.
  */
 jobIntakeRouter.post('/intake/approve', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -341,7 +389,7 @@ jobIntakeRouter.post('/intake/approve', async (req: Request, res: Response, next
       job_id: jobId,
       org_id: orgId,
       source: 'scope_document' satisfies IntakeSource,
-      source_detail: { enteredFrom: 'intake_package' },
+      source_detail: { enteredFrom: 'intake_package', captureInvites: input.invitees.length },
       entered_by: userId,
     });
 
@@ -350,7 +398,7 @@ jobIntakeRouter.post('/intake/approve', async (req: Request, res: Response, next
       .insert({
         org_id: orgId,
         job_id: jobId,
-        revision: 0, // trigger assigns next revision
+        revision: 0,
         facts: input.facts ?? {},
         note: input.briefNote ?? null,
         created_by: userId,
@@ -378,22 +426,44 @@ jobIntakeRouter.post('/intake/approve', async (req: Request, res: Response, next
       .select('id');
     if (scopeError) throw new HttpError(500, 'Could not save scope lines.', 'scope_failed');
 
-    const { data: party, error: partyError } = await supabase
-      .from('job_parties')
-      .insert({
-        org_id: orgId,
-        job_id: jobId,
-        company: input.party.company,
-        trade: input.party.trade ?? null,
-        contact_name: input.party.contactName || null,
-        role: 'subcontractor',
-        invited_at: new Date().toISOString(),
-        created_by: userId,
-      })
-      .select('id, company, access_token')
-      .single();
-    if (partyError || !party) {
-      throw new HttpError(500, 'Could not invite the company.', 'party_failed');
+    const invites: Array<{
+      id: string;
+      name: string;
+      email: string | null;
+      sharePath: string;
+      fieldCapturePath: string;
+      token: string;
+    }> = [];
+
+    for (const person of input.invitees) {
+      const { data: party, error: partyError } = await supabase
+        .from('job_parties')
+        .insert({
+          org_id: orgId,
+          job_id: jobId,
+          // Company label = who is capturing; trade marks Field Capture.
+          company: person.fullName,
+          trade: person.trade || 'field_capture',
+          contact_name: person.fullName,
+          email: person.email ?? null,
+          role: 'subcontractor',
+          invited_at: new Date().toISOString(),
+          created_by: userId,
+        })
+        .select('id, company, access_token, email')
+        .single();
+      if (partyError || !party) {
+        throw new HttpError(500, `Could not invite ${person.fullName}.`, 'party_failed');
+      }
+      const token = String((party as any).access_token);
+      invites.push({
+        id: String((party as any).id),
+        name: String((party as any).company),
+        email: ((party as any).email as string) ?? null,
+        token,
+        sharePath: `/shared/${token}`,
+        fieldCapturePath: `/fieldcapture/index.html?token=${encodeURIComponent(token)}`,
+      });
     }
 
     await recordAccess(supabase, {
@@ -402,10 +472,11 @@ jobIntakeRouter.post('/intake/approve', async (req: Request, res: Response, next
       action: 'job_created',
       actorId: userId,
       actorLabel: 'Office',
-      detail: `Intake package approved — ${(scopeRows ?? []).length} scope lines, brief r${revision}, invite ready`,
+      detail: `Intake approved — ${(scopeRows ?? []).length} scope lines, brief r${revision}, ${invites.length} Field Capture invite(s)`,
     }).catch(() => undefined);
 
     const facts = await factsFor(supabase, jobId);
+    const primary = invites[0]!;
     res.status(201).json({
       job: {
         id: jobId,
@@ -414,12 +485,11 @@ jobIntakeRouter.post('/intake/approve', async (req: Request, res: Response, next
       },
       briefRevision: revision,
       scopeSaved: (scopeRows ?? []).length,
-      party: {
-        id: (party as any).id,
-        company: (party as any).company,
-      },
-      sharePath: `/shared/${(party as any).access_token}`,
-      fieldCapturePath: `/fieldcapture/index.html?token=${encodeURIComponent((party as any).access_token)}`,
+      invites,
+      // Back-compat for older UI: first invitee
+      party: { id: primary.id, company: primary.name },
+      sharePath: primary.sharePath,
+      fieldCapturePath: primary.fieldCapturePath,
       readiness: assessReadiness(facts),
     });
   } catch (err) {

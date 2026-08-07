@@ -1,14 +1,20 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AppShell, PageHeader } from '../components/AppShell';
-import { api, type IntakeProposal, type IntakeApproveResult } from '../lib/api';
+import {
+  api,
+  type CaptureTeamMember,
+  type IntakeProposal,
+  type IntakeApproveResult,
+} from '../lib/api';
 import { SpinnerIcon } from '../components/icons';
 
 /**
  * AI-first office intake — one paste, one review, one approve.
  *
- * Creates the job file, scope lines, published brief, and crew invite together.
- * No money. No multi-screen wizard. The human only decides.
+ * Creates the job file, scope lines, published brief, and Field Capture invites
+ * together. No money. The capture team is preloaded from your org and invited
+ * to film the job.
  */
 
 type Step = 'paste' | 'review' | 'done';
@@ -32,10 +38,11 @@ export function JobIntakePage() {
   const [step, setStep] = useState<Step>('paste');
   const [text, setText] = useState('');
   const [proposal, setProposal] = useState<IntakeProposal | null>(null);
+  const [captureTeam, setCaptureTeam] = useState<CaptureTeamMember[]>([]);
   const [result, setResult] = useState<IntakeApproveResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const included = useMemo(
     () => (proposal?.scope ?? []).filter((s) => s.state === 'included').length,
@@ -45,6 +52,10 @@ export function JobIntakePage() {
     () => (proposal?.scope ?? []).filter((s) => s.state === 'excluded').length,
     [proposal],
   );
+  const selectedCount = useMemo(
+    () => captureTeam.filter((m) => m.selected).length,
+    [captureTeam],
+  );
 
   async function onPropose(e: FormEvent) {
     e.preventDefault();
@@ -53,6 +64,9 @@ export function JobIntakePage() {
     try {
       const res = await api.proposeIntake({ text });
       setProposal(res.proposal);
+      setCaptureTeam(
+        (res.captureTeam ?? []).map((m) => ({ ...m, selected: m.selected !== false })),
+      );
       setStep('review');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not draft that package.');
@@ -64,6 +78,18 @@ export function JobIntakePage() {
   async function onApprove(e: FormEvent) {
     e.preventDefault();
     if (!proposal) return;
+    const invitees = captureTeam
+      .filter((m) => m.selected)
+      .map((m) => ({
+        userId: m.userId,
+        fullName: m.fullName,
+        email: m.email,
+        trade: 'field_capture',
+      }));
+    if (invitees.length < 1) {
+      setError('Select at least one Field Capture teammate to invite.');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -77,7 +103,7 @@ export function JobIntakePage() {
         briefNote: proposal.briefNote,
         facts: proposal.facts,
         scope: proposal.scope,
-        party: proposal.party,
+        invitees,
       });
       setResult(res);
       setStep('done');
@@ -107,24 +133,48 @@ export function JobIntakePage() {
     });
   }
 
-  async function copyLink() {
-    if (!result) return;
-    const url = `${window.location.origin}${result.sharePath}`;
+  function toggleMember(userId: string) {
+    setCaptureTeam((team) =>
+      team.map((m) => (m.userId === userId ? { ...m, selected: !m.selected } : m)),
+    );
+  }
+
+  function setAllSelected(selected: boolean) {
+    setCaptureTeam((team) => team.map((m) => ({ ...m, selected })));
+  }
+
+  async function copyLink(path: string, id: string) {
+    const url = `${window.location.origin}${path}`;
     try {
       await navigator.clipboard.writeText(url);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+      setCopiedId(id);
+      window.setTimeout(() => setCopiedId(null), 2000);
     } catch {
       setError('Could not copy — select the link and copy it yourself.');
     }
   }
+
+  const invites = result?.invites?.length
+    ? result.invites
+    : result
+      ? [
+          {
+            id: result.party.id,
+            name: result.party.company,
+            email: null as string | null,
+            sharePath: result.sharePath,
+            fieldCapturePath: result.fieldCapturePath,
+            token: '',
+          },
+        ]
+      : [];
 
   return (
     <AppShell>
       <PageHeader
         eyebrow="Work Verification Platform"
         title="Start a job"
-        description="Paste the scope or claim. Review what we drafted. Approve once — the crew link is ready. Nothing about money here; this is the handoff."
+        description="Paste the scope. Review what we drafted. Approve once — Field Capture is invited to film. Nothing about money here; this is the handoff."
         action={
           <Link
             to="/shared"
@@ -140,7 +190,7 @@ export function JobIntakePage() {
           [
             ['paste', '1 · Paste'],
             ['review', '2 · Review'],
-            ['done', '3 · Invite ready'],
+            ['done', '3 · Capture invited'],
           ] as const
         ).map(([id, label]) => (
           <li
@@ -171,7 +221,7 @@ export function JobIntakePage() {
             <h2 className="text-base font-semibold text-ink-900">Drop the facts</h2>
             <p className="mt-1 text-sm text-ink-600">
               Scope PDF text, carrier notes, or a pasted estimate. We draft the job, lines, and
-              first brief — you still approve before anyone is invited.
+              first brief — you still approve before Field Capture is invited.
             </p>
             <textarea
               value={text}
@@ -329,8 +379,8 @@ export function JobIntakePage() {
           <div className="rounded-xl glass-card p-5">
             <h2 className="text-base font-semibold text-ink-900">First brief</h2>
             <p className="mt-1 text-sm text-ink-600">
-              Approving publishes this revision. The crew accepts these facts before they are clear
-              to work.
+              Approving publishes this revision. Field Capture accepts these facts before they are
+              clear to film.
             </p>
             <textarea
               className="glass-field mt-3 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
@@ -341,49 +391,67 @@ export function JobIntakePage() {
           </div>
 
           <div className="rounded-xl glass-card p-5">
-            <h2 className="text-base font-semibold text-ink-900">Who gets the link</h2>
-            <div className="mt-3 grid gap-3 sm:grid-cols-3">
-              <label className="block text-xs font-medium text-ink-600 sm:col-span-1">
-                Company
-                <input
-                  className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
-                  value={proposal.party.company}
-                  onChange={(e) =>
-                    setProposal({
-                      ...proposal,
-                      party: { ...proposal.party, company: e.target.value },
-                    })
-                  }
-                  required
-                />
-              </label>
-              <label className="block text-xs font-medium text-ink-600">
-                Trade
-                <input
-                  className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
-                  value={proposal.party.trade}
-                  onChange={(e) =>
-                    setProposal({
-                      ...proposal,
-                      party: { ...proposal.party, trade: e.target.value },
-                    })
-                  }
-                />
-              </label>
-              <label className="block text-xs font-medium text-ink-600">
-                Contact name
-                <input
-                  className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
-                  value={proposal.party.contactName}
-                  onChange={(e) =>
-                    setProposal({
-                      ...proposal,
-                      party: { ...proposal.party, contactName: e.target.value },
-                    })
-                  }
-                />
-              </label>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h2 className="text-base font-semibold text-ink-900">Field Capture team</h2>
+                <p className="mt-1 text-sm text-ink-600">
+                  Preloaded from your org. Selected people get a link to capture this job on site
+                  (video + mic).
+                </p>
+              </div>
+              {captureTeam.length > 0 && (
+                <div className="flex gap-2 text-xs font-medium">
+                  <button
+                    type="button"
+                    className="text-brand-600"
+                    onClick={() => setAllSelected(true)}
+                  >
+                    Invite all
+                  </button>
+                  <span className="text-ink-400">·</span>
+                  <button
+                    type="button"
+                    className="text-ink-500"
+                    onClick={() => setAllSelected(false)}
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
             </div>
+
+            {captureTeam.length === 0 ? (
+              <p className="mt-4 text-sm text-ink-600">
+                No field technicians in this org yet. Add Field Capture teammates under Team, then
+                come back — or invite will need at least one capture person.
+              </p>
+            ) : (
+              <ul className="mt-4 divide-y divide-line/50">
+                {captureTeam.map((m) => (
+                  <li key={m.userId} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                    <input
+                      id={`capture-${m.userId}`}
+                      type="checkbox"
+                      checked={m.selected}
+                      onChange={() => toggleMember(m.userId)}
+                      className="h-4 w-4 rounded border-line text-brand-600"
+                    />
+                    <label htmlFor={`capture-${m.userId}`} className="min-w-0 flex-1 cursor-pointer">
+                      <span className="block text-sm font-medium text-ink-900">{m.fullName}</span>
+                      <span className="block truncate text-xs text-ink-500">
+                        {[m.email, m.workType].filter(Boolean).join(' · ') || m.role}
+                      </span>
+                    </label>
+                    <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-ink-400">
+                      Capture
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-3 text-xs text-ink-500">
+              {selectedCount} selected · each gets their own capture link for this job
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 pb-8">
@@ -397,14 +465,14 @@ export function JobIntakePage() {
             </button>
             <button
               type="submit"
-              disabled={busy || !proposal.scope.length}
+              disabled={busy || !proposal.scope.length || selectedCount < 1}
               className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-ink-900 disabled:opacity-50"
             >
               {busy && <SpinnerIcon className="h-4 w-4 animate-spin" />}
-              Approve &amp; invite
+              Approve &amp; invite Field Capture
             </button>
             <p className="text-xs text-ink-500">
-              Creates the job file, publishes the brief, and mints their link — in one step.
+              Creates the job file, publishes the brief, and invites the capture team — in one step.
             </p>
           </div>
         </form>
@@ -413,52 +481,65 @@ export function JobIntakePage() {
       {step === 'done' && result && (
         <div className="mx-auto max-w-3xl space-y-4 animate-fade-in-up">
           <div className="rounded-xl border border-success-200/80 bg-success-50/40 glass-card p-5">
-            <h2 className="text-base font-semibold text-ink-900">Ready for the crew</h2>
+            <h2 className="text-base font-semibold text-ink-900">Field Capture invited</h2>
             <p className="mt-1 text-sm text-ink-600">
               <span className="font-medium text-ink-800">{result.job.title}</span>
               {result.job.jobNumber != null ? ` · Job #${result.job.jobNumber}` : ''} ·{' '}
-              {result.scopeSaved} scope lines · brief r{result.briefRevision} ·{' '}
-              {result.party.company}
+              {result.scopeSaved} scope lines · brief r{result.briefRevision} · {invites.length}{' '}
+              capture link{invites.length === 1 ? '' : 's'}
             </p>
           </div>
 
           <div className="rounded-xl glass-card p-5">
-            <h3 className="text-sm font-semibold text-ink-900">Share link</h3>
+            <h3 className="text-sm font-semibold text-ink-900">Capture links</h3>
             <p className="mt-1 text-sm text-ink-600">
-              Send this. They see the scope, accept the brief, and film the day — no office login.
+              Send each person their link. They see the scope, accept the brief, and film the day —
+              no office login.
             </p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <code className="glass-field flex-1 truncate rounded-lg px-3 py-2 text-xs text-ink-800">
-                {window.location.origin}
-                {result.sharePath}
-              </code>
-              <button
-                type="button"
-                onClick={() => void copyLink()}
-                className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-ink-900"
-              >
-                {copied ? 'Copied' : 'Copy link'}
-              </button>
-            </div>
-            <p className="mt-3 text-xs text-ink-500">
-              Field Capture (phone film): open with the same token on the capture app.
-            </p>
+            <ul className="mt-4 space-y-3">
+              {invites.map((inv) => (
+                <li
+                  key={inv.id}
+                  className="rounded-lg border border-line/60 bg-paper-50/40 px-3 py-3"
+                >
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <p className="text-sm font-medium text-ink-900">{inv.name}</p>
+                    {inv.email && <p className="text-xs text-ink-500">{inv.email}</p>}
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <code className="glass-field min-w-0 flex-1 truncate rounded-lg px-3 py-2 text-xs text-ink-800">
+                      {window.location.origin}
+                      {inv.fieldCapturePath || inv.sharePath}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void copyLink(inv.fieldCapturePath || inv.sharePath, inv.id)
+                      }
+                      className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-ink-900"
+                    >
+                      {copiedId === inv.id ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </div>
 
           <div className="rounded-xl glass-card p-5">
-            <h3 className="text-sm font-semibold text-ink-900">What they see</h3>
+            <h3 className="text-sm font-semibold text-ink-900">What they do</h3>
             <ul className="mt-3 space-y-2 text-sm text-ink-700">
               <li className="flex gap-2">
                 <span className="text-brand-600">1</span>
-                Job title and site facts from this brief
+                Open their capture link on phone
               </li>
               <li className="flex gap-2">
                 <span className="text-brand-600">2</span>
-                In-scope lines and clear “do not” exclusions
+                Accept the brief — in-scope and “do not” lines
               </li>
               <li className="flex gap-2">
                 <span className="text-brand-600">3</span>
-                Accept this revision → film the day (video + mic)
+                Film the day (video + mic) against that scope
               </li>
             </ul>
           </div>
@@ -478,6 +559,7 @@ export function JobIntakePage() {
                 setStep('paste');
                 setText('');
                 setProposal(null);
+                setCaptureTeam([]);
                 setResult(null);
               }}
             >

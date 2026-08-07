@@ -906,10 +906,28 @@ export interface IntakeProposal {
   briefNote: string;
   facts: Record<string, string>;
   scope: Array<{ title: string; state: 'included' | 'excluded'; reason?: string }>;
-  party: { company: string; trade: string; contactName: string };
+  /** Stub; invites come from captureTeam, not free-text party fields. */
+  party?: { company: string; trade: string; contactName: string };
   source: 'heuristic' | 'model';
   summary: string;
 }
+
+/** Org Field Capture teammates returned with propose — pre-selected to invite. */
+export type CaptureTeamMember = {
+  userId: string;
+  fullName: string;
+  email: string | null;
+  role: string;
+  workType: string | null;
+  selected: boolean;
+};
+
+export type IntakeInvitee = {
+  userId?: string;
+  fullName: string;
+  email?: string | null;
+  trade?: string;
+};
 
 export type IntakeApproveInput = {
   title: string;
@@ -921,13 +939,24 @@ export type IntakeApproveInput = {
   briefNote?: string | null;
   facts?: Record<string, string>;
   scope: IntakeProposal['scope'];
-  party: { company: string; trade?: string; contactName?: string };
+  invitees: IntakeInvitee[];
+};
+
+export type IntakeCaptureInvite = {
+  id: string;
+  name: string;
+  email: string | null;
+  sharePath: string;
+  fieldCapturePath: string;
+  token: string;
 };
 
 export type IntakeApproveResult = {
   job: { id: string; title: string; jobNumber: number | null };
   briefRevision: number;
   scopeSaved: number;
+  invites: IntakeCaptureInvite[];
+  /** First invitee — back-compat with older UI. */
   party: { id: string; company: string };
   sharePath: string;
   fieldCapturePath: string;
@@ -2694,10 +2723,13 @@ export const api = {
     }>('/api/operations/jobs/quick-start', { method: 'POST', body: JSON.stringify(input) }),
 
   proposeIntake: (input: { text: string }) =>
-    request<{ proposal: IntakeProposal }>('/api/operations/intake/propose', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    }),
+    request<{ proposal: IntakeProposal; captureTeam: CaptureTeamMember[] }>(
+      '/api/operations/intake/propose',
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+    ),
 
   approveIntake: (input: IntakeApproveInput) =>
     request<IntakeApproveResult>('/api/operations/intake/approve', {

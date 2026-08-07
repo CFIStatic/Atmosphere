@@ -158,17 +158,17 @@ export function proposeIntakeFromText(rawText: string): IntakeProposal {
     postalCode: meta.postalCode,
     claimNumber: meta.claimNumber,
     briefNote:
-      'First published facts for the crew. Edit anything that looks wrong before you approve — approving invites them on this revision.',
+      'First published facts for Field Capture. Edit anything wrong before you approve — approving invites your capture team to film this job.',
     facts,
     scope: scope.length
       ? scope
       : [{ title: 'Confirm scope lines with the office before work', state: 'included' }],
-    party: {
-      company: 'Subcontractor to invite',
-      trade: workType === 'mitigation' ? 'mitigation' : 'general',
-      contactName: '',
-    },
-    source: 'heuristic',
-    summary: `${scope.length || 1} scope lines drafted from your paste. Nothing is live until you approve.`,
-  };
+  party: {
+    company: 'Field Capture',
+    trade: 'field_capture',
+    contactName: '',
+  },
+  source: 'heuristic',
+  summary: `${scope.length || 1} scope lines drafted from your paste. Nothing is live until you approve and invite Field Capture.`,
+};
 }

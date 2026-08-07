@@ -101,6 +101,8 @@ const membership = (): Membership => ({
 const MEMBERS: OrgMember[] = [
   { userId: 'demo-user-1', email: 'dana@ortizrestoration.com', fullName: 'Dana Ortiz', role: 'project_manager', workType: 'mitigation', usageIntents: ['project_management', 'mitigation_estimating', 'billing'], status: 'active' },
   { userId: 'u-marcus', email: 'marcus@ortizrestoration.com', fullName: 'Marcus Webb', role: 'field_technician', workType: 'mitigation', usageIntents: ['field_work'], status: 'active' },
+  { userId: 'u-jess', email: 'jess@ortizrestoration.com', fullName: 'Jess Ortega', role: 'field_technician', workType: 'mitigation', usageIntents: ['field_work'], status: 'active' },
+  { userId: 'u-devon', email: 'devon@ortizrestoration.com', fullName: 'Devon Hale', role: 'field_technician', workType: 'construction', usageIntents: ['field_work'], status: 'active' },
   { userId: 'u-priya', email: 'priya@ortizrestoration.com', fullName: 'Priya Shah', role: 'sales', workType: 'construction', usageIntents: ['crm', 'construction_estimating'], status: 'active' },
   { userId: 'u-tom', email: 'tom@ortizrestoration.com', fullName: 'Tom Reyes', role: 'office_manager', workType: 'mitigation', usageIntents: ['web_access', 'project_management'], status: 'active' },
   { userId: 'u-elena', email: 'elena@ortizrestoration.com', fullName: 'Elena Cruz', role: 'accountant', workType: 'construction', usageIntents: ['billing'], status: 'active' },
@@ -2370,22 +2372,46 @@ const routes: Array<[string, RegExp, Handler]> = [
             ? lines
             : [{ title: 'Confirm scope with the office', state: 'included' }],
           party: {
-            company: 'Rio Grande Mitigation',
-            trade: 'mitigation',
-            contactName: 'Alex Rivera',
+            company: 'Field Capture',
+            trade: 'field_capture',
+            contactName: '',
           },
           source: 'heuristic',
-          summary: `${lines.length || 1} scope lines drafted from your paste. Nothing is live until you approve.`,
+          summary: `${lines.length || 1} scope lines drafted from your paste. Nothing is live until you approve and invite Field Capture.`,
         },
+        captureTeam: MEMBERS.filter((m) => m.role === 'field_technician').map((m) => ({
+          userId: m.userId,
+          fullName: m.fullName,
+          email: m.email,
+          role: m.role,
+          workType: m.workType,
+          selected: true,
+        })),
       },
     };
   }],
   ['POST', /^\/api\/operations\/intake\/approve$/, (_m, b) => {
     const id = `job-intake-${Date.now()}`;
     const scope = Array.isArray(b.scope) ? b.scope : [];
-    const party = (b.party ?? {}) as { company?: string };
-    const company = String(party.company ?? 'Crew');
-    const token = `demo-intake-${Date.now().toString(36)}`;
+    const invitees = Array.isArray(b.invitees) ? b.invitees : [];
+    const people =
+      invitees.length > 0
+        ? invitees
+        : [{ fullName: 'Field Capture', email: null }];
+    const stamp = Date.now().toString(36);
+    const invites = people.map((person: { fullName?: string; email?: string | null }, i: number) => {
+      const token = `demo-intake-${stamp}-${i}`;
+      const name = String(person.fullName ?? 'Field Capture');
+      return {
+        id: `party-${token}`,
+        name,
+        email: (person.email as string) ?? null,
+        token,
+        sharePath: `/shared/${token}`,
+        fieldCapturePath: `/fieldcapture/index.html?token=${encodeURIComponent(token)}`,
+      };
+    });
+    const primary = invites[0]!;
     MANUAL_JOBS[id] = {
       hasAddress: Boolean(b.address),
       hasCoordinates: false,
@@ -2399,10 +2425,10 @@ const routes: Array<[string, RegExp, Handler]> = [
       jobNumber: 9000 + (SHARED_JOBS.length % 900),
       title: String(b.title ?? 'New job'),
       status: 'scheduled',
-      parties: 1,
+      parties: invites.length,
       currentRevision: 1,
       behind: 0,
-      awaiting: 1,
+      awaiting: invites.length,
       exclusions: scope.filter((s: { state?: string }) => s.state === 'excluded').length,
     });
     return {
@@ -2411,9 +2437,10 @@ const routes: Array<[string, RegExp, Handler]> = [
         job: { id, title: String(b.title ?? 'New job'), jobNumber: null },
         briefRevision: 1,
         scopeSaved: scope.length,
-        party: { id: `party-${token}`, company },
-        sharePath: `/shared/${token}`,
-        fieldCapturePath: `/fieldcapture/index.html?token=${encodeURIComponent(token)}`,
+        invites,
+        party: { id: primary.id, company: primary.name },
+        sharePath: primary.sharePath,
+        fieldCapturePath: primary.fieldCapturePath,
         readiness: readinessFor(id),
       },
     };
