@@ -17,7 +17,7 @@ export const SETUP_WIZARD_STEPS = [
   {
     step: 3 as const,
     title: 'Pick your role and trade',
-    detail: 'Crew Lead, Field Technician, Project Manager, or Reviewer — doing HVAC, plumbing, electrical, or other service work.',
+    detail: 'Crew Lead, Field Technician, Project Manager, or Reviewer — then pick your trade from the full service contractor list.',
   },
   {
     step: 4 as const,

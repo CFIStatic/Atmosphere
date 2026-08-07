@@ -38,64 +38,40 @@ export const VERIFIER_ROLE_OPTIONS: {
   },
 ];
 
-export type ServiceTrade =
-  | 'hvac'
-  | 'plumbing'
-  | 'electrical'
-  | 'cleaning'
-  | 'facilities'
-  | 'other';
+const TRADE_DEFAULTS = {
+  contractorType: 'other' as ContractorType,
+  workType: 'construction' as WorkType,
+};
 
-export const SERVICE_TRADE_OPTIONS: {
-  value: ServiceTrade;
-  label: string;
-  blurb: string;
-  contractorType: ContractorType;
-  workType: WorkType;
-}[] = [
-  {
-    value: 'hvac',
-    label: 'HVAC',
-    blurb: 'Heating, cooling, and mechanical service work verified on site.',
-    contractorType: 'other',
-    workType: 'construction',
-  },
-  {
-    value: 'plumbing',
-    label: 'Plumbing',
-    blurb: 'Plumbing installs, repairs, and service calls with a daily verification record.',
-    contractorType: 'other',
-    workType: 'construction',
-  },
-  {
-    value: 'electrical',
-    label: 'Electrical',
-    blurb: 'Electrical service and install work — filmed, checked, and held on the record.',
-    contractorType: 'other',
-    workType: 'construction',
-  },
-  {
-    value: 'cleaning',
-    label: 'Cleaning',
-    blurb: 'Commercial or specialty cleaning with before-and-after proof of work.',
-    contractorType: 'other',
-    workType: 'construction',
-  },
-  {
-    value: 'facilities',
-    label: 'Facilities',
-    blurb: 'Facilities maintenance and multi-trade service contracts.',
-    contractorType: 'general_contractor',
-    workType: 'construction',
-  },
-  {
-    value: 'other',
-    label: 'Other service trade',
-    blurb: 'Any service contractor work that needs a verifiable field record.',
-    contractorType: 'other',
-    workType: 'construction',
-  },
-];
+/** Full service-trade list for signup — stored as org contractor_type + work_type today. */
+export const SERVICE_TRADE_OPTIONS = [
+  { value: 'hvac', label: 'HVAC', ...TRADE_DEFAULTS },
+  { value: 'plumbing', label: 'Plumbing', ...TRADE_DEFAULTS },
+  { value: 'electrical', label: 'Electrical', ...TRADE_DEFAULTS },
+  { value: 'drywall', label: 'Drywall', ...TRADE_DEFAULTS },
+  { value: 'painting', label: 'Painting', ...TRADE_DEFAULTS },
+  { value: 'roofing', label: 'Roofing', contractorType: 'roofing' as ContractorType, workType: 'construction' as WorkType },
+  { value: 'flooring', label: 'Flooring', ...TRADE_DEFAULTS },
+  { value: 'carpentry', label: 'Carpentry', ...TRADE_DEFAULTS },
+  { value: 'masonry', label: 'Masonry & concrete', ...TRADE_DEFAULTS },
+  { value: 'insulation', label: 'Insulation', ...TRADE_DEFAULTS },
+  { value: 'siding', label: 'Siding & exterior', ...TRADE_DEFAULTS },
+  { value: 'windows_doors', label: 'Windows & doors', ...TRADE_DEFAULTS },
+  { value: 'landscaping', label: 'Landscaping', ...TRADE_DEFAULTS },
+  { value: 'cleaning', label: 'Cleaning & janitorial', ...TRADE_DEFAULTS },
+  { value: 'facilities', label: 'Facilities maintenance', contractorType: 'general_contractor' as ContractorType, workType: 'construction' as WorkType },
+  { value: 'fire_life_safety', label: 'Fire & life safety', ...TRADE_DEFAULTS },
+  { value: 'security', label: 'Security & access control', ...TRADE_DEFAULTS },
+  { value: 'low_voltage', label: 'Low voltage / AV / data', ...TRADE_DEFAULTS },
+  { value: 'pool_spa', label: 'Pool & spa', ...TRADE_DEFAULTS },
+  { value: 'pest_control', label: 'Pest control', ...TRADE_DEFAULTS },
+  { value: 'appliance', label: 'Appliance repair', ...TRADE_DEFAULTS },
+  { value: 'restoration', label: 'Restoration (water / fire / mold)', contractorType: 'restoration' as ContractorType, workType: 'mitigation' as WorkType },
+  { value: 'general_contractor', label: 'General contractor', contractorType: 'general_contractor' as ContractorType, workType: 'construction' as WorkType },
+  { value: 'other', label: 'Other service trade', ...TRADE_DEFAULTS },
+] as const;
+
+export type ServiceTrade = (typeof SERVICE_TRADE_OPTIONS)[number]['value'];
 
 export function resolveVerifierSetup(
   role: MemberRole,

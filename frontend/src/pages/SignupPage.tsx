@@ -381,20 +381,21 @@ type OrgMode = 'create' | 'join';
             </section>
 
             <section>
-              <h3 className="text-sm font-semibold text-ink-900">Kind of service work</h3>
+              <h3 className="text-sm font-semibold text-ink-900">Your trade</h3>
               <p className="mt-1 text-xs text-ink-500">
-                HVAC, plumbing, electrical, cleaning, facilities, or another service trade.
+                Select the trade that best matches the work you verify — scroll for the full list.
               </p>
-              <div className="mt-3 space-y-2">
-                {SERVICE_TRADE_OPTIONS.map((opt) => (
-                  <OptionCard
-                    key={opt.value}
-                    selected={serviceTrade === opt.value}
-                    title={opt.label}
-                    blurb={opt.blurb}
-                    onClick={() => setServiceTrade(opt.value)}
-                  />
-                ))}
+              <div className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-line p-2 sm:max-h-72">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {SERVICE_TRADE_OPTIONS.map((opt) => (
+                    <TradeChip
+                      key={opt.value}
+                      selected={serviceTrade === opt.value}
+                      label={opt.label}
+                      onClick={() => setServiceTrade(opt.value)}
+                    />
+                  ))}
+                </div>
               </div>
             </section>
           </div>
@@ -561,6 +562,31 @@ function ModeTab({
       }`}
     >
       {children}
+    </button>
+  );
+}
+
+function TradeChip({
+  selected,
+  label,
+  onClick,
+}: {
+  selected: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      className={`rounded-lg border px-3 py-2.5 text-left text-sm font-medium transition ${
+        selected
+          ? 'border-brand-400 bg-brand-50 text-ink-900 ring-1 ring-brand-200'
+          : 'border-line bg-paper-0 text-ink-700 hover:border-brand-200 hover:bg-paper-50'
+      }`}
+    >
+      {label}
     </button>
   );
 }
