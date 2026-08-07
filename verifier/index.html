@@ -198,13 +198,11 @@
     display: flex;
     flex-direction: column;
   }
-  .screen-dashboard,
-  .screen-mywork {
+  .screen-dashboard {
     flex: 1;
     min-height: 0;
     overflow: hidden;
   }
-  .screen-mywork[hidden],
   .screen-dashboard[hidden] { display: none !important; }
   .rail {
     background: var(--panel); border-right: 1px solid var(--line);
@@ -221,24 +219,6 @@
   .navitem.nav-icon { justify-content: flex-start; gap: 8px; }
   .navitem.nav-icon svg { flex: none; color: var(--muted); }
   .navitem.nav-icon[aria-current="true"] svg { color: var(--accent); }
-  .mywork-list { padding-bottom: 24px; }
-  .mywork-row {
-    display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
-    gap: 12px; align-items: center; padding: 14px 18px;
-    border-bottom: 1px solid var(--line);
-  }
-  .mywork-row h3 { font-size: 14px; font-weight: 650; margin: 0; color: var(--ink); }
-  .mywork-meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
-  .mywork-badge {
-    font-size: 11px; padding: 3px 8px; border-radius: 999px;
-    background: var(--line-soft); color: var(--ink-2); white-space: nowrap;
-  }
-  .mywork-record {
-    border: 0; border-radius: 8px; padding: 8px 14px;
-    background: var(--accent); color: #fff; font-weight: 650;
-    font-size: 12.5px; cursor: pointer; white-space: nowrap;
-  }
-  .mywork-record:hover { filter: brightness(1.05); }
   @media (max-width: 1100px) {
     .app-frame.has-sidebar { --rail-w: 212px; }
   }
@@ -603,10 +583,13 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
         <span>Dashboard</span>
       </button>
-      <button type="button" class="navitem nav-icon app-nav" data-screen="my-work">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-        <span>My Work</span>
-        <span class="count" id="n-mywork">0</span>
+      <button type="button" class="navitem nav-icon" id="nav-start-job" data-tour="nav-start-job">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        <span>Start a job</span>
+      </button>
+      <button type="button" class="navitem nav-icon" id="nav-jobfiles" data-tour="nav-job-files">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>
+        <span>Job files</span>
       </button>
     </div>
 
@@ -629,10 +612,6 @@
     <!-- Shown only when the portal IS the platform: the one piece of app
          chrome that still matters lives at the bottom of this sidebar. -->
     <div id="embed-nav" hidden>
-      <h3>Set up</h3>
-      <button class="navitem" id="nav-jobfiles" style="gap:8px;justify-content:flex-start">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg><span>Job files</span>
-      </button>
       <h3>System</h3>
       <button class="navitem" id="nav-settings" style="gap:8px;justify-content:flex-start">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09A1.7 1.7 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09A1.7 1.7 0 0 0 20.91 10H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></svg><span>Settings</span>
@@ -682,20 +661,6 @@
       </p>
     </div>
   </main>
-  </div>
-
-  <div class="screen screen-mywork" id="screen-mywork" hidden>
-    <main class="main">
-      <div class="toolbar">
-        <h1>My Work</h1>
-        <span class="result" id="mywork-sub">Jobs waiting for field capture</span>
-      </div>
-      <div class="mywork-list" id="mywork-list"></div>
-      <p class="footnote">
-        These are open jobs assigned to you or active on your crew. Tap Record to open Field Capture
-        and film the proof the verification library expects.
-      </p>
-    </main>
   </div>
   </div>
 </div>
@@ -1968,93 +1933,17 @@
   // Job files is the same handoff for the one thing the portal has no screen
   // for: setting a job's scope, seeing whether it can be verified yet, and
   // inviting a subcontractor.
-  var sessionRole = null;
-  var myWorkLoaded = false;
-  var OPEN_JOB_STATUSES = ['draft', 'scheduled', 'in_progress', 'on_hold'];
-
-  function escHtml(value) {
-    return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
-  }
-
-  function filterOpenJobs(jobs) {
-    return (jobs || []).filter(function (job) {
-      return OPEN_JOB_STATUSES.indexOf(job.status) >= 0;
-    });
-  }
-
   function setScreen(name) {
     document.querySelectorAll('.app-nav').forEach(function (btn) {
       btn.setAttribute('aria-current', String(btn.dataset.screen === name));
     });
     var dash = document.getElementById('screen-dashboard');
-    var work = document.getElementById('screen-mywork');
     if (dash) dash.hidden = name !== 'dashboard';
-    if (work) work.hidden = name !== 'my-work';
-    if (name === 'my-work') loadMyWork();
-  }
-
-  function renderMyWork(jobs) {
-    var list = document.getElementById('mywork-list');
-    var count = document.getElementById('n-mywork');
-    if (count) count.textContent = String(jobs.length);
-    if (!list) return;
-    if (!jobs.length) {
-      list.innerHTML =
-        '<div class="empty" style="padding:40px 20px">' +
-        '<p style="font-size:16px;font-weight:650">Nothing to record right now.</p>' +
-        '<p style="margin-top:8px;color:var(--muted)">Open jobs assigned to you will appear here when field capture is due.</p>' +
-        '</div>';
-      return;
-    }
-    list.innerHTML = jobs.map(function (job) {
-      var status = String(job.status || '').replace(/_/g, ' ');
-      var meta = '#' + job.jobNumber + ' · ' + (job.tasksDone || 0) + '/' + (job.taskCount || 0) + ' tasks';
-      if (job.scheduledStart) {
-        try { meta += ' · ' + new Date(job.scheduledStart).toLocaleDateString(); } catch (e) { /* ignore */ }
-      }
-      return (
-        '<article class="mywork-row">' +
-          '<div><h3>' + escHtml(job.title) + '</h3><p class="mywork-meta">' + escHtml(meta) + '</p></div>' +
-          '<span class="mywork-badge">' + escHtml(status) + '</span>' +
-          '<button type="button" class="mywork-record" data-job="' + escHtml(job.jobId) + '">Record</button>' +
-        '</article>'
-      );
-    }).join('');
-    list.querySelectorAll('.mywork-record').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var id = btn.getAttribute('data-job');
-        var to = id ? '/technician?job=' + encodeURIComponent(id) : '/technician';
-        if (EMBEDDED) window.parent.postMessage({ atmosphere: 'navigate', to: to }, '*');
-        else location.href = to;
-      });
-    });
-  }
-
-  function loadMyWork(force) {
-    if (myWorkLoaded && !force) return;
-    myWorkLoaded = true;
-    var list = document.getElementById('mywork-list');
-    if (list) list.innerHTML = '<div class="empty" style="padding:40px 20px">Loading your work…</div>';
-
-    fetch('/api/jobs?mine=1', { credentials: 'include' })
-      .then(function (r) { return r.ok ? r.json() : { jobs: [] }; })
-      .then(function (data) {
-        var jobs = filterOpenJobs(data.jobs);
-        if (jobs.length || sessionRole !== 'field_technician') {
-          renderMyWork(jobs);
-          return null;
-        }
-        return fetch('/api/jobs?status=in_progress', { credentials: 'include' })
-          .then(function (r) { return r.ok ? r.json() : { jobs: [] }; })
-          .then(function (next) { renderMyWork(filterOpenJobs(next.jobs)); });
-      })
-      .catch(function () { renderMyWork([]); });
   }
 
   function applySession(payload) {
     if (!payload || !payload.user) return;
     var u = payload.user;
-    sessionRole = u.role || null;
     var name = u.name || 'Teammate';
     var email = u.email || '';
     var init = u.initials || '??';
@@ -2151,11 +2040,17 @@
     var platformNav = document.getElementById('platform-nav');
     if (railHead) railHead.hidden = false;
     if (platformNav) platformNav.hidden = false;
-    document.querySelectorAll('.app-nav').forEach(function (btn) {
+    document.querySelectorAll('.app-nav[data-screen]').forEach(function (btn) {
       btn.addEventListener('click', function () { setScreen(btn.dataset.screen); });
     });
     var embedNav = document.getElementById('embed-nav');
     if (embedNav) embedNav.hidden = false;
+    var navStartJob = document.getElementById('nav-start-job');
+    if (navStartJob) {
+      navStartJob.addEventListener('click', function () {
+        window.parent.postMessage({ atmosphere: 'navigate', to: '/intake' }, '*');
+      });
+    }
     var navJobFiles = document.getElementById('nav-jobfiles');
     if (navJobFiles) {
       navJobFiles.addEventListener('click', function () {
