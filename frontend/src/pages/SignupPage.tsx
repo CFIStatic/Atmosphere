@@ -1,10 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ApiError } from '../lib/api';
 import { loginHref, resolveAuthRedirect } from '../lib/authRedirect';
 import { PLATFORM_HOME } from '../lib/platforms';
 import { postAuthDestination } from '../lib/postAuth';
+import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
 import { getPlatform } from '../lib/usePlatform';
 import { Logo } from '../components/Logo';
 import { EyeIcon, EyeOffIcon, SpinnerIcon, CheckIcon } from '../components/icons';
@@ -33,9 +34,9 @@ const SETUP_STEPS = [
 
 export function SignupPage() {
   const { user, loading, signup } = useAuth();
-  const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const queueRedirect = usePendingAuthRedirect();
   const redirectTo = resolveAuthRedirect(
     searchParams.get('next'),
     (location.state as { from?: string } | null)?.from,
@@ -56,7 +57,15 @@ export function SignupPage() {
     };
   }, []);
 
-  if (!loading && user) {
+  if (loading) {
+    return (
+      <div className="cx-aurora grid min-h-screen place-items-center bg-paper-100 text-brand-600">
+        <SpinnerIcon className="animate-spin" width={28} height={28} />
+      </div>
+    );
+  }
+
+  if (user) {
     return <Navigate to={redirectTo} replace />;
   }
 
@@ -77,7 +86,7 @@ export function SignupPage() {
         setNotice(res.message ?? 'Check your email to confirm your account, then sign in.');
         setPassword('');
       } else {
-        navigate(postAuthDestination(res.membership, redirectTo), { replace: true });
+        queueRedirect(postAuthDestination(res.membership, redirectTo));
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');

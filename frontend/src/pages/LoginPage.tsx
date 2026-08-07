@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, ApiError } from '../lib/api';
 import { resolveAuthRedirect, signupHref } from '../lib/authRedirect';
 import { PLATFORM_HOME } from '../lib/platforms';
+import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
 import { postAuthDestination } from '../lib/postAuth';
 import { getPlatform } from '../lib/usePlatform';
 import { Logo } from '../components/Logo';
@@ -14,20 +15,10 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function LoginPage() {
   const { user, loading, login, unlockWithPin } = useAuth();
-  const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-
-  // Legacy links from the marketing site and invitations still use /login?mode=signup.
-  if (searchParams.get('mode') === 'signup') {
-    const params = new URLSearchParams();
-    const next = searchParams.get('next');
-    const email = searchParams.get('email');
-    if (next) params.set('next', next);
-    if (email) params.set('email', email);
-    const qs = params.toString();
-    return <Navigate to={qs ? `/signup?${qs}` : '/signup'} replace />;
-  }
+  const queueRedirect = usePendingAuthRedirect();
+  const isLegacySignup = searchParams.get('mode') === 'signup';
 
   const redirectTo = resolveAuthRedirect(
     searchParams.get('next'),
@@ -80,7 +71,25 @@ export function LoginPage() {
 
   useEffect(() => () => window.clearTimeout(shakeTimer.current), []);
 
-  if (!loading && user) {
+  if (isLegacySignup) {
+    const params = new URLSearchParams();
+    const next = searchParams.get('next');
+    const email = searchParams.get('email');
+    if (next) params.set('next', next);
+    if (email) params.set('email', email);
+    const qs = params.toString();
+    return <Navigate to={qs ? `/signup?${qs}` : '/signup'} replace />;
+  }
+
+  if (loading) {
+    return (
+      <div className="cx-aurora grid min-h-screen place-items-center bg-paper-100 text-brand-600">
+        <SpinnerIcon className="animate-spin" width={28} height={28} />
+      </div>
+    );
+  }
+
+  if (user) {
     return <Navigate to={redirectTo} replace />;
   }
 
@@ -101,7 +110,7 @@ export function LoginPage() {
     setPinError(null);
     try {
       const membership = await unlockWithPin(entered);
-      navigate(postAuthDestination(membership, redirectTo), { replace: true });
+      queueRedirect(postAuthDestination(membership, redirectTo));
     } catch (err) {
       if (err instanceof ApiError) {
         rejectPin(err.message);
@@ -125,7 +134,7 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       const membership = await login(email.trim(), password);
-      navigate(postAuthDestination(membership, redirectTo), { replace: true });
+      queueRedirect(postAuthDestination(membership, redirectTo));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {
@@ -134,6 +143,7 @@ export function LoginPage() {
   }
 
   const createAccountHref = signupHref({ next: redirectTo, email: email.trim() || undefined });
+  const returningToUsage = redirectTo === '/usage' || redirectTo.startsWith('/usage?');
 
   return (
     <div className="cx-aurora relative flex min-h-screen flex-col bg-paper-100">
@@ -207,7 +217,18 @@ export function LoginPage() {
                   Workspace
                 </p>
                 <h1 className="mt-2 text-2xl font-bold tracking-tight text-ink-900">Welcome back</h1>
-                <p className="mt-1.5 text-sm text-ink-600">Sign in to your Atmosphere workspace.</p>
+                <p className="mt-1.5 text-sm text-ink-600">
+                  {returningToUsage
+                    ? 'Sign in to open your usage dashboard for this billing period.'
+                    : 'Sign in to your Atmosphere workspace.'}
+                </p>
+
+                {returningToUsage && (
+                  <p className="mt-4 rounded-lg border border-brand-200 bg-brand-50/80 px-3.5 py-3 text-sm text-ink-700">
+                    After you sign in, you will land on <strong>Usage</strong> — jobs processed,
+                    compute units, and your estimated bill.
+                  </p>
+                )}
 
                 {error && (
                   <div

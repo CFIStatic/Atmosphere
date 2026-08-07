@@ -189,7 +189,7 @@
     var origin = appOrigin();
     if (!origin) return null;
     var safe = path.charAt(0) === '/' ? path : '/' + path;
-    return origin + '/login?next=' + encodeURIComponent(safe);
+    return origin + safe;
   }
 
   function wireAppLinks() {

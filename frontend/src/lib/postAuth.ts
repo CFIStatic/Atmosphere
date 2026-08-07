@@ -1,4 +1,5 @@
 import type { Membership } from './api';
+import { safeAuthRedirect } from './authRedirect';
 import { PLATFORM_HOME } from './platforms';
 import { getPlatform } from './usePlatform';
 
@@ -7,5 +8,10 @@ export function postAuthDestination(
   membership: Membership | null,
   fallback = PLATFORM_HOME[getPlatform()],
 ): string {
-  return membership ? fallback : '/onboarding';
+  if (membership) return fallback;
+  const next = safeAuthRedirect(fallback);
+  if (next && next !== '/onboarding') {
+    return `/onboarding?next=${encodeURIComponent(next)}`;
+  }
+  return '/onboarding';
 }
