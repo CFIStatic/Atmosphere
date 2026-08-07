@@ -9,6 +9,7 @@ import { HttpError, paymentRequired } from '../lib/errors.js';
 import { toNanos } from '../lib/money.js';
 import { billingError, serializeBalance } from '../lib/billing.js';
 import { anthropicClient, describeIterations, extractUsage } from '../lib/anthropic.js';
+import { recordAiUsageEventAsync } from '../metering/usageEvents.js';
 
 export const modelGatewayRouter = Router();
 
@@ -163,12 +164,14 @@ modelGatewayRouter.post('/messages', async (req: Request, res: Response, next: N
       console.warn(`[usage] response billed across multiple attempts (${iterations})`);
     }
 
+    const requestId = input.requestId ?? randomUUID();
+
     const { data: charge, error: chargeError } = await supabase.rpc('record_usage', {
       p_org: req.orgId,
       // Bill against the model that actually served the response — a
       // server-side fallback can answer on a different model than requested.
       p_model_id: message.model ?? params.model,
-      p_request_id: input.requestId ?? randomUUID(),
+      p_request_id: requestId,
       p_input_tokens: usage.inputTokens,
       p_output_tokens: usage.outputTokens,
       p_cache_write_5m_tokens: usage.cacheWrite5mTokens,
@@ -178,6 +181,21 @@ modelGatewayRouter.post('/messages', async (req: Request, res: Response, next: N
       p_feature: input.feature ?? null,
     });
     if (chargeError) throw billingError(chargeError);
+
+    recordAiUsageEventAsync(supabase, {
+      orgId: req.orgId!,
+      idempotencyKey: `model:${requestId}`,
+      actionType: 'model_completion',
+      provider: 'anthropic',
+      model: message.model ?? params.model,
+      userId: req.user?.id ?? null,
+      workflowId: input.feature ?? null,
+      agentType: 'model_gateway',
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cachedInputTokens: usage.cacheReadTokens + usage.cacheWrite5mTokens + usage.cacheWrite1hTokens,
+      metadata: { feature: input.feature ?? null },
+    });
 
     const charged = charge as any;
     res.json({

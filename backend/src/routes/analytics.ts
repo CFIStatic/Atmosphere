@@ -16,6 +16,7 @@ import {
   scopeAtLeast,
 } from '../lib/analytics.js';
 import { buildWorkbook, workbookFilename, type Dataset } from '../lib/analyticsWorkbook.js';
+import { getAdminMeteringAnalytics } from '../metering/periodAggregation.js';
 
 export const analyticsRouter = Router();
 
@@ -117,6 +118,21 @@ analyticsRouter.get(
       const { from, to } = parseRange(req);
       const supabase = createUserClient(req.accessToken!);
       res.json({ accounts: await getAccounts(supabase, from, to, 500) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** AI cost vs revenue metering — internal scope only. */
+analyticsRouter.get(
+  '/metering',
+  requireAnalytics('internal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { from, to } = parseRange(req);
+      const supabase = createUserClient(req.accessToken!);
+      res.json(await getAdminMeteringAnalytics(supabase, from.toISOString(), to.toISOString()));
     } catch (err) {
       next(err);
     }

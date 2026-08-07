@@ -14,6 +14,7 @@ import { memoryRouter } from './routes/memory.js';
 import { technicianRouter } from './routes/technician.js';
 import { billingRouter } from './routes/billing.js';
 import { usageRouter } from './routes/usage.js';
+import { meteringRouter } from './routes/metering.js';
 import { pmRouter } from './routes/pm.js';
 import { portalRouter } from './portal/routes.js';
 import { webAccessRouter } from './routes/webAccess.js';
@@ -168,6 +169,7 @@ export function createApp(): Express {
   app.use('/api/technician', technicianRouter);
   app.use('/api/billing', billingRouter);
   app.use('/api/usage', usageRouter);
+  app.use('/api/metering', meteringRouter);
   // Two different subsystems, two namespaces: /api/ai is the learning layer's
   // task execution, /api/model is the metered gateway that bills a raw model
   // call. Co-mounting them would run requireAuth twice on every metered call.

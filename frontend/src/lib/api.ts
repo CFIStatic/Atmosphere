@@ -4352,6 +4352,10 @@ export const api = {
   getUsageDaily: (days = 30) =>
     request<{ days: UsageDay[] }>(`/api/usage/daily?days=${days}`, { method: 'GET' }),
 
+  /** Customer-facing billing period usage — jobs and compute, not tokens. */
+  getMeteringSummary: () =>
+    request<CustomerMeteringSummary>('/api/metering/summary', { method: 'GET' }),
+
   // ---- Model calls (metered server-side) ----
 
   /** Exact pre-flight token count from the provider's tokenizer. */
@@ -4835,6 +4839,22 @@ export interface BillingOverview {
   }[];
   /** False for roles that may view billing but not change it. */
   canManage: boolean;
+}
+
+/** Customer-safe metering summary — no tokens, models, or margin. */
+export interface CustomerMeteringSummary {
+  periodStart: string;
+  periodEnd: string;
+  planName: string;
+  processedJobs: number;
+  includedJobs: number;
+  excessJobs: number;
+  videoVerificationHours: number;
+  computeOverage: { units: number; chargeCents: number } | null;
+  basePlatformChargeCents: number;
+  jobOverageChargeCents: number;
+  videoProcessingChargeCents: number;
+  estimatedUpcomingBillCents: number;
 }
 
 export interface SetPlanResult {
