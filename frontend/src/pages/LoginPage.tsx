@@ -147,14 +147,8 @@ export function LoginPage() {
 
   return (
     <div className="cx-aurora relative flex min-h-screen flex-col bg-paper-100">
-      <header className="flex items-center justify-between gap-4 px-6 py-6 sm:px-10">
+      <header className="px-6 py-6 sm:px-10">
         <Logo />
-        <Link
-          to={createAccountHref}
-          className="text-sm font-medium text-ink-600 transition hover:text-ink-900"
-        >
-          New here? <span className="font-semibold text-brand-600">Create your organization</span>
-        </Link>
       </header>
 
       <main className="flex flex-1 items-center justify-center px-4 pb-16">
