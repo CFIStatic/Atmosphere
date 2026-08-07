@@ -114,11 +114,17 @@ export async function extractSparseFramesFromUrl(input: {
   const runner = input.runner ?? defaultRunner;
   const ffmpeg = input.ffmpegPath ?? process.env.FFMPEG_PATH ?? 'ffmpeg';
   const maxFrames = Math.max(1, Math.floor(input.maxFrames));
-  // Oversample ~3× the keep budget (floor at 60s) so a static hour collapses
-  // to one frame and an active hour keeps many distinct ones.
+  const duration = Math.max(0, Number(input.durationSeconds) || 0);
+  // Oversample ~3× the keep budget. Floor at 60s for long days so we do not
+  // explode candidates — but never exceed half the clip length, or a short
+  // guided video (or synthetic fixture) yields zero JPEGs from fps=1/60.
+  const preferred = Math.floor(
+    input.candidateIntervalSeconds
+      ?? Math.max(60, Math.floor((duration || 1) / (maxFrames * 3))),
+  );
   const candidateInterval = Math.max(
-    60,
-    Math.floor(input.candidateIntervalSeconds ?? Math.max(60, Math.floor((input.durationSeconds || 1) / (maxFrames * 3)))),
+    1,
+    Math.min(Math.max(1, preferred), Math.max(1, Math.floor(duration / 2) || 1)),
   );
   // Hard cap candidates so a 24h file at 60s never means 1440 JPEGs on disk.
   const maxCandidates = Math.min(720, Math.max(maxFrames * 4, maxFrames));

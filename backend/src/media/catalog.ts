@@ -10,6 +10,7 @@ import { config } from '../config.js';
 import { HttpError } from '../lib/errors.js';
 import { assertAudiovisualPolicy, kindRequiresAudio } from './capturePolicy.js';
 import { mediaDriverFor, mediaObjectKey, type MediaStorageDriver } from './driver.js';
+import { bindMediaObjectMap, hydrateMediaForOrg, resetMediaHydrationForTests } from './hydrate.js';
 import { persistMediaObject, persistOrgQuota } from './persist.js';
 import { assertWithinQuotas, usageOf, type CatalogView } from './quotas.js';
 import type {
@@ -21,6 +22,7 @@ import type {
 } from './types.js';
 
 const objects = new Map<string, MediaObject>();
+bindMediaObjectMap(objects);
 const sessions = new Map<string, MediaUploadSession>();
 const quotas = new Map<string, OrgMediaQuota>();
 /** Ingest seconds keyed by orgId → YYYY-MM-DD (UTC). */
@@ -31,6 +33,7 @@ export function resetMediaCatalogForTests(): void {
   sessions.clear();
   quotas.clear();
   ingestDay.clear();
+  resetMediaHydrationForTests();
 }
 
 function dayKey(orgId: string, at = new Date()): string {
@@ -231,6 +234,12 @@ export function listMediaForOrg(orgId: string): MediaObject[] {
   return [...objects.values()]
     .filter((m) => m.orgId === orgId && m.state !== 'deleted')
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+/** Prefer this from HTTP handlers so restarts still see catalogued objects. */
+export async function listMediaForOrgHydrated(orgId: string): Promise<MediaObject[]> {
+  await hydrateMediaForOrg(orgId);
+  return listMediaForOrg(orgId);
 }
 
 export function markTier(mediaId: string, orgId: string, tier: MediaObject['tier']): MediaObject {

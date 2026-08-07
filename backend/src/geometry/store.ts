@@ -61,6 +61,12 @@ export function listTwinsForOrg(orgId: string): PropertyDigitalTwin[] {
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
+export async function listTwinsForOrgHydrated(orgId: string): Promise<PropertyDigitalTwin[]> {
+  const { hydrateTwinsForOrg } = await import('./hydrate.js');
+  await hydrateTwinsForOrg(orgId);
+  return listTwinsForOrg(orgId);
+}
+
 export function saveTwin(twin: PropertyDigitalTwin): PropertyDigitalTwin {
   twin.updatedAt = new Date().toISOString();
   twins.set(twin.id, twin);

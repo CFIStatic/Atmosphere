@@ -54,3 +54,10 @@ test('zero or negative duration yields no timestamps', () => {
   assert.deepEqual(planSparseTimestamps(0, { intervalSeconds: 600, maxFrames: 180 }), []);
   assert.deepEqual(planSparseTimestamps(-10, { intervalSeconds: 600, maxFrames: 180 }), []);
 });
+
+test('short clips still get at least one sparse timestamp under a 60s preferred interval', () => {
+  // A 12s guided clip must not plan zero samples when the long-form default
+  // spacing is 60s — otherwise FFmpeg fps=1/60 extracts nothing.
+  const timestamps = planSparseTimestamps(12, { intervalSeconds: 60, maxFrames: 180 });
+  assert.ok(timestamps.length >= 1);
+});

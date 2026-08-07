@@ -13,6 +13,7 @@
     "browser:install": "playwright install chromium",
     "check:verifier": "tsx src/scripts/checkVerifier.ts",
     "test": "node --import tsx --test src/**/*.test.ts test/*.test.ts",
+    "smoke:synthetic": "tsx scripts/smokeSyntheticPipeline.ts",
     "learn": "tsx src/scripts/learn.ts",
     "backup": "tsx src/scripts/backup.ts snapshot",
     "backup:list": "tsx src/scripts/backup.ts list",

@@ -10,7 +10,7 @@ import {
   createTwin,
   getSession,
   getTwin,
-  listTwinsForOrg,
+  listTwinsForOrgHydrated,
   saveSession,
   saveTwin,
 } from '../geometry/store.js';
@@ -117,7 +117,7 @@ geometryRouter.post('/twins', async (req: Request, res: Response, next: NextFunc
 geometryRouter.get('/twins', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { orgId } = await requireOrgContext(req);
-    const twins = listTwinsForOrg(orgId).map((t) => ({
+    const twins = (await listTwinsForOrgHydrated(orgId)).map((t) => ({
       twin: t,
       summary: summarizeTwin(t),
     }));

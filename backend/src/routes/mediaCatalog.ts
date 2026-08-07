@@ -9,7 +9,7 @@ import {
   beginMediaUpload,
   completeMediaUpload,
   getMedia,
-  listMediaForOrg,
+  listMediaForOrgHydrated,
   markTier,
   orgUsage,
   setOrgQuota,
@@ -135,7 +135,7 @@ mediaCatalogRouter.post(
 mediaCatalogRouter.get('/objects', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { orgId } = await requireOrgContext(req);
-    res.json({ objects: listMediaForOrg(orgId) });
+    res.json({ objects: await listMediaForOrgHydrated(orgId) });
   } catch (err) {
     next(err);
   }
