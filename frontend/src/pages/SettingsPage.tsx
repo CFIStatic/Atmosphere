@@ -14,7 +14,6 @@ import {
   ApiError,
   CONTRACTOR_TYPE_LABELS,
   ROLE_LABELS,
-  USAGE_INTENT_LABELS,
   WORK_TYPE_LABELS,
   type ContractorType,
   type CrmConnections,
@@ -25,9 +24,9 @@ import {
   type Diagnosis,
   type Integration,
   type MemberRole,
-  type UsageIntent,
   type WorkType,
 } from '../lib/api';
+import { usageIntentsForRole } from '../components/setup/verifierSetupOptions';
 import { AppShell } from '../components/AppShell';
 import { PinSetupCard } from '../components/PinSetupCard';
 import { BillingSection } from '../components/settings/BillingSection';
@@ -591,29 +590,11 @@ const CONTRACTOR_ORDER: ContractorType[] = [
   'general_contractor',
   'other',
 ];
-const USAGE_ORDER: UsageIntent[] = [
-  'mitigation_estimating',
-  'construction_estimating',
-  'project_management',
-  'crm',
-  'web_access',
-  'field_work',
-  'billing',
-  'financial',
-  'exploring',
-];
-
-function sameUsageIntents(a: UsageIntent[] | undefined, b: UsageIntent[] | undefined) {
-  const left = [...(a ?? [])].sort();
-  const right = [...(b ?? [])].sort();
-  return left.length === right.length && left.every((value, index) => value === right[index]);
-}
 
 function OrganizationSection() {
   const { membership, refreshMembership } = useAuth();
   const [role, setRole] = useState<MemberRole | null>(membership?.role ?? null);
   const [workType, setWorkType] = useState<WorkType | null>(membership?.workType ?? null);
-  const [usageIntents, setUsageIntents] = useState<UsageIntent[]>(membership?.usageIntents ?? []);
   const [contractorType, setContractorType] = useState<ContractorType | null>(
     membership?.org?.contractorType ?? null,
   );
@@ -625,12 +606,10 @@ function OrganizationSection() {
   useEffect(() => {
     setRole(membership?.role ?? null);
     setWorkType(membership?.workType ?? null);
-    setUsageIntents(membership?.usageIntents ?? []);
     setContractorType(membership?.org?.contractorType ?? null);
   }, [
     membership?.role,
     membership?.workType,
-    membership?.usageIntents,
     membership?.org?.contractorType,
   ]);
 
@@ -639,25 +618,16 @@ function OrganizationSection() {
     () =>
       role !== membership?.role ||
       workType !== membership?.workType ||
-      !sameUsageIntents(usageIntents, membership?.usageIntents) ||
       contractorType !== (membership?.org?.contractorType ?? null),
     [
       role,
       workType,
-      usageIntents,
       contractorType,
       membership?.role,
       membership?.workType,
-      membership?.usageIntents,
       membership?.org?.contractorType,
     ],
   );
-
-  function toggleUsage(intent: UsageIntent) {
-    setUsageIntents((current) =>
-      current.includes(intent) ? current.filter((value) => value !== intent) : [...current, intent],
-    );
-  }
 
   async function copyCode() {
     if (!org?.joinCode) return;
@@ -671,7 +641,7 @@ function OrganizationSection() {
   }
 
   async function save() {
-    if (!role || !workType || usageIntents.length === 0) return;
+    if (!role || !workType) return;
     setSaving(true);
     setError(null);
     try {
@@ -679,7 +649,7 @@ function OrganizationSection() {
       if (contractorChanged && contractorType) {
         await api.updateOrgProfile(contractorType);
       }
-      await api.updateMembership(role, workType, usageIntents);
+      await api.updateMembership(role, workType, usageIntentsForRole(role));
       await refreshMembership();
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2500);
@@ -778,39 +748,11 @@ function OrganizationSection() {
             </select>
           </Field>
 
-          <Field label="How you use Atmosphere">
-            <div className="mt-2 space-y-2">
-              {USAGE_ORDER.map((value) => {
-                const checked = usageIntents.includes(value);
-                return (
-                  <label
-                    key={value}
-                    className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-2.5 transition ${
-                      checked
-                        ? 'border-brand-400 bg-brand-50'
-                        : 'glass-card hover:bg-paper-100'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleUsage(value)}
-                      className="mt-1 h-4 w-4 rounded border-line text-brand-600 focus:ring-brand-200"
-                    />
-                    <span className="text-sm font-medium text-ink-900">
-                      {USAGE_INTENT_LABELS[value]}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </Field>
-
           <div className="flex flex-wrap items-center gap-3">
             <PrimaryButton
               onClick={save}
               busy={saving}
-              disabled={!dirty || usageIntents.length === 0}
+              disabled={!dirty}
             >
               Save changes
             </PrimaryButton>

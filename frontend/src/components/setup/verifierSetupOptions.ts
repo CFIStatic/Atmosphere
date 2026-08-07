@@ -73,6 +73,11 @@ export const SERVICE_TRADE_OPTIONS = [
 
 export type ServiceTrade = (typeof SERVICE_TRADE_OPTIONS)[number]['value'];
 
+export function usageIntentsForRole(role: MemberRole): UsageIntent[] {
+  const roleOption = VERIFIER_ROLE_OPTIONS.find((r) => r.value === role);
+  return roleOption?.usageIntents ?? (['exploring'] as UsageIntent[]);
+}
+
 export function resolveVerifierSetup(
   role: MemberRole,
   trade: ServiceTrade,
@@ -87,13 +92,12 @@ export function resolveVerifierSetup(
     };
   }
 
-  const roleOption = VERIFIER_ROLE_OPTIONS.find((r) => r.value === role);
   const tradeOption = SERVICE_TRADE_OPTIONS.find((t) => t.value === trade);
 
   return {
     role,
     workType: tradeOption?.workType ?? ('construction' as WorkType),
     contractorType: tradeOption?.contractorType ?? ('other' as ContractorType),
-    usageIntents: roleOption?.usageIntents ?? (['exploring'] as UsageIntent[]),
+    usageIntents: usageIntentsForRole(role),
   };
 }

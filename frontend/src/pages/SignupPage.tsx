@@ -28,6 +28,8 @@ import { EyeIcon, EyeOffIcon, SpinnerIcon, CheckIcon } from '../components/icons
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type OrgMode = 'create' | 'join';
+
+export function SignupPage() {
   const { user, loading, membership, signup, refreshMembership, logout } = useAuth();
   const location = useLocation();
   const [searchParams] = useSearchParams();
