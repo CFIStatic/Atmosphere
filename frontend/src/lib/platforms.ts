@@ -316,6 +316,9 @@ export const PLATFORM_HOME: Record<PlatformId, string> = {
   manager: '/manager',
 };
 
+/** The Work Verification dashboard — logo clicks always return here. */
+export const DASHBOARD_HOME = PLATFORM_HOME.operations;
+
 /**
  * Which platform a path belongs to. Shared screens (Jobs, Billing, Settings)
  * deliberately return null: they keep whichever platform the person is in,

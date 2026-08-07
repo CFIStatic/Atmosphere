@@ -98,9 +98,7 @@ export function AppShell({
         }`}
       >
         <div className="flex shrink-0 items-center justify-between px-5 py-5">
-          <NavLink to={PLATFORM_HOME[platformId]} aria-label={`Atmosphere — ${platform.name}`}>
-            <Logo />
-          </NavLink>
+          <Logo />
           <button
             className="text-ink-500 md:hidden"
             onClick={() => setMobileOpen(false)}

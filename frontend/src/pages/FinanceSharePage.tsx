@@ -61,7 +61,7 @@ export function FinanceSharePage() {
     return (
       <div className="cx-aurora min-h-screen bg-paper-100">
         <div className="mx-auto max-w-xl px-6 py-20 text-center">
-          <Logo />
+          <Logo to={null} />
           <h1 className="mt-8 text-2xl font-semibold text-ink-900">Share unavailable</h1>
           <p className="mt-3 text-ink-600">{error ?? 'This link is not valid.'}</p>
         </div>
@@ -89,7 +89,7 @@ export function FinanceSharePage() {
       <header className="border-b border-line bg-paper-0/90 backdrop-blur">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-6 py-5">
           <div className="flex items-center gap-4">
-            <Logo />
+            <Logo to={null} />
             <div>
               <p className="text-xs font-medium uppercase tracking-wide text-brand-600">
                 Financial dataroom

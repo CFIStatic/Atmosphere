@@ -27,6 +27,7 @@ import {
   type WorkType,
 } from '../lib/api';
 import { usageIntentsForRole } from '../components/setup/verifierSetupOptions';
+import { Logo } from '../components/Logo';
 import { PinSetupCard } from '../components/PinSetupCard';
 import { BillingSection } from '../components/settings/BillingSection';
 import { displayName, initials } from '../lib/display';
@@ -143,6 +144,11 @@ export function SettingsPage() {
 
   return (
     <div className="min-h-screen bg-paper-100">
+      <header className="border-b border-line bg-paper-0/80">
+        <div className="mx-auto flex max-w-5xl items-center px-4 py-4 sm:px-6">
+          <Logo />
+        </div>
+      </header>
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:py-10">
         <header>
           <h1 className="text-3xl font-bold tracking-tight text-ink-900">Settings</h1>
