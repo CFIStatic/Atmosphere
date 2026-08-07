@@ -11,6 +11,7 @@ import {
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { LoginPage } from './pages/LoginPage';
+import { SignupPage } from './pages/SignupPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
@@ -216,6 +217,7 @@ export default function App() {
         <Suspense fallback={<FullScreenSpinner />}>
           <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
 
           {/* The subcontractor's screen. Outside every guard by construction:
               they work for six general contractors and have an account with

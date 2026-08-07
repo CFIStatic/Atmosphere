@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loginHref, resolveAuthRedirect, safeAuthRedirect } from './authRedirect';
+import { loginHref, resolveAuthRedirect, safeAuthRedirect, signupHref } from './authRedirect';
 
 describe('safeAuthRedirect', () => {
   it('accepts relative in-app paths', () => {
@@ -27,5 +27,17 @@ describe('resolveAuthRedirect', () => {
 describe('loginHref', () => {
   it('encodes the return path', () => {
     expect(loginHref('/usage')).toBe('/login?next=%2Fusage');
+  });
+
+  it('returns bare login without a path', () => {
+    expect(loginHref()).toBe('/login');
+  });
+});
+
+describe('signupHref', () => {
+  it('builds signup with email and next', () => {
+    expect(signupHref({ email: 'a@b.co', next: '/usage' })).toBe(
+      '/signup?next=%2Fusage&email=a%40b.co',
+    );
   });
 });

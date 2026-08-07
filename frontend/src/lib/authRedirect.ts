@@ -20,8 +20,19 @@ export function resolveAuthRedirect(
 }
 
 /** Build /login?next=… for marketing-site and email deep links. */
-export function loginHref(next: string): string {
-  const safe = safeAuthRedirect(next);
+export function loginHref(next?: string): string {
+  const safe = next ? safeAuthRedirect(next) : null;
   if (!safe) return '/login';
   return `/login?next=${encodeURIComponent(safe)}`;
+}
+
+/** Build /signup with optional email and return path. */
+export function signupHref(options?: { next?: string; email?: string }): string {
+  const params = new URLSearchParams();
+  const next = options?.next ? safeAuthRedirect(options.next) : null;
+  const email = options?.email?.trim();
+  if (next) params.set('next', next);
+  if (email) params.set('email', email);
+  const qs = params.toString();
+  return qs ? `/signup?${qs}` : '/signup';
 }

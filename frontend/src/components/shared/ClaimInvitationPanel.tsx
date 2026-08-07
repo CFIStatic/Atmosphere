@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { signupHref } from '../../lib/authRedirect';
 import { SpinnerIcon } from '../icons';
 
 /**
@@ -42,9 +43,9 @@ export function ClaimInvitationPanel({
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const signupHref = looksLikeEmail
-    ? `/login?mode=signup&email=${encodeURIComponent(seeded.toLowerCase())}`
-    : '/login?mode=signup';
+  const signupLink = looksLikeEmail
+    ? signupHref({ email: seeded.toLowerCase() })
+    : signupHref();
 
   async function sendCode() {
     setBusy(true);
@@ -97,7 +98,7 @@ export function ClaimInvitationPanel({
           </button>
           <p className="mt-3 text-xs text-ink-500">
             No Atmosphere account yet?{' '}
-            <Link to={signupHref} className="font-medium text-brand-600 hover:text-brand-500">
+            <Link to={signupLink} className="font-medium text-brand-600 hover:text-brand-500">
               Create a free one
             </Link>
             , then come back to this link.
@@ -114,7 +115,7 @@ export function ClaimInvitationPanel({
           {looksLikeEmail && (
             <p className="mt-2 text-xs text-ink-500">
               Invited as {seeded}. No account yet?{' '}
-              <Link to={signupHref} className="font-medium text-brand-600 hover:text-brand-500">
+              <Link to={signupLink} className="font-medium text-brand-600 hover:text-brand-500">
                 Create a free Atmosphere account
               </Link>{' '}
               with this address, then confirm below.

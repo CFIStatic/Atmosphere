@@ -11,7 +11,7 @@
     document.querySelectorAll('a[href$="signin.html"], a[href$="signup.html"]')
       .forEach(function (a) {
         var toSignup = a.getAttribute('href').indexOf('signup') !== -1;
-        a.setAttribute('href', APP_ORIGIN + (toSignup ? '/login?mode=signup' : '/login'));
+        a.setAttribute('href', APP_ORIGIN + (toSignup ? '/signup' : '/login'));
       });
   }
 
@@ -182,10 +182,7 @@
   function authUrl(kind, nextPath) {
     var origin = appOrigin();
     if (!origin) return null;
-    var base = kind === 'signup' ? origin + '/login?mode=signup' : origin + '/login';
-    if (!nextPath) return base;
-    var safe = nextPath.charAt(0) === '/' ? nextPath : '/' + nextPath;
-    return base + (base.indexOf('?') === -1 ? '?' : '&') + 'next=' + encodeURIComponent(safe);
+    return kind === 'signup' ? origin + '/signup' : origin + '/login';
   }
 
   function appPath(path) {
