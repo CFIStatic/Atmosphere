@@ -215,8 +215,9 @@ select
   p.job_id,
   p.party_id,
   p.work_date,
-  max(case when p.phase = 'before' then p.id end)         as before_id,
-  max(case when p.phase = 'after'  then p.id end)         as after_id,
+  -- uuid has no max(); pick one id per phase via array_agg.
+  (array_agg(p.id) filter (where p.phase = 'before'))[1]   as before_id,
+  (array_agg(p.id) filter (where p.phase = 'after'))[1]    as after_id,
   max(case when p.phase = 'before' then p.captured_at end) as before_at,
   max(case when p.phase = 'after'  then p.captured_at end) as after_at,
   -- Accepted only when a human accepted both halves. Anything less is a day

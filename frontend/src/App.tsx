@@ -21,6 +21,8 @@ import { ProfilerPage } from './pages/ProfilerPage';
 import { TerritoriesPage } from './pages/TerritoriesPage';
 import { SalesWorkPage } from './pages/SalesWorkPage';
 import { SharedDashboardPage } from './pages/SharedDashboardPage';
+import { JobIntakePage } from './pages/JobIntakePage';
+import { VerifierLibraryPage } from './pages/VerifierLibraryPage';
 import { PurchaseOrdersPage } from './pages/PurchaseOrdersPage';
 import { JobSharePage } from './pages/JobSharePage';
 import { PlatformHomePage } from './pages/PlatformHomePage';
@@ -31,6 +33,7 @@ import { CustomersPage } from './pages/CustomersPage';
 import { PipelinePage } from './pages/PipelinePage';
 import { ProspectorPage } from './pages/ProspectorPage';
 import { JobCostingPage } from './pages/JobCostingPage';
+import { MyJobsPage } from './pages/MyJobsPage';
 import { getPlatform } from './lib/usePlatform';
 
 // Auth and onboarding stay eager so /login is fast. Everything else loads on demand —
@@ -210,6 +213,13 @@ export default function App() {
               not shared. The token in the path is the whole credential. */}
           <Route path="/shared/:token" element={<JobSharePage />} />
 
+          {/* The same person, one level up. A sub who has proved they control
+              a phone or an inbox gets every job across every general
+              contractor on one screen — which is why this route is outside
+              the org guards too: the list spans organizations the sub is a
+              member of none of. */}
+          <Route path="/my-jobs" element={<MyJobsPage />} />
+
           {/* Recovery routes stay outside ProtectedRoute: a locked-out user has
               no session, and the reset link must work in a fresh browser. */}
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -295,6 +305,22 @@ export default function App() {
               element: (
                 <RequirePlatform platform="operations">
                   <SharedDashboardPage />
+                </RequirePlatform>
+              ),
+            },
+            {
+              path: '/intake',
+              element: (
+                <RequirePlatform platform="operations">
+                  <JobIntakePage />
+                </RequirePlatform>
+              ),
+            },
+            {
+              path: '/verifier-library',
+              element: (
+                <RequirePlatform platform="operations">
+                  <VerifierLibraryPage />
                 </RequirePlatform>
               ),
             },

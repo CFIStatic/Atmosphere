@@ -9,13 +9,13 @@ written to appeal to contractors of every trade.
 
 | File              | Page                                                        |
 | ----------------- | ----------------------------------------------------------- |
-| `index.html`      | Home — Work Verification Platform thesis, replayable clip record, platform overview |
-| `verification.html` | Work Verification Platform — the main product: film, check, read, hold, share |
-| `platform.html`   | Platform hub — the four platforms + the shared foundation   |
-| `sales.html`      | Sales Platform — pipeline, the agent, the handoff           |
-| `operations.html` | Operations Platform — project management, estimating, assistance |
+| `index.html`      | Home — Work Verification Platform thesis, replayable clip record |
+| `verification.html` | Work Verification Platform — the product: film, check, read, hold, share |
 | `field.html`      | Field Platform — capture on site, with a capture-log hero   |
-| `manager.html`    | Manager Platform — job costing, accounting, business insights |
+| `platform.html`   | LATER PRODUCT (unlisted) — platform hub for the four-platform suite |
+| `sales.html`      | LATER PRODUCT (unlisted) — Sales Platform                   |
+| `operations.html` | LATER PRODUCT (unlisted) — Operations Platform              |
+| `manager.html`    | LATER PRODUCT (unlisted) — Manager Platform                 |
 | `security.html`   | Security — architecture diagram and six structural claims   |
 | `pricing.html`    | Pricing — the 30-day test, seat plans, and the flat rate    |
 | `docs.html`       | Resources hub — documentation index, guides, troubleshooting |

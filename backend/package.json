@@ -18,6 +18,7 @@
     "mitigation:demo": "tsx src/estimator/mitigation/demo.ts",
     "browser:install": "playwright install chromium",
     "check:verifier": "tsx src/scripts/checkVerifier.ts",
+    "smoke:synthetic": "tsx scripts/smokeSyntheticPipeline.ts",
     "learn": "tsx src/scripts/learn.ts",
     "backup": "tsx src/scripts/backup.ts snapshot",
     "backup:list": "tsx src/scripts/backup.ts list",

@@ -1,0 +1,36 @@
+# XcodeGen spec — on a Mac: `brew install xcodegen && xcodegen generate`
+name: AtmosphereFieldCapture
+options:
+  bundleIdPrefix: com.atmosphere
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    TARGETED_DEVICE_FAMILY: "1"
+    INFOPLIST_FILE: AtmosphereFieldCapture/Info.plist
+targets:
+  AtmosphereFieldCapture:
+    type: application
+    platform: iOS
+    sources:
+      - AtmosphereFieldCapture
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.atmosphere.fieldcapture
+        PRODUCT_NAME: Field Capture
+        DEVELOPMENT_TEAM: "" # set in Xcode
+        CODE_SIGN_STYLE: Automatic
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: 0.1.0
+    info:
+      path: AtmosphereFieldCapture/Info.plist
+      properties:
+        UILaunchScreen: {}
+        NSCameraUsageDescription: Field Capture films the workday so the office can verify work on site.
+        NSMicrophoneUsageDescription: Field Capture records microphone audio with the day film so the office can hear the site, not only see it.
+        NSLocationWhenInUseUsageDescription: Location attributes stretches of the day film to the right job.
+        ATMOSPHERE_API_BASE: https://api.atmosphere.example
+    entitlements:
+      path: AtmosphereFieldCapture/FieldCapture.entitlements

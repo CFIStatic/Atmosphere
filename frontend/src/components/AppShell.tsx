@@ -4,11 +4,10 @@ import { useAuth } from '../context/AuthContext';
 import { api, ROLE_LABELS } from '../lib/api';
 import { displayName, initials } from '../lib/display';
 import { setPreference, usePreferences } from '../lib/preferences';
-import { PLATFORMS, PLATFORM_HOME, PLATFORM_IDS, platformOfPath } from '../lib/platforms';
+import { PLATFORMS, PLATFORM_HOME, VISIBLE_PLATFORM_IDS, platformOfPath } from '../lib/platforms';
 import { usePlatform } from '../lib/usePlatform';
 import { Logo } from './Logo';
 import {
-  AuditIcon,
   ChevronDownIcon,
   CloseIcon,
   GaugeIcon,
@@ -22,10 +21,13 @@ import {
   SunIcon,
 } from './icons';
 
-/** Every destination the jump palette can reach, across all four platforms. */
+/**
+ * Every destination the jump palette can reach — visible platforms only.
+ * A palette that jumps into hidden products would quietly resurrect them.
+ */
 const JUMP_TARGETS = (() => {
   const seen = new Map<string, { to: string; label: string; Icon: typeof GaugeIcon }>();
-  for (const id of PLATFORM_IDS) {
+  for (const id of VISIBLE_PLATFORM_IDS) {
     for (const group of PLATFORMS[id].groups) {
       for (const item of group.items) {
         const key = `${item.to}:${item.label}`;
@@ -33,7 +35,7 @@ const JUMP_TARGETS = (() => {
       }
     }
   }
-  seen.set('/audit:Audit trail', { to: '/audit', label: 'Audit trail', Icon: AuditIcon });
+  // Later product (agent runs): seen.set('/audit:Audit trail', { to: '/audit', label: 'Audit trail', Icon: AuditIcon });
   seen.set('/technician:Field capture', { to: '/technician', label: 'Field capture', Icon: MicIcon });
   return [...seen.values()];
 })();
@@ -178,7 +180,9 @@ export function AppShell({
 
             <div className="ml-auto flex items-center gap-3">
               <ThemeToggle />
-              {approvalCount > 0 && (
+              {/* Approvals are an office concern; the Field app's topbar
+                  carries capture, not a queue. */}
+              {approvalCount > 0 && platformId !== 'field' && (
                 <button
                   onClick={() => navigate('/approvals')}
                   className="hidden items-center gap-1.5 rounded-full border border-caution-200 bg-caution-50 px-3 py-1.5 text-xs font-semibold text-caution-600 transition hover:border-caution-600 sm:flex"
@@ -223,6 +227,9 @@ function PlatformSwitcher({
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const platform = PLATFORMS[active];
+  // One visible platform means there is nothing to switch to: the chip is
+  // identity, not a control, and a dropdown with one option is a lie.
+  const switchable = VISIBLE_PLATFORM_IDS.length > 1;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -239,6 +246,22 @@ function PlatformSwitcher({
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [open]);
+
+  if (!switchable) {
+    return (
+      <div className="flex w-full items-center gap-2.5 rounded-lg glass-card px-2.5 py-2">
+        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-brand-50 text-brand-700">
+          <platform.Icon width={14} height={14} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] font-semibold text-ink-900">
+            {platform.short}
+          </span>
+          <span className="block truncate text-[11px] text-ink-500">{platform.tagline}</span>
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div ref={wrapRef} className="relative">
@@ -265,7 +288,9 @@ function PlatformSwitcher({
           role="listbox"
           className="absolute left-0 right-0 top-full z-40 mt-1.5 overflow-hidden rounded-xl glass-panel"
         >
-          {PLATFORM_IDS.map((id) => {
+          {/* Later products stay off the menu entirely — a greyed-out entry
+              would advertise what is deliberately not being sold yet. */}
+          {VISIBLE_PLATFORM_IDS.map((id) => {
             const p = PLATFORMS[id];
             return (
               <button

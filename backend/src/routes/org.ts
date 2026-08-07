@@ -4,7 +4,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { z } from 'zod';
 import { config } from '../config.js';
 import { createAdminClient } from '../lib/supabase.js';
-import { buildMailSender } from '../campaigns/mail/index.js';
+import { sendSystemMail } from '../lib/systemMail.js';
 import { invitesAnsweredBy, inviteEmail } from '../org/invites.js';
 import { MEMBER_ROLES } from '../lib/validation.js';
 import {
@@ -451,28 +451,25 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
     }
 
     if (!erased) {
-      try {
-        const sender = await buildMailSender(orgId);
-        if (sender) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('full_name, email')
-            .eq('id', req.user!.id)
-            .maybeSingle();
-          const mail = inviteEmail({
-            orgName: name,
-            inviterName: (profile as any)?.full_name ?? (profile as any)?.email ?? null,
-            joinCode,
-            origin: config.frontendOrigins?.[0] ?? null,
-            note: input.note ?? null,
-          });
-          const result = await sender.send({ to: email, subject: mail.subject, text: mail.text });
-          emailed = result.ok;
-        }
-      } catch {
-        // The invite stands; only the delivery failed, and the response's
-        // emailed:false is the honest report of that.
-      }
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', req.user!.id)
+        .maybeSingle();
+      const mail = inviteEmail({
+        orgName: name,
+        inviterName: (profile as any)?.full_name ?? (profile as any)?.email ?? null,
+        joinCode,
+        origin: config.frontendOrigins?.[0] ?? null,
+        note: input.note ?? null,
+      });
+      // Atmosphere sends — not the org's connected Gmail/Microsoft.
+      const result = await sendSystemMail({
+        to: email,
+        subject: mail.subject,
+        text: mail.text,
+      });
+      emailed = result.ok;
     }
 
     res.status(201).json({

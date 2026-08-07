@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { SpinnerIcon } from '../components/icons';
 import { readCapture, todayISO } from '../lib/proofCapture';
 import { CaptureGuideSteps } from '../components/shared/CaptureGuideSteps';
+import { ClaimInvitationPanel } from '../components/shared/ClaimInvitationPanel';
+import { readFieldSession, writeFieldSession } from './MyJobsPage';
 import type { CaptureGuide } from '../lib/api';
 
 /**
@@ -77,7 +79,12 @@ const STATE_STYLE: Record<string, string> = {
 
 export function JobSharePage() {
   const { token = '' } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const inviteEmail = useMemo(() => {
+    const raw = searchParams.get('email')?.trim() ?? '';
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw) ? raw : '';
+  }, [searchParams]);
   const [view, setView] = useState<ShareView | null>(null);
   const [days, setDays] = useState<ProofDay[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +92,9 @@ export function JobSharePage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [question, setQuestion] = useState('');
   const [extra, setExtra] = useState('');
+  // Seeded from the stored session rather than from the server: a sub who has
+  // already claimed some other GC's link should not be asked again here.
+  const [claimed, setClaimed] = useState(() => Boolean(readFieldSession()));
 
   const load = useCallback(async () => {
     try {
@@ -319,7 +329,39 @@ export function JobSharePage() {
             </section>
           )}
 
-          <AtmospherePitch company={view.you.company} />
+          {/* Above the pitch and below the work. Claiming is about this sub's
+              other general contractors, so it belongs after everything to do
+              with the job in front of them — and before the pitch, because
+              collecting their own links is a smaller ask than buying
+              something. */}
+          {claimed ? (
+            <section className="mt-5 rounded-xl glass-card p-5">
+              <h2 className="text-base font-semibold text-ink-900">This job is on your list</h2>
+              <p className="mt-1 text-xs text-ink-600">
+                Every job a general contractor invites you to now shows up in one place.
+              </p>
+              <Link
+                to="/my-jobs"
+                className="mt-3 inline-block rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-ink-900"
+              >
+                See all your jobs
+              </Link>
+            </section>
+          ) : (
+            <div className="mt-5">
+              <ClaimInvitationPanel
+                token={token ?? ''}
+                company={view.you.company}
+                initialContact={inviteEmail}
+                onClaimed={(session) => {
+                  writeFieldSession(session);
+                  setClaimed(true);
+                }}
+              />
+            </div>
+          )}
+
+          <AtmospherePitch company={view.you.company} inviteEmail={inviteEmail} />
         </>
       )}
     </div>
@@ -340,7 +382,16 @@ export function JobSharePage() {
  * upload button. A lure that gets in the way of the day's work would cost the
  * GC's trust — and the GC is who brought us here.
  */
-function AtmospherePitch({ company }: { company: string }) {
+function AtmospherePitch({
+  company,
+  inviteEmail,
+}: {
+  company: string;
+  inviteEmail?: string;
+}) {
+  const signupHref = inviteEmail
+    ? `/login?mode=signup&email=${encodeURIComponent(inviteEmail)}&src=job-share`
+    : '/login?mode=signup&src=job-share';
   return (
     <footer className="mt-8 rounded-xl border border-brand-200 bg-brand-600/5 p-4">
       <p className="text-xs font-medium uppercase tracking-wide text-brand-600">
@@ -353,12 +404,15 @@ function AtmospherePitch({ company }: { company: string }) {
         Every video you file and every scope you sign lives in a builder's account today. With your
         own Atmosphere account, your proof-of-work follows you — every job, every builder, one
         history that shows how you work. Free for subcontractors.
+        {inviteEmail
+          ? ` Use ${inviteEmail} so this invite stays with your account.`
+          : ''}
       </p>
       <a
-        href="/login?mode=signup&src=job-share"
+        href={signupHref}
         className="mt-3 inline-block rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900 transition hover:bg-brand-700"
       >
-        Get your own record
+        {inviteEmail ? 'Create your free account' : 'Get your own record'}
       </a>
     </footer>
   );
@@ -425,17 +479,21 @@ function ProofSection({
 
       setStep('Getting somewhere to put it…');
       const extension = (file.name.split('.').pop() ?? 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '');
-      const slot = await call<{ path: string; token: string }>(`${API}/${token}/proof/upload-url`, {
+      const slot = await call<{ path: string; token: string; uploadUrl?: string }>(`${API}/${token}/proof/upload-url`, {
         method: 'POST',
         body: JSON.stringify({ workDate: today, phase, extension: extension || 'mp4' }),
       });
 
       setStep('Uploading…');
-      // Straight to storage with the one-time token, not through the API.
-      const put = await fetch(
-        `/storage/v1/object/upload/sign/job-proofs/${slot.path}?token=${encodeURIComponent(slot.token)}`,
-        { method: 'PUT', body: file, headers: { 'Content-Type': file.type || 'video/mp4' } },
-      );
+      // Prefer absolute signed URL from the API (works without a Vite storage proxy).
+      const putUrl =
+        slot.uploadUrl ||
+        `/storage/v1/object/upload/sign/job-proofs/${slot.path}?token=${encodeURIComponent(slot.token)}`;
+      const put = await fetch(putUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': file.type || 'video/mp4' },
+      });
       if (!put.ok) throw new Error('The upload did not go through. Try again on a better signal.');
 
       setStep('Filing it…');

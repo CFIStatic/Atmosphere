@@ -1,0 +1,86 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { config } from '../src/config.js';
+import {
+  assertProcessableDuration,
+  framesContentFingerprint,
+  isLongFormVideo,
+  pickEvenlySpaced,
+  prepareVideoFrames,
+} from '../src/shared/videoIntelligence.js';
+import { HttpError } from '../src/lib/errors.js';
+
+test('isLongFormVideo follows verification.longFormSeconds', () => {
+  const threshold = config.verification.longFormSeconds;
+  assert.equal(isLongFormVideo(threshold - 1), false);
+  assert.equal(isLongFormVideo(threshold), true);
+  assert.equal(isLongFormVideo(24 * 60 * 60), true);
+});
+
+test('assertProcessableDuration rejects empty and over-max clips', () => {
+  assert.throws(() => assertProcessableDuration(0), (e: unknown) => e instanceof HttpError && e.status === 400);
+  assert.throws(
+    () => assertProcessableDuration(config.verification.maxDurationSeconds + 1),
+    (e: unknown) => e instanceof HttpError && e.status === 400,
+  );
+  assert.doesNotThrow(() => assertProcessableDuration(60));
+  assert.doesNotThrow(() => assertProcessableDuration(config.verification.maxDurationSeconds));
+});
+
+test('pickEvenlySpaced covers ends without exceeding max', () => {
+  const items = Array.from({ length: 100 }, (_, i) => i);
+  const picked = pickEvenlySpaced(items, 5);
+  assert.deepEqual(picked, [0, 25, 50, 74, 99]);
+  assert.deepEqual(pickEvenlySpaced([1, 2, 3], 10), [1, 2, 3]);
+});
+
+test('prepareVideoFrames is source-agnostic (field_capture and media_upload share path)', async () => {
+  // Fake ffmpeg: write three tiny JPEG-ish files the extractor will read.
+  const runner = async (_bin: string, args: string[]) => {
+    const outPattern = args[args.length - 1]!;
+    const dir = outPattern.replace(/frame_%04d\.jpg$/, '');
+    await mkdir(dir, { recursive: true });
+    // Distinct bytes so diversity keeps more than one.
+    for (let i = 1; i <= 3; i += 1) {
+      const buf = Buffer.alloc(300, i * 40);
+      buf.write(`frame-${i}`, 0);
+      await writeFile(join(dir, `frame_000${i}.jpg`), buf);
+    }
+    return { stdout: '', stderr: '', code: 0 };
+  };
+
+  const a = await prepareVideoFrames(
+    {
+      id: 'cap-1',
+      source: 'field_capture',
+      url: 'https://example.test/day.mp4',
+      durationSeconds: 3600,
+      maxFrames: 10,
+    },
+    { runner },
+  );
+  const b = await prepareVideoFrames(
+    {
+      id: 'up-1',
+      source: 'media_upload',
+      url: 'https://example.test/other.mp4',
+      durationSeconds: 3600,
+      maxFrames: 10,
+    },
+    { runner },
+  );
+
+  assert.equal(a.source, 'field_capture');
+  assert.equal(b.source, 'media_upload');
+  assert.ok(a.frames.length >= 1);
+  assert.ok(b.frames.length >= 1);
+  assert.equal(a.longForm, true);
+  // Fingerprints differ by content, not by source label.
+  assert.equal(typeof framesContentFingerprint(a.frames), 'string');
+
+  // Cleanup any leftover temp dirs from failed runs is handled inside extract.
+  await rm(join(tmpdir(), 'atm-sparse-unused'), { recursive: true, force: true }).catch(() => undefined);
+});

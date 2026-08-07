@@ -137,6 +137,90 @@ export const config = {
     encryptionKey: process.env.SYMBILITY_ENC_KEY ?? process.env.XACTIMATE_ENC_KEY ?? '',
   },
 
+  verification: {
+    // Above this duration a clip is a workday, not a walkthrough, and the
+    // analysis goes hierarchical: windows on the cheap model, synthesis on
+    // the strong one. 15 minutes is where a single-look read stops being
+    // honest about its own coverage.
+    longFormSeconds: Number(process.env.LONG_FORM_SECONDS ?? 900),
+    windowMaxFrames: Number(process.env.LONG_FORM_WINDOW_FRAMES ?? 12),
+    // One hour per window keeps a 24h sparse sample (~144 frames at 10 min)
+    // near ~24 cheap reads + one synthesis, not dozens of tiny windows.
+    windowMaxSeconds: Number(process.env.LONG_FORM_WINDOW_SECONDS ?? 3600),
+    // The synthesis reads no pixels — it composes a day report out of window
+    // summaries that were already written, and the verdict caps that matter
+    // are applied in code afterward, not asked of the model. That is a
+    // mid-tier job. It gets its own knob rather than borrowing the
+    // assistant's flagship, so the expensive leg of the pipeline stays the
+    // one that actually looks at frames.
+    synthesisModel: process.env.LONG_FORM_SYNTHESIS_MODEL ?? 'claude-sonnet-5',
+    // Day-length / overnight recordings. The phone may leave the camera
+    // running for a whole shift (and sometimes longer); intake accepts up to
+    // this many seconds, then the server sparsely extracts stills rather
+    // than trusting the device to ship hundreds of base64 frames.
+    maxDurationSeconds: Number(process.env.PROOF_MAX_DURATION_SECONDS ?? 24 * 60 * 60),
+    // Final keep budget after diversity filtering (distinct scenes, not
+    // clock ticks). A static camera collapses; an active day keeps more.
+    sparseMaxFrames: Number(process.env.PROOF_SPARSE_MAX_FRAMES ?? 180),
+    // Candidate spacing before diversity (denser than the keep budget).
+    sparseCandidateIntervalSeconds: Number(
+      process.env.PROOF_SPARSE_CANDIDATE_INTERVAL_SECONDS ?? 120,
+    ),
+    // Perceptual-hash Hamming distance at or below this = "same frame".
+    sparseDiversityHamming: Number(process.env.PROOF_SPARSE_DIVERSITY_HAMMING ?? 8),
+    // Even when nothing changes, keep one temporal anchor this often.
+    sparseCoverageIntervalSeconds: Number(
+      process.env.PROOF_SPARSE_COVERAGE_INTERVAL_SECONDS ?? 3600,
+    ),
+    // Legacy alias used by older docs/tests — treated as candidate spacing
+    // when the dedicated candidate knob is unset above.
+    sparseFrameIntervalSeconds: Number(
+      process.env.PROOF_SPARSE_FRAME_INTERVAL_SECONDS ??
+        process.env.PROOF_SPARSE_CANDIDATE_INTERVAL_SECONDS ??
+        120,
+    ),
+    ffmpegPath: process.env.FFMPEG_PATH ?? 'ffmpeg',
+  },
+
+  /**
+   * Fleet media: many ≤24h objects in object storage.
+   * Postgres catalogs identity; bytes never live in the API or DB.
+   */
+  media: {
+    // supabase = today's hot bucket; s3 = multipart/lifecycle-ready stub;
+    // memory = unit tests only.
+    backend: (process.env.MEDIA_BACKEND === 's3'
+      ? 's3'
+      : process.env.MEDIA_BACKEND === 'memory'
+        ? 'memory'
+        : 'supabase') as 'supabase' | 's3' | 'memory',
+    hotBucket: process.env.MEDIA_HOT_BUCKET ?? 'job-proofs',
+    archiveBucket: process.env.MEDIA_ARCHIVE_BUCKET ?? '',
+    // Above this expected size, prefer multipart when the driver supports it.
+    multipartThresholdBytes: Number(
+      process.env.MEDIA_MULTIPART_THRESHOLD_BYTES ?? 64 * 1024 * 1024,
+    ),
+    multipartPartBytes: Number(process.env.MEDIA_MULTIPART_PART_BYTES ?? 16 * 1024 * 1024),
+    // Soft defaults when an org has no row in org_media_quotas (null = unlimited).
+    defaultMaxHotBytes: optionalPositiveInt(process.env.MEDIA_DEFAULT_MAX_HOT_BYTES),
+    defaultMaxTotalBytes: optionalPositiveInt(process.env.MEDIA_DEFAULT_MAX_TOTAL_BYTES),
+    defaultMaxIngestSecondsPerDay: optionalPositiveInt(
+      process.env.MEDIA_DEFAULT_MAX_INGEST_SECONDS_PER_DAY,
+    ),
+    // ~3 GB/hour × 24h ≈ 72 GB — generous single-object ceiling for a day file.
+    defaultMaxObjectBytes: Number(
+      process.env.MEDIA_DEFAULT_MAX_OBJECT_BYTES ?? 80 * 1024 * 1024 * 1024,
+    ),
+  },
+
+  crmSync: {
+    // Job files from the customer's own CRM. 'mock' by default so the whole
+    // connect-and-sync pipeline is exercisable without vendor credentials;
+    // 'api' turns on the per-vendor clients once a deployment configures
+    // them. Which driver runs is a deployment decision, never per-request.
+    driver: (process.env.CRM_SYNC_DRIVER === 'api' ? 'api' : 'mock') as 'mock' | 'api',
+  },
+
   sla: {
     // Where carrier program agreements come from. 'manual' is the default and
     // the only source guaranteed to match what the franchise actually signed —
@@ -915,6 +999,14 @@ export const config = {
     fromDomain: process.env.EMAIL_MARKETING_FROM ?? 'onboarding@resend.dev',
   },
 } as const;
+
+/** Positive int from env, or null when unset / invalid (means “unlimited”). */
+function optionalPositiveInt(value: string | undefined): number | null {
+  if (value == null || value.trim() === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.floor(n);
+}
 
 function parseSlaSource(value: string | undefined): 'manual' | 'portal' | 'mock' {
   return value === 'portal' || value === 'mock' ? value : 'manual';
