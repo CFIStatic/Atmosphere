@@ -9,7 +9,7 @@ import {
   type ScopeState,
 } from '../lib/api';
 import { SpinnerIcon } from '../components/icons';
-import { JobProgressPanel } from '../components/shared/JobProgressPanel';
+import { JobProgressDashboard, jobListStatus } from '../components/shared/JobProgressDashboard';
 import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPanel';
 import { ScopeDocPanel } from '../components/shared/ScopeDocPanel';
 import { JobReadinessPanel } from '../components/shared/JobReadinessPanel';
@@ -57,12 +57,6 @@ const STATE_WORD: Record<ScopeState, string> = {
   declined: 'declined',
 };
 
-const LEVEL_STYLE = {
-  blocker: 'border-danger-200 bg-danger-50 text-danger-600',
-  warn: 'border-caution-200 bg-caution-50 text-caution-600',
-  note: 'border-line text-ink-600',
-} as const;
-
 const money = (n: number | null | undefined) =>
   n === null || n === undefined
     ? null
@@ -81,7 +75,6 @@ function ago(iso: string | null): string {
 export function SharedDashboardPage() {
   const navigate = useNavigate();
   const [list, setList] = useState<SharedJobSummary[] | null>(null);
-  const [counts, setCounts] = useState({ jobs: 0, parties: 0, blockers: 0, awaiting: 0 });
   const [openId, setOpenId] = useState<string | null>(null);
   const [record, setRecord] = useState<SharedJobRecord | null>(null);
   const [loading, setLoading] = useState(false);
@@ -91,16 +84,12 @@ export function SharedDashboardPage() {
 
   function openShare() {
     setShareFormOpen(true);
-    requestAnimationFrame(() => {
-      document.getElementById('share-job-progress')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
   }
 
   async function loadList() {
     try {
       const res = await api.sharedJobs();
       setList(res.jobs);
-      setCounts(res.counts);
       if (!openId && res.jobs.length) void openJob(res.jobs[0].jobId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load the shared records.');
@@ -148,7 +137,7 @@ export function SharedDashboardPage() {
       <PageHeader
         eyebrow="Work Verification Platform"
         title="Job Progress"
-        description="Track how work is advancing on each job — scope completion, verified field days, and a day-by-day history of what crews filmed on site."
+        description="See where each job stands — what's done, what's happening on site, and what needs a decision."
         action={
           record ? (
             <button
@@ -188,135 +177,93 @@ export function SharedDashboardPage() {
         </div>
       ) : (
         <>
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              { label: 'Active jobs', value: counts.jobs, tone: '' },
-              { label: 'Crews on site', value: counts.parties, tone: '' },
-              { label: 'Behind on scope', value: counts.blockers, tone: 'danger' },
-              { label: 'Awaiting capture', value: counts.awaiting, tone: 'caution' },
-            ].map((tile) => (
-              <div key={tile.label} className="rounded-xl glass-card px-4 py-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-ink-500">
-                  {tile.label}
-                </p>
-                <p
-                  className={`mt-1 text-2xl font-semibold tabular-nums ${
-                    tile.value > 0 && tile.tone === 'danger'
-                      ? 'text-danger-600'
-                      : tile.value > 0 && tile.tone === 'caution'
-                        ? 'text-caution-600'
-                        : 'text-ink-900'
-                  }`}
-                >
-                  {tile.value}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[20rem_minmax(0,1fr)] lg:items-start">
-            {/* The jobs, worst first. This page is checked, not browsed. */}
-            <ul className="rounded-xl glass-card lg:sticky lg:top-6">
+          {list.length > 1 && (
+            <div className="mt-6 flex gap-2 overflow-x-auto pb-1">
               {list.map((job) => {
                 const on = openId === job.jobId;
-                const trouble = job.behind + job.awaiting;
+                const status = jobListStatus(job);
                 return (
-                  <li key={job.jobId} className="border-b border-line last:border-b-0">
-                    <button
-                      onClick={() => void openJob(job.jobId)}
-                      aria-pressed={on}
-                      className={`block w-full px-4 py-3 text-left transition ${
-                        on ? 'bg-brand-600/10' : 'hover:bg-paper-200/40'
+                  <button
+                    key={job.jobId}
+                    type="button"
+                    onClick={() => void openJob(job.jobId)}
+                    aria-pressed={on}
+                    className={`shrink-0 rounded-xl border px-4 py-2.5 text-left transition ${
+                      on
+                        ? 'border-brand-300 bg-brand-600/10'
+                        : 'border-line bg-paper-0/60 hover:border-brand-200'
+                    }`}
+                  >
+                    <span className="block text-sm font-semibold text-ink-900">
+                      {job.jobNumber !== null && (
+                        <span className="tabular-nums text-ink-500">#{job.jobNumber} </span>
+                      )}
+                      {job.title}
+                    </span>
+                    <span
+                      className={`mt-0.5 block text-[11px] font-medium ${
+                        status.tone === 'danger' ? 'text-danger-600' : 'text-success-600'
                       }`}
                     >
-                      <span className="flex items-start justify-between gap-2">
-                        <span
-                          className={`text-sm font-semibold ${on ? 'text-brand-600' : 'text-ink-900'}`}
-                        >
-                          {job.jobNumber !== null && (
-                            <span className="tabular-nums text-ink-500">#{job.jobNumber} </span>
-                          )}
-                          {job.title}
-                        </span>
-                        {trouble > 0 && (
-                          <span className="shrink-0 rounded-full bg-danger-50 px-2 py-0.5 text-[10px] font-semibold text-danger-600">
-                            {trouble}
-                          </span>
-                        )}
-                      </span>
-                      <span className="mt-0.5 block text-[11px] text-ink-500">
-                        {job.parties} compan{job.parties === 1 ? 'y' : 'ies'}
-                        {job.currentRevision !== null && ` · rev ${job.currentRevision}`}
-                        {job.exclusions > 0 && ` · ${job.exclusions} exclusion${job.exclusions === 1 ? '' : 's'}`}
-                      </span>
-                    </button>
-                  </li>
+                      {status.label}
+                    </span>
+                  </button>
                 );
               })}
-            </ul>
-
-            <div className="min-w-0 space-y-4">
-              {loading && !record ? (
-                <p className="text-sm text-ink-600">Opening…</p>
-              ) : !record ? (
-                <p className="text-sm text-ink-600">Pick a job.</p>
-              ) : (
-                <>
-                  {record.risks.length > 0 && (
-                    <ul className="space-y-2">
-                      {record.risks.map((risk) => (
-                        <li
-                          key={risk.key}
-                          className={`rounded-lg border px-4 py-2.5 ${LEVEL_STYLE[risk.level]}`}
-                        >
-                          <p className="text-sm font-semibold">{risk.title}</p>
-                          <p className="mt-0.5 text-xs opacity-90">{risk.action}</p>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-
-                  <JobProgressPanel jobId={record.job.id} record={record} />
-
-                  <ShareJobProgressPanel
-                    jobId={record.job.id}
-                    creating={shareFormOpen}
-                    onCreatingChange={setShareFormOpen}
-                  />
-
-                  <details className="rounded-xl glass-card group">
-                    <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-ink-900 marker:content-none [&::-webkit-details-marker]:hidden">
-                      <span className="flex items-center justify-between gap-2">
-                        Job record — scope, crew &amp; decisions
-                        <span className="text-xs font-normal text-ink-500 group-open:hidden">Show</span>
-                        <span className="hidden text-xs font-normal text-ink-500 group-open:inline">Hide</span>
-                      </span>
-                    </summary>
-                    <div className="space-y-4 border-t border-line px-5 pb-5 pt-4">
-                      <SharedFacts record={record} onPublished={() => void openJob(record.job.id)} />
-                      <PartyList
-                        record={record}
-                        onChanged={() => {
-                          void openJob(record.job.id);
-                          void loadList();
-                        }}
-                      />
-                      <JobReadinessPanel jobId={record.job.id} refreshKey={readinessKey} />
-                      <ScopeDocPanel
-                        jobId={record.job.id}
-                        onChanged={() => {
-                          void openJob(record.job.id);
-                          setReadinessKey((k) => k + 1);
-                        }}
-                      />
-                      <ScopeList record={record} onDecide={decide} onChanged={() => void openJob(record.job.id)} />
-                      <Thread record={record} onPosted={() => void openJob(record.job.id)} />
-                    </div>
-                  </details>
-                </>
-              )}
             </div>
+          )}
+
+          <div className="mt-4">
+            {loading && !record ? (
+              <p className="text-sm text-ink-600">Loading…</p>
+            ) : !record ? (
+              <p className="text-sm text-ink-600">Pick a job.</p>
+            ) : (
+              <>
+                <JobProgressDashboard jobId={record.job.id} record={record} />
+
+                <details className="mt-4 rounded-xl glass-card group">
+                  <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-ink-900 marker:content-none [&::-webkit-details-marker]:hidden">
+                    <span className="flex items-center justify-between gap-2">
+                      Job setup — scope, crew &amp; documents
+                      <span className="text-xs font-normal text-ink-500 group-open:hidden">Show</span>
+                      <span className="hidden text-xs font-normal text-ink-500 group-open:inline">Hide</span>
+                    </span>
+                  </summary>
+                  <div className="space-y-4 border-t border-line px-5 pb-5 pt-4">
+                    <SharedFacts record={record} onPublished={() => void openJob(record.job.id)} />
+                    <PartyList
+                      record={record}
+                      onChanged={() => {
+                        void openJob(record.job.id);
+                        void loadList();
+                      }}
+                    />
+                    <JobReadinessPanel jobId={record.job.id} refreshKey={readinessKey} />
+                    <ScopeDocPanel
+                      jobId={record.job.id}
+                      onChanged={() => {
+                        void openJob(record.job.id);
+                        setReadinessKey((k) => k + 1);
+                      }}
+                    />
+                    <ScopeList record={record} onDecide={decide} onChanged={() => void openJob(record.job.id)} />
+                    <Thread record={record} onPosted={() => void openJob(record.job.id)} />
+                  </div>
+                </details>
+              </>
+            )}
           </div>
+
+          {shareFormOpen && record && (
+            <ShareJobProgressPanel
+              jobId={record.job.id}
+              creating
+              modal
+              onClose={() => setShareFormOpen(false)}
+              onCreatingChange={setShareFormOpen}
+            />
+          )}
         </>
       )}
     </>

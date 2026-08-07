@@ -22,10 +22,14 @@ export function ShareJobProgressPanel({
   jobId,
   creating: creatingProp,
   onCreatingChange,
+  modal = false,
+  onClose,
 }: {
   jobId: string;
   creating?: boolean;
   onCreatingChange?: (open: boolean) => void;
+  modal?: boolean;
+  onClose?: () => void;
 }) {
   const [shares, setShares] = useState<EvidenceShare[] | null>(null);
   const [creatingInternal, setCreatingInternal] = useState(false);
@@ -53,6 +57,11 @@ export function ShareJobProgressPanel({
   }
 
   useEffect(() => {
+    if (modal) setCreating(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modal, jobId]);
+
+  useEffect(() => {
     setShares(null);
     setMade(null);
     void load();
@@ -73,7 +82,7 @@ export function ShareJobProgressPanel({
       setMade(res);
       setLabel('');
       setEmail('');
-      setCreating(false);
+      if (!modal) setCreating(false);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create the share.');
@@ -97,26 +106,41 @@ export function ShareJobProgressPanel({
 
   const live = (shares ?? []).filter((s) => s.state === 'live');
 
-  return (
-    <section id="share-job-progress" className="rounded-xl glass-card p-5">
+  const panel = (
+    <section
+      id={modal ? undefined : 'share-job-progress'}
+      className={`rounded-xl glass-card p-5 ${modal ? 'shadow-xl' : ''}`}
+    >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <h2 className="text-base font-semibold text-ink-900">Share job progress</h2>
+          <h2 id="share-job-title" className="text-base font-semibold text-ink-900">
+            Share this job
+          </h2>
           <p className="mt-0.5 text-xs text-ink-500">
-            Send a read-only link to a homeowner, attorney, bank or insurance company — scope
-            completion, verified field days, and day-by-day work history. No Atmosphere account
-            required.
+            Send a read-only link — no account needed. Homeowners, attorneys, banks and insurers
+            can see progress and daily site updates.
           </p>
         </div>
-        <button
-          onClick={() => {
-            setCreating(!creating);
-            setMade(null);
-          }}
-          className="text-xs font-medium text-brand-600 hover:text-brand-700"
-        >
-          {creating ? 'Cancel' : 'Share'}
-        </button>
+        {modal ? (
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xs font-medium text-ink-500 hover:text-ink-800"
+          >
+            Close
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setCreating(!creating);
+              setMade(null);
+            }}
+            className="text-xs font-medium text-brand-600 hover:text-brand-700"
+          >
+            {creating ? 'Cancel' : 'Share'}
+          </button>
+        )}
       </div>
 
       {error && (
@@ -126,44 +150,47 @@ export function ShareJobProgressPanel({
       )}
 
       {creating && (
-        <form onSubmit={create} className="mt-3 space-y-2">
-          <div className="flex flex-wrap gap-2">
+        <form onSubmit={create} className="mt-4 space-y-3">
+          <label className="block">
+            <span className="text-xs font-medium text-ink-700">Who is this for?</span>
             <input
               required
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              placeholder="Who — e.g. Cedar Ridge HOA — homeowner"
-              className="min-w-[14rem] flex-1 rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+              placeholder="e.g. Cedar Ridge HOA — homeowner"
+              className="mt-1 w-full rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
             />
+          </label>
+          <label className="block">
+            <span className="text-xs font-medium text-ink-700">Email them (optional)</span>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email (optional — for notification)"
-              className="min-w-[12rem] flex-1 rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+              placeholder="Leave blank to copy the link yourself"
+              className="mt-1 w-full rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
             />
+          </label>
+          <label className="block">
+            <span className="text-xs font-medium text-ink-700">Link expires</span>
             <select
               value={days}
               onChange={(e) => setDays(Number(e.target.value))}
-              className="rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+              className="mt-1 w-full rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
             >
-              <option value={7}>Expires in 7 days</option>
-              <option value={30}>Expires in 30 days</option>
-              <option value={90}>Expires in 90 days</option>
-              <option value={0}>No expiry — until revoked</option>
+              <option value={7}>In 7 days</option>
+              <option value={30}>In 30 days</option>
+              <option value={90}>In 90 days</option>
+              <option value={0}>Never — until you revoke it</option>
             </select>
-          </div>
-          <p className="text-[11px] text-ink-500">
-            The link opens without login. Add an email to notify them, or copy the link and send it
-            yourself — by text, portal upload, or counsel letter.
-          </p>
+          </label>
           <button
             type="submit"
             disabled={busy}
-            className="flex items-center gap-2 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-ink-900 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-ink-900 disabled:opacity-50"
           >
-            {busy && <SpinnerIcon className="animate-spin" width={12} height={12} />}
-            {email.trim() ? 'Email them the link' : 'Create link'}
+            {busy && <SpinnerIcon className="animate-spin" width={14} height={14} />}
+            {email.trim() ? 'Email the link' : 'Create link'}
           </button>
         </form>
       )}
@@ -241,11 +268,29 @@ export function ShareJobProgressPanel({
         </ul>
       )}
 
-      {live.length > 0 && (
+      {live.length > 0 && !creating && (
         <p className="mt-2 text-[10.5px] text-ink-400">
-          {live.length} live link{live.length === 1 ? '' : 's'}. Revoking is immediate.
+          {live.length} active link{live.length === 1 ? '' : 's'} out right now.
         </p>
       )}
     </section>
   );
+
+  if (modal) {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-start justify-center bg-ink-900/50 p-4 pt-[10vh] backdrop-blur-sm"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="share-job-title"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose?.();
+        }}
+      >
+        <div className="w-full max-w-md">{panel}</div>
+      </div>
+    );
+  }
+
+  return panel;
 }
