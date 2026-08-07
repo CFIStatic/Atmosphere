@@ -2,12 +2,15 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifierStaticPlugin } from './vite.verifier';
 
-const srcDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'src');
+const frontendDir = path.dirname(fileURLToPath(import.meta.url));
+const srcDir = path.resolve(frontendDir, 'src');
+const verifierDir = path.resolve(frontendDir, '../verifier');
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [verifierStaticPlugin(verifierDir, path.resolve(frontendDir, 'dist')), react()],
   resolve: {
     alias: { '@': srcDir },
   },

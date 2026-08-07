@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { SpinnerIcon } from '../components/icons';
 
 /**
  * The Work Verification Platform's surface IS the Verifier.
@@ -18,8 +19,11 @@ import { useNavigate } from 'react-router-dom';
 export function VerifierLibraryPage() {
   const navigate = useNavigate();
   const [srcDoc, setSrcDoc] = useState<string | null>(null);
+  const [frameReady, setFrameReady] = useState(false);
 
   useEffect(() => {
+    setFrameReady(false);
+  }, [srcDoc]);
     const inline = document.getElementById('atm-verify-src');
     if (inline?.textContent) {
       setSrcDoc(
@@ -44,9 +48,30 @@ export function VerifierLibraryPage() {
   }, [navigate]);
 
   const frameClass = 'fixed inset-0 h-full w-full border-0';
-  return srcDoc ? (
-    <iframe title="Verifier" srcDoc={srcDoc} className={frameClass} />
-  ) : (
-    <iframe title="Verifier" src="/verifier/?embed=1" className={frameClass} />
+  const frameSrc = srcDoc ? undefined : '/verifier/?embed=1';
+
+  return (
+    <>
+      {!frameReady && (
+        <div className="fixed inset-0 z-10 grid place-items-center bg-paper-100 text-brand-600">
+          <SpinnerIcon className="animate-spin" width={28} height={28} />
+        </div>
+      )}
+      {srcDoc ? (
+        <iframe
+          title="Verifier"
+          srcDoc={srcDoc}
+          className={frameClass}
+          onLoad={() => setFrameReady(true)}
+        />
+      ) : (
+        <iframe
+          title="Verifier"
+          src={frameSrc}
+          className={frameClass}
+          onLoad={() => setFrameReady(true)}
+        />
+      )}
+    </>
   );
 }

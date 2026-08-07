@@ -1151,6 +1151,61 @@ const EVIDENCE: Record<string, any[]> = {
   'job-1041': [],
 };
 
+function evidencePortalLibrary() {
+  const jobById = Object.fromEntries(JOBS.map((j) => [j.jobId, j]));
+  const items: Record<string, unknown>[] = [];
+  for (const [jobId, proofs] of Object.entries(EVIDENCE)) {
+    const job = jobById[jobId];
+    for (const p of proofs) {
+      const checks = (p.checks ?? []) as Array<{ key: string; verdict: string; detail: string }>;
+      const flagged = checks.some((c) => c.verdict === 'fail');
+      items.push({
+        id: p.id,
+        jobId,
+        jobName: job?.title ?? 'Job',
+        jobNumber: job?.jobNumber ?? null,
+        company: p.company,
+        person: p.company,
+        phase: p.phase,
+        workDate: p.workDate,
+        capturedAt: p.capturedAt,
+        uploadedAt: p.receivedAt,
+        durationSeconds: p.durationSeconds,
+        byteSize: p.byteSize,
+        hash: p.contentHash,
+        labels: p.tags ?? [],
+        checks,
+        flagged,
+        legalHold: Boolean(p.legalHold),
+        tier: 1,
+        analysisState: p.state === 'analysed' ? 'done' : p.state === 'checked' ? 'paired' : 'none',
+        analysis:
+          p.aiSummary != null
+            ? {
+                summary: p.aiSummary,
+                dictation: p.aiSummary,
+                materialChange: p.category === 'issue',
+                materialBecause: p.category === 'issue' ? 'Integrity check failed' : null,
+                changes: [],
+                scope: [],
+                couldNotTell: [],
+              }
+            : null,
+      });
+    }
+  }
+  return {
+    items,
+    counts: {
+      total: items.length,
+      flagged: items.filter((i) => i.flagged).length,
+      unanalysed: items.filter((i) => i.analysisState !== 'done' && i.analysisState !== 'paired')
+        .length,
+      onHold: items.filter((i) => i.legalHold).length,
+    },
+  };
+}
+
 const CUSTODY: Record<string, any[]> = {
   'pf-4': [
     { id: 'cu-1', action: 'held', actor_label: 'Priya Shah', actor_role: 'general_contractor', detail: 'Disputed day — mediation pending', occurred_at: '2026-08-06T09:20:00Z' },
@@ -2520,6 +2575,7 @@ const routes: Array<[string, RegExp, Handler]> = [
   }],
 
   /* ------------------------------------------- verifier shares */
+  ['GET', /^\/api\/evidence-portal\/library$/, () => ({ body: evidencePortalLibrary() })],
   ['GET', /^\/api\/evidence-portal\/shares$/, () => ({
     body: {
       shares: LAST_QUERY.jobId
