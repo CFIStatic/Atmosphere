@@ -4,6 +4,7 @@ import {
   markTourCompleted,
   queueProductTour,
   takePendingTour,
+  withTourQuery,
   WORK_VERIFICATION_TOUR,
 } from './productTour';
 
@@ -22,5 +23,10 @@ describe('productTour storage', () => {
     expect(isTourCompleted(WORK_VERIFICATION_TOUR.id)).toBe(false);
     markTourCompleted(WORK_VERIFICATION_TOUR.id);
     expect(isTourCompleted(WORK_VERIFICATION_TOUR.id)).toBe(true);
+  });
+
+  it('appends tour query param to redirect paths', () => {
+    expect(withTourQuery('/verifier-library')).toBe('/verifier-library?tour=1');
+    expect(withTourQuery('/usage?period=month')).toBe('/usage?period=month&tour=1');
   });
 });

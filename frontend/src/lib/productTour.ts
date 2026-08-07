@@ -163,3 +163,10 @@ export function clearPendingTour() {
     /* ignore */
   }
 }
+
+/** Append ?tour=1 so ProductTourHost starts the walkthrough after navigation. */
+export function withTourQuery(path: string): string {
+  const url = new URL(path, window.location.origin);
+  url.searchParams.set('tour', '1');
+  return `${url.pathname}${url.search}${url.hash}`;
+}

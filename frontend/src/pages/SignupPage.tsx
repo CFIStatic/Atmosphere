@@ -14,6 +14,7 @@ import { getPlatform } from '../lib/usePlatform';
 import { SetupStepCard, SetupWizardShell } from '../components/setup/SetupWizardShell';
 import { SetupBillingStep } from '../components/setup/SetupBillingStep';
 import { scheduleWorkVerificationTour } from '../components/tour/ProductTourHost';
+import { withTourQuery } from '../lib/productTour';
 import {
   SETUP_DEFAULTS,
   initialSetupStep,
@@ -206,7 +207,7 @@ export function SignupPage() {
 
   function enterApp() {
     scheduleWorkVerificationTour();
-    queueRedirect(redirectTo);
+    queueRedirect(withTourQuery(redirectTo));
   }
 
   async function copyJoinCode() {

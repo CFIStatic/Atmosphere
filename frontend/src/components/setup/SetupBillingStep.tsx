@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError, type BillingOnboardingStatus } from '../../lib/api';
 import { formatCents } from '../../lib/money';
 import { SetupStepCard } from './SetupWizardShell';
@@ -18,6 +18,7 @@ export function SetupBillingStep({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const autoEnteredRef = useRef(false);
 
   const refresh = useCallback(async () => {
     const next = await api.getBillingOnboarding();
@@ -73,6 +74,13 @@ export function SetupBillingStep({
 
     return () => window.clearInterval(timer);
   }, [checkoutOutcome, refresh, status?.complete, status?.required]);
+
+  // After Stripe checkout, go straight to the dashboard with the product tour.
+  useEffect(() => {
+    if (checkoutOutcome !== 'success' || !status?.complete || autoEnteredRef.current) return;
+    autoEnteredRef.current = true;
+    onComplete();
+  }, [checkoutOutcome, onComplete, status?.complete]);
 
   async function startCheckout() {
     setBusy(true);

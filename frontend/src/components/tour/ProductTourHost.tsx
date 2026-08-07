@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
+  clearPendingTour,
   markTourCompleted,
   PRODUCT_TOURS,
   queueProductTour,
@@ -55,12 +56,13 @@ export function ProductTourHost() {
     setReady(false);
   }, []);
 
-  // Auto-start after signup or ?tour=1
+  // Auto-start after signup (?tour=1), pending queue, or navigation while pending.
   useEffect(() => {
-    if (!user || !membership) return;
+    if (!user || !membership || tour) return;
 
     const replay = searchParams.get('tour');
     if (replay === '1' || replay === WORK_VERIFICATION_TOUR.id) {
+      clearPendingTour();
       startTour(WORK_VERIFICATION_TOUR);
       return;
     }
@@ -69,7 +71,7 @@ export function ProductTourHost() {
     if (pending && PRODUCT_TOURS[pending]) {
       startTour(PRODUCT_TOURS[pending]);
     }
-  }, [user, membership, searchParams, startTour]);
+  }, [user, membership, searchParams, location.pathname, location.search, startTour, tour]);
 
   // Navigate when step changes
   useEffect(() => {
