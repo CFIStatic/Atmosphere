@@ -1,39 +1,59 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { ApiError } from '../lib/api';
+import {
+  api,
+  ApiError,
+  CONTRACTOR_TYPE_LABELS,
+  ROLE_LABELS,
+  WORK_TYPE_LABELS,
+  type ContractorType,
+  type MemberRole,
+  type Org,
+  type UsageIntent,
+  type WorkType,
+} from '../lib/api';
 import { loginHref, resolveAuthRedirect } from '../lib/authRedirect';
 import { PLATFORM_HOME } from '../lib/platforms';
-import { postAuthDestination } from '../lib/postAuth';
 import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
 import { getPlatform } from '../lib/usePlatform';
-import { Logo } from '../components/Logo';
+import { SetupStepCard, SetupWizardShell } from '../components/setup/SetupWizardShell';
+import {
+  SETUP_DEFAULTS,
+  initialSetupStep,
+  type SetupWizardStep,
+} from '../components/setup/setupWizard';
 import { EyeIcon, EyeOffIcon, SpinnerIcon, CheckIcon } from '../components/icons';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const SETUP_STEPS = [
+type OrgMode = 'create' | 'join';
+
+const ROLE_OPTIONS: { value: MemberRole; blurb: string }[] = [
+  { value: 'project_manager', blurb: 'Runs jobs end to end and coordinates the crew.' },
+  { value: 'field_technician', blurb: 'On-site work — film, verify, and sign off in the field.' },
+  { value: 'accountant', blurb: 'Invoicing, payments, job cost, and the books.' },
+  { value: 'office_manager', blurb: 'Scheduling, dispatch, and back office.' },
+  { value: 'sales', blurb: 'Estimates, bids, and winning new work.' },
+];
+
+const WORK_OPTIONS: { value: WorkType; blurb: string }[] = [
+  { value: 'mitigation', blurb: 'Emergency response, water/fire/mold mitigation and drying.' },
+  { value: 'construction', blurb: 'Rebuild and reconstruction after mitigation.' },
+];
+
+const CONTRACTOR_OPTIONS: { value: ContractorType; blurb: string }[] = [
   {
-    title: 'Create your account',
-    detail: 'Work email and a password. We never store your password in plain text.',
-    active: true,
+    value: 'restoration',
+    blurb: 'Water, fire, mold, and related restoration — mitigation through rebuild.',
   },
-  {
-    title: 'Name your organization',
-    detail: 'Start a new workspace — or join an existing team with a join code.',
-  },
-  {
-    title: 'Pick your role and trade',
-    detail: 'So Field Capture and the Evidence Platform open with the right defaults.',
-  },
-  {
-    title: 'Invite your crew',
-    detail: 'Every organization gets one join code. Hand it to a teammate and they are in.',
-  },
-] as const;
+  { value: 'roofing', blurb: 'Roofing installs, repairs, and storm work.' },
+  { value: 'general_contractor', blurb: 'General contracting across trades and scopes.' },
+  { value: 'other', blurb: 'HVAC, plumbing, electrical, cleaning, facilities, or another trade.' },
+];
 
 export function SignupPage() {
-  const { user, loading, signup } = useAuth();
+  const { user, loading, membership, signup, refreshMembership, logout } = useAuth();
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const queueRedirect = usePendingAuthRedirect();
@@ -43,12 +63,37 @@ export function SignupPage() {
     PLATFORM_HOME[getPlatform()],
   );
 
+  const [step, setStep] = useState<SetupWizardStep>(() =>
+    initialSetupStep({
+      user: Boolean(user),
+      membership: Boolean(membership),
+      stepParam: searchParams.get('step'),
+    }),
+  );
+
+  // Step 1 — account
   const [email, setEmail] = useState(() => searchParams.get('email') ?? '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [accountSubmitting, setAccountSubmitting] = useState(false);
+  const [accountNotice, setAccountNotice] = useState<string | null>(null);
+
+  // Step 2 — organization
+  const [mode, setMode] = useState<OrgMode>('create');
+  const [orgName, setOrgName] = useState('');
+  const [joinCode, setJoinCode] = useState('');
+
+  // Step 3 — role & trade
+  const [role, setRole] = useState<MemberRole | null>(null);
+  const [workType, setWorkType] = useState<WorkType | null>(null);
+  const [contractorType, setContractorType] = useState<ContractorType | null>(null);
+
+  // Step 4 — result
+  const [createdOrg, setCreatedOrg] = useState<Org | null>(null);
+  const [copied, setCopied] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     document.title = 'Create your organization · Atmosphere';
@@ -56,6 +101,12 @@ export function SignupPage() {
       document.title = 'Atmosphere';
     };
   }, []);
+
+  useEffect(() => {
+    if (!loading && user && !membership && step === 1) {
+      setStep(2);
+    }
+  }, [loading, user, membership, step]);
 
   if (loading) {
     return (
@@ -65,237 +116,521 @@ export function SignupPage() {
     );
   }
 
-  if (user) {
+  if (user && membership) {
     return <Navigate to={redirectTo} replace />;
   }
 
+  const signInHref = loginHref(redirectTo);
   const emailValid = EMAIL_RE.test(email.trim());
   const passwordValid = password.length >= 8;
-  const canSubmit = emailValid && passwordValid && !submitting;
+  const orgStepValid =
+    mode === 'create' ? orgName.trim().length >= 2 : /^[A-Za-z0-9]{6,12}$/.test(joinCode.trim());
+  const roleStepValid = role !== null && workType !== null && (mode === 'join' || contractorType !== null);
 
-  async function handleSubmit(e: FormEvent) {
+  async function handleAccountSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    setNotice(null);
-    if (!canSubmit) return;
+    setAccountNotice(null);
+    if (!emailValid || !passwordValid || accountSubmitting) return;
 
-    setSubmitting(true);
+    setAccountSubmitting(true);
     try {
       const res = await signup(email.trim(), password);
       if (res.needsEmailConfirmation) {
-        setNotice(res.message ?? 'Check your email to confirm your account, then sign in.');
+        setAccountNotice(
+          res.message ?? 'Account created. Check your email to confirm before continuing.',
+        );
         setPassword('');
-      } else {
-        queueRedirect(postAuthDestination(res.membership, redirectTo));
+        return;
       }
+      setStep(2);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+    } finally {
+      setAccountSubmitting(false);
+    }
+  }
+
+  async function completeSetup(useDefaults: boolean) {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const resolvedRole = useDefaults ? SETUP_DEFAULTS.role : role!;
+      const resolvedWork = useDefaults ? SETUP_DEFAULTS.workType : workType!;
+      const resolvedContractor = useDefaults ? SETUP_DEFAULTS.contractorType : contractorType!;
+      const usageIntents: UsageIntent[] = SETUP_DEFAULTS.usageIntents;
+
+      let org: Org;
+      if (mode === 'create') {
+        const res = await api.createOrg(
+          orgName.trim(),
+          resolvedRole,
+          resolvedWork,
+          resolvedContractor,
+          usageIntents,
+        );
+        org = res.org;
+      } else {
+        const res = await api.joinOrg(
+          joinCode.trim().toUpperCase(),
+          resolvedRole,
+          resolvedWork,
+          usageIntents,
+        );
+        org = res.org;
+      }
+
+      await refreshMembership();
+      setCreatedOrg(org);
+      setStep(4);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      if (err instanceof ApiError && err.code === 'join_org_failed') setStep(2);
     } finally {
       setSubmitting(false);
     }
   }
 
-  const signInHref = loginHref(redirectTo);
+  function enterApp() {
+    queueRedirect(redirectTo);
+  }
+
+  async function copyJoinCode() {
+    if (!createdOrg?.joinCode) return;
+    try {
+      await navigator.clipboard.writeText(createdOrg.joinCode);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard denied — user can still select manually */
+    }
+  }
 
   return (
-    <div className="cx-aurora relative flex min-h-screen flex-col bg-paper-100">
-      <header className="flex items-center justify-between gap-4 px-6 py-6 sm:px-10">
-        <Logo />
-        <Link
-          to={signInHref}
-          className="text-sm font-medium text-ink-600 transition hover:text-ink-900"
+    <SetupWizardShell
+      step={step}
+      signInHref={step === 1 ? signInHref : undefined}
+      headerAction={
+        step > 1 ? (
+          <button
+            type="button"
+            onClick={() => logout()}
+            className="text-sm text-ink-600 transition hover:text-ink-900"
+          >
+            Sign out
+          </button>
+        ) : undefined
+      }
+    >
+      {step === 1 && !user && (
+        <SetupStepCard
+          step={1}
+          title="Your login details"
+          subtitle="Organization setup starts on the next screen — about two minutes total."
         >
-          Already have an account? <span className="font-semibold text-brand-600">Sign in</span>
-        </Link>
-      </header>
-
-      <main className="flex flex-1 items-center justify-center px-4 pb-16">
-        <div className="w-full max-w-4xl animate-fade-in-up">
-          <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:items-start lg:gap-14">
-            <div className="hidden lg:block">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-600">
-                Get started
-              </p>
-              <h1 className="mt-3 text-3xl font-bold tracking-tight text-ink-900">
-                Create your organization
-              </h1>
-              <p className="mt-3 max-w-md text-base text-ink-600">
-                One account, one organization, one join code — and everyone from the office to the
-                truck works on the same verified record.
-              </p>
-
-              <ol className="mt-10 space-y-5">
-                {SETUP_STEPS.map((step, index) => (
-                  <li
-                    key={step.title}
-                    className={`flex gap-4 rounded-xl border px-4 py-4 ${
-                      step.active
-                        ? 'border-brand-200 bg-brand-50/80 shadow-sm'
-                        : 'border-line bg-paper-0/60'
-                    }`}
-                  >
-                    <span
-                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                        step.active
-                          ? 'bg-brand-500 text-ink-900'
-                          : 'bg-paper-100 text-ink-500'
-                      }`}
-                      aria-hidden="true"
-                    >
-                      {index + 1}
-                    </span>
-                    <div>
-                      <p className="font-semibold text-ink-900">{step.title}</p>
-                      <p className="mt-1 text-sm text-ink-600">{step.detail}</p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
+          {accountNotice && (
+            <div
+              role="status"
+              className="mt-6 flex items-start gap-2 rounded-lg border border-success-200 bg-success-50 px-3.5 py-3 text-sm text-success-600"
+            >
+              <CheckIcon className="mt-0.5 shrink-0" width={18} height={18} />
+              <span>
+                {accountNotice}{' '}
+                <Link to={signInHref} className="font-semibold underline underline-offset-2">
+                  Sign in
+                </Link>{' '}
+                once your email is confirmed to continue steps 2–4.
+              </span>
             </div>
+          )}
 
-            <div>
-              <div className="rounded-2xl border border-brand-200 bg-paper-0 p-8 shadow-lift shadow-2xl shadow-lift-xl sm:p-10">
-                <div className="lg:hidden">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-600">
-                    Step 1 · Create your account
-                  </p>
-                  <h1 className="mt-2 text-2xl font-bold tracking-tight text-ink-900">
-                    Create your organization
-                  </h1>
-                  <p className="mt-2 text-sm text-ink-600">
-                    Start with your work email. Next you will name your organization or join with a
-                    code.
-                  </p>
-                </div>
+          {error && <Alert>{error}</Alert>}
 
-                <div className="hidden lg:block">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-600">
-                    Step 1 · Create your account
-                  </p>
-                  <h2 className="mt-2 text-xl font-bold tracking-tight text-ink-900">
-                    Your login details
-                  </h2>
-                  <p className="mt-1.5 text-sm text-ink-600">
-                    Organization setup comes right after this — about two minutes.
-                  </p>
-                </div>
+          <form onSubmit={handleAccountSubmit} noValidate className="mt-6 space-y-4">
+            <Field label="Work email" htmlFor="signup-email">
+              <input
+                id="signup-email"
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@company.com"
+                className={inputClass}
+              />
+            </Field>
 
-                {notice && (
-                  <div
-                    role="status"
-                    className="mt-6 flex items-start gap-2 rounded-lg border border-success-200 bg-success-50 px-3.5 py-3 text-sm text-success-600"
-                  >
-                    <CheckIcon className="mt-0.5 shrink-0" width={18} height={18} />
-                    <span>
-                      {notice}{' '}
-                      <Link to={signInHref} className="font-semibold underline underline-offset-2">
-                        Sign in
-                      </Link>{' '}
-                      once your email is confirmed.
-                    </span>
-                  </div>
-                )}
-
-                {error && (
-                  <div
-                    role="alert"
-                    className="mt-6 rounded-lg border border-danger-200 bg-danger-50 px-3.5 py-3 text-sm text-danger-700"
-                  >
-                    {error}
-                  </div>
-                )}
-
-                <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-4">
-                  <div>
-                    <label htmlFor="signup-email" className="mb-1.5 block text-sm font-medium text-ink-700">
-                      Work email
-                    </label>
-                    <input
-                      id="signup-email"
-                      name="email"
-                      type="email"
-                      autoComplete="email"
-                      inputMode="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="you@company.com"
-                      className="w-full rounded-lg glass-card px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
-                    />
-                  </div>
-
-                  <div>
-                    <div className="mb-1.5 flex items-center justify-between">
-                      <label
-                        htmlFor="signup-password"
-                        className="block text-sm font-medium text-ink-700"
-                      >
-                        Password
-                      </label>
-                      <span id="signup-password-hint" className="text-xs text-ink-500">
-                        Min. 8 characters
-                      </span>
-                    </div>
-                    <div className="relative">
-                      <input
-                        id="signup-password"
-                        name="password"
-                        type={showPassword ? 'text' : 'password'}
-                        autoComplete="new-password"
-                        required
-                        minLength={8}
-                        aria-describedby="signup-password-hint"
-                        aria-invalid={password.length > 0 && !passwordValid}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Choose a strong password"
-                        className="w-full rounded-lg glass-card px-3.5 py-2.5 pr-11 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword((s) => !s)}
-                        aria-label={showPassword ? 'Hide password' : 'Show password'}
-                        className="absolute inset-y-0 right-0 grid w-11 place-items-center text-ink-600 transition hover:text-ink-900"
-                      >
-                        {showPassword ? <EyeOffIcon /> : <EyeIcon />}
-                      </button>
-                    </div>
-                    {password.length > 0 && !passwordValid && (
-                      <p className="mt-1.5 text-xs text-caution-600">Use at least 8 characters.</p>
-                    )}
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={!canSubmit}
-                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 font-semibold text-ink-900 shadow-lg shadow-card transition hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:ring-offset-2 focus:ring-offset-ink-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {submitting && <SpinnerIcon className="animate-spin" />}
-                    {submitting ? 'Creating account…' : 'Continue — set up your organization'}
-                  </button>
-                </form>
-
-                <p className="mt-5 rounded-lg bg-paper-50 px-3.5 py-3 text-xs leading-relaxed text-ink-500">
-                  Joining a team that already uses Atmosphere? Create your account here, then choose{' '}
-                  <strong className="font-medium text-ink-700">Join with a code</strong> on the next
-                  screen.
-                </p>
-
-                <p className="mt-6 text-center text-sm text-ink-600 lg:hidden">
-                  Already have an account?{' '}
-                  <Link to={signInHref} className="font-semibold text-brand-600 hover:text-brand-700">
-                    Sign in
-                  </Link>
-                </p>
+            <Field
+              label="Password"
+              htmlFor="signup-password"
+              hint="Min. 8 characters"
+            >
+              <div className="relative">
+                <input
+                  id="signup-password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  required
+                  minLength={8}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Choose a strong password"
+                  className={`${inputClass} pr-11`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((s) => !s)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute inset-y-0 right-0 grid w-11 place-items-center text-ink-600"
+                >
+                  {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                </button>
               </div>
+            </Field>
 
-              <p className="mt-6 text-center text-xs text-ink-400">
-                Passwords are encrypted, never stored in plain text, and never seen by this page.
+            <PrimaryButton disabled={!emailValid || !passwordValid || accountSubmitting} loading={accountSubmitting}>
+              {accountSubmitting ? 'Creating account…' : 'Continue to step 2'}
+            </PrimaryButton>
+          </form>
+
+          <p className="mt-5 rounded-lg bg-paper-50 px-3.5 py-3 text-xs leading-relaxed text-ink-500">
+            Joining a team that already uses Atmosphere? Create your account here, then choose{' '}
+            <strong className="font-medium text-ink-700">Join with a code</strong> on step 2.
+          </p>
+        </SetupStepCard>
+      )}
+
+      {step === 1 && user && (
+        <SetupStepCard
+          step={1}
+          title="Account ready"
+          subtitle="Your login is set. Continue to name your organization or join with a code."
+        >
+          <PrimaryButton onClick={() => setStep(2)}>Continue to step 2</PrimaryButton>
+        </SetupStepCard>
+      )}
+
+      {step === 2 && (
+        <SetupStepCard
+          step={2}
+          title="Your organization"
+          subtitle="Create a new workspace for your company, or join one that already exists."
+        >
+          {error && <Alert>{error}</Alert>}
+
+          <div className="mt-5 grid grid-cols-2 gap-2 rounded-lg glass-card p-1">
+            <ModeTab active={mode === 'create'} onClick={() => setMode('create')}>
+              Create new
+            </ModeTab>
+            <ModeTab active={mode === 'join'} onClick={() => setMode('join')}>
+              Join with a code
+            </ModeTab>
+          </div>
+
+          {mode === 'create' ? (
+            <Field label="Organization name" htmlFor="org-name" className="mt-5">
+              <input
+                id="org-name"
+                value={orgName}
+                onChange={(e) => setOrgName(e.target.value)}
+                placeholder="e.g. Meridian Services"
+                autoFocus
+                className={inputClass}
+              />
+              <p className="mt-2 text-xs text-ink-500">
+                You will get a join code on step 4 to invite your crew.
               </p>
+            </Field>
+          ) : (
+            <Field label="Organization join code" htmlFor="join-code" className="mt-5">
+              <input
+                id="join-code"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                placeholder="e.g. 8F3A9C2B"
+                autoFocus
+                autoCapitalize="characters"
+                className={`${inputClass} font-mono tracking-widest`}
+              />
+              <p className="mt-2 text-xs text-ink-500">Ask a teammate or admin for your team&apos;s code.</p>
+            </Field>
+          )}
+
+          <div className="mt-6 flex items-center justify-between gap-3">
+            {user ? (
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                className="text-sm font-medium text-ink-600 hover:text-ink-900"
+              >
+                Back
+              </button>
+            ) : (
+              <span />
+            )}
+            <PrimaryButton disabled={!orgStepValid} onClick={() => { setError(null); setStep(3); }}>
+              Continue to step 3
+            </PrimaryButton>
+          </div>
+        </SetupStepCard>
+      )}
+
+      {step === 3 && (
+        <SetupStepCard
+          step={3}
+          title="Role and trade"
+          subtitle="Pick what fits today — or skip and we will use sensible defaults."
+        >
+          {error && <Alert>{error}</Alert>}
+
+          <div className="mt-5 space-y-6">
+            <section>
+              <h3 className="text-sm font-semibold text-ink-900">Your role</h3>
+              <div className="mt-3 space-y-2">
+                {ROLE_OPTIONS.map((opt) => (
+                  <OptionCard
+                    key={opt.value}
+                    selected={role === opt.value}
+                    title={ROLE_LABELS[opt.value]}
+                    blurb={opt.blurb}
+                    onClick={() => setRole(opt.value)}
+                  />
+                ))}
+              </div>
+            </section>
+
+            {mode === 'create' && (
+              <section>
+                <h3 className="text-sm font-semibold text-ink-900">Kind of contractor</h3>
+                <div className="mt-3 space-y-2">
+                  {CONTRACTOR_OPTIONS.map((opt) => (
+                    <OptionCard
+                      key={opt.value}
+                      selected={contractorType === opt.value}
+                      title={CONTRACTOR_TYPE_LABELS[opt.value]}
+                      blurb={opt.blurb}
+                      onClick={() => setContractorType(opt.value)}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <section>
+              <h3 className="text-sm font-semibold text-ink-900">Primary work type</h3>
+              <div className="mt-3 space-y-2">
+                {WORK_OPTIONS.map((opt) => (
+                  <OptionCard
+                    key={opt.value}
+                    selected={workType === opt.value}
+                    title={WORK_TYPE_LABELS[opt.value]}
+                    blurb={opt.blurb}
+                    onClick={() => setWorkType(opt.value)}
+                  />
+                ))}
+              </div>
+            </section>
+          </div>
+
+          <div className="mt-7 flex flex-wrap items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => setStep(2)}
+              disabled={submitting}
+              className="text-sm font-medium text-ink-600 hover:text-ink-900 disabled:opacity-40"
+            >
+              Back
+            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => completeSetup(true)}
+                disabled={submitting}
+                className="rounded-lg px-4 py-2.5 text-sm font-medium text-ink-600 transition hover:bg-paper-100 disabled:opacity-50"
+              >
+                Skip — use defaults
+              </button>
+              <PrimaryButton
+                disabled={!roleStepValid || submitting}
+                loading={submitting}
+                onClick={() => completeSetup(false)}
+              >
+                {submitting ? 'Setting up…' : 'Continue to step 4'}
+              </PrimaryButton>
             </div>
           </div>
-        </div>
-      </main>
+        </SetupStepCard>
+      )}
+
+      {step === 4 && createdOrg && (
+        <SetupStepCard
+          step={4}
+          title={mode === 'create' ? 'Invite your crew' : 'You are connected'}
+          subtitle={
+            mode === 'create'
+              ? 'Share this join code with anyone who should work in the same organization.'
+              : `You joined ${createdOrg.name}. You can invite others from Settings later.`
+          }
+        >
+          {mode === 'create' && (
+            <div className="mt-6 rounded-xl border border-line bg-paper-50 p-5 text-center">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-500">
+                Your organization join code
+              </p>
+              <p className="mt-3 font-mono text-3xl font-bold tracking-[0.2em] text-ink-900">
+                {createdOrg.joinCode}
+              </p>
+              <button
+                type="button"
+                onClick={copyJoinCode}
+                className="mt-4 rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
+              >
+                {copied ? 'Copied!' : 'Copy join code'}
+              </button>
+              <p className="mt-4 text-xs text-ink-500">
+                Teammates choose <strong>Join with a code</strong> when they sign up.
+              </p>
+            </div>
+          )}
+
+          <div className="mt-7 flex flex-wrap items-center justify-between gap-3">
+            <span className="text-xs text-ink-500">You can change role and trade anytime in Settings.</span>
+            <PrimaryButton onClick={enterApp}>
+              {mode === 'create' ? 'Enter Atmosphere' : 'Continue to Atmosphere'}
+            </PrimaryButton>
+          </div>
+        </SetupStepCard>
+      )}
+
+      <p className="mt-6 text-center text-xs text-ink-400">
+        Passwords are encrypted, never stored in plain text, and never seen by this page.
+      </p>
+    </SetupWizardShell>
+  );
+}
+
+const inputClass =
+  'w-full rounded-lg glass-card px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200';
+
+function Alert({ children }: { children: ReactNode }) {
+  return (
+    <div
+      role="alert"
+      className="mt-6 rounded-lg border border-danger-200 bg-danger-50 px-3.5 py-3 text-sm text-danger-700"
+    >
+      {children}
     </div>
+  );
+}
+
+function Field({
+  label,
+  htmlFor,
+  hint,
+  className,
+  children,
+}: {
+  label: string;
+  htmlFor: string;
+  hint?: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className={className}>
+      <div className="mb-1.5 flex items-center justify-between">
+        <label htmlFor={htmlFor} className="block text-sm font-medium text-ink-700">
+          {label}
+        </label>
+        {hint ? <span className="text-xs text-ink-500">{hint}</span> : null}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function PrimaryButton({
+  children,
+  disabled,
+  loading,
+  onClick,
+  type = 'button',
+}: {
+  children: ReactNode;
+  disabled?: boolean;
+  loading?: boolean;
+  onClick?: () => void;
+  type?: 'button' | 'submit';
+}) {
+  return (
+    <button
+      type={type}
+      disabled={disabled || loading}
+      onClick={onClick}
+      className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 font-semibold text-ink-900 shadow-lg shadow-card transition hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:min-w-[180px]"
+    >
+      {loading && <SpinnerIcon className="animate-spin" />}
+      {children}
+    </button>
+  );
+}
+
+function ModeTab({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`rounded-md px-3 py-2 text-sm font-medium transition ${
+        active ? 'bg-brand-500 text-ink-900 shadow' : 'text-ink-600 hover:text-ink-900'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function OptionCard({
+  selected,
+  title,
+  blurb,
+  onClick,
+}: {
+  selected: boolean;
+  title: string;
+  blurb: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      className={`flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition ${
+        selected
+          ? 'border-brand-400 bg-brand-50 ring-1 ring-brand-200'
+          : 'glass-card hover:border-line hover:bg-paper-100'
+      }`}
+    >
+      <span
+        className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border ${
+          selected ? 'border-brand-400 bg-brand-500 text-ink-900' : 'border-line'
+        }`}
+      >
+        {selected && <CheckIcon width={14} height={14} />}
+      </span>
+      <span>
+        <span className="block font-semibold text-ink-900">{title}</span>
+        <span className="mt-0.5 block text-sm text-ink-600">{blurb}</span>
+      </span>
+    </button>
   );
 }

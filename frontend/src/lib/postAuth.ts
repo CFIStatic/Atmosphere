@@ -10,8 +10,8 @@ export function postAuthDestination(
 ): string {
   if (membership) return fallback;
   const next = safeAuthRedirect(fallback);
-  if (next && next !== '/onboarding') {
-    return `/onboarding?next=${encodeURIComponent(next)}`;
+  if (next && next !== '/onboarding' && !next.startsWith('/signup')) {
+    return `/signup?step=2&next=${encodeURIComponent(next)}`;
   }
-  return '/onboarding';
+  return '/signup?step=2';
 }

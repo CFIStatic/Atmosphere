@@ -137,7 +137,7 @@ function RequireOnboarded({ children }: { children: ReactNode }) {
     const returnPath = `${location.pathname}${location.search}${location.hash}`;
     return (
       <Navigate
-        to={`/onboarding?next=${encodeURIComponent(returnPath)}`}
+        to={`/signup?step=2&next=${encodeURIComponent(returnPath)}`}
         replace
       />
     );
