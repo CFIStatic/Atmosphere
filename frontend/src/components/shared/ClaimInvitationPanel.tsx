@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { SpinnerIcon } from '../icons';
 
@@ -15,25 +16,35 @@ import { SpinnerIcon } from '../icons';
  * film, and sign off having never seen this. That is not an oversight, it is
  * the reason the GC's rollout succeeds — a signup wall in front of the scope
  * is how a subcontractor decides this software is the GC's problem, not
- * theirs. What claiming buys is the list, and the offer is phrased as exactly
- * that rather than as an account.
+ * theirs. What claiming buys is the list. When the invite arrived by email,
+ * we still offer a free Atmosphere account for people who do not have one yet.
  */
 export function ClaimInvitationPanel({
   token,
   company,
   onClaimed,
+  initialContact = '',
 }: {
   token: string;
   company: string;
   onClaimed: (session: string) => void;
+  /** Prefill from the invite email query string. */
+  initialContact?: string;
 }) {
-  const [stage, setStage] = useState<'offer' | 'contact' | 'code'>('offer');
-  const [contact, setContact] = useState('');
+  const seeded = initialContact.trim();
+  const looksLikeEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(seeded);
+  const [stage, setStage] = useState<'offer' | 'contact' | 'code'>(
+    seeded ? 'contact' : 'offer',
+  );
+  const [contact, setContact] = useState(seeded);
   const [code, setCode] = useState('');
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const signupHref = looksLikeEmail
+    ? `/login?mode=signup&email=${encodeURIComponent(seeded.toLowerCase())}`
+    : '/login?mode=signup';
 
   async function sendCode() {
     setBusy(true);
@@ -84,6 +95,13 @@ export function ClaimInvitationPanel({
           >
             Put my jobs in one place
           </button>
+          <p className="mt-3 text-xs text-ink-500">
+            No Atmosphere account yet?{' '}
+            <Link to={signupHref} className="font-medium text-brand-600 hover:text-brand-500">
+              Create a free one
+            </Link>
+            , then come back to this link.
+          </p>
         </>
       )}
 
@@ -93,6 +111,15 @@ export function ClaimInvitationPanel({
             Your phone number or email. We send a code to prove it is you — nothing else, and
             never to your general contractors.
           </p>
+          {looksLikeEmail && (
+            <p className="mt-2 text-xs text-ink-500">
+              Invited as {seeded}. No account yet?{' '}
+              <Link to={signupHref} className="font-medium text-brand-600 hover:text-brand-500">
+                Create a free Atmosphere account
+              </Link>{' '}
+              with this address, then confirm below.
+            </p>
+          )}
           <div className="mt-3 flex flex-wrap gap-2">
             <input
               value={contact}

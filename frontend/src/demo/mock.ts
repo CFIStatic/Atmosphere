@@ -2397,20 +2397,41 @@ const routes: Array<[string, RegExp, Handler]> = [
     const people =
       invitees.length > 0
         ? invitees
-        : [{ fullName: 'Field Capture', email: null }];
+        : [{ fullName: 'Field Capture', email: null, external: false }];
     const stamp = Date.now().toString(36);
-    const invites = people.map((person: { fullName?: string; email?: string | null }, i: number) => {
-      const token = `demo-intake-${stamp}-${i}`;
-      const name = String(person.fullName ?? 'Field Capture');
-      return {
-        id: `party-${token}`,
-        name,
-        email: (person.email as string) ?? null,
-        token,
-        sharePath: `/shared/${token}`,
-        fieldCapturePath: `/fieldcapture/index.html?token=${encodeURIComponent(token)}`,
-      };
-    });
+    const knownAccounts = new Set(
+      MEMBERS.map((m) => m.email.toLowerCase()),
+    );
+    const invites = people.map(
+      (
+        person: {
+          fullName?: string;
+          company?: string;
+          email?: string | null;
+          external?: boolean;
+          userId?: string;
+        },
+        i: number,
+      ) => {
+        const token = `demo-intake-${stamp}-${i}`;
+        const email = person.email ? String(person.email).toLowerCase() : null;
+        const external = Boolean(person.external || !person.userId);
+        const name = String(person.company || person.fullName || 'Field Capture');
+        const emailParam = email ? `?email=${encodeURIComponent(email)}` : '';
+        return {
+          id: `party-${token}`,
+          name,
+          email,
+          token,
+          sharePath: `/shared/${token}${emailParam}`,
+          fieldCapturePath: `/fieldcapture/index.html?token=${encodeURIComponent(token)}`,
+          external,
+          emailed: Boolean(email),
+          recipientHasAccount: Boolean(email && knownAccounts.has(email)),
+          attachedToAccount: false,
+        };
+      },
+    );
     const primary = invites[0]!;
     MANUAL_JOBS[id] = {
       hasAddress: Boolean(b.address),

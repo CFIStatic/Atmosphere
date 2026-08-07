@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { SpinnerIcon } from '../components/icons';
 import { readCapture, todayISO } from '../lib/proofCapture';
 import { CaptureGuideSteps } from '../components/shared/CaptureGuideSteps';
@@ -79,7 +79,12 @@ const STATE_STYLE: Record<string, string> = {
 
 export function JobSharePage() {
   const { token = '' } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const inviteEmail = useMemo(() => {
+    const raw = searchParams.get('email')?.trim() ?? '';
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw) ? raw : '';
+  }, [searchParams]);
   const [view, setView] = useState<ShareView | null>(null);
   const [days, setDays] = useState<ProofDay[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -347,6 +352,7 @@ export function JobSharePage() {
               <ClaimInvitationPanel
                 token={token ?? ''}
                 company={view.you.company}
+                initialContact={inviteEmail}
                 onClaimed={(session) => {
                   writeFieldSession(session);
                   setClaimed(true);
@@ -355,7 +361,7 @@ export function JobSharePage() {
             </div>
           )}
 
-          <AtmospherePitch company={view.you.company} />
+          <AtmospherePitch company={view.you.company} inviteEmail={inviteEmail} />
         </>
       )}
     </div>
@@ -376,7 +382,16 @@ export function JobSharePage() {
  * upload button. A lure that gets in the way of the day's work would cost the
  * GC's trust — and the GC is who brought us here.
  */
-function AtmospherePitch({ company }: { company: string }) {
+function AtmospherePitch({
+  company,
+  inviteEmail,
+}: {
+  company: string;
+  inviteEmail?: string;
+}) {
+  const signupHref = inviteEmail
+    ? `/login?mode=signup&email=${encodeURIComponent(inviteEmail)}&src=job-share`
+    : '/login?mode=signup&src=job-share';
   return (
     <footer className="mt-8 rounded-xl border border-brand-200 bg-brand-600/5 p-4">
       <p className="text-xs font-medium uppercase tracking-wide text-brand-600">
@@ -389,12 +404,15 @@ function AtmospherePitch({ company }: { company: string }) {
         Every video you file and every scope you sign lives in a builder's account today. With your
         own Atmosphere account, your proof-of-work follows you — every job, every builder, one
         history that shows how you work. Free for subcontractors.
+        {inviteEmail
+          ? ` Use ${inviteEmail} so this invite stays with your account.`
+          : ''}
       </p>
       <a
-        href="/login?mode=signup&src=job-share"
+        href={signupHref}
         className="mt-3 inline-block rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900 transition hover:bg-brand-700"
       >
-        Get your own record
+        {inviteEmail ? 'Create your free account' : 'Get your own record'}
       </a>
     </footer>
   );

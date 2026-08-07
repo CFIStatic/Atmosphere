@@ -5,6 +5,10 @@ import { requireOrgContext } from '../lib/orgContext.js';
 import { HttpError, badRequest } from '../lib/errors.js';
 import { assessReadiness, type IntakeSource, type JobFacts } from '../verifier/readiness.js';
 import { proposeIntakeFromText } from '../verifier/intakePropose.js';
+import { partyInviteEmail } from '../verifier/partyInviteEmail.js';
+import { buildMailSender } from '../campaigns/mail/index.js';
+import { createAdminClient } from '../lib/supabase.js';
+import { config } from '../config.js';
 import { recordAccess } from './proofOfWork.js';
 
 /**
@@ -316,12 +320,28 @@ jobIntakeRouter.post('/intake/propose', async (req: Request, res: Response, next
   }
 });
 
-const inviteeSchema = z.object({
-  userId: z.string().trim().min(1).max(80).optional(),
-  fullName: z.string().trim().min(1).max(120),
-  email: z.string().trim().email().max(200).nullable().optional(),
-  trade: z.string().trim().max(60).optional(),
-});
+const inviteeSchema = z
+  .object({
+    userId: z.string().trim().min(1).max(80).optional(),
+    fullName: z.string().trim().min(1).max(120),
+    /** Company / crew label when inviting someone outside the org. */
+    company: z.string().trim().min(1).max(160).optional(),
+    email: z.string().trim().email().max(200).nullable().optional(),
+    trade: z.string().trim().max(60).optional(),
+    /** Outside the org — mainly subcontractors invited by email. */
+    external: z.boolean().optional(),
+  })
+  .superRefine((person, ctx) => {
+    // Org teammates can ride a seat without an inbox. Outsiders need email —
+    // that is how the invite reaches them and how the job finds their account.
+    if ((person.external || !person.userId) && !person.email) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Email is required to invite someone outside the company.',
+        path: ['email'],
+      });
+    }
+  });
 
 const approveSchema = z.object({
   title: z.string().trim().min(1).max(200),
@@ -342,9 +362,109 @@ const approveSchema = z.object({
     )
     .min(1)
     .max(60),
-  /** Field Capture team members invited to film this job. */
+  /** Field Capture teammates and/or external subcontractors invited to film. */
   invitees: z.array(inviteeSchema).min(1).max(20),
 });
+
+async function actorLabelFor(supabase: any, userId: string): Promise<string> {
+  const { data } = await supabase
+    .from('profiles')
+    .select('full_name, email')
+    .eq('id', userId)
+    .maybeSingle();
+  return (data as any)?.full_name ?? (data as any)?.email ?? 'Office';
+}
+
+/**
+ * Best-effort: email the capture invite, and if this inbox already owns a
+ * field identity, attach the job so it shows under My jobs without a second trip.
+ */
+async function deliverPartyInvite(input: {
+  supabase: any;
+  orgId: string;
+  jobId: string;
+  jobTitle: string;
+  userId: string;
+  partyId: string;
+  company: string;
+  contactName: string;
+  email: string | null;
+  token: string;
+}): Promise<{ emailed: boolean; recipientHasAccount: boolean; attachedToAccount: boolean }> {
+  const email = input.email?.trim().toLowerCase() || null;
+  if (!email) {
+    return { emailed: false, recipientHasAccount: false, attachedToAccount: false };
+  }
+
+  const admin = createAdminClient();
+  let recipientHasAccount = false;
+  let erased = false;
+  let attachedToAccount = false;
+
+  if (admin) {
+    const [{ data: existing }, { data: erasure }, { data: identity }] = await Promise.all([
+      admin.from('profiles').select('id').ilike('email', email).limit(1).maybeSingle(),
+      admin.from('network_erasures').select('email').eq('email', email).maybeSingle(),
+      admin
+        .from('field_identities')
+        .select('id')
+        .eq('channel', 'email')
+        .eq('address', email)
+        .maybeSingle(),
+    ]);
+    recipientHasAccount = Boolean(existing);
+    erased = Boolean(erasure);
+
+    // Already proved this inbox — the job lands in their list immediately.
+    if (identity) {
+      const { error } = await admin.from('job_party_claims').upsert(
+        {
+          org_id: input.orgId,
+          party_id: input.partyId,
+          identity_id: (identity as any).id,
+        },
+        { onConflict: 'party_id' },
+      );
+      attachedToAccount = !error;
+    }
+  }
+
+  let emailed = false;
+  if (!erased) {
+    try {
+      const sender = await buildMailSender(input.orgId);
+      if (sender) {
+        const [{ data: org }, inviterName] = await Promise.all([
+          input.supabase.from('orgs').select('name').eq('id', input.orgId).maybeSingle(),
+          actorLabelFor(input.supabase, input.userId),
+        ]);
+        const emailParam = encodeURIComponent(email);
+        const sharePath = `/shared/${input.token}?email=${emailParam}`;
+        const mail = partyInviteEmail({
+          orgName: (org as any)?.name ?? 'An Atmosphere member',
+          inviterName,
+          jobTitle: input.jobTitle,
+          recipientName: input.contactName || input.company,
+          recipientEmail: email,
+          recipientHasAccount,
+          origin: config.frontendOrigins?.[0] ?? null,
+          path: sharePath,
+          signupPath: `/login?mode=signup&email=${emailParam}`,
+        });
+        const result = await sender.send({
+          to: email,
+          subject: mail.subject,
+          text: mail.text,
+        });
+        emailed = result.ok;
+      }
+    } catch {
+      // Invite stands; emailed:false is the honest report.
+    }
+  }
+
+  return { emailed, recipientHasAccount, attachedToAccount };
+}
 
 /**
  * POST /api/operations/intake/approve
@@ -433,19 +553,26 @@ jobIntakeRouter.post('/intake/approve', async (req: Request, res: Response, next
       sharePath: string;
       fieldCapturePath: string;
       token: string;
+      external: boolean;
+      emailed: boolean;
+      recipientHasAccount: boolean;
+      attachedToAccount: boolean;
     }> = [];
 
     for (const person of input.invitees) {
+      const company = (person.company?.trim() || person.fullName).slice(0, 160);
+      const contactName = person.fullName;
+      const email = person.email?.trim().toLowerCase() || null;
+      const external = Boolean(person.external || !person.userId);
       const { data: party, error: partyError } = await supabase
         .from('job_parties')
         .insert({
           org_id: orgId,
           job_id: jobId,
-          // Company label = who is capturing; trade marks Field Capture.
-          company: person.fullName,
-          trade: person.trade || 'field_capture',
-          contact_name: person.fullName,
-          email: person.email ?? null,
+          company,
+          trade: person.trade || (external ? 'subcontractor' : 'field_capture'),
+          contact_name: contactName,
+          email,
           role: 'subcontractor',
           invited_at: new Date().toISOString(),
           created_by: userId,
@@ -453,26 +580,45 @@ jobIntakeRouter.post('/intake/approve', async (req: Request, res: Response, next
         .select('id, company, access_token, email')
         .single();
       if (partyError || !party) {
-        throw new HttpError(500, `Could not invite ${person.fullName}.`, 'party_failed');
+        throw new HttpError(500, `Could not invite ${contactName}.`, 'party_failed');
       }
       const token = String((party as any).access_token);
-      invites.push({
-        id: String((party as any).id),
-        name: String((party as any).company),
-        email: ((party as any).email as string) ?? null,
+      const partyId = String((party as any).id);
+      const delivery = await deliverPartyInvite({
+        supabase,
+        orgId,
+        jobId,
+        jobTitle: (job as any).title,
+        userId,
+        partyId,
+        company,
+        contactName,
+        email,
         token,
-        sharePath: `/shared/${token}`,
+      });
+      const emailParam = email ? `?email=${encodeURIComponent(email)}` : '';
+      invites.push({
+        id: partyId,
+        name: company,
+        email: ((party as any).email as string) ?? email,
+        token,
+        sharePath: `/shared/${token}${emailParam}`,
         fieldCapturePath: `/fieldcapture/index.html?token=${encodeURIComponent(token)}`,
+        external,
+        emailed: delivery.emailed,
+        recipientHasAccount: delivery.recipientHasAccount,
+        attachedToAccount: delivery.attachedToAccount,
       });
     }
 
+    const emailedCount = invites.filter((i) => i.emailed).length;
     await recordAccess(supabase, {
       orgId,
       jobId,
       action: 'job_created',
       actorId: userId,
       actorLabel: 'Office',
-      detail: `Intake approved — ${(scopeRows ?? []).length} scope lines, brief r${revision}, ${invites.length} Field Capture invite(s)`,
+      detail: `Intake approved — ${(scopeRows ?? []).length} scope lines, brief r${revision}, ${invites.length} invite(s)${emailedCount ? `, ${emailedCount} emailed` : ''}`,
     }).catch(() => undefined);
 
     const facts = await factsFor(supabase, jobId);

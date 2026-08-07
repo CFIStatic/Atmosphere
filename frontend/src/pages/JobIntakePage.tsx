@@ -12,12 +12,20 @@ import { SpinnerIcon } from '../components/icons';
 /**
  * AI-first office intake — one paste, one review, one approve.
  *
- * Creates the job file, scope lines, published brief, and Field Capture invites
- * together. No money. The capture team is preloaded from your org and invited
- * to film the job.
+ * Creates the job file, scope lines, published brief, and capture invites
+ * together. Invite your Field Capture team and/or subcontractors by email.
+ * Outsiders get an email; if they already have an Atmosphere account the job
+ * shows there, otherwise they are prompted to create one.
  */
 
 type Step = 'paste' | 'review' | 'done';
+
+type ExternalInvite = {
+  id: string;
+  fullName: string;
+  company: string;
+  email: string;
+};
 
 const SAMPLE = `Claim #AM-10428
 Property: 1842 Meridian Ave
@@ -33,12 +41,18 @@ DO NOT: open ceilings without written approval
 
 Mitigation — water loss`;
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export function JobIntakePage() {
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>('paste');
   const [text, setText] = useState('');
   const [proposal, setProposal] = useState<IntakeProposal | null>(null);
   const [captureTeam, setCaptureTeam] = useState<CaptureTeamMember[]>([]);
+  const [externals, setExternals] = useState<ExternalInvite[]>([]);
+  const [extName, setExtName] = useState('');
+  const [extCompany, setExtCompany] = useState('');
+  const [extEmail, setExtEmail] = useState('');
   const [result, setResult] = useState<IntakeApproveResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +70,7 @@ export function JobIntakePage() {
     () => captureTeam.filter((m) => m.selected).length,
     [captureTeam],
   );
+  const inviteTotal = selectedCount + externals.length;
 
   async function onPropose(e: FormEvent) {
     e.preventDefault();
@@ -67,6 +82,7 @@ export function JobIntakePage() {
       setCaptureTeam(
         (res.captureTeam ?? []).map((m) => ({ ...m, selected: m.selected !== false })),
       );
+      setExternals([]);
       setStep('review');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not draft that package.');
@@ -75,19 +91,55 @@ export function JobIntakePage() {
     }
   }
 
+  function addExternal() {
+    const email = extEmail.trim().toLowerCase();
+    const fullName = extName.trim();
+    const company = extCompany.trim() || fullName;
+    if (!fullName) {
+      setError('Add a name for the subcontractor.');
+      return;
+    }
+    if (!EMAIL_RE.test(email)) {
+      setError('Enter a valid email to invite someone outside the company.');
+      return;
+    }
+    if (externals.some((x) => x.email === email)) {
+      setError('That email is already on the invite list.');
+      return;
+    }
+    setError(null);
+    setExternals((list) => [
+      ...list,
+      { id: `ext-${Date.now()}-${list.length}`, fullName, company, email },
+    ]);
+    setExtName('');
+    setExtCompany('');
+    setExtEmail('');
+  }
+
   async function onApprove(e: FormEvent) {
     e.preventDefault();
     if (!proposal) return;
-    const invitees = captureTeam
-      .filter((m) => m.selected)
-      .map((m) => ({
-        userId: m.userId,
-        fullName: m.fullName,
-        email: m.email,
-        trade: 'field_capture',
-      }));
+    const invitees = [
+      ...captureTeam
+        .filter((m) => m.selected)
+        .map((m) => ({
+          userId: m.userId,
+          fullName: m.fullName,
+          email: m.email,
+          trade: 'field_capture' as const,
+          external: false,
+        })),
+      ...externals.map((x) => ({
+        fullName: x.fullName,
+        company: x.company,
+        email: x.email,
+        trade: 'subcontractor',
+        external: true,
+      })),
+    ];
     if (invitees.length < 1) {
-      setError('Select at least one Field Capture teammate to invite.');
+      setError('Invite at least one Field Capture teammate or subcontractor.');
       return;
     }
     setBusy(true);
@@ -174,7 +226,7 @@ export function JobIntakePage() {
       <PageHeader
         eyebrow="Work Verification Platform"
         title="Start a job"
-        description="Paste the scope. Review what we drafted. Approve once — Field Capture is invited to film. Nothing about money here; this is the handoff."
+        description="Paste the scope. Review what we drafted. Approve once — invite your Field Capture team and subcontractors by email. Nothing about money here; this is the handoff."
         action={
           <Link
             to="/shared"
@@ -422,8 +474,8 @@ export function JobIntakePage() {
 
             {captureTeam.length === 0 ? (
               <p className="mt-4 text-sm text-ink-600">
-                No field technicians in this org yet. Add Field Capture teammates under Team, then
-                come back — or invite will need at least one capture person.
+                No field technicians in this org yet. Invite a subcontractor by email below, or add
+                Field Capture teammates under Team.
               </p>
             ) : (
               <ul className="mt-4 divide-y divide-line/50">
@@ -454,6 +506,95 @@ export function JobIntakePage() {
             </p>
           </div>
 
+          <div className="rounded-xl glass-card p-5">
+            <h2 className="text-base font-semibold text-ink-900">Invite a subcontractor</h2>
+            <p className="mt-1 text-sm text-ink-600">
+              Outside your company — email invite. If they already have an Atmosphere account, the
+              job shows there. If not, the email walks them through creating one with that address.
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <label className="block text-xs font-medium text-ink-600">
+                Contact name
+                <input
+                  className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
+                  value={extName}
+                  onChange={(e) => setExtName(e.target.value)}
+                  placeholder="Alex Rivera"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addExternal();
+                    }
+                  }}
+                />
+              </label>
+              <label className="block text-xs font-medium text-ink-600">
+                Company
+                <input
+                  className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
+                  value={extCompany}
+                  onChange={(e) => setExtCompany(e.target.value)}
+                  placeholder="Rio Grande Mitigation"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addExternal();
+                    }
+                  }}
+                />
+              </label>
+              <label className="block text-xs font-medium text-ink-600">
+                Email
+                <input
+                  type="email"
+                  className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
+                  value={extEmail}
+                  onChange={(e) => setExtEmail(e.target.value)}
+                  placeholder="alex@example.com"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addExternal();
+                    }
+                  }}
+                />
+              </label>
+            </div>
+            <button
+              type="button"
+              onClick={() => addExternal()}
+              className="mt-3 text-sm font-medium text-brand-600"
+            >
+              Add to invite list
+            </button>
+            {externals.length > 0 && (
+              <ul className="mt-4 divide-y divide-line/50">
+                {externals.map((x) => (
+                  <li key={x.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                    <div className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium text-ink-900">{x.fullName}</span>
+                      <span className="block truncate text-xs text-ink-500">
+                        {[x.company !== x.fullName ? x.company : null, x.email]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </span>
+                    </div>
+                    <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-ink-400">
+                      Email
+                    </span>
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-ink-500 hover:text-danger-600"
+                      onClick={() => setExternals((list) => list.filter((i) => i.id !== x.id))}
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           <div className="flex flex-wrap items-center gap-3 pb-8">
             <button
               type="button"
@@ -465,14 +606,15 @@ export function JobIntakePage() {
             </button>
             <button
               type="submit"
-              disabled={busy || !proposal.scope.length || selectedCount < 1}
+              disabled={busy || !proposal.scope.length || inviteTotal < 1}
               className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-ink-900 disabled:opacity-50"
             >
               {busy && <SpinnerIcon className="h-4 w-4 animate-spin" />}
-              Approve &amp; invite Field Capture
+              Approve &amp; invite
             </button>
             <p className="text-xs text-ink-500">
-              Creates the job file, publishes the brief, and invites the capture team — in one step.
+              {inviteTotal} invite{inviteTotal === 1 ? '' : 's'} · job file, brief, and capture
+              links in one step.
             </p>
           </div>
         </form>
@@ -481,20 +623,23 @@ export function JobIntakePage() {
       {step === 'done' && result && (
         <div className="mx-auto max-w-3xl space-y-4 animate-fade-in-up">
           <div className="rounded-xl border border-success-200/80 bg-success-50/40 glass-card p-5">
-            <h2 className="text-base font-semibold text-ink-900">Field Capture invited</h2>
+            <h2 className="text-base font-semibold text-ink-900">Capture invited</h2>
             <p className="mt-1 text-sm text-ink-600">
               <span className="font-medium text-ink-800">{result.job.title}</span>
               {result.job.jobNumber != null ? ` · Job #${result.job.jobNumber}` : ''} ·{' '}
               {result.scopeSaved} scope lines · brief r{result.briefRevision} · {invites.length}{' '}
-              capture link{invites.length === 1 ? '' : 's'}
+              invite{invites.length === 1 ? '' : 's'}
+              {invites.some((i) => i.emailed)
+                ? ` · ${invites.filter((i) => i.emailed).length} emailed`
+                : ''}
             </p>
           </div>
 
           <div className="rounded-xl glass-card p-5">
-            <h3 className="text-sm font-semibold text-ink-900">Capture links</h3>
+            <h3 className="text-sm font-semibold text-ink-900">Invites</h3>
             <p className="mt-1 text-sm text-ink-600">
-              Send each person their link. They see the scope, accept the brief, and film the day —
-              no office login.
+              Teammates get a capture link. Subcontractors get an email — if they already have an
+              Atmosphere account the job shows there; if not, the email prompts them to create one.
             </p>
             <ul className="mt-4 space-y-3">
               {invites.map((inv) => (
@@ -506,15 +651,28 @@ export function JobIntakePage() {
                     <p className="text-sm font-medium text-ink-900">{inv.name}</p>
                     {inv.email && <p className="text-xs text-ink-500">{inv.email}</p>}
                   </div>
+                  <p className="mt-1 text-xs text-ink-500">
+                    {inv.emailed
+                      ? inv.recipientHasAccount
+                        ? 'Emailed — they already have an Atmosphere account; the job will show when they sign in.'
+                        : 'Emailed — no account yet; the email walks them through creating one with this address.'
+                      : inv.email
+                        ? 'Email not sent (no mailbox connected) — copy the link below.'
+                        : 'Copy their capture link below.'}
+                    {inv.attachedToAccount ? ' Already on their My jobs list.' : ''}
+                  </p>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <code className="glass-field min-w-0 flex-1 truncate rounded-lg px-3 py-2 text-xs text-ink-800">
                       {window.location.origin}
-                      {inv.fieldCapturePath || inv.sharePath}
+                      {inv.external ? inv.sharePath : inv.fieldCapturePath || inv.sharePath}
                     </code>
                     <button
                       type="button"
                       onClick={() =>
-                        void copyLink(inv.fieldCapturePath || inv.sharePath, inv.id)
+                        void copyLink(
+                          inv.external ? inv.sharePath : inv.fieldCapturePath || inv.sharePath,
+                          inv.id,
+                        )
                       }
                       className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-ink-900"
                     >
@@ -560,6 +718,7 @@ export function JobIntakePage() {
                 setText('');
                 setProposal(null);
                 setCaptureTeam([]);
+                setExternals([]);
                 setResult(null);
               }}
             >

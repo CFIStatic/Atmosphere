@@ -925,8 +925,11 @@ export type CaptureTeamMember = {
 export type IntakeInvitee = {
   userId?: string;
   fullName: string;
+  company?: string;
   email?: string | null;
   trade?: string;
+  /** Outside the org — mainly subcontractors invited by email. */
+  external?: boolean;
 };
 
 export type IntakeApproveInput = {
@@ -949,6 +952,10 @@ export type IntakeCaptureInvite = {
   sharePath: string;
   fieldCapturePath: string;
   token: string;
+  external?: boolean;
+  emailed?: boolean;
+  recipientHasAccount?: boolean;
+  attachedToAccount?: boolean;
 };
 
 export type IntakeApproveResult = {
