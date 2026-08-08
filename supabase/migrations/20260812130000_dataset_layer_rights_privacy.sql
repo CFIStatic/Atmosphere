@@ -348,9 +348,7 @@ begin
     'privacy_findings',
     'provenance_records',
     'dataset_examples',
-    'dataset_example_media',
     'export_jobs',
-    'export_manifests',
     'eligibility_decisions'
   ] loop
     execute format('alter table public.%I enable row level security', t);
@@ -362,7 +360,7 @@ begin
     execute format(
       'create policy %I_insert on public.%I for insert to authenticated
          with check (private.is_org_member(org_id))', t, t);
-    if t not in ('eligibility_decisions', 'provenance_records', 'export_manifests') then
+    if t not in ('eligibility_decisions', 'provenance_records') then
       execute format('drop policy if exists %I_update on public.%I', t, t);
       execute format(
         'create policy %I_update on public.%I for update to authenticated
@@ -408,6 +406,63 @@ begin
          exists (
            select 1 from public.dataset_registry d
            where d.id = dataset_id and d.org_id is not null and private.is_org_member(d.org_id)
+         )
+       )';
+
+  execute 'alter table public.dataset_example_media enable row level security';
+  execute 'drop policy if exists dataset_example_media_select on public.dataset_example_media';
+  execute
+    'create policy dataset_example_media_select on public.dataset_example_media for select to authenticated
+       using (
+         exists (
+           select 1 from public.dataset_examples e
+           where e.id = example_id and private.is_org_member(e.org_id)
+         )
+       )';
+  execute 'drop policy if exists dataset_example_media_insert on public.dataset_example_media';
+  execute
+    'create policy dataset_example_media_insert on public.dataset_example_media for insert to authenticated
+       with check (
+         exists (
+           select 1 from public.dataset_examples e
+           where e.id = example_id and private.is_org_member(e.org_id)
+         )
+       )';
+  execute 'drop policy if exists dataset_example_media_update on public.dataset_example_media';
+  execute
+    'create policy dataset_example_media_update on public.dataset_example_media for update to authenticated
+       using (
+         exists (
+           select 1 from public.dataset_examples e
+           where e.id = example_id and private.is_org_member(e.org_id)
+         )
+       )
+       with check (
+         exists (
+           select 1 from public.dataset_examples e
+           where e.id = example_id and private.is_org_member(e.org_id)
+         )
+       )';
+
+  execute 'alter table public.export_manifests enable row level security';
+  execute 'drop policy if exists export_manifests_select on public.export_manifests';
+  execute
+    'create policy export_manifests_select on public.export_manifests for select to authenticated
+       using (
+         exists (
+           select 1 from public.export_jobs j
+           where j.id = export_job_id
+             and (j.org_id is null or private.is_org_member(j.org_id))
+         )
+       )';
+  execute 'drop policy if exists export_manifests_insert on public.export_manifests';
+  execute
+    'create policy export_manifests_insert on public.export_manifests for insert to authenticated
+       with check (
+         exists (
+           select 1 from public.export_jobs j
+           where j.id = export_job_id
+             and j.org_id is not null and private.is_org_member(j.org_id)
          )
        )';
 end $$;
