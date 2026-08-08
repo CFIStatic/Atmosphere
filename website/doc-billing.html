@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Work Verification pricing at $599/month (Field Capture + Evidence Platform), plus how the one flat token rate is set and metered." />
+  <meta name="description" content="How Atmosphere billing works — platform fee, job usage, and exceptional compute. Customer-facing usage without token counts." />
   <meta name="theme-color" content="#FBFAF7" />
-  <title>Billing & the flat rate · Atmosphere Docs</title>
-  <meta property="og:title" content="Billing & the flat rate · Atmosphere Docs" />
-  <meta property="og:description" content="Work Verification pricing at $599/month (Field Capture + Evidence Platform), plus how the one flat token rate is set and metered." />
+  <title>Billing &amp; usage · Atmosphere Docs</title>
+  <meta property="og:title" content="Billing &amp; usage · Atmosphere Docs" />
+  <meta property="og:description" content="How Atmosphere billing works — platform fee, job usage, and exceptional compute. Customer-facing usage without token counts." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Atmosphere" />
   <meta property="og:image" content="/assets/og.png" />
@@ -101,40 +101,36 @@
       <a href="doc-field.html">Field Capture</a>
       <a href="doc-web-access.html">The Verifier</a>
       <div class="grp mono">Account</div>
-      <a class="active" href="doc-billing.html">Billing &amp; the flat rate</a>
+      <a class="active" href="doc-billing.html">Billing &amp; usage</a>
   </aside>
   <article class="docs-prose">
     <div class="eyebrow mono">Resources · Account</div>
-    <h1>Billing &amp; the flat rate</h1>
-    <p class="lede">Work Verification at $599/month — Field Capture and the Evidence Platform bundled — plus how the one flat token rate is set and metered.</p>
+    <h1>Billing &amp; usage</h1>
+    <p class="lede">Monthly platform fee plus usage based on jobs processed and exceptional compute — not raw LLM tokens on your invoice.</p>
 
-<h2>One subscription</h2>
-<p>Work Verification ships as one monthly subscription at <strong>$599</strong>, plus usage at the flat token rate. The fee includes both parts of the system:</p>
-<table>
-<tr><th>Part</th><th>What it does</th></tr>
-<tr><td>Field Capture</td><td>On-site capture — film, voice, and camera — and verification as work happens</td></tr>
-<tr><td>Evidence Platform</td><td>The full record — Verifier, audit trail, durable storage, replay, and sharing</td></tr>
-</table>
-<p>Both are required for the system to work, so they are not sold separately.</p>
-<h2>The flat rate</h2>
-<p>Usage is billed per token at one simple rate:</p>
-<pre><code>Input   $30  per million tokens
-Output  $150 per million tokens</code></pre>
-<p>Every token is billed at that rate <strong>whichever model actually ran the task</strong> — your job always goes to the model that does it best, and the bill stays two numbers you can check against the token counts in your audit trail.</p>
-<h2>Credits: prepaid, always</h2>
-<p>Usage is prepaid. You buy credits — one credit is one dollar of usage at the flat rate — and agents draw the balance down as they work. Nothing ever runs on an unpaid balance, which is also why there is never a surprise bill: what you loaded is the most you can spend.</p>
-<p>Credits come in packs from $10 to $1,000, and the larger packs carry a volume bonus ($100 buys $103 of usage; $1,000 buys $1,075).</p>
-<h2>Auto-reload or manual reload</h2>
-<p>In <strong>Settings &rarr; Billing</strong> you choose how the balance stays topped up:</p>
+<h2>Three billing layers</h2>
+<ol>
+<li><strong>Base platform fee</strong> — fixed monthly subscription for Field Capture and the Evidence Platform. Varies by plan; enterprise terms are negotiable.</li>
+<li><strong>Job usage</strong> — each unique job Atmosphere actively processes in a billing period counts once, regardless of how many AI actions occur inside it. Plans include an allowance; overages are per job.</li>
+<li><strong>Exceptional compute</strong> — heavy workloads (long-form video, large documents, expensive autonomous workflows) draw from included Compute Units. Overages are billed in understandable units — never as token counts.</li>
+</ol>
+
+<h2>What you see in the app</h2>
+<p>Open <strong>Usage</strong> in the product to see:</p>
 <ul>
-<li><strong>Auto-reload on</strong> — set a threshold and an amount; when the balance dips below the threshold, a reload purchases itself. The defaults are a $25 reload when the balance falls under $5.</li>
-<li><strong>Auto-reload off (manual)</strong> — every purchase is one you made. When the balance reaches zero, new runs pause and resume the moment you top up; nothing in your record is lost while paused.</li>
+<li>Jobs processed this period</li>
+<li>Jobs above your plan allowance</li>
+<li>Video verification hours</li>
+<li>Compute overage, if applicable</li>
+<li>Estimated upcoming bill</li>
 </ul>
-<p>Either way, an organization-level <strong>monthly spend cap</strong> is available, and no reload — automatic or manual — will carry usage past it.</p>
-<h2>How usage is counted</h2>
-<p>Token counts come from the model provider's own response, never from the browser — what you are billed is what was actually spent. Every grant, charge, and adjustment lands in an append-only ledger you can read by run, by agent, and by platform.</p>
-<h2>There is no bundled allowance</h2>
-<p>Products include no free usage — the monthly fee buys access, and every token comes out of credits you loaded. A quiet week costs you the subscription and nothing more; unused credits just wait.</p>
+<p>Token counts, model names, and provider costs are tracked internally for Atmosphere's cost accounting — they do not appear on your invoice.</p>
+
+<h2>Configurable plans</h2>
+<p>Base fees, included jobs, per-job rates, compute allowances, and video processing rates are stored in versioned billing plans. Customer-specific overrides are supported. When a billing period closes, pricing inputs are snapshotted so historical invoices never change when plans or provider costs change later.</p>
+
+<h2>Legacy credit ledger</h2>
+<p>Some agent paths still draw from the prepaid credit ledger during migration. New workflows record internal usage events and bill through the job + compute model above.</p>
 
     <div class="doc-pager">
       <a class="prev" href="doc-web-access.html"><span class="dir mono">&larr; PREVIOUS</span>The Verifier</a>

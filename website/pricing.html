@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Atmosphere pricing — Work Verification at $599/month (Field Capture + Evidence Platform) plus usage at one flat token rate. Prepaid credits, auto or manual reload."  />
+  <meta name="description" content="Atmosphere pricing — monthly platform fee plus usage based on jobs processed and exceptional compute. No token counts on your invoice."  />
   <meta name="theme-color" content="#FBFAF7" />
   <title>Pricing · Atmosphere</title>
   <meta property="og:title" content="Pricing · Atmosphere" />
-  <meta property="og:description" content="Atmosphere pricing — Work Verification at $599/month (Field Capture + Evidence Platform) plus usage at one flat token rate. Prepaid credits, auto or manual reload." />
+  <meta property="og:description" content="Atmosphere pricing — monthly platform fee plus usage based on jobs processed and exceptional compute. No token counts on your invoice." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Atmosphere" />
   <meta property="og:image" content="/assets/og.png" />
@@ -15,7 +15,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect width='22' height='2.8' fill='%23A8A29E'/%3E%3Crect y='4.8' width='22' height='2.8' fill='%2378716C'/%3E%3Crect y='9.6' width='22' height='2.8' fill='%2357534E'/%3E%3Crect y='14.4' width='22' height='2.8' fill='%23292524'/%3E%3Crect y='19.2' width='22' height='2.8' fill='%23F2670C'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="assets/site.css" />
   <script>try{var t=localStorage.getItem('atm-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is included in the subscription?","acceptedAnswer":{"@type":"Answer","text":"One monthly fee covers the full Work Verification system: Field Capture for filming and checking work on site, and the Evidence Platform for recording, verifying, storing, and sharing that work. Both are required — they ship together."}},{"@type":"Question","name":"What does the monthly fee cover?","acceptedAnswer":{"@type":"Answer","text":"The $599 flat fee buys access to the complete system — capture on site, the Verifier, the audit trail, durable storage, and sharing. Token usage is billed separately at the flat rate below."}},{"@type":"Question","name":"Why one flat usage rate?","acceptedAnswer":{"@type":"Answer","text":"So the math stays simple: two numbers and the token counts in your audit trail. The rate covers the agents doing the work, the Verifier's second pass over it, and the record you can replay."}},{"@type":"Question","name":"What happens when the balance hits zero?","acceptedAnswer":{"@type":"Answer","text":"New runs pause — Atmosphere never spends money you haven't loaded. Turn on auto-reload and the balance tops itself up before that point; keep it manual and one click resumes work. Either way, nothing already in your record is lost."}},{"@type":"Question","name":"Where do I choose auto or manual reload?","acceptedAnswer":{"@type":"Answer","text":"Settings → Billing. Auto-reload takes a threshold and an amount; leaving it off means every purchase is one you made yourself. You can also set a monthly spend cap that neither mode will cross."}},{"@type":"Question","name":"What are Field Capture and the Evidence Platform?","acceptedAnswer":{"@type":"Answer","text":"They are the two parts of one system, not separate purchases. Field Capture is how crews film daily work on site. The Evidence Platform is where that footage is checked, read against the scope, and held in a chain of custody. You get both on every subscription."}},{"@type":"Question","name":"Does Atmosphere train on our data?","acceptedAnswer":{"@type":"Answer","text":"The learning layer scores your organization's own runs and improves how work is routed for you. Your data stays inside your organization, behind Row-Level Security — another org's agents cannot see it, at the database layer."}}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is included in the subscription?","acceptedAnswer":{"@type":"Answer","text":"One monthly platform fee covers the full Work Verification system: Field Capture for filming and checking work on site, and the Evidence Platform for recording, verifying, storing, and sharing that work. Both are required — they ship together."}},{"@type":"Question","name":"How is usage billed?","acceptedAnswer":{"@type":"Answer","text":"Usage is billed in understandable units: processed jobs above your plan allowance, exceptional compute for heavy workloads like long-form video analysis, and optional video processing rates. You are not billed directly on LLM tokens or model names."}},{"@type":"Question","name":"What counts as a processed job?","acceptedAnswer":{"@type":"Answer","text":"A job is counted once per billing period when Atmosphere performs a qualifying workflow against it — such as daily work verification capture. Multiple AI actions inside the same job do not multiply the count."}},{"@type":"Question","name":"What are Field Capture and the Evidence Platform?","acceptedAnswer":{"@type":"Answer","text":"They are the two parts of one system, not separate purchases. Field Capture is how crews film daily work on site. The Evidence Platform is where that footage is checked, read against the scope, and held in a chain of custody."}},{"@type":"Question","name":"Can plans be customized?","acceptedAnswer":{"@type":"Answer","text":"Yes. Base fees, included jobs, per-job overage rates, included compute units, and enterprise terms are configurable per customer — nothing is hard-coded in the product."}},{"@type":"Question","name":"Does Atmosphere train on our data?","acceptedAnswer":{"@type":"Answer","text":"The learning layer scores your organization's own runs and improves how work is routed for you. Your data stays inside your organization, behind Row-Level Security."}}]}</script>
 </head>
 <body>
 
@@ -94,13 +94,12 @@
 <header class="page-hero">
   <div class="wrap">
     <div class="eyebrow mono">Pricing</div>
-    <h1>One subscription. The full system, plus usage.</h1>
+    <h1>Platform fee + usage you can explain on one line</h1>
     <p class="lede">
       Work Verification ships as one bundle — <strong>Field Capture</strong> on site and the
-      <strong>Evidence Platform</strong> for the record. You need both for the system to work,
-      so we sell them together: <strong>$599 per month</strong>, plus usage credits at
-      one flat token rate. Nothing runs on an unpaid balance, nothing expires unused,
-      and nothing is priced differently because of which model did the work.
+      <strong>Evidence Platform</strong> for the record. You pay a <strong>monthly platform fee</strong>,
+      then usage based on <strong>jobs Atmosphere processes</strong> and
+      <strong>exceptional compute</strong> — not raw LLM tokens or model names on your invoice.
     </p>
   </div>
 </header>
@@ -109,8 +108,8 @@
   <div class="subnav-inner">
     <a href="#plans">PLANS</a>
     <a href="#usage">USAGE</a>
-    <a href="#rates">THE RATE</a>
-    <a href="#credits">CREDITS &amp; RELOAD</a>
+    <a href="#jobs">JOBS</a>
+    <a href="#compute">COMPUTE</a>
     <a href="#faq">FAQ</a>
   </div>
 </nav>
@@ -128,20 +127,21 @@
         <span class="flag mono">FULL SYSTEM</span>
         <div class="plan-name mono">Work Verification</div>
         <div class="price"><span class="amt">$599</span></div>
-        <p class="per">per month · plus usage</p>
+        <p class="per">platform fee / month · plus usage</p>
         <p class="plan-desc">Field Capture + Evidence Platform — sold together</p>
         <ul class="checks">
           <li>Field Capture — film and check work on site</li>
           <li>Evidence Platform — Verifier, audit trail, storage, sharing</li>
-          <li>Both required; both included on every subscription</li>
-          <li>Usage billed at the flat rate below</li>
+          <li>Included processed jobs each period (plan-specific)</li>
+          <li>Job overages and exceptional compute billed separately</li>
         </ul>
         <a class="btn plan-cta" href="signup.html">Get started</a>
       </div>
     </div>
     <p class="plans-note">
-      The monthly fee is one line on your bill — capture in the field and the evidence
-      record in the platform. Token usage is billed separately, at the flat rate below.
+      Platform fees, included jobs, per-job overage rates, and compute allowances are
+      configurable by plan and by customer. Enterprise terms are negotiated — nothing is
+      hard-coded in the product.
     </p>
   </div>
 </section>
@@ -150,139 +150,100 @@
   <div class="wrap">
     <div class="section-head">
       <div class="eyebrow mono">Usage</div>
-      <h2>You pay for tokens, and only for tokens</h2>
+      <h2>Three layers — one invoice you can read aloud</h2>
       <p>
-        No bundled allowance, no postpaid tab. You load credits, agents draw them down
-        as they work, and a quiet week costs you the monthly fee and nothing more — unused
-        credits just wait.
+        Customers see work performed, not infrastructure. Atmosphere tracks tokens and
+        provider costs internally; your bill is based on platform access, jobs processed,
+        and exceptional compute when a workload goes beyond the ordinary.
       </p>
     </div>
     <div class="sec-grid">
       <div class="sec-card">
-        <span class="kbd mono">prepaid</span>
-        <h3>Credits first, tokens second</h3>
-        <p>You buy usage credits before agents spend them. One credit is one dollar of usage at the flat rate — so there is never a surprise bill at month end, on either side of the table.</p>
+        <span class="kbd mono">01</span>
+        <h3>Base platform fee</h3>
+        <p>Fixed monthly subscription for Field Capture and the Evidence Platform. Varies by plan and can be negotiated for enterprise customers.</p>
       </div>
       <div class="sec-card">
-        <span class="kbd mono">metered</span>
-        <h3>Counted by the provider, not by us</h3>
-        <p>Every token drawn from your balance is counted from the model provider's own response, never from the browser — and lands in an append-only ledger you can read by run, agent, and platform.</p>
+        <span class="kbd mono">02</span>
+        <h3>Job usage</h3>
+        <p>Each unique job Atmosphere actively processes in a billing period counts once — no matter how many AI actions happen inside it. Plans include a job allowance; overages are per job.</p>
       </div>
       <div class="sec-card">
-        <span class="kbd mono">zero</span>
-        <h3>At zero, work pauses — never runs a tab</h3>
-        <p>An empty balance pauses new runs rather than billing past it. Auto-reload tops you up before that ever happens, or reload manually if you'd rather approve every dollar.</p>
+        <span class="kbd mono">03</span>
+        <h3>Exceptional compute</h3>
+        <p>Long-form video analysis, large document sets, and unusually expensive autonomous workflows draw from included compute units. Overages are billed in Atmosphere Compute Units — never as raw token counts.</p>
       </div>
     </div>
   </div>
 </section>
 
-<section class="section" id="rates">
+<section class="section" id="jobs">
   <div class="wrap">
     <div class="section-head">
-      <div class="eyebrow mono">The rate</div>
-      <h2>One simple rate, whatever the job takes</h2>
+      <div class="eyebrow mono">Job usage</div>
+      <h2>Counted once per job, per period</h2>
       <p>
-        Every token your agents spend is billed at the same rate — whether the job needed
-        deep reasoning or a quick read. No tiers to compare, no menu of models to price,
-        no math beyond the two numbers below.
+        A job becomes billable when Atmosphere runs a qualifying workflow against it —
+        daily work verification, video analysis, document processing, or another
+        configured workflow type. Ten AI calls on the same job still count as one job.
       </p>
     </div>
 
     <div class="rate-hero">
       <div class="rate-cell">
-        <div class="rate-lbl mono">INPUT</div>
-        <div class="rate-big mono">$30</div>
-        <div class="rate-unit mono">PER MILLION TOKENS</div>
+        <div class="rate-lbl mono">EXAMPLE</div>
+        <div class="rate-big mono">187</div>
+        <div class="rate-unit mono">JOBS PROCESSED</div>
       </div>
       <div class="rate-cell">
-        <div class="rate-lbl mono">OUTPUT</div>
-        <div class="rate-big mono">$150</div>
-        <div class="rate-unit mono">PER MILLION TOKENS</div>
+        <div class="rate-lbl mono">INCLUDED</div>
+        <div class="rate-big mono">100</div>
+        <div class="rate-unit mono">ON YOUR PLAN</div>
       </div>
       <div class="rate-basis">
-        <div class="tag mono">What it covers</div>
+        <div class="tag mono">Overage</div>
         <p>
-          Everything behind a run — the frontier models doing the work, the Verifier's
-          second pass, and the record you can replay. These two numbers are the whole
-          price list.
-        </p>
-      </div>
-    </div>
-
-    <div class="quiet-row">
-      <div class="quiet-item">
-        <h3>You can estimate the bill yourself</h3>
-        <p>
-          Two numbers and the token counts in your audit trail. No model mix to work out,
-          no per-agent table to reconcile at month end.
-        </p>
-      </div>
-      <div class="quiet-item">
-        <h3>You always get our best</h3>
-        <p>
-          The rate is the same whichever model does the work, so every job simply goes to
-          whatever handles it best. There is never a reason for your work to get anything
-          less.
-        </p>
-      </div>
-      <div class="quiet-item">
-        <h3>Better routing shows up as better work</h3>
-        <p>
-          The learning layer improves which model handles what, run over run. On a flat
-          rate that lands in the estimates you send, not in a fluctuating invoice.
+          87 jobs above plan × your plan's per-job rate. Exact included jobs and overage
+          pricing are set in your plan — configurable, not hard-coded.
         </p>
       </div>
     </div>
   </div>
 </section>
 
-<section class="section" id="credits">
+<section class="section" id="compute">
   <div class="wrap">
     <div class="section-head">
-      <div class="eyebrow mono">Credits &amp; reload</div>
-      <h2>Load the balance your way</h2>
+      <div class="eyebrow mono">Exceptional compute</div>
+      <h2>Heavy workloads, understandable units</h2>
       <p>
-        Buy credits in packs — larger packs carry a volume bonus — and choose how the
-        balance stays topped up. Both controls live in Settings &rarr; Billing.
+        When verification requires unusually expensive processing — hours of video,
+        multimodal analysis, large commercial jobs — usage draws from included Compute
+        Units. You see compute overage on your bill, not millions of tokens.
       </p>
-    </div>
-
-    <div class="packs">
-      <div class="pack-head mono">
-        <span>PACK</span><span>YOU GET</span><span>BONUS</span>
-      </div>
-      <div class="pack-row"><span class="pack-price mono">$10</span><span class="pack-credits">$10 of usage</span><span class="pack-bonus mono">—</span></div>
-      <div class="pack-row"><span class="pack-price mono">$25</span><span class="pack-credits">$25 of usage</span><span class="pack-bonus mono">—</span></div>
-      <div class="pack-row"><span class="pack-price mono">$50</span><span class="pack-credits">$50 of usage</span><span class="pack-bonus mono">—</span></div>
-      <div class="pack-row"><span class="pack-price mono">$100</span><span class="pack-credits">$103 of usage</span><span class="pack-bonus mono">+$3</span></div>
-      <div class="pack-row"><span class="pack-price mono">$250</span><span class="pack-credits">$260 of usage</span><span class="pack-bonus mono">+$10</span></div>
-      <div class="pack-row"><span class="pack-price mono">$500</span><span class="pack-credits">$525 of usage</span><span class="pack-bonus mono">+$25</span></div>
-      <div class="pack-row"><span class="pack-price mono">$1,000</span><span class="pack-credits">$1,075 of usage</span><span class="pack-bonus mono">+$75</span></div>
     </div>
 
     <div class="quiet-row">
       <div class="quiet-item">
-        <h3>Auto-reload</h3>
+        <h3>Video verification hours</h3>
         <p>
-          Set a threshold and an amount, and when the balance dips below the line a
-          reload buys itself — a Friday-afternoon estimate never stops halfway. Defaults:
-          reload $25 when the balance falls under $5.
+          Long-form or multimodal video work is tracked as verification hours on your
+          usage dashboard — a number you can explain to a customer or CFO.
         </p>
       </div>
       <div class="quiet-item">
-        <h3>Manual reload</h3>
+        <h3>Compute overage</h3>
         <p>
-          Leave auto-reload off and every dollar is one you approved. Work pauses at
-          zero and resumes the moment you top up — nothing in your record is lost while
-          paused.
+          When included Compute Units are exhausted, overage is billed at your plan's
+          rate. The conversion between internal AI cost and Compute Units is configurable
+          and snapshotted when a billing period closes.
         </p>
       </div>
       <div class="quiet-item">
-        <h3>A spend cap, either way</h3>
+        <h3>Provider independence</h3>
         <p>
-          Set a monthly spend limit on the organization and no reload — automatic or
-          manual — will carry usage past it.
+          Atmosphere can switch models and providers without changing your pricing model.
+          As inference costs change, your invoice stays based on work performed.
         </p>
       </div>
     </div>
@@ -305,20 +266,26 @@
         </p>
       </details>
       <details>
-        <summary>What does the monthly fee cover?</summary>
+        <summary>What does the monthly platform fee cover?</summary>
         <p>
-          The $599 flat fee buys access to the complete system — capture on site, the
-          Verifier, the audit trail, durable storage, and sharing. Token usage is billed
-          separately at the flat rate below.
+          Access to the complete Work Verification system — Field Capture on site, the
+          Verifier, the audit trail, durable storage, and sharing. Usage for jobs and
+          exceptional compute is billed separately.
         </p>
       </details>
       <details>
-        <summary>Why one flat usage rate?</summary>
+        <summary>How is usage billed?</summary>
         <p>
-          So the math stays simple: two numbers and the token counts in your audit trail.
-          And because a token is not the product — the rate covers the agents doing the
-          work, the Verifier's second pass over it, and the record you can replay. None of
-          that comes from a model provider.
+          In three layers: the platform fee, processed jobs above your included allowance,
+          and exceptional compute overages. You see jobs processed and compute units — not
+          token counts or model names.
+        </p>
+      </details>
+      <details>
+        <summary>What counts as a processed job?</summary>
+        <p>
+          A unique job where Atmosphere runs a qualifying workflow during the billing
+          period. The job is counted once regardless of how many AI actions occur inside it.
         </p>
       </details>
       <details>
@@ -331,19 +298,10 @@
         </p>
       </details>
       <details>
-        <summary>What happens when the balance hits zero?</summary>
+        <summary>Can our plan be customized?</summary>
         <p>
-          New runs pause — Atmosphere never spends money you haven't loaded. Turn on
-          auto-reload and the balance tops itself up before that point; keep it manual
-          and one click resumes work. Either way, nothing already in your record is lost.
-        </p>
-      </details>
-      <details>
-        <summary>Where do I choose auto or manual reload?</summary>
-        <p>
-          Settings &rarr; Billing. Auto-reload takes a threshold and an amount; leaving
-          it off means every purchase is one you made yourself. You can also set a
-          monthly spend cap that neither mode will cross.
+          Yes. Base fees, included jobs, per-job rates, compute allowances, and enterprise
+          terms are all configurable. Negotiated overrides are stored per organization.
         </p>
       </details>
       <details>

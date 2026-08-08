@@ -35,43 +35,18 @@ dark themes) and `assets/site.js` (receipt replay + the careers form).
 
 ## Pricing
 
-`pricing.html` sells one bundled subscription plus usage:
+`pricing.html` sells one bundled subscription plus usage in **understandable units**:
 
-- **Work Verification** — $599/month. Includes Field Capture (on-site film and
-  check) and the Evidence Platform (Verifier, audit trail, storage, replay, sharing).
-  Both parts are required; they are not sold separately.
-- **Usage is prepaid credits at one flat rate**, on the subscription. Customers buy
-  credits (the `credit_packs` seed, bonuses included) before agents spend them,
-  and work pauses at a zero balance. There is **no bundled allowance and no
-  postpaid usage** — the page must never imply either. Reload behavior is a
-  per-organization setting (`PATCH /api/billing/settings`: `autoReloadEnabled`
-  + threshold + amount, surfaced in the app's Billing page); auto-reload off
-  *is* manual reload.
+- **Work Verification** — configurable monthly platform fee (seed plan: $599/month).
+  Includes Field Capture and the Evidence Platform. Both parts are required.
+- **Job usage** — unique jobs processed per billing period; plans include an allowance
+  with per-job overage pricing (all configurable in `metering_plan_versions`).
+- **Exceptional compute** — Atmosphere Compute Units for heavy workloads (video analysis,
+  large documents). Internal AI/token costs are tracked in `private.ai_usage_events`
+  but never shown on customer invoices.
 
-  This ordering is the margin guarantee: every token is sold at 2× list and
-  paid for before it is spent, so usage can never be served at a loss or go
-  uncollected.
-
-**The rate is flat and internally derived.** The flagship entry in
-`backend/src/ai/catalog.ts` lists $15/$75 per million tokens; doubled, that is
-the $30/$150 the page quotes, charged for *every* token regardless of which
-model ran the task. Raise the flagship in the catalog and this number moves
-with it. **The derivation is internal only**: customer-facing copy quotes the
-two numbers and never names the underlying model, the provider, or the 2×
-multiple — keep it that way when editing.
-
-That flat rate constrains the copy: the site must never claim routing makes a
-customer's bill cheaper, because it cannot. What it may claim — and what is
-true — is that a fixed rate leaves us no incentive to route work to a weaker
-model, and that better routing lands as better output rather than a smaller
-invoice.
-
-Two things to keep straight. The `billing_plans` seed in
-`supabase/migrations/20260727124743_billing_pricing_metering.sql` still carries
-a `free` plan and `included_credits_nanos` values from an earlier model — the
-site deliberately does **not** follow it on those two points, and the migration
-is the thing that needs updating. And the API key a customer supplies is for
-computer use, which is a setup step, never a billing arrangement.
+Legacy prepaid credits (`credit_packs`, `record_usage`) remain during migration.
+New workflows should record via `record_ai_usage_event` and bill through job + compute.
 
 ## Resources
 
