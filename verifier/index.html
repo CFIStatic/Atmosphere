@@ -222,8 +222,32 @@
   .rail-head {
     flex: none; height: 56px; display: flex; align-items: center;
     padding: 0 14px; border-bottom: 1px solid var(--line);
+    gap: 8px;
   }
-  .rail-head .brand { font-size: 15px; }
+  .rail-head .brand { font-size: 15px; flex: 1; min-width: 0; }
+  .rail-toggle {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; padding: 0;
+    border: 0; border-radius: 6px; background: none;
+    color: var(--muted); cursor: pointer; flex: none;
+  }
+  .rail-toggle:hover { background: var(--line-soft); color: var(--ink-2); }
+  .rail-toggle-expand {
+    display: none; margin: 8px auto 0; width: calc(100% - 16px);
+  }
+  body.rail-collapsed .rail-head .brand span { display: none; }
+  body.rail-collapsed .rail-head { justify-content: center; padding: 0 8px; }
+  body.rail-collapsed .rail-head .rail-toggle-collapse { display: none; }
+  body.rail-collapsed .rail-toggle-expand { display: inline-flex; }
+  body.rail-collapsed .rail h3,
+  body.rail-collapsed .navitem .label,
+  body.rail-collapsed .navitem .count { display: none; }
+  body.rail-collapsed .navitem {
+    justify-content: center; width: calc(100% - 12px); margin: 1px 6px; padding: 8px;
+  }
+  body.rail-collapsed .navitem svg { margin: 0; }
+  body.rail-collapsed { --rail-w: 64px; }
+  body.rail-collapsed[data-atm-rail-only] .rail { width: 64px; }
   .rail-section { padding-top: 6px; }
   .app-frame.has-sidebar .topbar .brand-fallback { display: none; }
   /* Rail-only embed: sidebar beside a React page — hide top bar and main pane. */
@@ -598,7 +622,13 @@
         </svg>
         <span>Atmosphere</span>
       </button>
+      <button type="button" class="rail-toggle rail-toggle-collapse" id="rail-collapse" aria-label="Collapse navigation" title="Collapse navigation">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="m14 9-3 3 3 3"/></svg>
+      </button>
     </div>
+    <button type="button" class="rail-toggle rail-toggle-expand" id="rail-expand" aria-label="Expand navigation" title="Expand navigation">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="m13 9 3 3-3 3"/></svg>
+    </button>
 
     <div class="rail-body">
     <div class="rail-section" id="platform-nav" hidden>
@@ -618,11 +648,11 @@
 
     <div class="rail-section" id="evidence-nav">
     <h3>Videos</h3>
-    <button class="navitem" data-view="all" data-label="All videos" aria-current="true"><span class="label">All videos</span> <span class="count" id="n-all">0</span></button>
-    <button class="navitem" data-view="classified" data-label="Classified"><span class="label">Classified</span> <span class="count" id="n-classified">0</span></button>
-    <button class="navitem" data-view="unanalysed" data-label="Awaiting analysis"><span class="label">Awaiting analysis</span> <span class="count" id="n-unan">0</span></button>
-    <button class="navitem" data-view="flagged" data-label="Needs review"><span class="label">Needs review</span> <span class="count" id="n-flag">0</span></button>
-    <button class="navitem" data-view="hold" data-label="Legal hold"><span class="label">Legal hold</span> <span class="count" id="n-hold">0</span></button>
+    <button class="navitem nav-icon" data-view="all" data-label="All videos" aria-current="true" title="All videos"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="M15.5 10.5l4.2-2.6a.7.7 0 0 1 1.05.6v6.99a.7.7 0 0 1-1.06.6l-4.19-2.59"/></svg><span class="label">All videos</span> <span class="count" id="n-all">0</span></button>
+    <button class="navitem nav-icon" data-view="classified" data-label="Classified" title="Classified"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h10"/><path d="M4 17h14"/></svg><span class="label">Classified</span> <span class="count" id="n-classified">0</span></button>
+    <button class="navitem nav-icon" data-view="unanalysed" data-label="Awaiting analysis" title="Awaiting analysis"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="label">Awaiting analysis</span> <span class="count" id="n-unan">0</span></button>
+    <button class="navitem nav-icon" data-view="flagged" data-label="Needs review" title="Needs review"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V4"/><path d="M4 4h11l-1.5 4L15 12H4"/></svg><span class="label">Needs review</span> <span class="count" id="n-flag">0</span></button>
+    <button class="navitem nav-icon" data-view="hold" data-label="Legal hold" title="Legal hold"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span class="label">Legal hold</span> <span class="count" id="n-hold">0</span></button>
     </div>
     </div>
 
@@ -1914,6 +1944,38 @@
     new URLSearchParams(location.search).get('rail') === '1';
   if (RAIL_ONLY) document.body.setAttribute('data-atm-rail-only', '1');
 
+  var RAIL_COLLAPSED_KEY = 'atmosphere.sidebarCollapsed';
+  var RAIL_EXPANDED_W = 236;
+  var RAIL_COLLAPSED_W = 64;
+
+  function readRailCollapsed() {
+    try { return window.localStorage.getItem(RAIL_COLLAPSED_KEY) === '1'; } catch (e) { return false; }
+  }
+
+  function notifyRailCollapsed(collapsed) {
+    if (!EMBEDDED) return;
+    window.parent.postMessage({
+      atmosphere: 'rail-collapsed',
+      collapsed: collapsed,
+      width: collapsed ? RAIL_COLLAPSED_W : RAIL_EXPANDED_W,
+    }, '*');
+  }
+
+  function setRailCollapsed(collapsed, notifyParent) {
+    if (notifyParent === undefined) notifyParent = true;
+    document.body.classList.toggle('rail-collapsed', collapsed);
+    try { window.localStorage.setItem(RAIL_COLLAPSED_KEY, collapsed ? '1' : '0'); } catch (e) {}
+    if (notifyParent) notifyRailCollapsed(collapsed);
+  }
+
+  function initRailCollapse() {
+    setRailCollapsed(readRailCollapsed());
+    var collapseBtn = document.getElementById('rail-collapse');
+    var expandBtn = document.getElementById('rail-expand');
+    if (collapseBtn) collapseBtn.addEventListener('click', function () { setRailCollapsed(true); });
+    if (expandBtn) expandBtn.addEventListener('click', function () { setRailCollapsed(false); });
+  }
+
   var activeRoute = '/verifier-library';
 
   function syncSidebarActive() {
@@ -2066,10 +2128,12 @@
     if (d && d.atmosphere === 'session') applySession(d);
     if (d && d.atmosphere === 'active-route') setActiveRoute(d.path);
     if (d && d.atmosphere === 'layout') setRailOnly(!!d.railOnly);
+    if (d && d.atmosphere === 'rail-collapsed') setRailCollapsed(!!d.collapsed, false);
   });
 
   var appFrame = document.getElementById('app-frame');
   if (appFrame) appFrame.classList.add('has-sidebar');
+  initRailCollapse();
 
   if (EMBEDDED) {
     window.parent.postMessage({ atmosphere: 'request-session' }, '*');
