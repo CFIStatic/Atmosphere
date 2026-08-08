@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { SpinnerIcon } from '../components/icons';
 import { readCapture, todayISO } from '../lib/proofCapture';
+import { signupHref } from '../lib/authRedirect';
 import { CaptureGuideSteps } from '../components/shared/CaptureGuideSteps';
 import { ClaimInvitationPanel } from '../components/shared/ClaimInvitationPanel';
 import { readFieldSession, writeFieldSession } from './MyJobsPage';
@@ -389,9 +390,9 @@ function AtmospherePitch({
   company: string;
   inviteEmail?: string;
 }) {
-  const signupHref = inviteEmail
-    ? `/login?mode=signup&email=${encodeURIComponent(inviteEmail)}&src=job-share`
-    : '/login?mode=signup&src=job-share';
+  const signupLink = signupHref(
+    inviteEmail ? { email: inviteEmail } : undefined,
+  );
   return (
     <footer className="mt-8 rounded-xl border border-brand-200 bg-brand-600/5 p-4">
       <p className="text-xs font-medium uppercase tracking-wide text-brand-600">
@@ -408,12 +409,12 @@ function AtmospherePitch({
           ? ` Use ${inviteEmail} so this invite stays with your account.`
           : ''}
       </p>
-      <a
-        href={signupHref}
+      <Link
+        to={signupLink}
         className="mt-3 inline-block rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900 transition hover:bg-brand-700"
       >
         {inviteEmail ? 'Create your free account' : 'Get your own record'}
-      </a>
+      </Link>
     </footer>
   );
 }
@@ -685,9 +686,9 @@ function ProofSection({
       {done?.startsWith('After') && (
         <p className="mt-2 text-[11px] text-ink-500">
           That video is your record as much as the job's.{' '}
-          <a href="/login?mode=signup&src=proof-filed" className="font-medium text-brand-600 hover:underline">
+          <Link to={signupHref()} className="font-medium text-brand-600 hover:underline">
             Keep every day's proof in your own Atmosphere account
-          </a>
+          </Link>
           {' '}— free for subs.
         </p>
       )}

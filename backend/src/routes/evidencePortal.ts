@@ -13,6 +13,7 @@ import {
   shareState,
 } from '../verifier/library.js';
 import { shareEmail } from '../verifier/shareEmail.js';
+import { progressShareEmail } from '../verifier/progressShareEmail.js';
 import { buildMailSender } from '../campaigns/mail/index.js';
 import { config } from '../config.js';
 
@@ -340,14 +341,18 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
       .object({
         jobId: z.string().uuid(),
         label: z.string().trim().min(2).max(200),
-        // Shares are account-to-account: the pin that makes the custody log
-        // name a person rather than a link.
-        recipientEmail: z.string().email(),
-        // Zero means "until revoked" — allowed, but it has to be said.
+        kind: z.enum(['evidence', 'progress']).default('evidence'),
+        // Evidence shares require an account pin; progress shares may omit
+        // email for link-only handoff to homeowners and counsel.
+        recipientEmail: z.string().email().optional(),
         expiresInDays: z.number().int().min(0).max(365).default(30),
       })
       .parse(req.body);
     const { supabase, orgId, userId } = await requireOrgContext(req);
+
+    if (body.kind === 'evidence' && !body.recipientEmail) {
+      throw new HttpError(400, 'Evidence shares require a recipient email.', 'recipient_required');
+    }
 
     const { data: job } = await supabase
       .from('crm_jobs')
@@ -362,7 +367,7 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
         ? null
         : new Date(Date.now() + body.expiresInDays * 86_400_000).toISOString();
 
-    const recipientEmail = body.recipientEmail.toLowerCase();
+    const recipientEmail = body.recipientEmail?.toLowerCase() ?? null;
 
     const { data: share, error } = await supabase
       .from('verifier_shares')
@@ -371,6 +376,7 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
         job_id: body.jobId,
         label: body.label,
         recipient_email: recipientEmail,
+        share_kind: body.kind,
         created_by: userId,
         expires_at: expiresAt,
       })
@@ -378,7 +384,10 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
       .single();
     if (error) throw new HttpError(400, error.message, 'share_failed');
 
-    const sharePath = `/verifier/shared/${(share as any).access_token}`;
+    const sharePath =
+      body.kind === 'progress'
+        ? `/progress/${(share as any).access_token}`
+        : `/verifier/shared/${(share as any).access_token}`;
     const admin = createAdminClient();
 
     // Whether the pinned address already answers to an Atmosphere account
@@ -386,7 +395,7 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
     // the screen can say it too, because "will this open for them" is the
     // question the sharer is standing there with.
     let recipientHasAccount = false;
-    if (admin) {
+    if (admin && recipientEmail) {
       const { data: existing } = await admin
         .from('profiles')
         .select('id')
@@ -402,7 +411,7 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
     // any other way — and the reason stays generic, because "this address is
     // on an erasure list" is itself a disclosure.
     let erased = false;
-    if (admin) {
+    if (admin && recipientEmail) {
       const { data } = await admin
         .from('network_erasures')
         .select('email')
@@ -412,7 +421,7 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
     }
 
     let emailed = false;
-    if (!erased) {
+    if (!erased && recipientEmail) {
       try {
         const sender = await buildMailSender(orgId);
         if (sender) {
@@ -420,16 +429,27 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
             supabase.from('orgs').select('name').eq('id', orgId).maybeSingle(),
             actorLabelFor(supabase, userId),
           ]);
-          const mail = shareEmail({
-            orgName: (org as any)?.name ?? 'An Atmosphere member',
-            sharerName,
-            jobTitle: (job as any).title ?? null,
-            recipientEmail,
-            recipientHasAccount,
-            origin: config.frontendOrigins?.[0] ?? null,
-            path: sharePath,
-            expiresAt,
-          });
+          const mail =
+            body.kind === 'progress'
+              ? progressShareEmail({
+                  orgName: (org as any)?.name ?? 'An Atmosphere member',
+                  sharerName,
+                  jobTitle: (job as any)?.title ?? null,
+                  recipientEmail,
+                  origin: config.frontendOrigins?.[0] ?? null,
+                  path: sharePath,
+                  expiresAt,
+                })
+              : shareEmail({
+                  orgName: (org as any)?.name ?? 'An Atmosphere member',
+                  sharerName,
+                  jobTitle: (job as any)?.title ?? null,
+                  recipientEmail,
+                  recipientHasAccount,
+                  origin: config.frontendOrigins?.[0] ?? null,
+                  path: sharePath,
+                  expiresAt,
+                });
           const result = await sender.send({
             to: recipientEmail,
             subject: mail.subject,
@@ -453,7 +473,9 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
       actorId: userId,
       actorLabel: await actorLabelFor(supabase, userId),
       actorRole: 'general_contractor',
-      detail: `Verifier link issued to ${body.label} <${recipientEmail}>${
+      detail: `${body.kind === 'progress' ? 'Progress' : 'Verifier'} link issued to ${body.label}${
+        recipientEmail ? ` <${recipientEmail}>` : ''
+      }${
         expiresAt ? `, expires ${expiresAt.slice(0, 10)}` : ', no expiry'
       }${emailed ? ', emailed' : ', email not sent'}`,
     });
@@ -462,12 +484,13 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
       share: {
         id: (share as any).id,
         label: (share as any).label,
+        kind: body.kind,
         expiresAt: (share as any).expires_at,
         createdAt: (share as any).created_at,
         path: sharePath,
       },
       emailed,
-      recipientHasAccount,
+      recipientHasAccount: body.kind === 'evidence' ? recipientHasAccount : false,
     });
   } catch (err) {
     next(err);
@@ -477,17 +500,23 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
 /** GET /api/evidence-portal/shares?jobId= — the outstanding links. */
 evidencePortalRouter.get('/shares', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { jobId } = z.object({ jobId: z.string().uuid().optional() }).parse(req.query);
+    const { jobId, kind } = z
+      .object({
+        jobId: z.string().uuid().optional(),
+        kind: z.enum(['evidence', 'progress']).optional(),
+      })
+      .parse(req.query);
     const { supabase, orgId } = await requireOrgContext(req);
     let query = supabase
       .from('verifier_shares')
       .select(
-        'id, job_id, label, recipient_email, access_token, created_at, expires_at, revoked_at, last_opened_at, open_count',
+        'id, job_id, label, recipient_email, access_token, share_kind, created_at, expires_at, revoked_at, last_opened_at, open_count',
       )
       .eq('org_id', orgId)
       .order('created_at', { ascending: false })
       .limit(100);
     if (jobId) query = query.eq('job_id', jobId);
+    if (kind) query = query.eq('share_kind', kind);
     const { data, error } = await query;
     if (error) throw new HttpError(500, error.message, 'shares_failed');
 
@@ -496,8 +525,12 @@ evidencePortalRouter.get('/shares', async (req: Request, res: Response, next: Ne
         id: row.id,
         jobId: row.job_id,
         label: row.label,
+        kind: row.share_kind ?? 'evidence',
         recipientEmail: row.recipient_email ?? null,
-        path: `/verifier/shared/${row.access_token}`,
+        path:
+          row.share_kind === 'progress'
+            ? `/progress/${row.access_token}`
+            : `/verifier/shared/${row.access_token}`,
         createdAt: row.created_at,
         expiresAt: row.expires_at,
         revokedAt: row.revoked_at,
@@ -566,7 +599,9 @@ async function shareForToken(token: string, req: Request) {
 
   const { data: share } = await admin
     .from('verifier_shares')
-    .select('id, org_id, job_id, label, recipient_email, expires_at, revoked_at, open_count')
+    .select(
+      'id, org_id, job_id, label, recipient_email, expires_at, revoked_at, open_count, share_kind',
+    )
     .eq('access_token', token)
     .maybeSingle();
 
@@ -576,6 +611,9 @@ async function shareForToken(token: string, req: Request) {
   if (state === 'missing') throw new HttpError(404, 'This link does not exist.', 'not_found');
   if (state === 'revoked') throw new HttpError(410, 'This link was revoked.', 'revoked');
   if (state === 'expired') throw new HttpError(410, 'This link has expired.', 'expired');
+  if ((share as any)?.share_kind === 'progress') {
+    throw new HttpError(404, 'This link does not exist.', 'not_found');
+  }
 
   const sessionEmail = req.user?.email ?? null;
   if (!shareRecipientAllowed((share as any).recipient_email, sessionEmail)) {

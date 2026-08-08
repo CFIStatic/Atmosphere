@@ -1,0 +1,114 @@
+import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
+import { Logo } from '../Logo';
+import { CheckIcon } from '../icons';
+import { SETUP_WIZARD_STEPS, type SetupWizardStep } from './setupWizard';
+
+export function SetupWizardShell({
+  step,
+  signInHref,
+  headerAction,
+  children,
+}: {
+  step: SetupWizardStep;
+  signInHref?: string;
+  headerAction?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="cx-aurora relative flex min-h-screen flex-col bg-paper-100">
+      <header className="flex items-center justify-between gap-4 px-6 py-6 sm:px-10">
+        <Logo />
+        {headerAction ??
+          (signInHref ? (
+            <Link
+              to={signInHref}
+              className="text-sm font-medium text-ink-600 transition hover:text-ink-900"
+            >
+              Already have an account? <span className="font-semibold text-brand-600">Sign in</span>
+            </Link>
+          ) : null)}
+      </header>
+
+      <main className="flex flex-1 items-start justify-center px-4 pb-16 pt-2 sm:items-center">
+        <div className="w-full max-w-4xl animate-fade-in-up">
+          <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)] lg:items-start lg:gap-14">
+            <div className="hidden lg:block">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-600">
+                Get started
+              </p>
+              <h1 className="mt-3 text-3xl font-bold tracking-tight text-ink-900">
+                Create your organization
+              </h1>
+              <p className="mt-3 max-w-md text-base text-ink-600">
+                Five quick steps — about two minutes from account to your first job.
+              </p>
+
+              <ol className="mt-10 space-y-5">
+                {SETUP_WIZARD_STEPS.map((item) => {
+                  const done = item.step < step;
+                  const active = item.step === step;
+                  return (
+                    <li
+                      key={item.step}
+                      className={`flex gap-4 rounded-xl border px-4 py-4 transition ${
+                        active
+                          ? 'border-brand-200 bg-brand-50/80 shadow-sm'
+                          : done
+                            ? 'border-brand-100 bg-paper-0/80'
+                            : 'border-line bg-paper-0/60 opacity-80'
+                      }`}
+                    >
+                      <span
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                          done
+                            ? 'bg-brand-500 text-ink-900'
+                            : active
+                              ? 'bg-brand-500 text-ink-900'
+                              : 'bg-paper-100 text-ink-500'
+                        }`}
+                        aria-hidden="true"
+                      >
+                        {done ? <CheckIcon width={16} height={16} /> : item.step}
+                      </span>
+                      <div>
+                        <p className="font-semibold text-ink-900">{item.title}</p>
+                        <p className="mt-1 text-sm text-ink-600">{item.detail}</p>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+
+            <div>{children}</div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+export function SetupStepCard({
+  step,
+  title,
+  subtitle,
+  children,
+}: {
+  step: SetupWizardStep;
+  title: string;
+  subtitle: string;
+  children: ReactNode;
+}) {
+  const label = SETUP_WIZARD_STEPS[step - 1]?.title ?? title;
+  return (
+    <div className="rounded-2xl border border-brand-200 bg-paper-0 p-8 shadow-lift shadow-2xl shadow-lift-xl sm:p-10">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-600">
+        Step {step} · {label}
+      </p>
+      <h2 className="mt-2 text-xl font-bold tracking-tight text-ink-900">{title}</h2>
+      <p className="mt-1.5 text-sm text-ink-600">{subtitle}</p>
+      {children}
+    </div>
+  );
+}

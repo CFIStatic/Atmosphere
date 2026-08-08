@@ -94,12 +94,13 @@
 <header class="page-hero">
   <div class="wrap">
     <div class="eyebrow mono">Pricing</div>
-    <h1>Platform fee + usage you can explain on one line</h1>
+    <h1>One subscription. Three numbers on your invoice.</h1>
     <p class="lede">
       Work Verification ships as one bundle — <strong>Field Capture</strong> on site and the
-      <strong>Evidence Platform</strong> for the record. You pay a <strong>monthly platform fee</strong>,
-      then usage based on <strong>jobs Atmosphere processes</strong> and
-      <strong>exceptional compute</strong> — not raw LLM tokens or model names on your invoice.
+      <strong>Evidence Platform</strong> for the record. Your bill is always:
+      <strong>$599/month platform fee</strong> + <strong>jobs processed above 50</strong> at
+      <strong>$30 each</strong> + <strong>exceptional compute</strong> only when a workload
+      exceeds your included allowance. No LLM tokens. No model names. No surprise line items.
     </p>
   </div>
 </header>
@@ -107,9 +108,11 @@
 <nav class="subnav mono" aria-label="On this page">
   <div class="subnav-inner">
     <a href="#plans">PLANS</a>
+    <a href="#sample-bill">SAMPLE BILL</a>
     <a href="#usage">USAGE</a>
     <a href="#jobs">JOBS</a>
     <a href="#compute">COMPUTE</a>
+    <a href="#not-billed">NOT BILLED</a>
     <a href="#faq">FAQ</a>
   </div>
 </nav>
@@ -127,22 +130,75 @@
         <span class="flag mono">FULL SYSTEM</span>
         <div class="plan-name mono">Work Verification</div>
         <div class="price"><span class="amt">$599</span></div>
-        <p class="per">platform fee / month · plus usage</p>
-        <p class="plan-desc">Field Capture + Evidence Platform — sold together</p>
+        <p class="per">platform fee / month · plus usage below</p>
+        <p class="plan-desc">Field Capture + Evidence Platform — sold together, never à la carte</p>
         <ul class="checks">
+          <li><strong>50 processed jobs included</strong> each billing period</li>
+          <li><strong>$30 per additional job</strong> above 50 (counted once per job)</li>
+          <li><strong>1,000 Compute Units included</strong> for heavy AI workloads</li>
           <li>Field Capture — film and check work on site</li>
           <li>Evidence Platform — Verifier, audit trail, storage, sharing</li>
-          <li>Included processed jobs each period (plan-specific)</li>
-          <li>Job overages and exceptional compute billed separately</li>
         </ul>
         <a class="btn plan-cta" href="signup.html">Get started</a>
+        <p class="plans-note" style="margin-top: 20px; margin-bottom: 0;">
+          Already a customer?
+          <a href="#" data-app-path="/usage">Sign in to your usage dashboard&nbsp;→</a>
+        </p>
       </div>
     </div>
     <p class="plans-note">
-      Platform fees, included jobs, per-job overage rates, and compute allowances are
-      configurable by plan and by customer. Enterprise terms are negotiated — nothing is
-      hard-coded in the product.
+      These are the default Work Verification rates. Enterprise customers can negotiate
+      different included jobs, overage rates, and compute allowances — stored per organization,
+      not hard-coded. Your signed-in <a href="#" data-app-path="/usage">usage dashboard</a>
+      shows your org's exact plan and current-period totals.
     </p>
+  </div>
+</section>
+
+<section class="section" id="sample-bill">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow mono">Sample bill</div>
+      <h2>What a busy month actually looks like</h2>
+      <p>
+        Suppose your crews run daily work verification on <strong>62 unique jobs</strong> in March,
+        and one long-form video analysis pushes you <strong>200 Compute Units</strong> over your
+        included allowance. Your invoice would read like this — every line explainable in one sentence.
+      </p>
+    </div>
+
+    <div class="pricing-invoice">
+      <div class="pricing-invoice-head">
+        <div>
+          <h3>March 2026 · Work Verification</h3>
+          <p>Billing period closes on the last day of each calendar month.</p>
+        </div>
+        <div class="mono" style="font-size: 12px; color: var(--ink-faint);">ESTIMATED</div>
+      </div>
+      <div class="pricing-line">
+        <span class="lbl">Platform fee (Field Capture + Evidence Platform)</span>
+        <span class="amt">$599.00</span>
+      </div>
+      <div class="pricing-line">
+        <span class="lbl">Job usage — 62 processed, 50 included → 12 × $30</span>
+        <span class="amt">$360.00</span>
+      </div>
+      <div class="pricing-line">
+        <span class="lbl">Exceptional compute — 200 units over included 1,000 @ $0.01/unit</span>
+        <span class="amt">$2.00</span>
+      </div>
+      <div class="pricing-line total">
+        <span class="lbl">Estimated total for March</span>
+        <span class="amt">$961.00</span>
+      </div>
+    </div>
+
+    <div class="pricing-cta-row">
+      <a class="btn" href="#" data-app-path="/usage">View your usage dashboard</a>
+      <span class="mono" style="font-size: 12px; color: var(--ink-faint);">
+        Sign in with your Atmosphere account · returns here after login when signed in
+      </span>
+    </div>
   </div>
 </section>
 
@@ -152,26 +208,26 @@
       <div class="eyebrow mono">Usage</div>
       <h2>Three layers — one invoice you can read aloud</h2>
       <p>
-        Customers see work performed, not infrastructure. Atmosphere tracks tokens and
-        provider costs internally; your bill is based on platform access, jobs processed,
-        and exceptional compute when a workload goes beyond the ordinary.
+        Customers see <strong>work performed</strong>, not infrastructure. Atmosphere tracks
+        tokens and provider costs internally for our own accounting; your bill is always
+        platform access + jobs + exceptional compute.
       </p>
     </div>
     <div class="sec-grid">
       <div class="sec-card">
         <span class="kbd mono">01</span>
-        <h3>Base platform fee</h3>
-        <p>Fixed monthly subscription for Field Capture and the Evidence Platform. Varies by plan and can be negotiated for enterprise customers.</p>
+        <h3>Base platform fee — $599/mo</h3>
+        <p>Fixed monthly subscription for Field Capture and the Evidence Platform. Always the first line on your invoice. Negotiable for enterprise.</p>
       </div>
       <div class="sec-card">
         <span class="kbd mono">02</span>
-        <h3>Job usage</h3>
-        <p>Each unique job Atmosphere actively processes in a billing period counts once — no matter how many AI actions happen inside it. Plans include a job allowance; overages are per job.</p>
+        <h3>Job usage — 50 included, then $30/job</h3>
+        <p>Each unique job Atmosphere actively processes in a billing period counts <strong>once</strong> — ten AI actions on the same job still count as one job. Jobs 1–50 are included; job 51 and above are $30 each.</p>
       </div>
       <div class="sec-card">
         <span class="kbd mono">03</span>
-        <h3>Exceptional compute</h3>
-        <p>Long-form video analysis, large document sets, and unusually expensive autonomous workflows draw from included compute units. Overages are billed in Atmosphere Compute Units — never as raw token counts.</p>
+        <h3>Exceptional compute — 1,000 units included</h3>
+        <p>Long-form video, large document sets, and unusually expensive autonomous workflows draw from included Compute Units. Only the overage appears on your bill — never raw token counts.</p>
       </div>
     </div>
   </div>
@@ -191,20 +247,21 @@
 
     <div class="rate-hero">
       <div class="rate-cell">
-        <div class="rate-lbl mono">EXAMPLE</div>
-        <div class="rate-big mono">187</div>
+        <div class="rate-lbl mono">EXAMPLE MONTH</div>
+        <div class="rate-big mono">62</div>
         <div class="rate-unit mono">JOBS PROCESSED</div>
       </div>
       <div class="rate-cell">
         <div class="rate-lbl mono">INCLUDED</div>
-        <div class="rate-big mono">100</div>
+        <div class="rate-big mono">50</div>
         <div class="rate-unit mono">ON YOUR PLAN</div>
       </div>
       <div class="rate-basis">
-        <div class="tag mono">Overage</div>
+        <div class="tag mono">Overage math</div>
         <p>
-          87 jobs above plan × your plan's per-job rate. Exact included jobs and overage
-          pricing are set in your plan — configurable, not hard-coded.
+          62 − 50 = <strong>12 billable overage jobs</strong> × $30 = <strong>$360</strong>.
+          The platform fee ($599) is separate and always charged. Multiple verification
+          runs on the same job in the same month still count as <strong>one job</strong>.
         </p>
       </div>
     </div>
@@ -218,8 +275,9 @@
       <h2>Heavy workloads, understandable units</h2>
       <p>
         When verification requires unusually expensive processing — hours of video,
-        multimodal analysis, large commercial jobs — usage draws from included Compute
-        Units. You see compute overage on your bill, not millions of tokens.
+        multimodal analysis, large commercial jobs — usage draws from your
+        <strong>1,000 included Compute Units</strong> each period. You see compute
+        overage on your bill, not millions of tokens.
       </p>
     </div>
 
@@ -250,6 +308,26 @@
   </div>
 </section>
 
+<section class="section" id="not-billed">
+  <div class="wrap">
+    <div class="pricing-callout">
+      <h3>What is never on your invoice</h3>
+      <p>We track these internally for cost accounting. You never see them as customer-facing line items:</p>
+      <ul>
+        <li><strong>LLM tokens</strong> — input, output, cached, or reasoning tokens</li>
+        <li><strong>Model or provider names</strong> — Claude, GPT, Gemini, etc.</li>
+        <li><strong>Per-API-call micro-charges</strong> — one job can involve dozens of AI steps; you pay for the job once</li>
+        <li><strong>Separate Field Capture or Evidence Platform fees</strong> — both are included in the $599 platform fee</li>
+      </ul>
+    </div>
+    <p class="plans-note" style="margin-top: 20px;">
+      During migration, some legacy agent paths may still draw from prepaid credits in the app.
+      New work bills through jobs + compute above. See
+      <a href="doc-billing.html">Billing &amp; usage docs</a> for the full model.
+    </p>
+  </div>
+</section>
+
 <section class="section" id="faq">
   <div class="wrap">
     <div class="section-head">
@@ -257,6 +335,15 @@
       <h2>The ones we actually get asked</h2>
     </div>
     <div class="faq">
+      <details>
+        <summary>Where do I see my current usage?</summary>
+        <p>
+          Sign in and open your <a href="#" data-app-path="/usage">usage dashboard</a>.
+          It shows jobs processed this period, video verification hours, compute units used,
+          and your estimated bill — updated as work runs. You must be signed in; the dashboard
+          is not public.
+        </p>
+      </details>
       <details>
         <summary>What is included in the subscription?</summary>
         <p>
@@ -276,9 +363,10 @@
       <details>
         <summary>How is usage billed?</summary>
         <p>
-          In three layers: the platform fee, processed jobs above your included allowance,
-          and exceptional compute overages. You see jobs processed and compute units — not
-          token counts or model names.
+          Three lines: <strong>$599 platform fee</strong>, then
+          <strong>$30 for each job above 50</strong> processed that month, then
+          <strong>exceptional compute overage</strong> if you exceed 1,000 included Compute Units.
+          You see jobs and compute units — not token counts or model names.
         </p>
       </details>
       <details>

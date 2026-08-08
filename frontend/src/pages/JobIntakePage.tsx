@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AppShell, PageHeader } from '../components/AppShell';
+import { PageHeader } from '../components/AppShell';
 import {
   api,
   type CaptureTeamMember,
@@ -222,7 +222,7 @@ export function JobIntakePage() {
       : [];
 
   return (
-    <AppShell>
+    <>
       <PageHeader
         eyebrow="Work Verification Platform"
         title="Start a job"
@@ -232,7 +232,7 @@ export function JobIntakePage() {
             to="/shared"
             className="text-sm font-medium text-brand-600 hover:text-brand-500"
           >
-            Back to job files
+            Back to job progress
           </Link>
         }
       />
@@ -709,7 +709,7 @@ export function JobIntakePage() {
               className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900"
               onClick={() => navigate(`/shared`)}
             >
-              Open job files
+              Open job progress
             </button>
             <button
               type="button"
@@ -728,6 +728,6 @@ export function JobIntakePage() {
           </div>
         </div>
       )}
-    </AppShell>
+    </>
   );
 }

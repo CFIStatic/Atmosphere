@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { api, ROLE_LABELS } from '../lib/api';
 import { displayName, initials } from '../lib/display';
 import { setPreference, usePreferences } from '../lib/preferences';
-import { PLATFORMS, PLATFORM_HOME, VISIBLE_PLATFORM_IDS, platformOfPath } from '../lib/platforms';
+import { PLATFORMS, VISIBLE_PLATFORM_IDS, platformOfPath } from '../lib/platforms';
 import { usePlatform } from '../lib/usePlatform';
 import { Logo } from './Logo';
 import {
@@ -98,9 +98,7 @@ export function AppShell({
         }`}
       >
         <div className="flex shrink-0 items-center justify-between px-5 py-5">
-          <NavLink to={PLATFORM_HOME[platformId]} aria-label={`Atmosphere — ${platform.name}`}>
-            <Logo />
-          </NavLink>
+          <Logo />
           <button
             className="text-ink-500 md:hidden"
             onClick={() => setMobileOpen(false)}
@@ -110,28 +108,21 @@ export function AppShell({
           </button>
         </div>
 
-        <div className="shrink-0 px-3 pb-1">
-          <PlatformSwitcher
-            active={platformId}
-            onSelect={(next) => {
-              setPlatformId(next);
-              setMobileOpen(false);
-              navigate(PLATFORM_HOME[next]);
-            }}
-          />
-        </div>
-
-        <nav aria-label="Primary" className="cx-scroll cx-gutter min-h-0 flex-1 overflow-y-auto px-3 pb-6">
+        <nav aria-label="Primary" className="cx-scroll cx-gutter min-h-0 flex-1 overflow-y-auto px-3 pb-6 pt-1">
           {platform.groups.map((group) => (
             <div key={group.label} className="mt-4 first:mt-0">
               <p className="px-2.5 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.09em] text-ink-500">
                 {group.label}
               </p>
               <div className="space-y-0.5">
-                {group.items.map(({ to, label, Icon }) => (
+                {group.items.map(({ to, label, Icon }) => {
+                  const tourTarget =
+                    to === '/intake' ? 'nav-start-job' : to === '/shared' ? 'nav-job-progress' : undefined;
+                  return (
                   <NavLink
                     key={`${group.label}-${to}`}
                     to={to}
+                    data-tour={tourTarget}
                     onClick={() => setMobileOpen(false)}
                     className={({ isActive }) =>
                       `flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13.5px] font-medium transition-colors ${
@@ -149,7 +140,8 @@ export function AppShell({
                       </span>
                     )}
                   </NavLink>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}
@@ -208,125 +200,6 @@ export function AppShell({
           )}
         </div>
       </div>
-    </div>
-  );
-}
-
-/**
- * The platform switcher. Four products, one console — this is the only
- * control that changes what the sidebar contains, and it names the platform
- * you are in so that is never ambiguous.
- */
-function PlatformSwitcher({
-  active,
-  onSelect,
-}: {
-  active: keyof typeof PLATFORMS;
-  onSelect: (next: keyof typeof PLATFORMS) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement | null>(null);
-  const platform = PLATFORMS[active];
-  // One visible platform means there is nothing to switch to: the chip is
-  // identity, not a control, and a dropdown with one option is a lie.
-  const switchable = VISIBLE_PLATFORM_IDS.length > 1;
-
-  useEffect(() => {
-    if (!open) return undefined;
-    function onPointerDown(event: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(event.target as Node)) setOpen(false);
-    }
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [open]);
-
-  if (!switchable) {
-    return (
-      <div className="flex w-full items-center gap-2.5 rounded-lg glass-card px-2.5 py-2">
-        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-brand-50 text-brand-700">
-          <platform.Icon width={14} height={14} />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-semibold text-ink-900">
-            {platform.short}
-          </span>
-          <span className="block truncate text-[11px] text-ink-500">{platform.tagline}</span>
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <div ref={wrapRef} className="relative">
-      <button
-        onClick={() => setOpen((value) => !value)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        className="flex w-full items-center gap-2.5 rounded-lg glass-card px-2.5 py-2 text-left transition hover:border-line-strong"
-      >
-        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-brand-50 text-brand-700">
-          <platform.Icon width={14} height={14} />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-semibold text-ink-900">
-            {platform.short}
-          </span>
-          <span className="block truncate text-[11px] text-ink-500">{platform.tagline}</span>
-        </span>
-        <ChevronDownIcon width={14} height={14} className="shrink-0 text-ink-500" />
-      </button>
-
-      {open && (
-        <div
-          role="listbox"
-          className="absolute left-0 right-0 top-full z-40 mt-1.5 overflow-hidden rounded-xl glass-panel"
-        >
-          {/* Later products stay off the menu entirely — a greyed-out entry
-              would advertise what is deliberately not being sold yet. */}
-          {VISIBLE_PLATFORM_IDS.map((id) => {
-            const p = PLATFORMS[id];
-            return (
-              <button
-                key={id}
-                role="option"
-                aria-selected={id === active}
-                onClick={() => {
-                  onSelect(id);
-                  setOpen(false);
-                }}
-                className={`flex w-full items-center gap-2.5 px-2.5 py-2.5 text-left transition hover:bg-paper-200 ${
-                  id === active ? 'bg-brand-50' : ''
-                }`}
-              >
-                <span
-                  className={`grid h-6 w-6 shrink-0 place-items-center rounded-md ${
-                    id === active ? 'bg-brand-500 text-white' : 'bg-paper-200 text-ink-600'
-                  }`}
-                >
-                  <p.Icon width={14} height={14} />
-                </span>
-                <span className="min-w-0">
-                  <span
-                    className={`block truncate text-[13px] font-semibold ${
-                      id === active ? 'text-brand-700' : 'text-ink-900'
-                    }`}
-                  >
-                    {p.name}
-                  </span>
-                  <span className="block truncate text-[11px] text-ink-500">{p.tagline}</span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }

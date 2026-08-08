@@ -589,6 +589,17 @@ export const setPlanSchema = z.object({
   seats: z.number().int().min(1, 'At least one seat').max(10000, 'Too many seats').default(1),
 });
 
+/** Optional post-checkout return path — must be a same-origin relative path. */
+export const onboardingCheckoutSchema = z.object({
+  returnPath: z
+    .string()
+    .max(500)
+    .optional()
+    .refine((value) => !value || (value.startsWith('/') && !value.startsWith('//')), {
+      message: 'returnPath must be a relative path',
+    }),
+});
+
 /**
  * Auto-reload and spend limits are money settings, so amounts are integer
  * nanodollars. `null` on the spend limit means "no cap" and is distinct from

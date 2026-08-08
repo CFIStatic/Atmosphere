@@ -3,23 +3,8 @@ import { api, type CreateEvidenceShareResult, type EvidenceShare } from '../../l
 import { SpinnerIcon } from '../icons';
 
 /**
- * Handing the record to somebody outside.
- *
- * The form asks for two things about a person, because a share is issued to a
- * person: who they are (the label that will appear in the chain of custody)
- * and the email their Atmosphere account answers to. The link opens for that
- * account and no other — which the panel says before the button is pressed,
- * because the alternative is the sharer finding out from the adjuster's
- * annoyed phone call.
- *
- * After creating, the panel reports the two facts the sharer is actually
- * standing there wondering: did the email go out (their mailbox, so no is a
- * real possibility and gets the copy-the-link fallback shown immediately, not
- * hunted for), and does the recipient already have an account or are they
- * about to be walked through making one.
- *
- * The list underneath is the outstanding-links audit: who holds a live way
- * into this job's evidence, have they used it, and the revoke that ends it.
+ * Share the job progress dashboard with third parties — homeowners, attorneys,
+ * banks, insurance adjusters — via a read-only link that opens without login.
  */
 
 const STATE_STYLE: Record<EvidenceShare['state'], string> = {
@@ -33,9 +18,27 @@ const when = (iso: string | null) =>
     ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
     : null;
 
-export function ShareEvidencePanel({ jobId }: { jobId: string }) {
+export function ShareJobProgressPanel({
+  jobId,
+  creating: creatingProp,
+  onCreatingChange,
+  modal = false,
+  onClose,
+}: {
+  jobId: string;
+  creating?: boolean;
+  onCreatingChange?: (open: boolean) => void;
+  modal?: boolean;
+  onClose?: () => void;
+}) {
   const [shares, setShares] = useState<EvidenceShare[] | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [creatingInternal, setCreatingInternal] = useState(false);
+  const creating = creatingProp ?? creatingInternal;
+
+  function setCreating(open: boolean) {
+    if (onCreatingChange) onCreatingChange(open);
+    else setCreatingInternal(open);
+  }
   const [label, setLabel] = useState('');
   const [email, setEmail] = useState('');
   const [days, setDays] = useState(30);
@@ -45,13 +48,18 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
 
   async function load() {
     try {
-      const res = await api.evidenceShares(jobId, 'evidence');
+      const res = await api.evidenceShares(jobId, 'progress');
       setShares(res.shares);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load the outstanding links.');
       setShares([]);
     }
   }
+
+  useEffect(() => {
+    if (modal) setCreating(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modal, jobId]);
 
   useEffect(() => {
     setShares(null);
@@ -65,16 +73,16 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
     setBusy(true);
     setError(null);
     try {
-      const res = await api.createEvidenceShare({
+      const res = await api.createProgressShare({
         jobId,
         label,
-        recipientEmail: email,
+        recipientEmail: email.trim() || undefined,
         expiresInDays: days,
       });
       setMade(res);
       setLabel('');
       setEmail('');
-      setCreating(false);
+      if (!modal) setCreating(false);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create the share.');
@@ -98,25 +106,41 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
 
   const live = (shares ?? []).filter((s) => s.state === 'live');
 
-  return (
-    <section className="rounded-xl glass-card p-5">
+  const panel = (
+    <section
+      id={modal ? undefined : 'share-job-progress'}
+      className={`rounded-xl glass-card p-5 ${modal ? 'shadow-xl' : ''}`}
+    >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <h2 className="text-base font-semibold text-ink-900">Share with a reviewer</h2>
+          <h2 id="share-job-title" className="text-base font-semibold text-ink-900">
+            Share this job
+          </h2>
           <p className="mt-0.5 text-xs text-ink-500">
-            An adjuster, examiner or attorney gets this job's evidence in the Verifier — viewing
-            free, every view on the record under their name.
+            Send a read-only link — no account needed. Homeowners, attorneys, banks and insurers
+            can see progress and daily site updates.
           </p>
         </div>
-        <button
-          onClick={() => {
-            setCreating((v) => !v);
-            setMade(null);
-          }}
-          className="text-xs font-medium text-brand-600 hover:text-brand-700"
-        >
-          {creating ? 'Cancel' : 'Share this job'}
-        </button>
+        {modal ? (
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xs font-medium text-ink-500 hover:text-ink-800"
+          >
+            Close
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setCreating(!creating);
+              setMade(null);
+            }}
+            className="text-xs font-medium text-brand-600 hover:text-brand-700"
+          >
+            {creating ? 'Cancel' : 'Share'}
+          </button>
+        )}
       </div>
 
       {error && (
@@ -126,47 +150,47 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
       )}
 
       {creating && (
-        <form onSubmit={create} className="mt-3 space-y-2">
-          <div className="flex flex-wrap gap-2">
+        <form onSubmit={create} className="mt-4 space-y-3">
+          <label className="block">
+            <span className="text-xs font-medium text-ink-700">Who is this for?</span>
             <input
               required
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              placeholder="Who — e.g. R. Calloway — Alliance Mutual"
-              className="min-w-[14rem] flex-1 rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+              placeholder="e.g. Cedar Ridge HOA — homeowner"
+              className="mt-1 w-full rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
             />
+          </label>
+          <label className="block">
+            <span className="text-xs font-medium text-ink-700">Email them (optional)</span>
             <input
-              required
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Their email"
-              className="min-w-[12rem] flex-1 rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+              placeholder="Leave blank to copy the link yourself"
+              className="mt-1 w-full rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
             />
+          </label>
+          <label className="block">
+            <span className="text-xs font-medium text-ink-700">Link expires</span>
             <select
               value={days}
               onChange={(e) => setDays(Number(e.target.value))}
-              className="rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+              className="mt-1 w-full rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
             >
-              <option value={7}>Expires in 7 days</option>
-              <option value={30}>Expires in 30 days</option>
-              <option value={90}>Expires in 90 days</option>
-              <option value={0}>No expiry — until revoked</option>
+              <option value={7}>In 7 days</option>
+              <option value={30}>In 30 days</option>
+              <option value={90}>In 90 days</option>
+              <option value={0}>Never — until you revoke it</option>
             </select>
-          </div>
-          {/* The pin, stated before the button: it changes what "share" means. */}
-          <p className="text-[11px] text-ink-500">
-            The link is emailed to them and opens only for an Atmosphere account signed in with
-            that address — forwarded, it refuses. Watching is free; keeping a copy settles your
-            download fee first.
-          </p>
+          </label>
           <button
             type="submit"
             disabled={busy}
-            className="flex items-center gap-2 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-ink-900 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-ink-900 disabled:opacity-50"
           >
-            {busy && <SpinnerIcon className="animate-spin" width={12} height={12} />}
-            Email them the link
+            {busy && <SpinnerIcon className="animate-spin" width={14} height={14} />}
+            {email.trim() ? 'Email the link' : 'Create link'}
           </button>
         </form>
       )}
@@ -175,12 +199,8 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
         <div className="mt-3 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2">
           <p className="text-xs font-semibold text-brand-700">
             {made.emailed
-              ? `Emailed. ${
-                  made.recipientHasAccount
-                    ? 'They already have an Atmosphere account — the link opens as soon as they sign in.'
-                    : 'No Atmosphere account under that address yet — the email walks them through creating one with it.'
-                }`
-              : 'Share created, but the email did not go out — no mailbox is connected, or it refused. Send the link yourself:'}
+              ? 'Emailed. They can open the link directly — no account needed.'
+              : 'Link created. Copy it and send it yourself:'}
           </p>
           {!made.emailed && (
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
@@ -200,7 +220,7 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
         <p className="mt-3 text-xs text-ink-500">Loading…</p>
       ) : shares.length === 0 ? (
         <p className="mt-3 text-xs text-ink-500">
-          Nobody outside has a link to this job's evidence.
+          Nobody outside has a progress link for this job yet.
         </p>
       ) : (
         <ul className="mt-3 space-y-2">
@@ -212,7 +232,7 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
               <div className="min-w-0">
                 <p className="text-sm font-medium text-ink-800">{share.label}</p>
                 <p className="text-[11px] text-ink-500">
-                  {share.recipientEmail ?? 'any account'}
+                  {share.recipientEmail ?? 'link only'}
                   {share.openCount > 0
                     ? ` · opened ${share.openCount}×${when(share.lastOpenedAt) ? `, last ${when(share.lastOpenedAt)}` : ''}`
                     : ' · never opened'}
@@ -248,12 +268,29 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
         </ul>
       )}
 
-      {live.length > 0 && (
+      {live.length > 0 && !creating && (
         <p className="mt-2 text-[10.5px] text-ink-400">
-          {live.length} live link{live.length === 1 ? '' : 's'}. Revoking is immediate and goes in
-          the chain of custody, like the share did.
+          {live.length} active link{live.length === 1 ? '' : 's'} out right now.
         </p>
       )}
     </section>
   );
+
+  if (modal) {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-start justify-center bg-ink-900/50 p-4 pt-[10vh] backdrop-blur-sm"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="share-job-title"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose?.();
+        }}
+      >
+        <div className="w-full max-w-md">{panel}</div>
+      </div>
+    );
+  }
+
+  return panel;
 }

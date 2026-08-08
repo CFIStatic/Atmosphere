@@ -117,7 +117,9 @@
   .brand {
     display: flex; align-items: center; gap: 10px;
     font-weight: 800; font-size: 16px; letter-spacing: -0.02em; color: var(--ink);
+    background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit;
   }
+  .brand:hover { opacity: 0.88; }
   .brand svg { display: block; flex: none; color: var(--ink); }
 
   .search { flex: 1; max-width: 520px; position: relative; }
@@ -131,22 +133,120 @@
   .search svg { position: absolute; left: 9px; top: 10px; color: var(--faint); }
 
   .topbar .spacer { flex: 1; }
-  .who { display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--ink-2); }
+  .who-wrap { position: relative; }
+  .who {
+    display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--ink-2);
+    background: none; border: 0; cursor: pointer; padding: 4px 6px; border-radius: 8px;
+    font: inherit; text-align: left;
+  }
+  .who:hover, .who[aria-expanded="true"] { background: var(--line-soft); }
   .who .avatar {
     width: 28px; height: 28px; border-radius: 50%; background: var(--accent);
     display: grid; place-items: center;
-    font-size: 11px; font-weight: 700; color: #FFFFFF;
+    font-size: 11px; font-weight: 700; color: #FFFFFF; flex: none;
   }
   .who .role { color: var(--faint); font-size: 11.5px; }
+  .who-menu {
+    position: absolute; right: 0; top: calc(100% + 6px); z-index: 80;
+    min-width: 220px; padding: 5px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 9px;
+    box-shadow: 0 14px 36px -14px rgba(0,0,0,.4);
+  }
+  .who-menu-head {
+    padding: 8px 9px 10px; border-bottom: 1px solid var(--line); margin-bottom: 4px;
+  }
+  .who-menu-head .name { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .who-menu-head .email { font-size: 11.5px; color: var(--faint); margin-top: 2px; word-break: break-all; }
+  .who-menu-head .meta { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+  .who-menu button {
+    display: flex; width: 100%; align-items: center; gap: 9px; padding: 7px 9px;
+    border: 0; background: none; border-radius: 6px; cursor: pointer;
+    font: inherit; font-size: 12.5px; font-weight: 550; color: var(--ink); text-align: left;
+  }
+  .who-menu button:hover, .who-menu button:focus-visible { background: var(--bg); outline: none; }
+  .who-menu button.danger { color: var(--fail); border-top: 1px solid var(--line); margin-top: 4px; border-radius: 0 0 6px 6px; }
 
   /* ---------- layout ---------- */
-  .shell { display: grid; grid-template-columns: 236px minmax(0, 1fr); height: calc(100% - 52px); }
-  @media (max-width: 900px) { .shell { grid-template-columns: 1fr; } .rail { display: none; } }
-
+  .app-frame {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    min-height: 0;
+  }
+  .app-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .shell {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    overflow: hidden;
+  }
+  .app-frame.has-sidebar .shell {
+    grid-template-columns: var(--rail-w, 236px) minmax(0, 1fr);
+  }
+  .shell-main {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .screen-dashboard {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .screen-dashboard[hidden] { display: none !important; }
   .rail {
     background: var(--panel); border-right: 1px solid var(--line);
-    overflow-y: auto; padding: 14px 0 40px;
+    overflow: hidden; display: flex; flex-direction: column;
+    min-height: 0;
   }
+  .rail-body {
+    flex: 1; min-height: 0; overflow-y: auto;
+    padding: 0 0 8px;
+  }
+  .rail-footer {
+    flex: none; margin-top: auto;
+    padding: 8px 0 12px;
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+  }
+  .rail-head {
+    flex: none; height: 56px; display: flex; align-items: center;
+    padding: 0 14px; border-bottom: 1px solid var(--line);
+  }
+  .rail-head .brand { font-size: 15px; }
+  .rail-section { padding-top: 6px; }
+  .app-frame.has-sidebar .topbar .brand-fallback { display: none; }
+  /* Rail-only embed: sidebar beside a React page — hide top bar and main pane. */
+  body[data-atm-rail-only] .topbar,
+  body[data-atm-rail-only] .shell-main { display: none !important; }
+  body[data-atm-rail-only] .app-frame,
+  body[data-atm-rail-only] .app-body,
+  body[data-atm-rail-only] .shell { height: 100%; min-height: 0; }
+  body[data-atm-rail-only] .app-frame.has-sidebar .shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  body[data-atm-rail-only] .rail { height: 100%; border-right: 0; overflow-x: hidden; }
+  body[data-atm-rail-only] .app-frame { overflow: hidden; }
+  .navitem.nav-icon { justify-content: flex-start; gap: 8px; }
+  .navitem.nav-icon svg { flex: none; color: var(--muted); }
+  .navitem.nav-icon[aria-current="true"] svg { color: var(--accent); }
+  @media (max-width: 1100px) {
+    .app-frame.has-sidebar { --rail-w: 212px; }
+  }
+  @media (max-width: 900px) {
+    .app-frame.has-sidebar { --rail-w: 196px; }
+  }
+
   .rail h3 {
     margin: 16px 14px 7px; font-size: 10.5px; letter-spacing: .08em;
     text-transform: uppercase; color: var(--faint); font-weight: 700;
@@ -159,7 +259,8 @@
   }
   .navitem:hover { background: var(--line-soft); }
   .navitem[aria-current="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-  .navitem .count { font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .navitem .count { font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; margin-left: auto; }
+  .navitem .label { min-width: 0; }
   .navitem[aria-current="true"] .count { color: var(--accent); }
 
   .facet { padding: 2px 14px 8px; }
@@ -443,8 +544,10 @@
 </head>
 <body>
 
+<div class="app-frame" id="app-frame">
+  <div class="app-body">
 <header class="topbar">
-  <div class="brand">
+  <button type="button" class="brand brand-fallback" id="brand-home-fallback" aria-label="Atmosphere home">
     <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
       <rect width="22" height="2.8" fill="currentColor" opacity="0.3" />
       <rect y="4.8" width="22" height="2.8" fill="currentColor" opacity="0.5" />
@@ -453,55 +556,89 @@
       <rect y="19.2" width="22" height="2.8" fill="#F2670C" />
     </svg>
     <span>Atmosphere</span>
-  </div>
+  </button>
   <div class="search">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-    <input id="q" type="search" placeholder="Search by job, company, evidence ID, or hash" aria-label="Search evidence" />
+    <input id="q" type="search" placeholder="Search videos by job, company, ID, or hash" aria-label="Search videos" />
   </div>
   <div class="spacer"></div>
-  <div class="who">
-    <div>
-      <div>Dana Ortiz</div>
-      <div class="role">Ortiz Restoration · reviewer</div>
+  <div class="who-wrap" id="who-wrap">
+    <button type="button" class="who" id="who-btn" aria-haspopup="menu" aria-expanded="false">
+      <div>
+        <div id="who-name">Your account</div>
+        <div class="role" id="who-sub">Loading…</div>
+      </div>
+      <div class="avatar" id="who-avatar">—</div>
+    </button>
+    <div class="who-menu" id="who-menu" role="menu" aria-label="Account" hidden>
+      <div class="who-menu-head">
+        <div class="name" id="menu-name">Your account</div>
+        <div class="email" id="menu-email"></div>
+        <div class="meta" id="menu-meta"></div>
+      </div>
+      <button type="button" role="menuitem" id="menu-settings">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09A1.7 1.7 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09A1.7 1.7 0 0 0 20.91 10H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></svg>
+        Settings
+      </button>
+      <button type="button" role="menuitem" id="menu-signout" class="danger">Sign out</button>
     </div>
-    <div class="avatar">DO</div>
   </div>
 </header>
 
-<div class="shell">
-  <aside class="rail">
-    <h3>Evidence</h3>
-    <button class="navitem" data-view="all" aria-current="true">All evidence <span class="count" id="n-all">0</span></button>
-    <button class="navitem" data-view="flagged">Flagged <span class="count" id="n-flag">0</span></button>
-    <button class="navitem" data-view="unanalysed">Not analysed <span class="count" id="n-unan">0</span></button>
-    <button class="navitem" data-view="hold">Legal hold <span class="count" id="n-hold">0</span></button>
-
-    <h3>Job</h3>
-    <div class="facet" id="facet-job"></div>
-
-    <h3>Company</h3>
-    <div class="facet" id="facet-company"></div>
-
-    <h3>Capture</h3>
-    <div class="facet" id="facet-phase"></div>
-
-    <!-- Shown only when the portal IS the platform: the one piece of app
-         chrome that still matters lives at the bottom of this sidebar. -->
-    <div id="embed-nav" hidden>
-      <h3>Set up</h3>
-      <button class="navitem" id="nav-jobfiles" style="gap:8px;justify-content:flex-start">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg><span>Job files</span>
+<div class="shell" id="shell">
+  <aside class="rail" id="main-rail" aria-label="Navigation">
+    <div class="rail-head" id="rail-head" hidden>
+      <button type="button" class="brand" id="brand-home" aria-label="Atmosphere home">
+        <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+          <rect width="22" height="2.8" fill="currentColor" opacity="0.3" />
+          <rect y="4.8" width="22" height="2.8" fill="currentColor" opacity="0.5" />
+          <rect y="9.6" width="22" height="2.8" fill="currentColor" opacity="0.68" />
+          <rect y="14.4" width="22" height="2.8" fill="currentColor" opacity="0.88" />
+          <rect y="19.2" width="22" height="2.8" fill="#F2670C" />
+        </svg>
+        <span>Atmosphere</span>
       </button>
-      <h3>System</h3>
-      <button class="navitem" id="nav-settings" style="gap:8px;justify-content:flex-start">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09A1.7 1.7 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09A1.7 1.7 0 0 0 20.91 10H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></svg><span>Settings</span>
+    </div>
+
+    <div class="rail-body">
+    <div class="rail-section" id="platform-nav" hidden>
+      <button type="button" class="navitem nav-icon app-nav" data-screen="dashboard">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span>Dashboard</span>
+      </button>
+      <button type="button" class="navitem nav-icon" id="nav-start-job" data-tour="nav-start-job">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        <span>Start a job</span>
+      </button>
+      <button type="button" class="navitem nav-icon" id="nav-jobprogress" data-tour="nav-job-progress">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+        <span>Job Progress</span>
+      </button>
+    </div>
+
+    <div class="rail-section" id="evidence-nav">
+    <h3>Videos</h3>
+    <button class="navitem" data-view="all" data-label="All videos" aria-current="true"><span class="label">All videos</span> <span class="count" id="n-all">0</span></button>
+    <button class="navitem" data-view="classified" data-label="Classified"><span class="label">Classified</span> <span class="count" id="n-classified">0</span></button>
+    <button class="navitem" data-view="unanalysed" data-label="Awaiting analysis"><span class="label">Awaiting analysis</span> <span class="count" id="n-unan">0</span></button>
+    <button class="navitem" data-view="flagged" data-label="Needs review"><span class="label">Needs review</span> <span class="count" id="n-flag">0</span></button>
+    <button class="navitem" data-view="hold" data-label="Legal hold"><span class="label">Legal hold</span> <span class="count" id="n-hold">0</span></button>
+    </div>
+    </div>
+
+    <div class="rail-footer" id="rail-footer" hidden>
+      <button type="button" class="navitem nav-icon" id="nav-settings">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09A1.7 1.7 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09A1.7 1.7 0 0 0 20.91 10H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></svg>
+        <span>Settings</span>
       </button>
     </div>
   </aside>
 
+  <div class="shell-main">
+  <div class="screen screen-dashboard" id="screen-dashboard">
   <main class="main">
     <div class="toolbar">
-      <h1 id="viewtitle">All evidence</h1>
+      <h1 id="viewtitle">All videos</h1>
       <span class="result" id="resultcount"></span>
       <span class="spacer"></span>
       <div class="seg" role="group" aria-label="Arrange">
@@ -519,9 +656,9 @@
         <thead>
           <tr>
             <th style="width:96px">Clip</th>
-            <th>Evidence</th>
+            <th>Video</th>
             <th>Integrity</th>
-            <th>Analysis</th>
+            <th>Classification</th>
             <th>Tier</th>
             <th>Recorded</th>
             <th>Uploaded by</th>
@@ -538,6 +675,10 @@
       </p>
     </div>
   </main>
+  </div>
+  </div>
+</div>
+  </div>
 </div>
 
 <!-- One menu, repositioned to whichever row's dots opened it. Share, Delete,
@@ -1100,7 +1241,7 @@
     if (a.state === 'skipped') return { cls: 'neutral', text: 'Waiting on the after' };
     if (a.state === 'paired') return { cls: 'neutral', text: 'Read as the before half' };
     if (a.state === 'failed') return { cls: 'fail', text: 'Analysis failed' };
-    if (a.state !== 'done') return { cls: 'neutral', text: 'Not analysed' };
+    if (a.state !== 'done') return { cls: 'neutral', text: 'Awaiting analysis' };
     if (a.longForm) return { cls: 'pass', text: 'Workday read' };
     if (a.materialChange === 'significant') return { cls: 'pass', text: 'Work changed' };
     if (a.materialChange === 'minor') return { cls: 'unknown', text: 'Minor change' };
@@ -1132,34 +1273,15 @@
   }
 
   function initFacets() {
-    var byJob = tally(function (e) { return e.job; });
-    buildFacet($('#facet-job'), Object.keys(byJob).map(function (k) {
-      return { key: k, label: JOBS[k].name.split('—')[0].trim() + ' · #' + JOBS[k].number, n: byJob[k] };
-    }), 'jobs');
-
-    var byCo = tally(function (e) { return e.company; });
-    buildFacet($('#facet-company'), Object.keys(byCo).map(function (k) {
-      return { key: k, label: k, n: byCo[k] };
-    }), 'companies');
-
-    var byPhase = tally(function (e) { return e.phase; });
-    buildFacet($('#facet-phase'), Object.keys(byPhase).map(function (k) {
-      return { key: k, label: k.charAt(0).toUpperCase() + k.slice(1), n: byPhase[k] };
-    }), 'phases');
-
-    document.querySelectorAll('.facet input').forEach(function (input) {
-      input.addEventListener('change', function () {
-        var group = state[input.dataset.group];
-        if (input.checked) group[input.value] = true; else delete group[input.value];
-        render();
-      });
-    });
+    /* Job / company / capture facet filters removed from the sidebar — search
+       and the evidence view tabs carry enough filtering for most work. */
   }
 
   function visible() {
     var q = state.q.trim().toLowerCase();
     return EVIDENCE.filter(function (e) {
       if (state.view === 'flagged' && !needsAttention(e)) return false;
+      if (state.view === 'classified' && (e.analysis || {}).state !== 'done') return false;
       if (state.view === 'unanalysed' && (e.analysis || {}).state === 'done') return false;
       if (state.view === 'hold' && !(e.hold && e.hold.on)) return false;
       if (Object.keys(state.jobs).length && !state.jobs[e.job]) return false;
@@ -1292,6 +1414,7 @@
 
   function counts() {
     $('#n-all').textContent = EVIDENCE.length;
+    $('#n-classified').textContent = EVIDENCE.filter(function (e) { return (e.analysis || {}).state === 'done'; }).length;
     $('#n-flag').textContent = EVIDENCE.filter(needsAttention).length;
     $('#n-unan').textContent = EVIDENCE.filter(function (e) { return (e.analysis || {}).state !== 'done'; }).length;
     $('#n-hold').textContent = EVIDENCE.filter(function (e) { return e.hold && e.hold.on; }).length;
@@ -1785,13 +1908,55 @@
    * Wiring
    * ------------------------------------------------------------------ */
 
+  var EMBEDDED = document.body.hasAttribute('data-atm-embed') ||
+    new URLSearchParams(location.search).get('embed') === '1';
+  var RAIL_ONLY = document.body.hasAttribute('data-atm-rail-only') ||
+    new URLSearchParams(location.search).get('rail') === '1';
+  if (RAIL_ONLY) document.body.setAttribute('data-atm-rail-only', '1');
+
+  var activeRoute = '/verifier-library';
+
+  function syncSidebarActive() {
+    document.querySelectorAll('.rail .navitem').forEach(function (btn) {
+      btn.removeAttribute('aria-current');
+    });
+    if (activeRoute === '/verifier-library') {
+      var view = state.view || 'all';
+      document.querySelectorAll('.navitem[data-view]').forEach(function (btn) {
+        if (btn.dataset.view === view) btn.setAttribute('aria-current', 'true');
+      });
+      return;
+    }
+    document.querySelectorAll('#platform-nav .navitem, #rail-footer .navitem').forEach(function (btn) {
+      var active = false;
+      if (btn.id === 'nav-start-job') active = activeRoute === '/intake';
+      else if (btn.id === 'nav-jobprogress') active = activeRoute === '/shared';
+      else if (btn.id === 'nav-settings') active = activeRoute === '/settings';
+      if (active) btn.setAttribute('aria-current', 'true');
+    });
+  }
+
+  function setActiveRoute(path) {
+    activeRoute = path || '/verifier-library';
+    syncSidebarActive();
+  }
+
+  function setRailOnly(on) {
+    if (on) document.body.setAttribute('data-atm-rail-only', '1');
+    else document.body.removeAttribute('data-atm-rail-only');
+  }
+
   document.querySelectorAll('.navitem[data-view]').forEach(function (b) {
     b.addEventListener('click', function () {
       state.view = b.dataset.view;
-      document.querySelectorAll('.navitem[data-view]').forEach(function (o) {
-        o.setAttribute('aria-current', String(o === b));
-      });
-      $('#viewtitle').textContent = b.textContent.replace(/\d+$/, '').trim();
+      activeRoute = '/verifier-library';
+      syncSidebarActive();
+      $('#viewtitle').textContent = b.dataset.label || (b.querySelector('.label') && b.querySelector('.label').textContent) || b.textContent.trim();
+      if (EMBEDDED && RAIL_ONLY) {
+        window.parent.postMessage({ atmosphere: 'navigate', to: '/verifier-library' }, '*');
+        return;
+      }
+      if (EMBEDDED) setScreen('dashboard');
       render();
     });
   });
@@ -1802,14 +1967,139 @@
   // Job files is the same handoff for the one thing the portal has no screen
   // for: setting a job's scope, seeing whether it can be verified yet, and
   // inviting a subcontractor.
-  var EMBEDDED = document.body.hasAttribute('data-atm-embed') ||
-    new URLSearchParams(location.search).get('embed') === '1';
+  function setScreen(name) {
+    var dash = document.getElementById('screen-dashboard');
+    if (dash) dash.hidden = name !== 'dashboard';
+    if (name === 'dashboard') {
+      activeRoute = '/verifier-library';
+      syncSidebarActive();
+    }
+  }
+
+  function applySession(payload) {
+    if (!payload || !payload.user) return;
+    var u = payload.user;
+    var name = u.name || 'Teammate';
+    var email = u.email || '';
+    var init = u.initials || '??';
+    var meta = [u.orgName, u.roleLabel].filter(Boolean).join(' · ');
+    var sub = meta || email || 'Atmosphere';
+
+    var whoName = document.getElementById('who-name');
+    var whoSub = document.getElementById('who-sub');
+    var whoAvatar = document.getElementById('who-avatar');
+    var menuName = document.getElementById('menu-name');
+    var menuEmail = document.getElementById('menu-email');
+    var menuMeta = document.getElementById('menu-meta');
+    if (whoName) whoName.textContent = name;
+    if (whoSub) whoSub.textContent = sub;
+    if (whoAvatar) whoAvatar.textContent = init;
+    if (menuName) menuName.textContent = name;
+    if (menuEmail) menuEmail.textContent = email;
+    if (menuMeta) menuMeta.textContent = meta;
+  }
+
+  function initAccountMenu() {
+    var btn = document.getElementById('who-btn');
+    var menu = document.getElementById('who-menu');
+    if (!btn || !menu) return;
+
+    function closeMenu() {
+      menu.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+    }
+
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var open = !menu.hidden;
+      if (open) closeMenu();
+      else {
+        menu.hidden = false;
+        btn.setAttribute('aria-expanded', 'true');
+      }
+    });
+
+    document.addEventListener('click', function (e) {
+      if (!menu.hidden && !menu.contains(e.target) && e.target !== btn) closeMenu();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeMenu();
+    });
+
+    var menuSettings = document.getElementById('menu-settings');
+    if (menuSettings) {
+      menuSettings.addEventListener('click', function () {
+        closeMenu();
+        if (EMBEDDED) window.parent.postMessage({ atmosphere: 'navigate', to: '/settings' }, '*');
+        else location.href = '/settings';
+      });
+    }
+
+    var menuSignout = document.getElementById('menu-signout');
+    if (menuSignout) {
+      menuSignout.addEventListener('click', function () {
+        closeMenu();
+        if (EMBEDDED) window.parent.postMessage({ atmosphere: 'sign-out' }, '*');
+        else location.href = '/login';
+      });
+    }
+  }
+
+  initAccountMenu();
+
+  function goDashboard() {
+    setScreen('dashboard');
+    if (EMBEDDED) {
+      window.parent.postMessage({ atmosphere: 'navigate', to: '/verifier-library' }, '*');
+    } else {
+      location.href = '/verifier-library';
+    }
+  }
+
+  var brandHome = document.getElementById('brand-home');
+  var brandFallback = document.getElementById('brand-home-fallback');
+  if (brandHome) brandHome.addEventListener('click', goDashboard);
+  if (brandFallback) brandFallback.addEventListener('click', goDashboard);
+
+  window.addEventListener('message', function (e) {
+    var d = e.data;
+    if (d && d.atmosphere === 'session') applySession(d);
+    if (d && d.atmosphere === 'active-route') setActiveRoute(d.path);
+    if (d && d.atmosphere === 'layout') setRailOnly(!!d.railOnly);
+  });
+
+  var appFrame = document.getElementById('app-frame');
+  if (appFrame) appFrame.classList.add('has-sidebar');
+
   if (EMBEDDED) {
-    var embedNav = document.getElementById('embed-nav');
-    if (embedNav) embedNav.hidden = false;
-    var navJobFiles = document.getElementById('nav-jobfiles');
-    if (navJobFiles) {
-      navJobFiles.addEventListener('click', function () {
+    window.parent.postMessage({ atmosphere: 'request-session' }, '*');
+    var railHead = document.getElementById('rail-head');
+    var platformNav = document.getElementById('platform-nav');
+    var railFooter = document.getElementById('rail-footer');
+    if (railHead) railHead.hidden = false;
+    if (platformNav) platformNav.hidden = false;
+    if (railFooter) railFooter.hidden = false;
+    document.querySelectorAll('.app-nav[data-screen]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (EMBEDDED) {
+          state.view = 'all';
+          activeRoute = '/verifier-library';
+          syncSidebarActive();
+          window.parent.postMessage({ atmosphere: 'navigate', to: '/verifier-library' }, '*');
+          return;
+        }
+        setScreen(btn.dataset.screen);
+      });
+    });
+    var navStartJob = document.getElementById('nav-start-job');
+    if (navStartJob) {
+      navStartJob.addEventListener('click', function () {
+        window.parent.postMessage({ atmosphere: 'navigate', to: '/intake' }, '*');
+      });
+    }
+    var navJobProgress = document.getElementById('nav-jobprogress');
+    if (navJobProgress) {
+      navJobProgress.addEventListener('click', function () {
         window.parent.postMessage({ atmosphere: 'navigate', to: '/shared' }, '*');
       });
     }
@@ -1868,6 +2158,7 @@
   function boot() {
     initFacets();
     counts();
+    syncSidebarActive();
     render();
   }
 

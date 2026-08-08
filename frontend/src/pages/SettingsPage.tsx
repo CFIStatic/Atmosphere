@@ -14,7 +14,6 @@ import {
   ApiError,
   CONTRACTOR_TYPE_LABELS,
   ROLE_LABELS,
-  USAGE_INTENT_LABELS,
   WORK_TYPE_LABELS,
   type ContractorType,
   type CrmConnections,
@@ -25,10 +24,10 @@ import {
   type Diagnosis,
   type Integration,
   type MemberRole,
-  type UsageIntent,
   type WorkType,
 } from '../lib/api';
-import { AppShell } from '../components/AppShell';
+import { usageIntentsForRole } from '../components/setup/verifierSetupOptions';
+import { Logo } from '../components/Logo';
 import { PinSetupCard } from '../components/PinSetupCard';
 import { BillingSection } from '../components/settings/BillingSection';
 import { displayName, initials } from '../lib/display';
@@ -49,6 +48,7 @@ import {
   CreditCardIcon,
 } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
+import { WORK_VERIFICATION_TOUR, queueProductTour } from '../lib/productTour';
 
 type SectionId =
   | 'profile'
@@ -143,8 +143,13 @@ export function SettingsPage() {
   }
 
   return (
-    <AppShell>
-      <div className="mx-auto max-w-5xl">
+    <div className="min-h-screen bg-paper-100">
+      <header className="border-b border-line bg-paper-0/80">
+        <div className="mx-auto flex max-w-5xl items-center px-4 py-4 sm:px-6">
+          <Logo />
+        </div>
+      </header>
+      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:py-10">
         <header>
           <h1 className="text-3xl font-bold tracking-tight text-ink-900">Settings</h1>
           <p className="mt-1.5 text-sm text-ink-600">
@@ -152,46 +157,42 @@ export function SettingsPage() {
           </p>
         </header>
 
-        <div className="mt-8 flex flex-col gap-8 lg:flex-row lg:gap-10">
-          {/* Section nav: a rail beside the content on wide screens, a row of
-              tabs above it on narrow ones. */}
-          <nav className="lg:w-60 lg:shrink-0">
-            <ul className="flex gap-2 overflow-x-auto pb-2 lg:flex-col lg:gap-1 lg:overflow-visible lg:pb-0">
-              {visible.map((section) => {
-                const isActive = section.id === active;
-                return (
-                  <li key={section.id} className="shrink-0 lg:shrink">
-                    <button
-                      onClick={() => select(section.id)}
-                      aria-current={isActive ? 'page' : undefined}
-                      className={`flex w-full items-center gap-3 rounded-lg px-3.5 py-2.5 text-sm font-medium transition ${
-                        isActive
-                          ? 'bg-brand-50 text-brand-700'
-                          : 'text-ink-600 hover:bg-paper-200/50 hover:text-ink-900'
-                      }`}
-                    >
-                      <section.icon width={18} height={18} />
-                      {section.label}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </nav>
+        <nav className="mt-8 border-b border-line" aria-label="Settings sections">
+          <ul className="flex gap-1 overflow-x-auto pb-px">
+            {visible.map((section) => {
+              const isActive = section.id === active;
+              return (
+                <li key={section.id} className="shrink-0">
+                  <button
+                    onClick={() => select(section.id)}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={`flex items-center gap-2 rounded-t-lg px-3.5 py-2.5 text-sm font-medium transition ${
+                      isActive
+                        ? 'border border-b-0 border-line bg-paper-0 text-brand-700'
+                        : 'text-ink-600 hover:bg-paper-200/50 hover:text-ink-900'
+                    }`}
+                  >
+                    <section.icon width={18} height={18} />
+                    {section.label}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
 
-          <div className="min-w-0 flex-1 space-y-6">
-            {active === 'profile' && <ProfileSection />}
-            {active === 'security' && <SecuritySection />}
-            {active === 'organization' && <OrganizationSection />}
-            {active === 'billing' && <BillingSection />}
-            {active === 'integrations' && <IntegrationsSection />}
-            {active === 'sending' && <SendingSection />}
-            {active === 'contactdata' && <ContactDataSection />}
-            {active === 'preferences' && <PreferencesSection />}
-          </div>
+        <div className="mt-8 min-w-0 space-y-6">
+          {active === 'profile' && <ProfileSection />}
+          {active === 'security' && <SecuritySection />}
+          {active === 'organization' && <OrganizationSection />}
+          {active === 'billing' && <BillingSection />}
+          {active === 'integrations' && <IntegrationsSection />}
+          {active === 'sending' && <SendingSection />}
+          {active === 'contactdata' && <ContactDataSection />}
+          {active === 'preferences' && <PreferencesSection />}
         </div>
       </div>
-    </AppShell>
+    </div>
   );
 }
 
@@ -591,29 +592,11 @@ const CONTRACTOR_ORDER: ContractorType[] = [
   'general_contractor',
   'other',
 ];
-const USAGE_ORDER: UsageIntent[] = [
-  'mitigation_estimating',
-  'construction_estimating',
-  'project_management',
-  'crm',
-  'web_access',
-  'field_work',
-  'billing',
-  'financial',
-  'exploring',
-];
-
-function sameUsageIntents(a: UsageIntent[] | undefined, b: UsageIntent[] | undefined) {
-  const left = [...(a ?? [])].sort();
-  const right = [...(b ?? [])].sort();
-  return left.length === right.length && left.every((value, index) => value === right[index]);
-}
 
 function OrganizationSection() {
   const { membership, refreshMembership } = useAuth();
   const [role, setRole] = useState<MemberRole | null>(membership?.role ?? null);
   const [workType, setWorkType] = useState<WorkType | null>(membership?.workType ?? null);
-  const [usageIntents, setUsageIntents] = useState<UsageIntent[]>(membership?.usageIntents ?? []);
   const [contractorType, setContractorType] = useState<ContractorType | null>(
     membership?.org?.contractorType ?? null,
   );
@@ -625,12 +608,10 @@ function OrganizationSection() {
   useEffect(() => {
     setRole(membership?.role ?? null);
     setWorkType(membership?.workType ?? null);
-    setUsageIntents(membership?.usageIntents ?? []);
     setContractorType(membership?.org?.contractorType ?? null);
   }, [
     membership?.role,
     membership?.workType,
-    membership?.usageIntents,
     membership?.org?.contractorType,
   ]);
 
@@ -639,25 +620,16 @@ function OrganizationSection() {
     () =>
       role !== membership?.role ||
       workType !== membership?.workType ||
-      !sameUsageIntents(usageIntents, membership?.usageIntents) ||
       contractorType !== (membership?.org?.contractorType ?? null),
     [
       role,
       workType,
-      usageIntents,
       contractorType,
       membership?.role,
       membership?.workType,
-      membership?.usageIntents,
       membership?.org?.contractorType,
     ],
   );
-
-  function toggleUsage(intent: UsageIntent) {
-    setUsageIntents((current) =>
-      current.includes(intent) ? current.filter((value) => value !== intent) : [...current, intent],
-    );
-  }
 
   async function copyCode() {
     if (!org?.joinCode) return;
@@ -671,7 +643,7 @@ function OrganizationSection() {
   }
 
   async function save() {
-    if (!role || !workType || usageIntents.length === 0) return;
+    if (!role || !workType) return;
     setSaving(true);
     setError(null);
     try {
@@ -679,7 +651,7 @@ function OrganizationSection() {
       if (contractorChanged && contractorType) {
         await api.updateOrgProfile(contractorType);
       }
-      await api.updateMembership(role, workType, usageIntents);
+      await api.updateMembership(role, workType, usageIntentsForRole(role));
       await refreshMembership();
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2500);
@@ -778,39 +750,11 @@ function OrganizationSection() {
             </select>
           </Field>
 
-          <Field label="How you use Atmosphere">
-            <div className="mt-2 space-y-2">
-              {USAGE_ORDER.map((value) => {
-                const checked = usageIntents.includes(value);
-                return (
-                  <label
-                    key={value}
-                    className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-2.5 transition ${
-                      checked
-                        ? 'border-brand-400 bg-brand-50'
-                        : 'glass-card hover:bg-paper-100'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleUsage(value)}
-                      className="mt-1 h-4 w-4 rounded border-line text-brand-600 focus:ring-brand-200"
-                    />
-                    <span className="text-sm font-medium text-ink-900">
-                      {USAGE_INTENT_LABELS[value]}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </Field>
-
           <div className="flex flex-wrap items-center gap-3">
             <PrimaryButton
               onClick={save}
               busy={saving}
-              disabled={!dirty || usageIntents.length === 0}
+              disabled={!dirty}
             >
               Save changes
             </PrimaryButton>
@@ -847,6 +791,7 @@ const TOGGLES: { key: BooleanPreference; label: string; description: string }[] 
 
 function PreferencesSection() {
   const preferences = usePreferences();
+  const navigate = useNavigate();
 
   return (
     <Card
@@ -863,6 +808,26 @@ function PreferencesSection() {
             description={toggle.description}
           />
         ))}
+
+        <div className="flex flex-wrap items-center justify-between gap-4 py-4">
+          <div>
+            <p className="text-sm font-medium text-ink-900">Product walkthrough</p>
+            <p className="mt-0.5 text-sm text-ink-600">
+              Replay the guided tour with simulated previews of Field Capture and the Evidence
+              Platform.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              queueProductTour(WORK_VERIFICATION_TOUR.id);
+              navigate('/verifier-library?tour=1');
+            }}
+            className="rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
+          >
+            Replay tour
+          </button>
+        </div>
 
         <div className="flex items-center justify-between gap-4 py-4">
           <div>

@@ -1151,6 +1151,61 @@ const EVIDENCE: Record<string, any[]> = {
   'job-1041': [],
 };
 
+function evidencePortalLibrary() {
+  const jobById = Object.fromEntries(JOBS.map((j) => [j.jobId, j]));
+  const items: Record<string, unknown>[] = [];
+  for (const [jobId, proofs] of Object.entries(EVIDENCE)) {
+    const job = jobById[jobId];
+    for (const p of proofs) {
+      const checks = (p.checks ?? []) as Array<{ key: string; verdict: string; detail: string }>;
+      const flagged = checks.some((c) => c.verdict === 'fail');
+      items.push({
+        id: p.id,
+        jobId,
+        jobName: job?.title ?? 'Job',
+        jobNumber: job?.jobNumber ?? null,
+        company: p.company,
+        person: p.company,
+        phase: p.phase,
+        workDate: p.workDate,
+        capturedAt: p.capturedAt,
+        uploadedAt: p.receivedAt,
+        durationSeconds: p.durationSeconds,
+        byteSize: p.byteSize,
+        hash: p.contentHash,
+        labels: p.tags ?? [],
+        checks,
+        flagged,
+        legalHold: Boolean(p.legalHold),
+        tier: 1,
+        analysisState: p.state === 'analysed' ? 'done' : p.state === 'checked' ? 'paired' : 'none',
+        analysis:
+          p.aiSummary != null
+            ? {
+                summary: p.aiSummary,
+                dictation: p.aiSummary,
+                materialChange: p.category === 'issue',
+                materialBecause: p.category === 'issue' ? 'Integrity check failed' : null,
+                changes: [],
+                scope: [],
+                couldNotTell: [],
+              }
+            : null,
+      });
+    }
+  }
+  return {
+    items,
+    counts: {
+      total: items.length,
+      flagged: items.filter((i) => i.flagged).length,
+      unanalysed: items.filter((i) => i.analysisState !== 'done' && i.analysisState !== 'paired')
+        .length,
+      onHold: items.filter((i) => i.legalHold).length,
+    },
+  };
+}
+
 const CUSTODY: Record<string, any[]> = {
   'pf-4': [
     { id: 'cu-1', action: 'held', actor_label: 'Priya Shah', actor_role: 'general_contractor', detail: 'Disputed day — mediation pending', occurred_at: '2026-08-06T09:20:00Z' },
@@ -1173,9 +1228,11 @@ const CUSTODY: Record<string, any[]> = {
  * other side.
  */
 const VERIFIER_SHARES: Array<Record<string, any>> = [
-  { id: 'vs-1', jobId: 'job-1038', label: 'M. Rhodes — TDI appraisal', recipientEmail: 'm.rhodes@tdi-appraisal.com', path: '/verifier/shared/demo-rhodes', createdAt: '2026-07-22T15:00:00Z', expiresAt: '2026-09-01T00:00:00Z', revokedAt: null, lastOpenedAt: '2026-08-03T10:15:00Z', openCount: 3, state: 'live' },
-  { id: 'vs-2', jobId: 'job-1038', label: 'Halcyon PA Group', recipientEmail: 'files@halcyonpa.com', path: '/verifier/shared/demo-halcyon', createdAt: '2026-07-18T09:00:00Z', expiresAt: null, revokedAt: '2026-07-30T16:40:00Z', lastOpenedAt: '2026-07-19T08:20:00Z', openCount: 1, state: 'revoked' },
-  { id: 'vs-3', jobId: 'job-1041', label: 'R. Calloway — Alliance Mutual', recipientEmail: 'r.calloway@alliancemutual.com', path: '/verifier/shared/demo-calloway', createdAt: '2026-07-28T12:00:00Z', expiresAt: '2026-09-06T00:00:00Z', revokedAt: null, lastOpenedAt: '2026-08-04T11:15:00Z', openCount: 5, state: 'live' },
+  { id: 'vs-1', jobId: 'job-1038', kind: 'evidence', label: 'M. Rhodes — TDI appraisal', recipientEmail: 'm.rhodes@tdi-appraisal.com', path: '/verifier/shared/demo-rhodes', createdAt: '2026-07-22T15:00:00Z', expiresAt: '2026-09-01T00:00:00Z', revokedAt: null, lastOpenedAt: '2026-08-03T10:15:00Z', openCount: 3, state: 'live' },
+  { id: 'vs-2', jobId: 'job-1038', kind: 'evidence', label: 'Halcyon PA Group', recipientEmail: 'files@halcyonpa.com', path: '/verifier/shared/demo-halcyon', createdAt: '2026-07-18T09:00:00Z', expiresAt: null, revokedAt: '2026-07-30T16:40:00Z', lastOpenedAt: '2026-07-19T08:20:00Z', openCount: 1, state: 'revoked' },
+  { id: 'vs-3', jobId: 'job-1041', kind: 'evidence', label: 'R. Calloway — Alliance Mutual', recipientEmail: 'r.calloway@alliancemutual.com', path: '/verifier/shared/demo-calloway', createdAt: '2026-07-28T12:00:00Z', expiresAt: '2026-09-06T00:00:00Z', revokedAt: null, lastOpenedAt: '2026-08-04T11:15:00Z', openCount: 5, state: 'live' },
+  { id: 'vs-4', jobId: 'job-1038', kind: 'progress', label: 'Cedar Ridge HOA — homeowner', recipientEmail: 'board@cedarridgehoa.org', path: '/progress/demo-homeowner', createdAt: '2026-08-01T09:00:00Z', expiresAt: '2026-10-01T00:00:00Z', revokedAt: null, lastOpenedAt: '2026-08-05T14:20:00Z', openCount: 2, state: 'live' },
+  { id: 'vs-5', jobId: 'job-1038', kind: 'progress', label: 'Halcyon PA — counsel', recipientEmail: null, path: '/progress/demo-counsel', createdAt: '2026-07-29T11:00:00Z', expiresAt: null, revokedAt: null, lastOpenedAt: null, openCount: 0, state: 'live' },
 ];
 
 /** Addresses the demo treats as already holding an Atmosphere account. */
@@ -1591,7 +1648,7 @@ const CAMPAIGN_MEMBERS: Record<string, Array<Record<string, any>>> = {
 };
 
 /** Handlers that need the query string get it here, since Handler takes only the path match. */
-const LAST_QUERY: { leadId?: string; scope?: string; phase?: string; jobId?: string } = {};
+const LAST_QUERY: { leadId?: string; scope?: string; phase?: string; jobId?: string; kind?: string; mine?: string; status?: string } = {};
 
 const COMPUTER_STATUS: ComputerStatus = {
   enabled: true,
@@ -1760,7 +1817,16 @@ const routes: Array<[string, RegExp, Handler]> = [
     m[1] === 'job-1041'
       ? { body: JOB_DETAIL }
       : { status: 404, body: { error: 'Only job #1041 carries full detail in the demo — open Meridian Ave.', code: 'not_found' } }],
-  ['GET', /^\/api\/jobs$/, () => ({ body: { jobs: JOBS } })],
+  ['GET', /^\/api\/jobs$/, () => {
+    let jobs = JOBS;
+    if (LAST_QUERY.mine === '1') {
+      jobs = jobs.filter((job) => job.ownerId === user().id);
+    }
+    if (LAST_QUERY.status === 'in_progress') {
+      jobs = jobs.filter((job) => job.status === 'in_progress');
+    }
+    return { body: { jobs } };
+  }],
 
   ['GET', /^\/api\/memory\/stats$/, () => ({ body: MEMORY_STATS })],
   ['GET', /^\/api\/memory\/agents\/([\w-]+)$/, (m) => ({
@@ -1773,6 +1839,21 @@ const routes: Array<[string, RegExp, Handler]> = [
   ['GET', /^\/api\/memory$/, () => ({ body: { events: EVENTS, nextCursor: null } })],
 
   ['GET', /^\/api\/billing\/catalog$/, () => ({ body: CATALOG })],
+  ['GET', /^\/api\/billing\/onboarding$/, () => ({
+    body: {
+      paymentProvider: CATALOG.paymentProvider,
+      required: false,
+      complete: true,
+      isCreator: true,
+      hasSubscription: false,
+      plan: {
+        name: 'Work Verification',
+        baseMonthlyFeeCents: 59900,
+        includedJobs: 50,
+        additionalJobPriceCents: 3000,
+      },
+    },
+  })],
   ['GET', /^\/api\/billing\/overview$/, () => ({ body: OVERVIEW() })],
   ['GET', /^\/api\/billing\/ledger$/, () => ({ body: { entries: LEDGER } })],
   ['GET', /^\/api\/billing\/purchases$/, () => ({ body: { purchases: PURCHASES } })],
@@ -2505,22 +2586,25 @@ const routes: Array<[string, RegExp, Handler]> = [
   }],
 
   /* ------------------------------------------- verifier shares */
-  ['GET', /^\/api\/evidence-portal\/shares$/, () => ({
-    body: {
-      shares: LAST_QUERY.jobId
-        ? VERIFIER_SHARES.filter((s) => s.jobId === LAST_QUERY.jobId)
-        : VERIFIER_SHARES,
-    },
-  })],
+  ['GET', /^\/api\/evidence-portal\/library$/, () => ({ body: evidencePortalLibrary() })],
+  ['GET', /^\/api\/evidence-portal\/shares$/, () => {
+    let shares = VERIFIER_SHARES;
+    if (LAST_QUERY.jobId) shares = shares.filter((s) => s.jobId === LAST_QUERY.jobId);
+    if (LAST_QUERY.kind) shares = shares.filter((s) => (s.kind ?? 'evidence') === LAST_QUERY.kind);
+    return { body: { shares } };
+  }],
   ['POST', /^\/api\/evidence-portal\/shares$/, (_m, b) => {
-    const email = String(b.recipientEmail ?? '').toLowerCase();
+    const email = b.recipientEmail ? String(b.recipientEmail).toLowerCase() : null;
     const days = Number(b.expiresInDays ?? 30);
+    const kind = b.kind === 'progress' ? 'progress' : 'evidence';
+    const token = `demo-${Date.now().toString(36)}`;
     const share = {
       id: `vs-${Date.now()}`,
       jobId: String(b.jobId ?? ''),
+      kind,
       label: String(b.label ?? ''),
       recipientEmail: email,
-      path: `/verifier/shared/demo-${Date.now().toString(36)}`,
+      path: kind === 'progress' ? `/progress/${token}` : `/verifier/shared/${token}`,
       createdAt: new Date().toISOString(),
       expiresAt: days === 0 ? null : new Date(Date.now() + days * 86_400_000).toISOString(),
       revokedAt: null,
@@ -2529,15 +2613,13 @@ const routes: Array<[string, RegExp, Handler]> = [
       state: 'live',
     };
     VERIFIER_SHARES.unshift(share);
-    // "nomail" anywhere in the address shows the email-refused path — the
-    // fallback UI is part of the design, so the demo has to be able to reach it.
-    const emailed = !email.includes('nomail');
+    const emailed = email ? !email.includes('nomail') : false;
     return {
       status: 201,
       body: {
-        share: { id: share.id, label: share.label, expiresAt: share.expiresAt, createdAt: share.createdAt, path: share.path },
+        share: { id: share.id, label: share.label, kind: share.kind, expiresAt: share.expiresAt, createdAt: share.createdAt, path: share.path },
         emailed,
-        recipientHasAccount: KNOWN_ACCOUNTS.has(email),
+        recipientHasAccount: email ? KNOWN_ACCOUNTS.has(email) : false,
       },
     };
   }],
@@ -2549,6 +2631,58 @@ const routes: Array<[string, RegExp, Handler]> = [
     }
     return { body: { ok: true } };
   }],
+
+  /* ------------------------------------------- progress shares (guest) */
+  ['GET', /^\/api\/progress-share\/([\w-]+)$/, (m) => {
+    const token = m[1];
+    const share = VERIFIER_SHARES.find(
+      (s) => s.kind === 'progress' && (s.path === `/progress/${token}` || s.path.endsWith(`/${token}`)),
+    );
+    if (!share) return { status: 404, body: { error: 'not_found', message: 'This link does not exist.' } };
+    if (share.state === 'revoked') return { status: 410, body: { error: 'revoked', message: 'This link was revoked.' } };
+    if (share.state === 'expired') return { status: 410, body: { error: 'expired', message: 'This link has expired.' } };
+    const record = SHARED_RECORDS[share.jobId];
+    const proofRecord = PROOF_DAYS[share.jobId] ?? { siteKnown: false, days: [] };
+    const days = proofRecord.days ?? [];
+    const scope = record?.scope ?? [];
+    const actionable = scope.filter((item: any) => item.state !== 'excluded');
+    const scopeApproved = actionable.filter((item: any) => item.state === 'approved').length;
+    const scopePct = actionable.length ? Math.round((scopeApproved / actionable.length) * 100) : 0;
+    share.openCount = (share.openCount ?? 0) + 1;
+    share.lastOpenedAt = new Date().toISOString();
+    return {
+      body: {
+        share: {
+          label: share.label,
+          expiresAt: share.expiresAt ?? null,
+          recipientEmail: share.recipientEmail ?? null,
+        },
+        org: { name: 'Ortiz Restoration' },
+        job: record?.job ?? null,
+        progress: {
+          scopePct,
+          scopeApproved,
+          scopeTotal: actionable.length,
+          daysLogged: days.length,
+          verifiedDays: days.filter((d: any) => d.payable || d.accepted).length,
+          inProgress: days.filter((d: any) => d.hasBefore && !d.hasAfter).length,
+        },
+        proof: {
+          days,
+          counts: {
+            days: days.length,
+            payable: days.filter((d: any) => d.payable && !d.accepted).length,
+            contradicted: days.filter((d: any) => d.contradicted).length,
+            awaitingAfter: days.filter((d: any) => d.hasBefore && !d.hasAfter).length,
+          },
+          siteKnown: proofRecord.siteKnown ?? false,
+        },
+      },
+    };
+  }],
+  ['GET', /^\/api\/progress-share\/([\w-]+)\/proof\/([\w-]+)\/video$/, () => ({
+    body: { url: DEMO_CLIP, expiresInSeconds: 600 },
+  })],
 
   /* ------------------------------------------- invitations */
   ['GET', /^\/api\/org\/invites$/, () => ({ body: { invites: ORG_INVITES } })],
@@ -3405,6 +3539,9 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   LAST_QUERY.scope = query.get('scope') ?? undefined;
   LAST_QUERY.phase = query.get('phase') ?? undefined;
   LAST_QUERY.jobId = query.get('jobId') ?? undefined;
+  LAST_QUERY.kind = query.get('kind') ?? undefined;
+  LAST_QUERY.mine = query.get('mine') ?? undefined;
+  LAST_QUERY.status = query.get('status') ?? undefined;
 
   const method = (init?.method ?? 'GET').toUpperCase();
   let body: Record<string, unknown> = {};

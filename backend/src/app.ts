@@ -32,6 +32,7 @@ import { purchasingRouter } from './routes/purchasing.js';
 import { episodesRouter } from './routes/episodes.js';
 import { evidencePortalRouter, evidenceShareRouter } from './routes/evidencePortal.js';
 import { verificationRouter } from './verification/routes.js';
+import { progressShareRouter } from './routes/progressShare.js';
 import { crmAccountsRouter } from './routes/crmAccounts.js';
 import { unsubscribeRouter } from './routes/unsubscribe.js';
 import { locationsRouter } from './routes/locations.js';
@@ -192,6 +193,8 @@ export function createApp(): Express {
   // Outside auth like the job-share routes, and for the same reason: the
   // person holding a Verifier link is an adjuster who never had an account.
   app.use('/api/verifier-share', evidenceShareRouter);
+  // Read-only job progress for homeowners, counsel, banks and adjusters — no login.
+  app.use('/api/progress-share', progressShareRouter);
   // Outside every auth middleware, like the unsubscribe route and for the same
   // reason: the person clicking is a subcontractor who never had an account,
   // and a shared job record that requires signing in is not shared.

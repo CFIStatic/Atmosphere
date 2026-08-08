@@ -161,17 +161,9 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
     Icon: DecisionIcon,
     metrics: ['openJobs', 'crewOnJobs', 'awaitingApproval', 'scheduledToday', 'blockedJobs', 'atRiskProjects'],
     groups: [
-      // The platform IS the Verifier, full screen with its own sidebar — so
-      // this rail carries no duplicate entry for it. Settings remains for
-      // the shell pages (the portal's sidebar links to it), and the wordmark
-      // and switcher both lead back to the portal.
-      //
-      // Job files is the one exception, not a resurrection of the old rail:
-      // it is where a job's scope gets set (typed or read from a document),
-      // where readiness says what the footage will be able to prove, and
-      // where a subcontractor is invited — office work the Verifier has no
-      // screen for. Its own sidebar links here exactly the way it already
-      // links to Settings.
+      // All office navigation lives in the Verifier sidebar (Dashboard,
+      // Start a job, Job files, Settings). Nothing duplicated here.
+      /* Restore when a shell page needs its own rail again:
       {
         label: 'Set up',
         items: [
@@ -179,39 +171,8 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
           { to: '/shared', label: 'Job files', Icon: UsersIcon },
         ],
       },
-      /* Earlier workspace surfaces — kept, not displayed. The routes still
-         answer; restore by moving groups back.
-      OPERATE('/operations', 'Run the day'),
-      {
-        label: 'The record',
-        items: [
-          { to: '/jobs', label: 'Jobs', Icon: BriefcaseIcon },
-          { to: '/schedule', label: 'Schedule', Icon: HistoryIcon },
-          { to: '/team', label: 'Crew', Icon: UsersIcon },
-        ],
-      },
-      */
-      /* Later products — built, kept, not displayed while the Work
-         Verification Platform is the sole focus. Restore by moving items
-         back into a visible group.
-      {
-        label: 'Delivery',
-        items: [
-          { to: '/pm', label: 'Project board', Icon: DecisionIcon },
-          { to: '/mitigation', label: 'Estimating', Icon: ArtifactIcon },
-          { to: '/purchase-orders', label: 'Purchase orders', Icon: CreditCardIcon },
-        ],
-      },
-      {
-        label: 'Automation',
-        items: [
-          { to: '/web-access', label: 'Web access', Icon: GlobeIcon },
-          { to: '/computer-use', label: 'Computer use', Icon: MonitorIcon },  // re-import MonitorIcon when restoring
-          { to: '/audit', label: 'Agent runs', Icon: BoltIcon },
-        ],
-      },
-      */
       SYSTEM,
+      */
     ],
   },
 
@@ -315,6 +276,9 @@ export const PLATFORM_HOME: Record<PlatformId, string> = {
   field: '/field',
   manager: '/manager',
 };
+
+/** The Work Verification dashboard — logo clicks always return here. */
+export const DASHBOARD_HOME = PLATFORM_HOME.operations;
 
 /**
  * Which platform a path belongs to. Shared screens (Jobs, Billing, Settings)

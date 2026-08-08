@@ -11,7 +11,7 @@
     document.querySelectorAll('a[href$="signin.html"], a[href$="signup.html"]')
       .forEach(function (a) {
         var toSignup = a.getAttribute('href').indexOf('signup') !== -1;
-        a.setAttribute('href', APP_ORIGIN + (toSignup ? '/login?mode=signup' : '/login'));
+        a.setAttribute('href', APP_ORIGIN + (toSignup ? '/signup' : '/login'));
       });
   }
 
@@ -179,10 +179,26 @@
     return null;
   }
 
-  function authUrl(kind) {
+  function authUrl(kind, nextPath) {
     var origin = appOrigin();
     if (!origin) return null;
-    return kind === 'signup' ? origin + '/login?mode=signup' : origin + '/login';
+    return kind === 'signup' ? origin + '/signup' : origin + '/login';
+  }
+
+  function appPath(path) {
+    var origin = appOrigin();
+    if (!origin) return null;
+    var safe = path.charAt(0) === '/' ? path : '/' + path;
+    return origin + safe;
+  }
+
+  function wireAppLinks() {
+    document.querySelectorAll('[data-app-path]').forEach(function (a) {
+      var path = a.getAttribute('data-app-path');
+      if (!path) return;
+      var target = appPath(path);
+      if (target) a.setAttribute('href', target);
+    });
   }
 
   function wireAuthLinks() {
@@ -194,6 +210,7 @@
       if (href === 'signin.html' || href === './signin.html') a.setAttribute('href', signin);
       else if (href === 'signup.html' || href === './signup.html') a.setAttribute('href', signup);
     });
+    wireAppLinks();
   }
 
   wireAuthLinks();

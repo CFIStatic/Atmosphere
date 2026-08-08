@@ -1,18 +1,22 @@
-import { lazy, Suspense, useEffect, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import {
   BrowserRouter,
   MemoryRouter,
   Navigate,
   Route,
   Routes,
+  useLocation,
   useNavigate,
 } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { api } from './lib/api';
 import { LoginPage } from './pages/LoginPage';
+import { SignupPage } from './pages/SignupPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
+import { ProductTourHost } from './components/tour/ProductTourHost';
 import { SpinnerIcon } from './components/icons';
 import { PLATFORM_HOME } from './lib/platforms';
 import { RequirePlatform } from './components/RequirePlatform';
@@ -22,7 +26,7 @@ import { TerritoriesPage } from './pages/TerritoriesPage';
 import { SalesWorkPage } from './pages/SalesWorkPage';
 import { SharedDashboardPage } from './pages/SharedDashboardPage';
 import { JobIntakePage } from './pages/JobIntakePage';
-import { VerifierLibraryPage } from './pages/VerifierLibraryPage';
+import { OperationsShell } from './layouts/OperationsShell';
 import { PurchaseOrdersPage } from './pages/PurchaseOrdersPage';
 import { JobSharePage } from './pages/JobSharePage';
 import { PlatformHomePage } from './pages/PlatformHomePage';
@@ -112,6 +116,9 @@ const IntegrationsPage = lazy(() =>
 const HomeownerReportPage = lazy(() =>
   import('./pages/HomeownerReportPage').then((m) => ({ default: m.HomeownerReportPage })),
 );
+const JobProgressGuestPage = lazy(() =>
+  import('./pages/JobProgressGuestPage').then((m) => ({ default: m.JobProgressGuestPage })),
+);
 
 function FullScreenSpinner() {
   return (
@@ -129,8 +136,51 @@ function FullScreenSpinner() {
 /** Requires the user to have completed onboarding; otherwise send to /onboarding. */
 function RequireOnboarded({ children }: { children: ReactNode }) {
   const { membership, membershipLoading } = useAuth();
+  const location = useLocation();
   if (membershipLoading) return <FullScreenSpinner />;
-  if (!membership) return <Navigate to="/onboarding" replace />;
+  if (!membership) {
+    const returnPath = `${location.pathname}${location.search}${location.hash}`;
+    return (
+      <Navigate
+        to={`/signup?step=2&next=${encodeURIComponent(returnPath)}`}
+        replace
+      />
+    );
+  }
+  return <RequireBillingSetup>{children}</RequireBillingSetup>;
+}
+
+/** Org creators must finish Stripe before the dashboard; joiners skip when not required. */
+function RequireBillingSetup({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  const [gate, setGate] = useState<'loading' | 'ready' | 'blocked'>('loading');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const status = await api.getBillingOnboarding();
+        if (cancelled) return;
+        setGate(status.required && !status.complete ? 'blocked' : 'ready');
+      } catch {
+        if (!cancelled) setGate('ready');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (gate === 'loading') return <FullScreenSpinner />;
+  if (gate === 'blocked') {
+    const returnPath = `${location.pathname}${location.search}${location.hash}`;
+    return (
+      <Navigate
+        to={`/signup?step=5&next=${encodeURIComponent(returnPath)}`}
+        replace
+      />
+    );
+  }
   return <>{children}</>;
 }
 
@@ -203,9 +253,11 @@ export default function App() {
     <Router {...routerProps()}>
       {import.meta.env.VITE_DEMO ? <DemoRouteBridge /> : null}
       <AuthProvider>
+        <ProductTourHost />
         <Suspense fallback={<FullScreenSpinner />}>
           <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
 
           {/* The subcontractor's screen. Outside every guard by construction:
               they work for six general contractors and have an account with
@@ -227,6 +279,8 @@ export default function App() {
 
           {/* Tokenized HomeOwner Report — no staff session required. */}
           <Route path="/report/:token" element={<HomeownerReportPage />} />
+          {/* Read-only job progress for homeowners, counsel, banks — no login. */}
+          <Route path="/progress/:token" element={<JobProgressGuestPage />} />
           {/* Third-party financial dataroom — token in the URL is the credential. */}
           <Route path="/share/finance/:token" element={<FinanceSharePage />} />
 
@@ -301,30 +355,6 @@ export default function App() {
               ),
             },
             {
-              path: '/shared',
-              element: (
-                <RequirePlatform platform="operations">
-                  <SharedDashboardPage />
-                </RequirePlatform>
-              ),
-            },
-            {
-              path: '/intake',
-              element: (
-                <RequirePlatform platform="operations">
-                  <JobIntakePage />
-                </RequirePlatform>
-              ),
-            },
-            {
-              path: '/verifier-library',
-              element: (
-                <RequirePlatform platform="operations">
-                  <VerifierLibraryPage />
-                </RequirePlatform>
-              ),
-            },
-            {
               path: '/purchase-orders',
               element: (
                 <RequirePlatform platform="operations">
@@ -344,6 +374,22 @@ export default function App() {
               }
             />
           ))}
+
+          <Route
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <RequirePlatform platform="operations">
+                    <OperationsShell />
+                  </RequirePlatform>
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          >
+            <Route path="/verifier-library" element={null} />
+            <Route path="/intake" element={<JobIntakePage />} />
+            <Route path="/shared" element={<SharedDashboardPage />} />
+          </Route>
 
           {/* Growth analytics. Onboarding is required — every figure is scoped to
               a signed-in staff member, and the guards inside re-check access. */}

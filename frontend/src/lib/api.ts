@@ -832,11 +832,12 @@ export interface CustodyEntry {
   occurred_at: string;
 }
 
-/** A Verifier link: one job's evidence, pinned to one recipient's account. */
+/** A share link scoped to one job — evidence library or progress dashboard. */
 export interface EvidenceShare {
   id: string;
   jobId: string;
   label: string;
+  kind: 'evidence' | 'progress';
   recipientEmail: string | null;
   path: string;
   createdAt: string;
@@ -845,6 +846,31 @@ export interface EvidenceShare {
   lastOpenedAt: string | null;
   openCount: number;
   state: 'live' | 'expired' | 'revoked';
+}
+
+export interface ProgressShareGuestView {
+  share: {
+    label: string;
+    expiresAt: string | null;
+    recipientEmail: string | null;
+  };
+  org: { name: string };
+  job: {
+    id: string;
+    title: string;
+    jobNumber: number | null;
+    claimNumber: string | null;
+    status: string | null;
+  } | null;
+  progress: {
+    scopePct: number;
+    scopeApproved: number;
+    scopeTotal: number;
+    daysLogged: number;
+    verifiedDays: number;
+    inProgress: number;
+  };
+  proof: ProofResponse;
 }
 
 /* ---- Scope documents ----------------------------------------------------- */
@@ -1060,6 +1086,7 @@ export interface CreateEvidenceShareResult {
   share: {
     id: string;
     label: string;
+    kind?: 'evidence' | 'progress';
     expiresAt: string | null;
     createdAt: string;
     path: string;
@@ -2941,9 +2968,12 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
-  evidenceShares: (jobId?: string) =>
+  evidenceShares: (jobId?: string, kind?: 'evidence' | 'progress') =>
     request<{ shares: EvidenceShare[] }>(
-      `/api/evidence-portal/shares${jobId ? `?jobId=${jobId}` : ''}`,
+      `/api/evidence-portal/shares${jobId || kind ? `?${new URLSearchParams({
+        ...(jobId ? { jobId } : {}),
+        ...(kind ? { kind } : {}),
+      }).toString()}` : ''}`,
       { method: 'GET' },
     ),
 
@@ -2955,8 +2985,30 @@ export const api = {
   }) =>
     request<CreateEvidenceShareResult>('/api/evidence-portal/shares', {
       method: 'POST',
-      body: JSON.stringify(input),
+      body: JSON.stringify({ ...input, kind: 'evidence' }),
     }),
+
+  createProgressShare: (input: {
+    jobId: string;
+    label: string;
+    recipientEmail?: string;
+    expiresInDays?: number;
+  }) =>
+    request<CreateEvidenceShareResult>('/api/evidence-portal/shares', {
+      method: 'POST',
+      body: JSON.stringify({ ...input, kind: 'progress' }),
+    }),
+
+  progressShareGuest: (token: string) =>
+    request<ProgressShareGuestView>(`/api/progress-share/${encodeURIComponent(token)}`, {
+      method: 'GET',
+    }),
+
+  progressShareVideo: (token: string, proofId: string) =>
+    request<{ url: string; expiresInSeconds: number }>(
+      `/api/progress-share/${encodeURIComponent(token)}/proof/${encodeURIComponent(proofId)}/video`,
+      { method: 'GET' },
+    ),
 
   revokeEvidenceShare: (id: string) =>
     request<{ ok: boolean }>(`/api/evidence-portal/shares/${id}/revoke`, { method: 'POST' }),
@@ -3355,6 +3407,15 @@ export const api = {
   /** Stripe's hosted portal: cards, invoices and cancellation. */
   openBillingPortal: () =>
     request<{ portalUrl: string }>('/api/billing/portal', { method: 'POST' }),
+
+  getBillingOnboarding: () =>
+    request<BillingOnboardingStatus>('/api/billing/onboarding', { method: 'GET' }),
+
+  startOnboardingCheckout: (returnPath?: string) =>
+    request<{ checkoutUrl: string | null }>('/api/billing/checkout/onboarding', {
+      method: 'POST',
+      body: JSON.stringify(returnPath ? { returnPath } : {}),
+    }),
 
   getPayments: (limit = 50) =>
     request<{ payments: Payment[] }>(`/api/billing/payments?limit=${limit}`, { method: 'GET' }),
@@ -4855,6 +4916,20 @@ export interface CustomerMeteringSummary {
   jobOverageChargeCents: number;
   videoProcessingChargeCents: number;
   estimatedUpcomingBillCents: number;
+}
+
+export interface BillingOnboardingStatus {
+  paymentProvider: 'stripe' | 'dev' | 'manual';
+  required: boolean;
+  complete: boolean;
+  isCreator: boolean;
+  hasSubscription: boolean;
+  plan: {
+    name: string;
+    baseMonthlyFeeCents: number;
+    includedJobs: number;
+    additionalJobPriceCents: number;
+  };
 }
 
 export interface SetPlanResult {
