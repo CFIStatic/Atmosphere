@@ -8,7 +8,8 @@ import { Logo } from './Logo';
  */
 describe('Logo brand mark', () => {
   it('is only the five-bar mark (no Saturn/planet, no orange tile, no split wordmark)', () => {
-    const { container, getByText, queryByText } = render(<Logo />);
+    // Skip NavLink wrapper — this test asserts the mark only.
+    const { container, getByText, queryByText } = render(<Logo to={null} />);
 
     const rects = container.querySelectorAll('rect');
     expect(rects.length).toBe(5);
