@@ -602,7 +602,7 @@
 
     <div class="rail-body">
     <div class="rail-section" id="platform-nav" hidden>
-      <button type="button" class="navitem nav-icon app-nav" data-screen="dashboard" aria-current="true">
+      <button type="button" class="navitem nav-icon app-nav" data-screen="dashboard">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
         <span>Dashboard</span>
       </button>
@@ -1916,26 +1916,29 @@
 
   var activeRoute = '/verifier-library';
 
-  function setActiveRoute(path) {
-    activeRoute = path || '/verifier-library';
+  function syncSidebarActive() {
+    document.querySelectorAll('.rail .navitem').forEach(function (btn) {
+      btn.removeAttribute('aria-current');
+    });
+    if (activeRoute === '/verifier-library') {
+      var view = state.view || 'all';
+      document.querySelectorAll('.navitem[data-view]').forEach(function (btn) {
+        if (btn.dataset.view === view) btn.setAttribute('aria-current', 'true');
+      });
+      return;
+    }
     document.querySelectorAll('#platform-nav .navitem, #rail-footer .navitem').forEach(function (btn) {
       var active = false;
       if (btn.id === 'nav-start-job') active = activeRoute === '/intake';
       else if (btn.id === 'nav-jobprogress') active = activeRoute === '/shared';
       else if (btn.id === 'nav-settings') active = activeRoute === '/settings';
-      else if (btn.dataset.screen === 'dashboard') active = activeRoute === '/verifier-library';
-      btn.setAttribute('aria-current', String(active));
+      if (active) btn.setAttribute('aria-current', 'true');
     });
-    if (activeRoute !== '/verifier-library') {
-      document.querySelectorAll('.navitem[data-view]').forEach(function (btn) {
-        btn.removeAttribute('aria-current');
-      });
-    } else {
-      var view = state.view || 'all';
-      document.querySelectorAll('.navitem[data-view]').forEach(function (btn) {
-        btn.setAttribute('aria-current', String(btn.dataset.view === view));
-      });
-    }
+  }
+
+  function setActiveRoute(path) {
+    activeRoute = path || '/verifier-library';
+    syncSidebarActive();
   }
 
   function setRailOnly(on) {
@@ -1945,16 +1948,15 @@
 
   document.querySelectorAll('.navitem[data-view]').forEach(function (b) {
     b.addEventListener('click', function () {
+      state.view = b.dataset.view;
+      activeRoute = '/verifier-library';
+      syncSidebarActive();
+      $('#viewtitle').textContent = b.dataset.label || (b.querySelector('.label') && b.querySelector('.label').textContent) || b.textContent.trim();
       if (EMBEDDED && RAIL_ONLY) {
         window.parent.postMessage({ atmosphere: 'navigate', to: '/verifier-library' }, '*');
         return;
       }
       if (EMBEDDED) setScreen('dashboard');
-      state.view = b.dataset.view;
-      document.querySelectorAll('.navitem[data-view]').forEach(function (o) {
-        o.setAttribute('aria-current', String(o === b));
-      });
-      $('#viewtitle').textContent = b.dataset.label || (b.querySelector('.label') && b.querySelector('.label').textContent) || b.textContent.trim();
       render();
     });
   });
@@ -1966,11 +1968,12 @@
   // for: setting a job's scope, seeing whether it can be verified yet, and
   // inviting a subcontractor.
   function setScreen(name) {
-    document.querySelectorAll('.app-nav[data-screen]').forEach(function (btn) {
-      btn.setAttribute('aria-current', String(btn.dataset.screen === name));
-    });
     var dash = document.getElementById('screen-dashboard');
     if (dash) dash.hidden = name !== 'dashboard';
+    if (name === 'dashboard') {
+      activeRoute = '/verifier-library';
+      syncSidebarActive();
+    }
   }
 
   function applySession(payload) {
@@ -2079,6 +2082,9 @@
     document.querySelectorAll('.app-nav[data-screen]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         if (EMBEDDED) {
+          state.view = 'all';
+          activeRoute = '/verifier-library';
+          syncSidebarActive();
           window.parent.postMessage({ atmosphere: 'navigate', to: '/verifier-library' }, '*');
           return;
         }
@@ -2152,6 +2158,7 @@
   function boot() {
     initFacets();
     counts();
+    syncSidebarActive();
     render();
   }
 
