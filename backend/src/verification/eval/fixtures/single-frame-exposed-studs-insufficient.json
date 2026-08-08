@@ -1,0 +1,20 @@
+{
+  "slug": "single-frame-exposed-studs-insufficient",
+  "activity_id": "drywall_removed",
+  "room_type": "bathroom",
+  "trade_id": "water_mitigation",
+  "damage_type_id": "water_damage",
+  "expected_decision": "rejected",
+  "expected_uncertainty": ["Insufficient before-and-after evidence"],
+  "input_fixture": {
+    "proposedActivity": "drywall_removed",
+    "roomOrArea": "bathroom",
+    "beforeState": "unknown",
+    "afterState": "framing_exposed",
+    "beforeFrameIds": [],
+    "afterFrameIds": ["frame_only_1"],
+    "observations": ["Exposed studs visible"],
+    "contradictoryObservations": []
+  },
+  "notes": "Single after frame must not prove the contractor removed drywall."
+}

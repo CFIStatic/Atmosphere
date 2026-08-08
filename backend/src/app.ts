@@ -30,6 +30,7 @@ import { sharedJobsRouter, jobShareRouter } from './routes/sharedJobs.js';
 import { purchasingRouter } from './routes/purchasing.js';
 import { episodesRouter } from './routes/episodes.js';
 import { evidencePortalRouter, evidenceShareRouter } from './routes/evidencePortal.js';
+import { verificationRouter } from './verification/routes.js';
 import { crmAccountsRouter } from './routes/crmAccounts.js';
 import { unsubscribeRouter } from './routes/unsubscribe.js';
 import { locationsRouter } from './routes/locations.js';
@@ -184,6 +185,8 @@ export function createApp(): Express {
   app.use('/api/purchasing', purchasingRouter);
   app.use('/api/episodes', episodesRouter);
   app.use('/api/evidence-portal', evidencePortalRouter);
+  // Video work-verification pipeline (extends proof-of-work; async stages).
+  app.use('/api/verification', verificationRouter);
   // Outside auth like the job-share routes, and for the same reason: the
   // person holding a Verifier link is an adjuster who never had an account.
   app.use('/api/verifier-share', evidenceShareRouter);

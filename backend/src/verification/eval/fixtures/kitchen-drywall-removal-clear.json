@@ -1,0 +1,20 @@
+{
+  "slug": "kitchen-drywall-removal-clear",
+  "activity_id": "drywall_removed",
+  "room_type": "kitchen",
+  "trade_id": "water_mitigation",
+  "damage_type_id": "water_damage",
+  "expected_decision": "verified",
+  "expected_uncertainty": [],
+  "input_fixture": {
+    "proposedActivity": "drywall_removed",
+    "roomOrArea": "kitchen",
+    "beforeState": "drywall_present",
+    "afterState": "framing_exposed",
+    "beforeFrameIds": ["frame_before_1"],
+    "afterFrameIds": ["frame_after_1"],
+    "observations": ["Finished drywall on north wall", "Exposed studs same wall"],
+    "contradictoryObservations": []
+  },
+  "notes": "De-identified synthetic fixture. Clear before/after in one room."
+}

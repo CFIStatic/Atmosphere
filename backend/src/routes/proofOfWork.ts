@@ -303,6 +303,15 @@ export async function recordProof(party: any, admin: any, body: unknown) {
     detail: `${input.phase} · ${input.workDate}`,
   });
 
+  // Optional deep verification pipeline (FFmpeg / rules / review). Additive and
+  // non-blocking: payment-gate analysis above must not wait on it, and a missing
+  // migration must not fail the crew's upload.
+  if (process.env.VERIFICATION_PIPELINE_FROM_PROOF !== 'false') {
+    void enqueueVerificationFromProof(admin, party, proof as any).catch((err) => {
+      console.error('[verification.enqueue_from_proof]', err instanceof Error ? err.message : err);
+    });
+  }
+
   return {
     proof,
     checks,
@@ -312,6 +321,33 @@ export async function recordProof(party: any, admin: any, body: unknown) {
     // actionable; the same problem told at 4pm is.
     problems: checks.filter((c) => c.verdict === 'fail').map((c) => c.detail),
   };
+}
+
+async function enqueueVerificationFromProof(admin: any, party: any, proof: any): Promise<void> {
+  const { linkProofAsVerificationVideo, getVerificationOrchestrator, pipelineIdempotencyKey } =
+    await import('../verification/index.js');
+  const videoId = await linkProofAsVerificationVideo(
+    { supabase: admin, orgId: party.org_id, uploaderId: null },
+    {
+      id: proof.id,
+      jobId: party.job_id,
+      partyId: party.id,
+      storagePath: proof.storage_path,
+      fileSize: proof.byte_size,
+      durationSeconds: proof.duration_seconds === null ? null : Number(proof.duration_seconds),
+      contentHash: proof.content_hash,
+      capturedAt: proof.captured_at,
+      lat: proof.lat === null || proof.lat === undefined ? null : Number(proof.lat),
+      lon: proof.lon === null || proof.lon === undefined ? null : Number(proof.lon),
+    },
+  );
+  await getVerificationOrchestrator().enqueue({
+    supabase: admin,
+    orgId: party.org_id,
+    videoId,
+    jobId: party.job_id,
+    idempotencyKey: pipelineIdempotencyKey(videoId),
+  });
 }
 
 type DayAnalysisResult =
