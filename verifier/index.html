@@ -206,8 +206,18 @@
   .screen-dashboard[hidden] { display: none !important; }
   .rail {
     background: var(--panel); border-right: 1px solid var(--line);
-    overflow-y: auto; display: flex; flex-direction: column;
-    padding: 0 0 40px;
+    overflow: hidden; display: flex; flex-direction: column;
+    min-height: 0;
+  }
+  .rail-body {
+    flex: 1; min-height: 0; overflow-y: auto;
+    padding: 0 0 8px;
+  }
+  .rail-footer {
+    flex: none; margin-top: auto;
+    padding: 8px 0 12px;
+    border-top: 1px solid var(--line);
+    background: var(--panel);
   }
   .rail-head {
     flex: none; height: 56px; display: flex; align-items: center;
@@ -589,6 +599,7 @@
       </button>
     </div>
 
+    <div class="rail-body">
     <div class="rail-section" id="platform-nav" hidden>
       <button type="button" class="navitem nav-icon app-nav" data-screen="dashboard" aria-current="true">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
@@ -602,10 +613,6 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
         <span>Job Progress</span>
       </button>
-      <button type="button" class="navitem nav-icon" id="nav-settings">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09A1.7 1.7 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09A1.7 1.7 0 0 0 20.91 10H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></svg>
-        <span>Settings</span>
-      </button>
     </div>
 
     <div class="rail-section" id="evidence-nav">
@@ -614,15 +621,14 @@
     <button class="navitem" data-view="flagged">Flagged <span class="count" id="n-flag">0</span></button>
     <button class="navitem" data-view="unanalysed">Not analysed <span class="count" id="n-unan">0</span></button>
     <button class="navitem" data-view="hold">Legal hold <span class="count" id="n-hold">0</span></button>
+    </div>
+    </div>
 
-    <h3>Job</h3>
-    <div class="facet" id="facet-job"></div>
-
-    <h3>Company</h3>
-    <div class="facet" id="facet-company"></div>
-
-    <h3>Capture</h3>
-    <div class="facet" id="facet-phase"></div>
+    <div class="rail-footer" id="rail-footer" hidden>
+      <button type="button" class="navitem nav-icon" id="nav-settings">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09A1.7 1.7 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09A1.7 1.7 0 0 0 20.91 10H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></svg>
+        <span>Settings</span>
+      </button>
     </div>
   </aside>
 
@@ -1265,28 +1271,8 @@
   }
 
   function initFacets() {
-    var byJob = tally(function (e) { return e.job; });
-    buildFacet($('#facet-job'), Object.keys(byJob).map(function (k) {
-      return { key: k, label: JOBS[k].name.split('—')[0].trim() + ' · #' + JOBS[k].number, n: byJob[k] };
-    }), 'jobs');
-
-    var byCo = tally(function (e) { return e.company; });
-    buildFacet($('#facet-company'), Object.keys(byCo).map(function (k) {
-      return { key: k, label: k, n: byCo[k] };
-    }), 'companies');
-
-    var byPhase = tally(function (e) { return e.phase; });
-    buildFacet($('#facet-phase'), Object.keys(byPhase).map(function (k) {
-      return { key: k, label: k.charAt(0).toUpperCase() + k.slice(1), n: byPhase[k] };
-    }), 'phases');
-
-    document.querySelectorAll('.facet input').forEach(function (input) {
-      input.addEventListener('change', function () {
-        var group = state[input.dataset.group];
-        if (input.checked) group[input.value] = true; else delete group[input.value];
-        render();
-      });
-    });
+    /* Job / company / capture facet filters removed from the sidebar — search
+       and the evidence view tabs carry enough filtering for most work. */
   }
 
   function visible() {
@@ -1928,7 +1914,7 @@
 
   function setActiveRoute(path) {
     activeRoute = path || '/verifier-library';
-    document.querySelectorAll('#platform-nav .navitem').forEach(function (btn) {
+    document.querySelectorAll('#platform-nav .navitem, #rail-footer .navitem').forEach(function (btn) {
       var active = false;
       if (btn.id === 'nav-start-job') active = activeRoute === '/intake';
       else if (btn.id === 'nav-jobprogress') active = activeRoute === '/shared';
@@ -2082,8 +2068,10 @@
     window.parent.postMessage({ atmosphere: 'request-session' }, '*');
     var railHead = document.getElementById('rail-head');
     var platformNav = document.getElementById('platform-nav');
+    var railFooter = document.getElementById('rail-footer');
     if (railHead) railHead.hidden = false;
     if (platformNav) platformNav.hidden = false;
+    if (railFooter) railFooter.hidden = false;
     document.querySelectorAll('.app-nav[data-screen]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         if (EMBEDDED) {
