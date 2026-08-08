@@ -15,6 +15,9 @@ export default defineConfig({
     alias: { '@': srcDir },
   },
   server: {
+    // Listen on all interfaces so Cursor port forwarding and both IPv4/IPv6
+    // localhost resolve correctly — binding [::1] alone causes ERR_CONNECTION_REFUSED.
+    host: true,
     port: 5174,
     strictPort: true,
     // Proxy API calls to the backend during development so the browser talks to

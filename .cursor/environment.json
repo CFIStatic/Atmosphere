@@ -14,12 +14,12 @@
     },
     {
       "name": "website",
-      "command": "cd frontend && npx vite --config website.vite.config.ts",
+      "command": "cd frontend && npx vite --config website.vite.config.ts --host",
       "description": "Corporate marketing site on :5173 (open this first)"
     },
     {
       "name": "app",
-      "command": "cd frontend && npm run dev",
+      "command": "cd frontend && npm run dev -- --host",
       "description": "React product app on :5174"
     }
   ]
