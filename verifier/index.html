@@ -181,15 +181,32 @@
     min-height: 0;
     overflow: hidden;
   }
+  /* Full-height rail beside a top bar that only spans the work area — the
+     classic app shell, without a band of search bar floating over empty rail. */
+  .app-frame.has-sidebar .app-body {
+    display: grid;
+    grid-template-columns: var(--rail-w, 220px) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+      'rail topbar'
+      'rail main';
+  }
+  .app-frame.has-sidebar .rail { grid-area: rail; }
+  .app-frame.has-sidebar .topbar {
+    grid-area: topbar;
+    border-left: 0;
+  }
+  .app-frame.has-sidebar .shell {
+    grid-area: main;
+    min-height: 0;
+    overflow: hidden;
+  }
   .shell {
     flex: 1;
     min-height: 0;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
-  }
-  .app-frame.has-sidebar .shell {
-    grid-template-columns: var(--rail-w, 236px) minmax(0, 1fr);
   }
   .shell-main {
     min-width: 0;
@@ -197,6 +214,7 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    flex: 1;
   }
   .screen-dashboard {
     flex: 1;
@@ -205,87 +223,159 @@
   }
   .screen-dashboard[hidden] { display: none !important; }
   .rail {
-    background: var(--panel); border-right: 1px solid var(--line);
-    overflow: hidden; display: flex; flex-direction: column;
+    background: var(--bg);
+    border-right: 1px solid var(--line);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
     min-height: 0;
+    transition: width 0.2s ease;
   }
   .rail-body {
-    flex: 1; min-height: 0; overflow-y: auto;
-    padding: 0 0 8px;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 10px 0 8px;
+    scrollbar-gutter: stable;
   }
   .rail-footer {
-    flex: none; margin-top: auto;
-    padding: 8px 0 12px;
+    flex: none;
+    margin-top: auto;
+    padding: 8px;
     border-top: 1px solid var(--line);
     background: var(--panel);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
   .rail-head {
-    flex: none; height: 56px; display: flex; align-items: center;
-    padding: 0 14px; border-bottom: 1px solid var(--line);
+    flex: none;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
     gap: 8px;
   }
   .rail-head .brand { font-size: 15px; flex: 1; min-width: 0; }
   .rail-toggle {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 28px; height: 28px; padding: 0;
-    border: 0; border-radius: 6px; background: none;
-    color: var(--muted); cursor: pointer; flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 34px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+    flex: none;
+    font-size: 12.5px;
+    font-weight: 550;
   }
   .rail-toggle:hover { background: var(--line-soft); color: var(--ink-2); }
-  .rail-toggle-expand {
-    display: none; margin: 8px auto 0; width: calc(100% - 16px);
-  }
-  body.rail-collapsed .rail-head .brand span { display: none; }
-  body.rail-collapsed .rail-head { justify-content: center; padding: 0 8px; }
+  .rail-toggle svg { flex: none; }
+  .rail-toggle-collapse { margin-left: auto; width: auto; min-width: 28px; padding: 0 6px; }
+  .rail-toggle-expand { display: none; }
+  body.rail-collapsed .rail-head .brand span,
+  body.rail-collapsed .rail-toggle .label { display: none; }
+  body.rail-collapsed .rail-head { justify-content: center; padding: 0 10px; }
   body.rail-collapsed .rail-head .rail-toggle-collapse { display: none; }
   body.rail-collapsed .rail-toggle-expand { display: inline-flex; }
+  body.rail-collapsed .rail-toggle-expand { width: auto; min-width: 34px; margin: 0 auto; }
   body.rail-collapsed .rail h3,
   body.rail-collapsed .navitem .label,
   body.rail-collapsed .navitem .count { display: none; }
   body.rail-collapsed .navitem {
-    justify-content: center; width: calc(100% - 12px); margin: 1px 6px; padding: 8px;
+    justify-content: center;
+    width: calc(100% - 12px);
+    margin: 2px 6px;
+    padding: 9px;
   }
-  body.rail-collapsed .navitem svg { margin: 0; }
-  body.rail-collapsed { --rail-w: 64px; }
-  body.rail-collapsed[data-atm-rail-only] .rail { width: 64px; }
-  .rail-section { padding-top: 6px; }
+  body.rail-collapsed { --rail-w: 72px; }
+  body.rail-collapsed[data-atm-rail-only] .rail { width: 72px; }
+  .rail-section { padding: 0; }
+  .rail-section + .rail-section {
+    margin-top: 6px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line-soft);
+  }
   .app-frame.has-sidebar .topbar .brand-fallback { display: none; }
   /* Rail-only embed: sidebar beside a React page — hide top bar and main pane. */
   body[data-atm-rail-only] .topbar,
-  body[data-atm-rail-only] .shell-main { display: none !important; }
-  body[data-atm-rail-only] .app-frame,
+  body[data-atm-rail-only] .shell { display: none !important; }
   body[data-atm-rail-only] .app-body,
-  body[data-atm-rail-only] .shell { height: 100%; min-height: 0; }
-  body[data-atm-rail-only] .app-frame.has-sidebar .shell {
+  body[data-atm-rail-only] .app-frame { height: 100%; min-height: 0; }
+  body[data-atm-rail-only] .app-frame.has-sidebar .app-body {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 1fr;
+    grid-template-areas: 'rail';
   }
-  body[data-atm-rail-only] .rail { height: 100%; border-right: 0; overflow-x: hidden; }
+  body[data-atm-rail-only] .rail {
+    grid-area: rail;
+    height: 100%;
+    border-right: 0;
+    overflow-x: hidden;
+  }
   body[data-atm-rail-only] .app-frame { overflow: hidden; }
-  .navitem.nav-icon { justify-content: flex-start; gap: 8px; }
-  .navitem.nav-icon svg { flex: none; color: var(--muted); }
+  .navitem.nav-icon { justify-content: flex-start; gap: 10px; }
+  .navitem.nav-icon svg { flex: none; color: var(--muted); width: 16px; height: 16px; }
   .navitem.nav-icon[aria-current="true"] svg { color: var(--accent); }
   @media (max-width: 1100px) {
-    .app-frame.has-sidebar { --rail-w: 212px; }
+    .app-frame.has-sidebar { --rail-w: 204px; }
   }
   @media (max-width: 900px) {
-    .app-frame.has-sidebar { --rail-w: 196px; }
+    .app-frame.has-sidebar { --rail-w: 188px; }
   }
 
   .rail h3 {
-    margin: 16px 14px 7px; font-size: 10.5px; letter-spacing: .08em;
-    text-transform: uppercase; color: var(--faint); font-weight: 700;
+    margin: 4px 12px 8px;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--faint);
+    font-weight: 600;
   }
   .navitem {
-    display: flex; align-items: center; justify-content: space-between; gap: 8px;
-    width: calc(100% - 16px); margin: 1px 8px; padding: 7px 10px;
-    background: none; border: 0; border-radius: 6px; cursor: pointer;
-    font-size: 13px; text-align: left; color: var(--ink-2);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: calc(100% - 16px);
+    margin: 2px 8px;
+    padding: 8px 10px;
+    background: none;
+    border: 0;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    text-align: left;
+    color: var(--ink-2);
+    transition: background 0.12s ease, color 0.12s ease;
   }
-  .navitem:hover { background: var(--line-soft); }
-  .navitem[aria-current="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-  .navitem .count { font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; margin-left: auto; }
-  .navitem .label { min-width: 0; }
-  .navitem[aria-current="true"] .count { color: var(--accent); }
+  .navitem:hover { background: var(--line-soft); color: var(--ink); }
+  .navitem[aria-current="true"] {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .navitem .count {
+    font-size: 11px;
+    color: var(--faint);
+    font-variant-numeric: tabular-nums;
+    margin-left: auto;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--line-soft);
+  }
+  .navitem .label { min-width: 0; flex: 1; }
+  .navitem[aria-current="true"] .count {
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
 
   .facet { padding: 2px 14px 8px; }
   .facet label {
@@ -570,6 +660,61 @@
 
 <div class="app-frame" id="app-frame">
   <div class="app-body">
+  <aside class="rail" id="main-rail" aria-label="Navigation">
+    <div class="rail-head" id="rail-head" hidden>
+      <button type="button" class="brand" id="brand-home" aria-label="Atmosphere home">
+        <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+          <rect width="22" height="2.8" fill="currentColor" opacity="0.3" />
+          <rect y="4.8" width="22" height="2.8" fill="currentColor" opacity="0.5" />
+          <rect y="9.6" width="22" height="2.8" fill="currentColor" opacity="0.68" />
+          <rect y="14.4" width="22" height="2.8" fill="currentColor" opacity="0.88" />
+          <rect y="19.2" width="22" height="2.8" fill="#F2670C" />
+        </svg>
+        <span>Atmosphere</span>
+      </button>
+      <button type="button" class="rail-toggle rail-toggle-collapse" id="rail-collapse" aria-label="Collapse sidebar" title="Collapse sidebar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+    </div>
+
+    <div class="rail-body">
+    <div class="rail-section" id="platform-nav" hidden>
+      <button type="button" class="navitem nav-icon app-nav" data-screen="dashboard">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span class="label">Dashboard</span>
+      </button>
+      <button type="button" class="navitem nav-icon" id="nav-start-job" data-tour="nav-start-job">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        <span class="label">Start a job</span>
+      </button>
+      <button type="button" class="navitem nav-icon" id="nav-jobprogress" data-tour="nav-job-progress">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+        <span class="label">Job Progress</span>
+      </button>
+    </div>
+
+    <div class="rail-section" id="evidence-nav">
+    <h3>Videos</h3>
+    <button class="navitem nav-icon" data-view="all" data-label="All videos" aria-current="true" title="All videos"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="M15.5 10.5l4.2-2.6a.7.7 0 0 1 1.05.6v6.99a.7.7 0 0 1-1.06.6l-4.19-2.59"/></svg><span class="label">All videos</span> <span class="count" id="n-all">0</span></button>
+    <button class="navitem nav-icon" data-view="classified" data-label="Classified" title="Classified"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h10"/><path d="M4 17h14"/></svg><span class="label">Classified</span> <span class="count" id="n-classified">0</span></button>
+    <button class="navitem nav-icon" data-view="unanalysed" data-label="Awaiting analysis" title="Awaiting analysis"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="label">Awaiting analysis</span> <span class="count" id="n-unan">0</span></button>
+    <button class="navitem nav-icon" data-view="flagged" data-label="Needs review" title="Needs review"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V4"/><path d="M4 4h11l-1.5 4L15 12H4"/></svg><span class="label">Needs review</span> <span class="count" id="n-flag">0</span></button>
+    <button class="navitem nav-icon" data-view="hold" data-label="Legal hold" title="Legal hold"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span class="label">Legal hold</span> <span class="count" id="n-hold">0</span></button>
+    </div>
+    </div>
+
+    <div class="rail-footer" id="rail-footer" hidden>
+      <button type="button" class="navitem nav-icon" id="nav-settings">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09A1.7 1.7 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l-.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0 .34 1.87v.09A1.7 1.7 0 0 0 20.91 10H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></svg>
+        <span class="label">Settings</span>
+      </button>
+      <button type="button" class="rail-toggle rail-toggle-expand" id="rail-expand" aria-label="Expand sidebar" title="Expand sidebar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+        <span class="label">Expand sidebar</span>
+      </button>
+    </div>
+  </aside>
+
 <header class="topbar">
   <button type="button" class="brand brand-fallback" id="brand-home-fallback" aria-label="Atmosphere home">
     <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
@@ -610,60 +755,6 @@
 </header>
 
 <div class="shell" id="shell">
-  <aside class="rail" id="main-rail" aria-label="Navigation">
-    <div class="rail-head" id="rail-head" hidden>
-      <button type="button" class="brand" id="brand-home" aria-label="Atmosphere home">
-        <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
-          <rect width="22" height="2.8" fill="currentColor" opacity="0.3" />
-          <rect y="4.8" width="22" height="2.8" fill="currentColor" opacity="0.5" />
-          <rect y="9.6" width="22" height="2.8" fill="currentColor" opacity="0.68" />
-          <rect y="14.4" width="22" height="2.8" fill="currentColor" opacity="0.88" />
-          <rect y="19.2" width="22" height="2.8" fill="#F2670C" />
-        </svg>
-        <span>Atmosphere</span>
-      </button>
-      <button type="button" class="rail-toggle rail-toggle-collapse" id="rail-collapse" aria-label="Collapse navigation" title="Collapse navigation">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="m14 9-3 3 3 3"/></svg>
-      </button>
-    </div>
-    <button type="button" class="rail-toggle rail-toggle-expand" id="rail-expand" aria-label="Expand navigation" title="Expand navigation">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="m13 9 3 3-3 3"/></svg>
-    </button>
-
-    <div class="rail-body">
-    <div class="rail-section" id="platform-nav" hidden>
-      <button type="button" class="navitem nav-icon app-nav" data-screen="dashboard">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-        <span>Dashboard</span>
-      </button>
-      <button type="button" class="navitem nav-icon" id="nav-start-job" data-tour="nav-start-job">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-        <span>Start a job</span>
-      </button>
-      <button type="button" class="navitem nav-icon" id="nav-jobprogress" data-tour="nav-job-progress">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
-        <span>Job Progress</span>
-      </button>
-    </div>
-
-    <div class="rail-section" id="evidence-nav">
-    <h3>Videos</h3>
-    <button class="navitem nav-icon" data-view="all" data-label="All videos" aria-current="true" title="All videos"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="M15.5 10.5l4.2-2.6a.7.7 0 0 1 1.05.6v6.99a.7.7 0 0 1-1.06.6l-4.19-2.59"/></svg><span class="label">All videos</span> <span class="count" id="n-all">0</span></button>
-    <button class="navitem nav-icon" data-view="classified" data-label="Classified" title="Classified"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h10"/><path d="M4 17h14"/></svg><span class="label">Classified</span> <span class="count" id="n-classified">0</span></button>
-    <button class="navitem nav-icon" data-view="unanalysed" data-label="Awaiting analysis" title="Awaiting analysis"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="label">Awaiting analysis</span> <span class="count" id="n-unan">0</span></button>
-    <button class="navitem nav-icon" data-view="flagged" data-label="Needs review" title="Needs review"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V4"/><path d="M4 4h11l-1.5 4L15 12H4"/></svg><span class="label">Needs review</span> <span class="count" id="n-flag">0</span></button>
-    <button class="navitem nav-icon" data-view="hold" data-label="Legal hold" title="Legal hold"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span class="label">Legal hold</span> <span class="count" id="n-hold">0</span></button>
-    </div>
-    </div>
-
-    <div class="rail-footer" id="rail-footer" hidden>
-      <button type="button" class="navitem nav-icon" id="nav-settings">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09A1.7 1.7 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09A1.7 1.7 0 0 0 20.91 10H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></svg>
-        <span>Settings</span>
-      </button>
-    </div>
-  </aside>
-
   <div class="shell-main">
   <div class="screen screen-dashboard" id="screen-dashboard">
   <main class="main">
@@ -1945,8 +2036,8 @@
   if (RAIL_ONLY) document.body.setAttribute('data-atm-rail-only', '1');
 
   var RAIL_COLLAPSED_KEY = 'atmosphere.sidebarCollapsed';
-  var RAIL_EXPANDED_W = 236;
-  var RAIL_COLLAPSED_W = 64;
+  var RAIL_EXPANDED_W = 220;
+  var RAIL_COLLAPSED_W = 72;
 
   function readRailCollapsed() {
     try { return window.localStorage.getItem(RAIL_COLLAPSED_KEY) === '1'; } catch (e) { return false; }

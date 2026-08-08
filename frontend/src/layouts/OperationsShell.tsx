@@ -3,8 +3,8 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { VerifierFrame } from '../components/VerifierFrame';
 
 const RAIL_COLLAPSED_KEY = 'atmosphere.sidebarCollapsed';
-const RAIL_EXPANDED_W = 236;
-const RAIL_COLLAPSED_W = 64;
+const RAIL_EXPANDED_W = 220;
+const RAIL_COLLAPSED_W = 72;
 
 function readRailCollapsed(): boolean {
   try {
