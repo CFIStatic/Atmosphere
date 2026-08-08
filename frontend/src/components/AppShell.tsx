@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api, ROLE_LABELS } from '../lib/api';
 import { displayName, initials } from '../lib/display';
@@ -20,6 +21,16 @@ import {
   SpinnerIcon,
   SunIcon,
 } from './icons';
+
+const SIDEBAR_COLLAPSED_KEY = 'atmosphere.sidebarCollapsed';
+
+function readSidebarCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Every destination the jump palette can reach — visible platforms only.
@@ -56,10 +67,24 @@ export function AppShell({
   rail?: ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed);
   const [approvalCount, setApprovalCount] = useState(0);
   const [platformId, setPlatformId] = usePlatform();
+  const { reduceMotion } = usePreferences();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const toggleSidebarCollapsed = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0');
+      } catch {
+        /* storage denied — preference still applies for this session */
+      }
+      return next;
+    });
+  }, []);
 
   // Landing on a platform's home makes it the active one; shared screens
   // (Jobs, Billing, Settings) leave the choice alone, so opening a job from
@@ -89,16 +114,31 @@ export function AppShell({
   return (
     <div className="min-h-screen bg-paper-100">
       {/* ---- Sidebar ---- */}
-      {/* The rail is fixed furniture: full height, its own scroll region, and
-          no transition at desktop widths. The slide belongs to the mobile
-          drawer alone, so nothing here can move under a pointer. */}
+      {/* Fixed rail on desktop; slide-in drawer on mobile. Width collapses to
+          icons-only on md+ so the workspace can breathe without losing nav. */}
       <aside
-        className={`glass-rail fixed inset-y-0 left-0 z-40 flex w-60 flex-col transition-transform duration-200 md:translate-x-0 md:transform-none md:transition-none ${
+        className={`glass-rail fixed inset-y-0 left-0 z-40 flex w-60 flex-col transition-transform duration-200 md:translate-x-0 md:transform-none ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
+        } ${sidebarCollapsed ? 'md:w-16' : 'md:w-60'} ${
+          reduceMotion ? '' : 'md:transition-[width]'
         }`}
       >
-        <div className="flex shrink-0 items-center justify-between px-5 py-5">
-          <Logo />
+        <div
+          className={`flex shrink-0 items-center px-5 py-5 ${
+            sidebarCollapsed ? 'md:justify-center md:px-2' : 'justify-between'
+          }`}
+        >
+          <Logo compact={sidebarCollapsed && !mobileOpen} />
+          {!sidebarCollapsed && (
+            <button
+              type="button"
+              className="hidden rounded-md p-1 text-ink-500 transition hover:bg-paper-200 hover:text-ink-900 md:block"
+              onClick={toggleSidebarCollapsed}
+              aria-label="Collapse navigation"
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+          )}
           <button
             className="text-ink-500 md:hidden"
             onClick={() => setMobileOpen(false)}
@@ -108,10 +148,25 @@ export function AppShell({
           </button>
         </div>
 
+        {sidebarCollapsed && (
+          <button
+            type="button"
+            className="mx-auto mt-1 hidden rounded-md p-1.5 text-ink-500 transition hover:bg-paper-200 hover:text-ink-900 md:block"
+            onClick={toggleSidebarCollapsed}
+            aria-label="Expand navigation"
+          >
+            <PanelLeftOpen className="h-4 w-4" />
+          </button>
+        )}
+
         <nav aria-label="Primary" className="cx-scroll cx-gutter min-h-0 flex-1 overflow-y-auto px-3 pb-6 pt-1">
           {platform.groups.map((group) => (
             <div key={group.label} className="mt-4 first:mt-0">
-              <p className="px-2.5 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.09em] text-ink-500">
+              <p
+                className={`px-2.5 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.09em] text-ink-500 ${
+                  sidebarCollapsed ? 'md:hidden' : ''
+                }`}
+              >
                 {group.label}
               </p>
               <div className="space-y-0.5">
@@ -122,22 +177,37 @@ export function AppShell({
                   <NavLink
                     key={`${group.label}-${to}`}
                     to={to}
+                    title={sidebarCollapsed ? label : undefined}
                     data-tour={tourTarget}
                     onClick={() => setMobileOpen(false)}
                     className={({ isActive }) =>
-                      `flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13.5px] font-medium transition-colors ${
+                      `relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13.5px] font-medium transition-colors ${
+                        sidebarCollapsed ? 'md:justify-center md:px-2' : ''
+                      } ${
                         isActive
                           ? 'bg-brand-50 text-brand-700'
                           : 'text-ink-600 hover:bg-paper-200 hover:text-ink-900'
                       }`
                     }
                   >
-                    <Icon width={16} height={16} />
-                    <span className="flex-1">{label}</span>
+                    <Icon width={16} height={16} className="shrink-0" />
+                    <span className={`flex-1 truncate ${sidebarCollapsed ? 'md:hidden' : ''}`}>{label}</span>
                     {to === '/approvals' && approvalCount > 0 && (
-                      <span className="rounded-full bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700">
-                        {approvalCount}
-                      </span>
+                      <>
+                        <span
+                          className={`rounded-full bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700 ${
+                            sidebarCollapsed ? 'md:hidden' : ''
+                          }`}
+                        >
+                          {approvalCount}
+                        </span>
+                        {sidebarCollapsed && (
+                          <span
+                            aria-label={`${approvalCount} awaiting approval`}
+                            className="absolute right-1.5 top-1.5 hidden h-1.5 w-1.5 rounded-full bg-brand-600 md:block"
+                          />
+                        )}
+                      </>
                     )}
                   </NavLink>
                   );
@@ -157,7 +227,7 @@ export function AppShell({
       )}
 
       {/* ---- Top bar + content ---- */}
-      <div className="md:pl-60">
+      <div className={sidebarCollapsed ? 'md:pl-16' : 'md:pl-60'}>
         <header className="glass-bar sticky top-0 z-20">
           <div className="flex items-center gap-3 px-4 py-3 sm:px-6">
             <button
