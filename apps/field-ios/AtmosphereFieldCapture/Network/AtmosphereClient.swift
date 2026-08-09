@@ -245,7 +245,7 @@ final class AtmosphereClient: ObservableObject {
         }
         var request = URLRequest(url: url)
         request.httpMethod = method
-        if body != nil {
+        if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONEncoder().encode(body)
         }
