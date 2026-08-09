@@ -8,20 +8,33 @@
     <meta name="description" content="Atmosphere — sign in to your workspace." />
     <title>Atmosphere · Sign in</title>
     <script>
-      // Resolve the theme before first paint. Without this the page renders on
-      // the default (dark) ground and then snaps to light, which reads as a bug.
+      // Resolve appearance before first paint so routes never flash the wrong
+      // palette. Preference is light | dark | system (default); data-theme is
+      // always the resolved light/dark tokens CSS expects.
       (function () {
         try {
-          var stored = localStorage.getItem('atmosphere.theme');
-          var theme =
-            stored === 'light' || stored === 'dark'
-              ? stored
-              : matchMedia('(prefers-color-scheme: light)').matches
-                ? 'light'
-                : 'dark';
-          document.documentElement.setAttribute('data-theme', theme);
+          var pref = localStorage.getItem('atmosphere.theme');
+          if (pref !== 'light' && pref !== 'dark' && pref !== 'system') {
+            try {
+              var prefs = JSON.parse(localStorage.getItem('atmosphere.preferences') || '{}');
+              pref = prefs.theme;
+            } catch (e) {}
+          }
+          if (pref !== 'light' && pref !== 'dark' && pref !== 'system') {
+            pref = localStorage.getItem('atm-theme');
+          }
+          if (pref !== 'light' && pref !== 'dark' && pref !== 'system') pref = 'system';
+          var resolved =
+            pref === 'system'
+              ? matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light'
+              : pref;
+          document.documentElement.setAttribute('data-theme', resolved);
+          document.documentElement.setAttribute('data-theme-preference', pref);
         } catch (e) {
           document.documentElement.setAttribute('data-theme', 'dark');
+          document.documentElement.setAttribute('data-theme-preference', 'system');
         }
       })();
     </script>

@@ -68,18 +68,97 @@
     }, { rootMargin: '-25% 0px -65% 0px' });
     Object.keys(byId).forEach(function (id) { io.observe(document.getElementById(id)); });
   });
-  // Light/dark toggle. A saved choice wins; otherwise the OS preference shows.
+  // Appearance: System → Light → Dark. Same keys as the React console so a
+  // choice made in either place sticks everywhere on this origin.
+  var THEME_KEY = 'atmosphere.theme';
+  var PREFS_KEY = 'atmosphere.preferences';
+  var LEGACY_THEME_KEY = 'atm-theme';
+  var THEME_CYCLE = ['system', 'light', 'dark'];
+
+  function readThemePref() {
+    try {
+      var p = localStorage.getItem(THEME_KEY);
+      if (p === 'light' || p === 'dark' || p === 'system') return p;
+      try {
+        var prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
+        if (prefs.theme === 'light' || prefs.theme === 'dark' || prefs.theme === 'system') {
+          return prefs.theme;
+        }
+      } catch (e) { /* ignore */ }
+      p = localStorage.getItem(LEGACY_THEME_KEY);
+      if (p === 'light' || p === 'dark') return p;
+    } catch (e) { /* private mode */ }
+    return 'system';
+  }
+
+  function resolveTheme(pref) {
+    if (pref === 'light' || pref === 'dark') return pref;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  function persistThemePref(pref) {
+    try {
+      localStorage.setItem(THEME_KEY, pref);
+      var prefs = {};
+      try { prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}') || {}; } catch (e) { prefs = {}; }
+      prefs.theme = pref;
+      localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+      if (pref === 'system') localStorage.removeItem(LEGACY_THEME_KEY);
+      else localStorage.setItem(LEGACY_THEME_KEY, pref);
+    } catch (e) { /* private mode */ }
+  }
+
+  function applyThemePref(pref) {
+    var root = document.documentElement;
+    var resolved = resolveTheme(pref);
+    root.setAttribute('data-theme', resolved);
+    root.setAttribute('data-theme-preference', pref);
+    return resolved;
+  }
+
+  function themeLabel(pref) {
+    return pref === 'system' ? 'System' : pref === 'light' ? 'Light' : 'Dark';
+  }
+
   var toggle = document.getElementById('theme-toggle');
   if (toggle) {
-    var root = document.documentElement;
+    // Ensure a monitor glyph exists for the System state without editing every HTML file.
+    if (!toggle.querySelector('.icon-system')) {
+      toggle.insertAdjacentHTML(
+        'beforeend',
+        '<svg class="icon-system" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">' +
+          '<rect x="1.5" y="2.5" width="13" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/>' +
+          '<path d="M5.5 14h5M8 11.5V14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>' +
+        '</svg>'
+      );
+    }
+
+    var media = window.matchMedia('(prefers-color-scheme: dark)');
+    function paintFromStore() {
+      var pref = readThemePref();
+      applyThemePref(pref);
+      toggle.setAttribute(
+        'aria-label',
+        'Appearance: ' + themeLabel(pref) + '. Click to change.'
+      );
+      toggle.setAttribute('title', 'Appearance: ' + themeLabel(pref));
+    }
+    paintFromStore();
+    media.addEventListener('change', function () {
+      if (readThemePref() === 'system') applyThemePref('system');
+    });
+
     toggle.addEventListener('click', function () {
-      var explicit = root.getAttribute('data-theme');
-      var isDark = explicit
-        ? explicit === 'dark'
-        : window.matchMedia('(prefers-color-scheme: dark)').matches;
-      var next = isDark ? 'light' : 'dark';
-      root.setAttribute('data-theme', next);
-      try { localStorage.setItem('atm-theme', next); } catch (e) { /* private mode */ }
+      var current = readThemePref();
+      var idx = THEME_CYCLE.indexOf(current);
+      var next = THEME_CYCLE[(idx + 1) % THEME_CYCLE.length];
+      persistThemePref(next);
+      applyThemePref(next);
+      toggle.setAttribute(
+        'aria-label',
+        'Appearance: ' + themeLabel(next) + '. Click to change.'
+      );
+      toggle.setAttribute('title', 'Appearance: ' + themeLabel(next));
     });
   }
   // Replay restarts the receipt animation — the audit trail's replay, embodied.

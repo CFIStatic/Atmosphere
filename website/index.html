@@ -14,7 +14,7 @@
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect width='22' height='2.8' fill='%23A8A29E'/%3E%3Crect y='4.8' width='22' height='2.8' fill='%2378716C'/%3E%3Crect y='9.6' width='22' height='2.8' fill='%2357534E'/%3E%3Crect y='14.4' width='22' height='2.8' fill='%23292524'/%3E%3Crect y='19.2' width='22' height='2.8' fill='%23F2670C'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="assets/site.css" />
-  <script>try{var t=localStorage.getItem('atm-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
+  <script>try{var p=localStorage.getItem('atmosphere.theme');if(p!=='light'&&p!=='dark'&&p!=='system'){try{p=JSON.parse(localStorage.getItem('atmosphere.preferences')||'{}').theme}catch(e){}}if(p!=='light'&&p!=='dark'&&p!=='system')p=localStorage.getItem('atm-theme');if(p!=='light'&&p!=='dark'&&p!=='system')p='system';var r=p==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):p;document.documentElement.setAttribute('data-theme',r);document.documentElement.setAttribute('data-theme-preference',p)}catch(e){}</script>
 </head>
 <body>
 

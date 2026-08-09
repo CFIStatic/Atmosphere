@@ -833,23 +833,30 @@ function PreferencesSection() {
           <div>
             <p className="text-sm font-medium text-ink-900">Appearance</p>
             <p className="mt-0.5 text-sm text-ink-600">
-              Dark is the console's home; light is here when the sun wins.
+              Applies across every screen in this browser — dark, light, or match
+              the device.
             </p>
           </div>
           <div className="flex rounded-lg glass-card p-1">
-            {(['dark', 'light'] as const).map((mode) => (
+            {(
+              [
+                { mode: 'dark', label: 'Dark' },
+                { mode: 'light', label: 'Light' },
+                { mode: 'system', label: 'System' },
+              ] as const
+            ).map(({ mode, label }) => (
               <button
                 key={mode}
                 type="button"
                 onClick={() => setPreference('theme', mode)}
                 aria-pressed={preferences.theme === mode}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium capitalize transition ${
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
                   preferences.theme === mode
                     ? 'bg-brand-50 text-brand-700'
                     : 'text-ink-600 hover:text-ink-900'
                 }`}
               >
-                {mode}
+                {label}
               </button>
             ))}
           </div>

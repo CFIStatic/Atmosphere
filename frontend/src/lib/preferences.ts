@@ -1,4 +1,13 @@
 import { useSyncExternalStore } from 'react';
+import {
+  initTheme,
+  isThemePreference,
+  persistThemePreference,
+  readThemePreference,
+  subscribeTheme,
+  syncThemeRuntime,
+  type ThemePreference,
+} from './theme';
 
 /**
  * Device-local user preferences.
@@ -13,14 +22,17 @@ export interface Preferences {
   reduceMotion: boolean;
   /** Ask for confirmation before signing out. */
   confirmSignOut: boolean;
-  /** The console is dark by default; light is a choice, not an accident. */
-  theme: 'dark' | 'light';
+  /**
+   * Appearance: explicit light/dark, or follow the device (`system`).
+   * The resolved palette is applied as `data-theme` on <html>.
+   */
+  theme: ThemePreference;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
   reduceMotion: false,
   confirmSignOut: false,
-  theme: 'dark',
+  theme: 'system',
 };
 
 const STORAGE_KEY = 'atmosphere.preferences';
@@ -28,16 +40,27 @@ const STORAGE_KEY = 'atmosphere.preferences';
 let current: Preferences = DEFAULT_PREFERENCES;
 const listeners = new Set<() => void>();
 
+function normalize(parsed: Partial<Preferences>): Preferences {
+  const theme = isThemePreference(parsed.theme) ? parsed.theme : readThemePreference();
+  return {
+    ...DEFAULT_PREFERENCES,
+    ...parsed,
+    theme,
+  };
+}
+
 function read(): Preferences {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_PREFERENCES;
+    if (!raw) {
+      return { ...DEFAULT_PREFERENCES, theme: readThemePreference() };
+    }
     const parsed = JSON.parse(raw) as Partial<Preferences>;
     // Merge over the defaults so a preference added in a later release does not
     // arrive as `undefined` for users with an older blob already stored.
-    return { ...DEFAULT_PREFERENCES, ...parsed };
+    return normalize(parsed);
   } catch {
-    return DEFAULT_PREFERENCES;
+    return { ...DEFAULT_PREFERENCES, theme: readThemePreference() };
   }
 }
 
@@ -48,15 +71,28 @@ function read(): Preferences {
 function applyDocumentPreferences(prefs: Preferences) {
   if (typeof document === 'undefined') return;
   document.documentElement.classList.toggle('reduce-motion', prefs.reduceMotion);
-  // The tokens in index.css key off this attribute; setting it before React
-  // renders (initPreferences) is what prevents a flash of the wrong theme.
-  document.documentElement.setAttribute('data-theme', prefs.theme);
+  // Theme tokens key off data-theme; preference mode is also stamped so the
+  // header control can show System vs an explicit choice. syncThemeRuntime
+  // keeps the OS media-query watcher attached while preference === 'system'.
+  syncThemeRuntime(prefs.theme);
 }
 
 /** Called once at startup, before React renders, to avoid a flash of animation. */
 export function initPreferences(): void {
+  // initTheme wires the OS media-query watcher and cross-tab sync; then we
+  // load the full preferences blob (which may refine theme from the same keys).
+  initTheme();
   current = read();
   applyDocumentPreferences(current);
+  persistThemePreference(current.theme);
+  // Keep React state aligned when another tab (or the marketing site) changes
+  // atmosphere.theme — otherwise Settings can show a stale selection.
+  subscribeTheme(() => {
+    const nextTheme = readThemePreference();
+    if (current.theme === nextTheme) return;
+    current = { ...current, theme: nextTheme };
+    listeners.forEach((listener) => listener());
+  });
 }
 
 export function getPreferences(): Preferences {
@@ -72,6 +108,9 @@ export function setPreference<K extends keyof Preferences>(key: K, value: Prefer
   } catch {
     // Private-browsing or a full quota: the preference still applies for this
     // session, it just will not survive a reload.
+  }
+  if (key === 'theme') {
+    persistThemePreference(value as ThemePreference);
   }
   listeners.forEach((listener) => listener());
 }

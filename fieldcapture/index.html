@@ -5,6 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Atmosphere Field Capture</title>
 <meta name="description" content="One button. Start it when you get to work, finish it when you're done for the day. Everything else happens to the footage, not to you." />
+<script>
+  (function () {
+    try {
+      var p = localStorage.getItem('atmosphere.theme');
+      if (p !== 'light' && p !== 'dark' && p !== 'system') {
+        try { p = JSON.parse(localStorage.getItem('atmosphere.preferences') || '{}').theme; } catch (e) {}
+      }
+      if (p !== 'light' && p !== 'dark' && p !== 'system') p = localStorage.getItem('atm-theme');
+      if (p !== 'light' && p !== 'dark' && p !== 'system') p = 'system';
+      var r = p === 'system'
+        ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+        : p;
+      document.documentElement.setAttribute('data-theme', r);
+      document.documentElement.setAttribute('data-theme-preference', p);
+    } catch (e) {}
+  })();
+</script>
 <style>
   /* ---------------------------------------------------------------------
      The Verifier's design tokens, on a phone.

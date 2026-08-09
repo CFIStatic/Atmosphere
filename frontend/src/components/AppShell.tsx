@@ -5,6 +5,11 @@ import { useAuth } from '../context/AuthContext';
 import { api, ROLE_LABELS } from '../lib/api';
 import { displayName, initials } from '../lib/display';
 import { setPreference, usePreferences } from '../lib/preferences';
+import {
+  cycleThemePreference,
+  resolveTheme,
+  themeLabel,
+} from '../lib/theme';
 import { PLATFORMS, VISIBLE_PLATFORM_IDS, platformOfPath } from '../lib/platforms';
 import { usePlatform } from '../lib/usePlatform';
 import { Logo } from './Logo';
@@ -15,6 +20,7 @@ import {
   LogOutIcon,
   MenuIcon,
   MicIcon,
+  MonitorIcon,
   MoonIcon,
   SearchIcon,
   SettingsIcon,
@@ -274,18 +280,30 @@ export function AppShell({
   );
 }
 
-/** Dark is the default; light is one click, and the choice sticks. */
+/**
+ * Cycles System → Light → Dark. The icon shows the *current* preference so a
+ * dark choice stays dark on every route until the user changes it — including
+ * when the OS would have preferred light.
+ */
 function ThemeToggle() {
   const { theme } = usePreferences();
-  const dark = theme === 'dark';
+  const next = cycleThemePreference(theme);
+  const resolved = resolveTheme(theme);
+  const label = themeLabel(theme);
   return (
     <button
-      onClick={() => setPreference('theme', dark ? 'light' : 'dark')}
-      aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
-      title={dark ? 'Light mode' : 'Dark mode'}
+      onClick={() => setPreference('theme', next)}
+      aria-label={`Appearance: ${label}. Click for ${themeLabel(next)}.`}
+      title={`Appearance: ${label} (click for ${themeLabel(next).toLowerCase()})`}
       className="grid h-8 w-8 place-items-center rounded-full border border-line text-ink-600 transition hover:border-line-strong hover:text-ink-900"
     >
-      {dark ? <SunIcon width={15} height={15} /> : <MoonIcon width={15} height={15} />}
+      {theme === 'system' ? (
+        <MonitorIcon width={15} height={15} />
+      ) : resolved === 'dark' ? (
+        <MoonIcon width={15} height={15} />
+      ) : (
+        <SunIcon width={15} height={15} />
+      )}
     </button>
   );
 }

@@ -1,9 +1,10 @@
 import { useNavigate } from 'react-router-dom';
-import { Check, Eye, LogOut, Moon, Sun, User } from 'lucide-react';
+import { Check, Eye, LogOut, Monitor, Moon, Sun, User } from 'lucide-react';
 import { Badge, Button, Popover, cn } from '../design';
 import { useAuth } from '../context/AuthContext';
 import { labelForRole } from '../domain/approvals';
 import type { Role } from '../domain/types';
+import { themeLabel } from '../lib/theme';
 import { useTheme } from './ThemeContext';
 import { useViewer } from './ViewerContext';
 
@@ -19,10 +20,11 @@ const ROLES: Role[] = [
 export function UserMenu() {
   const { user, logout } = useAuth();
   const { role, actualRole, isOverridden, viewAs } = useViewer();
-  const { theme, toggle } = useTheme();
+  const { preference, theme, toggle } = useTheme();
   const navigate = useNavigate();
 
   const initials = (user?.email ?? '?').slice(0, 2).toUpperCase();
+  const ThemeIcon = preference === 'system' ? Monitor : theme === 'dark' ? Moon : Sun;
 
   return (
     <Popover
@@ -82,12 +84,10 @@ export function UserMenu() {
           variant="ghost"
           size="sm"
           className="w-full justify-start"
-          leadingIcon={
-            theme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />
-          }
+          leadingIcon={<ThemeIcon className="h-3.5 w-3.5" />}
           onClick={toggle}
         >
-          {theme === 'dark' ? 'Light theme' : 'Dark theme'}
+          Appearance: {themeLabel(preference)}
         </Button>
         <Button
           variant="ghost"

@@ -2,63 +2,67 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
-  useState,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react';
+import {
+  cycleThemePreference,
+  readThemePreference,
+  setThemePreference,
+  subscribeTheme,
+  type ThemePreference,
+} from '../lib/theme';
 
 /**
- * Light/dark theming.
+ * Light / dark / system theming.
  *
- * The palette lives entirely in CSS variables (see index.css), so switching is
- * one attribute on <html> — no re-render, no class sweep, no flash of the wrong
- * surface between routes.
+ * The live console stores appearance in preferences (see lib/preferences.ts)
+ * and applies it through lib/theme.ts. This provider is a thin React wrapper
+ * over the same store for any shell that still mounts it — one attribute on
+ * <html>, no flash between routes.
  */
 
-export type Theme = 'dark' | 'light';
-
 interface ThemeValue {
-  theme: Theme;
-  setTheme: (theme: Theme) => void;
+  /** Stored preference, including `system`. */
+  preference: ThemePreference;
+  /** @deprecated Use `preference` — kept for older callers that expect light|dark only. */
+  theme: 'light' | 'dark';
+  setTheme: (theme: ThemePreference) => void;
   toggle: () => void;
 }
 
 const ThemeContext = createContext<ThemeValue | undefined>(undefined);
 
-const STORAGE_KEY = 'atmosphere.theme';
+function getSnapshot(): ThemePreference {
+  return readThemePreference();
+}
 
-function readStoredTheme(): Theme {
-  try {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (stored === 'light' || stored === 'dark') return stored;
-    // Fall back to the OS preference rather than assuming dark — a technician
-    // outdoors in daylight has usually already told their phone.
-    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-  } catch {
-    return 'dark';
-  }
+function getServerSnapshot(): ThemePreference {
+  return 'system';
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(readStoredTheme);
+  const preference = useSyncExternalStore(subscribeTheme, getSnapshot, getServerSnapshot);
+  const resolved = preference === 'system'
+    ? (typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light')
+    : preference;
 
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
-
-  const setTheme = useCallback((next: Theme) => {
-    setThemeState(next);
-    try {
-      window.localStorage.setItem(STORAGE_KEY, next);
-    } catch {
-      /* storage unavailable (private mode) — the choice just won't persist */
-    }
+  const setTheme = useCallback((next: ThemePreference) => {
+    setThemePreference(next);
   }, []);
 
   const value = useMemo<ThemeValue>(
-    () => ({ theme, setTheme, toggle: () => setTheme(theme === 'dark' ? 'light' : 'dark') }),
-    [theme, setTheme],
+    () => ({
+      preference,
+      theme: resolved,
+      setTheme,
+      toggle: () => setTheme(cycleThemePreference(preference)),
+    }),
+    [preference, resolved, setTheme],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
