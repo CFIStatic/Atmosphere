@@ -15,7 +15,9 @@ enum KeychainStore {
         SecItemDelete(query as CFDictionary)
         var add = query
         add[kSecValueData as String] = data
+        // Survive relaunches; only this device (not iCloud Keychain sync).
         add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        add[kSecAttrSynchronizable as String] = kCFBooleanFalse as Any
         SecItemAdd(add as CFDictionary, nil)
     }
 

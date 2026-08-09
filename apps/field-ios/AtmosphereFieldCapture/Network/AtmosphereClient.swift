@@ -11,6 +11,8 @@ final class AtmosphereClient: ObservableObject {
     let baseURL: URL
     var accessToken: String?
     var refreshToken: String?
+    /// Optional hook so AuthSession can rotate tokens on 401 without a cycle.
+    var onUnauthorized: (() async throws -> Void)?
 
     init(baseURL: URL, accessToken: String? = nil) {
         self.baseURL = baseURL
@@ -220,20 +222,7 @@ final class AtmosphereClient: ObservableObject {
     private struct EmptyJSON: Decodable {}
 
     private func get<Response: Decodable>(path: String) async throws -> Response {
-        guard let url = URL(string: path, relativeTo: baseURL)?.absoluteURL else {
-            throw APIError.http(status: 0, body: "bad url \(path)")
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        if let accessToken {
-            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        }
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200 ... 299).contains(http.statusCode) else {
-            let text = String(data: data, encoding: .utf8) ?? ""
-            throw APIError.http(status: (response as? HTTPURLResponse)?.statusCode ?? 0, body: text)
-        }
-        return try JSONDecoder().decode(Response.self, from: data)
+        try await send(path: path, method: "GET", body: Optional<EmptyJSON>.none, authed: true)
     }
 
     private func post<Body: Encodable, Response: Decodable>(
@@ -241,21 +230,38 @@ final class AtmosphereClient: ObservableObject {
         body: Body,
         authed: Bool = true
     ) async throws -> Response {
+        try await send(path: path, method: "POST", body: body, authed: authed)
+    }
+
+    private func send<Body: Encodable, Response: Decodable>(
+        path: String,
+        method: String,
+        body: Body?,
+        authed: Bool,
+        isRetry: Bool = false
+    ) async throws -> Response {
         guard let url = URL(string: path, relativeTo: baseURL)?.absoluteURL else {
             throw APIError.http(status: 0, body: "bad url \(path)")
         }
         var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpMethod = method
+        if body != nil {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONEncoder().encode(body)
+        }
         if authed, let accessToken {
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         }
-        request.httpBody = try JSONEncoder().encode(body)
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200 ... 299).contains(http.statusCode) else {
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        if authed, status == 401, !isRetry, let onUnauthorized {
+            try await onUnauthorized()
+            return try await send(path: path, method: method, body: body, authed: authed, isRetry: true)
+        }
+        guard (200 ... 299).contains(status) else {
             let text = String(data: data, encoding: .utf8) ?? ""
-            throw APIError.http(status: (response as? HTTPURLResponse)?.statusCode ?? 0, body: text)
+            throw APIError.http(status: status, body: text)
         }
         return try JSONDecoder().decode(Response.self, from: data)
     }

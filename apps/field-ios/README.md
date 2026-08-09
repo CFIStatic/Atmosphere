@@ -36,10 +36,10 @@ open AtmosphereFieldCapture.xcodeproj
 Set your Development Team, point `ATMOSPHERE_API_BASE` at your API (same host
 the dashboard uses), then run on a LiDAR iPhone for RoomPlan.
 
-**Sign in** with the **same email/password as the Atmosphere dashboard**. The
-phone stores tokens in Keychain and sends `Authorization: Bearer`. Day films
-upload through `/api/field-app/jobs/:jobId/proof*` into `job_proofs` for that
-org — they show up in the office evidence library.
+**Connect once** on first install with the **same email/password as the
+dashboard**. Tokens stay in Keychain — later launches skip the connect screen
+and open Today. Day films upload through `/api/field-app/jobs/:jobId/proof*`
+into `job_proofs` for that org. Disconnect only from Account → Disconnect.
 
 **Requirements:** iOS 17+, camera + mic + location when-in-use.
 
@@ -62,10 +62,10 @@ AtmosphereFieldCapture/
 
 ## Crew flow
 
-1. **Sign in** with the platform account (same as dashboard).
-2. Confirm today’s jobs loaded from the org (tap one if several).
-3. Tap **Start the day** — recording begins (camera + mic).
-4. Hold **Finish the day** — probe A/V → proof upload into that job → optional RoomPlan twin.
+1. **First launch only:** Connect Atmosphere account (same as dashboard).
+2. Later launches open Today already connected.
+3. Confirm today’s jobs (tap one if several) → **Start the day**.
+4. Hold **Finish the day** — proof upload into that job → optional RoomPlan twin.
 
 AI dictation and twin review stay in the **office Verifier**.
 

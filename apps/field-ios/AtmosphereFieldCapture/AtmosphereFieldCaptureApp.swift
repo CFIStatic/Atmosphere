@@ -3,9 +3,8 @@ import SwiftUI
 /**
  * Atmosphere Field Capture — App Store entry.
  *
- * Sign in with the same Atmosphere account as the dashboard. One button films
- * the day (video + microphone); uploads land in that org’s evidence library.
- * Optional RoomPlan/LiDAR measures rooms into the property digital twin.
+ * Connect the platform account once on first install. Later launches open
+ * straight to Today; day films land in that org’s evidence library.
  */
 @main
 struct AtmosphereFieldCaptureApp: App {
@@ -28,7 +27,7 @@ struct AtmosphereFieldCaptureApp: App {
                 .preferredColorScheme(.light)
                 .task {
                     await auth.restore()
-                    if auth.isSignedIn {
+                    if auth.isLinked {
                         await session.loadToday(api: api)
                     }
                 }
@@ -43,7 +42,7 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if !auth.isSignedIn {
+            if !auth.isLinked {
                 SignInView()
             } else {
                 switch session.phase {
@@ -57,8 +56,8 @@ struct RootView: View {
             }
         }
         .background(FieldTheme.bg.ignoresSafeArea())
-        .onChange(of: auth.isSignedIn) { _, signedIn in
-            if signedIn {
+        .onChange(of: auth.isLinked) { _, linked in
+            if linked {
                 Task { await session.loadToday(api: api) }
             }
         }

@@ -1,6 +1,12 @@
 import SwiftUI
 
-/// Same Atmosphere credentials as the dashboard — links this phone to the org.
+/**
+ * First-install account connect.
+ *
+ * Shown only when this phone has never been linked (or after an explicit
+ * disconnect). After Connect, the session stays in Keychain — crew opens
+ * straight to Today on every later launch.
+ */
 struct SignInView: View {
     @EnvironmentObject private var auth: AuthSession
     @State private var email = ""
@@ -9,7 +15,7 @@ struct SignInView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Spacer(minLength: 40)
+            Spacer(minLength: 36)
             VStack(alignment: .leading, spacing: 14) {
                 AtmosphereBarsMark(size: 36)
                 Text("Atmosphere")
@@ -18,12 +24,17 @@ struct SignInView: View {
                 Text("Field Capture")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(FieldTheme.muted)
+
+                Text("Connect this phone once")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(FieldTheme.ink)
+                    .padding(.top, 10)
+
                 Text(
-                    "Sign in with your office Atmosphere account. Jobs you film here land in that organization’s evidence library."
+                    "Use the same Atmosphere account as your office dashboard. You only do this when the app is first installed — after that, this phone stays connected and opens straight to today’s jobs."
                 )
                 .font(.system(size: 14))
                 .foregroundStyle(FieldTheme.muted)
-                .padding(.top, 4)
 
                 VStack(spacing: 10) {
                     TextField("Work email", text: $email)
@@ -43,7 +54,7 @@ struct SignInView: View {
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
                         .cornerRadius(10)
                 }
-                .padding(.top, 8)
+                .padding(.top, 4)
 
                 if let err = auth.lastError {
                     Text(err)
@@ -54,7 +65,10 @@ struct SignInView: View {
                 Button {
                     busy = true
                     Task {
-                        await auth.signIn(email: email.trimmingCharacters(in: .whitespacesAndNewlines), password: password)
+                        await auth.connectAccount(
+                            email: email.trimmingCharacters(in: .whitespacesAndNewlines),
+                            password: password
+                        )
                         busy = false
                     }
                 } label: {
@@ -62,7 +76,7 @@ struct SignInView: View {
                         if busy {
                             ProgressView().tint(FieldTheme.bg)
                         } else {
-                            Text("Sign in").fontWeight(.bold)
+                            Text("Connect account").fontWeight(.bold)
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -73,6 +87,10 @@ struct SignInView: View {
                 }
                 .disabled(busy || email.isEmpty || password.isEmpty)
                 .padding(.top, 6)
+
+                Text("After this, you won’t be asked again on this phone.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(FieldTheme.faint)
             }
             .padding(22)
             Spacer()

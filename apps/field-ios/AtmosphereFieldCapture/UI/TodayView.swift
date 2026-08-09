@@ -89,6 +89,12 @@ struct TodayView: View {
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(FieldTheme.line))
                     .cornerRadius(12)
 
+                    if let warn = auth.restoreWarning {
+                        Text(warn)
+                            .font(.system(size: 13))
+                            .foregroundStyle(FieldTheme.muted)
+                    }
+
                     if let err = session.lastError {
                         Text(err)
                             .font(.system(size: 13))
@@ -129,14 +135,22 @@ struct TodayView: View {
                     .lineLimit(1)
             }
             Spacer()
-            Button("Sign out") {
-                Task {
-                    await auth.signOut()
-                    session.jobs = []
+            Menu {
+                if let email = auth.email {
+                    Text(email)
                 }
+                Text("Connected — you only set this up once")
+                Button("Disconnect this phone", role: .destructive) {
+                    Task {
+                        await auth.disconnectAccount()
+                        session.jobs = []
+                    }
+                }
+            } label: {
+                Text("Account")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(FieldTheme.muted)
             }
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(FieldTheme.muted)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
