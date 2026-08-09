@@ -12,12 +12,10 @@ import { displayName, initials } from '../lib/display';
  */
 export function VerifierFrame({
   railOnly = false,
-  railCollapsed = false,
   className,
   style,
 }: {
   railOnly?: boolean;
-  railCollapsed?: boolean;
   className?: string;
   style?: CSSProperties;
 }) {
@@ -62,10 +60,9 @@ export function VerifierFrame({
 
   const syncFrame = useCallback(() => {
     postToFrame({ atmosphere: 'layout', railOnly });
-    postToFrame({ atmosphere: 'rail-collapsed', collapsed: railCollapsed });
     postToFrame({ atmosphere: 'active-route', path: location.pathname });
     postSession();
-  }, [location.pathname, postSession, postToFrame, railCollapsed, railOnly]);
+  }, [location.pathname, postSession, postToFrame, railOnly]);
 
   useLayoutEffect(() => {
     if (frameReady) syncFrame();

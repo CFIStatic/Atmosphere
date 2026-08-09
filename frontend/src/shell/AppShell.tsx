@@ -7,7 +7,6 @@ import { AssistantPanel } from '../assistant/AssistantPanel';
 import { CommandBar } from '../assistant/CommandBar';
 import { useAssistant } from '../assistant/AssistantContext';
 import { useApprovals, useTasks } from '../data/hooks';
-import { isFieldFirst } from '../domain/permissions';
 import { LeftNav } from './LeftNav';
 import { MobileNav } from './MobileNav';
 import { UserMenu } from './UserMenu';
@@ -30,7 +29,6 @@ export function AppShell() {
   const location = useLocation();
   const { open: assistantOpen, setOpen: setAssistantOpen, setContextLabel } = useAssistant();
 
-  const [navCollapsed, setNavCollapsed] = useState(() => isFieldFirst(role));
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const { data: approvals = [] } = useApprovals();
@@ -55,8 +53,6 @@ export function AppShell() {
       <div className="hidden shrink-0 lg:block">
         <LeftNav
           role={role}
-          collapsed={navCollapsed}
-          onToggleCollapsed={() => setNavCollapsed((c) => !c)}
           counts={{ approvals: pendingApprovals, 'my-work': openTasks }}
         />
       </div>

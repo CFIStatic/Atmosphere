@@ -57,8 +57,6 @@ export function MobileNav({
           <div className="absolute inset-y-0 left-0 w-[min(17rem,80vw)] animate-slide-in-right">
             <LeftNav
               role={role}
-              collapsed={false}
-              onToggleCollapsed={() => undefined}
               counts={counts}
               variant="mobile"
               onNavigate={() => onOpenChange(false)}

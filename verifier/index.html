@@ -322,44 +322,6 @@
     gap: 8px;
   }
   .rail-head .brand { font-size: 15px; flex: 1; min-width: 0; }
-  .rail-toggle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    width: 100%;
-    min-height: 34px;
-    padding: 0 10px;
-    border: 0;
-    border-radius: 8px;
-    background: none;
-    color: var(--muted);
-    cursor: pointer;
-    flex: none;
-    font-size: 12.5px;
-    font-weight: 550;
-  }
-  .rail-toggle:hover { background: var(--line-soft); color: var(--ink-2); }
-  .rail-toggle svg { flex: none; }
-  .rail-toggle-collapse { margin-left: auto; width: auto; min-width: 28px; padding: 0 6px; }
-  .rail-toggle-expand { display: none; }
-  body.rail-collapsed .rail-head .brand span,
-  body.rail-collapsed .rail-toggle .label { display: none; }
-  body.rail-collapsed .rail-head { justify-content: center; padding: 0 10px; }
-  body.rail-collapsed .rail-head .rail-toggle-collapse { display: none; }
-  body.rail-collapsed .rail-toggle-expand { display: inline-flex; }
-  body.rail-collapsed .rail-toggle-expand { width: auto; min-width: 34px; margin: 0 auto; }
-  body.rail-collapsed .rail h3,
-  body.rail-collapsed .navitem .label,
-  body.rail-collapsed .navitem .count { display: none; }
-  body.rail-collapsed .navitem {
-    justify-content: center;
-    width: calc(100% - 12px);
-    margin: 2px 6px;
-    padding: 9px;
-  }
-  body.rail-collapsed { --rail-w: 72px; }
-  body.rail-collapsed[data-atm-rail-only] .rail { width: 72px; }
   .rail-section { padding: 0; }
   .rail-section + .rail-section {
     margin-top: 6px;
@@ -735,9 +697,6 @@
         </svg>
         <span>Atmosphere</span>
       </button>
-      <button type="button" class="rail-toggle rail-toggle-collapse" id="rail-collapse" aria-label="Collapse sidebar" title="Collapse sidebar">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-      </button>
     </div>
 
     <div class="rail-body">
@@ -770,10 +729,6 @@
       <button type="button" class="navitem nav-icon" id="nav-settings">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09A1.7 1.7 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l-.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0 .34 1.87v.09A1.7 1.7 0 0 0 20.91 10H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></svg>
         <span class="label">Settings</span>
-      </button>
-      <button type="button" class="rail-toggle rail-toggle-expand" id="rail-expand" aria-label="Expand sidebar" title="Expand sidebar">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
-        <span class="label">Expand sidebar</span>
       </button>
     </div>
   </aside>
@@ -2098,47 +2053,6 @@
     new URLSearchParams(location.search).get('rail') === '1';
   if (RAIL_ONLY) document.body.setAttribute('data-atm-rail-only', '1');
 
-  var RAIL_COLLAPSED_KEY = 'atmosphere.sidebarCollapsed';
-  var RAIL_EXPANDED_W = 220;
-  var RAIL_COLLAPSED_W = 72;
-
-  function readRailCollapsed() {
-    try { return window.localStorage.getItem(RAIL_COLLAPSED_KEY) === '1'; } catch (e) { return false; }
-  }
-
-  function notifyRailCollapsed(collapsed) {
-    if (!EMBEDDED) return;
-    window.parent.postMessage({
-      atmosphere: 'rail-collapsed',
-      collapsed: collapsed,
-      width: collapsed ? RAIL_COLLAPSED_W : RAIL_EXPANDED_W,
-    }, '*');
-  }
-
-  function setRailCollapsed(collapsed, notifyParent) {
-    if (notifyParent === undefined) notifyParent = true;
-    document.body.classList.toggle('rail-collapsed', collapsed);
-    // Persist only when embedded: collapse/expand controls live in rail-head /
-    // rail-footer, which stay hidden on the standalone Verifier. Writing here
-    // in standalone would either trap the page icon-only or clobber the office
-    // console's sidebar preference.
-    if (EMBEDDED) {
-      try { window.localStorage.setItem(RAIL_COLLAPSED_KEY, collapsed ? '1' : '0'); } catch (e) {}
-      if (notifyParent) notifyRailCollapsed(collapsed);
-    }
-  }
-
-  function initRailCollapse() {
-    // Standalone has no expand control — always start expanded so a collapsed
-    // office preference cannot leave /verifier/ stuck icon-only.
-    var collapsed = EMBEDDED ? readRailCollapsed() : false;
-    setRailCollapsed(collapsed, false);
-    var collapseBtn = document.getElementById('rail-collapse');
-    var expandBtn = document.getElementById('rail-expand');
-    if (collapseBtn) collapseBtn.addEventListener('click', function () { setRailCollapsed(true); });
-    if (expandBtn) expandBtn.addEventListener('click', function () { setRailCollapsed(false); });
-  }
-
   var activeRoute = '/verifier-library';
   // Which rail row owns the orange overlay. Dashboard and the Videos filters
   // share /verifier-library in the shell, so route alone cannot tell them apart
@@ -2326,12 +2240,10 @@
     if (d && d.atmosphere === 'session') applySession(d);
     if (d && d.atmosphere === 'active-route') setActiveRoute(d.path);
     if (d && d.atmosphere === 'layout') setRailOnly(!!d.railOnly);
-    if (d && d.atmosphere === 'rail-collapsed') setRailCollapsed(!!d.collapsed, false);
   });
 
   var appFrame = document.getElementById('app-frame');
   if (appFrame) appFrame.classList.add('has-sidebar');
-  initRailCollapse();
 
   if (EMBEDDED) {
     window.parent.postMessage({ atmosphere: 'request-session' }, '*');
