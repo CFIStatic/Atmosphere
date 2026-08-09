@@ -1,10 +1,11 @@
 import Foundation
 
-/// Orchestrates today → record (A/V) → door → upload + optional twin ingest.
+/// Orchestrates today → record (A/V) → door → upload into the org evidence library.
 @MainActor
 final class FieldDaySession: ObservableObject {
     @Published var phase: FieldPhase = .today
-    @Published var jobs: [ExpectedJob] = FieldDaySession.demoJobs
+    @Published var jobs: [ExpectedJob] = []
+    @Published var activeJobId: String?
     @Published var elapsedSeconds: Int = 0
     @Published var siteLabel: String = "Getting your bearings…"
     @Published var doorChecks: [DoorCheck] = []
@@ -12,13 +13,35 @@ final class FieldDaySession: ObservableObject {
     @Published var lastError: String?
     @Published var uploading: Bool = false
     @Published var manifest: DayFilmManifest?
+    @Published var loadingJobs: Bool = false
 
     let recorder = DayFilmRecorder()
     let locator = SiteLocator()
     let roomPlan = RoomPlanBridge()
 
+    func loadToday(api: AtmosphereClient) async {
+        loadingJobs = true
+        lastError = nil
+        defer { loadingJobs = false }
+        do {
+            let list = try await api.todayJobs()
+            jobs = list
+            if activeJobId == nil {
+                activeJobId = list.first?.id
+            }
+        } catch {
+            lastError = error.localizedDescription
+            jobs = []
+        }
+    }
+
     func startDay() async {
         lastError = nil
+        guard activeJobId != nil || !jobs.isEmpty else {
+            lastError = "No job to film. Create or schedule a job in the Atmosphere dashboard first."
+            return
+        }
+        if activeJobId == nil { activeJobId = jobs.first?.id }
         do {
             try await recorder.prepare()
             locator.configure(jobs: jobs)
@@ -45,77 +68,93 @@ final class FieldDaySession: ObservableObject {
                 throw CaptureError.missingAudio
             }
 
+            guard let jobId = activeJobId ?? jobs.first?.id else {
+                throw APIError.http(status: 0, body: "No job selected for this day film.")
+            }
+
             uploading = true
             defer { uploading = false }
 
-            let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
-            let byteSize = attrs[.size] as? Int64 ?? 0
+            let workDate = Self.todayStamp()
+            let begin = try await api.beginJobProofUpload(jobId: jobId, workDate: workDate)
+            guard let uploadURL = URL(string: begin.uploadUrl) else {
+                throw APIError.http(status: 0, body: "Bad upload URL")
+            }
+            let uploaded = try await MediaUploadClient.uploadFile(localURL: url, uploadURL: uploadURL)
 
-            let begin = try await api.beginDayFilmUpload(
-                durationSeconds: tracks.duration,
-                byteSize: byteSize,
-                preferMultipart: byteSize > 64 * 1024 * 1024
-            )
-            let uploadURL = begin.session.uploadUrl.flatMap(URL.init(string:))
-            let uploaded = try await MediaUploadClient.uploadFile(
-                localURL: url,
-                uploadURL: uploadURL,
-                multipart: begin.session.multipart
-            )
-            let completed = try await api.completeDayFilmUpload(
-                sessionId: begin.session.id,
-                byteSize: uploaded.byteSize,
-                durationSeconds: tracks.duration,
-                contentHash: uploaded.sha256Hex
+            let iso = ISO8601DateFormatter().string(from: Date())
+            let recorded = try await api.completeJobProof(
+                jobId: jobId,
+                body: .init(
+                    workDate: workDate,
+                    phase: "after",
+                    storagePath: begin.path,
+                    byteSize: uploaded.byteSize,
+                    durationSeconds: tracks.duration,
+                    contentHash: uploaded.sha256Hex,
+                    capturedAt: iso,
+                    lat: locator.coordinate?.latitude,
+                    lon: locator.coordinate?.longitude,
+                    accuracyM: nil
+                )
             )
 
-            let videoRef = completed.media.id
+            let videoRef = recorded.proof?.id ?? begin.path
             var geometrySessionId: String?
             var twinId: String?
 
             roomPlan.detectCapabilities()
             await roomPlan.captureRooms()
-            let geo = try await api.openGeometrySession(
-                lidarAvailable: roomPlan.lidarAvailable,
-                label: "Field day \(Date().formatted(date: .abbreviated, time: .omitted))",
-                videoRef: videoRef
-            )
-            geometrySessionId = geo.session.id
-            twinId = geo.twin.id
-
-            let rooms = roomPlan.asIngestRooms()
-            if !rooms.isEmpty {
-                try await api.ingestGeometry(
-                    sessionId: geo.session.id,
-                    body: .init(
-                        source: "roomplan",
-                        rooms: rooms,
-                        mesh: nil,
-                        videoRef: videoRef,
-                        work: nil
-                    )
+            do {
+                let geo = try await api.openGeometrySession(
+                    lidarAvailable: roomPlan.lidarAvailable,
+                    label: "Field day \(workDate)",
+                    videoRef: videoRef
                 )
-                twinRooms = rooms.map {
-                    TwinRoomSummary(
-                        id: $0.name,
-                        name: $0.name,
-                        detail: $0.floorAreaSqFt.map { "\($0) SF" }
-                            ?? "\($0.lengthFt ?? 0)×\($0.widthFt ?? 0) ft"
+                geometrySessionId = geo.session.id
+                twinId = geo.twin.id
+                let rooms = roomPlan.asIngestRooms()
+                if !rooms.isEmpty {
+                    try await api.ingestGeometry(
+                        sessionId: geo.session.id,
+                        body: .init(
+                            source: "roomplan",
+                            rooms: rooms,
+                            mesh: nil,
+                            videoRef: videoRef,
+                            work: nil
+                        )
                     )
+                    twinRooms = rooms.map {
+                        TwinRoomSummary(
+                            id: $0.name,
+                            name: $0.name,
+                            detail: $0.floorAreaSqFt.map { "\($0) SF" }
+                                ?? "\($0.lengthFt ?? 0)×\($0.widthFt ?? 0) ft"
+                        )
+                    }
+                } else {
+                    twinRooms = [
+                        TwinRoomSummary(
+                            id: "pending",
+                            name: "Twin pending measure",
+                            detail: "Video + audio filed · RoomPlan pass when available"
+                        ),
+                    ]
                 }
-            } else {
+            } catch {
                 twinRooms = [
                     TwinRoomSummary(
-                        id: "pending",
-                        name: "Twin pending measure",
-                        detail: "Video + audio filed · RoomPlan pass when available"
+                        id: "skip",
+                        name: "Twin deferred",
+                        detail: "Day film is filed; twin measure can retry later"
                     ),
                 ]
             }
 
             manifest = DayFilmManifest(
-                mediaId: completed.media.id,
-                sessionId: begin.session.id,
+                mediaId: recorded.proof?.id,
+                sessionId: nil,
                 twinId: twinId,
                 geometrySessionId: geometrySessionId,
                 videoRef: videoRef,
@@ -127,10 +166,11 @@ final class FieldDaySession: ObservableObject {
                 capturedAt: Date()
             )
 
+            let jobName = jobs.first(where: { $0.id == jobId })?.name ?? jobId
             doorChecks = [
                 DoorCheck(id: "1", label: "Filmed on site", detail: siteLabel, ok: true),
                 DoorCheck(id: "2", label: "Video + audio sealed", detail: "mic track present", ok: true),
-                DoorCheck(id: "3", label: "Uploaded", detail: videoRef, ok: true),
+                DoorCheck(id: "3", label: "Filed to \(jobName)", detail: "office evidence library", ok: true),
                 DoorCheck(
                     id: "4",
                     label: "Twin session",
@@ -156,22 +196,12 @@ final class FieldDaySession: ObservableObject {
         lastError = nil
     }
 
-    static let demoJobs: [ExpectedJob] = [
-        ExpectedJob(
-            id: "j1041",
-            number: "#1041",
-            name: "Meridian Ave — water loss, Class 3",
-            address: "1841 Meridian Ave, Austin",
-            at: "7:00 AM",
-            placed: true
-        ),
-        ExpectedJob(
-            id: "j1038",
-            number: "#1038",
-            name: "Cedar Ridge — storm damage, roof tarp",
-            address: "4118 Cedar Ridge Dr, Austin",
-            at: "11:30 AM",
-            placed: true
-        ),
-    ]
+    private static func todayStamp() -> String {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = .current
+        f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: Date())
+    }
 }

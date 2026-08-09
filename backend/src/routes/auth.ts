@@ -1,6 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
-import type { User } from '@supabase/supabase-js';
+import type { Session, User } from '@supabase/supabase-js';
 import { config } from '../config.js';
 import { createAnonClient, createUserClient, createAdminClient } from '../lib/supabase.js';
 import {
@@ -31,6 +31,19 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { recordEvent } from '../lib/memory.js';
 
 export const authRouter = Router();
+
+/**
+ * Tokens for native clients (Field Capture). The dashboard keeps using
+ * httpOnly cookies; the phone stores these in Keychain and sends Bearer.
+ */
+function sessionTokens(session: Session) {
+  return {
+    accessToken: session.access_token,
+    refreshToken: session.refresh_token,
+    expiresIn: session.expires_in ?? null,
+    expiresAt: session.expires_at ?? null,
+  };
+}
 
 /**
  * Rate limiter for authentication endpoints to blunt credential-stuffing and
@@ -101,9 +114,11 @@ authRouter.post('/signup', authLimiter, async (req: Request, res: Response, next
 
     if (data.session) {
       setSessionCookies(res, data.session);
-      res
-        .status(201)
-        .json({ user: data.user ? publicUser(data.user) : null, needsEmailConfirmation: false });
+      res.status(201).json({
+        user: data.user ? publicUser(data.user) : null,
+        needsEmailConfirmation: false,
+        session: sessionTokens(data.session),
+      });
       return;
     }
 
@@ -154,7 +169,7 @@ authRouter.post('/login', authLimiter, async (req: Request, res: Response, next:
       entityId: data.user.id,
     });
 
-    res.json({ user: publicUser(data.user) });
+    res.json({ user: publicUser(data.user), session: sessionTokens(data.session) });
   } catch (err) {
     next(err);
   }
@@ -168,7 +183,9 @@ authRouter.post('/login', authLimiter, async (req: Request, res: Response, next:
  */
 authRouter.post('/logout', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const refreshToken = req.cookies?.[config.cookies.refreshTokenName] as string | undefined;
+    const refreshToken =
+      (req.cookies?.[config.cookies.refreshTokenName] as string | undefined) ||
+      (typeof req.body?.refreshToken === 'string' ? req.body.refreshToken : undefined);
 
     if (refreshToken) {
       const supabase = createAnonClient();
@@ -200,11 +217,14 @@ authRouter.post('/logout', async (req: Request, res: Response, next: NextFunctio
 
 /**
  * POST /api/auth/refresh
- * Exchanges the refresh token cookie for a fresh session.
+ * Exchanges the refresh token cookie (or JSON body for native apps) for a
+ * fresh session.
  */
 authRouter.post('/refresh', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const refreshToken = req.cookies?.[config.cookies.refreshTokenName] as string | undefined;
+    const refreshToken =
+      (req.cookies?.[config.cookies.refreshTokenName] as string | undefined) ||
+      (typeof req.body?.refreshToken === 'string' ? req.body.refreshToken : undefined);
     if (!refreshToken) throw badRequest('No refresh token', 'no_refresh_token');
 
     const supabase = createAnonClient();
@@ -215,7 +235,7 @@ authRouter.post('/refresh', async (req: Request, res: Response, next: NextFuncti
     }
 
     setSessionCookies(res, data.session);
-    res.json({ user: publicUser(data.user) });
+    res.json({ user: publicUser(data.user), session: sessionTokens(data.session) });
   } catch (err) {
     next(err);
   }

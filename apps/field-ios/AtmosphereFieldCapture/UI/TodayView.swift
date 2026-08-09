@@ -2,6 +2,8 @@ import SwiftUI
 
 struct TodayView: View {
     @EnvironmentObject private var session: FieldDaySession
+    @EnvironmentObject private var auth: AuthSession
+    @EnvironmentObject private var api: AtmosphereClient
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,7 +20,7 @@ struct TodayView: View {
                         .foregroundStyle(FieldTheme.ink)
 
                     Text(
-                        "One button, once a day. Tap when you get to your first job and hold when you are done. The film is video + audio — the office hears the site as well as sees it."
+                        "One button, once a day. Tap when you get to your first job and hold when you are done. The film is video + audio — filed to \(auth.orgName ?? "your organization") so the office can open it in the evidence library."
                     )
                     .font(.system(size: 15))
                     .foregroundStyle(FieldTheme.muted)
@@ -28,23 +30,46 @@ struct TodayView: View {
                             .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(FieldTheme.faint)
                             .textCase(.uppercase)
+                        if session.loadingJobs {
+                            Text("Loading jobs from your account…")
+                                .font(.system(size: 13))
+                                .foregroundStyle(FieldTheme.muted)
+                        } else if session.jobs.isEmpty {
+                            Text("No open jobs yet. Create a job in the Atmosphere dashboard, then pull to refresh.")
+                                .font(.system(size: 13))
+                                .foregroundStyle(FieldTheme.muted)
+                        }
                         ForEach(session.jobs) { job in
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(job.name).font(.system(size: 14, weight: .semibold))
-                                    Text(job.address)
-                                        .font(.system(size: 12))
-                                        .foregroundStyle(FieldTheme.muted)
+                            Button {
+                                session.activeJobId = job.id
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(job.name).font(.system(size: 14, weight: .semibold))
+                                        Text(job.address)
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(FieldTheme.muted)
+                                    }
+                                    Spacer()
+                                    Text(job.at)
+                                        .font(FieldTheme.mono)
+                                        .foregroundStyle(FieldTheme.faint)
+                                    if session.activeJobId == job.id {
+                                        Text("●")
+                                            .foregroundStyle(FieldTheme.accent)
+                                            .font(.system(size: 10))
+                                    }
                                 }
-                                Spacer()
-                                Text(job.at)
-                                    .font(FieldTheme.mono)
-                                    .foregroundStyle(FieldTheme.faint)
+                                .padding(12)
+                                .background(FieldTheme.panel)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(session.activeJobId == job.id ? FieldTheme.accent : FieldTheme.line)
+                                )
+                                .cornerRadius(10)
                             }
-                            .padding(12)
-                            .background(FieldTheme.panel)
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
-                            .cornerRadius(10)
+                            .buttonStyle(.plain)
+                            .foregroundStyle(FieldTheme.ink)
                         }
                     }
 
@@ -72,6 +97,9 @@ struct TodayView: View {
                 }
                 .padding(18)
             }
+            .refreshable {
+                await session.loadToday(api: api)
+            }
 
             Button {
                 Task { await session.startDay() }
@@ -91,13 +119,24 @@ struct TodayView: View {
     private var header: some View {
         HStack(spacing: 10) {
             AtmosphereBarsMark(size: 22)
-            Text("Atmosphere")
-                .font(.system(size: 16, weight: .heavy))
-                .foregroundStyle(FieldTheme.ink)
-            Text("Field Capture")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(FieldTheme.muted)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Atmosphere")
+                    .font(.system(size: 16, weight: .heavy))
+                    .foregroundStyle(FieldTheme.ink)
+                Text(auth.orgName ?? "Field Capture")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(FieldTheme.muted)
+                    .lineLimit(1)
+            }
             Spacer()
+            Button("Sign out") {
+                Task {
+                    await auth.signOut()
+                    session.jobs = []
+                }
+            }
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(FieldTheme.muted)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)

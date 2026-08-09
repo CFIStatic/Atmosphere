@@ -33,8 +33,13 @@ xcodegen generate
 open AtmosphereFieldCapture.xcodeproj
 ```
 
-Set your Development Team, point `ATMOSPHERE_API_BASE` at your API, sign in
-token wiring, then run on a LiDAR iPhone for RoomPlan.
+Set your Development Team, point `ATMOSPHERE_API_BASE` at your API (same host
+the dashboard uses), then run on a LiDAR iPhone for RoomPlan.
+
+**Sign in** with the **same email/password as the Atmosphere dashboard**. The
+phone stores tokens in Keychain and sends `Authorization: Bearer`. Day films
+upload through `/api/field-app/jobs/:jobId/proof*` into `job_proofs` for that
+org — they show up in the office evidence library.
 
 **Requirements:** iOS 17+, camera + mic + location when-in-use.
 
@@ -57,18 +62,20 @@ AtmosphereFieldCapture/
 
 ## Crew flow
 
-1. Tap **Start the day** — recording begins (camera + mic).
-2. Work the jobs — GPS + clock ride with the film; no job picker.
-3. Hold **Finish the day** — probe A/V tracks → upload catalog → optional RoomPlan → twin session.
+1. **Sign in** with the platform account (same as dashboard).
+2. Confirm today’s jobs loaded from the org (tap one if several).
+3. Tap **Start the day** — recording begins (camera + mic).
+4. Hold **Finish the day** — probe A/V → proof upload into that job → optional RoomPlan twin.
 
 AI dictation and twin review stay in the **office Verifier**.
 
-## API (same as backend foundation)
+## API (account-linked)
 
-1. `POST /api/media/catalog/uploads` with `hasAudio: true`, `kind: field_day_video`
-2. PUT bytes (or multipart) to signed URL
-3. `POST /api/media/catalog/uploads/complete` with `hasAudio: true`
-4. `POST /api/geometry/sessions` + optional `…/ingest` for RoomPlan rooms
+1. `POST /api/auth/login` → `{ user, session: { accessToken, refreshToken } }`
+2. `GET /api/field-app/me` + `GET /api/field-app/today` (Bearer)
+3. `POST /api/field-app/jobs/:jobId/proof/upload-url` → signed PUT URL
+4. PUT video bytes → `POST /api/field-app/jobs/:jobId/proof` (creates `job_proofs`)
+5. Optional: `POST /api/geometry/sessions` + `…/ingest` for RoomPlan
 
 See also `docs/media-storage.md` and `backend/src/geometry/`.
 
@@ -89,6 +96,5 @@ In-app header uses `AtmosphereBarsMark`.
 ## Still to wire in Xcode
 
 - UIKit host for `RoomCaptureViewController` → real room list + USDZ
-- Auth cookie / bearer exchange with Atmosphere login
 - Background `URLSession` for multi‑GB day uploads on poor signal
 - App Store Connect listing, TestFlight, privacy nutrition labels

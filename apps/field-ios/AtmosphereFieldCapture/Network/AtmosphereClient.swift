@@ -3,13 +3,14 @@ import Foundation
 /**
  * REST client for Atmosphere Field Capture.
  *
- * Auth: bearer access token from the crew's Atmosphere login / device session.
+ * Auth: bearer access token from the same Atmosphere login as the dashboard.
  * Base URL from `ATMOSPHERE_API_BASE` Info.plist / environment.
  */
 @MainActor
 final class AtmosphereClient: ObservableObject {
     let baseURL: URL
     var accessToken: String?
+    var refreshToken: String?
 
     init(baseURL: URL, accessToken: String? = nil) {
         self.baseURL = baseURL
@@ -23,98 +24,132 @@ final class AtmosphereClient: ObservableObject {
         return AtmosphereClient(baseURL: URL(string: raw)!)
     }
 
-    // MARK: - Media catalog (A/V day film)
+    // MARK: - Auth (same account as dashboard)
 
-    struct BeginUploadBody: Encodable {
-        var kind: String = "field_day_video"
-        var contentType: String = "video/mp4"
-        var durationSeconds: Double?
-        var byteSize: Int64?
-        var hasAudio: Bool = true
-        var preferMultipart: Bool?
-        var refType: String?
-        var refId: String?
+    struct SessionTokens: Decodable {
+        let accessToken: String
+        let refreshToken: String
+        let expiresIn: Int?
+        let expiresAt: Int?
     }
 
-    struct BeginUploadResponse: Decodable {
-        struct Media: Decodable {
-            let id: String
-            let objectKey: String?
-            let hasAudio: Bool?
-            let state: String?
-        }
-        struct Session: Decodable {
-            let id: String
-            let uploadUrl: String?
-            let multipart: Multipart?
-            struct Multipart: Decodable {
-                let uploadId: String
-                let partSizeBytes: Int
-                let partCount: Int
-                let parts: [Part]
-                struct Part: Decodable {
-                    let partNumber: Int
-                    let url: String
-                }
-            }
-        }
-        let media: Media
-        let session: Session
+    struct PublicUser: Decodable {
+        let id: String
+        let email: String?
     }
 
-    func beginDayFilmUpload(
-        durationSeconds: Double,
-        byteSize: Int64,
-        preferMultipart: Bool = true
-    ) async throws -> BeginUploadResponse {
+    struct AuthResponse: Decodable {
+        let user: PublicUser
+        let session: SessionTokens?
+    }
+
+    func login(email: String, password: String) async throws -> AuthResponse {
         try await post(
-            path: "/api/media/catalog/uploads",
-            body: BeginUploadBody(
-                durationSeconds: durationSeconds,
-                byteSize: byteSize,
-                hasAudio: true,
-                preferMultipart: preferMultipart
-            )
+            path: "/api/auth/login",
+            body: ["email": email, "password": password],
+            authed: false
         )
     }
 
-    struct CompleteUploadBody: Encodable {
-        let sessionId: String
+    func refresh(refreshToken: String) async throws -> AuthResponse {
+        try await post(
+            path: "/api/auth/refresh",
+            body: ["refreshToken": refreshToken],
+            authed: false
+        )
+    }
+
+    func logout() async {
+        struct Ok: Decodable { let ok: Bool? }
+        do {
+            let _: Ok = try await post(
+                path: "/api/auth/logout",
+                body: ["refreshToken": refreshToken ?? ""],
+                authed: false
+            )
+        } catch {
+            /* best-effort */
+        }
+    }
+
+    // MARK: - Field app bridge
+
+    struct FieldMe: Decodable {
+        struct User: Decodable {
+            let id: String
+            let email: String?
+            let fullName: String?
+        }
+        struct Org: Decodable {
+            let id: String
+            let name: String
+            let role: String?
+        }
+        let user: User
+        let org: Org
+    }
+
+    func fieldMe() async throws -> FieldMe {
+        try await get(path: "/api/field-app/me")
+    }
+
+    struct TodayResponse: Decodable {
+        let jobs: [ExpectedJob]
+    }
+
+    func todayJobs() async throws -> [ExpectedJob] {
+        let res: TodayResponse = try await get(path: "/api/field-app/today")
+        return res.jobs
+    }
+
+    struct ProofUploadUrlResponse: Decodable {
+        let path: String
+        let token: String?
+        let uploadUrl: String
+    }
+
+    func beginJobProofUpload(
+        jobId: String,
+        workDate: String,
+        phase: String = "after",
+        fileExtension: String = "mp4"
+    ) async throws -> ProofUploadUrlResponse {
+        struct Body: Encodable {
+            let workDate: String
+            let phase: String
+            let `extension`: String
+        }
+        return try await post(
+            path: "/api/field-app/jobs/\(jobId)/proof/upload-url",
+            body: Body(workDate: workDate, phase: phase, extension: fileExtension)
+        )
+    }
+
+    struct ProofRecordBody: Encodable {
+        var workDate: String
+        var phase: String
+        var storagePath: String
         var byteSize: Int64?
+        var durationSeconds: Double?
         var contentHash: String?
-        var durationSeconds: Double?
-        var hasAudio: Bool = true
+        var capturedAt: String?
+        var lat: Double?
+        var lon: Double?
+        var accuracyM: Double?
     }
 
-    struct CompleteUploadResponse: Decodable {
-        struct Media: Decodable {
-            let id: String
-            let state: String?
-            let hasAudio: Bool?
-            let objectKey: String?
+    struct ProofRecordResponse: Decodable {
+        struct Proof: Decodable {
+            let id: String?
         }
-        let media: Media
+        let proof: Proof?
     }
 
-    func completeDayFilmUpload(
-        sessionId: String,
-        byteSize: Int64,
-        durationSeconds: Double,
-        contentHash: String?
-    ) async throws -> CompleteUploadResponse {
-        try await post(
-            path: "/api/media/catalog/uploads/complete",
-            body: CompleteUploadBody(
-                sessionId: sessionId,
-                byteSize: byteSize,
-                contentHash: contentHash,
-                durationSeconds: durationSeconds,
-                hasAudio: true
-            )
-        )
+    func completeJobProof(jobId: String, body: ProofRecordBody) async throws -> ProofRecordResponse {
+        try await post(path: "/api/field-app/jobs/\(jobId)/proof", body: body)
     }
 
-    // MARK: - Geometry / twin
+    // MARK: - Geometry / twin (org-authenticated)
 
     struct OpenGeometrySessionBody: Encodable {
         var platform: String = "ios"
@@ -184,9 +219,27 @@ final class AtmosphereClient: ObservableObject {
 
     private struct EmptyJSON: Decodable {}
 
+    private func get<Response: Decodable>(path: String) async throws -> Response {
+        guard let url = URL(string: path, relativeTo: baseURL)?.absoluteURL else {
+            throw APIError.http(status: 0, body: "bad url \(path)")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        if let accessToken {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200 ... 299).contains(http.statusCode) else {
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw APIError.http(status: (response as? HTTPURLResponse)?.statusCode ?? 0, body: text)
+        }
+        return try JSONDecoder().decode(Response.self, from: data)
+    }
+
     private func post<Body: Encodable, Response: Decodable>(
         path: String,
-        body: Body
+        body: Body,
+        authed: Bool = true
     ) async throws -> Response {
         guard let url = URL(string: path, relativeTo: baseURL)?.absoluteURL else {
             throw APIError.http(status: 0, body: "bad url \(path)")
@@ -194,7 +247,7 @@ final class AtmosphereClient: ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let accessToken {
+        if authed, let accessToken {
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         }
         request.httpBody = try JSONEncoder().encode(body)

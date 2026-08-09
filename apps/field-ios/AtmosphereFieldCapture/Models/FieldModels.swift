@@ -13,6 +13,25 @@ struct ExpectedJob: Identifiable, Equatable, Codable {
     let address: String
     let at: String
     let placed: Bool
+    let status: String?
+
+    init(
+        id: String,
+        number: String,
+        name: String,
+        address: String,
+        at: String,
+        placed: Bool,
+        status: String? = nil
+    ) {
+        self.id = id
+        self.number = number
+        self.name = name
+        self.address = address
+        self.at = at
+        self.placed = placed
+        self.status = status
+    }
 }
 
 struct TwinRoomSummary: Identifiable, Equatable {

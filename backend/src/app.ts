@@ -54,6 +54,7 @@ import { crmSyncRouter } from './routes/crmSync.js';
 import { scopeDocsRouter } from './routes/scopeDocs.js';
 import { jobIntakeRouter } from './routes/jobIntake.js';
 import { fieldIdentityRouter } from './routes/fieldIdentity.js';
+import { fieldAppRouter } from './routes/fieldApp.js';
 import { mediaVideoRouter } from './routes/mediaVideo.js';
 import { mediaCatalogRouter } from './routes/mediaCatalog.js';
 import { geometryRouter } from './routes/geometry.js';
@@ -216,6 +217,8 @@ export function createApp(): Express {
   // contractors into one list. They hold a session of their own, not a seat
   // in anybody's org, so no org middleware could apply.
   app.use('/api/field', fieldIdentityRouter);
+  // App Store Field Capture signed in as the same org account as the dashboard.
+  app.use('/api/field-app', fieldAppRouter);
   // Any inbound video (proof, field capture, CRM, upload) can share one
   // sparse+diversity+dictation pipeline without a job_proofs row.
   app.use('/api/media/video', mediaVideoRouter);
