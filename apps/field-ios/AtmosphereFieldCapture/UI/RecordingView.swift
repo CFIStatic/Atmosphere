@@ -1,5 +1,6 @@
 import AVFoundation
 import SwiftUI
+import UIKit
 
 struct RecordingView: View {
     @EnvironmentObject private var session: FieldDaySession

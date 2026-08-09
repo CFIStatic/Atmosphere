@@ -33,8 +33,12 @@ xcodegen generate
 open AtmosphereFieldCapture.xcodeproj
 ```
 
-Set your Development Team, point `ATMOSPHERE_API_BASE` at your API (same host
-the dashboard uses), then run on a LiDAR iPhone for RoomPlan.
+**If Build Failed:** almost always Signing. In Xcode → target **AtmosphereFieldCapture**
+→ **Signing & Capabilities** → check **Automatically manage signing** → pick your
+**Team** (Apple ID). Then Product → Clean Build Folder → Run.
+
+Also set `ATMOSPHERE_API_BASE` to your API (same host as the dashboard), then run
+on a LiDAR iPhone for RoomPlan.
 
 **Connect once** on first install with the **same email/password as the
 dashboard**. Tokens stay in Keychain — later launches skip the connect screen

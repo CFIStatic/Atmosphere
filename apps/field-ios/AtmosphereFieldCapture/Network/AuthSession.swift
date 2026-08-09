@@ -33,6 +33,10 @@ final class AuthSession: ObservableObject {
     init(api: AtmosphereClient) {
         self.api = api
         hydrateFromStore()
+    }
+
+    /// Wire after both objects exist (avoids capturing `self` during `init`).
+    func bindAPIRefresh() {
         api.onUnauthorized = { [weak self] in
             guard let self else { return }
             try await self.refreshAccessToken()

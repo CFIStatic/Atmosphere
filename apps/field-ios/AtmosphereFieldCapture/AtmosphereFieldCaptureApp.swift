@@ -14,8 +14,10 @@ struct AtmosphereFieldCaptureApp: App {
 
     init() {
         let client = AtmosphereClient.fromEnvironment()
+        let sessionAuth = AuthSession(api: client)
+        sessionAuth.bindAPIRefresh()
         _api = StateObject(wrappedValue: client)
-        _auth = StateObject(wrappedValue: AuthSession(api: client))
+        _auth = StateObject(wrappedValue: sessionAuth)
     }
 
     var body: some Scene {
@@ -26,6 +28,7 @@ struct AtmosphereFieldCaptureApp: App {
                 .environmentObject(auth)
                 .preferredColorScheme(.light)
                 .task {
+                    auth.bindAPIRefresh()
                     await auth.restore()
                     if auth.isLinked {
                         await session.loadToday(api: api)

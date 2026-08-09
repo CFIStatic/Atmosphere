@@ -45,10 +45,19 @@ final class AtmosphereClient: ObservableObject {
         let session: SessionTokens?
     }
 
+    private struct PasswordLoginBody: Encodable {
+        let email: String
+        let password: String
+    }
+
+    private struct RefreshBody: Encodable {
+        let refreshToken: String
+    }
+
     func login(email: String, password: String) async throws -> AuthResponse {
         try await post(
             path: "/api/auth/login",
-            body: ["email": email, "password": password],
+            body: PasswordLoginBody(email: email, password: password),
             authed: false
         )
     }
@@ -56,7 +65,7 @@ final class AtmosphereClient: ObservableObject {
     func refresh(refreshToken: String) async throws -> AuthResponse {
         try await post(
             path: "/api/auth/refresh",
-            body: ["refreshToken": refreshToken],
+            body: RefreshBody(refreshToken: refreshToken),
             authed: false
         )
     }
@@ -66,7 +75,7 @@ final class AtmosphereClient: ObservableObject {
         do {
             let _: Ok = try await post(
                 path: "/api/auth/logout",
-                body: ["refreshToken": refreshToken ?? ""],
+                body: RefreshBody(refreshToken: refreshToken ?? ""),
                 authed: false
             )
         } catch {
@@ -219,10 +228,8 @@ final class AtmosphereClient: ObservableObject {
 
     // MARK: - HTTP
 
-    private struct EmptyJSON: Decodable {}
-
     private func get<Response: Decodable>(path: String) async throws -> Response {
-        try await send(path: path, method: "GET", body: Optional<EmptyJSON>.none, authed: true)
+        try await send(path: path, method: "GET", bodyData: nil, authed: true)
     }
 
     private func post<Body: Encodable, Response: Decodable>(
@@ -230,13 +237,14 @@ final class AtmosphereClient: ObservableObject {
         body: Body,
         authed: Bool = true
     ) async throws -> Response {
-        try await send(path: path, method: "POST", body: body, authed: authed)
+        let data = try JSONEncoder().encode(body)
+        return try await send(path: path, method: "POST", bodyData: data, authed: authed)
     }
 
-    private func send<Body: Encodable, Response: Decodable>(
+    private func send<Response: Decodable>(
         path: String,
         method: String,
-        body: Body?,
+        bodyData: Data?,
         authed: Bool,
         isRetry: Bool = false
     ) async throws -> Response {
@@ -245,9 +253,9 @@ final class AtmosphereClient: ObservableObject {
         }
         var request = URLRequest(url: url)
         request.httpMethod = method
-        if let body {
+        if let bodyData {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONEncoder().encode(body)
+            request.httpBody = bodyData
         }
         if authed, let accessToken {
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
@@ -257,7 +265,13 @@ final class AtmosphereClient: ObservableObject {
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if authed, status == 401, !isRetry, let onUnauthorized {
             try await onUnauthorized()
-            return try await send(path: path, method: method, body: body, authed: authed, isRetry: true)
+            return try await send(
+                path: path,
+                method: method,
+                bodyData: bodyData,
+                authed: authed,
+                isRetry: true
+            )
         }
         guard (200 ... 299).contains(status) else {
             let text = String(data: data, encoding: .utf8) ?? ""
