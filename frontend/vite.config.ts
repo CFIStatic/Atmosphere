@@ -20,6 +20,8 @@ export default defineConfig({
     host: true,
     port: 5174,
     strictPort: true,
+    // Allow Cloudflare quick-tunnel Host headers during local/cloud previews.
+    allowedHosts: true,
     // Proxy API calls to the backend during development so the browser talks to
     // a single origin (cookies "just work", no CORS headaches in dev).
     proxy: {
