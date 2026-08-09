@@ -758,7 +758,7 @@
 
     <div class="rail-section" id="evidence-nav">
     <h3>Videos</h3>
-    <button class="navitem nav-icon" data-view="all" data-label="All videos" aria-current="true" title="All videos"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="M15.5 10.5l4.2-2.6a.7.7 0 0 1 1.05.6v6.99a.7.7 0 0 1-1.06.6l-4.19-2.59"/></svg><span class="label">All videos</span> <span class="count" id="n-all">0</span></button>
+    <button class="navitem nav-icon" data-view="all" data-label="All videos" title="All videos"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="M15.5 10.5l4.2-2.6a.7.7 0 0 1 1.05.6v6.99a.7.7 0 0 1-1.06.6l-4.19-2.59"/></svg><span class="label">All videos</span> <span class="count" id="n-all">0</span></button>
     <button class="navitem nav-icon" data-view="classified" data-label="Classified" title="Classified"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h10"/><path d="M4 17h14"/></svg><span class="label">Classified</span> <span class="count" id="n-classified">0</span></button>
     <button class="navitem nav-icon" data-view="unanalysed" data-label="Awaiting analysis" title="Awaiting analysis"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="label">Awaiting analysis</span> <span class="count" id="n-unan">0</span></button>
     <button class="navitem nav-icon" data-view="flagged" data-label="Needs review" title="Needs review"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V4"/><path d="M4 4h11l-1.5 4L15 12H4"/></svg><span class="label">Needs review</span> <span class="count" id="n-flag">0</span></button>
@@ -2140,29 +2140,57 @@
   }
 
   var activeRoute = '/verifier-library';
+  // Which rail row owns the orange overlay. Dashboard and the Videos filters
+  // share /verifier-library in the shell, so route alone cannot tell them apart
+  // — only the last clicked bar should light up.
+  var activeRailItem = 'dashboard';
 
   function syncSidebarActive() {
     document.querySelectorAll('.rail .navitem').forEach(function (btn) {
       btn.removeAttribute('aria-current');
     });
-    if (activeRoute === '/verifier-library') {
-      var view = state.view || 'all';
+
+    if (activeRoute === '/intake') {
+      var startJob = document.getElementById('nav-start-job');
+      if (startJob) startJob.setAttribute('aria-current', 'true');
+      return;
+    }
+    if (activeRoute === '/shared') {
+      var jobProgress = document.getElementById('nav-jobprogress');
+      if (jobProgress) jobProgress.setAttribute('aria-current', 'true');
+      return;
+    }
+    if (activeRoute === '/settings') {
+      var settings = document.getElementById('nav-settings');
+      if (settings) settings.setAttribute('aria-current', 'true');
+      return;
+    }
+
+    // Library: exactly one of Dashboard or a Videos filter.
+    if (activeRailItem === 'dashboard') {
+      var dashBtn = document.querySelector('#platform-nav .app-nav[data-screen="dashboard"]');
+      if (dashBtn) dashBtn.setAttribute('aria-current', 'true');
+      return;
+    }
+    if (activeRailItem.indexOf('view:') === 0) {
+      var view = activeRailItem.slice(5);
       document.querySelectorAll('.navitem[data-view]').forEach(function (btn) {
         if (btn.dataset.view === view) btn.setAttribute('aria-current', 'true');
       });
-      return;
     }
-    document.querySelectorAll('#platform-nav .navitem, #rail-footer .navitem').forEach(function (btn) {
-      var active = false;
-      if (btn.id === 'nav-start-job') active = activeRoute === '/intake';
-      else if (btn.id === 'nav-jobprogress') active = activeRoute === '/shared';
-      else if (btn.id === 'nav-settings') active = activeRoute === '/settings';
-      if (active) btn.setAttribute('aria-current', 'true');
-    });
   }
 
   function setActiveRoute(path) {
     activeRoute = path || '/verifier-library';
+    if (activeRoute === '/verifier-library') {
+      // Keep Dashboard vs Videos selection; only reset when arriving from
+      // another top-level route without a rail click.
+      if (activeRailItem !== 'dashboard' && activeRailItem.indexOf('view:') !== 0) {
+        activeRailItem = 'dashboard';
+      }
+    } else {
+      activeRailItem = '';
+    }
     syncSidebarActive();
   }
 
@@ -2175,6 +2203,7 @@
     b.addEventListener('click', function () {
       state.view = b.dataset.view;
       activeRoute = '/verifier-library';
+      activeRailItem = 'view:' + b.dataset.view;
       syncSidebarActive();
       $('#viewtitle').textContent = b.dataset.label || (b.querySelector('.label') && b.querySelector('.label').textContent) || b.textContent.trim();
       if (EMBEDDED && RAIL_ONLY) {
@@ -2197,6 +2226,11 @@
     if (dash) dash.hidden = name !== 'dashboard';
     if (name === 'dashboard') {
       activeRoute = '/verifier-library';
+      // setScreen is used for showing the library pane; do not steal the orange
+      // overlay from a Videos filter the user just chose.
+      if (!activeRailItem || activeRailItem.indexOf('view:') !== 0) {
+        activeRailItem = 'dashboard';
+      }
       syncSidebarActive();
     }
   }
@@ -2273,6 +2307,7 @@
   initAccountMenu();
 
   function goDashboard() {
+    activeRailItem = 'dashboard';
     setScreen('dashboard');
     if (EMBEDDED) {
       window.parent.postMessage({ atmosphere: 'navigate', to: '/verifier-library' }, '*');
@@ -2311,28 +2346,39 @@
         if (EMBEDDED) {
           state.view = 'all';
           activeRoute = '/verifier-library';
+          activeRailItem = 'dashboard';
           syncSidebarActive();
           window.parent.postMessage({ atmosphere: 'navigate', to: '/verifier-library' }, '*');
           return;
         }
+        activeRailItem = 'dashboard';
         setScreen(btn.dataset.screen);
       });
     });
     var navStartJob = document.getElementById('nav-start-job');
     if (navStartJob) {
       navStartJob.addEventListener('click', function () {
+        activeRoute = '/intake';
+        activeRailItem = '';
+        syncSidebarActive();
         window.parent.postMessage({ atmosphere: 'navigate', to: '/intake' }, '*');
       });
     }
     var navJobProgress = document.getElementById('nav-jobprogress');
     if (navJobProgress) {
       navJobProgress.addEventListener('click', function () {
+        activeRoute = '/shared';
+        activeRailItem = '';
+        syncSidebarActive();
         window.parent.postMessage({ atmosphere: 'navigate', to: '/shared' }, '*');
       });
     }
     var navSettings = document.getElementById('nav-settings');
     if (navSettings) {
       navSettings.addEventListener('click', function () {
+        activeRoute = '/settings';
+        activeRailItem = '';
+        syncSidebarActive();
         window.parent.postMessage({ atmosphere: 'navigate', to: '/settings' }, '*');
       });
     }
