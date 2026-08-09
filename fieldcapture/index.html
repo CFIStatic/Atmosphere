@@ -21,6 +21,15 @@
       document.documentElement.setAttribute('data-theme-preference', p);
     } catch (e) {}
   })();
+  try {
+    if (document.documentElement.getAttribute('data-theme-preference') === 'system') {
+      matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+        if (document.documentElement.getAttribute('data-theme-preference') !== 'system') return;
+        var r = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', r);
+      });
+    }
+  } catch (e) {}
 </script>
 <style>
   /* ---------------------------------------------------------------------

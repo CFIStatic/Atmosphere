@@ -40,8 +40,22 @@ const STORAGE_KEY = 'atmosphere.preferences';
 let current: Preferences = DEFAULT_PREFERENCES;
 const listeners = new Set<() => void>();
 
-function normalize(parsed: Partial<Preferences>): Preferences {
-  const theme = isThemePreference(parsed.theme) ? parsed.theme : readThemePreference();
+function normalize(parsed: Partial<Preferences>, opts?: { hadStoredBlob?: boolean }): Preferences {
+  let theme: ThemePreference;
+  if (isThemePreference(parsed.theme)) {
+    theme = parsed.theme;
+  } else if (opts?.hadStoredBlob) {
+    // Pre-system installs defaulted to dark when theme was absent from the blob.
+    // Keep that continuity unless a newer atmosphere.theme / atm-theme key exists.
+    const migrated = readThemePreference();
+    const hasExplicitThemeKey =
+      typeof window !== 'undefined' &&
+      (window.localStorage.getItem('atmosphere.theme') != null ||
+        window.localStorage.getItem('atm-theme') != null);
+    theme = hasExplicitThemeKey ? migrated : 'dark';
+  } else {
+    theme = readThemePreference();
+  }
   return {
     ...DEFAULT_PREFERENCES,
     ...parsed,
@@ -58,7 +72,7 @@ function read(): Preferences {
     const parsed = JSON.parse(raw) as Partial<Preferences>;
     // Merge over the defaults so a preference added in a later release does not
     // arrive as `undefined` for users with an older blob already stored.
-    return normalize(parsed);
+    return normalize(parsed, { hadStoredBlob: true });
   } catch {
     return { ...DEFAULT_PREFERENCES, theme: readThemePreference() };
   }

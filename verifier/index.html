@@ -2118,12 +2118,21 @@
   function setRailCollapsed(collapsed, notifyParent) {
     if (notifyParent === undefined) notifyParent = true;
     document.body.classList.toggle('rail-collapsed', collapsed);
-    try { window.localStorage.setItem(RAIL_COLLAPSED_KEY, collapsed ? '1' : '0'); } catch (e) {}
-    if (notifyParent) notifyRailCollapsed(collapsed);
+    // Persist only when embedded: collapse/expand controls live in rail-head /
+    // rail-footer, which stay hidden on the standalone Verifier. Writing here
+    // in standalone would either trap the page icon-only or clobber the office
+    // console's sidebar preference.
+    if (EMBEDDED) {
+      try { window.localStorage.setItem(RAIL_COLLAPSED_KEY, collapsed ? '1' : '0'); } catch (e) {}
+      if (notifyParent) notifyRailCollapsed(collapsed);
+    }
   }
 
   function initRailCollapse() {
-    setRailCollapsed(readRailCollapsed());
+    // Standalone has no expand control — always start expanded so a collapsed
+    // office preference cannot leave /verifier/ stuck icon-only.
+    var collapsed = EMBEDDED ? readRailCollapsed() : false;
+    setRailCollapsed(collapsed, false);
     var collapseBtn = document.getElementById('rail-collapse');
     var expandBtn = document.getElementById('rail-expand');
     if (collapseBtn) collapseBtn.addEventListener('click', function () { setRailCollapsed(true); });
