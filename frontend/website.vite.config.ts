@@ -14,7 +14,11 @@ export default defineConfig({
     host: true,
     port: 5173,
     strictPort: true,
+<<<<<<< HEAD
     // Allow Cloudflare quick-tunnel Host headers during local/cloud previews.
+=======
+    // Allow Cloudflare quick-tunnel Host headers in local/cloud-agent previews.
+>>>>>>> origin/cursor/tunnel-auth-cors-3344
     allowedHosts: true,
     proxy: {
       '/api': {
