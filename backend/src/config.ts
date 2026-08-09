@@ -58,7 +58,15 @@ export const config = {
     // Access token lives ~1h (matches Supabase JWT); refresh token much longer.
     accessMaxAgeMs: 60 * 60 * 1000, // 1 hour
     refreshMaxAgeMs: 30 * 24 * 60 * 60 * 1000, // 30 days
-    secure: isProduction, // require HTTPS in production
+    // Prefer explicit COOKIE_SECURE; otherwise require HTTPS in production.
+    // Preview tunnels (trycloudflare.com) are HTTPS even in development — set
+    // COOKIE_SECURE=true in .env so browsers accept the session cookies.
+    secure:
+      process.env.COOKIE_SECURE === 'true'
+        ? true
+        : process.env.COOKIE_SECURE === 'false'
+          ? false
+          : isProduction,
     sameSite: (process.env.COOKIE_SAMESITE as 'lax' | 'strict' | 'none') ?? 'lax',
     domain: process.env.COOKIE_DOMAIN || undefined,
   },

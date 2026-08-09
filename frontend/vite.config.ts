@@ -20,6 +20,9 @@ export default defineConfig({
     host: true,
     port: 5174,
     strictPort: true,
+    // Cloudflare quick tunnels and other reverse proxies send their own Host
+    // header; without this Vite 5.4+ blocks the request as a DNS-rebinding guard.
+    allowedHosts: true,
     // Proxy API calls to the backend during development so the browser talks to
     // a single origin (cookies "just work", no CORS headaches in dev).
     proxy: {

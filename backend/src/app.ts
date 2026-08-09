@@ -81,11 +81,20 @@ export function createApp(): Express {
   app.use(helmet());
 
   // CORS — allow the configured frontend origins with credentials (cookies).
+  // In development, also accept Cloudflare quick-tunnel hosts so cloud-agent /
+  // shareable preview URLs can sign in without editing FRONTEND_ORIGIN each time.
   app.use(
     cors({
       origin(origin, callback) {
         // Allow same-origin / server-to-server / curl (no Origin header).
         if (!origin || config.frontendOrigins.includes(origin)) {
+          callback(null, true);
+          return;
+        }
+        if (
+          !config.isProduction &&
+          /^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/i.test(origin)
+        ) {
           callback(null, true);
           return;
         }
