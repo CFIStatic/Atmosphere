@@ -80,6 +80,12 @@ See also `docs/media-storage.md` and `backend/src/geometry/`.
 | Upload MP4 + rooms / USDZ | Inspect digital twin |
 | Door checks | Scope verdicts, estimating |
 
+## Brand
+
+Home-screen / App Store icon is the Atmosphere **five bars** mark
+(`Assets.xcassets/AppIcon.appiconset`) — same bars as the web logo, orange base.
+In-app header uses `AtmosphereBarsMark`.
+
 ## Still to wire in Xcode
 
 - UIKit host for `RoomCaptureViewController` → real room list + USDZ

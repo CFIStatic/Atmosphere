@@ -10,6 +10,7 @@ settings:
     SWIFT_VERSION: "5.9"
     TARGETED_DEVICE_FAMILY: "1"
     INFOPLIST_FILE: AtmosphereFieldCapture/Info.plist
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 targets:
   AtmosphereFieldCapture:
     type: application
@@ -24,6 +25,7 @@ targets:
         CODE_SIGN_STYLE: Automatic
         CURRENT_PROJECT_VERSION: 1
         MARKETING_VERSION: 0.1.0
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
       path: AtmosphereFieldCapture/Info.plist
       properties:

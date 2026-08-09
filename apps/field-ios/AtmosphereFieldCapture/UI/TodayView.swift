@@ -89,9 +89,11 @@ struct TodayView: View {
     }
 
     private var header: some View {
-        HStack {
+        HStack(spacing: 10) {
+            AtmosphereBarsMark(size: 22)
             Text("Atmosphere")
                 .font(.system(size: 16, weight: .heavy))
+                .foregroundStyle(FieldTheme.ink)
             Text("Field Capture")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(FieldTheme.muted)
