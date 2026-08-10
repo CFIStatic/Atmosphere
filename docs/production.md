@@ -74,11 +74,15 @@ npm run check:migrations --prefix backend
 
 ### Internal analytics access
 
-Time-spent telemetry and the `/analytics` dashboard are gated by
-`public.analytics_staff`. Grant yourself after signup:
+`/analytics` is gated by `public.analytics_staff`. Atmosphere staff emails in
+`ANALYTICS_INTERNAL_EMAILS` (default: `jack@jettx.ai`) are **auto-granted** on
+the next `/api/analytics/access` probe when `SUPABASE_SERVICE_ROLE_KEY` is set —
+no SQL step in preview.
+
+Optional manual grant for others:
 
 ```bash
-cd backend && npm run analytics:grant -- jack@jettx.ai internal
+cd backend && npm run analytics:grant -- someone@company.com internal
 ```
 
 A/B experiments live in `public.experiments` (see migration

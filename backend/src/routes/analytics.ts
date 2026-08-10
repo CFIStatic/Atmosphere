@@ -16,6 +16,7 @@ import {
   getSummary,
   scopeAtLeast,
 } from '../lib/analytics.js';
+import { ensureAllowlistedAnalyticsAccess } from '../lib/analyticsAccess.js';
 import { buildWorkbook, workbookFilename, type Dataset } from '../lib/analyticsWorkbook.js';
 import { getAdminMeteringAnalytics } from '../metering/periodAggregation.js';
 
@@ -32,6 +33,10 @@ analyticsRouter.use(requireAuth);
  */
 analyticsRouter.get('/access', async (req: Request, res: Response, next: NextFunction) => {
   try {
+    // Auto-grant Atmosphere staff (e.g. jack@jettx.ai) so preview shows
+    // /analytics without a manual SQL upsert.
+    await ensureAllowlistedAnalyticsAccess(req.user);
+
     const supabase = createUserClient(req.accessToken!);
     res.json(await getAccess(supabase));
   } catch (err) {

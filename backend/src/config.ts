@@ -1012,6 +1012,20 @@ export const config = {
     // so a key alone is enough to try a real delivery in development.
     fromDomain: process.env.EMAIL_MARKETING_FROM ?? 'onboarding@resend.dev',
   },
+
+  /**
+   * Atmosphere corporate staff who get /analytics without a manual SQL grant.
+   * On sign-in / access probe the BFF upserts analytics_staff for these emails
+   * (requires SUPABASE_SERVICE_ROLE_KEY). Defaults include jack@jettx.ai so
+   * preview just works.
+   */
+  analytics: {
+    internalEmails: parseEmailList(
+      process.env.ANALYTICS_INTERNAL_EMAILS,
+      ['jack@jettx.ai'],
+    ),
+    investorEmails: parseEmailList(process.env.ANALYTICS_INVESTOR_EMAILS, []),
+  },
 } as const;
 
 /** Positive int from env, or null when unset / invalid (means “unlimited”). */
@@ -1020,6 +1034,18 @@ function optionalPositiveInt(value: string | undefined): number | null {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return null;
   return Math.floor(n);
+}
+
+function parseEmailList(value: string | undefined, fallback: string[]): string[] {
+  const raw = value?.trim() ? value : fallback.join(',');
+  return [
+    ...new Set(
+      raw
+        .split(',')
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ];
 }
 
 function parseSlaSource(value: string | undefined): 'manual' | 'portal' | 'mock' {

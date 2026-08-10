@@ -275,12 +275,10 @@ Contact / careers forms default to `jack@jettx.ai`.
 
 ### Internal monitoring (Atmosphere staff only)
 
-Time spent in the product is already measured via feature heartbeats and shown
-on **`/analytics`**. Grant access after your account exists:
-
-```bash
-cd backend && npm run analytics:grant -- jack@jettx.ai internal
-```
+Time spent in the product is measured via feature heartbeats and shown on
+**`/analytics`**. Sign in as `jack@jettx.ai` (or any email in
+`ANALYTICS_INTERNAL_EMAILS`) and the dashboard link appears automatically —
+the BFF upserts `analytics_staff` when the service role key is configured.
 
 A/B experiments: seed/manage rows in `public.experiments`, set `status` to
 `running`, instrument with `useExperiment()` in the UI. Results appear on the
