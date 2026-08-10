@@ -35,7 +35,23 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Location attributes stretches of the day film to the right job — you never pick a job by hand.</string>
 	<key>ATMOSPHERE_API_BASE</key>
-	<string>https://api.atmosphere.example</string>
+	<string>http://127.0.0.1:4000</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.atmosphere.fieldcapture</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>atmosphere-field</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

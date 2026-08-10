@@ -3,19 +3,19 @@ import SwiftUI
 /**
  * First-install account connect.
  *
- * Shown only when this phone has never been linked (or after an explicit
- * disconnect). After Connect, the session stays in Keychain — crew opens
- * straight to Today on every later launch.
+ * Uses the **same email + password as the Atmosphere website / dashboard**.
+ * Shown only when this phone has never been linked (or after disconnect).
  */
 struct SignInView: View {
     @EnvironmentObject private var auth: AuthSession
     @State private var email = ""
     @State private var password = ""
+    @State private var apiBase = ApiConfig.resolvedBaseString()
+    @State private var showServer = false
     @State private var busy = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 36)
+        ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 // Same as the website: bars mark beside the Atmosphere wordmark.
                 HStack(alignment: .center, spacing: 10) {
@@ -25,17 +25,19 @@ struct SignInView: View {
                         .foregroundStyle(FieldTheme.ink)
                         .tracking(-0.4)
                 }
+                .padding(.top, 36)
+
                 Text("Field Capture")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(FieldTheme.muted)
 
-                Text("Connect this phone once")
+                Text("Sign in with your website account")
                     .font(.system(size: 22, weight: .bold))
                     .foregroundStyle(FieldTheme.ink)
                     .padding(.top, 10)
 
                 Text(
-                    "Use the same Atmosphere account as your office dashboard. You only do this when the app is first installed — after that, this phone stays connected and opens straight to today’s jobs."
+                    "Use the same email and password you use on the Atmosphere website. You only connect this phone once — after that it stays signed in."
                 )
                 .font(.system(size: 14))
                 .foregroundStyle(FieldTheme.muted)
@@ -60,6 +62,30 @@ struct SignInView: View {
                 }
                 .padding(.top, 4)
 
+                DisclosureGroup(isExpanded: $showServer) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Atmosphere API (same backend as the website)")
+                            .font(.system(size: 12))
+                            .foregroundStyle(FieldTheme.faint)
+                        TextField("https://your-atmosphere-host", text: $apiBase)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                            .padding(12)
+                            .background(FieldTheme.panel)
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
+                            .cornerRadius(10)
+                        Text("Example for a Mac running the API locally: http://127.0.0.1:4000")
+                            .font(.system(size: 11))
+                            .foregroundStyle(FieldTheme.faint)
+                    }
+                    .padding(.top, 8)
+                } label: {
+                    Text("Server")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(FieldTheme.muted)
+                }
+
                 if let err = auth.lastError {
                     Text(err)
                         .font(.system(size: 13))
@@ -71,7 +97,8 @@ struct SignInView: View {
                     Task {
                         await auth.connectAccount(
                             email: email.trimmingCharacters(in: .whitespacesAndNewlines),
-                            password: password
+                            password: password,
+                            apiBase: apiBase
                         )
                         busy = false
                     }
@@ -80,7 +107,7 @@ struct SignInView: View {
                         if busy {
                             ProgressView().tint(FieldTheme.bg)
                         } else {
-                            Text("Connect account").fontWeight(.bold)
+                            Text("Sign in & connect phone").fontWeight(.bold)
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -89,7 +116,7 @@ struct SignInView: View {
                     .foregroundStyle(FieldTheme.bg)
                     .cornerRadius(12)
                 }
-                .disabled(busy || email.isEmpty || password.isEmpty)
+                .disabled(busy || email.isEmpty || password.isEmpty || apiBase.isEmpty)
                 .padding(.top, 6)
 
                 Text("After this, you won’t be asked again on this phone.")
@@ -97,7 +124,6 @@ struct SignInView: View {
                     .foregroundStyle(FieldTheme.faint)
             }
             .padding(22)
-            Spacer()
         }
         .background(FieldTheme.bg.ignoresSafeArea())
     }

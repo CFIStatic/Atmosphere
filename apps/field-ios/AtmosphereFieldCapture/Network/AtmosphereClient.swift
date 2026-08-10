@@ -8,7 +8,8 @@ import Foundation
  */
 @MainActor
 final class AtmosphereClient: ObservableObject {
-    let baseURL: URL
+    /// Same Atmosphere API origin the website/dashboard uses.
+    @Published private(set) var baseURL: URL
     var accessToken: String?
     var refreshToken: String?
     /// Optional hook so AuthSession can rotate tokens on 401 without a cycle.
@@ -20,10 +21,17 @@ final class AtmosphereClient: ObservableObject {
     }
 
     static func fromEnvironment() -> AtmosphereClient {
-        let raw = Bundle.main.object(forInfoDictionaryKey: "ATMOSPHERE_API_BASE") as? String
-            ?? ProcessInfo.processInfo.environment["ATMOSPHERE_API_BASE"]
-            ?? "https://api.atmosphere.example"
-        return AtmosphereClient(baseURL: URL(string: raw)!)
+        AtmosphereClient(baseURL: ApiConfig.resolvedBaseURL())
+    }
+
+    /// Point at the dashboard’s API (saved on device for next launches).
+    func useAPIBase(_ raw: String) throws {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed), url.scheme == "http" || url.scheme == "https" else {
+            throw APIError.http(status: 0, body: "Enter a valid API URL, like https://your-atmosphere-host")
+        }
+        ApiConfig.saveBaseString(trimmed)
+        baseURL = ApiConfig.resolvedBaseURL()
     }
 
     // MARK: - Auth (same account as dashboard)

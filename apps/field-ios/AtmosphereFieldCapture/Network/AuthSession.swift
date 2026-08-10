@@ -74,13 +74,17 @@ final class AuthSession: ObservableObject {
         }
     }
 
-    /// First-install (or re-connect) only.
-    func connectAccount(email: String, password: String) async {
+    /// First-install (or re-connect) only — same email/password as the website.
+    func connectAccount(email: String, password: String, apiBase: String) async {
         lastError = nil
         do {
+            try api.useAPIBase(apiBase)
             let result = try await api.login(email: email, password: password)
             guard let session = result.session else {
-                throw APIError.http(status: 0, body: "No session returned — confirm email if needed.")
+                throw APIError.http(
+                    status: 0,
+                    body: "Signed in on the website account, but no session came back. Confirm your email if Atmosphere asked you to."
+                )
             }
             persist(session: session, email: result.user.email ?? email)
             let me = try await api.fieldMe()
@@ -88,9 +92,39 @@ final class AuthSession: ObservableObject {
             UserDefaults.standard.set(true, forKey: linkedFlagKey)
             isLinked = true
         } catch {
-            lastError = error.localizedDescription
+            lastError = Self.friendlyConnectError(error)
             isLinked = KeychainStore.get(account: refreshAccount) != nil
         }
+    }
+
+    private static func friendlyConnectError(_ error: Error) -> String {
+        if let urlErr = error as? URLError {
+            switch urlErr.code {
+            case .notConnectedToInternet, .networkConnectionLost:
+                return "No network. Connect to the internet and try again."
+            case .cannotFindHost, .dnsLookupFailed:
+                return "Can’t reach that Atmosphere server. Check the API URL matches the host your website uses."
+            case .timedOut:
+                return "The Atmosphere server timed out. Try again in a moment."
+            default:
+                break
+            }
+        }
+        if case let APIError.http(status, body) = error {
+            if status == 401 {
+                return "Wrong email or password — use the same login as your Atmosphere website."
+            }
+            if status == 0 || status >= 500 {
+                return body.isEmpty
+                    ? "Couldn’t reach Atmosphere. Check the API URL (same backend as the website)."
+                    : body
+            }
+            if body.localizedCaseInsensitiveContains("invalid") {
+                return "Wrong email or password — use the same login as your Atmosphere website."
+            }
+            return body.isEmpty ? "Sign-in failed (\(status))." : String(body.prefix(240))
+        }
+        return error.localizedDescription
     }
 
     /// Explicit disconnect — the only way to return to the connect screen.

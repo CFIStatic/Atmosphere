@@ -189,7 +189,12 @@ export function SettingsPage() {
           {active === 'integrations' && <IntegrationsSection />}
           {active === 'sending' && <SendingSection />}
           {active === 'contactdata' && <ContactDataSection />}
-          {active === 'preferences' && <PreferencesSection />}
+          {active === 'preferences' && (
+            <>
+              <FieldCaptureAppSection />
+              <PreferencesSection />
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -788,6 +793,37 @@ const TOGGLES: { key: BooleanPreference; label: string; description: string }[] 
     description: 'Ask first — useful on a shared tablet in the field.',
   },
 ];
+
+/**
+ * How the Field Capture iPhone app signs in with the same Atmosphere account
+ * as this dashboard — one-time connect on the phone, then it stays linked.
+ */
+function FieldCaptureAppSection() {
+  return (
+    <Card
+      title="Field Capture app"
+      description="The iPhone app uses the same Atmosphere login as this website. Connect the phone once; day films land in your organization’s evidence library."
+    >
+      <ol className="list-decimal space-y-2 pl-5 text-sm text-ink-700">
+        <li>Install Field Capture from the App Store build (or Xcode).</li>
+        <li>
+          On first open, sign in with <strong className="font-semibold text-ink-900">the same email and password</strong>{' '}
+          you use here.
+        </li>
+        <li>
+          Under <span className="font-medium text-ink-900">Server</span>, set the API URL to the same Atmosphere
+          backend this dashboard talks to (for local Mac testing: <span className="font-mono text-xs">http://127.0.0.1:4000</span>
+          — use your Mac’s LAN IP if the phone is not the simulator).
+        </li>
+        <li>Tap <span className="font-medium text-ink-900">Sign in &amp; connect phone</span>. You won’t be asked again on that device.</li>
+      </ol>
+      <p className="mt-4 text-sm text-ink-600">
+        Jobs you film on the phone appear in Verifier / evidence for your org. Disconnect only from the app’s
+        Account menu if you hand the phone to someone else.
+      </p>
+    </Card>
+  );
+}
 
 function PreferencesSection() {
   const preferences = usePreferences();
