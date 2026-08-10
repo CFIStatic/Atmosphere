@@ -17,10 +17,14 @@ struct SignInView: View {
         VStack(spacing: 0) {
             Spacer(minLength: 36)
             VStack(alignment: .leading, spacing: 14) {
-                AtmosphereBarsMark(size: 36)
-                Text("Atmosphere")
-                    .font(.system(size: 28, weight: .bold))
-                    .foregroundStyle(FieldTheme.ink)
+                // Same as the website: bars mark beside the Atmosphere wordmark.
+                HStack(alignment: .center, spacing: 10) {
+                    AtmosphereBarsMark(size: 28)
+                    Text("Atmosphere")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundStyle(FieldTheme.ink)
+                        .tracking(-0.4)
+                }
                 Text("Field Capture")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(FieldTheme.muted)
