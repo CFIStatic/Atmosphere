@@ -53,6 +53,19 @@ final class AtmosphereClient: ObservableObject {
         let session: SessionTokens?
     }
 
+    struct SignupResponse: Decodable {
+        let user: PublicUser?
+        let session: SessionTokens?
+        let needsEmailConfirmation: Bool?
+        let message: String?
+    }
+
+    struct OrgRef: Decodable {
+        let id: String
+        let name: String
+        let joinCode: String?
+    }
+
     private struct PasswordLoginBody: Encodable {
         let email: String
         let password: String
@@ -62,11 +75,74 @@ final class AtmosphereClient: ObservableObject {
         let refreshToken: String
     }
 
+    private struct JoinOrgBody: Encodable {
+        let joinCode: String
+        let role: String
+        let workType: String
+        let usageIntents: [String]
+    }
+
+    private struct CreateOrgBody: Encodable {
+        let name: String
+        let role: String
+        let workType: String
+        let contractorType: String
+        let usageIntents: [String]
+    }
+
+    private struct ProfileBody: Encodable {
+        let fullName: String
+    }
+
     func login(email: String, password: String) async throws -> AuthResponse {
         try await post(
             path: "/api/auth/login",
             body: PasswordLoginBody(email: email, password: password),
             authed: false
+        )
+    }
+
+    func signup(email: String, password: String) async throws -> SignupResponse {
+        try await post(
+            path: "/api/auth/signup",
+            body: PasswordLoginBody(email: email, password: password),
+            authed: false
+        )
+    }
+
+    func joinOrg(joinCode: String) async throws -> OrgRef {
+        struct Wrap: Decodable { let org: OrgRef }
+        let res: Wrap = try await post(
+            path: "/api/org/join",
+            body: JoinOrgBody(
+                joinCode: joinCode,
+                role: "field_technician",
+                workType: "mitigation",
+                usageIntents: ["field_work"]
+            )
+        )
+        return res.org
+    }
+
+    func createOrg(name: String) async throws -> OrgRef {
+        struct Wrap: Decodable { let org: OrgRef }
+        let res: Wrap = try await post(
+            path: "/api/org",
+            body: CreateOrgBody(
+                name: name,
+                role: "field_technician",
+                workType: "mitigation",
+                contractorType: "general_contractor",
+                usageIntents: ["field_work"]
+            )
+        )
+        return res.org
+    }
+
+    func updateProfile(fullName: String) async throws {
+        let _: Ack = try await patch(
+            path: "/api/profile",
+            body: ProfileBody(fullName: fullName)
         )
     }
 
@@ -262,6 +338,15 @@ final class AtmosphereClient: ObservableObject {
     ) async throws -> Response {
         let data = try JSONEncoder().encode(body)
         return try await send(path: path, method: "POST", bodyData: data, authed: authed)
+    }
+
+    private func patch<Body: Encodable, Response: Decodable>(
+        path: String,
+        body: Body,
+        authed: Bool = true
+    ) async throws -> Response {
+        let data = try JSONEncoder().encode(body)
+        return try await send(path: path, method: "PATCH", bodyData: data, authed: authed)
     }
 
     private func send<Response: Decodable>(
