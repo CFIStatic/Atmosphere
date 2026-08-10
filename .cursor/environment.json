@@ -20,7 +20,7 @@
     {
       "name": "app",
       "command": "cd frontend && npm run dev -- --host",
-      "description": "React product app on :5174"
+      "description": "React product app on :5174 (also serves /fieldcapture and /verifier)"
     }
   ]
 }

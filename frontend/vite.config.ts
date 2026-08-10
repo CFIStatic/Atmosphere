@@ -3,14 +3,28 @@ import react from '@vitejs/plugin-react';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifierStaticPlugin } from './vite.verifier';
+import { staticMountPlugin } from './vite.staticMount';
 
 const frontendDir = path.dirname(fileURLToPath(import.meta.url));
 const srcDir = path.resolve(frontendDir, 'src');
 const verifierDir = path.resolve(frontendDir, '../verifier');
+const fieldcaptureDir = path.resolve(frontendDir, '../fieldcapture');
+const distDir = path.resolve(frontendDir, 'dist');
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [verifierStaticPlugin(verifierDir, path.resolve(frontendDir, 'dist')), react()],
+  plugins: [
+    verifierStaticPlugin(verifierDir, distDir),
+    // Crew Field Capture web app — same mount the job-share links use
+    // (`/fieldcapture/index.html?token=…`). Demo UI: `?demo=1`.
+    staticMountPlugin({
+      name: 'fieldcapture-static',
+      mount: '/fieldcapture',
+      dir: fieldcaptureDir,
+      outDir: distDir,
+    }),
+    react(),
+  ],
   resolve: {
     alias: { '@': srcDir },
   },
