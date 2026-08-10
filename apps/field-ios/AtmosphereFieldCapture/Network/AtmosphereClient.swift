@@ -121,6 +121,18 @@ final class AtmosphereClient: ObservableObject {
         return res.jobs
     }
 
+    /// Search any open org job (assigned or not) by address, #, title, or claim.
+    func searchJobs(q: String, limit: Int = 30) async throws -> [ExpectedJob] {
+        var components = URLComponents()
+        components.queryItems = [
+            URLQueryItem(name: "q", value: q),
+            URLQueryItem(name: "limit", value: String(limit)),
+        ]
+        let query = components.percentEncodedQuery.map { "?\($0)" } ?? ""
+        let res: TodayResponse = try await get(path: "/api/field-app/jobs/search\(query)")
+        return res.jobs
+    }
+
     struct ProofUploadUrlResponse: Decodable {
         let path: String
         let token: String?

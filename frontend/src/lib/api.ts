@@ -1028,6 +1028,24 @@ export interface FieldJobList {
   today: ClaimedJob[];
 }
 
+/** Open org job row returned by Field Capture today / search. */
+export interface FieldAppJob {
+  id: string;
+  number: string;
+  name: string;
+  address: string;
+  at: string;
+  status: string | null;
+  placed: boolean;
+}
+
+export interface FieldAppCaptureLink {
+  jobId: string;
+  partyId: string;
+  token: string;
+  fieldCapturePath: string;
+}
+
 /* ---- CRM job sync -------------------------------------------------------- */
 
 export type CrmSyncSystem = 'jobnimbus' | 'acculynx' | 'dash' | 'servicetitan';
@@ -3104,6 +3122,24 @@ export const api = {
     request<{ ok: boolean }>('/api/field/signout', {
       method: 'POST',
       headers: { Authorization: `Bearer ${session}` },
+    }),
+
+  // ---- Org Field Capture (same seat as the dashboard / iPhone app) ----
+  fieldAppTodayJobs: () =>
+    request<{ jobs: FieldAppJob[] }>('/api/field-app/today', { method: 'GET' }),
+
+  fieldAppSearchJobs: (q: string, limit = 30) => {
+    const params = new URLSearchParams({ q, limit: String(limit) });
+    return request<{ jobs: FieldAppJob[]; q: string }>(
+      `/api/field-app/jobs/search?${params.toString()}`,
+      { method: 'GET' },
+    );
+  },
+
+  fieldAppCaptureLink: (jobId: string) =>
+    request<FieldAppCaptureLink>(`/api/field-app/jobs/${encodeURIComponent(jobId)}/capture-link`, {
+      method: 'POST',
+      body: JSON.stringify({}),
     }),
 
   // ---- CRM job sync ----

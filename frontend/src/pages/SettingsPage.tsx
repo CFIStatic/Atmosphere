@@ -818,8 +818,10 @@ function FieldCaptureAppSection() {
         <li>Tap <span className="font-medium text-ink-900">Sign in &amp; connect phone</span>. You won’t be asked again on that device.</li>
       </ol>
       <p className="mt-4 text-sm text-ink-600">
-        Jobs you film on the phone appear in Verifier / evidence for your org. Disconnect only from the app’s
-        Account menu if you hand the phone to someone else.
+        Jobs you film on the phone appear in Verifier / evidence for your org. On the phone (or under{' '}
+        <span className="font-medium text-ink-900">Field → Film a job</span>), search by address or job # to
+        file footage on a job you were not assigned to. Disconnect only from the app’s Account menu if you
+        hand the phone to someone else.
       </p>
     </Card>
   );

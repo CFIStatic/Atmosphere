@@ -4,6 +4,8 @@ struct TodayView: View {
     @EnvironmentObject private var session: FieldDaySession
     @EnvironmentObject private var auth: AuthSession
     @EnvironmentObject private var api: AtmosphereClient
+    @State private var searchDraft: String = ""
+    @State private var searchTask: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -20,24 +22,30 @@ struct TodayView: View {
                         .foregroundStyle(FieldTheme.ink)
 
                     Text(
-                        "One button, once a day. Tap when you get to your first job and hold when you are done. The film is video + audio — filed to \(auth.orgName ?? "your organization") so the office can open it in the evidence library."
+                        "One button, once a day. Tap a job — or search any open job in \(auth.orgName ?? "your organization") if something comes up off-schedule — then hold when you are done. The film is video + audio, filed to the office evidence library."
                     )
                     .font(.system(size: 15))
                     .foregroundStyle(FieldTheme.muted)
 
+                    searchField
+
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("What today expects of you")
+                        Text(session.searchQuery.isEmpty ? "What today expects of you" : "Matching jobs")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(FieldTheme.faint)
                             .textCase(.uppercase)
-                        if session.loadingJobs {
-                            Text("Loading jobs from your account…")
+                        if session.loadingJobs || session.searchingJobs {
+                            Text(session.searchingJobs ? "Searching jobs…" : "Loading jobs from your account…")
                                 .font(.system(size: 13))
                                 .foregroundStyle(FieldTheme.muted)
                         } else if session.jobs.isEmpty {
-                            Text("No open jobs yet. Create a job in the Atmosphere dashboard, then pull to refresh.")
-                                .font(.system(size: 13))
-                                .foregroundStyle(FieldTheme.muted)
+                            Text(
+                                session.searchQuery.isEmpty
+                                    ? "No open jobs yet. Create a job in the Atmosphere dashboard, then pull to refresh — or search by address / job #."
+                                    : "No open jobs match that search. Try an address, job #, or claim number."
+                            )
+                            .font(.system(size: 13))
+                            .foregroundStyle(FieldTheme.muted)
                         }
                         ForEach(session.jobs) { job in
                             Button {
@@ -45,7 +53,14 @@ struct TodayView: View {
                             } label: {
                                 HStack {
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(job.name).font(.system(size: 14, weight: .semibold))
+                                        HStack(spacing: 6) {
+                                            if !job.number.isEmpty {
+                                                Text(job.number)
+                                                    .font(FieldTheme.mono)
+                                                    .foregroundStyle(FieldTheme.faint)
+                                            }
+                                            Text(job.name).font(.system(size: 14, weight: .semibold))
+                                        }
                                         Text(job.address)
                                             .font(.system(size: 12))
                                             .foregroundStyle(FieldTheme.muted)
@@ -104,21 +119,76 @@ struct TodayView: View {
                 .padding(18)
             }
             .refreshable {
+                searchDraft = ""
                 await session.loadToday(api: api)
             }
 
             Button {
                 Task { await session.startDay() }
             } label: {
-                Label("Start the day", systemImage: "video.fill")
-                    .font(.system(size: 17, weight: .bold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(FieldTheme.ink)
-                    .foregroundStyle(FieldTheme.bg)
-                    .cornerRadius(12)
+                Label(
+                    session.activeJobId == nil ? "Start the day" : "Start filming selected job",
+                    systemImage: "video.fill"
+                )
+                .font(.system(size: 17, weight: .bold))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(FieldTheme.ink)
+                .foregroundStyle(FieldTheme.bg)
+                .cornerRadius(12)
             }
             .padding(18)
+        }
+    }
+
+    private var searchField: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Find any job")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(FieldTheme.faint)
+                .textCase(.uppercase)
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(FieldTheme.faint)
+                TextField(
+                    "Address, job #, title, claim…",
+                    text: $searchDraft
+                )
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+                .onSubmit { runSearch(immediate: true) }
+                if !searchDraft.isEmpty {
+                    Button("Clear") {
+                        searchDraft = ""
+                        searchTask?.cancel()
+                        Task { await session.loadToday(api: api) }
+                    }
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(FieldTheme.muted)
+                }
+            }
+            .padding(12)
+            .background(FieldTheme.panel)
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
+            .cornerRadius(10)
+            .onChange(of: searchDraft) { _, _ in
+                runSearch(immediate: false)
+            }
+            Text("Use this when something comes up that you were not assigned to — pick the job, then start filming.")
+                .font(.system(size: 12))
+                .foregroundStyle(FieldTheme.muted)
+        }
+    }
+
+    private func runSearch(immediate: Bool) {
+        searchTask?.cancel()
+        searchTask = Task {
+            if !immediate {
+                try? await Task.sleep(nanoseconds: 320_000_000)
+            }
+            guard !Task.isCancelled else { return }
+            await session.searchJobs(api: api, query: searchDraft)
         }
     }
 

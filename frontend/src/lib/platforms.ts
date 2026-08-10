@@ -198,6 +198,7 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
         label: 'On site',
         items: [
           { to: '/technician', label: 'Capture', Icon: MicIcon },
+          { to: '/field/film', label: 'Film a job', Icon: SearchIcon },
           { to: '/jobs', label: 'My jobs', Icon: BriefcaseIcon },
         ],
       },
