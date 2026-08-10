@@ -617,6 +617,67 @@ a { color: inherit; }
   .pack-bonus { grid-column: 2; }
 }
 
+/* ---------- Store: physical goods (helmets & vests) ----------
+   A shelf, not a feature grid. Every card reserves a fixed 4:3 slot for
+   product photography and a foot that always holds a price and one button,
+   so an unphotographed or unpriced card still occupies its final size. */
+.shop {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: 22px;
+}
+.shop-card {
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: var(--shadow-card);
+  transition: box-shadow .16s ease, border-color .16s ease;
+}
+.shop-card:hover { box-shadow: var(--shadow-lift); border-color: var(--line-strong); }
+.shop-card.is-featured { border-color: var(--accent); }
+.shop-media {
+  position: relative; aspect-ratio: 4 / 3; background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  display: grid; place-content: center; justify-items: center; gap: 8px; padding: 18px;
+}
+.shop-media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.shop-media .shop-ph {
+  font-size: 10.5px; letter-spacing: .1em; color: var(--ink-faint); text-align: center;
+}
+.shop-tag {
+  position: absolute; top: 12px; left: 12px;
+  padding: 4px 10px; border-radius: 999px; font-size: 10.5px; letter-spacing: .08em;
+  background: var(--accent); color: var(--accent-ink);
+}
+.shop-body { flex: 1; padding: 20px 22px 0; }
+.shop-body h3 { margin: 0 0 4px; font-size: 18px; font-weight: 700; letter-spacing: -0.015em; }
+.shop-line { margin: 0 0 12px; font-size: 12.5px; letter-spacing: .06em; color: var(--ink-faint); }
+.shop-body p { margin: 0 0 14px; font-size: 14.5px; line-height: 1.6; color: var(--ink-soft); }
+.shop-incl { margin: 0; padding: 0; list-style: none; }
+.shop-incl li {
+  position: relative; margin-bottom: 7px; padding-left: 19px;
+  font-size: 13.5px; color: var(--ink-soft);
+}
+.shop-incl li::before { content: "✓"; position: absolute; left: 0; color: var(--success); }
+.shop-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  flex-wrap: wrap; margin-top: auto; padding: 20px 22px 22px;
+}
+.shop-price { font-size: 25px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.shop-price .shop-unit {
+  margin-left: 5px; font-size: 12.5px; font-weight: 500; letter-spacing: 0; color: var(--ink-faint);
+}
+/* Unpriced is a state, not a number: it must never render as a figure. */
+.shop-price.is-unset { font-size: 14px; font-weight: 600; color: var(--ink-faint); letter-spacing: .04em; }
+.shop-checkout {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin-top: 26px; padding: 18px 22px;
+  background: var(--card); border: 1px dashed var(--line-strong); border-radius: 12px;
+  font-size: 13.5px; color: var(--ink-soft);
+}
+.shop-checkout .pill { flex: none; }
+@media (max-width: 620px) {
+  .shop-foot { padding: 18px 20px 20px; }
+}
+
 /* The rate: two figures and the basis for them. */
 .rate-hero {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.5fr);

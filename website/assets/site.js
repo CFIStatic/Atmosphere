@@ -336,4 +336,37 @@
     teamSize: 'ct-team', workType: 'ct-work',
     message: 'ct-message', website: 'ct-website'
   }, "Sent — a person replies, usually within one business day.");
+
+  // Store prices (helmets & vests) are published from one attribute per card:
+  // put whole dollars in data-price and the card prints them. Left empty, the
+  // card says so in words — an unpriced product must never render as a figure
+  // nobody set, and never as free. Same rule as the recovery counter.
+  document.querySelectorAll('.shop-price').forEach(function (el) {
+    var raw = (el.getAttribute('data-price') || '').replace(/[^0-9.]/g, '');
+    var amount = parseFloat(raw);
+    if (!raw || !isFinite(amount) || amount <= 0) {
+      el.classList.add('is-unset');
+      el.textContent = 'Price to come';
+      return;
+    }
+    el.classList.remove('is-unset');
+    el.textContent = '$' + amount.toLocaleString('en-US');
+    var unit = document.createElement('span');
+    unit.className = 'shop-unit';
+    unit.textContent = el.getAttribute('data-unit') || 'each';
+    el.appendChild(unit);
+  });
+
+  // An Order button carries which item it came from; the contact form opens
+  // with that already written down, so sales gets a request and not a riddle.
+  var ORDER_ITEMS = {
+    'helmet-mount': 'Helmet Mount',
+    'chest-vest': 'Chest Vest',
+    'crew-kit': 'Crew Kit (one helmet mount + one vest per tech)'
+  };
+  var ordered = ORDER_ITEMS[(location.search.match(/[?&]item=([\w-]+)/) || [])[1]];
+  var orderMessage = document.getElementById('ct-message');
+  if (ordered && orderMessage && !orderMessage.value) {
+    orderMessage.value = 'I would like to order: ' + ordered + '.\n\nHow many: ';
+  }
 })();

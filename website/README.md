@@ -43,9 +43,7 @@ dark themes) and `assets/site.js` (receipt replay + the careers form).
 - **Job usage** — unique jobs processed per billing period; plans include an allowance
   with per-job overage pricing (all configurable in `metering_plan_versions`).
 - **Helmets & Vests** — physical mounts, bought outright per tech and billed outside the
-  subscription. `helmets-vests.html` carries the SKU table; the price column ships as a
-  `$—` placeholder with a visible "prices not published yet" note, so an unpriced page
-  can never read as a claim about cost. Fill all three rows together before launch.
+  subscription. Sold on `helmets-vests.html`; see "The store" below.
 - **Exceptional compute** — Atmosphere Compute Units for heavy workloads (video analysis,
   large documents). Internal AI/token costs are tracked in `private.ai_usage_events`
   but never shown on customer invoices.
@@ -88,6 +86,31 @@ derived, not entered, so it can't drift from the other two.
 instead of a total**, so an unfilled counter can never read as a claim of
 zero. That is the state it ships in today: set the real numbers before
 launch, and re-check the as-of date whenever they move.
+
+## The store (Helmets & Vests)
+
+`helmets-vests.html` explains the hardware first — a four-step "how it works", then the
+two mounts side by side — and sells it in the `#shop` section at the bottom. The shelf is
+three `.shop-card`s (helmet mount, chest vest, crew kit) built to hold real merchandising
+before it exists:
+
+| Slot                | How to fill it                                                  |
+| ------------------- | --------------------------------------------------------------- |
+| `.shop-media`       | Drop an `<img>` in place of the `.shop-ph` placeholder. The slot is a fixed 4:3 box, so the card never resizes when photography lands. |
+| `data-price`        | Whole dollars on the `.shop-price` span, e.g. `data-price="129"` |
+| `data-unit`         | Optional label after the figure; defaults to `each`              |
+| `data-sku`          | On `.shop-card`, for whatever fulfils the order later            |
+| `href` on **Order** | Currently `contact.html?item=<slug>`; point at checkout when it exists |
+
+Prices render from `data-price` alone (`assets/site.js`). **An empty `data-price` renders
+the words "Price to come", never a figure** — the same rule the recovery counter follows,
+so an unpriced product can't read as free or as a number nobody set. The static HTML
+already carries that text, so it stays correct with JS off and in the single-file preview.
+
+Checkout is not wired. **Order** carries the item slug to the contact form, which opens
+with the request written into the message field; `.shop-checkout` states plainly that card
+payment isn't open yet. Replacing that path with real checkout means changing the three
+`href`s and deleting the `.shop-checkout` notice — the cards themselves don't move.
 
 ## Forms (frontend + backend)
 
@@ -183,9 +206,10 @@ dashboard. Unset, the site keeps its designed early-access surfaces.
 
 - The careers listings and benefits are placeholders, and the on-site roles
   still need a real city named.
-- Helmets & Vests has no prices and no photography — the SKU table's price column is a
-  `$—` placeholder and the mounts are described by fit and use, not by measured specs.
-  Set real prices, and check the fit claims against the actual hardware, before launch.
+- The store has no prices, no product photography, and no checkout: `data-price` is
+  empty on all three cards, the media slots hold placeholders, and Order routes to the
+  contact form. The mounts are described by fit and use, not by measured specs — check
+  those claims against the actual hardware before launch.
 - Privacy and terms are plain-language drafts and need review by counsel.
 - The investor page is a designed surface — the data room behind it (auth +
   documents) doesn't exist yet; "Request access" routes to contact.
