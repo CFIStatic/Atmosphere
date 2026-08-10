@@ -29,6 +29,8 @@ targets:
         GENERATE_INFOPLIST_FILE: false
         TARGETED_DEVICE_FAMILY: "1"
         SUPPORTS_MACCATALYST: false
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: false
+        SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: false
     info:
       path: AtmosphereFieldCapture/Info.plist
       properties:

@@ -220,13 +220,16 @@ final class AtmosphereClient: ObservableObject {
     }
 
     func ingestGeometry(sessionId: String, body: IngestBody) async throws {
-        let _: EmptyJSON = try await post(
+        let _: Ack = try await post(
             path: "/api/geometry/sessions/\(sessionId)/ingest",
             body: body
         )
     }
 
     // MARK: - HTTP
+
+    /// Decodable stand-in when the API returns `{}` or a body we ignore.
+    private struct Ack: Decodable {}
 
     private func get<Response: Decodable>(path: String) async throws -> Response {
         try await send(path: path, method: "GET", bodyData: nil, authed: true)
