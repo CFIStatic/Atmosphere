@@ -29,7 +29,12 @@ jobs:
         working-directory: backend
       - run: npm run typecheck
         working-directory: backend
+      - run: npm test
+        working-directory: backend
       - run: npm run build
+        working-directory: backend
+      - name: Migration inventory
+        run: npm run check:migrations
         working-directory: backend
 
   frontend:
@@ -43,6 +48,8 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+        working-directory: frontend
+      - run: npm test
         working-directory: frontend
       # `npm run build` runs `tsc -b` first, so this covers the typecheck too.
       - run: npm run build
@@ -88,3 +95,15 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: backend/supabase/tests/run.sh -h localhost -p 5432 -U postgres
+      - name: Project Manager schema tests
+        env:
+          PGPASSWORD: postgres
+        run: supabase/tests/run.sh -h localhost -p 5432 -U postgres
+
+  docker-backend:
+    name: Backend image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build -f backend/Dockerfile -t atmosphere-backend:ci ./backend

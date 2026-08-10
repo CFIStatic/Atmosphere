@@ -248,18 +248,34 @@ back to copy-link.
 cd backend && npm run typecheck && npm test && npm run build
 
 # Frontend
-cd frontend && npm run build
+cd frontend && npm test && npm run build
+
+# Migration inventory (two trees — see docs/production.md)
+cd backend && npm run check:migrations
 
 # Synthetic A/V → frames → catalog → twin (when configured)
 cd backend && npm run smoke:synthetic
 ```
 
-CI runs Backend, Frontend, Migrations, and Agent typechecks on push.
+CI runs backend/frontend **tests**, builds, Agent typecheck, migration SQL
+suites, migration inventory, and a backend Docker image build on every push.
+
+## Production
+
+See **[`docs/production.md`](docs/production.md)** for the Work Verification
+go-live checklist, required env vars, health probes (`/api/health`,
+`/api/ready`), migration apply order, and Docker Compose sketch.
+
+```bash
+# Production-shaped local stack (needs a filled backend/.env)
+docker compose up --build
+```
 
 ## Related docs
 
 | Doc | Topic |
 | --- | --- |
+| [`docs/production.md`](docs/production.md) | Production deploy + go-live checklist |
 | [`fieldcapture/README.md`](fieldcapture/README.md) | Live capture + token query params |
 | [`verifier/README.md`](verifier/README.md) | Evidence portal rules and access model |
 | [`apps/field-ios/README.md`](apps/field-ios/README.md) | Native Field Capture / RoomPlan status |

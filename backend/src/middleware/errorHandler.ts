@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
 import { HttpError } from '../lib/errors.js';
 import { config } from '../config.js';
+import { logger } from '../lib/logger.js';
 
 /** 404 handler for unmatched routes. */
 export function notFound(_req: Request, res: Response): void {
@@ -11,7 +12,7 @@ export function notFound(_req: Request, res: Response): void {
 /** Central error handler — converts thrown errors into consistent JSON. */
 export function errorHandler(
   err: unknown,
-  _req: Request,
+  req: Request,
   res: Response,
    
   _next: NextFunction,
@@ -46,7 +47,12 @@ export function errorHandler(
   }
 
   // Unknown/unexpected error — log server-side, return generic message.
-  console.error('[unhandled error]', err);
+  logger.error('unhandled_error', {
+    requestId: req.requestId,
+    path: req.path,
+    method: req.method,
+    err: err instanceof Error ? { name: err.name, message: err.message, stack: err.stack } : String(err),
+  });
   res.status(500).json({
     error: 'Internal server error',
     code: 'internal_error',

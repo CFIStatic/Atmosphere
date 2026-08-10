@@ -28,10 +28,11 @@
     "check": "npm run typecheck && npm test && npm run check:backup && npm run check:csv",
     "check:backup": "tsx src/scripts/checkBackupArchive.ts",
     "check:csv": "tsx src/scripts/checkCsvImport.ts",
+    "check:migrations": "node scripts/check-migrations.mjs",
     "test:vitest": "vitest run --passWithNoTests"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
