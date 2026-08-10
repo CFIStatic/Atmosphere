@@ -8,10 +8,11 @@ accent, monospace as the "audit record" voice). Positioned written for service c
 
 | File              | Page                                                        |
 | ----------------- | ----------------------------------------------------------- |
-| `index.html`      | Home — Work Verification for service contractors, two-product overview |
+| `index.html`      | Home — Work Verification for service contractors, three-product overview |
 | `verification.html` | Evidence Platform — record, verify, store, and share |
 | `how-it-works.html` | How it works — the full Work Verification pipeline, end to end |
 | `field.html`      | Field Capture — film and check work on site |
+| `helmets-vests.html` | Helmets &amp; Vests — hard-hat and chest mounts that hold the phone |
 | `platform.html`   | Redirect → home (legacy four-platform page) |
 | `sales.html`      | Redirect → home (legacy) |
 | `operations.html` | Redirect → home (legacy) |
@@ -41,6 +42,10 @@ dark themes) and `assets/site.js` (receipt replay + the careers form).
   Includes Field Capture and the Evidence Platform. Both parts are required.
 - **Job usage** — unique jobs processed per billing period; plans include an allowance
   with per-job overage pricing (all configurable in `metering_plan_versions`).
+- **Helmets & Vests** — physical mounts, bought outright per tech and billed outside the
+  subscription. `helmets-vests.html` carries the SKU table; the price column ships as a
+  `$—` placeholder with a visible "prices not published yet" note, so an unpriced page
+  can never read as a claim about cost. Fill all three rows together before launch.
 - **Exceptional compute** — Atmosphere Compute Units for heavy workloads (video analysis,
   large documents). Internal AI/token costs are tracked in `private.ai_usage_events`
   but never shown on customer invoices.
@@ -178,6 +183,9 @@ dashboard. Unset, the site keeps its designed early-access surfaces.
 
 - The careers listings and benefits are placeholders, and the on-site roles
   still need a real city named.
+- Helmets & Vests has no prices and no photography — the SKU table's price column is a
+  `$—` placeholder and the mounts are described by fit and use, not by measured specs.
+  Set real prices, and check the fit claims against the actual hardware, before launch.
 - Privacy and terms are plain-language drafts and need review by counsel.
 - The investor page is a designed surface — the data room behind it (auth +
   documents) doesn't exist yet; "Request access" routes to contact.

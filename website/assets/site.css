@@ -443,7 +443,7 @@ a { color: inherit; }
 .feature p { margin: 0; font-size: 14.5px; line-height: 1.6; color: var(--ink-soft); }
 
 /* Four platforms read as a set, so they wrap 4 → 2 → 1, never 3 + 1. */
-.plat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.plat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 1080px) { .plat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 620px)  { .plat-grid { grid-template-columns: 1fr; } }
 
