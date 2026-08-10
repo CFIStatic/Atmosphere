@@ -71,7 +71,8 @@ AtmosphereFieldCapture/
 2. Later launches open Today already connected.
 3. Confirm today’s jobs (tap one if several) → **Start the day**.
    Or **search** by address / job # / title when something comes up that you
-   were not assigned to — only this company’s open jobs can receive a day film.
+   were not assigned to — only this company’s Field Capture seats can browse.
+   Outside trades working for a GC must be invited per job as subcontractors.
 4. Hold **Finish the day** — proof upload into that job → optional RoomPlan twin.
 
 AI dictation and twin review stay in the **office Verifier**.

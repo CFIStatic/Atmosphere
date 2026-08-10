@@ -509,9 +509,11 @@ export function JobIntakePage() {
           <div className="rounded-xl glass-card p-5">
             <h2 className="text-base font-semibold text-ink-900">Invite a subcontractor</h2>
             <p className="mt-1 text-sm text-ink-600">
-              Outside your company — Atmosphere emails them the invite. If they already have an
-              account, the job shows there. If not, the email walks them through creating one with
-              that address.
+              Outside your company and working for you as the general contractor — they must be
+              invited with the <span className="font-medium text-ink-900">subcontractor</span>{' '}
+              designation (this form). They only see jobs they are invited to; they cannot search
+              your whole book. Atmosphere emails the invite. If they already have an account, the job
+              shows under My jobs; if not, the email walks them through creating one.
             </p>
             <div className="mt-3 grid gap-2 sm:grid-cols-3">
               <label className="block text-xs font-medium text-ink-600">

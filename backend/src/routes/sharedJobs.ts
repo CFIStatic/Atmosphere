@@ -254,17 +254,22 @@ sharedJobsRouter.post(
       const { orgId, userId, supabase } = await requireOrgContext(req);
       const input = partySchema.parse(req.body ?? {});
 
+      // Default outside trades to subcontractor — workers filming for a GC
+      // from another company must carry that designation on the job party.
+      const role = input.role ?? 'subcontractor';
+      const trade =
+        input.trade ?? (role === 'subcontractor' ? 'subcontractor' : null);
       const { data, error } = await supabase
         .from('job_parties')
         .insert({
           org_id: orgId,
           job_id: req.params.jobId,
           company: input.company,
-          trade: input.trade ?? null,
+          trade,
           contact_name: input.contactName ?? null,
           email: input.email ?? null,
           phone: input.phone ?? null,
-          role: input.role ?? 'subcontractor',
+          role,
           created_by: userId,
         })
         .select(`${PARTY_SELECT}, access_token`)

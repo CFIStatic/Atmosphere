@@ -818,9 +818,10 @@ function FieldCaptureAppSection() {
         <li>Tap <span className="font-medium text-ink-900">Sign in &amp; connect phone</span>. You won’t be asked again on that device.</li>
       </ol>
       <p className="mt-4 text-sm text-ink-600">
-        Jobs you film on the phone appear in Verifier / evidence for your org. On the phone (or under{' '}
-        <span className="font-medium text-ink-900">Field → Film a job</span>), search your company’s jobs by
-        address or job # to file footage on a job you were not assigned to — other companies never appear.
+        Jobs you film on the phone appear in Verifier / evidence for your org. Your Field Capture team can
+        search this company’s jobs under <span className="font-medium text-ink-900">Field → Film a job</span>{' '}
+        (or on the phone). Outside trades working for you as the GC must be invited to each job as a{' '}
+        <span className="font-medium text-ink-900">subcontractor</span> — they only see invited jobs.
         Disconnect only from the app’s Account menu if you hand the phone to someone else.
       </p>
     </Card>

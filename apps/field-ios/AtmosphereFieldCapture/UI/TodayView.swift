@@ -22,7 +22,7 @@ struct TodayView: View {
                         .foregroundStyle(FieldTheme.ink)
 
                     Text(
-                        "One button, once a day. Tap a job — or search \(auth.orgName ?? "your company")’s open jobs if something comes up off-schedule — then hold when you are done. Only this company’s jobs appear here. The film is video + audio, filed to the office evidence library."
+                        "One button, once a day. Tap a job — or search \(auth.orgName ?? "your company")’s open jobs if something comes up off-schedule — then hold when you are done. This is for your company’s Field Capture team only. Subcontractors working for a GC must open their invite link. The film is video + audio, filed to the office evidence library."
                     )
                     .font(.system(size: 15))
                     .foregroundStyle(FieldTheme.muted)

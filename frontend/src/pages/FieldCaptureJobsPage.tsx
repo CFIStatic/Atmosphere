@@ -3,11 +3,10 @@ import { api, type FieldAppJob, type FieldAppOrgRef } from '../lib/api';
 import { AppShell, ErrorNote, PageHeader, PanelSpinner } from '../components/AppShell';
 
 /**
- * Company Field Capture job finder — search open jobs **in this org only**
- * and open the crew recorder, even when the worker was not on the invite list.
- *
- * Never lists another company's jobs. Capture-link creates (or reuses) the
- * Field Capture party for this account on the selected job.
+ * GC Field Capture job finder — for this company’s Field Capture seats only.
+ * Search open jobs in the org and open the recorder even if not personally
+ * invited. Subcontractors working for a GC must use a per-job invite with the
+ * subcontractor designation instead — they never browse the GC’s book here.
  */
 export function FieldCaptureJobsPage() {
   const [q, setQ] = useState('');
@@ -56,7 +55,7 @@ export function FieldCaptureJobsPage() {
       <PageHeader
         eyebrow="On site"
         title="Film a job"
-        description={`Search open jobs for ${company} only — including jobs you were not assigned to — and open Field Capture when something comes up off-schedule. Other companies’ jobs never appear here.`}
+        description={`For ${company}’s Field Capture team only. Search this company’s open jobs — including ones you were not assigned to — when something comes up off-schedule. Subcontractors working for a general contractor must be invited to each job as a subcontractor; they do not use this screen.`}
       />
 
       <label className="block max-w-xl">

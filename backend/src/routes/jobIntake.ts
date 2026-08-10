@@ -10,6 +10,7 @@ import { sendSystemMail } from '../lib/systemMail.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { config } from '../config.js';
 import { recordAccess } from './proofOfWork.js';
+import { partyDesignationForInvite } from './fieldAppAccess.js';
 
 /**
  * How a job gets here, and what that costs.
@@ -328,7 +329,10 @@ const inviteeSchema = z
     company: z.string().trim().min(1).max(160).optional(),
     email: z.string().trim().email().max(200).nullable().optional(),
     trade: z.string().trim().max(60).optional(),
-    /** Outside the org — mainly subcontractors invited by email. */
+    /**
+     * Outside the org — workers filming for this general contractor.
+     * Must be invited with the subcontractor designation (trade + party role).
+     */
     external: z.boolean().optional(),
   })
   .superRefine((person, ctx) => {
@@ -340,6 +344,18 @@ const inviteeSchema = z
         message: 'Email is required to invite someone outside the company.',
         path: ['email'],
       });
+    }
+    const external = Boolean(person.external || !person.userId);
+    if (external) {
+      const trade = (person.trade || 'subcontractor').trim().toLowerCase();
+      if (trade !== 'subcontractor') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'Workers outside the company must be invited as subcontractors when working for a general contractor.',
+          path: ['trade'],
+        });
+      }
     }
   });
 
@@ -557,17 +573,19 @@ jobIntakeRouter.post('/intake/approve', async (req: Request, res: Response, next
       const company = (person.company?.trim() || person.fullName).slice(0, 160);
       const contactName = person.fullName;
       const email = person.email?.trim().toLowerCase() || null;
-      const external = Boolean(person.external || !person.userId);
+      // Outside the GC company → always subcontractor designation.
+      // Internal Field Capture seats → GC-side party on the job record.
+      const { external, trade, role: partyRole } = partyDesignationForInvite(person);
       const { data: party, error: partyError } = await supabase
         .from('job_parties')
         .insert({
           org_id: orgId,
           job_id: jobId,
           company,
-          trade: person.trade || (external ? 'subcontractor' : 'field_capture'),
+          trade,
           contact_name: contactName,
           email,
-          role: 'subcontractor',
+          role: partyRole,
           invited_at: new Date().toISOString(),
           created_by: userId,
         })

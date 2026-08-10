@@ -2,10 +2,11 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { requireOrgContext } from '../lib/orgContext.js';
+import { requireOrgContext, type OrgContext } from '../lib/orgContext.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { badRequest, HttpError, serviceUnavailable } from '../lib/errors.js';
 import { createUploadUrl, recordProof } from './proofOfWork.js';
+import { assertInternalFieldAppSeat } from './fieldAppAccess.js';
 import {
   FIELD_JOB_EXCLUDED_STATUSES,
   buildFieldJobSearchOr,
@@ -21,13 +22,19 @@ import {
  * with email+password, then uploads day films into `job_proofs` so the office
  * evidence library and job record see them — not a parallel catalog-only path.
  *
- * Workers can film any open job in the org (assigned or not). Search finds a
- * job by address / number / title when something comes up off-schedule; the
- * first upload creates a durable Field Capture party on that job.
+ * Company-wide today/search is for the GC’s Field Capture seats only. Outside
+ * trades working for a general contractor must be invited per job as
+ * subcontractors (share token / My jobs) — they do not browse the GC’s book.
  */
 export const fieldAppRouter = Router();
 
 fieldAppRouter.use(requireAuth);
+
+async function requireFieldAppOrg(req: Parameters<typeof requireOrgContext>[0]): Promise<OrgContext> {
+  const ctx = await requireOrgContext(req);
+  assertInternalFieldAppSeat(ctx.role);
+  return ctx;
+}
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -138,7 +145,7 @@ fieldAppRouter.get('/me', async (req: Request, res: Response, next: NextFunction
  */
 fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { orgId, supabase } = await requireOrgContext(req);
+    const { orgId, supabase } = await requireFieldAppOrg(req);
     const { data: org } = await supabase.from('orgs').select('id, name').eq('id', orgId).maybeSingle();
     const jobs = await listOpenFieldJobs(supabase, orgId, { limit: 50 });
     res.json({
@@ -163,7 +170,7 @@ fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunct
  */
 fieldAppRouter.get('/jobs/search', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { orgId, supabase } = await requireOrgContext(req);
+    const { orgId, supabase } = await requireFieldAppOrg(req);
     const { data: org } = await supabase.from('orgs').select('id, name').eq('id', orgId).maybeSingle();
     const orgOut = {
       id: orgId,
@@ -263,7 +270,7 @@ fieldAppRouter.post(
   '/jobs/:jobId/capture-link',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { orgId, userId, supabase } = await requireOrgContext(req);
+      const { orgId, userId, supabase } = await requireFieldAppOrg(req);
       const { data: profile } = await supabase
         .from('profiles')
         .select('full_name')
@@ -295,7 +302,7 @@ fieldAppRouter.post(
   '/jobs/:jobId/proof/upload-url',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { orgId, userId, supabase } = await requireOrgContext(req);
+      const { orgId, userId, supabase } = await requireFieldAppOrg(req);
       const { data: profile } = await supabase
         .from('profiles')
         .select('full_name')
@@ -331,7 +338,7 @@ fieldAppRouter.post(
   '/jobs/:jobId/proof',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { orgId, userId, supabase } = await requireOrgContext(req);
+      const { orgId, userId, supabase } = await requireFieldAppOrg(req);
       const { data: profile } = await supabase
         .from('profiles')
         .select('full_name')
