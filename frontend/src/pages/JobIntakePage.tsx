@@ -8,6 +8,8 @@ import {
   type IntakeApproveResult,
 } from '../lib/api';
 import { SpinnerIcon } from '../components/icons';
+import { useFeatureTimer } from '../hooks/useFeatureTimer';
+import { useExperiment } from '../hooks/useExperiment';
 
 /**
  * AI-first office intake — one paste, one review, one approve.
@@ -45,6 +47,13 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function JobIntakePage() {
   const navigate = useNavigate();
+  useFeatureTimer('job_intake');
+  // Paused by default in DB — assign returns null until status = running.
+  const intakeCta = useExperiment('intake_cta_copy');
+  const approveLabel =
+    intakeCta.variantKey === 'proof_first'
+      ? 'Publish brief & invite crew'
+      : 'Approve & invite';
   const [step, setStep] = useState<Step>('paste');
   const [text, setText] = useState('');
   const [proposal, setProposal] = useState<IntakeProposal | null>(null);
@@ -156,6 +165,10 @@ export function JobIntakePage() {
         facts: proposal.facts,
         scope: proposal.scope,
         invitees,
+      });
+      intakeCta.track('conversion', {
+        inviteCount: invitees.length,
+        scopeLines: proposal.scope.length,
       });
       setResult(res);
       setStep('done');
@@ -608,10 +621,12 @@ export function JobIntakePage() {
             <button
               type="submit"
               disabled={busy || !proposal.scope.length || inviteTotal < 1}
+              data-experiment="intake_cta_copy"
+              data-variant={intakeCta.variantKey ?? 'control'}
               className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-ink-900 disabled:opacity-50"
             >
               {busy && <SpinnerIcon className="h-4 w-4 animate-spin" />}
-              Approve &amp; invite
+              {approveLabel}
             </button>
             <p className="text-xs text-ink-500">
               {inviteTotal} invite{inviteTotal === 1 ? '' : 's'} · job file, brief, and capture

@@ -19,6 +19,24 @@ import {
 export type { ProductIntelligence, ProductInsight, AreaUsage, InsightKind } from './productInsights.js';
 export type AnalyticsScope = 'investor' | 'internal';
 
+export interface ExperimentVariantStats {
+  variantKey: string;
+  label: string;
+  weight: number;
+  assignments: number;
+  exposures: number;
+  conversions: number;
+  events: number;
+}
+
+export interface ExperimentStats {
+  experimentKey: string;
+  name: string;
+  status: string;
+  description: string | null;
+  variants: ExperimentVariantStats[];
+}
+
 /** 'internal' outranks 'investor'; mirrors the enum ordering in the database. */
 const SCOPE_RANK: Record<AnalyticsScope, number> = { investor: 1, internal: 2 };
 
@@ -375,6 +393,35 @@ export async function getRetention(
     monthOffset: num(r.month_offset),
     activeOrgs: num(r.active_orgs),
     retentionPct: numOrNull(r.retention_pct),
+  }));
+}
+
+export async function getExperiments(
+  supabase: SupabaseClient,
+  from: Date,
+  to: Date,
+): Promise<ExperimentStats[]> {
+  const { data, error } = await supabase.rpc('analytics_experiments', {
+    p_from: from.toISOString(),
+    p_to: to.toISOString(),
+  });
+  if (error) throw rpcError(error, 'analytics_experiments_failed');
+
+  const rows = (data ?? []) as Array<Record<string, unknown>>;
+  return rows.map((r) => ({
+    experimentKey: String(r.experiment_key ?? r.experimentKey ?? ''),
+    name: String(r.name ?? ''),
+    status: String(r.status ?? ''),
+    description: (r.description as string | null) ?? null,
+    variants: ((r.variants as Array<Record<string, unknown>>) ?? []).map((v) => ({
+      variantKey: String(v.variantKey ?? v.variant_key ?? ''),
+      label: String(v.label ?? ''),
+      weight: num(v.weight),
+      assignments: num(v.assignments),
+      exposures: num(v.exposures),
+      conversions: num(v.conversions),
+      events: num(v.events),
+    })),
   }));
 }
 

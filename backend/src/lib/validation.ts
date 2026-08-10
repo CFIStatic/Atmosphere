@@ -259,6 +259,26 @@ export const featureHeartbeatSchema = z.object({
   client: z.enum(['web', 'mobile', 'desktop', 'api']).default('web'),
 });
 
+const experimentKeyField = z
+  .string({ required_error: 'experimentKey is required' })
+  .trim()
+  .regex(/^[a-z][a-z0-9_]{1,48}$/, 'Invalid experiment key');
+
+/** POST /api/telemetry/experiment/assign */
+export const experimentAssignSchema = z.object({
+  experimentKey: experimentKeyField,
+});
+
+/** POST /api/telemetry/experiment/event */
+export const experimentEventSchema = z.object({
+  experimentKey: experimentKeyField,
+  eventName: z
+    .string({ required_error: 'eventName is required' })
+    .trim()
+    .regex(/^[a-z][a-z0-9_]{1,48}$/, 'Invalid event name'),
+  props: z.record(z.unknown()).optional().default({}),
+});
+
 /* -------------------------------------------------------------------------
  * Audit ledger
  *

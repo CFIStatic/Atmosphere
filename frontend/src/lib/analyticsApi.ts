@@ -252,11 +252,34 @@ function rangeQuery({ from, to, months }: RangeParams): string {
   )}&months=${months}`;
 }
 
+export interface ExperimentVariantStats {
+  variantKey: string;
+  label: string;
+  weight: number;
+  assignments: number;
+  exposures: number;
+  conversions: number;
+  events: number;
+}
+
+export interface ExperimentStats {
+  experimentKey: string;
+  name: string;
+  status: string;
+  description: string | null;
+  variants: ExperimentVariantStats[];
+}
+
 export const analyticsApi = {
   access: () => request<AnalyticsAccess>('/api/analytics/access'),
 
   overview: (range: RangeParams) =>
     request<OverviewPayload>(`/api/analytics/overview?${rangeQuery(range)}`),
+
+  experiments: (range: RangeParams) =>
+    request<{ experiments: ExperimentStats[] }>(
+      `/api/analytics/experiments?${rangeQuery(range)}`,
+    ),
 
   /** Absolute URL for an Excel download — used as an anchor href, so the browser
    *  handles the file save and cookies ride along automatically. */

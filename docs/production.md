@@ -39,7 +39,7 @@ Fail-loud at boot when `NODE_ENV=production` (see `backend/src/lib/productionGua
 | `SUPABASE_URL` / `SUPABASE_ANON_KEY` | Auth + RLS-backed reads |
 | `SUPABASE_SERVICE_ROLE_KEY` | PIN unlock, signed uploads, media catalog, schedulers |
 | `DEVICE_PEPPER` | PIN hashing (never store in the DB) |
-| `CONTACT_TO_EMAIL` / `CAREERS_TO_EMAIL` | Public site forms — **company** mailboxes only |
+| `CONTACT_TO_EMAIL` / `CAREERS_TO_EMAIL` | Public site forms — defaults to `jack@jettx.ai` |
 | `SMTP_*` + `CAREERS_FROM_EMAIL` | Atmosphere-sent invites and field OTPs |
 | `MEDIA_BACKEND=supabase` | Do not use `memory` or the `s3` stub in prod |
 
@@ -59,26 +59,32 @@ Full catalogue: `backend/.env.example`.
 
 ## Migration apply order
 
-There are **two** trees today:
+The two directories are a **byte-identical mirror** (CI enforces this):
 
-1. **`backend/supabase/migrations/`** — canonical for Work Verification (jobs,
-   proof, field identity, media, twins, storage).
-2. **`supabase/migrations/`** — broader platform (PM, billing, sales, cyber, …).
+- `backend/supabase/migrations/`
+- `supabase/migrations/`
 
-Overlapping filenames must be byte-identical. Inventory and drift check:
+Apply **one** of them, once, in filename order. Never apply both.
 
 ```bash
 npm run check:migrations --prefix backend
 ```
 
-**Minimum for Work Verification:** apply every file in
-`backend/supabase/migrations/` in filename order against the production
-Postgres (Supabase SQL editor, `supabase db push`, or `psql`).
-
-**Full platform:** additionally apply files that exist only under
-`supabase/migrations/`. Never apply an overlapping file twice.
-
 `db/*.sql` are reference/installers — prefer the timestamped migrations.
+
+### Internal analytics access
+
+Time-spent telemetry and the `/analytics` dashboard are gated by
+`public.analytics_staff`. Grant yourself after signup:
+
+```bash
+cd backend && npm run analytics:grant -- jack@jettx.ai internal
+```
+
+A/B experiments live in `public.experiments` (see migration
+`20260816090000_product_experiments_and_verification_catalog.sql`). Flip
+`status` to `running` to start assigning variants; results appear on
+`/analytics` under **A/B tests**.
 
 ## Health checks
 

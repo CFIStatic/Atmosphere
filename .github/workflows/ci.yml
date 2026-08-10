@@ -25,6 +25,9 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: backend/package-lock.json
+      # Synthetic A/V pipeline tests spawn ffmpeg; without it they fail with ENOENT.
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: npm ci
         working-directory: backend
       - run: npm run typecheck

@@ -2,10 +2,24 @@
  * Build short synthetic MP4s with H.264 + AAC so pipeline tests do not need
  * real field footage. Requires ffmpeg on PATH.
  */
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdir, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+
+/** True when ffmpeg (or FFMPEG_PATH) can be spawned. */
+export function ffmpegAvailable(): boolean {
+  const ffmpeg = process.env.FFMPEG_PATH ?? 'ffmpeg';
+  try {
+    const result = spawnSync(ffmpeg, ['-version'], {
+      stdio: 'ignore',
+      timeout: 5_000,
+    });
+    return result.status === 0;
+  } catch {
+    return false;
+  }
+}
 
 async function run(bin: string, args: string[]): Promise<void> {
   await new Promise<void>((resolve, reject) => {

@@ -1,0 +1,15 @@
+-- 20260727125059_billing_grant_initial_period_credits
+--
+-- ALREADY APPLIED to Supabase project ccxatzfsvzetciiwsjlj as version 20260727125059.
+-- This file intentionally contains no DDL: it exists so the repository's
+-- migration history matches production, which is what the Supabase GitHub
+-- check compares. Running it is a no-op; the schema it describes is live.
+--
+-- The authoritative statement text is recorded on the project itself:
+--   select array_to_string(statements, '') from supabase_migrations.schema_migrations
+--   where version = '20260727125059';
+--   -- md5 fccedaeaa57252cb1d1954d336a1553c, 3295 bytes
+--
+-- To restore the full text here, run the query above and replace this file's
+-- contents verbatim (the md5 must match). Do not write new DDL under this
+-- version number.

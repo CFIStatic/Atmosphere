@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 /**
- * Inventory the two Supabase migration trees and fail if they drift in ways
- * that make production apply order ambiguous.
+ * Assert the two migration directories are a byte-identical mirror.
  *
- * Canonical product / verification path: backend/supabase/migrations/
- * Broader platform (PM, billing, sales, cyber, …): supabase/migrations/
+ * Canonical content lives in both:
+ *   - backend/supabase/migrations/  (BFF / CI / historical path)
+ *   - supabase/migrations/          (Supabase CLI convention)
  *
- * Overlapping filenames MUST be byte-identical. Unique files are reported so
- * operators know both trees must be applied for a full platform schema.
+ * They must stay identical. Apply either tree once — never both.
  *
  * Usage: node backend/scripts/check-migrations.mjs
  */
@@ -35,59 +34,51 @@ function sha(path) {
 const backend = listSql(backendDir);
 const platform = listSql(rootDir);
 
+let failed = false;
+
+if (backend.length === 0) {
+  console.error('ERROR: backend/supabase/migrations is empty');
+  failed = true;
+}
+
+if (backend.length !== platform.length) {
+  console.error(
+    `ERROR: migration count mismatch — backend=${backend.length} supabase=${platform.length}`,
+  );
+  failed = true;
+}
+
 const backendSet = new Set(backend);
 const platformSet = new Set(platform);
-const overlap = backend.filter((f) => platformSet.has(f));
-const backendOnly = backend.filter((f) => !platformSet.has(f));
-const platformOnly = platform.filter((f) => !backendSet.has(f));
+const onlyBackend = backend.filter((f) => !platformSet.has(f));
+const onlyPlatform = platform.filter((f) => !backendSet.has(f));
 
-let drift = 0;
-const identical = [];
-const divergent = [];
+if (onlyBackend.length || onlyPlatform.length) {
+  console.error('ERROR: migration filename sets differ');
+  for (const f of onlyBackend) console.error(`  only in backend: ${f}`);
+  for (const f of onlyPlatform) console.error(`  only in supabase: ${f}`);
+  failed = true;
+}
 
-for (const name of overlap) {
-  const a = sha(join(backendDir, name));
-  const b = sha(join(rootDir, name));
-  if (a === b) identical.push(name);
-  else {
-    divergent.push(name);
-    drift += 1;
+let divergent = 0;
+for (const name of backend) {
+  if (!platformSet.has(name)) continue;
+  if (sha(join(backendDir, name)) !== sha(join(rootDir, name))) {
+    console.error(`ERROR: content drift: ${name}`);
+    divergent += 1;
+    failed = true;
   }
 }
 
 console.log('Atmosphere migration inventory');
 console.log('==============================');
-console.log(`backend/supabase/migrations: ${backend.length} files`);
-console.log(`supabase/migrations:         ${platform.length} files`);
-console.log(`overlap:                     ${overlap.length} (${identical.length} identical, ${divergent.length} divergent)`);
-console.log(`backend-only:                ${backendOnly.length}`);
-console.log(`platform-only:               ${platformOnly.length}`);
+console.log(`mirrored files: ${backend.length}`);
+console.log(`content drift:  ${divergent}`);
 console.log('');
+console.log('Apply once (either directory — they are identical):');
+console.log('  backend/supabase/migrations/   OR   supabase/migrations/');
+console.log('in filename order against the target Postgres.');
+console.log('See docs/production.md.');
 
-if (divergent.length) {
-  console.error('ERROR: overlapping migrations differ in content:');
-  for (const name of divergent) console.error(`  - ${name}`);
-  console.error('Resolve by making the files identical or renaming one side.');
-}
-
-console.log('Apply guidance (Work Verification path)');
-console.log('---------------------------------------');
-console.log('1. Apply ALL of backend/supabase/migrations/ in filename order');
-console.log('   (jobs, proof, field identity, media, twins, storage bucket).');
-console.log('2. If you also ship PM / billing / sales / cyber, additionally');
-console.log('   apply supabase/migrations/ files that are NOT in the overlap');
-console.log('   list — never re-apply an overlapping file twice.');
-console.log('3. Create Storage bucket job-proofs if the storage migration is');
-console.log('   not enough for your Supabase project settings.');
-console.log('');
-console.log('See docs/production.md for the full production checklist.');
-
-if (drift > 0) process.exit(1);
-
-// Soft signal: empty trees would be catastrophic.
-if (backend.length === 0) {
-  console.error('ERROR: backend/supabase/migrations is empty');
-  process.exit(1);
-}
-
-console.log('OK — no divergent overlaps.');
+if (failed) process.exit(1);
+console.log('OK — migration trees are identical mirrors.');

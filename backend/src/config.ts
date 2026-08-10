@@ -290,17 +290,16 @@ export const config = {
   contact: {
     // Where messages from the corporate site's contact form land. Falls back
     // to the careers inbox so one configured address serves both forms.
-    // Production refuses personal-inbox defaults — see productionGuards.ts.
+    // Production refuses consumer personal inboxes — see productionGuards.ts.
     toEmail:
       process.env.CONTACT_TO_EMAIL ??
       process.env.CAREERS_TO_EMAIL ??
-      (isProduction ? '' : 'dev-contact@localhost'),
+      'jack@jettx.ai',
   },
 
   careers: {
     // Where job applications from the corporate site's careers page land.
-    // Production requires an explicit company mailbox (productionGuards.ts).
-    toEmail: process.env.CAREERS_TO_EMAIL ?? (isProduction ? '' : 'dev-careers@localhost'),
+    toEmail: process.env.CAREERS_TO_EMAIL ?? 'jack@jettx.ai',
     // Envelope sender for the application emails. Many SMTP providers require
     // this to be an address the account is allowed to send as.
     fromEmail: process.env.CAREERS_FROM_EMAIL ?? process.env.SMTP_USER ?? '',

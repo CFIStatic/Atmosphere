@@ -7,6 +7,7 @@ import { HttpError } from '../lib/errors.js';
 import {
   getAccess,
   getAccounts,
+  getExperiments,
   getFeatures,
   getMonthly,
   getOverview,
@@ -133,6 +134,21 @@ analyticsRouter.get(
       const { from, to } = parseRange(req);
       const supabase = createUserClient(req.accessToken!);
       res.json(await getAdminMeteringAnalytics(supabase, from.toISOString(), to.toISOString()));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** A/B experiment funnel — Atmosphere internal staff only. */
+analyticsRouter.get(
+  '/experiments',
+  requireAnalytics('internal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { from, to } = parseRange(req);
+      const supabase = createUserClient(req.accessToken!);
+      res.json({ experiments: await getExperiments(supabase, from, to) });
     } catch (err) {
       next(err);
     }
