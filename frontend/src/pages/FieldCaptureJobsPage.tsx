@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, type FieldAppJob } from '../lib/api';
+import { api, type FieldAppJob, type FieldAppOrgRef } from '../lib/api';
 import { AppShell, ErrorNote, PageHeader, PanelSpinner } from '../components/AppShell';
 
 /**
- * Org Field Capture job finder — search any open job and open the crew
- * recorder, even when the worker was not on the invite list.
+ * Company Field Capture job finder — search open jobs **in this org only**
+ * and open the crew recorder, even when the worker was not on the invite list.
  *
- * Spur-of-the-moment footage still needs a party row for proofs; opening a
- * capture link creates (or reuses) the Field Capture party for this account.
+ * Never lists another company's jobs. Capture-link creates (or reuses) the
+ * Field Capture party for this account on the selected job.
  */
 export function FieldCaptureJobsPage() {
   const [q, setQ] = useState('');
   const [jobs, setJobs] = useState<FieldAppJob[] | null>(null);
+  const [org, setOrg] = useState<FieldAppOrgRef | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -22,6 +23,7 @@ export function FieldCaptureJobsPage() {
         ? await api.fieldAppSearchJobs(query.trim())
         : await api.fieldAppTodayJobs();
       setJobs(res.jobs);
+      setOrg(res.org);
     } catch (err) {
       setJobs([]);
       setError(err instanceof Error ? err.message : 'Could not load jobs.');
@@ -47,17 +49,19 @@ export function FieldCaptureJobsPage() {
     }
   }
 
+  const company = org?.name ?? 'your company';
+
   return (
     <AppShell>
       <PageHeader
         eyebrow="On site"
         title="Film a job"
-        description="Search any open job in your organization — assigned or not — and open Field Capture when something comes up off-schedule."
+        description={`Search open jobs for ${company} only — including jobs you were not assigned to — and open Field Capture when something comes up off-schedule. Other companies’ jobs never appear here.`}
       />
 
       <label className="block max-w-xl">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-400">
-          Find any job
+          Find a job at {company}
         </span>
         <input
           type="search"
@@ -68,8 +72,8 @@ export function FieldCaptureJobsPage() {
         />
       </label>
       <p className="mt-2 max-w-xl text-xs text-ink-500">
-        Selecting a job attaches your Field Capture account so the office can see the day film —
-        you do not need to have been on the original invite list.
+        Results are limited to {company}. Selecting a job attaches your Field Capture account so
+        your office can see the day film — you do not need to have been on the original invite list.
       </p>
 
       {error ? (
@@ -80,15 +84,15 @@ export function FieldCaptureJobsPage() {
 
       <div className="mt-6 max-w-2xl space-y-2">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-400">
-          {q.trim() ? 'Matching jobs' : 'Open jobs'}
+          {q.trim() ? `Matching ${company} jobs` : `${company} open jobs`}
         </p>
         {jobs === null ? (
           <PanelSpinner label="Loading jobs…" />
         ) : jobs.length === 0 ? (
           <p className="text-sm text-ink-500">
             {q.trim()
-              ? 'No open jobs match that search.'
-              : 'No open jobs yet. Create one in intake, then refresh.'}
+              ? `No open ${company} jobs match that search.`
+              : 'No open jobs yet for your company. Create one in intake, then refresh.'}
           </p>
         ) : (
           <ul className="divide-y divide-line rounded-xl border border-line bg-white">

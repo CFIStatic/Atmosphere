@@ -22,7 +22,7 @@ struct TodayView: View {
                         .foregroundStyle(FieldTheme.ink)
 
                     Text(
-                        "One button, once a day. Tap a job — or search any open job in \(auth.orgName ?? "your organization") if something comes up off-schedule — then hold when you are done. The film is video + audio, filed to the office evidence library."
+                        "One button, once a day. Tap a job — or search \(auth.orgName ?? "your company")’s open jobs if something comes up off-schedule — then hold when you are done. Only this company’s jobs appear here. The film is video + audio, filed to the office evidence library."
                     )
                     .font(.system(size: 15))
                     .foregroundStyle(FieldTheme.muted)
@@ -143,7 +143,7 @@ struct TodayView: View {
 
     private var searchField: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Find any job")
+            Text("Find a job at \(auth.orgName ?? "your company")")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(FieldTheme.faint)
                 .textCase(.uppercase)
@@ -175,7 +175,7 @@ struct TodayView: View {
             .onChange(of: searchDraft) { _, _ in
                 runSearch(immediate: false)
             }
-            Text("Use this when something comes up that you were not assigned to — pick the job, then start filming.")
+            Text("Only \(auth.orgName ?? "your company")’s jobs. Use this when something comes up that you were not assigned to — pick the job, then start filming.")
                 .font(.system(size: 12))
                 .foregroundStyle(FieldTheme.muted)
         }

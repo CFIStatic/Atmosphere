@@ -59,7 +59,7 @@ are prompted to create one with that exact address.
 ### Field Capture (crew)
 
 - **Web:** `fieldcapture/?token=<job-share-token>` — one-button video + mic
-- **Film a job** (`/field/film`) — org account search any open job (assigned or not) → capture link
+- **Film a job** (`/field/film`) — search this company’s open jobs (assigned or not) → capture link
 - **My jobs** (`/my-jobs`) — after claiming a link with email/phone OTP
 - **iOS (App Store path):** `apps/field-ios/` — Today list + search; same upload contract; RoomPlan twin later
 

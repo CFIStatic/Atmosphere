@@ -1028,7 +1028,7 @@ export interface FieldJobList {
   today: ClaimedJob[];
 }
 
-/** Open org job row returned by Field Capture today / search. */
+/** Open job in the caller's company (Field Capture today / search). */
 export interface FieldAppJob {
   id: string;
   number: string;
@@ -1037,6 +1037,11 @@ export interface FieldAppJob {
   at: string;
   status: string | null;
   placed: boolean;
+}
+
+export interface FieldAppOrgRef {
+  id: string;
+  name: string;
 }
 
 export interface FieldAppCaptureLink {
@@ -3125,12 +3130,15 @@ export const api = {
     }),
 
   // ---- Org Field Capture (same seat as the dashboard / iPhone app) ----
+  // Always scoped to the caller's company — never other orgs' jobs.
   fieldAppTodayJobs: () =>
-    request<{ jobs: FieldAppJob[] }>('/api/field-app/today', { method: 'GET' }),
+    request<{ jobs: FieldAppJob[]; org: FieldAppOrgRef }>('/api/field-app/today', {
+      method: 'GET',
+    }),
 
   fieldAppSearchJobs: (q: string, limit = 30) => {
     const params = new URLSearchParams({ q, limit: String(limit) });
-    return request<{ jobs: FieldAppJob[]; q: string }>(
+    return request<{ jobs: FieldAppJob[]; q: string; org: FieldAppOrgRef }>(
       `/api/field-app/jobs/search?${params.toString()}`,
       { method: 'GET' },
     );

@@ -39,8 +39,8 @@ final class FieldDaySession: ObservableObject {
         }
     }
 
-    /// Find any open org job so spur-of-the-moment footage can be filed
-    /// even when the worker was not on the invite list.
+    /// Find an open job in this company so spur-of-the-moment footage can be
+    /// filed even when the worker was not on the invite list (never other orgs).
     func searchJobs(api: AtmosphereClient, query: String) async {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         searchQuery = trimmed

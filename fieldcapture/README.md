@@ -5,8 +5,8 @@ Production crew app: **one button**, **video + microphone**, filed through a
 
 ## Run live
 
-Org teammates can open **Field → Film a job** in the dashboard, search any open
-job (even if they were not invited), and launch a live capture link.
+Org teammates can open **Field → Film a job** in the dashboard, search this
+company’s open jobs (even if they were not invited), and launch a live capture link.
 
 Serve this folder next to the API (same origin or pass `?api=`):
 

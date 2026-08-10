@@ -71,7 +71,7 @@ AtmosphereFieldCapture/
 2. Later launches open Today already connected.
 3. Confirm today’s jobs (tap one if several) → **Start the day**.
    Or **search** by address / job # / title when something comes up that you
-   were not assigned to — any open org job can receive a day film.
+   were not assigned to — only this company’s open jobs can receive a day film.
 4. Hold **Finish the day** — proof upload into that job → optional RoomPlan twin.
 
 AI dictation and twin review stay in the **office Verifier**.
@@ -80,7 +80,7 @@ AI dictation and twin review stay in the **office Verifier**.
 
 1. `POST /api/auth/login` → `{ user, session: { accessToken, refreshToken } }`
 2. `GET /api/field-app/me` + `GET /api/field-app/today` (Bearer)
-3. `GET /api/field-app/jobs/search?q=` — find any open org job (assigned or not)
+3. `GET /api/field-app/jobs/search?q=` — find open jobs in this company only
 4. `POST /api/field-app/jobs/:jobId/proof/upload-url` → signed PUT URL
 5. PUT video bytes → `POST /api/field-app/jobs/:jobId/proof` (creates `job_proofs`)
 6. Optional: `POST /api/geometry/sessions` + `…/ingest` for RoomPlan

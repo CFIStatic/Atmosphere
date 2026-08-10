@@ -139,8 +139,15 @@ fieldAppRouter.get('/me', async (req: Request, res: Response, next: NextFunction
 fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { orgId, supabase } = await requireOrgContext(req);
+    const { data: org } = await supabase.from('orgs').select('id, name').eq('id', orgId).maybeSingle();
     const jobs = await listOpenFieldJobs(supabase, orgId, { limit: 50 });
-    res.json({ jobs });
+    res.json({
+      jobs,
+      org: {
+        id: orgId,
+        name: (org as { name?: string } | null)?.name ?? 'Organization',
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -149,13 +156,19 @@ fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunct
 /**
  * GET /api/field-app/jobs/search?q=&limit=
  *
- * Find any open org job by address, job #, title, claim #, or id — so a crew
- * can file spur-of-the-moment footage even when they were not invited to that
- * job. Empty `q` returns the same list as /today.
+ * Search open jobs in **this company only** (`org_id` from the session — never
+ * cross-tenant). Match by address, job #, title, claim #, or id so a crew can
+ * file spur-of-the-moment footage on a job they were not personally invited to.
+ * Empty `q` returns the same list as /today.
  */
 fieldAppRouter.get('/jobs/search', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { orgId, supabase } = await requireOrgContext(req);
+    const { data: org } = await supabase.from('orgs').select('id, name').eq('id', orgId).maybeSingle();
+    const orgOut = {
+      id: orgId,
+      name: (org as { name?: string } | null)?.name ?? 'Organization',
+    };
     const raw = typeof req.query.q === 'string' ? req.query.q : '';
     const safe = sanitizeFieldSearchQuery(raw);
     const limitRaw = Number(req.query.limit);
@@ -165,14 +178,14 @@ fieldAppRouter.get('/jobs/search', async (req: Request, res: Response, next: Nex
 
     if (!safe) {
       const jobs = await listOpenFieldJobs(supabase, orgId, { limit });
-      res.json({ jobs, q: '' });
+      res.json({ jobs, q: '', org: orgOut });
       return;
     }
 
     const propertyIds = await findPropertyIdsByQuery(supabase, orgId, safe);
     const orFilter = buildFieldJobSearchOr(safe, propertyIds);
     const jobs = await listOpenFieldJobs(supabase, orgId, { orFilter, limit });
-    res.json({ jobs, q: safe });
+    res.json({ jobs, q: safe, org: orgOut });
   } catch (err) {
     next(err);
   }

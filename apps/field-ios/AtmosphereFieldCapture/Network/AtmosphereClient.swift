@@ -121,7 +121,7 @@ final class AtmosphereClient: ObservableObject {
         return res.jobs
     }
 
-    /// Search any open org job (assigned or not) by address, #, title, or claim.
+    /// Search this company's open jobs only (by address, #, title, or claim).
     func searchJobs(q: String, limit: Int = 30) async throws -> [ExpectedJob] {
         var components = URLComponents()
         components.queryItems = [

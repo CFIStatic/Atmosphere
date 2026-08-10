@@ -819,9 +819,9 @@ function FieldCaptureAppSection() {
       </ol>
       <p className="mt-4 text-sm text-ink-600">
         Jobs you film on the phone appear in Verifier / evidence for your org. On the phone (or under{' '}
-        <span className="font-medium text-ink-900">Field → Film a job</span>), search by address or job # to
-        file footage on a job you were not assigned to. Disconnect only from the app’s Account menu if you
-        hand the phone to someone else.
+        <span className="font-medium text-ink-900">Field → Film a job</span>), search your company’s jobs by
+        address or job # to file footage on a job you were not assigned to — other companies never appear.
+        Disconnect only from the app’s Account menu if you hand the phone to someone else.
       </p>
     </Card>
   );
