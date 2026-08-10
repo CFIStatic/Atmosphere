@@ -44,7 +44,7 @@ are prompted to create one with that exact address.
 | Audience | What they get |
 | --- | --- |
 | **General contractors** | Job files, briefs, invites, Verifier library, custody |
-| **Field crews / subcontractors** | Token link → film the day; optional My jobs list across GCs |
+| **Field crews / subcontractors** | Token link → film the day; org techs can search any open job; optional My jobs list across GCs |
 | **Adjusters / examiners / counsel** | Shared Verifier links pinned to their Atmosphere account |
 
 ## Surfaces
@@ -59,8 +59,9 @@ are prompted to create one with that exact address.
 ### Field Capture (crew)
 
 - **Web:** `fieldcapture/?token=<job-share-token>` — one-button video + mic
+- **Film a job** (`/field/film`) — org account search any open job (assigned or not) → capture link
 - **My jobs** (`/my-jobs`) — after claiming a link with email/phone OTP
-- **iOS (App Store path):** `apps/field-ios/` — same upload contract; RoomPlan twin later
+- **iOS (App Store path):** `apps/field-ios/` — Today list + search; same upload contract; RoomPlan twin later
 
 ## Architecture
 
