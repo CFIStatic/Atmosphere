@@ -35,7 +35,7 @@ A durable, multi-stage **work verification** pipeline under `backend/src/verific
 
 ## Schema
 
-Migration: `backend/supabase/migrations/20260812090000_video_work_verification.sql`
+Migration: `backend/supabase/migrations/20260812090001_video_work_verification.sql`
 
 Key tables: `verification_videos` (optional FK to `job_proofs`), `video_processing_jobs`, `video_processing_steps`, `verification_frames`, `verification_scenes`, `ai_analysis_runs`, `frame_observations`, `temporal_change_events`, `verification_rules`, `verification_results`, `verification_evidence`, `human_review_tasks`, `human_review_decisions`, `verification_audit_events`, `verification_ai_costs`, `verification_usage_limits`.
 
@@ -113,7 +113,7 @@ Released dataset versions are immutable. Split assignment is project-grouped to 
 ```bash
 # Apply migration (Supabase CLI or SQL editor)
 supabase db push
-# or run backend/supabase/migrations/20260812090000_video_work_verification.sql
+# or run backend/supabase/migrations/20260812090001_video_work_verification.sql
 
 cd backend
 cp .env.example .env   # add keys below

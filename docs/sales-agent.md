@@ -47,7 +47,7 @@ Same schema as the outbound Sales Agent (org-scoped, RLS via
 | `sales_events` | Campaign timeline |
 | `sales_people_searches` | NL people-search history |
 
-Migrations: `supabase/migrations/20260728140000_sales_agent.sql`,
+Migrations: `supabase/migrations/20260728140001_sales_agent.sql`,
 `…_sales_people_search.sql`.
 
 Campaign statuses: `draft → researching → crawling → outreach → following_up → scheduling → completed` (plus `paused` / `failed`).
