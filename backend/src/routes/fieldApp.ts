@@ -2,10 +2,18 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { requireOrgContext } from '../lib/orgContext.js';
+import { requireOrgContext, type OrgContext } from '../lib/orgContext.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { badRequest, HttpError, serviceUnavailable } from '../lib/errors.js';
 import { createUploadUrl, recordProof } from './proofOfWork.js';
+import { assertInternalFieldAppSeat } from './fieldAppAccess.js';
+import {
+  FIELD_JOB_EXCLUDED_STATUSES,
+  buildFieldJobSearchOr,
+  mapFieldJobRow,
+  sanitizeFieldSearchQuery,
+  type FieldJobRow,
+} from './fieldAppJobs.js';
 
 /**
  * Field Capture (App Store) ↔ platform account bridge.
@@ -13,10 +21,20 @@ import { createUploadUrl, recordProof } from './proofOfWork.js';
  * Same Supabase user / org membership as the dashboard. The phone signs in
  * with email+password, then uploads day films into `job_proofs` so the office
  * evidence library and job record see them — not a parallel catalog-only path.
+ *
+ * Company-wide today/search is for the GC’s Field Capture seats only. Outside
+ * trades working for a general contractor must be invited per job as
+ * subcontractors (share token / My jobs) — they do not browse the GC’s book.
  */
 export const fieldAppRouter = Router();
 
 fieldAppRouter.use(requireAuth);
+
+async function requireFieldAppOrg(req: Parameters<typeof requireOrgContext>[0]): Promise<OrgContext> {
+  const ctx = await requireOrgContext(req);
+  assertInternalFieldAppSeat(ctx.role);
+  return ctx;
+}
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -28,6 +46,66 @@ const limiter = rateLimit({
 fieldAppRouter.use(limiter);
 
 const FIELD_PARTY_COMPANY = 'Field Capture';
+
+async function loadAddressMap(
+  supabase: Awaited<ReturnType<typeof requireOrgContext>>['supabase'],
+  propertyIds: string[],
+) {
+  const addressById = new Map<string, string>();
+  if (!propertyIds.length) return addressById;
+  const { data: props } = await supabase
+    .from('crm_properties')
+    .select('id, address_line1, city')
+    .in('id', propertyIds);
+  for (const p of (props ?? []) as any[]) {
+    const line = [p.address_line1, p.city].filter(Boolean).join(', ');
+    if (line) addressById.set(p.id, line);
+  }
+  return addressById;
+}
+
+async function findPropertyIdsByQuery(
+  supabase: Awaited<ReturnType<typeof requireOrgContext>>['supabase'],
+  orgId: string,
+  safe: string,
+): Promise<string[]> {
+  if (!safe) return [];
+  const { data: props } = await supabase
+    .from('crm_properties')
+    .select('id')
+    .eq('org_id', orgId)
+    .or(
+      `address_line1.ilike.%${safe}%,city.ilike.%${safe}%,label.ilike.%${safe}%,postal_code.ilike.%${safe}%`,
+    )
+    .limit(40);
+  return ((props ?? []) as { id: string }[]).map((p) => p.id);
+}
+
+async function listOpenFieldJobs(
+  supabase: Awaited<ReturnType<typeof requireOrgContext>>['supabase'],
+  orgId: string,
+  opts: { orFilter?: string | null; limit: number },
+) {
+  let query = supabase
+    .from('crm_jobs')
+    .select('id, job_number, title, status, scheduled_start, property_id')
+    .eq('org_id', orgId)
+    .not('status', 'in', FIELD_JOB_EXCLUDED_STATUSES)
+    .order('scheduled_start', { ascending: true, nullsFirst: false })
+    .limit(opts.limit);
+
+  if (opts.orFilter) {
+    query = query.or(opts.orFilter);
+  }
+
+  const { data: jobs, error } = await query;
+  if (error) throw new HttpError(500, error.message, 'field_jobs_failed');
+
+  const rows = (jobs ?? []) as FieldJobRow[];
+  const propertyIds = [...new Set(rows.map((j) => j.property_id).filter(Boolean))] as string[];
+  const addressById = await loadAddressMap(supabase, propertyIds);
+  return rows.map((j) => mapFieldJobRow(j, addressById));
+}
 
 /** GET /api/field-app/me — who is signed in and which org receives uploads. */
 fieldAppRouter.get('/me', async (req: Request, res: Response, next: NextFunction) => {
@@ -67,48 +145,54 @@ fieldAppRouter.get('/me', async (req: Request, res: Response, next: NextFunction
  */
 fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { orgId, supabase } = await requireOrgContext(req);
+    const { orgId, supabase } = await requireFieldAppOrg(req);
+    const { data: org } = await supabase.from('orgs').select('id, name').eq('id', orgId).maybeSingle();
+    const jobs = await listOpenFieldJobs(supabase, orgId, { limit: 50 });
+    res.json({
+      jobs,
+      org: {
+        id: orgId,
+        name: (org as { name?: string } | null)?.name ?? 'Organization',
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
-    const { data: jobs, error } = await supabase
-      .from('crm_jobs')
-      .select('id, job_number, title, status, scheduled_start, property_id')
-      .eq('org_id', orgId)
-      .not('status', 'in', '("completed","cancelled","lost","archived")')
-      .order('scheduled_start', { ascending: true, nullsFirst: false })
-      .limit(50);
+/**
+ * GET /api/field-app/jobs/search?q=&limit=
+ *
+ * Search open jobs in **this company only** (`org_id` from the session — never
+ * cross-tenant). Match by address, job #, title, claim #, or id so a crew can
+ * file spur-of-the-moment footage on a job they were not personally invited to.
+ * Empty `q` returns the same list as /today.
+ */
+fieldAppRouter.get('/jobs/search', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { orgId, supabase } = await requireFieldAppOrg(req);
+    const { data: org } = await supabase.from('orgs').select('id, name').eq('id', orgId).maybeSingle();
+    const orgOut = {
+      id: orgId,
+      name: (org as { name?: string } | null)?.name ?? 'Organization',
+    };
+    const raw = typeof req.query.q === 'string' ? req.query.q : '';
+    const safe = sanitizeFieldSearchQuery(raw);
+    const limitRaw = Number(req.query.limit);
+    const limit = Number.isFinite(limitRaw)
+      ? Math.min(Math.max(Math.trunc(limitRaw), 1), 50)
+      : 30;
 
-    if (error) throw new HttpError(500, error.message, 'field_jobs_failed');
-
-    const rows = (jobs ?? []) as any[];
-    const propertyIds = [...new Set(rows.map((j) => j.property_id).filter(Boolean))];
-    const addressById = new Map<string, string>();
-    if (propertyIds.length) {
-      const { data: props } = await supabase
-        .from('crm_properties')
-        .select('id, address_line1, city')
-        .in('id', propertyIds);
-      for (const p of (props ?? []) as any[]) {
-        const line = [p.address_line1, p.city].filter(Boolean).join(', ');
-        if (line) addressById.set(p.id, line);
-      }
+    if (!safe) {
+      const jobs = await listOpenFieldJobs(supabase, orgId, { limit });
+      res.json({ jobs, q: '', org: orgOut });
+      return;
     }
 
-    const out = rows.map((j) => ({
-      id: j.id as string,
-      number: j.job_number != null ? `#${j.job_number}` : '',
-      name: (j.title as string) || 'Job',
-      address: (j.property_id && addressById.get(j.property_id)) || 'Address on file',
-      at: j.scheduled_start
-        ? new Date(j.scheduled_start).toLocaleTimeString('en-US', {
-            hour: 'numeric',
-            minute: '2-digit',
-          })
-        : 'Today',
-      status: j.status ?? null,
-      placed: Boolean(j.scheduled_start),
-    }));
-
-    res.json({ jobs: out });
+    const propertyIds = await findPropertyIdsByQuery(supabase, orgId, safe);
+    const orFilter = buildFieldJobSearchOr(safe, propertyIds);
+    const jobs = await listOpenFieldJobs(supabase, orgId, { orFilter, limit });
+    res.json({ jobs, q: safe, org: orgOut });
   } catch (err) {
     next(err);
   }
@@ -177,12 +261,48 @@ async function adminOrThrow() {
   return admin;
 }
 
+/**
+ * POST /api/field-app/jobs/:jobId/capture-link
+ * Open (or reuse) the Field Capture party and return a web capture URL so the
+ * dashboard / phone browser can film a job the worker was not invited to.
+ */
+fieldAppRouter.post(
+  '/jobs/:jobId/capture-link',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { orgId, userId, supabase } = await requireFieldAppOrg(req);
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', userId)
+        .maybeSingle();
+      const party = await ensureFieldParty(
+        supabase,
+        orgId,
+        req.params.jobId,
+        userId,
+        req.user?.email,
+        (profile as { full_name?: string } | null)?.full_name,
+      );
+      const token = party.access_token;
+      res.json({
+        jobId: req.params.jobId,
+        partyId: party.id,
+        token,
+        fieldCapturePath: `/fieldcapture/index.html?token=${encodeURIComponent(token)}`,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 /** POST /api/field-app/jobs/:jobId/proof/upload-url */
 fieldAppRouter.post(
   '/jobs/:jobId/proof/upload-url',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { orgId, userId, supabase } = await requireOrgContext(req);
+      const { orgId, userId, supabase } = await requireFieldAppOrg(req);
       const { data: profile } = await supabase
         .from('profiles')
         .select('full_name')
@@ -218,7 +338,7 @@ fieldAppRouter.post(
   '/jobs/:jobId/proof',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { orgId, userId, supabase } = await requireOrgContext(req);
+      const { orgId, userId, supabase } = await requireFieldAppOrg(req);
       const { data: profile } = await supabase
         .from('profiles')
         .select('full_name')

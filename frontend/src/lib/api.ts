@@ -1028,6 +1028,29 @@ export interface FieldJobList {
   today: ClaimedJob[];
 }
 
+/** Open job in the caller's company (Field Capture today / search). */
+export interface FieldAppJob {
+  id: string;
+  number: string;
+  name: string;
+  address: string;
+  at: string;
+  status: string | null;
+  placed: boolean;
+}
+
+export interface FieldAppOrgRef {
+  id: string;
+  name: string;
+}
+
+export interface FieldAppCaptureLink {
+  jobId: string;
+  partyId: string;
+  token: string;
+  fieldCapturePath: string;
+}
+
 /* ---- CRM job sync -------------------------------------------------------- */
 
 export type CrmSyncSystem = 'jobnimbus' | 'acculynx' | 'dash' | 'servicetitan';
@@ -3104,6 +3127,27 @@ export const api = {
     request<{ ok: boolean }>('/api/field/signout', {
       method: 'POST',
       headers: { Authorization: `Bearer ${session}` },
+    }),
+
+  // ---- Org Field Capture (same seat as the dashboard / iPhone app) ----
+  // Always scoped to the caller's company — never other orgs' jobs.
+  fieldAppTodayJobs: () =>
+    request<{ jobs: FieldAppJob[]; org: FieldAppOrgRef }>('/api/field-app/today', {
+      method: 'GET',
+    }),
+
+  fieldAppSearchJobs: (q: string, limit = 30) => {
+    const params = new URLSearchParams({ q, limit: String(limit) });
+    return request<{ jobs: FieldAppJob[]; q: string; org: FieldAppOrgRef }>(
+      `/api/field-app/jobs/search?${params.toString()}`,
+      { method: 'GET' },
+    );
+  },
+
+  fieldAppCaptureLink: (jobId: string) =>
+    request<FieldAppCaptureLink>(`/api/field-app/jobs/${encodeURIComponent(jobId)}/capture-link`, {
+      method: 'POST',
+      body: JSON.stringify({}),
     }),
 
   // ---- CRM job sync ----

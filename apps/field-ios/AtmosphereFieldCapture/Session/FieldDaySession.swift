@@ -14,6 +14,9 @@ final class FieldDaySession: ObservableObject {
     @Published var uploading: Bool = false
     @Published var manifest: DayFilmManifest?
     @Published var loadingJobs: Bool = false
+    /// Non-empty when the worker is searching beyond today’s scheduled list.
+    @Published var searchQuery: String = ""
+    @Published var searchingJobs: Bool = false
 
     let recorder = DayFilmRecorder()
     let locator = SiteLocator()
@@ -23,6 +26,7 @@ final class FieldDaySession: ObservableObject {
         loadingJobs = true
         lastError = nil
         defer { loadingJobs = false }
+        searchQuery = ""
         do {
             let list = try await api.todayJobs()
             jobs = list
@@ -35,10 +39,34 @@ final class FieldDaySession: ObservableObject {
         }
     }
 
+    /// Find an open job in this company so spur-of-the-moment footage can be
+    /// filed even when the worker was not on the invite list (never other orgs).
+    func searchJobs(api: AtmosphereClient, query: String) async {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        searchQuery = trimmed
+        lastError = nil
+        if trimmed.isEmpty {
+            await loadToday(api: api)
+            return
+        }
+        searchingJobs = true
+        defer { searchingJobs = false }
+        do {
+            let list = try await api.searchJobs(q: trimmed)
+            jobs = list
+            if activeJobId == nil || !list.contains(where: { $0.id == activeJobId }) {
+                activeJobId = list.first?.id
+            }
+        } catch {
+            lastError = error.localizedDescription
+            jobs = []
+        }
+    }
+
     func startDay() async {
         lastError = nil
         guard activeJobId != nil || !jobs.isEmpty else {
-            lastError = "No job to film. Create or schedule a job in the Atmosphere dashboard first."
+            lastError = "No job to film. Search by address or job #, or create a job in the dashboard."
             return
         }
         if activeJobId == nil { activeJobId = jobs.first?.id }

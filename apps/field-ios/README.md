@@ -40,11 +40,14 @@ open AtmosphereFieldCapture.xcodeproj
 Also set `ATMOSPHERE_API_BASE` to your API (same host as the dashboard), then run
 on a LiDAR iPhone for RoomPlan.
 
-**Sign in with your website account** on first install (same email/password as
-the Atmosphere dashboard). Under **Server**, point at the same API host the
+**Sign in or Create account** on first install (same Atmosphere auth as the
+website). Create account can **join a company** with an office join code or
+**start a new company**. Under **Server**, point at the same API host the
 website uses (simulator default: `http://127.0.0.1:4000`). Tokens stay in
 Keychain — later launches skip connect and open Today. Day films file into
 `job_proofs` for that org. Disconnect only from Account → Disconnect.
+Subcontractors working for a GC should use their job invite link, not a Field
+Capture seat.
 
 **Requirements:** iOS 17+, camera + mic + location when-in-use.
 
@@ -67,9 +70,12 @@ AtmosphereFieldCapture/
 
 ## Crew flow
 
-1. **First launch only:** Connect Atmosphere account (same as dashboard).
+1. **First launch only:** Sign in or create an Atmosphere account (join/start company).
 2. Later launches open Today already connected.
 3. Confirm today’s jobs (tap one if several) → **Start the day**.
+   Or **search** by address / job # / title when something comes up that you
+   were not assigned to — only this company’s Field Capture seats can browse.
+   Outside trades working for a GC must be invited per job as subcontractors.
 4. Hold **Finish the day** — proof upload into that job → optional RoomPlan twin.
 
 AI dictation and twin review stay in the **office Verifier**.
@@ -78,9 +84,11 @@ AI dictation and twin review stay in the **office Verifier**.
 
 1. `POST /api/auth/login` → `{ user, session: { accessToken, refreshToken } }`
 2. `GET /api/field-app/me` + `GET /api/field-app/today` (Bearer)
-3. `POST /api/field-app/jobs/:jobId/proof/upload-url` → signed PUT URL
-4. PUT video bytes → `POST /api/field-app/jobs/:jobId/proof` (creates `job_proofs`)
-5. Optional: `POST /api/geometry/sessions` + `…/ingest` for RoomPlan
+3. `GET /api/field-app/jobs/search?q=` — find open jobs in this company only
+4. `POST /api/field-app/jobs/:jobId/proof/upload-url` → signed PUT URL
+5. PUT video bytes → `POST /api/field-app/jobs/:jobId/proof` (creates `job_proofs`)
+6. Optional: `POST /api/geometry/sessions` + `…/ingest` for RoomPlan
+7. Web: `POST /api/field-app/jobs/:jobId/capture-link` → `/fieldcapture/…?token=`
 
 See also `docs/media-storage.md` and `backend/src/geometry/`.
 

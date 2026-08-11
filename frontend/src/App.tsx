@@ -71,6 +71,9 @@ const TeamMemoryPage = lazy(() =>
 const TechnicianPage = lazy(() =>
   import('./pages/TechnicianPage').then((m) => ({ default: m.TechnicianPage })),
 );
+const FieldCaptureJobsPage = lazy(() =>
+  import('./pages/FieldCaptureJobsPage').then((m) => ({ default: m.FieldCaptureJobsPage })),
+);
 const BillingPage = lazy(() =>
   import('./pages/BillingPage').then((m) => ({ default: m.BillingPage })),
 );
@@ -452,6 +455,16 @@ export default function App() {
               <ProtectedRoute>
                 <RequireOnboarded>
                   <TechnicianPage />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/field/film"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <FieldCaptureJobsPage />
                 </RequireOnboarded>
               </ProtectedRoute>
             }

@@ -807,19 +807,25 @@ function FieldCaptureAppSection() {
       <ol className="list-decimal space-y-2 pl-5 text-sm text-ink-700">
         <li>Install Field Capture from the App Store build (or Xcode).</li>
         <li>
-          On first open, sign in with <strong className="font-semibold text-ink-900">the same email and password</strong>{' '}
-          you use here.
+          On first open, choose <strong className="font-semibold text-ink-900">Sign in</strong> (existing website
+          account) or <strong className="font-semibold text-ink-900">Create account</strong>.
+        </li>
+        <li>
+          New accounts: join with this org’s join code (Team settings) or start a new company on the phone.
         </li>
         <li>
           Under <span className="font-medium text-ink-900">Server</span>, set the API URL to the same Atmosphere
           backend this dashboard talks to (for local Mac testing: <span className="font-mono text-xs">http://127.0.0.1:4000</span>
           — use your Mac’s LAN IP if the phone is not the simulator).
         </li>
-        <li>Tap <span className="font-medium text-ink-900">Sign in &amp; connect phone</span>. You won’t be asked again on that device.</li>
+        <li>Connect once — you won’t be asked again on that device.</li>
       </ol>
       <p className="mt-4 text-sm text-ink-600">
-        Jobs you film on the phone appear in Verifier / evidence for your org. Disconnect only from the app’s
-        Account menu if you hand the phone to someone else.
+        Jobs you film on the phone appear in Verifier / evidence for your org. Your Field Capture team can
+        search this company’s jobs under <span className="font-medium text-ink-900">Field → Film a job</span>{' '}
+        (or on the phone). Outside trades working for you as the GC must be invited to each job as a{' '}
+        <span className="font-medium text-ink-900">subcontractor</span> — they only see invited jobs.
+        Disconnect only from the app’s Account menu if you hand the phone to someone else.
       </p>
     </Card>
   );
