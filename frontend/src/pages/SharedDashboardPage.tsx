@@ -115,7 +115,28 @@ export function SharedDashboardPage() {
     }
     setLoading(true);
     try {
-      setRecord(await api.sharedJob(jobId));
+      const next = await api.sharedJob(jobId);
+      setRecord(next);
+      // After Approve & invite, surface the new job even if the list query
+      // has not indexed it yet — otherwise the dashboard flashes "No jobs yet".
+      setList((prev) => {
+        if (!prev) return prev;
+        if (prev.some((j) => j.jobId === jobId)) return prev;
+        return [
+          {
+            jobId,
+            jobNumber: next.job.jobNumber ?? null,
+            title: next.job.title,
+            status: next.job.status ?? null,
+            parties: next.parties?.length ?? 0,
+            currentRevision: next.brief?.revision ?? null,
+            behind: 0,
+            awaiting: 0,
+            exclusions: 0,
+          },
+          ...prev,
+        ];
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not open that record.');
       setRecord(null);
@@ -180,7 +201,7 @@ export function SharedDashboardPage() {
 
       {list === null ? (
         <p className="mt-6 text-sm text-ink-600">Loading…</p>
-      ) : list.length === 0 ? (
+      ) : list.length === 0 && !record && !loading ? (
         <div className="mt-6">
           <EmptyState
             title="No jobs yet"
@@ -195,6 +216,14 @@ export function SharedDashboardPage() {
               Start a job from scope
             </button>
           </div>
+        </div>
+      ) : list.length === 0 && (loading || record) ? (
+        <div className="mt-4">
+          {loading && !record ? (
+            <p className="text-sm text-ink-600">Opening the job you just created…</p>
+          ) : record ? (
+            <JobProgressDashboard jobId={record.job.id} record={record} />
+          ) : null}
         </div>
       ) : (
         <>
