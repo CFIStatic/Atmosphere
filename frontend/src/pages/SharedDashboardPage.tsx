@@ -79,9 +79,9 @@ export function SharedDashboardPage() {
   const requestedJob = searchParams.get('job');
   useFeatureTimer('job_files');
   const [list, setList] = useState<SharedJobSummary[] | null>(null);
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(requestedJob);
   const [record, setRecord] = useState<SharedJobRecord | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(Boolean(requestedJob));
   const [error, setError] = useState<string | null>(null);
   const [readinessKey, setReadinessKey] = useState(0);
   const [shareFormOpen, setShareFormOpen] = useState(false);
@@ -90,21 +90,12 @@ export function SharedDashboardPage() {
     setShareFormOpen(true);
   }
 
-  async function loadList() {
-    try {
-      const res = await api.sharedJobs();
-      setList(res.jobs);
-      // Prefer ?job= even when the list is still catching up after intake approve.
-      const preferred =
-        requestedJob ||
-        (openId && res.jobs.some((j) => j.jobId === openId) && openId) ||
-        res.jobs[0]?.jobId ||
-        null;
-      if (preferred) void openJob(preferred, { syncUrl: Boolean(requestedJob) });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load the shared records.');
-      setList([]);
-    }
+  function ensureListed(summary: SharedJobSummary) {
+    setList((prev) => {
+      const base = prev ?? [];
+      if (base.some((j) => j.jobId === summary.jobId)) return base;
+      return [summary, ...base];
+    });
   }
 
   async function openJob(jobId: string, opts?: { syncUrl?: boolean }) {
@@ -114,28 +105,20 @@ export function SharedDashboardPage() {
       setSearchParams(jobId ? { job: jobId } : {}, { replace: true });
     }
     setLoading(true);
+    setError(null);
     try {
       const next = await api.sharedJob(jobId);
       setRecord(next);
-      // After Approve & invite, surface the new job even if the list query
-      // has not indexed it yet — otherwise the dashboard flashes "No jobs yet".
-      setList((prev) => {
-        if (!prev) return prev;
-        if (prev.some((j) => j.jobId === jobId)) return prev;
-        return [
-          {
-            jobId,
-            jobNumber: next.job.jobNumber ?? null,
-            title: next.job.title,
-            status: next.job.status ?? null,
-            parties: next.parties?.length ?? 0,
-            currentRevision: next.brief?.revision ?? null,
-            behind: 0,
-            awaiting: 0,
-            exclusions: 0,
-          },
-          ...prev,
-        ];
+      ensureListed({
+        jobId,
+        jobNumber: next.job.jobNumber ?? null,
+        title: next.job.title,
+        status: next.job.status ?? null,
+        parties: next.parties?.length ?? 0,
+        currentRevision: next.brief?.revision ?? next.currentRevision ?? null,
+        behind: 0,
+        awaiting: 0,
+        exclusions: 0,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not open that record.');
@@ -145,19 +128,40 @@ export function SharedDashboardPage() {
     }
   }
 
+  async function loadList() {
+    try {
+      const res = await api.sharedJobs();
+      setList((prev) => {
+        const incoming = res.jobs;
+        if (!prev?.length) return incoming;
+        // Keep a freshly opened intake job if the list query briefly omits it.
+        const extras = prev.filter((j) => !incoming.some((i) => i.jobId === j.jobId));
+        return extras.length ? [...extras, ...incoming] : incoming;
+      });
+      const preferred =
+        requestedJob ||
+        (openId && res.jobs.some((j) => j.jobId === openId) && openId) ||
+        res.jobs[0]?.jobId ||
+        null;
+      if (preferred) void openJob(preferred, { syncUrl: Boolean(requestedJob) });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load the shared records.');
+      setList((prev) => prev ?? []);
+    }
+  }
+
   useEffect(() => {
     void loadList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Deep-link from Approve & invite: /shared?job=<id>
   useEffect(() => {
-    if (!requestedJob || !list?.length) return;
-    if (openId === requestedJob) return;
-    if (list.some((j) => j.jobId === requestedJob)) {
-      void openJob(requestedJob, { syncUrl: false });
-    }
+    if (!requestedJob) return;
+    if (record?.job.id === requestedJob) return;
+    void openJob(requestedJob, { syncUrl: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestedJob, list]);
+  }, [requestedJob]);
 
   async function decide(item: JobScopeItem, decision: 'approved' | 'declined') {
     if (!record) return;
@@ -199,9 +203,9 @@ export function SharedDashboardPage() {
         </p>
       )}
 
-      {list === null ? (
+      {list === null && !record ? (
         <p className="mt-6 text-sm text-ink-600">Loading…</p>
-      ) : list.length === 0 && !record && !loading ? (
+      ) : (list?.length ?? 0) === 0 && !record && !loading ? (
         <div className="mt-6">
           <EmptyState
             title="No jobs yet"
@@ -217,19 +221,11 @@ export function SharedDashboardPage() {
             </button>
           </div>
         </div>
-      ) : list.length === 0 && (loading || record) ? (
-        <div className="mt-4">
-          {loading && !record ? (
-            <p className="text-sm text-ink-600">Opening the job you just created…</p>
-          ) : record ? (
-            <JobProgressDashboard jobId={record.job.id} record={record} />
-          ) : null}
-        </div>
       ) : (
         <>
-          {list.length > 1 && (
+          {(list?.length ?? 0) > 1 && (
             <div className="mt-6 flex gap-2 overflow-x-auto pb-1">
-              {list.map((job) => {
+              {(list ?? []).map((job) => {
                 const on = openId === job.jobId;
                 const status = jobListStatus(job);
                 return (

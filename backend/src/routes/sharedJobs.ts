@@ -107,35 +107,43 @@ async function loadRecord(supabase: any, orgId: string, jobId: string) {
 
 /**
  * GET /api/operations/shared
- * Every job with a shared record, and what is wrong with each.
+ * Every job in the org — including brand-new intake jobs that just got
+ * Field Capture invites. Party readiness (behind / awaiting) is overlaid
+ * from job_share_status when present; a job with no parties still lists.
  *
- * The list leads with what needs an answer rather than with the newest job,
- * because this page exists to be checked, not browsed.
+ * Unresolved work floats first; newest jobs break ties so a job you just
+ * created is easy to find.
  */
 sharedJobsRouter.get('/shared', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { orgId, supabase } = await requireOrgContext(req);
 
-    const { data: statusRows, error } = await supabase
-      .from('job_share_status')
-      .select('*')
-      .eq('org_id', orgId);
-    if (error) throw new HttpError(500, error.message, 'shared_failed');
+    const { data: jobs, error: jobsError } = await supabase
+      .from('crm_jobs')
+      .select('id, job_number, title, status, created_at')
+      .eq('org_id', orgId)
+      .order('created_at', { ascending: false })
+      .limit(200);
+    if (jobsError) throw new HttpError(500, jobsError.message, 'shared_failed');
 
-    const rows = (statusRows ?? []) as any[];
-    const jobIds = [...new Set(rows.map((r) => r.job_id))];
-    if (!jobIds.length) {
+    const jobRows = (jobs ?? []) as any[];
+    if (!jobRows.length) {
       res.json({ jobs: [], counts: { jobs: 0, parties: 0, blockers: 0, awaiting: 0 } });
       return;
     }
 
-    const { data: jobs } = await supabase
-      .from('crm_jobs')
-      .select('id, job_number, title, status')
+    const jobIds = jobRows.map((j) => j.id as string);
+    const { data: statusRows, error: statusError } = await supabase
+      .from('job_share_status')
+      .select('*')
       .eq('org_id', orgId)
-      .in('id', jobIds);
+      .in('job_id', jobIds);
+    // A missing/broken readiness view must not hide jobs the office just created.
+    if (statusError) {
+      console.warn('[shared] job_share_status unavailable:', statusError.message);
+    }
 
-    const jobById = new Map(((jobs ?? []) as any[]).map((j) => [j.id, j]));
+    const rows = (statusRows ?? []) as any[];
     const byJob = new Map<string, any[]>();
     for (const row of rows) {
       const list = byJob.get(row.job_id) ?? [];
@@ -143,30 +151,35 @@ sharedJobsRouter.get('/shared', async (req: Request, res: Response, next: NextFu
       byJob.set(row.job_id, list);
     }
 
-    const out = [...byJob.entries()].map(([jobId, partyRows]) => {
-      const job = jobById.get(jobId);
-      const awaiting = Math.max(...partyRows.map((r) => Number(r.awaiting_answer ?? 0)), 0);
-      // "Not up to date" is the headline number. A job where everybody has
-      // accepted the current revision is a job that does not need this page.
+    const out = jobRows.map((job) => {
+      const partyRows = byJob.get(job.id) ?? [];
+      const awaiting = partyRows.length
+        ? Math.max(...partyRows.map((r) => Number(r.awaiting_answer ?? 0)), 0)
+        : 0;
       const behind = partyRows.filter((r) => !r.revoked_at && !r.up_to_date).length;
       return {
-        jobId,
-        jobNumber: job?.job_number ?? null,
-        title: job?.title ?? 'Job',
-        status: job?.status ?? null,
+        jobId: job.id as string,
+        jobNumber: job.job_number ?? null,
+        title: (job.title as string) ?? 'Job',
+        status: (job.status as string) ?? null,
         parties: partyRows.filter((r) => !r.revoked_at).length,
         currentRevision: partyRows[0]?.current_revision ?? null,
         behind,
         awaiting,
         exclusions: Number(partyRows[0]?.exclusions ?? 0),
+        createdAt: (job.created_at as string) ?? null,
       };
     });
 
-    // Anything unresolved first; within that, the most parties out of date.
-    out.sort((a, b) => b.behind + b.awaiting - (a.behind + a.awaiting) || b.parties - a.parties);
+    // Needs attention first; then newest created (intake handoff).
+    out.sort((a, b) => {
+      const urgency = b.behind + b.awaiting - (a.behind + a.awaiting);
+      if (urgency) return urgency;
+      return String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? ''));
+    });
 
     res.json({
-      jobs: out,
+      jobs: out.map(({ createdAt: _createdAt, ...job }) => job),
       counts: {
         jobs: out.length,
         parties: rows.filter((r) => !r.revoked_at).length,

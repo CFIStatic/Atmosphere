@@ -248,8 +248,11 @@ export function JobIntakePage() {
       });
       setResult(res);
       setStep('done');
-      // Job is live on the shared progress dashboard.
-      navigate(`/shared?job=${encodeURIComponent(res.job.id)}`);
+      // Job is live — land on Job Progress with this job open.
+      navigate(`/shared?job=${encodeURIComponent(res.job.id)}`, {
+        replace: true,
+        state: { freshJob: res.job },
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not approve that package.');
     } finally {
