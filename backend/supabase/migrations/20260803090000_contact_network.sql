@@ -239,7 +239,7 @@ create policy network_settings_own on public.network_contribution_settings
   with check (
     org_id in (
       select m.org_id from public.org_members m
-      where m.user_id = auth.uid() and m.role in ('owner', 'admin')
+      where m.user_id = auth.uid() and m.role in ('project_manager', 'office_manager')
     )
   );
 
