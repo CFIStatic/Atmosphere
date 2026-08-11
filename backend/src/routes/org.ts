@@ -77,6 +77,11 @@ function isMissingColumnError(message: string | undefined): boolean {
   return /usage_intents|contractor_type|column .* does not exist/i.test(message);
 }
 
+function isOrgMemberPrivilegeError(message: string | undefined): boolean {
+  if (!message) return false;
+  return /permission denied for function is_org_member/i.test(message);
+}
+
 /** Ensure the caller has a profile row carrying their email (for directories). */
 async function ensureProfile(req: Request) {
   const supabase = createUserClient(req.accessToken!);
@@ -96,14 +101,19 @@ async function saveUsageIntents(
   userId: string,
   usageIntents: string[],
 ) {
-  const { error } = await supabase
+  const admin = createAdminClient();
+  const writer = admin ?? supabase;
+  const { error } = await writer
     .from('org_members')
     .update({ usage_intents: usageIntents })
     .eq('user_id', userId);
   if (error) {
     // Hosting before the questionnaire migration should still let create/join
     // succeed — the answers are nice-to-have until the columns exist.
-    if (isMissingColumnError(error.message)) return;
+    // Same for the is_org_member EXECUTE gap until that grant migration lands.
+    if (isMissingColumnError(error.message) || isOrgMemberPrivilegeError(error.message)) {
+      return;
+    }
     throw new HttpError(500, error.message, 'usage_intents_failed');
   }
 }
@@ -112,7 +122,39 @@ async function loadMembership(
   supabase: ReturnType<typeof createUserClient>,
   userId: string,
 ) {
-  const primary = await supabase
+  // Prefer the SECURITY DEFINER helper (bypasses RLS / is_org_member EXECUTE).
+  const viaRpc = await supabase.rpc('my_org_membership');
+  if (!viaRpc.error) {
+    const row = Array.isArray(viaRpc.data) ? viaRpc.data[0] : viaRpc.data;
+    if (!row) return { data: [], error: null };
+    return {
+      data: [
+        {
+          role: row.role,
+          work_type: row.work_type,
+          usage_intents: row.usage_intents ?? [],
+          status: row.status,
+          orgs: {
+            id: row.org_id,
+            name: row.org_name,
+            join_code: row.org_join_code,
+            contractor_type: row.org_contractor_type,
+          },
+        },
+      ],
+      error: null,
+    };
+  }
+
+  // Helper not applied yet — fall back to table select (needs is_org_member EXECUTE).
+  if (!/could not find|does not exist|schema cache|my_org_membership/i.test(viaRpc.error.message)) {
+    // Unexpected RPC error — still try the table path / admin before failing.
+  }
+
+  const admin = createAdminClient();
+  const reader = admin ?? supabase;
+
+  const primary = await reader
     .from('org_members')
     .select(MEMBERSHIP_SELECT)
     .eq('user_id', userId)
@@ -121,9 +163,20 @@ async function loadMembership(
 
   if (!primary.error) return primary;
 
+  if (isOrgMemberPrivilegeError(primary.error.message)) {
+    return {
+      data: null,
+      error: {
+        message:
+          'Database privilege missing for private.is_org_member. Apply migration ' +
+          '20260816130000_grant_is_org_member_execute.sql (or run the GRANT in the Supabase SQL editor).',
+      },
+    };
+  }
+
   if (!isMissingColumnError(primary.error.message)) return primary;
 
-  return supabase
+  return reader
     .from('org_members')
     .select(MEMBERSHIP_SELECT_LEGACY)
     .eq('user_id', userId)
