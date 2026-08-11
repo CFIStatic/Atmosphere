@@ -36,11 +36,13 @@ final class FieldDaySession: ObservableObject {
     }
 
     /// Quick Add — type a job name on site; the office sees the file and can finish details later.
-    func quickAdd(title: String, api: AtmosphereClient) async {
+    /// Returns true when the job file was created and selected for filming.
+    @discardableResult
+    func quickAdd(title: String, api: AtmosphereClient) async -> Bool {
         let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard name.count >= 2 else {
             lastError = "Enter a job name (at least a couple of characters)."
-            return
+            return false
         }
         lastError = nil
         do {
@@ -49,9 +51,17 @@ final class FieldDaySession: ObservableObject {
                 jobs.insert(job, at: 0)
             }
             activeJobId = job.id
+            return true
         } catch {
             lastError = error.localizedDescription
+            return false
         }
+    }
+
+    /// Quick Add then open the camera — the call-in path when office has not opened a file yet.
+    func quickAddAndStart(title: String, api: AtmosphereClient) async {
+        guard await quickAdd(title: title, api: api) else { return }
+        await startDay()
     }
 
     func startDay() async {
