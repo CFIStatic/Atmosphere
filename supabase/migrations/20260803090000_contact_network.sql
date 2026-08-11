@@ -27,7 +27,7 @@
 -- narrowness of what may enter, plus the tombstones, plus opt-in.
 
 create table if not exists public.network_contribution_settings (
-  org_id uuid primary key references public.organizations (id) on delete cascade,
+  org_id uuid primary key references public.orgs (id) on delete cascade,
   -- Off unless a human turned it on. The default is the consent decision.
   contributing boolean not null default false,
   -- Who turned it on, and when, because "we have consent" needs a record.
@@ -72,7 +72,7 @@ create table if not exists public.network_contacts (
   phone text,
   mobile text,
   -- Which org supplied this, so opting out can withdraw everything they gave.
-  contributed_by uuid not null references public.organizations (id) on delete cascade,
+  contributed_by uuid not null references public.orgs (id) on delete cascade,
   contributed_at timestamptz not null default now(),
   -- How many distinct orgs have independently supplied the same pairing.
   -- Agreement between organizations that have never met is the strongest
