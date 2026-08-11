@@ -83,7 +83,9 @@ fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunct
       .from('crm_jobs')
       .select('id, job_number, title, status, scheduled_start, property_id')
       .eq('org_id', orgId)
-      .not('status', 'in', '("completed","cancelled","lost","archived")')
+      // Enum is draft/scheduled/in_progress/on_hold/completed/invoiced/paid/cancelled —
+      // unknown labels make PostgREST reject the whole list.
+      .not('status', 'in', '("completed","cancelled","invoiced","paid")')
       .order('scheduled_start', { ascending: true, nullsFirst: false })
       .limit(50);
 
@@ -164,34 +166,52 @@ fieldAppRouter.post('/jobs/quick-add', async (req: Request, res: Response, next:
 
     const jobId = (job as { id: string }).id;
 
-    await supabase.from('job_intake').insert({
+    const { error: intakeError } = await supabase.from('job_intake').insert({
       job_id: jobId,
       org_id: orgId,
       source: 'manual',
       source_detail: { enteredFrom: 'field_quick_add' },
       entered_by: userId,
     });
+    // Job file is still usable without provenance; do not fail the capture path.
+    if (intakeError) {
+      console.warn('[field-app/quick-add] job_intake insert failed', intakeError.message);
+    }
 
-    // Party is what makes the file appear on the office Job files list
-    // (job_share_status is built from job_parties). Without it the film has a
-    // home in crm_jobs but the dashboard the office checks stays empty.
-    const party = await ensureFieldParty(
-      supabase,
-      orgId,
-      jobId,
-      userId,
-      req.user?.email,
-      fullName,
-    );
+    // Create the party directly — we just inserted the job, so skip the extra
+    // existence round-trip in ensureFieldParty (keeps Quick Add snappy on poor
+    // field networks). Party is what makes Job files list the row.
+    const { data: party, error: partyError } = await supabase
+      .from('job_parties')
+      .insert({
+        org_id: orgId,
+        job_id: jobId,
+        company: FIELD_PARTY_COMPANY,
+        trade: 'field_capture',
+        contact_name: fullName ?? 'Field Capture',
+        email: req.user?.email ?? null,
+        role: 'general_contractor',
+        created_by: userId,
+      })
+      .select('id, company, access_token')
+      .single();
+    if (partyError || !party) {
+      throw new HttpError(
+        400,
+        partyError?.message ?? 'Could not open Field Capture on this job.',
+        'party_failed',
+      );
+    }
 
-    await recordAccess(supabase, {
+    // Best-effort audit — never block the phone on the access log.
+    void recordAccess(supabase, {
       orgId,
       jobId,
       action: 'job_created',
       actorId: userId,
       actorLabel: fullName ?? req.user?.email ?? 'Field Capture',
       detail: 'Quick Add from Field Capture — office can finish address and scope later',
-    }).catch(() => undefined);
+    });
 
     const title = (job as { title: string }).title || input.title;
     const jobNumber = (job as { job_number?: number | null }).job_number;
@@ -205,7 +225,7 @@ fieldAppRouter.post('/jobs/quick-add', async (req: Request, res: Response, next:
         status: (job as { status?: string | null }).status ?? 'scheduled',
         placed: false,
       },
-      party: { id: party.id },
+      party: { id: (party as { id: string }).id },
     });
   } catch (err) {
     if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid request'));

@@ -303,14 +303,15 @@ struct TodayView: View {
 
     private func submitQuickAdd(andStart: Bool) async {
         quickAddBusy = true
-        defer { quickAddBusy = false }
+        let created = await session.quickAdd(title: quickAddTitle, api: api)
+        quickAddBusy = false
+        guard created else { return }
+
+        // Dismiss as soon as the job file exists so a slow camera permission
+        // prompt never looks like the backend hanging.
+        showQuickAdd = false
         if andStart {
-            await session.quickAddAndStart(title: quickAddTitle, api: api)
-        } else {
-            _ = await session.quickAdd(title: quickAddTitle, api: api)
-        }
-        if session.lastError == nil {
-            showQuickAdd = false
+            await session.startDay()
         }
     }
 }

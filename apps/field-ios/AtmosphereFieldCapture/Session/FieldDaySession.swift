@@ -59,9 +59,14 @@ final class FieldDaySession: ObservableObject {
     }
 
     /// Quick Add then open the camera — the call-in path when office has not opened a file yet.
-    func quickAddAndStart(title: String, api: AtmosphereClient) async {
-        guard await quickAdd(title: title, api: api) else { return }
+    /// Returns whether the job file was created. Camera start is separate so the
+    /// Quick Add sheet can dismiss as soon as the backend answers (camera
+    /// permission must not look like a hung API call).
+    @discardableResult
+    func quickAddAndStart(title: String, api: AtmosphereClient) async -> Bool {
+        guard await quickAdd(title: title, api: api) else { return false }
         await startDay()
+        return true
     }
 
     func startDay() async {
