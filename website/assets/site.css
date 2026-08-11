@@ -786,24 +786,6 @@ a { color: inherit; }
 }
 .auth-links a { color: var(--ink-soft); }
 .auth-links a:hover { color: var(--ink); }
-.or-rule {
-  display: flex; align-items: center; gap: 12px;
-  color: var(--ink-faint); font-size: 11px; letter-spacing: .12em;
-}
-.or-rule::before, .or-rule::after { content: ''; flex: 1; border-top: 1px solid var(--line); }
-.pin-card {
-  border: 1px dashed var(--line-strong); border-radius: 12px; padding: 20px 22px;
-  display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
-}
-.pin-card p { margin: 6px 0 0; font-size: 13px; color: var(--ink-faint); max-width: 24em; }
-.pin-card .lbl { font-size: 11px; letter-spacing: .1em; color: var(--ink-faint); text-transform: uppercase; }
-.pin-dots { display: flex; gap: 9px; margin-left: auto; }
-.pin-dot {
-  width: 12px; height: 12px; border-radius: 50%;
-  border: 1.5px solid var(--line-strong); background: transparent;
-}
-.pin-dot.filled { background: var(--ink); border-color: var(--ink); }
-
 /* ---------- Job listings (careers) ---------- */
 .job-list details { border-bottom: 1px solid var(--line); }
 .job-list summary {

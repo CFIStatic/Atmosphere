@@ -23,7 +23,7 @@ accent, monospace as the "audit record" voice). Positioned written for service c
 | `about.html`      | About — the Work Verification company, story and principles |
 | `careers.html`    | Careers — roles, hiring process, and a working application form |
 | `contact.html`    | Contact — sales/support blocks and an intake form           |
-| `signin.html`     | Sign in — email/password plus the device-bound PIN          |
+| `signin.html`     | Sign in — a real login against the backend (`/api/auth/login`) |
 | `signup.html`     | Create your organization — onboarding walkthrough and form  |
 | `investors.html`  | Investors — invite-only data-room sign-in (under Company)   |
 | `privacy.html`    | Privacy policy — plain-language draft pending counsel       |
@@ -113,8 +113,27 @@ Without SMTP configured, development accepts and logs applications so the flow
 is testable; production returns 503 so a misconfigured deploy fails loudly.
 
 The site assumes it is served on the same origin as the backend (`/api/...`).
-Hosted elsewhere? Set `data-api="https://your-backend"` on the form in
-`careers.html`.
+Hosted elsewhere? Set `data-api="https://your-backend"` on the forms in
+`careers.html`, `contact.html`, and `signin.html`.
+
+## Sign in
+
+`signin.html` is a working login surface, not a stub. Submitting posts the
+credentials to **`POST /api/auth/login`** (`backend/src/routes/auth.ts`) with
+`credentials: 'include'` — the session comes back as httpOnly cookies, so no
+token ever touches page JavaScript. On success the page forwards to
+`{app}/login?email=...`: the app sees the fresh session and passes straight
+through to the dashboard; if the browser declined a cross-site cookie (site
+and backend on different origins — Safari does this), the app's login page
+opens with the email prefilled instead, so the user is one password away,
+never dead-ended. The API origin comes from the form's `data-api` (stamped
+from `WEBSITE_API_ORIGIN` at deploy), falling back to same-origin, or
+`http://localhost:4000` in local dev.
+
+For a cross-origin deploy the backend must also allow the site's origin:
+add it to the backend's comma-separated `FRONTEND_ORIGIN` (CORS runs with
+credentials), and use `COOKIE_SAMESITE=none` + `COOKIE_SECURE=true` if the
+app and backend are on different origins.
 
 ## Develop
 
@@ -149,13 +168,13 @@ Pages on every push to `main` that touches `website/`. The first run enables
 Pages on the repo; if the token lacks permission for that, flip it once by
 hand (Settings → Pages → Source: **GitHub Actions**) and re-run.
 
-The static site works fully on Pages except the two backend-wired forms
-(careers, contact), which need the Express backend hosted somewhere with the
-SMTP variables below. Once it is, set the `WEBSITE_API_ORIGIN` repository
-variable (Settings → Secrets and variables → Actions → Variables) to the
-backend's https origin — the workflow stamps it into both forms' `data-api`
-on the next deploy. Until then, submitting shows a clear could-not-reach
-message rather than silently failing.
+The static site works fully on Pages except the three backend-wired forms
+(careers, contact, sign-in), which need the Express backend hosted somewhere
+(the mail forms also need the SMTP variables below). Once it is, set the
+`WEBSITE_API_ORIGIN` repository variable (Settings → Secrets and variables →
+Actions → Variables) to the backend's https origin — the workflow stamps it
+into the forms' `data-api` on the next deploy. Until then, submitting shows
+a clear could-not-reach message rather than silently failing.
 
 ### Connecting the site to the product
 
@@ -164,11 +183,13 @@ the app is hosted. Set the `WEBSITE_APP_ORIGIN` repository variable to the
 app's https origin (e.g. `https://app.example.com`) and the next deploy
 stamps it onto every page as `<html data-app-origin>`; `site.js` then:
 
-- rewrites every **Sign in** CTA to `{origin}/login` and every **Get
-  started / Create your organization** CTA to `{origin}/login?mode=signup`
-  (the app's login page opens the create-account form for that deep link);
-- turns the sign-in and sign-up pages' forms into a handoff — submitting
-  forwards to the app with the typed email prefilled (never the password).
+- rewrites every **Get started / Create your organization** CTA to
+  `{origin}/signup`, and makes the sign-up page skip its marketing stub and
+  open the app's create-account flow directly;
+- gives the sign-in page (which performs the real login itself — see
+  "Sign in" above) somewhere to land: after a successful login it forwards
+  to `{origin}/login?email=...`, which passes an authenticated session
+  straight through to the dashboard.
 
 Downstream is already live in the app: a new account routes to onboarding,
 which creates the organization or joins one by code, then lands on the
@@ -184,7 +205,9 @@ dashboard. Unset, the site keeps its designed early-access surfaces.
 - The placeholder domain is stamped automatically by the Pages workflow; on
   any other host, substitute `https://REPLACE-WITH-YOUR-DOMAIN` in
   `sitemap.xml`/`robots.txt` and absolutize `og:image` yourself.
-- The sign-in and sign-up pages are designed surfaces until
-  `WEBSITE_APP_ORIGIN` is set (see "Connecting the site to the product") —
-  then they hand off to the real app automatically. The investor form always
-  keeps its notice; there is no investor surface in the app yet.
+- Sign-in authenticates for real once the backend is reachable
+  (`WEBSITE_API_ORIGIN`, or same-origin hosting), but only lands in the
+  dashboard once `WEBSITE_APP_ORIGIN` is set (see "Connecting the site to
+  the product"). The sign-up page stays a designed surface until
+  `WEBSITE_APP_ORIGIN` is set, then hands off to the real app. The investor
+  form always keeps its notice; there is no investor surface in the app yet.

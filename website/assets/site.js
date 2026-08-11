@@ -1,20 +1,5 @@
 // Shared behavior for the Atmosphere corporate site.
 (function () {
-  // The bridge to the product. The deploy workflow stamps the hosted app's
-  // origin onto <html data-app-origin> (from the WEBSITE_APP_ORIGIN repo
-  // variable); when present, every sign-in / get-started CTA routes into the
-  // real app and the early-access stubs below stand down. Unstamped — local
-  // dev, or the app not hosted yet — the site keeps its designed surfaces.
-  var APP_ORIGIN = (document.documentElement.getAttribute('data-app-origin') || '')
-    .replace(/\/+$/, '');
-  if (APP_ORIGIN) {
-    document.querySelectorAll('a[href$="signin.html"], a[href$="signup.html"]')
-      .forEach(function (a) {
-        var toSignup = a.getAttribute('href').indexOf('signup') !== -1;
-        a.setAttribute('href', APP_ORIGIN + (toSignup ? '/signup' : '/login'));
-      });
-  }
-
   // Highlight the nav group for the page being read. Platform-family pages
   // light the Platform menu; company-family pages light Company.
   var page = location.pathname.split('/').pop() || 'index.html';
@@ -247,8 +232,11 @@
     links: 'ap-links', message: 'ap-message', website: 'ap-website'
   }, 'Application sent — a person reads every one, and replies either way.');
 
-  // Auth links: when an app origin is known (local dev or data-app-origin at
-  // deploy), every Sign in / Get started CTA goes straight to the React app.
+  // The bridge to the product. The deploy workflow stamps the hosted app's
+  // origin onto <html data-app-origin> (from the WEBSITE_APP_ORIGIN repo
+  // variable). Sign-in stays on the site's own page — it performs a real
+  // login below and forwards into the app — while Get started / Create your
+  // organization CTAs go straight to the React app's signup flow.
   function appOrigin() {
     var fromHtml = document.documentElement.getAttribute('data-app-origin');
     if (fromHtml) return fromHtml.replace(/\/$/, '');
@@ -281,27 +269,22 @@
   }
 
   function wireAuthLinks() {
-    var signin = authUrl('signin');
     var signup = authUrl('signup');
-    if (!signin) return;
+    if (!signup) return;
     document.querySelectorAll('a[href]').forEach(function (a) {
       var href = a.getAttribute('href');
-      if (href === 'signin.html' || href === './signin.html') a.setAttribute('href', signin);
-      else if (href === 'signup.html' || href === './signup.html') a.setAttribute('href', signup);
+      if (href === 'signup.html' || href === './signup.html') a.setAttribute('href', signup);
     });
     wireAppLinks();
   }
 
   wireAuthLinks();
 
-  // Dedicated auth pages: skip the marketing stub and open the app directly.
+  // The signup page is still a handoff: when the app is hosted, skip the
+  // marketing stub and open the real create-account flow directly. Sign-in
+  // is a working surface (wired below), so it never redirects away.
   var authPage = page.replace(/^\.\//, '');
-  var signinTarget = authUrl('signin');
   var signupTarget = authUrl('signup');
-  if (signinTarget && authPage === 'signin.html') {
-    location.replace(signinTarget);
-    return;
-  }
   if (signupTarget && authPage === 'signup.html') {
     location.replace(signupTarget);
     return;
@@ -322,14 +305,75 @@
       status.textContent = text;
     });
   }
-  stubForm('signin-form', 'signin-status',
-    "We're onboarding organizations personally during early access — your team's workspace link gets you in.",
-    signinTarget);
   stubForm('signup-form', 'signup-status',
     "We're onboarding organizations personally during early access — reach out via the contact page and yours will be ready today.",
     signupTarget);
   stubForm('investors-form', 'investors-status',
     'Access keys are issued personally — use Request access and we will be in touch.');
+
+  // Sign in is real: the form posts credentials to the backend's auth
+  // endpoint — the same one the dashboard uses. The session comes back as
+  // httpOnly cookies (no token ever touches page JavaScript), and the page
+  // forwards into the app, which sees the fresh session and passes straight
+  // through to the dashboard. If the browser declined a cross-site cookie
+  // (site and backend on different origins), the app's login page comes up
+  // with the email already filled in — one password away, never a dead end.
+  // `data-api` on the form overrides the API origin when the site is hosted
+  // separately from the backend (stamped from WEBSITE_API_ORIGIN at deploy).
+  var signinForm = document.getElementById('signin-form');
+  if (signinForm) {
+    var signinStatus = document.getElementById('signin-status');
+    var signinApi = (signinForm.dataset.api || '').replace(/\/+$/, '');
+    if (!signinApi && (location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+      signinApi = 'http://localhost:4000'; // the local backend's default port
+    }
+
+    signinForm.addEventListener('submit', function (event) {
+      event.preventDefault();
+      if (!signinForm.reportValidity()) return;
+      var submit = signinForm.querySelector('button[type="submit"]');
+      var email = document.getElementById('email').value.trim();
+      submit.disabled = true;
+      signinStatus.className = 'form-status';
+      signinStatus.textContent = 'Signing in…';
+      fetch(signinApi + '/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // the session lives in httpOnly cookies
+        body: JSON.stringify({ email: email, password: document.getElementById('password').value })
+      })
+        .then(function (res) {
+          return res.json().catch(function () { return {}; }).then(function (body) {
+            return { ok: res.ok, body: body };
+          });
+        })
+        .then(function (result) {
+          if (result.ok) {
+            signinStatus.className = 'form-status ok';
+            var origin = appOrigin();
+            if (origin) {
+              signinStatus.textContent = 'Signed in — opening your workspace…';
+              location.href = origin + '/login?email=' + encodeURIComponent(email);
+              return;
+            }
+            signinStatus.textContent =
+              "Signed in. Open your team's workspace link to reach your dashboard.";
+            submit.disabled = false;
+          } else {
+            signinStatus.className = 'form-status err';
+            signinStatus.textContent = (result.body && result.body.error) ||
+              'Could not sign you in — please try again in a minute.';
+            submit.disabled = false;
+          }
+        })
+        .catch(function () {
+          signinStatus.className = 'form-status err';
+          signinStatus.textContent =
+            'Could not reach the sign-in service — check your connection and try again.';
+          submit.disabled = false;
+        });
+    });
+  }
 
   wireForm('contact-form', 'contact-status', '/api/contact/send', {
     name: 'ct-name', email: 'ct-email', company: 'ct-company',

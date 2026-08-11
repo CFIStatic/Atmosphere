@@ -180,6 +180,15 @@ out = f'''<title>Atmosphere — AI for Service Contractors</title>
       if (sel && link.dataset.role) sel.value = link.dataset.role;
     }});
   }});
+  var signinForm = document.getElementById('signin-form');
+  if (signinForm) {{
+    signinForm.addEventListener('submit', function (ev) {{
+      ev.preventDefault();
+      var s = document.getElementById('signin-status');
+      s.className = 'form-status ok';
+      s.textContent = 'Design preview — when hosted, this signs into your account via /api/auth/login and opens the app.';
+    }});
+  }}
   var careersForm = document.getElementById('careers-form');
   if (careersForm) {{
     careersForm.addEventListener('submit', function (ev) {{

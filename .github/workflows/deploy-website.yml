@@ -66,16 +66,17 @@ jobs:
           sed -i "s|https://REPLACE-WITH-YOUR-DOMAIN|${base}|g" website/sitemap.xml website/robots.txt
           sed -i "s|content=\"/assets/og.png\"|content=\"${base}/assets/og.png\"|g" website/*.html
 
-      # The careers and contact forms post to the backend. On a static host
-      # that is a different origin — set the WEBSITE_API_ORIGIN repository
-      # variable (Settings → Secrets and variables → Actions → Variables) to
-      # the hosted backend's https origin and the forms are wired on the next
-      # deploy. Until then they degrade to a clear could-not-reach message.
+      # The careers, contact, and sign-in forms post to the backend. On a
+      # static host that is a different origin — set the WEBSITE_API_ORIGIN
+      # repository variable (Settings → Secrets and variables → Actions →
+      # Variables) to the hosted backend's https origin and the forms are
+      # wired on the next deploy. Until then they degrade to a clear
+      # could-not-reach message.
       - name: Point forms at the hosted backend
         if: vars.WEBSITE_API_ORIGIN != ''
         run: |
           sed -i "s|data-api=\"\"|data-api=\"${{ vars.WEBSITE_API_ORIGIN }}\"|" \
-            website/careers.html website/contact.html
+            website/careers.html website/contact.html website/signin.html
 
       # The bridge from marketing to product. Set the WEBSITE_APP_ORIGIN
       # repository variable to the hosted app's https origin and every
