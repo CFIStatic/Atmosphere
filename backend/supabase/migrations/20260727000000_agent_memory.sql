@@ -530,8 +530,13 @@ $$;
 -- 6. Rollups
 -- ============================================================================
 -- security_invoker so the underlying RLS policies still decide what is visible.
+--
+-- DROP + CREATE (not CREATE OR REPLACE): Postgres refuses CREATE OR REPLACE
+-- VIEW when the new shape drops columns (42P16). Preview branches that already
+-- carry a wider job_memory from an earlier apply hit that error; drop first.
 
-create or replace view public.job_memory
+drop view if exists public.job_memory cascade;
+create view public.job_memory
 with (security_invoker = true) as
 select
   j.id            as job_id,
@@ -558,7 +563,8 @@ from public.crm_jobs j;
 
 comment on view public.job_memory is 'A crm_job with its memory rolled up — the state of the record at a glance.';
 
-create or replace view public.agent_memory
+drop view if exists public.agent_memory cascade;
+create view public.agent_memory
 with (security_invoker = true) as
 select
   m.org_id,
