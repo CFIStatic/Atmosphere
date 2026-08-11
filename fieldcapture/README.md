@@ -5,7 +5,21 @@ Production crew app: **one button**, **video + microphone**, filed through a
 
 ## Run live
 
-Serve this folder next to the API (same origin or pass `?api=`):
+With the frontend Vite app (`npm run dev` in `frontend/`, port **5174**), open:
+
+```
+http://localhost:5174/fieldcapture/index.html?demo=1
+```
+
+That loads the crew UI without a job token (scripted demo — no upload). For a
+real day film, serve this folder next to the API (same origin or pass `?api=`):
+
+```
+http://localhost:5174/fieldcapture/index.html?token=<job-share-token>
+```
+
+Same-origin `/api` is proxied by Vite, so `?api=` is optional on localhost.
+Legacy / standalone:
 
 ```
 /fieldcapture/index.html?token=<job-share-token>&api=http://localhost:4000
