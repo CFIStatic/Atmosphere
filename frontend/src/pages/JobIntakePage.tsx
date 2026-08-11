@@ -9,6 +9,7 @@ import {
   type IntakeApproveResult,
   type ResolvedPlaceAddress,
 } from '../lib/api';
+import { handoffFromApprove } from '../lib/intakeHandoff';
 import { SpinnerIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { useExperiment } from '../hooks/useExperiment';
@@ -248,25 +249,16 @@ export function JobIntakePage() {
         inviteCount: invitees.length,
         scopeLines: scope.length,
       });
+      const handoff = handoffFromApprove(res, proposal, scope);
       setResult(res);
-      setStep('done');
-      // Job is live — land on Job Progress with this job open.
-      // Use /job-progress (not /shared) so we never collide with public
-      // share links at /shared/:token.
+      // Leave intake immediately — seed Job Progress with the new job file so
+      // it paints even if the list/detail GETs lag or race.
       navigate(`/job-progress?job=${encodeURIComponent(res.job.id)}`, {
         replace: true,
         state: {
-          freshJob: {
-            jobId: res.job.id,
-            jobNumber: res.job.jobNumber ?? null,
-            title: res.job.title,
-            status: 'scheduled',
-            parties: res.invites?.length ?? 0,
-            currentRevision: res.briefRevision ?? null,
-            behind: 0,
-            awaiting: 0,
-            exclusions: scope.filter((s) => s.state === 'excluded').length,
-          },
+          freshJob: handoff.summary,
+          freshRecord: handoff.record,
+          justApproved: true,
         },
       });
     } catch (err) {
@@ -339,7 +331,7 @@ export function JobIntakePage() {
         description="Enter the site address, optionally upload or paste scope, then approve once to invite Field Capture. Scope is optional — without it, AI describes the video."
         action={
           <Link
-            to="/shared"
+            to="/job-progress"
             className="text-sm font-medium text-brand-600 hover:text-brand-500"
           >
             Back to job progress
@@ -903,23 +895,21 @@ export function JobIntakePage() {
             <button
               type="button"
               className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900"
-              onClick={() =>
+              onClick={() => {
+                if (!proposal) {
+                  navigate(`/job-progress?job=${encodeURIComponent(result.job.id)}`);
+                  return;
+                }
+                const scope = proposal.scope.filter((line) => line.title.trim().length > 0);
+                const handoff = handoffFromApprove(result, proposal, scope);
                 navigate(`/job-progress?job=${encodeURIComponent(result.job.id)}`, {
                   state: {
-                    freshJob: {
-                      jobId: result.job.id,
-                      jobNumber: result.job.jobNumber ?? null,
-                      title: result.job.title,
-                      status: 'scheduled',
-                      parties: result.invites?.length ?? 0,
-                      currentRevision: result.briefRevision ?? null,
-                      behind: 0,
-                      awaiting: 0,
-                      exclusions: 0,
-                    },
+                    freshJob: handoff.summary,
+                    freshRecord: handoff.record,
+                    justApproved: true,
                   },
-                })
-              }
+                });
+              }}
             >
               Open this job on the dashboard
             </button>

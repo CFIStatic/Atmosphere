@@ -249,11 +249,18 @@ function DemoRouteBridge() {
   return null;
 }
 
-/** Preserve ?job= when moving bookmarks from /shared → /job-progress. */
+/** Preserve ?job= (and intake handoff state) when moving /shared → /job-progress. */
 function SharedJobsRedirect() {
+  const location = useLocation();
   const [params] = useSearchParams();
   const q = params.toString();
-  return <Navigate to={q ? `/job-progress?${q}` : '/job-progress'} replace />;
+  return (
+    <Navigate
+      to={q ? `/job-progress?${q}` : '/job-progress'}
+      replace
+      state={location.state}
+    />
+  );
 }
 
 export default function App() {

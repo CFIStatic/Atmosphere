@@ -270,9 +270,9 @@ export const VISIBLE_PLATFORM_IDS: PlatformId[] = ['operations', 'field'];
 
 export const PLATFORM_HOME: Record<PlatformId, string> = {
   sales: '/sales',
-  // The Verification platform opens on the Verifier — the platform is the
-  // portal. The old overview still answers at /operations, unlisted.
-  operations: '/verifier-library',
+  // Office home is Job Progress (job files). The video library lives at
+  // /verifier-library — opening there after login looked like an empty dashboard.
+  operations: '/job-progress',
   field: '/field',
   manager: '/manager',
 };

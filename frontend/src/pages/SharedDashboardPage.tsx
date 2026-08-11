@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { PageHeader, EmptyState } from '../components/AppShell';
 import {
@@ -14,6 +14,12 @@ import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPane
 import { ScopeDocPanel } from '../components/shared/ScopeDocPanel';
 import { JobReadinessPanel } from '../components/shared/JobReadinessPanel';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
+
+type HandoffState = {
+  freshJob?: SharedJobSummary;
+  freshRecord?: SharedJobRecord;
+  justApproved?: boolean;
+};
 
 /**
  * One job, two companies, one record.
@@ -78,17 +84,29 @@ export function SharedDashboardPage() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedJob = searchParams.get('job');
-  const freshFromNav = (location.state as { freshJob?: SharedJobSummary } | null)?.freshJob;
+  const handoff = (location.state as HandoffState | null) ?? null;
+  const freshFromNav = handoff?.freshJob;
+  const freshRecord = handoff?.freshRecord;
+  const [justApproved, setJustApproved] = useState(Boolean(handoff?.justApproved));
   useFeatureTimer('job_files');
+  const openSeq = useRef(0);
+  const recordIdRef = useRef<string | null>(freshRecord?.job.id ?? null);
+  const seededId = requestedJob || freshFromNav?.jobId || freshRecord?.job.id || null;
+
   const [list, setList] = useState<SharedJobSummary[] | null>(() =>
     freshFromNav ? [freshFromNav] : null,
   );
-  const [openId, setOpenId] = useState<string | null>(requestedJob || freshFromNav?.jobId || null);
-  const [record, setRecord] = useState<SharedJobRecord | null>(null);
-  const [loading, setLoading] = useState(Boolean(requestedJob || freshFromNav));
+  const [openId, setOpenId] = useState<string | null>(seededId);
+  const [record, setRecord] = useState<SharedJobRecord | null>(() => freshRecord ?? null);
+  // If intake already handed us the file, don't flash a blank loading state.
+  const [loading, setLoading] = useState(Boolean(seededId) && !freshRecord);
   const [error, setError] = useState<string | null>(null);
   const [readinessKey, setReadinessKey] = useState(0);
   const [shareFormOpen, setShareFormOpen] = useState(false);
+
+  useEffect(() => {
+    recordIdRef.current = record?.job.id ?? null;
+  }, [record]);
 
   function openShare() {
     setShareFormOpen(true);
@@ -103,15 +121,22 @@ export function SharedDashboardPage() {
   }
 
   async function openJob(jobId: string, opts?: { syncUrl?: boolean }) {
+    const seq = ++openSeq.current;
     setOpenId(jobId);
     setShareFormOpen(false);
     if (opts?.syncUrl !== false) {
-      setSearchParams(jobId ? { job: jobId } : {}, { replace: true });
+      // Preserve intake handoff state — setSearchParams drops it otherwise.
+      setSearchParams(jobId ? { job: jobId } : {}, {
+        replace: true,
+        state: location.state,
+      });
     }
-    setLoading(true);
+    // Keep showing a seeded record while we refresh from the API.
+    if (recordIdRef.current !== jobId) setLoading(true);
     setError(null);
     try {
       const next = await api.sharedJob(jobId);
+      if (seq !== openSeq.current) return;
       setRecord(next);
       ensureListed({
         jobId,
@@ -125,10 +150,16 @@ export function SharedDashboardPage() {
         exclusions: 0,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not open that record.');
-      setRecord(null);
+      if (seq !== openSeq.current) return;
+      // Never wipe a just-created job file on a flaky GET — keep the handoff.
+      if (recordIdRef.current === jobId) {
+        // keep painted record; soft-fail
+      } else {
+        setRecord(null);
+        setError(err instanceof Error ? err.message : 'Could not open that record.');
+      }
     } finally {
-      setLoading(false);
+      if (seq === openSeq.current) setLoading(false);
     }
   }
 
@@ -145,21 +176,26 @@ export function SharedDashboardPage() {
       const preferred =
         requestedJob ||
         freshFromNav?.jobId ||
+        freshRecord?.job.id ||
         (openId && res.jobs.some((j) => j.jobId === openId) && openId) ||
         res.jobs[0]?.jobId ||
         null;
-      if (preferred) void openJob(preferred, { syncUrl: Boolean(requestedJob || freshFromNav) });
+      if (preferred) {
+        // Refresh detail in background; syncUrl only when deep-linked.
+        void openJob(preferred, {
+          syncUrl: Boolean(requestedJob || freshFromNav || freshRecord),
+        });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load the shared records.');
       setList((prev) => prev ?? []);
-      // Still try the deep-linked / just-approved job so intake handoff works
-      // even when the list endpoint blips.
-      const fallback = requestedJob || freshFromNav?.jobId;
+      const fallback = requestedJob || freshFromNav?.jobId || freshRecord?.job.id;
       if (fallback) void openJob(fallback, { syncUrl: Boolean(requestedJob) });
     }
   }
 
   useEffect(() => {
+    if (freshFromNav) ensureListed(freshFromNav);
     void loadList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -167,8 +203,9 @@ export function SharedDashboardPage() {
   // Deep-link from Approve & invite: /job-progress?job=<id>
   useEffect(() => {
     if (!requestedJob) return;
-    if (record?.job.id === requestedJob) return;
+    if (record?.job.id === requestedJob && !loading) return;
     if (freshFromNav?.jobId === requestedJob) ensureListed(freshFromNav);
+    // If we already painted from intake, only refresh — don't blank the page.
     void openJob(requestedJob, { syncUrl: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestedJob]);
@@ -207,6 +244,28 @@ export function SharedDashboardPage() {
         }
       />
 
+      {justApproved && record && (
+        <div
+          role="status"
+          className="mt-4 flex flex-wrap items-start justify-between gap-3 rounded-xl border border-success-200 bg-success-50/70 px-4 py-3"
+        >
+          <div>
+            <p className="text-sm font-semibold text-success-700">Job created</p>
+            <p className="mt-0.5 text-sm text-ink-700">
+              <span className="font-medium text-ink-900">{record.job.title}</span> is on Job
+              Progress. Field Capture invites are out — footage will land here as they film.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="shrink-0 text-sm font-medium text-ink-500 hover:text-ink-800"
+            onClick={() => setJustApproved(false)}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {error && (
         <p role="alert" className="mt-4 text-sm text-danger-600">
           {error}
@@ -233,7 +292,7 @@ export function SharedDashboardPage() {
         </div>
       ) : (
         <>
-          {(list?.length ?? 0) > 1 && (
+          {(list?.length ?? 0) >= 1 && (
             <div className="mt-6 flex gap-2 overflow-x-auto pb-1">
               {(list ?? []).map((job) => {
                 const on = openId === job.jobId;
