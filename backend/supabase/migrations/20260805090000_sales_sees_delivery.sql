@@ -160,33 +160,46 @@ comment on column public.crm_sends.kind is
 
 create or replace view public.crm_outreach_people
 with (security_invoker = true) as
+with people as (
+  select
+    s.org_id,
+    lower(s.email)                               as email,
+    count(*)                                      as messages,
+    count(*) filter (where s.state = 'sent')      as delivered,
+    count(*) filter (where s.state = 'bounced')   as bounced,
+    count(*) filter (where s.state = 'blocked')   as blocked,
+    count(*) filter (where s.kind = 'campaign')   as campaign_messages,
+    count(*) filter (where s.kind = 'job_update') as update_messages,
+    max(s.created_at)                             as last_at
+  from public.crm_sends s
+  group by s.org_id, lower(s.email)
+)
 select
-  s.org_id,
-  lower(s.email)                                   as email,
-  count(*)                                          as messages,
-  count(*) filter (where s.state = 'sent')          as delivered,
-  count(*) filter (where s.state = 'bounced')       as bounced,
-  count(*) filter (where s.state = 'blocked')       as blocked,
-  count(*) filter (where s.kind = 'campaign')       as campaign_messages,
-  count(*) filter (where s.kind = 'job_update')     as update_messages,
-  max(s.created_at)                                 as last_at,
+  p.org_id,
+  p.email,
+  p.messages,
+  p.delivered,
+  p.bounced,
+  p.blocked,
+  p.campaign_messages,
+  p.update_messages,
+  p.last_at,
   -- Whether this address can still be written to at all. Reading it here means
   -- the panel can say "unsubscribed — call instead" rather than showing a send
   -- button that will be refused.
   exists (
     select 1 from public.crm_unsubscribes u
-    where u.org_id = s.org_id and lower(u.email) = lower(s.email)
-  )                                                 as unsubscribed,
+    where u.org_id = p.org_id and lower(u.email) = p.email
+  ) as unsubscribed,
   exists (
-    select 1 from public.crm_suppressions p
-    where p.org_id = s.org_id
+    select 1 from public.crm_suppressions s
+    where s.org_id = p.org_id
       and (
-        (p.kind = 'email' and lower(p.value) = lower(s.email))
-        or (p.kind = 'domain' and lower(p.value) = split_part(lower(s.email), '@', 2))
+        (s.kind = 'email' and lower(s.value) = p.email)
+        or (s.kind = 'domain' and lower(s.value) = split_part(p.email, '@', 2))
       )
-  )                                                 as suppressed
-from public.crm_sends s
-group by s.org_id, lower(s.email);
+  ) as suppressed
+from people p;
 
 comment on view public.crm_outreach_people is
   'Every address this platform has sent to, with how it went and whether they '
