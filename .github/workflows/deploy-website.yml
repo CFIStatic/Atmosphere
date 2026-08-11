@@ -87,7 +87,7 @@ jobs:
           sed -i "s|<html lang=\"en\">|<html lang=\"en\" data-app-origin=\"${{ vars.WEBSITE_APP_ORIGIN }}\">|" \
             website/*.html
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: website
 
