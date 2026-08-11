@@ -70,8 +70,9 @@ AtmosphereFieldCapture/
 1. **First launch only:** Connect Atmosphere account (same as dashboard).
 2. Later launches open Today already connected.
 3. Confirm today’s jobs (tap one if several) → **Start the day**.
-   Or tap **+ Quick Add**, type a job name from a call, then start — the office
-   sees the job file and can finish details later.
+   Or tap the **+** (Quick Add), type a job name from a call → **Add & start
+   filming**. That creates the job file for the office Job files list so they
+   can finish address/scope later.
 4. Hold **Finish the day** — proof upload into that job → optional RoomPlan twin.
 
 AI dictation and twin review stay in the **office Verifier**.
