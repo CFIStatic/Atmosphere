@@ -52,6 +52,12 @@ export const config = {
     serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? '',
   },
 
+  // Google Maps / Places (address autocomplete on job intake). Server-only —
+  // distinct from GOOGLE_API_KEY used by the Gemini model arms.
+  googleMaps: {
+    apiKey: process.env.GOOGLE_MAPS_API_KEY ?? process.env.GOOGLE_PLACES_API_KEY ?? '',
+  },
+
   cookies: {
     accessTokenName: 'atm_access_token',
     refreshTokenName: 'atm_refresh_token',

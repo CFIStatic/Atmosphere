@@ -7,6 +7,7 @@ import {
   Routes,
   useLocation,
   useNavigate,
+  useSearchParams,
 } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -248,6 +249,13 @@ function DemoRouteBridge() {
   return null;
 }
 
+/** Preserve ?job= when moving bookmarks from /shared → /job-progress. */
+function SharedJobsRedirect() {
+  const [params] = useSearchParams();
+  const q = params.toString();
+  return <Navigate to={q ? `/job-progress?${q}` : '/job-progress'} replace />;
+}
+
 export default function App() {
   return (
     <Router {...routerProps()}>
@@ -388,7 +396,11 @@ export default function App() {
           >
             <Route path="/verifier-library" element={null} />
             <Route path="/intake" element={<JobIntakePage />} />
-            <Route path="/shared" element={<SharedDashboardPage />} />
+            {/* Canonical office Job Progress. /shared stays as a redirect so
+                old bookmarks and rail links keep working without colliding
+                with public share pages at /shared/:token. */}
+            <Route path="/job-progress" element={<SharedDashboardPage />} />
+            <Route path="/shared" element={<SharedJobsRedirect />} />
           </Route>
 
           {/* Growth analytics. Onboarding is required — every figure is scoped to

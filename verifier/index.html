@@ -2183,7 +2183,7 @@
       if (startJob) startJob.setAttribute('aria-current', 'true');
       return;
     }
-    if (activeRoute === '/shared') {
+    if (activeRoute === '/shared' || activeRoute === '/job-progress') {
       var jobProgress = document.getElementById('nav-jobprogress');
       if (jobProgress) jobProgress.setAttribute('aria-current', 'true');
       return;
@@ -2393,10 +2393,10 @@
     var navJobProgress = document.getElementById('nav-jobprogress');
     if (navJobProgress) {
       navJobProgress.addEventListener('click', function () {
-        activeRoute = '/shared';
+        activeRoute = '/job-progress';
         activeRailItem = '';
         syncSidebarActive();
-        window.parent.postMessage({ atmosphere: 'navigate', to: '/shared' }, '*');
+        window.parent.postMessage({ atmosphere: 'navigate', to: '/job-progress' }, '*');
       });
     }
     var navSettings = document.getElementById('nav-settings');

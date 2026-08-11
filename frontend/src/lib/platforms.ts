@@ -168,7 +168,7 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
         label: 'Set up',
         items: [
           { to: '/intake', label: 'Start a job', Icon: BoltIcon },
-          { to: '/shared', label: 'Job files', Icon: UsersIcon },
+          { to: '/job-progress', label: 'Job files', Icon: UsersIcon },
         ],
       },
       SYSTEM,

@@ -1,11 +1,13 @@
 import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { PageHeader } from '../components/AppShell';
+import { AddressAutocomplete } from '../components/AddressAutocomplete';
 import {
   api,
   type CaptureTeamMember,
   type IntakeProposal,
   type IntakeApproveResult,
+  type ResolvedPlaceAddress,
 } from '../lib/api';
 import { SpinnerIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
@@ -249,9 +251,23 @@ export function JobIntakePage() {
       setResult(res);
       setStep('done');
       // Job is live — land on Job Progress with this job open.
-      navigate(`/shared?job=${encodeURIComponent(res.job.id)}`, {
+      // Use /job-progress (not /shared) so we never collide with public
+      // share links at /shared/:token.
+      navigate(`/job-progress?job=${encodeURIComponent(res.job.id)}`, {
         replace: true,
-        state: { freshJob: res.job },
+        state: {
+          freshJob: {
+            jobId: res.job.id,
+            jobNumber: res.job.jobNumber ?? null,
+            title: res.job.title,
+            status: 'scheduled',
+            parties: res.invites?.length ?? 0,
+            currentRevision: res.briefRevision ?? null,
+            behind: 0,
+            awaiting: 0,
+            exclusions: scope.filter((s) => s.state === 'excluded').length,
+          },
+        },
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not approve that package.');
@@ -370,12 +386,13 @@ export function JobIntakePage() {
             </p>
             <label className="mt-4 block text-xs font-medium text-ink-600">
               Site address
-              <input
-                className="glass-field mt-1 w-full rounded-lg px-3 py-2.5 text-sm text-ink-900 placeholder:text-ink-400"
+              <AddressAutocomplete
                 value={siteAddress}
-                onChange={(e) => setSiteAddress(e.target.value)}
+                onChange={setSiteAddress}
+                onResolved={(addr: ResolvedPlaceAddress) => {
+                  setSiteAddress(addr.formatted || addr.addressLine1);
+                }}
                 required
-                autoComplete="street-address"
                 placeholder="1842 Meridian Ave, Austin, TX 78702"
               />
             </label>
@@ -503,11 +520,19 @@ export function JobIntakePage() {
               </label>
               <label className="block text-xs font-medium text-ink-600 sm:col-span-2">
                 Site address
-                <input
-                  className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
+                <AddressAutocomplete
                   value={proposal.address}
-                  onChange={(e) => setProposal({ ...proposal, address: e.target.value })}
+                  onChange={(next) => setProposal({ ...proposal, address: next })}
+                  onResolved={(addr: ResolvedPlaceAddress) => {
+                    setProposal({
+                      ...proposal,
+                      address: addr.formatted || addr.addressLine1,
+                      city: addr.city || proposal.city,
+                      postalCode: addr.postalCode || proposal.postalCode,
+                    });
+                  }}
                   required
+                  className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
                 />
               </label>
               <label className="block text-xs font-medium text-ink-600">
@@ -878,7 +903,23 @@ export function JobIntakePage() {
             <button
               type="button"
               className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900"
-              onClick={() => navigate(`/shared?job=${encodeURIComponent(result.job.id)}`)}
+              onClick={() =>
+                navigate(`/job-progress?job=${encodeURIComponent(result.job.id)}`, {
+                  state: {
+                    freshJob: {
+                      jobId: result.job.id,
+                      jobNumber: result.job.jobNumber ?? null,
+                      title: result.job.title,
+                      status: 'scheduled',
+                      parties: result.invites?.length ?? 0,
+                      currentRevision: result.briefRevision ?? null,
+                      behind: 0,
+                      awaiting: 0,
+                      exclusions: 0,
+                    },
+                  },
+                })
+              }
             >
               Open this job on the dashboard
             </button>

@@ -125,7 +125,11 @@ export function AppShell({
               <div className="space-y-0.5">
                 {group.items.map(({ to, label, Icon }) => {
                   const tourTarget =
-                    to === '/intake' ? 'nav-start-job' : to === '/shared' ? 'nav-job-progress' : undefined;
+                    to === '/intake'
+                      ? 'nav-start-job'
+                      : to === '/shared' || to === '/job-progress'
+                        ? 'nav-job-progress'
+                        : undefined;
                   return (
                   <NavLink
                     key={`${group.label}-${to}`}

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { PageHeader, EmptyState } from '../components/AppShell';
 import {
   api,
@@ -75,13 +75,17 @@ function ago(iso: string | null): string {
 
 export function SharedDashboardPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedJob = searchParams.get('job');
+  const freshFromNav = (location.state as { freshJob?: SharedJobSummary } | null)?.freshJob;
   useFeatureTimer('job_files');
-  const [list, setList] = useState<SharedJobSummary[] | null>(null);
-  const [openId, setOpenId] = useState<string | null>(requestedJob);
+  const [list, setList] = useState<SharedJobSummary[] | null>(() =>
+    freshFromNav ? [freshFromNav] : null,
+  );
+  const [openId, setOpenId] = useState<string | null>(requestedJob || freshFromNav?.jobId || null);
   const [record, setRecord] = useState<SharedJobRecord | null>(null);
-  const [loading, setLoading] = useState(Boolean(requestedJob));
+  const [loading, setLoading] = useState(Boolean(requestedJob || freshFromNav));
   const [error, setError] = useState<string | null>(null);
   const [readinessKey, setReadinessKey] = useState(0);
   const [shareFormOpen, setShareFormOpen] = useState(false);
@@ -140,13 +144,18 @@ export function SharedDashboardPage() {
       });
       const preferred =
         requestedJob ||
+        freshFromNav?.jobId ||
         (openId && res.jobs.some((j) => j.jobId === openId) && openId) ||
         res.jobs[0]?.jobId ||
         null;
-      if (preferred) void openJob(preferred, { syncUrl: Boolean(requestedJob) });
+      if (preferred) void openJob(preferred, { syncUrl: Boolean(requestedJob || freshFromNav) });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load the shared records.');
       setList((prev) => prev ?? []);
+      // Still try the deep-linked / just-approved job so intake handoff works
+      // even when the list endpoint blips.
+      const fallback = requestedJob || freshFromNav?.jobId;
+      if (fallback) void openJob(fallback, { syncUrl: Boolean(requestedJob) });
     }
   }
 
@@ -155,10 +164,11 @@ export function SharedDashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Deep-link from Approve & invite: /shared?job=<id>
+  // Deep-link from Approve & invite: /job-progress?job=<id>
   useEffect(() => {
     if (!requestedJob) return;
     if (record?.job.id === requestedJob) return;
+    if (freshFromNav?.jobId === requestedJob) ensureListed(freshFromNav);
     void openJob(requestedJob, { syncUrl: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestedJob]);

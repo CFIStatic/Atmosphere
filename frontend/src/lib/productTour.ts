@@ -65,7 +65,7 @@ export const WORK_VERIFICATION_TOUR: ProductTourDefinition = {
       id: 'job-progress',
       title: 'Job progress & work history',
       body: 'See scope completion, verified field days, and a day-by-day timeline of what crews filmed on site.',
-      route: '/shared',
+      route: '/job-progress',
       target: 'nav-job-progress',
       simulation: 'job-files',
       placement: 'right',

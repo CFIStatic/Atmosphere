@@ -920,6 +920,19 @@ export interface JobReadiness {
   source: IntakeSource | null;
 }
 
+/** Resolved street address from POST /api/operations/places/details. */
+export type ResolvedPlaceAddress = {
+  placeId: string;
+  formatted: string;
+  addressLine1: string;
+  city: string;
+  postalCode: string;
+  state: string;
+  country: string;
+  lat: number | null;
+  lng: number | null;
+};
+
 /** Editable package from POST /api/operations/intake/propose (no money fields). */
 export interface IntakeProposal {
   title: string;
@@ -3080,6 +3093,32 @@ export const api = {
     request<{ counts: Record<IntakeSource, number>; total: number }>('/api/operations/intake-mix', {
       method: 'GET',
     }),
+
+  placesStatus: () =>
+    request<{ configured: boolean }>('/api/operations/places/status', { method: 'GET' }),
+
+  placesAutocomplete: (input: { input: string; sessionToken?: string }) =>
+    request<{
+      configured: boolean;
+      suggestions: Array<{
+        placeId: string;
+        description: string;
+        mainText: string;
+        secondaryText: string;
+      }>;
+    }>('/api/operations/places/autocomplete', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  placesDetails: (input: { placeId: string; sessionToken?: string }) =>
+    request<{ configured: boolean; address: ResolvedPlaceAddress }>(
+      '/api/operations/places/details',
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+    ),
 
   // ---- The subcontractor's own list ----
   // These carry a session the sub holds rather than an org cookie, because a

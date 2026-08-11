@@ -28,6 +28,7 @@ import { prospectingRouter } from './routes/prospecting.js';
 import { campaignsRouter } from './routes/campaigns.js';
 import { salesWorkRouter } from './routes/salesWork.js';
 import { sharedJobsRouter, jobShareRouter } from './routes/sharedJobs.js';
+import { placesRouter } from './routes/places.js';
 import { purchasingRouter } from './routes/purchasing.js';
 import { episodesRouter } from './routes/episodes.js';
 import { evidencePortalRouter, evidenceShareRouter } from './routes/evidencePortal.js';
@@ -217,6 +218,7 @@ export function createApp(): Express {
   app.use('/api/operations', scopeDocsRouter);
   app.use('/api/operations', jobIntakeRouter);
   app.use('/api/operations', sharedJobsRouter);
+  app.use('/api/operations', placesRouter);
   app.use('/api/purchasing', purchasingRouter);
   app.use('/api/episodes', episodesRouter);
   app.use('/api/evidence-portal', evidencePortalRouter);

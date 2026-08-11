@@ -2521,11 +2521,13 @@ const routes: Array<[string, RegExp, Handler]> = [
       scheduledStart: null,
       source: 'scope_document',
     };
-    // Surface on the Job files list in this demo session.
+    // Surface on the Job Progress list AND openable record in this demo session.
+    const jobNumber = 9000 + (SHARED_JOBS.length % 900);
+    const title = String(b.title ?? 'New job');
     SHARED_JOBS.unshift({
       jobId: id,
-      jobNumber: 9000 + (SHARED_JOBS.length % 900),
-      title: String(b.title ?? 'New job'),
+      jobNumber,
+      title,
       status: 'scheduled',
       parties: invites.length,
       currentRevision: 1,
@@ -2533,10 +2535,70 @@ const routes: Array<[string, RegExp, Handler]> = [
       awaiting: invites.length,
       exclusions: scope.filter((s: { state?: string }) => s.state === 'excluded').length,
     });
+    const siteLine = [b.address, b.city, b.postalCode].filter(Boolean).join(', ');
+    const facts: Record<string, string> =
+      b.facts && typeof b.facts === 'object' && !Array.isArray(b.facts)
+        ? { ...(b.facts as Record<string, string>) }
+        : {};
+    if (siteLine && !facts['Site address']) facts['Site address'] = siteLine;
+    SHARED_RECORDS[id] = {
+      job: {
+        id,
+        jobNumber,
+        title,
+        status: 'scheduled',
+        claimNumber: (b.claimNumber as string | null) ?? null,
+      },
+      brief: {
+        id: `br-${id}`,
+        revision: 1,
+        created_at: new Date().toISOString(),
+        note: (b.briefNote as string | null) ?? null,
+        facts,
+      },
+      revisions: [
+        {
+          revision: 1,
+          note: (b.briefNote as string | null) ?? 'Intake approved.',
+          createdAt: new Date().toISOString(),
+        },
+      ],
+      currentRevision: 1,
+      parties: invites.map((inv) => ({
+        id: inv.id,
+        company: inv.name,
+        trade: 'field_capture',
+        contactName: inv.name,
+        email: inv.email,
+        phone: null,
+        role: 'subcontractor',
+        invited_at: new Date().toISOString(),
+        last_seen_at: null,
+        revoked_at: null,
+        acknowledgedRevision: null,
+        clear: false,
+        because: 'Invited from intake — waiting for them to accept the brief.',
+      })),
+      scope: scope.map((line: { title?: string; state?: string; reason?: string }, i: number) => ({
+        id: `sc-${id}-${i}`,
+        party_id: null,
+        state: line.state ?? 'included',
+        title: String(line.title ?? 'Scope line'),
+        detail: null,
+        amount: null,
+        reason: line.reason ?? null,
+        revision: 1,
+        decided_at: null,
+        created_at: new Date().toISOString(),
+      })),
+      money: { approved: 0, pending: 0, unpricedApprovals: 0 },
+      messages: [],
+      risks: [],
+    };
     return {
       status: 201,
       body: {
-        job: { id, title: String(b.title ?? 'New job'), jobNumber: null },
+        job: { id, title, jobNumber },
         briefRevision: 1,
         scopeSaved: scope.length,
         invites,
@@ -2728,6 +2790,19 @@ const routes: Array<[string, RegExp, Handler]> = [
     DUPLICATE_PAIRS.length = 0;
     return { body: { dryRun: false, moved, total } };
   }],
+
+  /* ------------------------------------------- Google Places (intake) */
+  ['GET', /^\/api\/operations\/places\/status$/, () => ({
+    body: { configured: false },
+  })],
+  ['POST', /^\/api\/operations\/places\/autocomplete$/, () => ({
+    status: 503,
+    body: { error: 'Google Maps is not configured in demo.', code: 'maps_unconfigured' },
+  })],
+  ['POST', /^\/api\/operations\/places\/details$/, () => ({
+    status: 503,
+    body: { error: 'Google Maps is not configured in demo.', code: 'maps_unconfigured' },
+  })],
 
   /* ------------------------------------------- shared job record */
   ['GET', /^\/api\/operations\/shared$/, () => ({
