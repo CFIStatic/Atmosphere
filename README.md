@@ -199,6 +199,7 @@ against the API.
 | `POST` | `/api/job-share/:token/proof` | File the day after upload |
 | `POST` | `/api/field/claim/start` · `/verify` | OTP → field identity → My jobs |
 | `GET` | `/api/field/jobs` | Claimed jobs for a field session |
+| `POST` | `/api/field-app/jobs/quick-add` | Field Capture Quick Add — name-only job file (+ party) for office Job files |
 | `GET` | `/api/evidence-portal/library` | Office clip library |
 | `POST` | `/api/evidence-portal/shares` | Share evidence to an email (account-pinned) |
 

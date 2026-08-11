@@ -121,6 +121,20 @@ final class AtmosphereClient: ObservableObject {
         return res.jobs
     }
 
+    struct QuickAddResponse: Decodable {
+        let job: ExpectedJob
+    }
+
+    /// Create a job file from the phone when the office has not opened one yet.
+    func quickAddJob(title: String) async throws -> ExpectedJob {
+        struct Body: Encodable { let title: String }
+        let res: QuickAddResponse = try await post(
+            path: "/api/field-app/jobs/quick-add",
+            body: Body(title: title)
+        )
+        return res.job
+    }
+
     struct ProofUploadUrlResponse: Decodable {
         let path: String
         let token: String?

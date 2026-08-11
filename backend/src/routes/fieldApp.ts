@@ -5,7 +5,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { badRequest, HttpError, serviceUnavailable } from '../lib/errors.js';
-import { createUploadUrl, recordProof } from './proofOfWork.js';
+import { createUploadUrl, recordAccess, recordProof } from './proofOfWork.js';
 
 /**
  * Field Capture (App Store) ↔ platform account bridge.
@@ -28,6 +28,16 @@ const limiter = rateLimit({
 fieldAppRouter.use(limiter);
 
 const FIELD_PARTY_COMPANY = 'Field Capture';
+
+/** Title-only job entry from the Field Capture phone when the office has not opened the file yet. */
+export const fieldQuickAddSchema = z.object({
+  title: z
+    .string({ required_error: 'Job name is required' })
+    .trim()
+    .min(2, 'Job name is too short')
+    .max(200, 'Job name is too long'),
+  workType: z.enum(['mitigation', 'construction']).default('construction'),
+});
 
 /** GET /api/field-app/me — who is signed in and which org receives uploads. */
 fieldAppRouter.get('/me', async (req: Request, res: Response, next: NextFunction) => {
@@ -111,6 +121,95 @@ fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunct
     res.json({ jobs: out });
   } catch (err) {
     next(err);
+  }
+});
+
+/**
+ * POST /api/field-app/jobs/quick-add
+ *
+ * Field Capture "Quick Add": the crew got a call, the office has not opened a
+ * job file yet, and they still need somewhere to put today's film. They type a
+ * job name; we create the org job file + a Field Capture party so it shows on
+ * the office Job files dashboard. Address, scope, and the rest are filled in
+ * later from the office — readiness will say what is still missing.
+ */
+fieldAppRouter.post('/jobs/quick-add', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { orgId, userId, supabase } = await requireOrgContext(req);
+    const input = fieldQuickAddSchema.parse(req.body);
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', userId)
+      .maybeSingle();
+    const fullName = (profile as { full_name?: string } | null)?.full_name ?? null;
+
+    const scheduledStart = new Date().toISOString();
+    const { data: job, error: jobError } = await supabase
+      .from('crm_jobs')
+      .insert({
+        org_id: orgId,
+        title: input.title,
+        work_type: input.workType,
+        status: 'scheduled',
+        scheduled_start: scheduledStart,
+        created_by: userId,
+      })
+      .select('id, title, job_number, status, scheduled_start')
+      .single();
+    if (jobError || !job) {
+      throw new HttpError(500, jobError?.message ?? 'Could not create the job.', 'job_failed');
+    }
+
+    const jobId = (job as { id: string }).id;
+
+    await supabase.from('job_intake').insert({
+      job_id: jobId,
+      org_id: orgId,
+      source: 'manual',
+      source_detail: { enteredFrom: 'field_quick_add' },
+      entered_by: userId,
+    });
+
+    // Party is what makes the file appear on the office Job files list
+    // (job_share_status is built from job_parties). Without it the film has a
+    // home in crm_jobs but the dashboard the office checks stays empty.
+    const party = await ensureFieldParty(
+      supabase,
+      orgId,
+      jobId,
+      userId,
+      req.user?.email,
+      fullName,
+    );
+
+    await recordAccess(supabase, {
+      orgId,
+      jobId,
+      action: 'job_created',
+      actorId: userId,
+      actorLabel: fullName ?? req.user?.email ?? 'Field Capture',
+      detail: 'Quick Add from Field Capture — office can finish address and scope later',
+    }).catch(() => undefined);
+
+    const title = (job as { title: string }).title || input.title;
+    const jobNumber = (job as { job_number?: number | null }).job_number;
+    res.status(201).json({
+      job: {
+        id: jobId,
+        number: jobNumber != null ? `#${jobNumber}` : '',
+        name: title,
+        address: 'Address TBD',
+        at: 'Today',
+        status: (job as { status?: string | null }).status ?? 'scheduled',
+        placed: false,
+      },
+      party: { id: party.id },
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid request'));
+    else next(err);
   }
 });
 

@@ -5,6 +5,10 @@ struct TodayView: View {
     @EnvironmentObject private var auth: AuthSession
     @EnvironmentObject private var api: AtmosphereClient
 
+    @State private var showQuickAdd = false
+    @State private var quickAddTitle = ""
+    @State private var quickAddBusy = false
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -26,16 +30,29 @@ struct TodayView: View {
                     .foregroundStyle(FieldTheme.muted)
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("What today expects of you")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(FieldTheme.faint)
-                            .textCase(.uppercase)
+                        HStack {
+                            Text("What today expects of you")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(FieldTheme.faint)
+                                .textCase(.uppercase)
+                            Spacer()
+                            Button {
+                                quickAddTitle = ""
+                                showQuickAdd = true
+                            } label: {
+                                Label("Quick Add", systemImage: "plus")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(FieldTheme.accent)
+                            }
+                            .accessibilityLabel("Quick Add job")
+                        }
+
                         if session.loadingJobs {
                             Text("Loading jobs from your account…")
                                 .font(.system(size: 13))
                                 .foregroundStyle(FieldTheme.muted)
                         } else if session.jobs.isEmpty {
-                            Text("No open jobs yet. Create a job in the Atmosphere dashboard, then pull to refresh.")
+                            Text("No open jobs yet. Tap + Quick Add to name one from a call, or wait for the office.")
                                 .font(.system(size: 13))
                                 .foregroundStyle(FieldTheme.muted)
                         }
@@ -120,6 +137,61 @@ struct TodayView: View {
             }
             .padding(18)
         }
+        .sheet(isPresented: $showQuickAdd) {
+            quickAddSheet
+        }
+    }
+
+    private var quickAddSheet: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Name the job so the office sees a file. You can film right away; they can fill in address and scope later.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(FieldTheme.muted)
+
+                TextField("Job name", text: $quickAddTitle)
+                    .textInputAutocapitalization(.sentences)
+                    .padding(12)
+                    .background(FieldTheme.panel)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
+                    .cornerRadius(10)
+
+                Button {
+                    Task {
+                        quickAddBusy = true
+                        defer { quickAddBusy = false }
+                        await session.quickAdd(title: quickAddTitle, api: api)
+                        if session.lastError == nil {
+                            showQuickAdd = false
+                        }
+                    }
+                } label: {
+                    HStack {
+                        if quickAddBusy { ProgressView() }
+                        Text(quickAddBusy ? "Adding…" : "Add job")
+                            .font(.system(size: 16, weight: .bold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(FieldTheme.ink)
+                    .foregroundStyle(FieldTheme.bg)
+                    .cornerRadius(12)
+                }
+                .disabled(quickAddBusy || quickAddTitle.trimmingCharacters(in: .whitespacesAndNewlines).count < 2)
+
+                Spacer()
+            }
+            .padding(18)
+            .background(FieldTheme.bg.ignoresSafeArea())
+            .navigationTitle("Quick Add")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showQuickAdd = false }
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 
     private var header: some View {
@@ -135,6 +207,19 @@ struct TodayView: View {
                     .lineLimit(1)
             }
             Spacer()
+            Button {
+                quickAddTitle = ""
+                showQuickAdd = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(FieldTheme.ink)
+                    .frame(width: 36, height: 36)
+                    .background(FieldTheme.panel)
+                    .overlay(Circle().stroke(FieldTheme.line))
+                    .clipShape(Circle())
+            }
+            .accessibilityLabel("Quick Add job")
             Menu {
                 if let email = auth.email {
                     Text(email)

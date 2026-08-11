@@ -35,10 +35,29 @@ final class FieldDaySession: ObservableObject {
         }
     }
 
+    /// Quick Add — type a job name on site; the office sees the file and can finish details later.
+    func quickAdd(title: String, api: AtmosphereClient) async {
+        let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard name.count >= 2 else {
+            lastError = "Enter a job name (at least a couple of characters)."
+            return
+        }
+        lastError = nil
+        do {
+            let job = try await api.quickAddJob(title: name)
+            if !jobs.contains(where: { $0.id == job.id }) {
+                jobs.insert(job, at: 0)
+            }
+            activeJobId = job.id
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
     func startDay() async {
         lastError = nil
         guard activeJobId != nil || !jobs.isEmpty else {
-            lastError = "No job to film. Create or schedule a job in the Atmosphere dashboard first."
+            lastError = "No job to film. Tap + Quick Add to name one, or wait for the office."
             return
         }
         if activeJobId == nil { activeJobId = jobs.first?.id }
