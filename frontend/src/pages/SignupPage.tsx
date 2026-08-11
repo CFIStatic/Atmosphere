@@ -323,7 +323,11 @@ export function SignupPage() {
               </div>
             </Field>
 
-            <PrimaryButton disabled={!nameValid || !emailValid || !passwordValid || accountSubmitting} loading={accountSubmitting}>
+            <PrimaryButton
+              type="submit"
+              disabled={!nameValid || !emailValid || !passwordValid || accountSubmitting}
+              loading={accountSubmitting}
+            >
               {accountSubmitting ? 'Creating account…' : 'Continue to step 2'}
             </PrimaryButton>
           </form>

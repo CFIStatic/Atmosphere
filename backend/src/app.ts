@@ -64,6 +64,24 @@ import { cyberMonitor } from './cyber/index.js';
 import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
 import { verificationHook, pumpVerificationQueue } from './lib/verifierRunner.js';
 
+/**
+ * Match a browser Origin against FRONTEND_ORIGIN.
+ * In development, treat localhost and 127.0.0.1 as interchangeable — Cursor's
+ * preview and some OS stacks use one while .env lists the other.
+ */
+function isAllowedFrontendOrigin(origin: string): boolean {
+  if (config.frontendOrigins.includes(origin)) return true;
+  if (config.isProduction) return false;
+
+  let alt: string | null = null;
+  if (origin.includes('://localhost')) {
+    alt = origin.replace('://localhost', '://127.0.0.1');
+  } else if (origin.includes('://127.0.0.1')) {
+    alt = origin.replace('://127.0.0.1', '://localhost');
+  }
+  return Boolean(alt && config.frontendOrigins.includes(alt));
+}
+
 export function createApp(): Express {
   const app = express();
 
@@ -92,7 +110,7 @@ export function createApp(): Express {
     cors({
       origin(origin, callback) {
         // Allow same-origin / server-to-server / curl (no Origin header).
-        if (!origin || config.frontendOrigins.includes(origin)) {
+        if (!origin || isAllowedFrontendOrigin(origin)) {
           callback(null, true);
           return;
         }
