@@ -1,7 +1,7 @@
 import type { ContractorType, MemberRole, UsageIntent, WorkType } from '../../lib/api';
 import type { ServiceTrade } from './verifierSetupOptions';
 
-export type SetupWizardStep = 1 | 2 | 3 | 4 | 5;
+export type SetupWizardStep = 1 | 2 | 3 | 4;
 
 export const SETUP_WIZARD_STEPS = [
   {
@@ -16,16 +16,11 @@ export const SETUP_WIZARD_STEPS = [
   },
   {
     step: 3 as const,
-    title: 'Pick your role and trade',
-    detail: 'Crew Lead, Field Technician, Project Manager, or Reviewer — then pick your trade from the full service contractor list.',
-  },
-  {
-    step: 4 as const,
     title: 'Invite your crew',
     detail: 'Every organization gets one join code. Hand it to a teammate and they are in.',
   },
   {
-    step: 5 as const,
+    step: 4 as const,
     title: 'Set up billing',
     detail: 'Add your payment method in Stripe — $599/mo platform fee, then you are in.',
   },
@@ -45,7 +40,9 @@ export function initialSetupStep(options: {
   stepParam: string | null;
 }): SetupWizardStep {
   const parsed = options.stepParam ? Number.parseInt(options.stepParam, 10) : NaN;
-  if (parsed >= 1 && parsed <= 5) return parsed as SetupWizardStep;
+  // Accept legacy ?step=5 (old billing step number) as billing.
+  if (parsed === 5) return 4;
+  if (parsed >= 1 && parsed <= 4) return parsed as SetupWizardStep;
   if (options.user && !options.membership) return 2;
   return 1;
 }

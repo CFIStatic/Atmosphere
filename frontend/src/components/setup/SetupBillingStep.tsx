@@ -103,7 +103,7 @@ export function SetupBillingStep({
   if (loading || !status) {
     return (
       <SetupStepCard
-        step={5}
+        step={4}
         title="Set up billing"
         subtitle="Loading your plan details…"
       >
@@ -117,7 +117,7 @@ export function SetupBillingStep({
   if (!status.required || status.complete) {
     return (
       <SetupStepCard
-        step={5}
+        step={4}
         title="Billing ready"
         subtitle={
           status.complete
@@ -150,7 +150,7 @@ export function SetupBillingStep({
 
   return (
     <SetupStepCard
-      step={5}
+      step={4}
       title="Set up billing"
       subtitle="Add your payment method in Stripe — the last step before your dashboard."
     >

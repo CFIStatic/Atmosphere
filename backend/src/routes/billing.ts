@@ -584,7 +584,7 @@ async function resolveOnboardingPriceId(
 }
 
 function onboardingReturnUrl(kind: 'success' | 'cancelled', returnPath?: string) {
-  const params = new URLSearchParams({ step: '5', checkout: kind });
+  const params = new URLSearchParams({ step: '4', checkout: kind });
   if (returnPath) params.set('next', returnPath);
   return `${config.stripe.onboardingReturnBase}?${params.toString()}`;
 }

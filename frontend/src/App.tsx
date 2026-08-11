@@ -176,7 +176,7 @@ function RequireBillingSetup({ children }: { children: ReactNode }) {
     const returnPath = `${location.pathname}${location.search}${location.hash}`;
     return (
       <Navigate
-        to={`/signup?step=5&next=${encodeURIComponent(returnPath)}`}
+        to={`/signup?step=4&next=${encodeURIComponent(returnPath)}`}
         replace
       />
     );
