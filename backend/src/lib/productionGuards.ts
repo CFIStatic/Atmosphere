@@ -59,12 +59,16 @@ export function assertProductionReady(): void {
 
   if (!config.careers.fromEmail) {
     warnings.push(
-      'CAREERS_FROM_EMAIL (or SMTP_USER) is unset — Atmosphere cannot send invites or OTPs until SMTP from-address is configured.',
+      'CAREERS_FROM_EMAIL (or SMTP_USER) is unset — Atmosphere cannot send invites or OTPs until a from-address is configured.',
     );
   }
-  if (!config.careers.smtp.host || !config.careers.smtp.user || !config.careers.smtp.pass) {
+  const smtpReady = Boolean(
+    config.careers.smtp.host && config.careers.smtp.user && config.careers.smtp.pass,
+  );
+  const resendReady = Boolean(process.env.RESEND_API_KEY?.trim());
+  if (!smtpReady && !resendReady) {
     warnings.push(
-      'SMTP is not fully configured — invite and OTP email will fall back to copy-link / log-only behaviour.',
+      'Neither SMTP nor RESEND_API_KEY is configured — invite and OTP email will fall back to copy-link behaviour.',
     );
   }
 
