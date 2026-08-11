@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { api, ROLE_LABELS } from '../lib/api';
+import { api } from '../lib/api';
 import { displayName, initials } from '../lib/display';
 import { setPreference, usePreferences } from '../lib/preferences';
 import {
