@@ -213,10 +213,9 @@ function routerProps(): Record<string, unknown> {
   try {
     const entry = localStorage.getItem('atmosphere.route');
     if (entry) {
-      // Consumed, not remembered. Leaving it set would send every reload back
-      // to the same screen however far somebody had navigated, which reads as
-      // the app refusing to move.
-      localStorage.removeItem('atmosphere.route');
+      // Keep the key through React StrictMode's double-mount in dev — removing
+      // it here made the second mount forget the entry and bounce to home.
+      // DemoRouteBridge clears it once after the router is live.
       return { initialEntries: [entry] };
     }
   } catch {
@@ -239,6 +238,12 @@ function routerProps(): Record<string, unknown> {
 function DemoRouteBridge() {
   const navigate = useNavigate();
   useEffect(() => {
+    // Entry was applied via initialEntries; drop it so reloads return to home.
+    try {
+      localStorage.removeItem('atmosphere.route');
+    } catch {
+      /* ignore */
+    }
     const go = (event: Event) => {
       const to = (event as CustomEvent<string>).detail;
       if (typeof to === 'string' && to.startsWith('/')) navigate(to);

@@ -201,11 +201,12 @@ export function SharedDashboardPage() {
   }, []);
 
   // Deep-link from Approve & invite: /job-progress?job=<id>
+  // When intake already seeded the file, loadList's refresh is enough — a
+  // second openJob here raced and could leave the dashboard stuck on Loading.
   useEffect(() => {
     if (!requestedJob) return;
-    if (record?.job.id === requestedJob && !loading) return;
     if (freshFromNav?.jobId === requestedJob) ensureListed(freshFromNav);
-    // If we already painted from intake, only refresh — don't blank the page.
+    if (recordIdRef.current === requestedJob || freshRecord?.job.id === requestedJob) return;
     void openJob(requestedJob, { syncUrl: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestedJob]);
@@ -335,7 +336,19 @@ export function SharedDashboardPage() {
               <p className="text-sm text-ink-600">Pick a job.</p>
             ) : (
               <>
-                <JobProgressDashboard jobId={record.job.id} record={record} />
+                <JobProgressDashboard
+                  jobId={record.job.id}
+                  record={record}
+                  initialProof={
+                    justApproved
+                      ? {
+                          days: [],
+                          counts: { days: 0, payable: 0, contradicted: 0, awaitingAfter: 0 },
+                          siteKnown: Boolean(record.brief?.facts?.['Site address']),
+                        }
+                      : undefined
+                  }
+                />
 
                 <details className="mt-4 rounded-xl glass-card group">
                   <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-ink-900 marker:content-none [&::-webkit-details-marker]:hidden">

@@ -15,7 +15,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "verify": "npm run lint && npm run typecheck && npm run test && npm run build",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "test:e2e:approve": "node scripts/e2e-approve-handoff.mjs"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.2.6",
