@@ -409,11 +409,10 @@ export function JobIntakePage() {
             </div>
           </div>
 
-          <div className="rounded-xl glass-card p-5">
+          <div className="rounded-xl glass-card p-4">
             <h2 className="text-base font-semibold text-ink-900">Or paste scope here (optional)</h2>
             <p className="mt-1 text-sm text-ink-600">
-              Same as upload — claim notes, estimate lines, and “do not” items. Skip this if you do
-              not have scope yet.
+              Claim notes, estimate lines, and “do not” items — or leave blank.
             </p>
             <textarea
               value={text}
@@ -421,37 +420,39 @@ export function JobIntakePage() {
                 setText(e.target.value);
                 if (scopeFileName) setScopeFileName(null);
               }}
-              rows={12}
-              placeholder="Paste claim / scope text here — or leave blank and continue without scope"
-              className="glass-field mt-4 w-full resize-y rounded-lg px-3 py-2.5 text-sm text-ink-900 placeholder:text-ink-400"
+              rows={5}
+              placeholder="Paste claim / scope text here…"
+              className="glass-field mt-3 w-full resize-y rounded-lg px-3 py-2 text-sm text-ink-900 placeholder:text-ink-400"
             />
-            <div className="mt-3 flex flex-wrap items-center gap-3">
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  className="text-sm font-medium text-brand-600"
+                  onClick={() => {
+                    setText(SAMPLE);
+                    setSiteAddress('1842 Meridian Ave, Austin, TX 78702');
+                    setScopeFileName(null);
+                  }}
+                >
+                  Use a sample scope
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || !siteAddress.trim()}
+                  className="text-sm font-medium text-ink-500 disabled:opacity-50"
+                  onClick={() => void draftPackage({ skipScope: true })}
+                >
+                  Skip scope
+                </button>
+              </div>
               <button
                 type="submit"
                 disabled={busy || !siteAddress.trim()}
                 className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900 disabled:opacity-50"
               >
                 {busy && <SpinnerIcon className="h-4 w-4 animate-spin" />}
-                {text.trim().length >= 20 ? 'Draft the package' : 'Continue without scope'}
-              </button>
-              <button
-                type="button"
-                disabled={busy || !siteAddress.trim()}
-                className="text-sm font-medium text-brand-600 disabled:opacity-50"
-                onClick={() => void draftPackage({ skipScope: true })}
-              >
-                Skip scope
-              </button>
-              <button
-                type="button"
-                className="text-sm font-medium text-ink-500"
-                onClick={() => {
-                  setText(SAMPLE);
-                  setSiteAddress('1842 Meridian Ave, Austin, TX 78702');
-                  setScopeFileName(null);
-                }}
-              >
-                Use a sample scope
+                Next
               </button>
             </div>
           </div>
