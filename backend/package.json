@@ -44,7 +44,7 @@
     "express": "^4.19.2",
     "express-rate-limit": "^7.4.0",
     "helmet": "^7.1.0",
-    "nodemailer": "^9.0.3",
+    "nodemailer": "^9.0.5",
     "playwright": "^1.56.1",
     "stripe": "^22.3.2",
     "ws": "^8.21.1",
