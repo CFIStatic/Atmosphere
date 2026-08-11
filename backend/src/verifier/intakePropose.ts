@@ -96,10 +96,44 @@ function extractMeta(text: string): {
   return { address, city, postalCode, claimNumber, titleHint };
 }
 
-export function proposeIntakeFromText(rawText: string): IntakeProposal {
+export function proposeIntakeFromText(
+  rawText: string,
+  opts?: { address?: string | null },
+): IntakeProposal {
   const text = rawText.trim();
+  const forcedAddress = (opts?.address ?? '').trim();
+
+  // Address alone is enough to start a job. Scope is optional — AI will
+  // describe the video when no lines are attached.
   if (text.length < 20) {
-    throw new Error('Paste more of the scope or claim — a few lines is not enough to propose a job.');
+    if (!forcedAddress) {
+      throw new Error(
+        'Enter a site address, or paste more of the scope — a few lines is not enough to propose a job.',
+      );
+    }
+    return {
+      title: `Work at ${forcedAddress}`.slice(0, 200),
+      workType: 'mitigation',
+      address: forcedAddress.slice(0, 200),
+      city: '',
+      postalCode: '',
+      claimNumber: '',
+      briefNote:
+        'No scope attached yet. Field Capture can still film — AI will describe what happened from the video. Add scope later for line-by-line cross-checks.',
+      facts: {
+        Site: forcedAddress.slice(0, 200),
+        Source: 'Address only — scope optional',
+      },
+      scope: [],
+      party: {
+        company: 'Field Capture',
+        trade: 'field_capture',
+        contactName: '',
+      },
+      source: 'heuristic',
+      summary:
+        'No scope uploaded. Invite Field Capture anyway — AI will describe the video. Add scope later if you want line-by-line checks.',
+    };
   }
 
   const meta = extractMeta(text);
@@ -136,15 +170,18 @@ export function proposeIntakeFromText(rawText: string): IntakeProposal {
     }
   }
 
+  const address = forcedAddress || meta.address || 'Address to confirm';
   const title =
     meta.titleHint ||
-    (meta.address ? `Work at ${meta.address}` : 'New job from scope') ||
-    'New job from scope';
+    (address && address !== 'Address to confirm' ? `Work at ${address}` : 'New job from intake') ||
+    'New job from intake';
 
   const facts: Record<string, string> = {};
   if (meta.claimNumber) facts['Claim #'] = meta.claimNumber;
-  if (meta.address) facts['Site'] = meta.address;
-  facts['Source'] = 'Scope / claim text (office intake)';
+  if (address && address !== 'Address to confirm') facts['Site'] = address;
+  facts['Source'] = scope.length
+    ? 'Scope / claim text (office intake)'
+    : 'Office intake — no scope lines extracted';
 
   const workType: 'mitigation' | 'construction' = /mitigat|water|flood|mold|dry|extract/i.test(text)
     ? 'mitigation'
@@ -153,22 +190,23 @@ export function proposeIntakeFromText(rawText: string): IntakeProposal {
   return {
     title: title.slice(0, 200),
     workType,
-    address: meta.address || 'Address to confirm',
+    address,
     city: meta.city,
     postalCode: meta.postalCode,
     claimNumber: meta.claimNumber,
-    briefNote:
-      'First published facts for Field Capture. Edit anything wrong before you approve — approving invites your capture team to film this job.',
+    briefNote: scope.length
+      ? 'First published facts for Field Capture. Edit anything wrong before you approve — approving invites your capture team to film this job.'
+      : 'No clear scope lines in the paste. You can add lines below, or approve without scope — AI will describe the video.',
     facts,
-    scope: scope.length
-      ? scope
-      : [{ title: 'Confirm scope lines with the office before work', state: 'included' }],
-  party: {
-    company: 'Field Capture',
-    trade: 'field_capture',
-    contactName: '',
-  },
-  source: 'heuristic',
-  summary: `${scope.length || 1} scope lines drafted from your paste. Nothing is live until you approve and invite Field Capture.`,
-};
+    scope,
+    party: {
+      company: 'Field Capture',
+      trade: 'field_capture',
+      contactName: '',
+    },
+    source: 'heuristic',
+    summary: scope.length
+      ? `${scope.length} scope lines drafted from your paste. Nothing is live until you approve and invite Field Capture.`
+      : 'No scope lines drafted. You can still approve and invite — AI will describe what happened from the video.',
+  };
 }

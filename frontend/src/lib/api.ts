@@ -3061,7 +3061,7 @@ export const api = {
       readiness: JobReadiness;
     }>('/api/operations/jobs/quick-start', { method: 'POST', body: JSON.stringify(input) }),
 
-  proposeIntake: (input: { text: string }) =>
+  proposeIntake: (input: { text?: string; address?: string }) =>
     request<{ proposal: IntakeProposal; captureTeam: CaptureTeamMember[] }>(
       '/api/operations/intake/propose',
       {

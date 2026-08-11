@@ -25,6 +25,13 @@ test('proposeIntakeFromText drafts job, inclusions, and exclusions', () => {
   assert.equal(p.source, 'heuristic');
 });
 
-test('proposeIntakeFromText refuses thin paste', () => {
-  assert.throws(() => proposeIntakeFromText('too short'), /Paste more/);
+test('proposeIntakeFromText refuses thin paste without an address', () => {
+  assert.throws(() => proposeIntakeFromText('too short'), /site address|few lines/i);
+});
+
+test('proposeIntakeFromText allows address-only with empty scope', () => {
+  const p = proposeIntakeFromText('', { address: '1842 Meridian Ave, Austin, TX' });
+  assert.equal(p.address, '1842 Meridian Ave, Austin, TX');
+  assert.deepEqual(p.scope, []);
+  assert.match(p.summary, /No scope/i);
 });

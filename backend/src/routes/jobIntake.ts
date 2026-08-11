@@ -257,9 +257,22 @@ jobIntakeRouter.get('/intake-mix', async (req: Request, res: Response, next: Nex
  * Creates job + scope + published brief + capture invite links together.
  */
 
-const proposeSchema = z.object({
-  text: z.string().trim().min(20).max(80_000),
-});
+const proposeSchema = z
+  .object({
+    /** Scope / claim paste. Optional when a site address is provided. */
+    text: z.string().trim().max(80_000).optional().default(''),
+    /** Site address — enough on its own to draft a job without scope. */
+    address: z.string().trim().max(200).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if ((value.text?.trim().length ?? 0) < 20 && !(value.address?.trim())) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Enter a site address, or paste at least a few lines of scope.',
+        path: ['text'],
+      });
+    }
+  });
 
 type CaptureTeamMember = {
   userId: string;
@@ -306,10 +319,10 @@ async function loadCaptureTeam(supabase: any, orgId: string): Promise<CaptureTea
 jobIntakeRouter.post('/intake/propose', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { orgId, supabase } = await requireOrgContext(req);
-    const { text } = proposeSchema.parse(req.body ?? {});
+    const { text, address } = proposeSchema.parse(req.body ?? {});
     let proposal;
     try {
-      proposal = proposeIntakeFromText(text);
+      proposal = proposeIntakeFromText(text ?? '', { address });
     } catch (err) {
       throw badRequest(err instanceof Error ? err.message : 'Could not read that text.', 'propose_failed');
     }
@@ -359,6 +372,7 @@ const approveSchema = z.object({
   claimNumber: z.string().trim().max(80).optional(),
   briefNote: z.string().trim().max(2000).nullable().optional(),
   facts: z.record(z.string().max(80), z.string().max(2000)).optional(),
+  /** Optional — empty means AI will describe the video instead of cross-referencing lines. */
   scope: z
     .array(
       z.object({
@@ -367,8 +381,8 @@ const approveSchema = z.object({
         reason: z.string().max(500).optional(),
       }),
     )
-    .min(1)
-    .max(60),
+    .max(60)
+    .default([]),
   /** Field Capture teammates and/or external subcontractors invited to film. */
   invitees: z.array(inviteeSchema).min(1).max(20),
 });
@@ -524,11 +538,16 @@ jobIntakeRouter.post('/intake/approve', async (req: Request, res: Response, next
     if (jobError || !job) throw new HttpError(500, 'Could not create the job.', 'job_failed');
     const jobId = (job as any).id as string;
 
+    const scopeLines = (input.scope ?? []).filter((line) => line.title.trim().length > 0);
     await supabase.from('job_intake').insert({
       job_id: jobId,
       org_id: orgId,
-      source: 'scope_document' satisfies IntakeSource,
-      source_detail: { enteredFrom: 'intake_package', captureInvites: input.invitees.length },
+      source: (scopeLines.length ? 'scope_document' : 'manual') satisfies IntakeSource,
+      source_detail: {
+        enteredFrom: 'intake_package',
+        captureInvites: input.invitees.length,
+        scopeOptional: scopeLines.length === 0,
+      },
       entered_by: userId,
     });
 
@@ -549,21 +568,25 @@ jobIntakeRouter.post('/intake/approve', async (req: Request, res: Response, next
     }
     const revision = (brief as any).revision ?? 1;
 
-    const { data: scopeRows, error: scopeError } = await supabase
-      .from('job_scope_items')
-      .insert(
-        input.scope.map((line) => ({
-          org_id: orgId,
-          job_id: jobId,
-          title: line.title,
-          state: line.state,
-          reason: line.reason ?? null,
-          revision,
-          created_by: userId,
-        })),
-      )
-      .select('id');
-    if (scopeError) throw new HttpError(500, 'Could not save scope lines.', 'scope_failed');
+    let scopeRows: unknown[] | null = [];
+    if (scopeLines.length) {
+      const inserted = await supabase
+        .from('job_scope_items')
+        .insert(
+          scopeLines.map((line) => ({
+            org_id: orgId,
+            job_id: jobId,
+            title: line.title,
+            state: line.state,
+            reason: line.reason ?? null,
+            revision,
+            created_by: userId,
+          })),
+        )
+        .select('id');
+      if (inserted.error) throw new HttpError(500, 'Could not save scope lines.', 'scope_failed');
+      scopeRows = inserted.data;
+    }
 
     const invites: Array<{
       id: string;

@@ -129,20 +129,24 @@ export function JobIntakePage() {
     }
   }
 
-  async function onPropose(e: FormEvent) {
-    e.preventDefault();
+  async function draftPackage(opts?: { skipScope?: boolean }) {
     if (!siteAddress.trim()) {
       setError('Enter the site address.');
       return;
     }
-    if (text.trim().length < 20) {
-      setError('Upload or paste the scope — a few lines is not enough.');
+    const skipScope = Boolean(opts?.skipScope) || text.trim().length < 20;
+    if (!skipScope && text.trim().length < 20) {
+      setError('Upload or paste the scope, or continue without scope.');
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const res = await api.proposeIntake({ text: buildProposeText(text, siteAddress) });
+      const res = await api.proposeIntake(
+        skipScope
+          ? { text: '', address: siteAddress.trim() }
+          : { text: buildProposeText(text, siteAddress), address: siteAddress.trim() },
+      );
       const drafted = res.proposal;
       setProposal({
         ...drafted,
@@ -160,6 +164,11 @@ export function JobIntakePage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function onPropose(e: FormEvent) {
+    e.preventDefault();
+    await draftPackage({ skipScope: text.trim().length < 20 });
   }
 
   function addExternal() {
@@ -307,7 +316,7 @@ export function JobIntakePage() {
       <PageHeader
         eyebrow="Work Verification Platform"
         title="Start a job"
-        description="Enter the site address, upload or paste the scope, review the draft, then approve once to invite Field Capture."
+        description="Enter the site address, optionally upload or paste scope, then approve once to invite Field Capture. Scope is optional — without it, AI describes the video."
         action={
           <Link
             to="/shared"
@@ -369,10 +378,10 @@ export function JobIntakePage() {
           </div>
 
           <div className="rounded-xl glass-card p-5">
-            <h2 className="text-base font-semibold text-ink-900">Upload scope here</h2>
+            <h2 className="text-base font-semibold text-ink-900">Upload scope here (optional)</h2>
             <p className="mt-1 text-sm text-ink-600">
-              Drop a text export of the carrier notes or estimate (.txt, .md, .csv). We draft the
-              job and scope lines — you still approve before anyone is invited.
+              Drop a text export of the carrier notes or estimate (.txt, .md, .csv) when you have
+              one. Not required — you can invite Field Capture with just the address.
             </p>
             <input
               ref={fileInputRef}
@@ -400,9 +409,10 @@ export function JobIntakePage() {
           </div>
 
           <div className="rounded-xl glass-card p-5">
-            <h2 className="text-base font-semibold text-ink-900">Or paste scope here</h2>
+            <h2 className="text-base font-semibold text-ink-900">Or paste scope here (optional)</h2>
             <p className="mt-1 text-sm text-ink-600">
-              Same as upload — claim notes, estimate lines, and “do not” items all work.
+              Same as upload — claim notes, estimate lines, and “do not” items. Skip this if you do
+              not have scope yet.
             </p>
             <textarea
               value={text}
@@ -410,23 +420,30 @@ export function JobIntakePage() {
                 setText(e.target.value);
                 if (scopeFileName) setScopeFileName(null);
               }}
-              rows={14}
-              required
-              placeholder="Paste claim / scope text here…"
+              rows={12}
+              placeholder="Paste claim / scope text here — or leave blank and continue without scope"
               className="glass-field mt-4 w-full resize-y rounded-lg px-3 py-2.5 text-sm text-ink-900 placeholder:text-ink-400"
             />
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <button
                 type="submit"
-                disabled={busy || text.trim().length < 20 || !siteAddress.trim()}
+                disabled={busy || !siteAddress.trim()}
                 className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900 disabled:opacity-50"
               >
                 {busy && <SpinnerIcon className="h-4 w-4 animate-spin" />}
-                Draft the package
+                {text.trim().length >= 20 ? 'Draft the package' : 'Continue without scope'}
               </button>
               <button
                 type="button"
-                className="text-sm font-medium text-brand-600"
+                disabled={busy || !siteAddress.trim()}
+                className="text-sm font-medium text-brand-600 disabled:opacity-50"
+                onClick={() => void draftPackage({ skipScope: true })}
+              >
+                Skip scope
+              </button>
+              <button
+                type="button"
+                className="text-sm font-medium text-ink-500"
                 onClick={() => {
                   setText(SAMPLE);
                   setSiteAddress('1842 Meridian Ave, Austin, TX 78702');
@@ -517,11 +534,18 @@ export function JobIntakePage() {
 
           <div className="rounded-xl glass-card p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-base font-semibold text-ink-900">Scope lines</h2>
+              <h2 className="text-base font-semibold text-ink-900">Scope lines (optional)</h2>
               <p className="text-xs text-ink-500">
-                {included} in scope · {excluded} do not
+                {proposal.scope.length
+                  ? `${included} in scope · ${excluded} do not`
+                  : 'None — AI will describe the video'}
               </p>
             </div>
+            {!proposal.scope.length && (
+              <p className="mt-2 text-sm text-ink-600">
+                No scope attached. You can add lines below, or approve as-is and invite Field Capture.
+              </p>
+            )}
             <ul className="mt-3 space-y-2">
               {proposal.scope.map((line, i) => (
                 <li
@@ -743,7 +767,7 @@ export function JobIntakePage() {
             </button>
             <button
               type="submit"
-              disabled={busy || !proposal.scope.length || inviteTotal < 1}
+              disabled={busy || inviteTotal < 1}
               data-experiment="intake_cta_copy"
               data-variant={intakeCta.variantKey ?? 'control'}
               className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-ink-900 disabled:opacity-50"
@@ -752,8 +776,11 @@ export function JobIntakePage() {
               {approveLabel}
             </button>
             <p className="text-xs text-ink-500">
-              {inviteTotal} invite{inviteTotal === 1 ? '' : 's'} · job file, brief, and capture
-              links in one step.
+              {inviteTotal} invite{inviteTotal === 1 ? '' : 's'}
+              {proposal.scope.length
+                ? ` · ${proposal.scope.length} scope line${proposal.scope.length === 1 ? '' : 's'}`
+                : ' · no scope (AI will describe the video)'}
+              {' · '}job file, brief, and capture links in one step.
             </p>
           </div>
         </form>
