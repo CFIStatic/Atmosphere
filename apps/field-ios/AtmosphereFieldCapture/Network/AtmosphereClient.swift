@@ -278,6 +278,8 @@ final class AtmosphereClient: ObservableObject {
         }
         var request = URLRequest(url: url)
         request.httpMethod = method
+        // Field networks stall; fail Quick Add / today rather than spinning forever.
+        request.timeoutInterval = 30
         if let bodyData {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = bodyData
