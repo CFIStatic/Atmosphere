@@ -36,7 +36,7 @@ echo "==> Migration (PM orchestration)"
   grep -vE 'NOTICE:.*(does not exist, skipping|already exists, skipping)' || true
 
 echo "==> Migration (PM network + adaptive comms)"
-MIGRATION_NET="$HERE/../migrations/20260728150000_pm_network_and_comms.sql"
+MIGRATION_NET="$HERE/../migrations/20260728150001_pm_network_and_comms.sql"
 "${PSQL[@]}" -q -v ON_ERROR_STOP=1 -d "$DB" -f "$MIGRATION_NET" 2>&1 |
   grep -vE 'NOTICE:.*(does not exist, skipping|already exists, skipping)' || true
 

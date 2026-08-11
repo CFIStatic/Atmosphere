@@ -70,10 +70,33 @@ for (const name of backend) {
   }
 }
 
+// Supabase records schema_migrations.version as the numeric timestamp prefix.
+// Two files sharing a version collide with schema_migrations_pkey (23505).
+const byVersion = new Map();
+for (const name of backend) {
+  const version = name.split('_', 1)[0];
+  if (!/^\d{14}$/.test(version)) {
+    console.error(`ERROR: migration filename missing 14-digit version prefix: ${name}`);
+    failed = true;
+    continue;
+  }
+  if (!byVersion.has(version)) byVersion.set(version, []);
+  byVersion.get(version).push(name);
+}
+let duplicateVersions = 0;
+for (const [version, names] of byVersion) {
+  if (names.length < 2) continue;
+  duplicateVersions += 1;
+  console.error(`ERROR: duplicate migration version ${version}:`);
+  for (const name of names) console.error(`  ${name}`);
+  failed = true;
+}
+
 console.log('Atmosphere migration inventory');
 console.log('==============================');
 console.log(`mirrored files: ${backend.length}`);
 console.log(`content drift:  ${divergent}`);
+console.log(`duplicate versions: ${duplicateVersions}`);
 console.log('');
 console.log('Apply once (either directory — they are identical):');
 console.log('  backend/supabase/migrations/   OR   supabase/migrations/');

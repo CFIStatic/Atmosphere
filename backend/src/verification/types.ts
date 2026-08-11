@@ -2,7 +2,7 @@
  * Shared types for the video work-verification pipeline.
  *
  * These mirror the Postgres enums/tables added in
- * `20260812090000_video_work_verification.sql`. Keep them in sync with Zod
+ * `20260812090001_video_work_verification.sql`. Keep them in sync with Zod
  * schemas in `./schemas.ts` — runtime validation is the trust boundary for
  * model output and API input.
  */

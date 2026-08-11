@@ -22,7 +22,7 @@ function fail(error: { code?: string; message: string }, action: string): never 
   if (error.code && MISSING.has(error.code)) {
     throw new HttpError(
       503,
-      'Partner network / internal comms tables are not set up yet. Apply supabase/migrations/20260728150000_pm_network_and_comms.sql.',
+      'Partner network / internal comms tables are not set up yet. Apply supabase/migrations/20260728150001_pm_network_and_comms.sql.',
       'pm_network_schema_missing',
     );
   }

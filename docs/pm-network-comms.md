@@ -100,7 +100,7 @@ PM cockpit (`/pm`) tabs:
 
 ## 4. Migration
 
-`supabase/migrations/20260728150000_pm_network_and_comms.sql`
+`supabase/migrations/20260728150001_pm_network_and_comms.sql`
 
 Also widens `pm_communications` channel (`internal`) and counterparty
 (`subcontractor`).

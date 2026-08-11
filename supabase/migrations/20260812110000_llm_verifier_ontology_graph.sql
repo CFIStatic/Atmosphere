@@ -1,7 +1,7 @@
 -- ---------------------------------------------------------------------------
 -- LLM verifier, work ontology, timeline / workflow graph, outcomes
 -- ---------------------------------------------------------------------------
--- Extends 20260812090000_video_work_verification.sql.
+-- Extends 20260812090001_video_work_verification.sql.
 --
 -- Principle shift: visual observations and temporal candidates are proposals.
 -- The LLM is the primary verifier/reviewer. Rules supply a checklist; humans
