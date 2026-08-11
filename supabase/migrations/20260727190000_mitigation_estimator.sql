@@ -21,7 +21,9 @@
 
 create schema if not exists private;
 
-create or replace function private.is_org_member(p_org_id uuid)
+-- Parameter name must match earlier migrations (p_org). CREATE OR REPLACE
+-- FUNCTION cannot rename arguments (42P13) — that broke Supabase Preview.
+create or replace function private.is_org_member(p_org uuid)
 returns boolean
 language sql
 stable
@@ -30,7 +32,7 @@ set search_path = public, pg_temp
 as $$
   select exists (
     select 1 from public.org_members m
-    where m.org_id = p_org_id and m.user_id = auth.uid()
+    where m.org_id = p_org and m.user_id = auth.uid()
   );
 $$;
 
