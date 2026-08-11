@@ -535,7 +535,16 @@
   }
   .toast[data-on="1"] { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-  .empty { padding: 60px 20px; text-align: center; color: var(--muted); }
+  .empty {
+    padding: 72px 24px 48px; text-align: center; color: var(--muted);
+    max-width: 28rem; margin: 0 auto;
+  }
+  .empty .empty-title {
+    margin: 0; font-size: 16px; font-weight: 650; color: var(--ink); letter-spacing: -0.01em;
+  }
+  .empty .empty-body {
+    margin: 8px 0 0; font-size: 13.5px; line-height: 1.45; color: var(--muted);
+  }
 
   /* ---------- detail ---------- */
   .detail {
@@ -811,13 +820,10 @@
         </thead>
         <tbody id="rows"></tbody>
       </table>
-      <div class="empty" id="empty" hidden>Nothing matches those filters.</div>
-      <p class="footnote">
-        Clips file themselves: every upload lands in its job's file automatically, so a job with ten
-        crews on it reads ten clips a day with nobody sorting anything. Retention and legal hold are
-        enforced on the record, not on this page. A clip under hold is never deleted by a retention
-        schedule, and the hold is visible to everyone who can see the clip.
-      </p>
+      <div class="empty" id="empty" hidden>
+        <p class="empty-title" id="empty-title">No clips yet</p>
+        <p class="empty-body" id="empty-body">When Field Capture uploads a day film, it shows up here.</p>
+      </div>
     </div>
   </main>
   </div>
@@ -1579,7 +1585,21 @@
 
   function render() {
     var list = visible();
-    $('#empty').hidden = list.length > 0;
+    var emptyEl = $('#empty');
+    var emptyTitle = document.getElementById('empty-title');
+    var emptyBody = document.getElementById('empty-body');
+    if (emptyEl) {
+      emptyEl.hidden = list.length > 0;
+      if (!list.length) {
+        if (!EVIDENCE.length) {
+          if (emptyTitle) emptyTitle.textContent = 'No clips yet';
+          if (emptyBody) emptyBody.textContent = 'When Field Capture uploads a day film, it shows up here.';
+        } else {
+          if (emptyTitle) emptyTitle.textContent = 'No matches';
+          if (emptyBody) emptyBody.textContent = 'Try clearing search or picking another view.';
+        }
+      }
+    }
     syncSortHeaders();
 
     if (state.groupByJob) {
@@ -2651,7 +2671,6 @@
         });
         EVIDENCE = (payload.items || []).map(function (raw) { return mapRemoteItem(raw, raw.jobId); });
         boot();
-        if (!EVIDENCE.length) showEmptyLibraryNote();
       })
       .catch(function () {
         if (wantDemo) boot();
@@ -2660,19 +2679,6 @@
           boot();
         }
       });
-  }
-
-  function showEmptyLibraryNote() {
-    var host = document.getElementById('list') || document.querySelector('main');
-    if (!host || host.querySelector('[data-empty-library]')) return;
-    var empty = document.createElement('div');
-    empty.className = 'empty';
-    empty.dataset.emptyLibrary = '1';
-    empty.style.padding = '40px 20px';
-    empty.innerHTML =
-      '<p style="font-size:16px;font-weight:650">No evidence filed yet.</p>' +
-      '<p style="margin-top:8px;color:var(--muted)">When Field Capture uploads a day film, clips and AI dictation land here. This is not a demo library.</p>';
-    host.appendChild(empty);
   }
 })();
 </script>
