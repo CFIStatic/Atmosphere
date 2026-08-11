@@ -266,9 +266,13 @@ export async function analyseProofDay(input: {
   if (!isModelProviderConfigured()) return null;
   if (!input.beforeFrames.length || !input.afterFrames.length) return null;
 
-  const scope = input.scopeTitles.length
-    ? input.scopeTitles.map((t) => `- ${t}`).join('\n')
-    : '(no scope recorded for this party)';
+  const scopeBlock = input.scopeTitles.length
+    ? `Agreed scope lines — cross-reference what is visible; give a verdict for every line using its exact title:\n${input.scopeTitles.map((t) => `- ${t}`).join('\n')}`
+    : [
+        'No scope is attached for this party.',
+        'Describe what the worker is doing from the frames and whether the work area changed between before and after.',
+        'Leave scopeTouched and scopeVerdicts empty — do not invent scope lines.',
+      ].join(' ');
 
   const response = await anthropicClient().messages.create({
     model: config.technician.assistant.model,
@@ -283,7 +287,7 @@ export async function analyseProofDay(input: {
             text:
               `Work date: ${input.workDate}\n` +
               (input.trade ? `Trade: ${input.trade}\n` : '') +
-              `\nScope lines on file for this party:\n${scope}\n`,
+              `\n${scopeBlock}\n`,
           },
           ...imageBlocks(input.beforeFrames, 'BEFORE'),
           ...imageBlocks(input.afterFrames, 'AFTER'),

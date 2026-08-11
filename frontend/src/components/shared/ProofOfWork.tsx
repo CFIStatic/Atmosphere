@@ -327,6 +327,16 @@ export function ProofOfWork({
                         <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">
                           What the footage shows
                         </p>
+                        {day.aiFindings?.scopeCrossRef === false && (
+                          <p className="mt-1 text-[11px] text-ink-500">
+                            No scope on file — AI described what happened from the frames.
+                          </p>
+                        )}
+                        {day.aiFindings?.scopeCrossRef === true && (
+                          <p className="mt-1 text-[11px] text-ink-500">
+                            Cross-referenced against the agreed scope lines.
+                          </p>
+                        )}
                         <p className="mt-1 text-xs text-ink-800">{day.aiSummary}</p>
                         {day.aiFindings?.materialBecause && (
                           <p className="mt-1 text-[11px] text-ink-600">

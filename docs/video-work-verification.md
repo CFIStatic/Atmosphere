@@ -16,6 +16,15 @@ Atmosphere is **not** a Next.js app. The stack is:
 
 The new pipeline **extends** that media layer. It does not replace the payment-gate proof flow.
 
+### Worker activity vs scope
+
+Proof narration / day analysis / long-form reading follow one rule:
+
+- **Scope attached** → AI reads frames and cross-references agreed `job_scope_items` (per-line verdicts: appears complete / in progress / not in shot).
+- **No scope** → AI still reads the frames and dictates what happened (description-only; `scopeCrossRef: false`). Long recordings are no longer skipped when scope is missing.
+
+The deep `/api/verification` frame + LLM stages load the same scope lines into vision/verify prompts when present.
+
 ## What this adds
 
 A durable, multi-stage **work verification** pipeline under `backend/src/verification/`:

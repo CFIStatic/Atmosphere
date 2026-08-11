@@ -149,12 +149,18 @@ export class GeminiVisionAnalyzer implements VisionAnalyzer {
     image: VisionImage,
     context?: AnalysisContext,
   ): Promise<AnalysisResult<FrameObservationParsed>> {
+    const scopeNote = context?.scopeLines?.length
+      ? `Job scope lines (note if visible; do not invent completed work):\n${context.scopeLines.map((t) => `- ${t}`).join('\n')}`
+      : 'No job scope attached — describe only what the worker appears to be doing in this frame.';
     return this.runStructured({
       purpose: 'frame_analysis',
       system: FRAME_SYSTEM,
       images: [image],
       schema: frameObservationSchema,
-      userNote: context?.roomHint ? `Room hint: ${context.roomHint}` : 'Analyze this frame.',
+      userNote: [
+        context?.roomHint ? `Room hint: ${context.roomHint}` : 'Analyze this frame.',
+        scopeNote,
+      ].join('\n'),
       model: verificationConfig.primaryModel,
       escalate: false,
     });
@@ -510,6 +516,25 @@ export function shouldEscalate(opts: {
   return false;
 }
 
+/** Agreed scope lines for the job (optional party filter). */
+export async function loadJobScopeLines(
+  supabase: PipelineContext['supabase'],
+  jobId: string,
+  partyId?: string | null,
+): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('job_scope_items')
+    .select('title, party_id, state')
+    .eq('job_id', jobId)
+    .in('state', ['included', 'approved']);
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Array<{ title: string; party_id: string | null }>)
+    .filter((row) => !row.party_id || !partyId || row.party_id === partyId)
+    .map((row) => String(row.title).trim())
+    .filter(Boolean)
+    .slice(0, 40);
+}
+
 export function createAnalyzeFramesHandler(opts: {
   analyzer: VisionAnalyzer;
   loadFrameBase64: (ctx: PipelineContext, storagePath: string) => Promise<string>;
@@ -518,6 +543,9 @@ export function createAnalyzeFramesHandler(opts: {
     if (await wouldExceedBudget(ctx.supabase, ctx.orgId)) {
       throw new Error('Monthly verification AI budget exceeded');
     }
+
+    const scopeLines = await loadJobScopeLines(ctx.supabase, ctx.jobId, ctx.partyId);
+    const analysisContext: AnalysisContext = { scopeLines };
 
     const { data: frames, error } = await ctx.supabase
       .from('verification_frames')
@@ -572,11 +600,14 @@ export function createAnalyzeFramesHandler(opts: {
         });
       } else {
         const base64 = await opts.loadFrameBase64(ctx, frame.storage_path);
-        let result = await opts.analyzer.analyzeFrame({
-          mimeType: 'image/jpeg',
-          base64,
-          frameId: frame.id,
-        });
+        let result = await opts.analyzer.analyzeFrame(
+          {
+            mimeType: 'image/jpeg',
+            base64,
+            frameId: frame.id,
+          },
+          analysisContext,
+        );
         if (
           shouldEscalate({
             confidence: result.parsed.confidence,
@@ -591,6 +622,7 @@ export function createAnalyzeFramesHandler(opts: {
           result = await opts.analyzer.escalateAnalysis(
             [{ mimeType: 'image/jpeg', base64, frameId: frame.id }],
             'low_confidence_or_safety',
+            analysisContext,
           );
           escalated += 1;
         }

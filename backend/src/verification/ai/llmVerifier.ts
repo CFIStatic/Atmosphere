@@ -466,6 +466,17 @@ export function createLlmVerifyEvidenceHandler(opts: {
     }
 
     const rules = await loadRules(ctx.supabase, ctx.orgId);
+    const { data: scopeRows } = await ctx.supabase
+      .from('job_scope_items')
+      .select('title, party_id, state')
+      .eq('job_id', ctx.jobId)
+      .in('state', ['included', 'approved']);
+    const scopeLines = ((scopeRows ?? []) as Array<{ title: string; party_id: string | null }>)
+      .filter((row) => !row.party_id || !ctx.partyId || row.party_id === ctx.partyId)
+      .map((row) => String(row.title).trim())
+      .filter(Boolean)
+      .slice(0, 40);
+
     const { data: events, error } = await ctx.supabase
       .from('temporal_change_events')
       .select('*')
@@ -541,6 +552,7 @@ export function createLlmVerifyEvidenceHandler(opts: {
             contradictoryObservations: event.conflicting_evidence ?? [],
             ruleChecklist,
             rule,
+            scopeLines,
             captureTimestamps: {
               before: event.first_observed_at,
               after: event.last_observed_at,

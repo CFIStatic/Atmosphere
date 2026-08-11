@@ -19,6 +19,8 @@ export interface PipelineContext {
   orgId: string;
   videoId: string;
   jobId: string;
+  /** Capture party when the video came from a job invite; null for office uploads. */
+  partyId: string | null;
   processingJobId: string;
   attempt: number;
   config: Record<string, unknown>;
@@ -181,7 +183,7 @@ export class ProcessingOrchestrator {
   private async runJob(job: QueuePayload, attempt: number): Promise<void> {
     const { data: row, error } = await job.supabase
       .from('video_processing_jobs')
-      .select('*, verification_videos!inner(job_id, status)')
+      .select('*, verification_videos!inner(job_id, party_id, status)')
       .eq('id', job.processingJobId)
       .maybeSingle();
     if (error) throw new Error(error.message);
@@ -204,11 +206,14 @@ export class ProcessingOrchestrator {
       .update({ status: 'processing' })
       .eq('id', job.videoId);
 
+    const videoMeta = (row as { verification_videos?: { job_id?: string; party_id?: string | null } })
+      .verification_videos;
     const ctxBase: Omit<PipelineContext, 'attempt'> = {
       supabase: job.supabase,
       orgId: job.orgId,
       videoId: job.videoId,
-      jobId: row.job_id,
+      jobId: (row as { job_id?: string }).job_id ?? videoMeta?.job_id ?? '',
+      partyId: videoMeta?.party_id ?? null,
       processingJobId: job.processingJobId,
       config: (row.config ?? {}) as Record<string, unknown>,
     };

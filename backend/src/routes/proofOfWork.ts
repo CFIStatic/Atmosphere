@@ -30,6 +30,10 @@ import {
   observeLiveFrame,
   stepsForNarration,
 } from '../shared/liveNarrator.js';
+import {
+  describeRecordingWithoutScope,
+  descriptionFindings,
+} from '../shared/workerActivityAnalysis.js';
 
 /**
  * Proof of work: the endpoints.
@@ -435,12 +439,14 @@ async function runDayAnalysis(admin: any, party: any, workDate: string): Promise
       ai_summary: analysis.summary,
       ai_material_change: analysis.materialChange,
       ai_findings: {
+        scopeCrossRef: titles.length > 0,
         materialBecause: analysis.materialBecause,
         changes: analysis.changes,
         cannotTell: analysis.cannotTell,
         scopeTouched: analysis.scopeTouched,
         scopeVerdicts: analysis.scopeVerdicts,
         concerns: analysis.concerns,
+        opening: analysis.opening,
       },
       ai_model: analysis.model,
     })
@@ -745,6 +751,58 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
   }
 
   const { steps, scopeTitles } = await guideStepsFor(admin, job.jobId, job.partyId, job.phase);
+  const { data: partyRow } = await admin
+    .from('job_parties')
+    .select('trade')
+    .eq('id', job.partyId)
+    .maybeSingle();
+  const trade = (partyRow as any)?.trade ?? null;
+
+  // Scope attached → shot-list narration cross-referenced to those lines.
+  // No scope → plain description of what the worker is doing in the frames.
+  if (!scopeTitles.length) {
+    const dictation = await describeRecordingWithoutScope({
+      proofId: job.proofId,
+      durationSeconds: durationSeconds || frames[frames.length - 1]?.atSeconds || 60,
+      frames,
+      longForm: false,
+      trade,
+    });
+    await write({
+      ai_summary: (dictation.narrationSummary || dictation.narrationText).slice(0, 500),
+      ai_findings: {
+        scopeCrossRef: false,
+        summary: dictation.narrationText,
+        scopeVerdicts: [],
+        changes: [],
+        cannotTell: [],
+        concerns: [],
+      },
+      ai_model: dictation.model,
+      analysis_status: 'done',
+      narration: { entries: [], coverage: [], model: dictation.model },
+      narration_text: dictation.narrationText,
+      narration_status: 'done',
+      narration_error: null,
+      narrated_at: new Date().toISOString(),
+      labels: labelsForProof({
+        phase: job.phase,
+        trade,
+        narration: { coverage: [] },
+        stageKinds: [],
+      }),
+    });
+    await recordAccess(admin, {
+      orgId: job.orgId,
+      jobId: job.jobId,
+      proofId: job.proofId,
+      action: 'analysed',
+      actorLabel: 'Atmosphere',
+      detail: `described · no scope · ${job.phase} · ${job.workDate}`,
+    });
+    return;
+  }
+
   const narration = await narrateProofVideo({
     frames,
     steps,
@@ -757,21 +815,19 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
   // The historical index rides the same write: phase, trade, and the stages
   // the narration actually saw, flattened for the GIN index so "every
   // flood-cut video ever" stays a millisecond query.
-  const { data: partyRow } = await admin
-    .from('job_parties')
-    .select('trade')
-    .eq('id', job.partyId)
-    .maybeSingle();
-
   await write({
     narration: { entries: narration.entries, coverage: narration.coverage, model: narration.model },
     narration_text: narration.report,
     narration_status: 'done',
     narration_error: null,
     narrated_at: new Date().toISOString(),
+    ai_findings: {
+      scopeCrossRef: true,
+      scopeTitles,
+    },
     labels: labelsForProof({
       phase: job.phase,
-      trade: (partyRow as any)?.trade ?? null,
+      trade,
       narration: { coverage: narration.coverage },
       stageKinds: steps.map((s) => s.kind),
     }),
@@ -783,15 +839,17 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
     proofId: job.proofId,
     action: 'analysed',
     actorLabel: 'Atmosphere',
-    detail: `narrated · ${job.phase} · ${job.workDate}`,
+    detail: `narrated · scope cross-ref · ${job.phase} · ${job.workDate}`,
   });
 }
 
 /**
- * The workday path: hours of footage, read honestly. Windows on the cheap
- * model (kept as job_proof_segments — the timeline is stored evidence, not
- * prose), one synthesis on the strong model, and per-scope-line verdicts
- * whose strength is capped by how many windows actually saw the line worked.
+ * The workday path: hours of footage, read honestly.
+ *
+ * With agreed scope: windows on the cheap model, synthesis on the strong one,
+ * per-line verdicts capped by actual sightings.
+ * Without scope: AI still reads the frames and dictates what happened — we do
+ * not skip a day of video just because nobody attached a scope yet.
  */
 async function performLongFormAnalysis(
   admin: any,
@@ -810,13 +868,41 @@ async function performLongFormAnalysis(
   const scopeTitles = mine
     .filter((s: any) => s.state === 'included' || s.state === 'approved')
     .map((s: any) => s.title as string);
+
+  const { data: partyRow } = await admin
+    .from('job_parties')
+    .select('trade')
+    .eq('id', job.partyId)
+    .maybeSingle();
+  const trade = ((partyRow as any)?.trade ?? '').trim().toLowerCase();
+
   if (!scopeTitles.length) {
-    // A recording with no agreed scope has nothing to be judged against —
-    // said plainly rather than inventing a rubric.
+    const dictation = await describeRecordingWithoutScope({
+      proofId: job.proofId,
+      durationSeconds,
+      frames,
+      longForm: true,
+      trade,
+    });
     await write({
-      narration_status: 'skipped',
-      narration_error: 'No agreed scope lines to judge this recording against. Set the scope, then re-run analysis.',
-      analysis_status: 'skipped',
+      ai_summary: (dictation.narrationSummary || dictation.narrationText).slice(0, 500),
+      ai_findings: descriptionFindings(dictation),
+      ai_model: dictation.model,
+      analysis_status: 'done',
+      narration: { entries: [], coverage: [], model: dictation.model },
+      narration_text: dictation.narrationText,
+      narration_status: 'done',
+      narration_error: null,
+      narrated_at: new Date().toISOString(),
+      labels: [job.phase, trade || null, 'workday', 'no_scope'].filter(Boolean).slice(0, 24),
+    });
+    await recordAccess(admin, {
+      orgId: job.orgId,
+      jobId: job.jobId,
+      proofId: job.proofId,
+      action: 'analysed',
+      actorLabel: 'Atmosphere',
+      detail: `workday described · no scope · ${(durationSeconds / 3600).toFixed(1)}h · ${dictation.frameCount} frames`,
     });
     return;
   }
@@ -850,17 +936,12 @@ async function performLongFormAnalysis(
   const activities = [
     ...new Set(result.windows.flatMap((w) => w.reading?.activity ?? [])),
   ].slice(0, 12);
-  const { data: partyRow } = await admin
-    .from('job_parties')
-    .select('trade')
-    .eq('id', job.partyId)
-    .maybeSingle();
-  const trade = ((partyRow as any)?.trade ?? '').trim().toLowerCase();
 
   await write({
     ai_summary: result.report.narrative.slice(0, 500),
     ai_findings: {
       longForm: true,
+      scopeCrossRef: true,
       summary: result.report.narrative,
       materialChange: null,
       materialBecause: null,
@@ -893,7 +974,7 @@ async function performLongFormAnalysis(
     proofId: job.proofId,
     action: 'analysed',
     actorLabel: 'Atmosphere',
-    detail: `workday read · ${(durationSeconds / 3600).toFixed(1)}h · ${result.windows.length} windows · ${scopeTitles.length} scope lines`,
+    detail: `workday read · scope cross-ref · ${(durationSeconds / 3600).toFixed(1)}h · ${result.windows.length} windows · ${scopeTitles.length} scope lines`,
   });
 }
 

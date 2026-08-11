@@ -722,6 +722,8 @@ export interface ProofDay {
   analysisStatus?: string | null;
   analysisError?: string | null;
   aiFindings: {
+    /** True when AI cross-referenced agreed scope lines; false = description-only. */
+    scopeCrossRef?: boolean;
     materialBecause?: string;
     changes?: string[];
     cannotTell?: string[];
