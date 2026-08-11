@@ -346,7 +346,14 @@ const inviteeSchema = z
 const approveSchema = z.object({
   title: z.string().trim().min(1).max(200),
   workType: z.enum(['mitigation', 'construction']).default('mitigation'),
-  address: z.string().trim().min(1).max(200),
+  address: z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .refine((value) => value.toLowerCase() !== 'address to confirm', {
+      message: 'Enter the real site address before inviting Field Capture.',
+    }),
   city: z.string().trim().max(120).optional(),
   postalCode: z.string().trim().max(20).optional(),
   claimNumber: z.string().trim().max(80).optional(),
@@ -379,11 +386,23 @@ async function actorLabelFor(supabase: any, userId: string): Promise<string> {
  * Best-effort: email the capture invite, and if this inbox already owns a
  * field identity, attach the job so it shows under My jobs without a second trip.
  */
+/** Prefer a real public app URL in invite links (not localhost). */
+function publicAppOrigin(): string | null {
+  const origins = config.frontendOrigins ?? [];
+  const httpsPublic = origins.find(
+    (o) => /^https:\/\//i.test(o) && !/localhost|127\.0\.0\.1/i.test(o),
+  );
+  if (httpsPublic) return httpsPublic;
+  const nonLocal = origins.find((o) => !/localhost|127\.0\.0\.1/i.test(o));
+  return nonLocal ?? origins[0] ?? null;
+}
+
 async function deliverPartyInvite(input: {
   supabase: any;
   orgId: string;
   jobId: string;
   jobTitle: string;
+  siteAddress?: string | null;
   userId: string;
   partyId: string;
   company: string;
@@ -437,23 +456,29 @@ async function deliverPartyInvite(input: {
     ]);
     const emailParam = encodeURIComponent(email);
     const sharePath = `/shared/${input.token}?email=${emailParam}`;
+    const origin = publicAppOrigin();
     const mail = partyInviteEmail({
       orgName: (org as any)?.name ?? 'a contractor',
       inviterName,
       jobTitle: input.jobTitle,
+      siteAddress: input.siteAddress ?? null,
       recipientName: input.contactName || input.company,
       recipientEmail: email,
       recipientHasAccount,
-      origin: config.frontendOrigins?.[0] ?? null,
+      origin,
       path: sharePath,
-      signupPath: `/login?mode=signup&email=${emailParam}`,
+      signupPath: `/signup?email=${emailParam}`,
     });
     // Atmosphere sends — not the org's connected Gmail/Microsoft.
     const result = await sendSystemMail({
       to: email,
       subject: mail.subject,
       text: mail.text,
+      html: mail.html,
     });
+    if (!result.ok) {
+      console.warn(`[intake] invite email to ${email} failed: ${result.why}`);
+    }
     emailed = result.ok;
   }
 
@@ -578,11 +603,16 @@ jobIntakeRouter.post('/intake/approve', async (req: Request, res: Response, next
       }
       const token = String((party as any).access_token);
       const partyId = String((party as any).id);
+      const siteAddress = [input.address, input.city, input.postalCode]
+        .map((part) => (part ?? '').trim())
+        .filter(Boolean)
+        .join(', ');
       const delivery = await deliverPartyInvite({
         supabase,
         orgId,
         jobId,
         jobTitle: (job as any).title,
+        siteAddress,
         userId,
         partyId,
         company,

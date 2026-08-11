@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { PageHeader, EmptyState } from '../components/AppShell';
 import {
   api,
@@ -75,6 +75,8 @@ function ago(iso: string | null): string {
 
 export function SharedDashboardPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedJob = searchParams.get('job');
   useFeatureTimer('job_files');
   const [list, setList] = useState<SharedJobSummary[] | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -92,16 +94,25 @@ export function SharedDashboardPage() {
     try {
       const res = await api.sharedJobs();
       setList(res.jobs);
-      if (!openId && res.jobs.length) void openJob(res.jobs[0].jobId);
+      // Prefer ?job= even when the list is still catching up after intake approve.
+      const preferred =
+        requestedJob ||
+        (openId && res.jobs.some((j) => j.jobId === openId) && openId) ||
+        res.jobs[0]?.jobId ||
+        null;
+      if (preferred) void openJob(preferred, { syncUrl: Boolean(requestedJob) });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load the shared records.');
       setList([]);
     }
   }
 
-  async function openJob(jobId: string) {
+  async function openJob(jobId: string, opts?: { syncUrl?: boolean }) {
     setOpenId(jobId);
     setShareFormOpen(false);
+    if (opts?.syncUrl !== false) {
+      setSearchParams(jobId ? { job: jobId } : {}, { replace: true });
+    }
     setLoading(true);
     try {
       setRecord(await api.sharedJob(jobId));
@@ -117,6 +128,15 @@ export function SharedDashboardPage() {
     void loadList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!requestedJob || !list?.length) return;
+    if (openId === requestedJob) return;
+    if (list.some((j) => j.jobId === requestedJob)) {
+      void openJob(requestedJob, { syncUrl: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedJob, list]);
 
   async function decide(item: JobScopeItem, decision: 'approved' | 'declined') {
     if (!record) return;

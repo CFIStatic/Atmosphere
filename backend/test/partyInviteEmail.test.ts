@@ -6,12 +6,13 @@ const base = {
   orgName: 'Ortiz Restoration',
   inviterName: 'Dana Ortiz',
   jobTitle: '1842 Meridian Ave — water loss',
+  siteAddress: '1842 Meridian Ave, Austin, TX 78702',
   recipientName: 'Alex Rivera',
   recipientEmail: 'alex@riogrande.example',
   recipientHasAccount: true,
   origin: 'https://app.atmosphere.example',
   path: '/shared/tok123?email=alex%40riogrande.example',
-  signupPath: '/login?mode=signup&email=alex%40riogrande.example',
+  signupPath: '/signup?email=alex%40riogrande.example',
 };
 
 test('the capture link is absolute when an origin is configured, and on its own line', () => {
@@ -29,24 +30,26 @@ test('without an origin the path still goes out rather than nothing', () => {
 });
 
 test('Atmosphere sends the invite; the org is named, not the From party', () => {
-  const { text, subject } = partyInviteEmail(base);
-  assert.ok(text.startsWith('Atmosphere invited you to capture a job for Ortiz Restoration.'));
+  const { text, subject, html } = partyInviteEmail(base);
+  assert.ok(text.includes('Ortiz Restoration invited you to capture work on Atmosphere.'));
   assert.ok(text.includes('Requested by: Dana Ortiz'));
-  assert.equal(subject, 'Atmosphere: invite to capture 1842 Meridian Ave — water loss');
-  assert.ok(!subject.includes('Dana Ortiz at'));
+  assert.ok(text.includes('Site: 1842 Meridian Ave, Austin, TX 78702'));
+  assert.equal(subject, 'Ortiz Restoration invited you to capture: 1842 Meridian Ave — water loss');
+  assert.ok(html.includes('Open job on phone'));
+  assert.ok(html.includes('Ortiz Restoration'));
 });
 
 test('an existing account gets sign-in; a missing one gets create-with-this-address', () => {
   const has = partyInviteEmail(base).text;
   assert.ok(has.includes('You already have an Atmosphere account'));
-  assert.ok(has.includes('Sign in with that account'));
-  assert.ok(!has.includes('Create a free one'));
+  assert.ok(has.includes('Sign in with that exact email'));
+  assert.ok(!has.includes('Create a free account with that exact address'));
 
-  const not = partyInviteEmail({ ...base, recipientHasAccount: false }).text;
-  assert.ok(not.includes('Create a free one'));
-  assert.ok(not.includes('this exact address'));
-  assert.ok(not.includes('https://app.atmosphere.example/login?mode=signup'));
-  assert.ok(!not.includes('You already have an Atmosphere account'));
+  const not = partyInviteEmail({ ...base, recipientHasAccount: false });
+  assert.ok(not.text.includes('Create a free account with that exact address'));
+  assert.ok(not.text.includes('https://app.atmosphere.example/signup?email='));
+  assert.ok(not.html.includes('Create your account'));
+  assert.ok(!not.text.includes('You already have an Atmosphere account'));
 });
 
 test('no unsubscribe footer — and the ignore path is stated', () => {

@@ -237,9 +237,10 @@ Verifier can judge against an agreed brief.
 | Team join invites | **Atmosphere** |
 | Sales campaigns | Customer mailbox (later product; not required for verification) |
 
-Configure `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, and `CAREERS_FROM_EMAIL` (or
-equivalent from-address). Without SMTP, invites still mint links; the UI falls
-back to copy-link.
+Configure `CAREERS_FROM_EMAIL` plus either SMTP (`SMTP_HOST`, `SMTP_USER`,
+`SMTP_PASS`) or `RESEND_API_KEY`. Invite emails include HTML + plain text and
+absolute app links from `FRONTEND_ORIGIN` (prefer a public `https://` origin).
+Without mail configured, invites still mint links; the UI falls back to copy-link.
 
 ## Development scripts
 
