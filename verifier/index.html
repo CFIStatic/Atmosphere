@@ -435,9 +435,24 @@
   thead th {
     position: sticky; top: 53px; z-index: 4; background: var(--bg);
     text-align: left; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase;
-    color: var(--faint); font-weight: 700; padding: 10px 10px; white-space: nowrap;
+    color: var(--faint); font-weight: 700; padding: 0; white-space: nowrap;
     border-bottom: 1px solid var(--line);
   }
+  thead th button {
+    display: inline-flex; align-items: center; gap: 5px;
+    width: 100%; padding: 10px 10px; margin: 0; border: 0; background: transparent;
+    font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit;
+    cursor: pointer; text-align: left;
+  }
+  thead th button:hover { color: var(--ink); }
+  thead th[aria-sort="ascending"] button,
+  thead th[aria-sort="descending"] button { color: var(--ink); }
+  thead th .sortcaret {
+    font-size: 9px; opacity: 0; transition: opacity .12s ease;
+  }
+  thead th button:hover .sortcaret { opacity: .45; }
+  thead th[aria-sort="ascending"] .sortcaret,
+  thead th[aria-sort="descending"] .sortcaret { opacity: 1; }
   tbody tr { background: var(--panel); cursor: pointer; }
   tbody tr:hover { background: var(--bg); }
   tbody td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
@@ -784,14 +799,14 @@
     <div class="tablewrap">
       <table>
         <thead>
-          <tr>
-            <th style="width:96px">Clip</th>
-            <th>Video</th>
-            <th>Integrity</th>
-            <th>Classification</th>
-            <th>Tier</th>
-            <th>Recorded</th>
-            <th>Uploaded by</th>
+          <tr id="colheads">
+            <th style="width:96px" data-sort-key="clip" aria-sort="none"><button type="button">Clip <span class="sortcaret" aria-hidden="true">↕</span></button></th>
+            <th data-sort-key="video" aria-sort="none"><button type="button">Video <span class="sortcaret" aria-hidden="true">↕</span></button></th>
+            <th data-sort-key="integrity" aria-sort="none"><button type="button">Integrity <span class="sortcaret" aria-hidden="true">↕</span></button></th>
+            <th data-sort-key="classification" aria-sort="none"><button type="button">Classification <span class="sortcaret" aria-hidden="true">↕</span></button></th>
+            <th data-sort-key="tier" aria-sort="none"><button type="button">Tier <span class="sortcaret" aria-hidden="true">↕</span></button></th>
+            <th data-sort-key="recorded" aria-sort="descending"><button type="button">Recorded <span class="sortcaret" aria-hidden="true">↓</span></button></th>
+            <th data-sort-key="uploader" aria-sort="none"><button type="button">Uploaded by <span class="sortcaret" aria-hidden="true">↕</span></button></th>
           </tr>
         </thead>
         <tbody id="rows"></tbody>
@@ -1337,7 +1352,14 @@
    * State
    * ------------------------------------------------------------------ */
 
-  var state = { view: 'all', jobs: {}, companies: {}, phases: {}, q: '', sort: 'recent', groupByJob: true, collapsed: {}, open: null, frame: 0, playing: null };
+  var state = {
+    view: 'all', jobs: {}, companies: {}, phases: {}, q: '',
+    /** Column sort: clip | video | integrity | classification | tier | recorded | uploader */
+    sortKey: 'recorded',
+    /** asc | desc — toggle on repeated clicks of the same header */
+    sortDir: 'desc',
+    groupByJob: true, collapsed: {}, open: null, frame: 0, playing: null
+  };
 
   var $ = function (sel) { return document.querySelector(sel); };
   var rowsEl = $('#rows');
@@ -1425,13 +1447,71 @@
         if (hay.indexOf(q) === -1) return false;
       }
       return true;
-    }).sort(function (a, b) {
-      if (state.sort === 'risk') {
-        var d = (needsAttention(b) ? 1 : 0) - (needsAttention(a) ? 1 : 0);
-        if (d) return d;
+    }).sort(compareEvidence);
+  }
+
+  function integrityRank(item) {
+    var v = integrityOf(item);
+    return v === 'fail' ? 2 : v === 'unknown' ? 1 : 0;
+  }
+
+  function sortValue(item, key) {
+    if (key === 'clip') return Number(item.duration) || 0;
+    if (key === 'video') {
+      var job = JOBS[item.job] || {};
+      return String(job.name || item.jobName || '') + ' ' + String(item.phase || '');
+    }
+    if (key === 'integrity') return integrityRank(item);
+    if (key === 'classification') return analysisChip(item).text.toLowerCase();
+    if (key === 'tier') return Number(item.tier) || 0;
+    if (key === 'recorded') return String(item.workDate || '') + 'T' + String(item.uploadedAt || '');
+    if (key === 'uploader') return String(item.person || '') + ' ' + String(item.company || '');
+    return String(item.uploadedAt || '');
+  }
+
+  function compareEvidence(a, b) {
+    var key = state.sortKey || 'recorded';
+    var dir = state.sortDir === 'asc' ? 1 : -1;
+    var av = sortValue(a, key);
+    var bv = sortValue(b, key);
+    var cmp = 0;
+    if (typeof av === 'number' && typeof bv === 'number') cmp = av - bv;
+    else cmp = String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: 'base' });
+    if (cmp) return cmp * dir;
+    // Stable tie-break: newest upload first.
+    return String(b.uploadedAt || '').localeCompare(String(a.uploadedAt || ''));
+  }
+
+  function syncSortHeaders() {
+    var heads = document.getElementById('colheads');
+    if (!heads) return;
+    Array.prototype.forEach.call(heads.querySelectorAll('th[data-sort-key]'), function (th) {
+      var key = th.getAttribute('data-sort-key');
+      var caret = th.querySelector('.sortcaret');
+      var active = key === state.sortKey;
+      th.setAttribute('aria-sort', active ? (state.sortDir === 'asc' ? 'ascending' : 'descending') : 'none');
+      if (caret) caret.textContent = active ? (state.sortDir === 'asc' ? '↑' : '↓') : '↕';
+      var btn = th.querySelector('button');
+      if (btn) {
+        btn.setAttribute(
+          'aria-label',
+          'Sort by ' + (btn.textContent || key).replace(/[↑↓↕]/g, '').trim() +
+            (active ? (state.sortDir === 'asc' ? ', ascending' : ', descending') : ''),
+        );
       }
-      return b.uploadedAt.localeCompare(a.uploadedAt);
     });
+  }
+
+  function setColumnSort(key) {
+    if (state.sortKey === key) {
+      state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      state.sortKey = key;
+      // Dates / ranks start newest / highest first; names start A→Z.
+      state.sortDir = (key === 'video' || key === 'classification' || key === 'uploader') ? 'asc' : 'desc';
+    }
+    syncSortHeaders();
+    render();
   }
 
   function thumbFor(item) {
@@ -1500,6 +1580,7 @@
   function render() {
     var list = visible();
     $('#empty').hidden = list.length > 0;
+    syncSortHeaders();
 
     if (state.groupByJob) {
       // The filing is automatic because it always was: every clip arrives
@@ -1509,6 +1590,10 @@
       list.forEach(function (e) {
         if (!groups[e.job]) { groups[e.job] = []; order.push(e.job); }
         groups[e.job].push(e);
+      });
+      // Order job files by the sort of their first clip (list is already sorted).
+      order.sort(function (ka, kb) {
+        return compareEvidence(groups[ka][0], groups[kb][0]);
       });
       $('#resultcount').textContent = list.length + ' of ' + EVIDENCE.length + ' clips · ' +
         order.length + ' job file' + (order.length === 1 ? '' : 's');
@@ -2307,6 +2392,17 @@
   });
 
   $('#q').addEventListener('input', function (e) { state.q = e.target.value; render(); });
+
+  var colheads = document.getElementById('colheads');
+  if (colheads) {
+    colheads.addEventListener('click', function (ev) {
+      var btn = ev.target.closest('button');
+      if (!btn) return;
+      var th = btn.closest('th[data-sort-key]');
+      if (!th) return;
+      setColumnSort(th.getAttribute('data-sort-key'));
+    });
+  }
 
   $('#d-close').addEventListener('click', function () {
     stopPlay();
