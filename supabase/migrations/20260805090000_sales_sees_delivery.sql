@@ -179,7 +179,11 @@ select
   )                                                 as unsubscribed,
   exists (
     select 1 from public.crm_suppressions p
-    where p.org_id = s.org_id and lower(p.email) = lower(s.email)
+    where p.org_id = s.org_id
+      and (
+        (p.kind = 'email' and lower(p.value) = lower(s.email))
+        or (p.kind = 'domain' and lower(p.value) = split_part(lower(s.email), '@', 2))
+      )
   )                                                 as suppressed
 from public.crm_sends s
 group by s.org_id, lower(s.email);
