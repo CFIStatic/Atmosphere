@@ -229,6 +229,7 @@ export function JobIntakePage() {
     setBusy(true);
     setError(null);
     try {
+      const scope = proposal.scope.filter((line) => line.title.trim().length > 0);
       const res = await api.approveIntake({
         title: proposal.title,
         workType: proposal.workType,
@@ -238,12 +239,12 @@ export function JobIntakePage() {
         claimNumber: proposal.claimNumber || undefined,
         briefNote: proposal.briefNote,
         facts: proposal.facts,
-        scope: proposal.scope,
+        scope,
         invitees,
       });
       intakeCta.track('conversion', {
         inviteCount: invitees.length,
-        scopeLines: proposal.scope.length,
+        scopeLines: scope.length,
       });
       setResult(res);
       setStep('done');
