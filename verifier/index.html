@@ -536,7 +536,7 @@
   .toast[data-on="1"] { opacity: 1; transform: translateX(-50%) translateY(0); }
 
   .empty {
-    padding: 72px 24px 48px; text-align: center; color: var(--muted);
+    padding: 48px 24px; text-align: center; color: var(--muted);
     max-width: 28rem; margin: 0 auto;
   }
   .empty .empty-title {
@@ -1602,8 +1602,17 @@
         }
       }
     }
-    if (clipTable) clipTable.hidden = !hasRows;
+    // Keep column headers (Clip, Video, Integrity, …) visible even with no rows.
+    if (clipTable) clipTable.hidden = false;
     syncSortHeaders();
+
+    if (!hasRows) {
+      $('#resultcount').textContent = EVIDENCE.length
+        ? '0 of ' + EVIDENCE.length + ' clips'
+        : '0 clips';
+      rowsEl.innerHTML = '';
+      return;
+    }
 
     if (state.groupByJob) {
       // The filing is automatic because it always was: every clip arrives
