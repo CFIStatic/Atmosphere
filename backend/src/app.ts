@@ -59,6 +59,7 @@ import { mediaVideoRouter } from './routes/mediaVideo.js';
 import { mediaCatalogRouter } from './routes/mediaCatalog.js';
 import { geometryRouter } from './routes/geometry.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
+import { requestLog } from './middleware/requestLog.js';
 import { cyberMonitor } from './cyber/index.js';
 import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
 import { verificationHook, pumpVerificationQueue } from './lib/verifierRunner.js';
@@ -80,6 +81,9 @@ export function createApp(): Express {
 
   // Security headers.
   app.use(helmet());
+
+  // Structured access logs + request ids (before routers so every path is covered).
+  app.use(requestLog);
 
   // CORS — allow the configured frontend origins with credentials (cookies).
   // In development, also accept Cloudflare quick-tunnel hosts so cloud-agent /

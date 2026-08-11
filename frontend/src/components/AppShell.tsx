@@ -11,6 +11,7 @@ import {
 } from '../lib/theme';
 import { PLATFORMS, VISIBLE_PLATFORM_IDS, platformOfPath } from '../lib/platforms';
 import { usePlatform } from '../lib/usePlatform';
+import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { Logo } from './Logo';
 import {
   ChevronDownIcon,
@@ -66,6 +67,9 @@ export function AppShell({
   const [platformId, setPlatformId] = usePlatform();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Whole-console session time for Atmosphere-internal product analytics.
+  useFeatureTimer('app_shell');
 
   // Landing on a platform's home makes it the active one; shared screens
   // (Jobs, Billing, Settings) leave the choice alone, so opening a job from

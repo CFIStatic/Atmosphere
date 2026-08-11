@@ -290,15 +290,16 @@ export const config = {
   contact: {
     // Where messages from the corporate site's contact form land. Falls back
     // to the careers inbox so one configured address serves both forms.
+    // Production refuses consumer personal inboxes — see productionGuards.ts.
     toEmail:
       process.env.CONTACT_TO_EMAIL ??
       process.env.CAREERS_TO_EMAIL ??
-      'jackcyganiak@yahoo.com',
+      'jack@jettx.ai',
   },
 
   careers: {
     // Where job applications from the corporate site's careers page land.
-    toEmail: process.env.CAREERS_TO_EMAIL ?? 'jackcyganiak@yahoo.com',
+    toEmail: process.env.CAREERS_TO_EMAIL ?? 'jack@jettx.ai',
     // Envelope sender for the application emails. Many SMTP providers require
     // this to be an address the account is allowed to send as.
     fromEmail: process.env.CAREERS_FROM_EMAIL ?? process.env.SMTP_USER ?? '',
@@ -1011,6 +1012,20 @@ export const config = {
     // so a key alone is enough to try a real delivery in development.
     fromDomain: process.env.EMAIL_MARKETING_FROM ?? 'onboarding@resend.dev',
   },
+
+  /**
+   * Atmosphere corporate staff who get /analytics without a manual SQL grant.
+   * On sign-in / access probe the BFF upserts analytics_staff for these emails
+   * (requires SUPABASE_SERVICE_ROLE_KEY). Defaults include jack@jettx.ai so
+   * preview just works.
+   */
+  analytics: {
+    internalEmails: parseEmailList(
+      process.env.ANALYTICS_INTERNAL_EMAILS,
+      ['jack@jettx.ai'],
+    ),
+    investorEmails: parseEmailList(process.env.ANALYTICS_INVESTOR_EMAILS, []),
+  },
 } as const;
 
 /** Positive int from env, or null when unset / invalid (means “unlimited”). */
@@ -1019,6 +1034,18 @@ function optionalPositiveInt(value: string | undefined): number | null {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return null;
   return Math.floor(n);
+}
+
+function parseEmailList(value: string | undefined, fallback: string[]): string[] {
+  const raw = value?.trim() ? value : fallback.join(',');
+  return [
+    ...new Set(
+      raw
+        .split(',')
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ];
 }
 
 function parseSlaSource(value: string | undefined): 'manual' | 'portal' | 'mock' {

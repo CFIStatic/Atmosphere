@@ -9,21 +9,25 @@ import {
 } from './estimator/mitigation/capture/scheduler.js';
 import { startCyberScheduler, stopCyberScheduler } from './cyber/index.js';
 import { agentHub } from './computer/agentHub.js';
+import { assertProductionReady } from './lib/productionGuards.js';
+import { logger } from './lib/logger.js';
+
+assertProductionReady();
 
 const app = createApp();
 
 const server = app.listen(config.port, () => {
-   
-  console.log(
-    `[atmosphere-backend] listening on http://localhost:${config.port}\n` +
-      `  → Supabase URL: ${config.supabase.url}\n` +
-      `  → Allowed origins: ${config.frontendOrigins.join(', ')}\n` +
-      `  → Xactimate driver: ${config.xactimate.driver}\n` +
-      `  → Computer use: ${config.computerUse.enabled ? `on (${config.computerUse.defaultModel})` : 'off'}\n` +
-      `  → Capture agent: ${config.estimator.captureAgent.enabled ? `on (every ${config.estimator.captureAgent.intervalMinutes}m)` : 'off'}\n` +
-      `  → Cyber defense: ${config.cyber.enabled ? 'on' : 'off'}\n` +
-      `  → Mode: ${config.isProduction ? 'production' : 'development'}`,
-  );
+  logger.info('listening', {
+    port: config.port,
+    supabaseUrl: config.supabase.url,
+    origins: config.frontendOrigins,
+    xactimateDriver: config.xactimate.driver,
+    mediaBackend: config.media.backend,
+    computerUse: config.computerUse.enabled,
+    captureAgent: config.estimator.captureAgent.enabled,
+    cyber: config.cyber.enabled,
+    mode: config.isProduction ? 'production' : 'development',
+  });
 
   // Opt-in background automation. No-ops unless PM_SCHEDULER_ENABLED is set and
   // a service-role key is configured — see backend/src/pm/scheduler.ts for why
@@ -52,8 +56,7 @@ if (config.computerUse.enabled) {
 // Graceful shutdown.
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
-     
-    console.log(`\n[atmosphere-backend] received ${signal}, shutting down…`);
+    logger.info('shutdown', { signal });
     // Subsystems that hold resources the process should not simply drop.
     stopScheduler();
     stopCaptureAgent();

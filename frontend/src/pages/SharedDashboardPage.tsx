@@ -13,6 +13,7 @@ import { JobProgressDashboard, jobListStatus } from '../components/shared/JobPro
 import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPanel';
 import { ScopeDocPanel } from '../components/shared/ScopeDocPanel';
 import { JobReadinessPanel } from '../components/shared/JobReadinessPanel';
+import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 /**
  * One job, two companies, one record.
@@ -74,6 +75,7 @@ function ago(iso: string | null): string {
 
 export function SharedDashboardPage() {
   const navigate = useNavigate();
+  useFeatureTimer('job_files');
   const [list, setList] = useState<SharedJobSummary[] | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [record, setRecord] = useState<SharedJobRecord | null>(null);

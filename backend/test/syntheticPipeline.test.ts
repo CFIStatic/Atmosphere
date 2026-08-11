@@ -14,6 +14,7 @@ import {
 } from '../src/geometry/store.js';
 import { ingestMeasurementsOntoTwin, summarizeTwin } from '../src/geometry/twin.js';
 import {
+  ffmpegAvailable,
   makeSyntheticDayClip,
   probeHasAudio,
   probeHasVideo,
@@ -22,13 +23,15 @@ import {
 process.env.MEDIA_STORE = 'memory';
 process.env.GEOMETRY_STORE = 'memory';
 
-test('synthetic fixture contains video + audio tracks', async () => {
+const hasFfmpeg = ffmpegAvailable();
+
+test('synthetic fixture contains video + audio tracks', { skip: !hasFfmpeg }, async () => {
   const clip = await makeSyntheticDayClip({ durationSeconds: 8, withAudio: true });
   assert.equal(await probeHasVideo(clip.path), true);
   assert.equal(await probeHasAudio(clip.path), true);
 });
 
-test('synthetic silent fixture has video but no audio', async () => {
+test('synthetic silent fixture has video but no audio', { skip: !hasFfmpeg }, async () => {
   const clip = await makeSyntheticDayClip({
     durationSeconds: 6,
     withAudio: false,
@@ -38,30 +41,38 @@ test('synthetic silent fixture has video but no audio', async () => {
   assert.equal(await probeHasAudio(clip.path), false);
 });
 
-test('sparse extract reads frames from a real synthetic MP4 via ffmpeg', async () => {
-  const clip = await makeSyntheticDayClip({ durationSeconds: 10, withAudio: true });
-  const frames = await extractSparseFramesFromUrl({
-    url: clip.path, // ffmpeg accepts a local path
-    durationSeconds: clip.durationSeconds,
-    maxFrames: 8,
-    candidateIntervalSeconds: 60,
-  });
-  assert.ok(frames.length >= 1, 'expected at least one JPEG from the clip');
-  assert.ok(frames[0]!.jpeg.length > 100);
-});
+test(
+  'sparse extract reads frames from a real synthetic MP4 via ffmpeg',
+  { skip: !hasFfmpeg },
+  async () => {
+    const clip = await makeSyntheticDayClip({ durationSeconds: 10, withAudio: true });
+    const frames = await extractSparseFramesFromUrl({
+      url: clip.path, // ffmpeg accepts a local path
+      durationSeconds: clip.durationSeconds,
+      maxFrames: 8,
+      candidateIntervalSeconds: 60,
+    });
+    assert.ok(frames.length >= 1, 'expected at least one JPEG from the clip');
+    assert.ok(frames[0]!.jpeg.length > 100);
+  },
+);
 
-test('prepareVideoFrames works on synthetic day film (source-agnostic)', async () => {
-  const clip = await makeSyntheticDayClip({ durationSeconds: 10, withAudio: true });
-  const prepared = await prepareVideoFrames({
-    id: 'synth-1',
-    source: 'field_capture',
-    url: clip.path,
-    durationSeconds: clip.durationSeconds,
-    maxFrames: 12,
-  });
-  assert.equal(prepared.source, 'field_capture');
-  assert.ok(prepared.frames.length >= 1);
-});
+test(
+  'prepareVideoFrames works on synthetic day film (source-agnostic)',
+  { skip: !hasFfmpeg },
+  async () => {
+    const clip = await makeSyntheticDayClip({ durationSeconds: 10, withAudio: true });
+    const prepared = await prepareVideoFrames({
+      id: 'synth-1',
+      source: 'field_capture',
+      url: clip.path,
+      durationSeconds: clip.durationSeconds,
+      maxFrames: 12,
+    });
+    assert.equal(prepared.source, 'field_capture');
+    assert.ok(prepared.frames.length >= 1);
+  },
+);
 
 test('media catalog accepts A/V day film and rejects silent field_day_video', async () => {
   resetMediaCatalogForTests();

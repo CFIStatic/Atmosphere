@@ -7,6 +7,7 @@ import { HttpError } from '../lib/errors.js';
 import {
   getAccess,
   getAccounts,
+  getExperiments,
   getFeatures,
   getMonthly,
   getOverview,
@@ -15,6 +16,7 @@ import {
   getSummary,
   scopeAtLeast,
 } from '../lib/analytics.js';
+import { ensureAllowlistedAnalyticsAccess } from '../lib/analyticsAccess.js';
 import { buildWorkbook, workbookFilename, type Dataset } from '../lib/analyticsWorkbook.js';
 import { getAdminMeteringAnalytics } from '../metering/periodAggregation.js';
 
@@ -31,6 +33,10 @@ analyticsRouter.use(requireAuth);
  */
 analyticsRouter.get('/access', async (req: Request, res: Response, next: NextFunction) => {
   try {
+    // Auto-grant Atmosphere staff (e.g. jack@jettx.ai) so preview shows
+    // /analytics without a manual SQL upsert.
+    await ensureAllowlistedAnalyticsAccess(req.user);
+
     const supabase = createUserClient(req.accessToken!);
     res.json(await getAccess(supabase));
   } catch (err) {
@@ -133,6 +139,21 @@ analyticsRouter.get(
       const { from, to } = parseRange(req);
       const supabase = createUserClient(req.accessToken!);
       res.json(await getAdminMeteringAnalytics(supabase, from.toISOString(), to.toISOString()));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** A/B experiment funnel — Atmosphere internal staff only. */
+analyticsRouter.get(
+  '/experiments',
+  requireAnalytics('internal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { from, to } = parseRange(req);
+      const supabase = createUserClient(req.accessToken!);
+      res.json({ experiments: await getExperiments(supabase, from, to) });
     } catch (err) {
       next(err);
     }

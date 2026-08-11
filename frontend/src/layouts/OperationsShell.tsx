@@ -1,5 +1,6 @@
 import { Outlet, useLocation } from 'react-router-dom';
 import { VerifierFrame } from '../components/VerifierFrame';
+import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 const RAIL_W = 220;
 
@@ -10,6 +11,7 @@ const RAIL_W = 220;
 export function OperationsShell() {
   const { pathname } = useLocation();
   const isLibrary = pathname === '/verifier-library';
+  useFeatureTimer('verifier_library', isLibrary);
 
   return (
     <div className="relative min-h-screen bg-paper-100">

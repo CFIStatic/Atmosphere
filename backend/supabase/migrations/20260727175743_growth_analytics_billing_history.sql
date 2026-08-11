@@ -1,0 +1,15 @@
+-- 20260727175743_growth_analytics_billing_history
+--
+-- ALREADY APPLIED to Supabase project ccxatzfsvzetciiwsjlj as version 20260727175743.
+-- This file intentionally contains no DDL: it exists so the repository's
+-- migration history matches production, which is what the Supabase GitHub
+-- check compares. Running it is a no-op; the schema it describes is live.
+--
+-- The authoritative statement text is recorded on the project itself:
+--   select array_to_string(statements, '') from supabase_migrations.schema_migrations
+--   where version = '20260727175743';
+--   -- md5 57034f8d8538a0b272823fa9018e2761, 6391 bytes
+--
+-- To restore the full text here, run the query above and replace this file's
+-- contents verbatim (the md5 must match). Do not write new DDL under this
+-- version number.

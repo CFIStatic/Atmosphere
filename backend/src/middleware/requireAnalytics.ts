@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { createUserClient } from '../lib/supabase.js';
 import { getAccess, scopeAtLeast, type AnalyticsScope } from '../lib/analytics.js';
+import { ensureAllowlistedAnalyticsAccess } from '../lib/analyticsAccess.js';
 import { HttpError } from '../lib/errors.js';
 
 declare global {
@@ -29,6 +30,8 @@ export function requireAnalytics(min: AnalyticsScope = 'investor') {
     next: NextFunction,
   ): Promise<void> {
     try {
+      await ensureAllowlistedAnalyticsAccess(req.user);
+
       const supabase = createUserClient(req.accessToken!);
       const { scope } = await getAccess(supabase);
 

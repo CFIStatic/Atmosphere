@@ -39,11 +39,20 @@ describe('atmosphere product defaults', () => {
 
 describe('sales schedule', () => {
   it('picks a future weekday slot inside availability', () => {
+    // Anchor relative to "now" so the suite does not time-bomb when a fixed
+    // calendar date falls outside the search window.
+    const after = new Date();
     const slot = pickMeetingSlot({
-      availability: { mon: ['09:00-12:00'], tue: ['13:00-17:00'] },
+      availability: {
+        mon: ['09:00-12:00'],
+        tue: ['09:00-12:00'],
+        wed: ['09:00-12:00'],
+        thu: ['09:00-12:00'],
+        fri: ['09:00-12:00'],
+      },
       durationMin: 30,
-      after: new Date('2026-07-27T12:00:00Z'),
-      searchDays: 14,
+      after,
+      searchDays: 21,
     });
     assert.ok(slot);
     assert.ok(slot!.startsAt.getTime() > Date.now());
@@ -51,19 +60,27 @@ describe('sales schedule', () => {
   });
 
   it('skips busy starts', () => {
+    const after = new Date();
+    const availability = {
+      mon: ['09:00-17:00'],
+      tue: ['09:00-17:00'],
+      wed: ['09:00-17:00'],
+      thu: ['09:00-17:00'],
+      fri: ['09:00-17:00'],
+    };
     const first = pickMeetingSlot({
-      availability: { wed: ['09:00-10:00'] },
+      availability,
       durationMin: 30,
-      after: new Date('2026-07-27T12:00:00Z'),
-      searchDays: 10,
+      after,
+      searchDays: 21,
     });
     assert.ok(first);
     const second = pickMeetingSlot({
-      availability: { wed: ['09:00-10:00'] },
+      availability,
       durationMin: 30,
-      after: new Date('2026-07-27T12:00:00Z'),
+      after,
       busyStarts: [first!.startsAt],
-      searchDays: 10,
+      searchDays: 21,
     });
     assert.ok(second);
     assert.notEqual(second!.startsAt.toISOString(), first!.startsAt.toISOString());
@@ -155,7 +172,8 @@ describe('people query parse', () => {
   });
 });
 
-describe('live web people search', () => {
+describe('live web people search', { skip: process.env.RUN_LIVE_WEB_TESTS !== '1' }, () => {
+  // Hits the public web. Opt in with RUN_LIVE_WEB_TESTS=1 — CI stays deterministic.
   it('returns DuckDuckGo hits for ABC Supply facilities query', async () => {
     const hits = await searchWeb('director of facilities "ABC Supply" Milwaukee', 8);
     assert.ok(hits.length >= 3, `expected search hits, got ${hits.length}`);

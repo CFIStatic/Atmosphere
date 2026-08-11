@@ -2,7 +2,11 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import rateLimit from 'express-rate-limit';
 import { createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { featureHeartbeatSchema } from '../lib/validation.js';
+import {
+  experimentAssignSchema,
+  experimentEventSchema,
+  featureHeartbeatSchema,
+} from '../lib/validation.js';
 import { HttpError } from '../lib/errors.js';
 
 export const telemetryRouter = Router();
@@ -66,6 +70,88 @@ telemetryRouter.post(
       }
 
       res.json({ sessionId: (data as string | null) ?? null });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/telemetry/experiment/assign
+ *
+ * Sticky A/B assignment for the signed-in user. Deterministic on first assign;
+ * subsequent calls return the same variant.
+ */
+telemetryRouter.post(
+  '/experiment/assign',
+  heartbeatLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = experimentAssignSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new HttpError(
+          400,
+          parsed.error.issues[0]?.message ?? 'Invalid experiment',
+          'invalid_experiment',
+        );
+      }
+
+      const supabase = createUserClient(req.accessToken!);
+      const { data, error } = await supabase.rpc('assign_experiment', {
+        p_experiment: parsed.data.experimentKey,
+      });
+
+      if (error) {
+        if (/unknown_experiment/.test(error.message)) {
+          throw new HttpError(404, 'Unknown experiment', 'unknown_experiment');
+        }
+        if (/experiment_not_running/.test(error.message)) {
+          throw new HttpError(409, 'Experiment is not running', 'experiment_not_running');
+        }
+        throw new HttpError(500, error.message, 'experiment_assign_failed');
+      }
+
+      res.json(data);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/telemetry/experiment/event
+ *
+ * Records an experiment event (conversion, click, …). Auto-assigns when needed.
+ */
+telemetryRouter.post(
+  '/experiment/event',
+  heartbeatLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = experimentEventSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new HttpError(
+          400,
+          parsed.error.issues[0]?.message ?? 'Invalid experiment event',
+          'invalid_experiment_event',
+        );
+      }
+
+      const supabase = createUserClient(req.accessToken!);
+      const { error } = await supabase.rpc('track_experiment_event', {
+        p_experiment: parsed.data.experimentKey,
+        p_event: parsed.data.eventName,
+        p_props: parsed.data.props ?? {},
+      });
+
+      if (error) {
+        if (/unknown_experiment|experiment_not_running|not_assigned/.test(error.message)) {
+          throw new HttpError(409, error.message, 'experiment_event_rejected');
+        }
+        throw new HttpError(500, error.message, 'experiment_event_failed');
+      }
+
+      res.json({ ok: true });
     } catch (err) {
       next(err);
     }

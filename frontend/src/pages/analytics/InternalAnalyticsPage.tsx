@@ -39,6 +39,7 @@ import {
   RevenueCollectedChart,
 } from '../../components/analytics/sections';
 import { ProductIntelligenceSection } from '../../components/analytics/ProductIntelligenceSection';
+import { ExperimentsSection } from '../../components/analytics/ExperimentsSection';
 import { AnalyticsError, AnalyticsLoading, AnalyticsShell } from './AnalyticsShell';
 
 type AccountSort = 'mrr' | 'usage' | 'recent';
@@ -194,6 +195,12 @@ export function InternalAnalyticsPage() {
             hint="Every instrumented tool, ranked by foreground time"
           />
           <FeatureUsageSection features={data.features} showAiColumn />
+
+          <SectionHeading
+            title="A/B tests"
+            hint="Assignments, exposures, and conversions for running experiments"
+          />
+          <ExperimentsSection range={range} />
 
           <SectionHeading title="Growth & revenue" hint="Point-in-time at each month end" />
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
