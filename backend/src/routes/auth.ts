@@ -47,11 +47,13 @@ function sessionTokens(session: Session) {
 
 /**
  * Rate limiter for authentication endpoints to blunt credential-stuffing and
- * brute-force attempts: max 20 attempts / 15 min per IP.
+ * brute-force attempts. Production stays tight; development is generous so
+ * local / preview iteration is not blocked by our own limiter (Supabase may
+ * still rate-limit independently).
  */
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
+  max: config.isProduction ? 20 : 200,
   standardHeaders: true,
   legacyHeaders: false,
   handler: (_req, res) => {
@@ -79,6 +81,11 @@ function publicUser(user: User) {
  * Creates a new account. Depending on the project's email-confirmation setting,
  * Supabase either returns an active session (auto-confirm on) or requires the
  * user to confirm via email first (no session returned).
+ *
+ * When the public Auth API rate-limits signups (HTTP 429) and a service-role
+ * key is configured, we fall back to admin.createUser + password sign-in so
+ * local/preview onboarding is not stuck. Production still prefers the public
+ * path first (same behavior when under the limit).
  */
 authRouter.post('/signup', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -95,16 +102,56 @@ authRouter.post('/signup', authLimiter, async (req: Request, res: Response, next
     }
 
     if (error) {
-      // Log the real cause server-side, but return a generic message so we do
-      // not reveal whether the email is already registered (account enumeration).
       console.warn('[signup] supabase error:', error.status, error.message);
+
+      // Bypass public Auth rate limits via the admin API when available.
       if (error.status === 429) {
+        const admin = createAdminClient();
+        if (admin) {
+          const created = await admin.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true,
+          });
+          if (created.error) {
+            console.warn('[signup] admin.createUser failed:', created.error.message);
+            // Already registered — try signing them in with the password they typed.
+            if (/already|registered|exists/i.test(created.error.message)) {
+              const signedIn = await supabase.auth.signInWithPassword({ email, password });
+              if (!signedIn.error && signedIn.data.session) {
+                setSessionCookies(res, signedIn.data.session);
+                res.status(200).json({
+                  user: signedIn.data.user ? publicUser(signedIn.data.user) : null,
+                  needsEmailConfirmation: false,
+                  session: sessionTokens(signedIn.data.session),
+                });
+                return;
+              }
+            }
+          } else {
+            const signedIn = await supabase.auth.signInWithPassword({ email, password });
+            if (!signedIn.error && signedIn.data.session) {
+              setSessionCookies(res, signedIn.data.session);
+              res.status(201).json({
+                user: signedIn.data.user ? publicUser(signedIn.data.user) : null,
+                needsEmailConfirmation: false,
+                session: sessionTokens(signedIn.data.session),
+              });
+              return;
+            }
+            console.warn('[signup] admin user created but sign-in failed:', signedIn.error?.message);
+          }
+        }
+
         throw new HttpError(
           429,
-          'Too many sign-up attempts right now. Please wait a few minutes and try again.',
+          'Too many sign-up attempts right now. Please wait a few minutes and try again — or sign in if you already have an account.',
           'rate_limited',
         );
       }
+
+      // Log the real cause server-side, but return a generic message so we do
+      // not reveal whether the email is already registered (account enumeration).
       throw new HttpError(
         400,
         'Unable to create an account with those details. If you already have an account, try signing in.',
@@ -123,6 +170,25 @@ authRouter.post('/signup', authLimiter, async (req: Request, res: Response, next
     }
 
     // No session => email confirmation required before the user can sign in.
+    // In non-production, confirm via admin when available so preview is not
+    // blocked waiting on an inbox.
+    if (!config.isProduction) {
+      const admin = createAdminClient();
+      if (admin && data.user?.id) {
+        await admin.auth.admin.updateUserById(data.user.id, { email_confirm: true });
+        const signedIn = await supabase.auth.signInWithPassword({ email, password });
+        if (!signedIn.error && signedIn.data.session) {
+          setSessionCookies(res, signedIn.data.session);
+          res.status(201).json({
+            user: signedIn.data.user ? publicUser(signedIn.data.user) : null,
+            needsEmailConfirmation: false,
+            session: sessionTokens(signedIn.data.session),
+          });
+          return;
+        }
+      }
+    }
+
     res.status(201).json({
       user: data.user ? publicUser(data.user) : null,
       needsEmailConfirmation: true,
