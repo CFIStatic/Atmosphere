@@ -4,10 +4,13 @@ import { config } from '../config.js';
 import {
   adminClient,
   cardDetails,
+  isConfiguredOnboardingPrice,
   mapSubscriptionStatus,
+  meteringPlanForPrice,
   planForPrice,
   resolveOrgId,
   stripeClient,
+  syncMeteringSubscription,
   toIso,
 } from '../lib/stripe.js';
 import { ingestMention, verifyMentionSignature } from '../pm/orchestration/messaging.js';
@@ -212,28 +215,46 @@ async function onSubscriptionChanged(sub: Stripe.Subscription, admin: any): Prom
   if (!orgId) return;
 
   const item = sub.items?.data?.[0] as any;
-  const plan = await planForPrice(admin, item?.price?.id);
-  if (!plan) {
-    console.warn(`[stripe] price ${item?.price?.id} is not mapped to a plan; skipping sync`);
-    return;
-  }
-
+  const priceId = item?.price?.id as string | undefined;
   // Period boundaries moved from the subscription onto its items in recent API
   // versions; read whichever the account's version provides.
   const periodStart = toIso(item?.current_period_start ?? (sub as any).current_period_start);
   const periodEnd = toIso(item?.current_period_end ?? (sub as any).current_period_end);
 
-  const { error } = await admin.rpc('stripe_sync_subscription', {
-    p_org: orgId,
-    p_plan: plan.code,
-    p_interval: plan.interval,
-    p_seats: item?.quantity ?? 1,
-    p_subscription_id: sub.id,
-    p_status: mapSubscriptionStatus(sub.status),
-    p_period_start: periodStart,
-    p_period_end: periodEnd,
-  });
-  if (error) throw new Error(`subscription sync failed: ${error.message}`);
+  const plan = await planForPrice(admin, priceId);
+  if (plan) {
+    const { error } = await admin.rpc('stripe_sync_subscription', {
+      p_org: orgId,
+      p_plan: plan.code,
+      p_interval: plan.interval,
+      p_seats: item?.quantity ?? 1,
+      p_subscription_id: sub.id,
+      p_status: mapSubscriptionStatus(sub.status),
+      p_period_start: periodStart,
+      p_period_end: periodEnd,
+    });
+    if (error) throw new Error(`subscription sync failed: ${error.message}`);
+    return;
+  }
+
+  // Signup Checkout uses metering_plan_versions.stripe_price_id (or
+  // STRIPE_ONBOARDING_PRICE_ID), which is not in billing_plans. Still mark the
+  // org subscribed so the onboarding step can complete.
+  const metering = await meteringPlanForPrice(admin, priceId);
+  const isOnboarding =
+    sub.metadata?.onboarding === 'true' || isConfiguredOnboardingPrice(priceId);
+  if (metering || isOnboarding) {
+    await syncMeteringSubscription(admin, orgId, {
+      subscriptionId: sub.id,
+      status: sub.status,
+      periodStart,
+      periodEnd,
+      cancelAtPeriodEnd: Boolean(sub.cancel_at_period_end),
+    });
+    return;
+  }
+
+  console.warn(`[stripe] price ${priceId} is not mapped to a plan; skipping sync`);
 }
 
 async function onSubscriptionDeleted(sub: Stripe.Subscription, admin: any): Promise<void> {

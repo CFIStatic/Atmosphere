@@ -289,6 +289,7 @@ internal analytics dashboard under **A/B tests**.
 | Doc | Topic |
 | --- | --- |
 | [`docs/production.md`](docs/production.md) | Production deploy + go-live checklist |
+| [`docs/stripe.md`](docs/stripe.md) | Stripe Checkout, webhooks, `npm run stripe:sync` |
 | [`fieldcapture/README.md`](fieldcapture/README.md) | Live capture + token query params |
 | [`verifier/README.md`](verifier/README.md) | Evidence portal rules and access model |
 | [`apps/field-ios/README.md`](apps/field-ios/README.md) | Native Field Capture / RoomPlan status |

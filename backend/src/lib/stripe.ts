@@ -125,7 +125,7 @@ export function mapSubscriptionStatus(status: Stripe.Subscription.Status): strin
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 /**
- * Look up which plan a Stripe price belongs to.
+ * Look up which seat/credit plan a Stripe price belongs to.
  *
  * The price id is the only durable link between a Stripe subscription and our
  * plan catalog, so a price that is not in the catalog is a configuration error
@@ -148,6 +148,69 @@ export async function planForPrice(
     code: data.code as string,
     interval: data.stripe_price_id_annual === priceId ? 'annual' : 'monthly',
   };
+}
+
+/**
+ * Look up whether a Stripe price is the Work Verification metering plan
+ * (signup onboarding). Separate from `billing_plans` — that catalog is seats /
+ * usage credits; metering is the $599/mo platform subscription.
+ */
+export async function meteringPlanForPrice(
+  admin: SupabaseClient,
+  priceId: string | null | undefined,
+): Promise<{ code: string; name: string } | null> {
+  if (!priceId) return null;
+
+  const { data } = await admin
+    .from('metering_plan_versions')
+    .select('stripe_price_id, metering_plans(code, name)')
+    .eq('stripe_price_id', priceId)
+    .is('effective_to', null)
+    .maybeSingle();
+
+  if (!data) return null;
+  const plan = Array.isArray((data as any).metering_plans)
+    ? (data as any).metering_plans[0]
+    : (data as any).metering_plans;
+  if (!plan?.code) return null;
+  return { code: plan.code as string, name: (plan.name as string) ?? plan.code };
+}
+
+/** True when the price matches STRIPE_ONBOARDING_PRICE_ID (DB may still be unset). */
+export function isConfiguredOnboardingPrice(priceId: string | null | undefined): boolean {
+  return Boolean(
+    priceId && config.stripe.onboardingPriceId && priceId === config.stripe.onboardingPriceId,
+  );
+}
+
+/**
+ * Mark org_billing as subscribed for a metering / onboarding Checkout.
+ *
+ * Does not call `stripe_sync_subscription` — that RPC only knows
+ * `billing_plans` codes. Signup completion only needs
+ * `stripe_subscription_id` + an active/trialing status.
+ */
+export async function syncMeteringSubscription(
+  admin: SupabaseClient,
+  orgId: string,
+  opts: {
+    subscriptionId: string;
+    status: Stripe.Subscription.Status;
+    periodStart: string | null;
+    periodEnd: string | null;
+    cancelAtPeriodEnd?: boolean;
+  },
+): Promise<void> {
+  const patch: Record<string, unknown> = {
+    stripe_subscription_id: opts.subscriptionId,
+    status: mapSubscriptionStatus(opts.status),
+    cancel_at_period_end: Boolean(opts.cancelAtPeriodEnd),
+  };
+  if (opts.periodStart) patch.period_start = opts.periodStart;
+  if (opts.periodEnd) patch.period_end = opts.periodEnd;
+
+  const { error } = await admin.from('org_billing').update(patch).eq('org_id', orgId);
+  if (error) throw new Error(`metering subscription sync failed: ${error.message}`);
 }
 
 /** Seconds-since-epoch → ISO, for Stripe's period boundaries. */

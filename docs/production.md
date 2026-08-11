@@ -46,6 +46,7 @@ Fail-loud at boot when `NODE_ENV=production` (see `backend/src/lib/productionGua
 Strongly recommended:
 
 - `ANTHROPIC_API_KEY` and/or `GOOGLE_API_KEY` for Verifier dictation
+- `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` (+ `STRIPE_ONBOARDING_PRICE_ID`) — see [`docs/stripe.md`](./stripe.md)
 - `COOKIE_SECURE=true` (default when `NODE_ENV=production`)
 - `BACKUP_ENCRYPTION_KEY` if `BACKUP_ENABLED` is on
 - `LOG_LEVEL=info` (structured JSON logs)
