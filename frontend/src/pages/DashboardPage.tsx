@@ -111,15 +111,13 @@ export function DashboardPage() {
             Welcome to Atmosphere 🎉
           </h1>
           <p className="mt-2 max-w-xl text-ink-600">
-            You're signed in as{' '}
-            <span className="text-ink-800">{user?.email}</span>
-            {membership && (
+            You're signed in as <span className="text-ink-800">{user?.email}</span>
+            {org?.name ? (
               <>
                 {' '}
-                — {ROLE_LABELS[membership.role]} ·{' '}
-                {WORK_TYPE_LABELS[membership.workType]}
+                at <span className="text-ink-800">{org.name}</span>
               </>
-            )}
+            ) : null}
             .
           </p>
 

@@ -779,15 +779,6 @@
     <div class="toolbar">
       <h1 id="viewtitle">All videos</h1>
       <span class="result" id="resultcount"></span>
-      <span class="spacer"></span>
-      <div class="seg" role="group" aria-label="Arrange">
-        <button data-arrange="job" aria-pressed="true">Job files</button>
-        <button data-arrange="flat" aria-pressed="false">All clips</button>
-      </div>
-      <div class="seg" role="group" aria-label="Sort">
-        <button data-sort="recent" aria-pressed="true">Newest</button>
-        <button data-sort="risk" aria-pressed="false">Needs attention</button>
-      </div>
     </div>
 
     <div class="tablewrap">
@@ -2170,8 +2161,8 @@
     var name = u.name || 'Teammate';
     var email = u.email || '';
     var init = u.initials || '??';
-    var meta = [u.orgName, u.roleLabel].filter(Boolean).join(' · ');
-    var sub = meta || email || 'Atmosphere';
+    // Org name only in the chip — role labels (e.g. Field Technician) stay out of the chrome.
+    var sub = u.orgName || email || 'Atmosphere';
 
     var whoName = document.getElementById('who-name');
     var whoSub = document.getElementById('who-sub');
@@ -2184,7 +2175,7 @@
     if (whoAvatar) whoAvatar.textContent = init;
     if (menuName) menuName.textContent = name;
     if (menuEmail) menuEmail.textContent = email;
-    if (menuMeta) menuMeta.textContent = meta;
+    if (menuMeta) menuMeta.textContent = u.orgName || '';
   }
 
   function initAccountMenu() {
@@ -2310,21 +2301,6 @@
       });
     }
   }
-
-  // Each segment control is its own group: pressing a sort button must not
-  // unpress the arrange buttons, and vice versa.
-  document.querySelectorAll('.seg').forEach(function (seg) {
-    seg.querySelectorAll('button').forEach(function (b) {
-      b.addEventListener('click', function () {
-        if (b.dataset.sort) state.sort = b.dataset.sort;
-        if (b.dataset.arrange) state.groupByJob = b.dataset.arrange === 'job';
-        seg.querySelectorAll('button').forEach(function (o) {
-          o.setAttribute('aria-pressed', String(o === b));
-        });
-        render();
-      });
-    });
-  });
 
   document.querySelectorAll('.tabs button').forEach(function (b) {
     b.addEventListener('click', function () { setTab(b.dataset.tab); });

@@ -395,8 +395,8 @@ function AccountMenu() {
           <div className="border-b border-line px-4 py-3">
             <p className="truncate text-sm font-medium text-ink-900">{name}</p>
             <p className="truncate text-xs text-ink-500">{user?.email}</p>
-            {membership && (
-              <p className="mt-1 text-xs text-ink-500">{ROLE_LABELS[membership.role]}</p>
+            {membership?.org?.name && (
+              <p className="mt-1 text-xs text-ink-500">{membership.org.name}</p>
             )}
           </div>
 
