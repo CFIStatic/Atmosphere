@@ -806,11 +806,12 @@
     </div>
 
     <div class="tablewrap">
-      <table>
+      <table id="clip-table">
         <thead>
           <tr id="colheads">
             <th style="width:96px" data-sort-key="clip" aria-sort="none"><button type="button">Clip <span class="sortcaret" aria-hidden="true">↕</span></button></th>
             <th data-sort-key="video" aria-sort="none"><button type="button">Video <span class="sortcaret" aria-hidden="true">↕</span></button></th>
+            <th data-sort-key="integrity" aria-sort="none"><button type="button">Integrity <span class="sortcaret" aria-hidden="true">�></th>
             <th data-sort-key="integrity" aria-sort="none"><button type="button">Integrity <span class="sortcaret" aria-hidden="true">↕</span></button></th>
             <th data-sort-key="classification" aria-sort="none"><button type="button">Classification <span class="sortcaret" aria-hidden="true">↕</span></button></th>
             <th data-sort-key="tier" aria-sort="none"><button type="button">Tier <span class="sortcaret" aria-hidden="true">↕</span></button></th>
@@ -1588,9 +1589,11 @@
     var emptyEl = $('#empty');
     var emptyTitle = document.getElementById('empty-title');
     var emptyBody = document.getElementById('empty-body');
+    var clipTable = document.getElementById('clip-table');
+    var hasRows = list.length > 0;
     if (emptyEl) {
-      emptyEl.hidden = list.length > 0;
-      if (!list.length) {
+      emptyEl.hidden = hasRows;
+      if (!hasRows) {
         if (!EVIDENCE.length) {
           if (emptyTitle) emptyTitle.textContent = 'No clips yet';
           if (emptyBody) emptyBody.textContent = 'When Field Capture uploads a day film, it shows up here.';
@@ -1600,6 +1603,7 @@
         }
       }
     }
+    if (clipTable) clipTable.hidden = !hasRows;
     syncSortHeaders();
 
     if (state.groupByJob) {
