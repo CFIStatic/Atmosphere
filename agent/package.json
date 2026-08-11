@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "sharp": "^0.33.5",
-    "ws": "^8.18.0"
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@types/node": "^22.5.4",
