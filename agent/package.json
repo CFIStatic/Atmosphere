@@ -17,7 +17,7 @@
     "node": ">=18"
   },
   "dependencies": {
-    "sharp": "^0.33.5",
+    "sharp": "^0.35.3",
     "ws": "^8.18.0"
   },
   "devDependencies": {
