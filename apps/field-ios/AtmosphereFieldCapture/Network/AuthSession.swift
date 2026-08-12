@@ -106,7 +106,7 @@ final class AuthSession: ObservableObject {
             switch urlErr.code {
             case .notConnectedToInternet, .networkConnectionLost:
                 return "No network. Connect to the internet and try again."
-            case .cannotFindHost, .dnsLookupFailed:
+            case .cannotFindHost, .dnsLookupFailed, .cannotConnectToHost:
                 return "Can’t reach Atmosphere right now. Check your connection and try again."
             case .timedOut:
                 return "Atmosphere timed out. Try again in a moment."
@@ -117,6 +117,11 @@ final class AuthSession: ObservableObject {
         if case let APIError.http(status, body) = error {
             if status == 401 {
                 return "Wrong email or password — use the same login as your Atmosphere website."
+            }
+            if status == 403 {
+                return body.isEmpty
+                    ? "Your account is not linked to an office yet."
+                    : body
             }
             if status == 0 || status >= 500 {
                 return body.isEmpty
@@ -129,6 +134,9 @@ final class AuthSession: ObservableObject {
             return body.isEmpty ? "Sign-in failed (\(status))." : String(body.prefix(240))
         }
         return error.localizedDescription
+            .localizedCaseInsensitiveContains("could not connect to the server")
+            ? "Can’t reach Atmosphere right now. Check your connection and try again."
+            : error.localizedDescription
     }
 
     /// Explicit disconnect — the only way to return to the connect screen.

@@ -38,8 +38,10 @@ open AtmosphereFieldCapture.xcodeproj
 → **Signing & Capabilities** → check **Automatically manage signing** → pick your
 **Team** (Apple ID). Then Product → Clean Build Folder → Run.
 
-Also set `ATMOSPHERE_API_BASE` to your API (same host as the dashboard), then run
-on a LiDAR iPhone for RoomPlan.
+The phone signs in against the same Atmosphere project as the website — no
+Server / API URL field. Run on a LiDAR iPhone for RoomPlan. Simulator can
+optionally talk to a local BFF at `http://127.0.0.1:4000` when `npm run dev`
+is running; a physical device never uses localhost.
 
 **Sign in with your website account** on first install (same email/password as
 the Atmosphere dashboard). Tokens stay in Keychain — later launches skip
@@ -76,11 +78,13 @@ AI dictation and twin review stay in the **office Verifier**.
 
 ## API (account-linked)
 
-1. `POST /api/auth/login` → `{ user, session: { accessToken, refreshToken } }`
-2. `GET /api/field-app/me` + `GET /api/field-app/today` (Bearer)
-3. `POST /api/field-app/jobs/:jobId/proof/upload-url` → signed PUT URL
-4. PUT video bytes → `POST /api/field-app/jobs/:jobId/proof` (creates `job_proofs`)
-5. Optional: `POST /api/geometry/sessions` + `…/ingest` for RoomPlan
+On a physical iPhone the app talks to the Atmosphere Supabase project
+(same users and jobs as the website). A local BFF is optional in Simulator.
+
+1. Sign-in: `POST /auth/v1/token?grant_type=password` (or BFF `POST /api/auth/login`)
+2. Profile + today’s jobs: `my_org_membership` + `crm_jobs` / `job_proofs` (or BFF `/api/field-app/*`)
+3. Day film: upload into the `job-proofs` bucket, then insert `job_proofs`
+4. Optional RoomPlan twin still uses the BFF geometry routes when one is running
 
 See also `docs/media-storage.md` and `backend/src/geometry/`.
 

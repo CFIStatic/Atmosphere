@@ -77,10 +77,7 @@ final class FieldDaySession: ObservableObject {
 
             let workDate = Self.todayStamp()
             let begin = try await api.beginJobProofUpload(jobId: jobId, workDate: workDate)
-            guard let uploadURL = URL(string: begin.uploadUrl) else {
-                throw APIError.http(status: 0, body: "Bad upload URL")
-            }
-            let uploaded = try await MediaUploadClient.uploadFile(localURL: url, uploadURL: uploadURL)
+            let uploaded = try await api.uploadProofMedia(localURL: url, begin: begin)
 
             let iso = ISO8601DateFormatter().string(from: Date())
             let recorded = try await api.completeJobProof(
