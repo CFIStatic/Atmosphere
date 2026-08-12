@@ -13,6 +13,8 @@
  * when VITE_DEMO is set, so production bundles never contain it.
  */
 import { DEMO_ESTIMATE, DEMO_ESTIMATE_SOURCES, DEMO_ESTIMATE_TAKEOFF } from './demoEstimate';
+
+const realFetch = window.fetch.bind(window);
 import type {
   AgentMemory,
   Escalation,
@@ -2802,18 +2804,94 @@ const routes: Array<[string, RegExp, Handler]> = [
     return { body: { dryRun: false, moved, total } };
   }],
 
-  /* ------------------------------------------- Google Places (intake) */
+  /* ------------------------------------------- Address lookup (intake) */
   ['GET', /^\/api\/operations\/places\/status$/, () => ({
-    body: { configured: false },
+    body: { configured: true, provider: 'osm' },
   })],
-  ['POST', /^\/api\/operations\/places\/autocomplete$/, () => ({
-    status: 503,
-    body: { error: 'Google Maps is not configured in demo.', code: 'maps_unconfigured' },
-  })],
-  ['POST', /^\/api\/operations\/places\/details$/, () => ({
-    status: 503,
-    body: { error: 'Google Maps is not configured in demo.', code: 'maps_unconfigured' },
-  })],
+  ['POST', /^\/api\/operations\/places\/autocomplete$/, async (_m, b) => {
+    const q = String(b.input ?? '').trim();
+    if (q.length < 2) return { body: { suggestions: [], configured: true, provider: 'osm' } };
+    try {
+      const url = new URL('https://photon.komoot.io/api/');
+      url.searchParams.set('q', q);
+      url.searchParams.set('limit', '8');
+      url.searchParams.set('lang', 'en');
+      const res = await realFetch(url.toString(), {
+        headers: { Accept: 'application/json' },
+      });
+      const data = (await res.json()) as {
+        features?: Array<{
+          geometry?: { coordinates?: [number, number] };
+          properties?: Record<string, string | number | undefined>;
+        }>;
+      };
+      const suggestions = (data.features ?? []).flatMap((f) => {
+        const p = f.properties ?? {};
+        const osmId = p.osm_id;
+        if (osmId == null) return [];
+        const [lng, lat] = f.geometry?.coordinates ?? [null, null];
+        const line1 = [p.housenumber, p.street].filter(Boolean).join(' ').trim() || String(p.name ?? '');
+        if (!line1) return [];
+        const city = String(p.city || p.locality || p.district || '');
+        const secondary = [city, p.state, p.postcode].filter(Boolean).join(', ');
+        const type = String(p.osm_type || 'N').slice(0, 1).toUpperCase();
+        return [{
+          placeId: `osm:${type}:${osmId}:${lng},${lat}`,
+          description: [line1, secondary].filter(Boolean).join(', '),
+          mainText: line1,
+          secondaryText: secondary,
+        }];
+      });
+      return { body: { suggestions, configured: true, provider: 'osm' } };
+    } catch {
+      return { status: 503, body: { error: 'Address lookup is unavailable.', code: 'places_unavailable' } };
+    }
+  }],
+  ['POST', /^\/api\/operations\/places\/details$/, async (_m, b) => {
+    const placeId = String(b.placeId ?? '');
+    const m = /^osm:[NWR]:(\d+):(-?[\d.]+),(-?[\d.]+)$/i.exec(placeId);
+    if (!m) return { status: 400, body: { error: 'Unknown place.', code: 'osm_place_invalid' } };
+    try {
+      const url = new URL('https://photon.komoot.io/reverse');
+      url.searchParams.set('lon', m[2]!);
+      url.searchParams.set('lat', m[3]!);
+      url.searchParams.set('lang', 'en');
+      const res = await realFetch(url.toString(), { headers: { Accept: 'application/json' } });
+      const data = (await res.json()) as {
+        features?: Array<{
+          geometry?: { coordinates?: [number, number] };
+          properties?: Record<string, string | number | undefined>;
+        }>;
+      };
+      const f = data.features?.[0];
+      const p = f?.properties ?? {};
+      const [lng, lat] = f?.geometry?.coordinates ?? [Number(m[2]), Number(m[3])];
+      const line1 = [p.housenumber, p.street].filter(Boolean).join(' ').trim() || String(p.name ?? '');
+      const city = String(p.city || p.locality || p.district || '');
+      const formatted = [line1, [city, p.state, p.postcode].filter(Boolean).join(', '), p.countrycode || p.country]
+        .filter(Boolean)
+        .join(', ');
+      return {
+        body: {
+          configured: true,
+          provider: 'osm',
+          address: {
+            placeId,
+            formatted,
+            addressLine1: line1,
+            city,
+            postalCode: String(p.postcode || ''),
+            state: String(p.state || ''),
+            country: String(p.countrycode || p.country || ''),
+            lat: typeof lat === 'number' ? lat : null,
+            lng: typeof lng === 'number' ? lng : null,
+          },
+        },
+      };
+    } catch {
+      return { status: 503, body: { error: 'Address lookup is unavailable.', code: 'places_unavailable' } };
+    }
+  }],
 
   /* ------------------------------------------- shared job record */
   ['GET', /^\/api\/operations\/shared$/, () => ({
@@ -3613,8 +3691,6 @@ const routes: Array<[string, RegExp, Handler]> = [
   }],
 ];
 
-const realFetch = window.fetch.bind(window);
-
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
   const path = url.replace(/^https?:\/\/[^/]+/, '').split('?')[0];
@@ -3642,7 +3718,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
     if (m !== method) continue;
     const match = path.match(re);
     if (!match) continue;
-    const result = handler(match, body);
+    const result = await Promise.resolve(handler(match, body));
     return new Response(JSON.stringify(result.body), {
       status: result.status ?? 200,
       headers: { 'Content-Type': 'application/json' },

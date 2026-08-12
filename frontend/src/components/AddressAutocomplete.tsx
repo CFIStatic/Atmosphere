@@ -16,8 +16,8 @@ function newSessionToken(): string {
 }
 
 /**
- * Site address field backed by Google Places (via the authenticated BFF).
- * Falls back to a plain text input when Maps is not configured.
+ * Site address field backed by the BFF (Google Places when configured,
+ * otherwise OpenStreetMap). Falls back to a plain text input if lookup fails.
  */
 export function AddressAutocomplete({
   value,
@@ -206,7 +206,7 @@ export function AddressAutocomplete({
       )}
       {configured === false && (
         <p className="mt-1 text-[11px] text-ink-500">
-          Type the full street address. Google address lookup is not configured on this server.
+          Type the full street address — lookup is unavailable right now.
         </p>
       )}
       {hint && <p className="mt-1 text-[11px] text-caution-600">{hint}</p>}
