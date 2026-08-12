@@ -73,7 +73,7 @@ export function ModelsTab({ range }: { range: RangeParams }) {
 
   if (loading && !data) {
     return (
-      <p className="mt-10 text-center text-sm text-gray-500" role="status">
+      <p className="mt-10 text-center text-sm text-ink-500" role="status">
         Loading model performance…
       </p>
     );
@@ -81,9 +81,9 @@ export function ModelsTab({ range }: { range: RangeParams }) {
 
   if (error) {
     return (
-      <div className="mt-10 rounded-xl border border-white/10 bg-ink-800/60 px-6 py-12 text-center">
-        <p className="text-sm font-medium text-gray-200">Could not load models</p>
-        <p className="mx-auto mt-1.5 max-w-md text-sm text-gray-500">{error}</p>
+      <div className="mt-10 rounded-xl glass-card px-6 py-12 text-center shadow-card">
+        <p className="text-sm font-semibold text-ink-900">Could not load models</p>
+        <p className="mx-auto mt-1.5 max-w-md text-sm text-ink-500">{error}</p>
       </div>
     );
   }
@@ -134,9 +134,9 @@ export function ModelsTab({ range }: { range: RangeParams }) {
       key: 'model',
       header: 'Model',
       render: (r) => (
-        <span className="font-medium text-white">
+        <span className="font-medium text-ink-900">
           {r.model}
-          <span className="ml-2 text-xs text-gray-500">{r.provider}</span>
+          <span className="ml-2 text-xs text-ink-500">{r.provider}</span>
         </span>
       ),
     },
@@ -203,7 +203,7 @@ export function ModelsTab({ range }: { range: RangeParams }) {
           }
         >
           {topModels.length === 0 ? (
-            <p className="py-8 text-center text-sm text-gray-500">No model usage yet.</p>
+            <p className="py-8 text-center text-sm text-ink-500">No model usage yet.</p>
           ) : (
             <HBarChart
               ariaLabel="AI cost by model"
@@ -240,7 +240,7 @@ export function ModelsTab({ range }: { range: RangeParams }) {
             {
               key: 'org',
               header: 'Organization',
-              render: (r) => <span className="font-medium text-white">{r.orgName}</span>,
+              render: (r) => <span className="font-medium text-ink-900">{r.orgName}</span>,
             },
             {
               key: 'events',

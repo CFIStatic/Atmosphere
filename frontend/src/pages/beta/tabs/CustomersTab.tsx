@@ -50,10 +50,10 @@ export function CustomersTab({ data, range }: { data: OverviewPayload; range: Ra
       key: 'name',
       header: 'Organization',
       render: (row) => (
-        <span className="font-medium text-white">
+        <span className="font-medium text-ink-900">
           {row.orgName}
           {row.status !== 'active' && (
-            <span className="ml-2 rounded-full border border-white/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-500">
+            <span className="ml-2 rounded-full border border-line bg-paper-100 px-2 py-0.5 text-[10px] uppercase tracking-wide text-ink-500">
               {row.status}
             </span>
           )}
@@ -66,7 +66,7 @@ export function CustomersTab({ data, range }: { data: OverviewPayload; range: Ra
       render: (row) => (
         <span>
           {row.planName}
-          <span className="ml-1.5 text-xs text-gray-600">{row.billingInterval}</span>
+          <span className="ml-1.5 text-xs text-ink-500">{row.billingInterval}</span>
         </span>
       ),
     },
@@ -85,7 +85,7 @@ export function CustomersTab({ data, range }: { data: OverviewPayload; range: Ra
       render: (row) => (
         <span>
           {count(row.members)}
-          <span className="text-gray-600">/{count(row.seats)}</span>
+          <span className="text-ink-500">/{count(row.seats)}</span>
         </span>
       ),
     },
@@ -93,13 +93,13 @@ export function CustomersTab({ data, range }: { data: OverviewPayload; range: Ra
     {
       key: 'top',
       header: 'Most-used tool',
-      render: (row) => <span className="text-gray-400">{row.topFeature ?? '—'}</span>,
+      render: (row) => <span className="text-ink-600">{row.topFeature ?? '—'}</span>,
     },
     {
       key: 'last',
       header: 'Last active',
       align: 'right',
-      render: (row) => <span className="text-gray-400">{dateTime(row.lastActiveAt)}</span>,
+      render: (row) => <span className="text-ink-600">{dateTime(row.lastActiveAt)}</span>,
     },
   ];
 
@@ -169,11 +169,11 @@ export function CustomersTab({ data, range }: { data: OverviewPayload; range: Ra
                 type="button"
                 onClick={() => setAccountSort(key)}
                 aria-pressed={accountSort === key}
-                className={`rounded-md px-2 py-1 text-xs transition ${
-                  accountSort === key
-                    ? 'bg-brand-600 text-white'
-                    : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'
-                }`}
+                    className={`rounded-md px-2 py-1 text-xs font-medium transition ${
+                      accountSort === key
+                        ? 'bg-brand-500 text-white'
+                        : 'text-ink-600 hover:bg-paper-200 hover:text-ink-900'
+                    }`}
               >
                 {label}
               </button>

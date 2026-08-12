@@ -7,9 +7,8 @@
 
 import { Navigate, useParams } from 'react-router-dom';
 import { useAnalyticsAccess } from '../../hooks/useAnalytics';
-import { AnalyticsLoading } from '../analytics/AnalyticsShell';
+import { AnalyticsLoading, type BetaTab } from './BetaPortalShell';
 import { BetaPortalPage } from './BetaPortalPage';
-import type { BetaTab } from './BetaPortalShell';
 
 const VALID_TABS: BetaTab[] = ['board', 'growth', 'customers', 'models', 'product'];
 
@@ -52,16 +51,16 @@ export function LegacyInvestorRedirect() {
 
 function NoAccess() {
   return (
-    <div className="grid min-h-screen place-items-center bg-ink-900 px-6">
-      <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold text-white">Beta Portal is restricted</h1>
-        <p className="mt-2 text-sm text-gray-400">
+    <div className="grid min-h-screen place-items-center bg-paper-100 px-6">
+      <div className="max-w-md rounded-xl glass-card px-8 py-10 text-center shadow-card">
+        <h1 className="text-xl font-semibold text-ink-900">Beta Portal is restricted</h1>
+        <p className="mt-2 text-sm text-ink-600">
           Company-wide growth and revenue figures are limited to people who have been granted
           access. Ask an Atmosphere administrator if you need it.
         </p>
         <a
           href="/operations"
-          className="mt-6 inline-block rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-500"
+          className="mt-6 inline-block rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-400"
         >
           Back to Atmosphere
         </a>

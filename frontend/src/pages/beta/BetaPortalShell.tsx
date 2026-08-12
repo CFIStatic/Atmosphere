@@ -1,12 +1,13 @@
 /**
  * Chrome for the Beta Portal — Atmosphere's internal analytics surface.
  *
- * Tabbed like an investor dataroom: one range filter scopes every tab, Excel
- * sits in the header, and internal-only tabs never appear for investor scope.
+ * Same paper / glass language as the rest of the console. Tabbed like an
+ * investor dataroom: one range filter scopes every tab, Excel sits in the
+ * header, and internal-only tabs never appear for investor scope.
  */
 
-import type { ReactNode } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { useEffect, type ReactNode } from 'react';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { Logo } from '../../components/Logo';
 import { SpinnerIcon } from '../../components/icons';
 import { useAuth } from '../../context/AuthContext';
@@ -47,6 +48,18 @@ export function BetaPortalShell({
   const navigate = useNavigate();
   const visibleTabs = TABS.filter((tab) => !tab.internalOnly || scope === 'internal');
 
+  // Board / investor decks are always the light Atmosphere paper look —
+  // never follow the console dark preference while this portal is open.
+  useEffect(() => {
+    const root = document.documentElement;
+    const previous = root.getAttribute('data-theme');
+    root.setAttribute('data-theme', 'light');
+    return () => {
+      if (previous) root.setAttribute('data-theme', previous);
+      else root.removeAttribute('data-theme');
+    };
+  }, []);
+
   const exportDataset =
     activeTab === 'customers'
       ? 'accounts'
@@ -59,44 +72,47 @@ export function BetaPortalShell({
             : 'all';
 
   return (
-    <div className="cx-aurora min-h-screen bg-ink-900">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-6 py-4 sm:px-10">
-        <div className="flex items-center gap-4">
-          <Logo className="text-white" />
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold tracking-tight text-white">Beta Portal</span>
-            <span className="text-[11px] uppercase tracking-[0.14em] text-gray-500">
-              {scope === 'internal' ? 'Internal analytics' : 'Investor analytics'}
-            </span>
+    <div className="min-h-screen bg-paper-100">
+      <header className="border-b border-line bg-paper-0/80 px-6 py-3.5 backdrop-blur sm:px-10">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Logo />
+            <div className="h-5 w-px bg-line" aria-hidden />
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold tracking-tight text-ink-900">Beta Portal</span>
+              <span className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-500">
+                {scope === 'internal' ? 'Internal analytics' : 'Investor view'}
+              </span>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => navigate('/operations')}
-            className="rounded-lg border border-white/10 px-3 py-2 text-sm text-gray-300 transition hover:bg-white/5"
-          >
-            Back to app
-          </button>
-          <button
-            type="button"
-            onClick={() => void logout()}
-            className="rounded-lg border border-white/10 bg-ink-700/70 px-3 py-2 text-sm text-gray-200 transition hover:bg-ink-600"
-          >
-            Sign out
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => navigate('/operations')}
+              className="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink-700 transition hover:bg-paper-200"
+            >
+              Back to app
+            </button>
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm font-medium text-ink-700 transition hover:bg-paper-200"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-7xl px-6 py-8 sm:px-10">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-              Atmosphere growth
+            <p className="text-sm font-medium text-brand-600">Atmosphere</p>
+            <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
+              Growth &amp; ARR
             </h1>
-            <p className="mt-1.5 max-w-2xl text-sm text-gray-400">
-              ARR, customers, usage, and model performance — presented for board and investor
-              reviews. Every figure downloads to Excel.
+            <p className="mt-1.5 max-w-2xl text-sm text-ink-600">
+              Board-ready recurring revenue, customers, and usage. Every figure downloads to Excel.
             </p>
           </div>
           <DownloadExcel
@@ -109,42 +125,39 @@ export function BetaPortalShell({
 
         <nav
           aria-label="Beta Portal sections"
-          className="mt-6 flex flex-wrap gap-1 border-b border-white/10"
+          className="mt-6 flex flex-wrap gap-1 border-b border-line"
         >
-          {visibleTabs.map((tab) => (
-            <NavLink
-              key={tab.id}
-              to={`/beta/${tab.id}`}
-              className={() => {
-                const active = activeTab === tab.id;
-                return `relative px-3.5 py-2.5 text-sm font-medium transition ${
-                  active
-                    ? 'text-white'
-                    : 'text-gray-500 hover:text-gray-300'
-                }`;
-              }}
-            >
-              {tab.label}
-              {activeTab === tab.id && (
-                <span
-                  aria-hidden
-                  className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand-500"
-                />
-              )}
-            </NavLink>
-          ))}
+          {visibleTabs.map((tab) => {
+            const active = activeTab === tab.id;
+            return (
+              <NavLink
+                key={tab.id}
+                to={`/beta/${tab.id}`}
+                className={`relative px-3.5 py-2.5 text-sm font-medium transition ${
+                  active ? 'text-ink-900' : 'text-ink-500 hover:text-ink-800'
+                }`}
+              >
+                {tab.label}
+                {active && (
+                  <span
+                    aria-hidden
+                    className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand-500"
+                  />
+                )}
+              </NavLink>
+            );
+          })}
         </nav>
 
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 pb-2">
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 pb-1">
           <RangeFilter value={preset} onChange={onPresetChange} />
-          <p className="flex items-center gap-2 text-xs text-gray-600">
+          <p className="flex items-center gap-2 text-xs text-ink-500">
             {refreshing && <SpinnerIcon className="animate-spin" width={12} height={12} />}
             {generatedAt
               ? `Data as of ${new Date(generatedAt).toLocaleString('en-US', {
                   month: 'short',
                   day: 'numeric',
-                  hour: 'numeric',
-                  minute: '2-digit',
+                  year: 'numeric',
                 })}`
               : 'Loading…'}
           </p>
@@ -156,17 +169,14 @@ export function BetaPortalShell({
           {children}
         </div>
 
-        <footer className="mt-14 border-t border-white/10 pt-6 text-xs text-gray-600">
+        <footer className="mt-14 border-t border-line pt-6 text-xs text-ink-500">
           <p>
             {scope === 'internal'
-              ? 'Beta Portal — internal view includes customer names, unit economics, and model costs. Do not forward outside Atmosphere.'
-              : 'Beta Portal — investor view. Aggregate figures only; no customer names or per-account detail.'}
+              ? 'Internal view — includes customer names, unit economics, and model costs. Do not forward outside Atmosphere.'
+              : 'Investor view — aggregate figures only. No customer names or per-account detail.'}
           </p>
           <p className="mt-1">
-            Definitions for every metric are on the “Definitions” sheet of each Excel export.{' '}
-            <Link to="/beta/board" className="text-gray-500 underline-offset-2 hover:underline">
-              Board
-            </Link>
+            Metric definitions are on the Definitions sheet of every Excel export.
           </p>
         </footer>
       </main>
@@ -174,4 +184,31 @@ export function BetaPortalShell({
   );
 }
 
-export { AnalyticsLoading, AnalyticsError } from '../analytics/AnalyticsShell';
+export function AnalyticsLoading() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="grid min-h-screen place-items-center bg-paper-100 text-brand-500"
+    >
+      <SpinnerIcon className="animate-spin" width={28} height={28} />
+      <span className="sr-only">Loading Beta Portal…</span>
+    </div>
+  );
+}
+
+export function AnalyticsError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="mt-10 rounded-xl glass-card px-6 py-12 text-center shadow-card">
+      <p className="text-sm font-semibold text-ink-900">Could not load analytics</p>
+      <p className="mx-auto mt-1.5 max-w-md text-sm text-ink-500">{message}</p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="mt-5 rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-400"
+      >
+        Try again
+      </button>
+    </div>
+  );
+}

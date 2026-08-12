@@ -25,35 +25,36 @@ function buildMonthly() {
   let seats = 42;
 
   for (let ago = 17; ago >= 0; ago--) {
-    const growth = ago > 12 ? 0.04 : ago > 6 ? 0.07 : 0.09;
+    // Steady SaaS curve — believable for a board deck (~3–6% MoM).
+    const growth = ago > 12 ? 0.035 : ago > 6 ? 0.045 : 0.055;
     const prevMrr = mrr;
     mrr = Math.round(mrr * (1 + growth));
-    orgs += ago % 3 === 0 ? 2 : 1;
-    users = Math.round(users * (1 + growth * 0.8));
-    seats = Math.round(seats * (1 + growth * 0.7));
+    orgs += ago % 4 === 0 ? 2 : 1;
+    users = Math.round(users * (1 + growth * 0.85));
+    seats = Math.round(seats * (1 + growth * 0.75));
     const paying = Math.max(3, orgs - 2);
-    const revenue = Math.round(mrr * 1.15);
+    const revenue = Math.round(mrr * 1.12);
     rows.push({
       month: monthKey(ago),
-      newOrgs: ago % 3 === 0 ? 2 : 1,
+      newOrgs: ago % 4 === 0 ? 2 : 1,
       totalOrgs: orgs,
       payingOrgs: paying,
       activeOrgs: Math.max(paying - 1, paying),
       churnedOrgs: ago === 1 ? 1 : 0,
-      newUsers: Math.round(users * 0.08),
+      newUsers: Math.round(users * 0.06),
       totalUsers: users,
-      activeUsers: Math.round(users * 0.72),
+      activeUsers: Math.round(users * 0.74),
       seats,
       mrrCents: mrr,
       arrCents: mrr * 12,
       revenueCents: revenue,
-      subscriptionRevenueCents: Math.round(revenue * 0.82),
-      creditRevenueCents: Math.round(revenue * 0.18),
+      subscriptionRevenueCents: Math.round(revenue * 0.85),
+      creditRevenueCents: Math.round(revenue * 0.15),
       arpaCents: Math.round(mrr / paying),
-      mrrGrowthPct: ago === 17 ? null : ((mrr - prevMrr) / prevMrr) * 100,
-      userGrowthPct: ago === 17 ? null : growth * 80,
-      seatGrowthPct: ago === 17 ? null : growth * 70,
-      trackedHours: Math.round(120 + (17 - ago) * 38 + (ago % 4) * 12),
+      mrrGrowthPct: ago === 17 ? null : Number((((mrr - prevMrr) / prevMrr) * 100).toFixed(1)),
+      userGrowthPct: ago === 17 ? null : Number((growth * 85).toFixed(1)),
+      seatGrowthPct: ago === 17 ? null : Number((growth * 75).toFixed(1)),
+      trackedHours: Math.round(120 + (17 - ago) * 32 + (ago % 4) * 10),
     });
   }
   return rows;
@@ -378,19 +379,19 @@ export function demoAnalyticsOverview(): OverviewPayload {
         orgsNew: 4,
         orgsPaying: latest.payingOrgs,
         orgsActive: latest.activeOrgs,
-        orgsGrowthMomPct: 6.2,
+        orgsGrowthMomPct: 4.2,
       },
       users: {
         usersTotal: latest.totalUsers,
         usersNew: latest.newUsers,
         usersActive: latest.activeUsers,
-        usersGrowthMomPct: 5.4,
+        usersGrowthMomPct: 3.8,
       },
       seats: {
         seatsLicensed: latest.seats,
         seatsFilled: Math.round(latest.seats * 0.78),
         seatUtilizationPct: 78,
-        seatsGrowthMomPct: 4.8,
+        seatsGrowthMomPct: 3.5,
       },
       revenue: {
         mrrCents: latest.mrrCents,
@@ -400,7 +401,9 @@ export function demoAnalyticsOverview(): OverviewPayload {
         monthlyBilledMrrCents: Math.round(latest.mrrCents * 0.38),
         trialPipelineMrrCents: 48_000,
         mrrGrowthMomPct: latest.mrrGrowthPct,
-        netNewMrrCents: Math.round(latest.mrrCents * 0.08),
+        netNewMrrCents: Math.round(
+          latest.mrrCents - (monthly[monthly.length - 2]?.mrrCents ?? latest.mrrCents),
+        ),
         collectedInRangeCents: monthly.reduce((s, m) => s + m.revenueCents, 0),
         subscriptionRevenueCents: monthly.reduce((s, m) => s + m.subscriptionRevenueCents, 0),
         creditRevenueCents: monthly.reduce((s, m) => s + m.creditRevenueCents, 0),

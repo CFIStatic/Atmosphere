@@ -9,12 +9,7 @@
 import { Navigate } from 'react-router-dom';
 import { useFeatureTimer } from '../../hooks/useFeatureTimer';
 import { useOverview, useRange } from '../../hooks/useAnalytics';
-import {
-  AnalyticsError,
-  AnalyticsLoading,
-  BetaPortalShell,
-  type BetaTab,
-} from './BetaPortalShell';
+import { AnalyticsError, AnalyticsLoading, BetaPortalShell, type BetaTab } from './BetaPortalShell';
 import { BoardTab } from './tabs/BoardTab';
 import { GrowthTab } from './tabs/GrowthTab';
 import { CustomersTab } from './tabs/CustomersTab';

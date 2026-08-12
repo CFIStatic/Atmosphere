@@ -1,5 +1,5 @@
 /**
- * Investor / board presentation tab — the three figures first, then growth.
+ * Investor / board presentation tab — headline ARR first, then growth story.
  */
 
 import {
@@ -12,6 +12,7 @@ import {
   percent,
   type MonthlyRow,
   type OverviewPayload,
+  type RangeParams,
 } from '../../../lib/analyticsApi';
 import {
   ChartCard,
@@ -28,7 +29,6 @@ import {
   RecurringRevenueChart,
   RevenueCollectedChart,
 } from '../../../components/analytics/sections';
-import type { RangeParams } from '../../../lib/analyticsApi';
 
 function arrYoyPct(monthly: MonthlyRow[]): number | null {
   if (monthly.length < 13) return null;
@@ -49,7 +49,7 @@ export function BoardTab({ data, range }: { data: OverviewPayload; range: RangeP
     { key: 'mrr', header: 'MRR', align: 'right', render: (r) => money(r.mrrCents) },
     {
       key: 'mrrGrowth',
-      header: 'MoM ARR',
+      header: 'MoM',
       align: 'right',
       render: (r) => (r.mrrGrowthPct === null ? '—' : percent(r.mrrGrowthPct)),
     },
@@ -66,12 +66,6 @@ export function BoardTab({ data, range }: { data: OverviewPayload; range: RangeP
       render: (r) => count(r.totalUsers),
     },
     {
-      key: 'userGrowth',
-      header: 'MoM users',
-      align: 'right',
-      render: (r) => (r.userGrowthPct === null ? '—' : percent(r.userGrowthPct)),
-    },
-    {
       key: 'collected',
       header: 'Collected',
       align: 'right',
@@ -81,21 +75,22 @@ export function BoardTab({ data, range }: { data: OverviewPayload; range: RangeP
 
   return (
     <>
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* The four figures a board asks for first. */}
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile
           tone="headline"
-          label="ARR (annual run-rate)"
+          label="ARR"
           value={moneyCompact(revenue.arrCents)}
           delta={revenue.mrrGrowthMomPct}
-          deltaLabel="vs last month"
-          footnote={money(revenue.arrCents)}
+          deltaLabel="MoM"
+          footnote={`${money(revenue.arrCents)} annual run-rate`}
         />
         <StatTile
           tone="headline"
-          label="MRR (monthly)"
+          label="MRR"
           value={moneyCompact(revenue.mrrCents)}
           delta={revenue.mrrGrowthMomPct}
-          deltaLabel={`${revenue.netNewMrrCents >= 0 ? '+' : '−'}${money(
+          deltaLabel={`${revenue.netNewMrrCents >= 0 ? '+' : '−'}${moneyCompact(
             Math.abs(revenue.netNewMrrCents),
           )} net new`}
           footnote={money(revenue.mrrCents)}
@@ -103,49 +98,52 @@ export function BoardTab({ data, range }: { data: OverviewPayload; range: RangeP
         <StatTile
           label="ARR on annual contracts"
           value={moneyCompact(revenue.annualContractedArrCents)}
-          footnote="Prepaid · hardest to churn"
+          footnote={`${percent(
+            revenue.arrCents > 0
+              ? (revenue.annualContractedArrCents / revenue.arrCents) * 100
+              : null,
+            0,
+          )} of ARR · prepaid`}
         />
         <StatTile
-          label="ARR year over year"
-          value={yoy === null ? '—' : percent(yoy)}
+          label="ARR year-over-year"
+          value={yoy === null ? '—' : percent(yoy, 0)}
           delta={yoy}
-          deltaLabel="vs same month last year"
-          footnote={
-            yoy === null ? 'Needs 13 months of history' : money(revenue.arrCents)
-          }
+          deltaLabel="vs prior year"
+          footnote={yoy === null ? 'Needs 13 months of history' : money(revenue.arrCents)}
         />
       </div>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile
           label="Paying customers"
           value={count(summary.customers.orgsPaying)}
           delta={summary.customers.orgsGrowthMomPct}
-          deltaLabel="orgs vs last month"
-          footnote={`${count(summary.customers.orgsTotal)} organizations in total`}
+          deltaLabel="MoM"
+          footnote={`${count(summary.customers.orgsTotal)} orgs total`}
         />
         <StatTile
           label="Active users"
           value={count(summary.users.usersActive)}
           delta={summary.users.usersGrowthMomPct}
-          deltaLabel="users vs last month"
+          deltaLabel="MoM"
           footnote={`of ${count(summary.users.usersTotal)} total`}
         />
         <StatTile
           label="Seats licensed"
           value={count(summary.seats.seatsLicensed)}
           delta={summary.seats.seatsGrowthMomPct}
-          deltaLabel="vs last month"
-          footnote={`${percent(summary.seats.seatUtilizationPct)} of seats filled`}
+          deltaLabel="MoM"
+          footnote={`${percent(summary.seats.seatUtilizationPct, 0)} filled`}
         />
         <StatTile
           label="Trailing 12-month revenue"
           value={moneyCompact(revenue.trailing12mRevenueCents)}
-          footnote="Cash collected, not run-rate"
+          footnote="Cash collected · not run-rate"
         />
       </div>
 
-      <SectionHeading title="Growth story" hint="Point-in-time at each month end" />
+      <SectionHeading title="Growth" hint="Month-end snapshots" />
       <div className="grid gap-4 lg:grid-cols-2">
         <RecurringRevenueChart monthly={data.monthly} />
         <CustomerGrowthChart monthly={data.monthly} />
@@ -155,13 +153,10 @@ export function BoardTab({ data, range }: { data: OverviewPayload; range: RangeP
         <PlanMixSection plans={data.planMix} />
       </div>
 
-      <SectionHeading
-        title="Month over month"
-        hint="Board-ready table · same numbers as the charts"
-      />
+      <SectionHeading title="Month-over-month" hint="Board table · same numbers as the charts" />
       <ChartCard
         title="MoM growth ledger"
-        subtitle="ARR, customers, and users at each month end — ready to paste into a deck."
+        subtitle="ARR, customers, and cash collected at each month end."
         action={
           <DownloadExcel href={analyticsApi.exportUrl(range, 'monthly')} label="Excel" compact />
         }
@@ -176,10 +171,10 @@ export function BoardTab({ data, range }: { data: OverviewPayload; range: RangeP
       </ChartCard>
 
       <SectionHeading
-        title="Engagement snapshot"
-        hint={`${hours(summary.engagement.trackedHours)} tracked in this period`}
+        title="Engagement"
+        hint={`${hours(summary.engagement.trackedHours)} in product this period`}
       />
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-3">
         <StatTile
           label="Active organizations"
           value={count(summary.customers.orgsActive)}
@@ -188,12 +183,12 @@ export function BoardTab({ data, range }: { data: OverviewPayload; range: RangeP
         <StatTile
           label="Hours in product"
           value={hours(summary.engagement.trackedHours)}
-          footnote={`across ${count(summary.engagement.sessions)} sessions`}
+          footnote={`${count(summary.engagement.sessions)} sessions`}
         />
         <StatTile
           label="AI requests"
           value={count(summary.engagement.aiRequests)}
-          footnote="Model-backed calls in period"
+          footnote="Model-backed calls"
         />
       </div>
 
@@ -206,8 +201,8 @@ export function BoardTab({ data, range }: { data: OverviewPayload; range: RangeP
         </div>
       )}
 
-      <SectionHeading title="Exports" hint="Excel, with a definitions sheet in every file" />
-      <div className="flex flex-wrap gap-3">
+      <SectionHeading title="Exports" hint="Excel · definitions sheet included" />
+      <div className="flex flex-wrap gap-2">
         <DownloadExcel href={analyticsApi.exportUrl(range, 'all')} label="Full workbook" />
         <DownloadExcel href={analyticsApi.exportUrl(range, 'summary')} label="Key metrics" compact />
         <DownloadExcel href={analyticsApi.exportUrl(range, 'monthly')} label="Monthly growth" compact />

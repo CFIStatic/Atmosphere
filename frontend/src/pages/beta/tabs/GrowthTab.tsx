@@ -26,15 +26,16 @@ export function GrowthTab({ data, range }: { data: OverviewPayload; range: Range
 
   return (
     <>
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile
           tone="headline"
           label="MRR"
           value={moneyCompact(revenue.mrrCents)}
           delta={revenue.mrrGrowthMomPct}
-          deltaLabel={`${revenue.netNewMrrCents >= 0 ? '+' : '−'}${money(
+          deltaLabel={`${revenue.netNewMrrCents >= 0 ? '+' : '−'}${moneyCompact(
             Math.abs(revenue.netNewMrrCents),
           )} net new`}
+          footnote={money(revenue.mrrCents)}
         />
         <StatTile
           tone="headline"
@@ -43,23 +44,23 @@ export function GrowthTab({ data, range }: { data: OverviewPayload; range: Range
           footnote={`${moneyCompact(revenue.annualContractedArrCents)} on annual contracts`}
         />
         <StatTile
-          label="New orgs (period)"
+          label="New orgs"
           value={count(summary.customers.orgsNew)}
           delta={summary.customers.orgsGrowthMomPct}
-          deltaLabel="total orgs vs last month"
+          deltaLabel="MoM org growth"
         />
         <StatTile
-          label="Orgs churned"
+          label="Churned orgs"
           value={count(churnedThisPeriod)}
           footnote="Cancelled while carrying MRR"
         />
       </div>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile
-          label="Avg monthly spend / account"
+          label="Avg spend / account"
           value={moneyCompact(revenue.avgMonthlySpendPerAccountCents)}
-          footnote="Subscription + usage, per 30 days"
+          footnote="Subscription + usage · 30 days"
         />
         <StatTile
           label="ARPA"
@@ -69,13 +70,13 @@ export function GrowthTab({ data, range }: { data: OverviewPayload; range: Range
         <StatTile
           label="Trial pipeline"
           value={moneyCompact(revenue.trialPipelineMrrCents)}
-          footnote="MRR if every trial converts"
+          footnote="If every trial converts"
         />
         <StatTile
-          label="New users (period)"
+          label="New users"
           value={count(summary.users.usersNew)}
           delta={summary.users.usersGrowthMomPct}
-          deltaLabel="users vs last month"
+          deltaLabel="MoM"
         />
       </div>
 
