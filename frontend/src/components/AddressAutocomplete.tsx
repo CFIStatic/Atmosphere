@@ -44,10 +44,11 @@ export function AddressAutocomplete({
   const listId = `${inputId}-list`;
   const sessionRef = useRef(newSessionToken());
   const blurTimer = useRef<number | null>(null);
-  const pickedLock = useRef(false);
+  const pickGen = useRef(0);
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
+  const [chosen, setChosen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [active, setActive] = useState(-1);
   const [hint, setHint] = useState<string | null>(null);
@@ -68,7 +69,7 @@ export function AddressAutocomplete({
   }, []);
 
   useEffect(() => {
-    if (pickedLock.current) {
+    if (chosen) {
       setOpen(false);
       setSuggestions([]);
       return;
@@ -77,15 +78,17 @@ export function AddressAutocomplete({
     const q = value.trim();
     if (q.length < 3) {
       setSuggestions([]);
+      setOpen(false);
       return;
     }
+    const gen = pickGen.current;
     let cancelled = false;
     const t = window.setTimeout(() => {
       setBusy(true);
       void api
         .placesAutocomplete({ input: q, sessionToken: sessionRef.current })
         .then((res) => {
-          if (cancelled) return;
+          if (cancelled || gen !== pickGen.current) return;
           setConfigured(res.configured);
           setSuggestions(res.suggestions);
           setOpen(res.suggestions.length > 0);
@@ -93,7 +96,7 @@ export function AddressAutocomplete({
           setHint(null);
         })
         .catch((err) => {
-          if (cancelled) return;
+          if (cancelled || gen !== pickGen.current) return;
           const msg = err instanceof Error ? err.message : '';
           if (/maps_unconfigured|not configured/i.test(msg)) {
             setConfigured(false);
@@ -102,19 +105,21 @@ export function AddressAutocomplete({
             setHint('Address lookup unavailable — type the full address.');
           }
           setSuggestions([]);
+          setOpen(false);
         })
         .finally(() => {
-          if (!cancelled) setBusy(false);
+          if (!cancelled && gen === pickGen.current) setBusy(false);
         });
     }, 280);
     return () => {
       cancelled = true;
       window.clearTimeout(t);
     };
-  }, [value, configured]);
+  }, [value, configured, chosen]);
 
   async function pick(s: Suggestion) {
-    pickedLock.current = true;
+    pickGen.current += 1;
+    setChosen(true);
     setOpen(false);
     setSuggestions([]);
     onChange(s.description);
@@ -127,8 +132,12 @@ export function AddressAutocomplete({
       sessionRef.current = newSessionToken();
       onChange(address.formatted || address.addressLine1);
       onResolved?.(address);
+      setOpen(false);
+      setSuggestions([]);
       setHint(null);
     } catch {
+      setOpen(false);
+      setSuggestions([]);
       setHint('Could not confirm that place — check city and postal below.');
     } finally {
       setBusy(false);
@@ -167,12 +176,11 @@ export function AddressAutocomplete({
         autoComplete="street-address"
         placeholder={placeholder ?? 'Start typing a street address…'}
         onChange={(e) => {
-          pickedLock.current = false;
+          setChosen(false);
           onChange(e.target.value);
-          setOpen(true);
         }}
         onFocus={() => {
-          if (suggestions.length) setOpen(true);
+          if (!chosen && suggestions.length) setOpen(true);
         }}
         onBlur={() => {
           blurTimer.current = window.setTimeout(() => setOpen(false), 160);
@@ -184,7 +192,7 @@ export function AddressAutocomplete({
           Looking up…
         </span>
       )}
-      {open && suggestions.length > 0 && (
+      {open && !chosen && suggestions.length > 0 && (
         <ul
           id={listId}
           role="listbox"
