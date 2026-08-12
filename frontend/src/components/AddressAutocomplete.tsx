@@ -161,11 +161,11 @@ export function AddressAutocomplete({
   }
 
   return (
-    <div className={open && suggestions.length > 0 ? 'relative z-50' : 'relative'}>
+    <div className={open && !chosen && suggestions.length > 0 ? 'relative z-50' : 'relative'}>
       <input
         id={inputId}
         role="combobox"
-        aria-expanded={open}
+        aria-expanded={open && !chosen}
         aria-controls={listId}
         aria-autocomplete="list"
         aria-activedescendant={active >= 0 ? `${listId}-${active}` : undefined}
