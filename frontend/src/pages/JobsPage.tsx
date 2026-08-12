@@ -15,7 +15,6 @@ import {
   type JobSummary,
   type JobPriority,
   type LossType,
-  type WorkType,
 } from '../lib/api';
 import { AppShell, PageHeader, PanelSpinner, EmptyState, ErrorNote } from '../components/AppShell';
 import { SpinnerIcon, PlusIcon } from '../components/icons';
@@ -85,24 +84,6 @@ function NewJobForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: 
             placeholder="Burst pipe — 14 Alder St"
             className={`mt-1 ${inputClass}`}
           />
-        </div>
-
-        <div>
-          <label className={labelClass} htmlFor="job-work-type">
-            Work type
-          </label>
-          <select
-            id="job-work-type"
-            value={form.workType}
-            onChange={(e) => set('workType', e.target.value as WorkType)}
-            className={`mt-1 ${inputClass}`}
-          >
-            {(Object.keys(WORK_TYPE_LABELS) as WorkType[]).map((v) => (
-              <option key={v} value={v}>
-                {WORK_TYPE_LABELS[v]}
-              </option>
-            ))}
-          </select>
         </div>
 
         <div>

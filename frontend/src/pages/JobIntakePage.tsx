@@ -485,7 +485,7 @@ export function JobIntakePage() {
             </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <label className="block text-xs font-medium text-ink-600">
+              <label className="block text-xs font-medium text-ink-600 sm:col-span-2">
                 Job title
                 <input
                   className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
@@ -493,22 +493,6 @@ export function JobIntakePage() {
                   onChange={(e) => setProposal({ ...proposal, title: e.target.value })}
                   required
                 />
-              </label>
-              <label className="block text-xs font-medium text-ink-600">
-                Work type
-                <select
-                  className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
-                  value={proposal.workType}
-                  onChange={(e) =>
-                    setProposal({
-                      ...proposal,
-                      workType: e.target.value as IntakeProposal['workType'],
-                    })
-                  }
-                >
-                  <option value="mitigation">Mitigation</option>
-                  <option value="construction">Construction</option>
-                </select>
               </label>
               <label className="block text-xs font-medium text-ink-600 sm:col-span-2">
                 Site address
