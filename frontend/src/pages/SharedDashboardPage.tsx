@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { PageHeader, EmptyState } from '../components/AppShell';
+import { PageHeader } from '../components/AppShell';
 import {
   api,
   type SharedJobSummary,
@@ -81,11 +81,29 @@ function ago(iso: string | null): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
+function placeholderRecord(jobId: string, title: string, jobNumber: number | null = null): SharedJobRecord {
+  return {
+    job: { id: jobId, jobNumber, title, status: null, claimNumber: null },
+    brief: null,
+    revisions: [],
+    currentRevision: null,
+    parties: [],
+    scope: [],
+    money: { approved: 0, pending: 0, unpricedApprovals: 0 },
+    messages: [],
+    risks: [],
+  };
+}
+
 export function SharedDashboardPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedJob = searchParams.get('job');
+  const requestedTitle = searchParams.get('title');
+  const requestedNumber = searchParams.get('number');
+  const parsedNumber = requestedNumber != null && requestedNumber !== '' ? Number(requestedNumber) : null;
+  const jobNumberHint = Number.isFinite(parsedNumber) ? parsedNumber : null;
   const handoff = (location.state as HandoffState | null) ?? null;
   const freshFromNav = handoff?.freshJob;
   const freshRecord = handoff?.freshRecord;
@@ -96,16 +114,19 @@ export function SharedDashboardPage() {
   const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
   useFeatureTimer('job_files');
   const openSeq = useRef(0);
-  const recordIdRef = useRef<string | null>(freshRecord?.job.id ?? null);
+  const recordIdRef = useRef<string | null>(freshRecord?.job.id ?? requestedJob ?? null);
   const seededId = requestedJob || freshFromNav?.jobId || freshRecord?.job.id || null;
 
   const [list, setList] = useState<SharedJobSummary[] | null>(() =>
     freshFromNav ? [freshFromNav] : null,
   );
   const [openId, setOpenId] = useState<string | null>(seededId);
-  const [record, setRecord] = useState<SharedJobRecord | null>(() => freshRecord ?? null);
-  // If intake already handed us the file, don't flash a blank loading state.
-  const [loading, setLoading] = useState(Boolean(seededId) && !freshRecord);
+  const [record, setRecord] = useState<SharedJobRecord | null>(() =>
+    freshRecord ??
+    (requestedJob
+      ? placeholderRecord(requestedJob, requestedTitle || 'Job', jobNumberHint)
+      : null),
+  );
   const [error, setError] = useState<string | null>(null);
   const [readinessKey, setReadinessKey] = useState(0);
   const [shareFormOpen, setShareFormOpen] = useState(false);
@@ -138,13 +159,14 @@ export function SharedDashboardPage() {
     setShareFormOpen(false);
     if (opts?.syncUrl !== false) {
       // Preserve intake handoff state — setSearchParams drops it otherwise.
-      setSearchParams(jobId ? { job: jobId } : {}, {
+      const next: Record<string, string> = jobId ? { job: jobId } : {};
+      if (requestedTitle) next.title = requestedTitle;
+      if (requestedNumber) next.number = requestedNumber;
+      setSearchParams(next, {
         replace: true,
         state: location.state,
       });
     }
-    // Keep showing a seeded record while we refresh from the API.
-    if (recordIdRef.current !== jobId) setLoading(true);
     setError(null);
     try {
       const next = await api.sharedJob(jobId);
@@ -167,11 +189,16 @@ export function SharedDashboardPage() {
       if (recordIdRef.current === jobId) {
         // keep painted record; soft-fail
       } else {
-        setRecord(null);
-        setError(err instanceof Error ? err.message : 'Could not open that record.');
+        const listed = (list ?? []).find((j) => j.jobId === jobId);
+        setRecord(
+          placeholderRecord(
+            jobId,
+            listed?.title || requestedTitle || 'Job',
+            listed?.jobNumber ?? jobNumberHint,
+          ),
+        );
+        setError(null);
       }
-    } finally {
-      if (seq === openSeq.current) setLoading(false);
     }
   }
 
@@ -353,46 +380,22 @@ export function SharedDashboardPage() {
         </p>
       )}
 
-      {list === null && !record ? (
-        <p className="mt-6 text-sm text-ink-600">Loading…</p>
-      ) : !record && !loading ? (
-        <div className="mt-6">
-          <EmptyState
-            title="Job not found"
-            hint="It may have been removed, or this link is out of date. Jobs live on the Dashboard."
-          />
-          <div className="mt-4">
-            <button
-              type="button"
-              onClick={() => navigate('/verifier-library')}
-              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900"
-            >
-              Back to Dashboard
-            </button>
-          </div>
-        </div>
-      ) : (
+      {record ? (
         <>
           <div className="mt-4">
-            {loading && !record ? (
-              <p className="text-sm text-ink-600">Loading…</p>
-            ) : !record ? (
-              <p className="text-sm text-ink-600">Loading…</p>
-            ) : (
-              <>
-                <JobProgressDashboard
-                  jobId={record.job.id}
-                  record={record}
-                  initialProof={
-                    justApproved
-                      ? {
-                          days: [],
-                          counts: { days: 0, payable: 0, contradicted: 0, awaitingAfter: 0 },
-                          siteKnown: Boolean(record.brief?.facts?.['Site address']),
-                        }
-                      : undefined
-                  }
-                />
+            <JobProgressDashboard
+              jobId={record.job.id}
+              record={record}
+              initialProof={
+                justApproved
+                  ? {
+                      days: [],
+                      counts: { days: 0, payable: 0, contradicted: 0, awaitingAfter: 0 },
+                      siteKnown: Boolean(record.brief?.facts?.['Site address']),
+                    }
+                  : undefined
+              }
+            />
 
                 <details className="mt-4 rounded-xl glass-card group">
                   <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-ink-900 marker:content-none [&::-webkit-details-marker]:hidden">
@@ -423,11 +426,9 @@ export function SharedDashboardPage() {
                     <Thread record={record} onPosted={() => void openJob(record.job.id)} />
                   </div>
                 </details>
-              </>
-            )}
           </div>
 
-          {shareFormOpen && record && (
+          {shareFormOpen && (
             <ShareJobProgressPanel
               jobId={record.job.id}
               creating
@@ -437,6 +438,8 @@ export function SharedDashboardPage() {
             />
           )}
         </>
+      ) : (
+        <p className="mt-6 text-sm text-ink-600">Loading…</p>
       )}
     </>
   );

@@ -1765,7 +1765,12 @@ const CRM_SYNC_STATE: {
   seeded: boolean;
 } = { connected: {}, conflicts: [], seeded: false };
 
-function emptySharedRecord(jobId: string, jobNumber: number, title: string, claimNumber: string | null) {
+function emptySharedRecord(
+  jobId: string,
+  jobNumber: number | null,
+  title: string,
+  claimNumber: string | null,
+) {
   return {
     job: { id: jobId, jobNumber, title, status: 'in_progress', claimNumber },
     brief: null,
@@ -1775,7 +1780,7 @@ function emptySharedRecord(jobId: string, jobNumber: number, title: string, clai
     scope: [],
     messages: [],
     risks: [],
-    money: { approved: 0, pending: 0 },
+    money: { approved: 0, pending: 0, unpricedApprovals: 0 },
   };
 }
 
@@ -2932,9 +2937,31 @@ const routes: Array<[string, RegExp, Handler]> = [
       },
     },
   })],
-  ['GET', /^\/api\/operations\/shared\/([\w-]+)$/, (m) => {
-    const record = SHARED_RECORDS[m[1]];
-    return record ? { body: record } : { status: 404, body: { error: 'job_not_found' } };
+  ['GET', /^\/api\/operations\/shared\/([\w-]+)$/, async (m) => {
+    const id = m[1];
+    if (SHARED_RECORDS[id]) return { body: SHARED_RECORDS[id] };
+    // Dashboard folders may be live org jobs while this mock owns demo ids.
+    try {
+      const res = await realFetch(`/api/operations/shared/${encodeURIComponent(id)}`, {
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const body = await res.json();
+        SHARED_RECORDS[id] = body;
+        return { body };
+      }
+    } catch {
+      /* live API not running */
+    }
+    const listed = SHARED_JOBS.find((j) => j.jobId === id);
+    const record = emptySharedRecord(
+      id,
+      listed?.jobNumber ?? null,
+      listed?.title ?? 'Job',
+      null,
+    );
+    SHARED_RECORDS[id] = record;
+    return { body: record };
   }],
   ['GET', /^\/api\/operations\/shared\/([\w-]+)\/parties\/([\w-]+)\/link$/, (m) => {
     const record = SHARED_RECORDS[m[1]];
