@@ -3,15 +3,21 @@ import react from '@vitejs/plugin-react';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { atmosphereApiProxy } from './vite.apiProxy';
-import { verifierStaticPlugin } from './vite.verifier';
+import { staticAppPlugin } from './vite.verifier';
 
 const frontendDir = path.dirname(fileURLToPath(import.meta.url));
 const srcDir = path.resolve(frontendDir, 'src');
 const verifierDir = path.resolve(frontendDir, '../verifier');
+const fieldCaptureDir = path.resolve(frontendDir, '../fieldcapture');
+const distDir = path.resolve(frontendDir, 'dist');
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [verifierStaticPlugin(verifierDir, path.resolve(frontendDir, 'dist')), react()],
+  plugins: [
+    staticAppPlugin('/verifier', verifierDir, distDir),
+    staticAppPlugin('/fieldcapture', fieldCaptureDir, distDir),
+    react(),
+  ],
   resolve: {
     alias: { '@': srcDir },
   },

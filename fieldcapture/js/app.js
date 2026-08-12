@@ -2,9 +2,9 @@
  * Field Capture — production UI controller.
  *
  * Modes:
- *   ?token=<job-share>  → live MediaRecorder + proof upload (default when token present)
+ *   ?token=<job-share>  → live MediaRecorder + proof upload (no office login)
+ *   signed in           → same dashboard email/password, jobs from the office account
  *   ?demo=1             → scripted demo only (explicit)
- *   no token, no demo   → blocked empty state (not a fake day)
  */
 (function () {
   'use strict';
@@ -16,6 +16,8 @@
   var STORAGE_BASE = params.get('storage') || '';
   var LIVE = Boolean(TOKEN) && !FORCE_DEMO;
   var DEMO = FORCE_DEMO || (!TOKEN && params.get('allowDemo') === '1');
+  var ACCESS_KEY = 'atm.field.accessToken';
+  var REFRESH_KEY = 'atm.field.refreshToken';
 
   var Core = window.FieldCaptureCore;
   if (!Core) {
@@ -43,7 +45,35 @@
     job: null,
     site: null,
     seconds: 0,
+    accessToken: null,
+    refreshToken: null,
+    jobs: [],
+    activeJobId: null,
+    account: false,
   };
+
+  function readStoredSession() {
+    try {
+      state.accessToken = sessionStorage.getItem(ACCESS_KEY);
+      state.refreshToken = sessionStorage.getItem(REFRESH_KEY);
+    } catch (e) {
+      state.accessToken = null;
+      state.refreshToken = null;
+    }
+  }
+
+  function writeStoredSession(accessToken, refreshToken) {
+    state.accessToken = accessToken || null;
+    state.refreshToken = refreshToken || null;
+    try {
+      if (accessToken) sessionStorage.setItem(ACCESS_KEY, accessToken);
+      else sessionStorage.removeItem(ACCESS_KEY);
+      if (refreshToken) sessionStorage.setItem(REFRESH_KEY, refreshToken);
+      else sessionStorage.removeItem(REFRESH_KEY);
+    } catch (e) {
+      /* private mode — stay signed in for this page only */
+    }
+  }
 
   /* ---------- home hydration ---------- */
 
@@ -52,13 +82,17 @@
     if (!root) return;
     if (!jobs.length) {
       root.innerHTML =
-        '<div class="erow"><span class="t"><b>No jobs on this link</b><span>Ask the office for a current share link.</span></span></div>';
+        '<div class="erow"><span class="t"><b>No open jobs yet</b><span>Ask the office to start a job, then refresh.</span></span></div>';
       return;
     }
     root.innerHTML = jobs
       .map(function (j) {
+        var selected = state.account && j.id && j.id === state.activeJobId;
         return (
-          '<div class="erow">' +
+          '<div class="erow"' +
+          (j.id ? ' data-job-id="' + escapeHtml(j.id) + '"' : '') +
+          (selected ? ' data-selected="1"' : '') +
+          '>' +
           '<span class="t"><b>' +
           escapeHtml(j.name) +
           '</b><span>' +
@@ -71,6 +105,15 @@
         );
       })
       .join('');
+    if (state.account) {
+      root.querySelectorAll('[data-job-id]').forEach(function (row) {
+        row.style.cursor = 'pointer';
+        row.addEventListener('click', function () {
+          state.activeJobId = row.getAttribute('data-job-id');
+          renderExpect(state.jobs);
+        });
+      });
+    }
   }
 
   function escapeHtml(s) {
@@ -122,7 +165,97 @@
   function bootBlocked() {
     show('s-blocked');
     $('#blocked-msg').textContent =
-      'Open Field Capture with a job share link (?token=…). Demo mode requires ?demo=1.';
+      'Use the same email and password as the Atmosphere dashboard.';
+  }
+
+  function showLoginError(message) {
+    var el = $('#login-err');
+    if (!el) return;
+    if (!message) {
+      el.hidden = true;
+      el.textContent = '';
+      return;
+    }
+    el.hidden = false;
+    el.textContent = message;
+  }
+
+  function enterAccountHome(me, jobs) {
+    state.account = true;
+    state.jobs = (jobs || []).map(function (j) {
+      return {
+        id: j.id,
+        name: (j.number ? j.number + ' · ' : '') + (j.name || 'Job'),
+        addr: j.address || '',
+        at: j.at || 'Today',
+        placed: Boolean(j.placed),
+      };
+    });
+    if (!state.activeJobId && state.jobs[0]) state.activeJobId = state.jobs[0].id;
+    var who = document.querySelector('.who');
+    if (who) {
+      var name = (me.user && (me.user.fullName || me.user.email)) || 'You';
+      var org = (me.org && me.org.name) || 'Office';
+      who.innerHTML = '<b>' + escapeHtml(name) + '</b>' + escapeHtml(org);
+    }
+    renderExpect(state.jobs);
+    $('#week-wrap').hidden = true;
+    $('#daybtn').disabled = !state.activeJobId;
+    setStatus(
+      state.activeJobId
+        ? 'Ready — tap Start. Records video + microphone.'
+        : 'No open jobs yet. Ask the office to start one.',
+    );
+    show('s-home');
+  }
+
+  function bootAccountSession() {
+    return Core.loadFieldMe(API_BASE, state.accessToken).then(function (me) {
+      return Core.loadTodayJobs(API_BASE, state.accessToken).then(function (jobs) {
+        enterAccountHome(me, jobs);
+      });
+    });
+  }
+
+  function bootAccount() {
+    document.body.setAttribute('data-mode', 'account');
+    readStoredSession();
+    $('#daybtn').addEventListener('click', startLiveDay);
+    var form = $('#login-form');
+    if (form) {
+      form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var email = ($('#login-email').value || '').trim();
+        var password = $('#login-password').value || '';
+        var btn = $('#login-btn');
+        showLoginError('');
+        btn.disabled = true;
+        Core.loginWithPassword(email, password, API_BASE)
+          .then(function (res) {
+            var session = res.session || {};
+            if (!session.accessToken) {
+              throw new Error('Signed in, but no session came back. Confirm your email if Atmosphere asked you to.');
+            }
+            writeStoredSession(session.accessToken, session.refreshToken);
+            return bootAccountSession();
+          })
+          .catch(function (err) {
+            writeStoredSession(null, null);
+            showLoginError(err.message || 'Could not sign in. Use your dashboard email and password.');
+          })
+          .then(function () {
+            btn.disabled = false;
+          });
+      });
+    }
+    if (state.accessToken) {
+      bootAccountSession().catch(function () {
+        writeStoredSession(null, null);
+        bootBlocked();
+      });
+      return;
+    }
+    bootBlocked();
   }
 
   /* ---------- recording ---------- */
@@ -137,6 +270,10 @@
   }
 
   function startLiveDay() {
+    if (state.account && !state.activeJobId) {
+      setStatus('No open job to file this day against.', true);
+      return;
+    }
     var videoEl = $('#preview');
     state.recorder = Core.recordDayFilm({
       videoEl: videoEl,
@@ -173,7 +310,9 @@
       .then(function (clip) {
         openDoorUploading();
         return Core.uploadDayFilm({
-          token: TOKEN,
+          token: TOKEN || undefined,
+          jobId: state.account ? state.activeJobId : undefined,
+          accessToken: state.account ? state.accessToken : undefined,
           apiBase: API_BASE,
           storageBase: STORAGE_BASE,
           blob: clip.blob,
@@ -384,7 +523,7 @@
   bindHold();
   $('#donebtn').addEventListener('click', function () {
     show('s-home');
-    setStatus(LIVE ? 'Ready for another day on this link.' : '');
+    setStatus(LIVE || state.account ? 'Ready for another day.' : '');
   });
 
   if (LIVE) {
@@ -394,6 +533,6 @@
   } else if (DEMO) {
     bootDemo();
   } else {
-    bootBlocked();
+    bootAccount();
   }
 })();

@@ -318,13 +318,70 @@
     };
   }
 
+  function apiJson(url, opts) {
+    opts = opts || {};
+    var headers = { Accept: 'application/json' };
+    if (opts.headers) {
+      Object.keys(opts.headers).forEach(function (key) {
+        headers[key] = opts.headers[key];
+      });
+    }
+    if (opts.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+    if (opts.accessToken) headers.Authorization = 'Bearer ' + opts.accessToken;
+    return fetch(url, {
+      method: opts.method || 'GET',
+      headers: headers,
+      credentials: 'include',
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    }).then(function (r) {
+      return r.text().then(function (text) {
+        var body = {};
+        try {
+          body = text ? JSON.parse(text) : {};
+        } catch (e) {
+          body = {};
+        }
+        if (!r.ok) throw new Error((body && body.error) || 'Request failed.');
+        return body;
+      });
+    });
+  }
+
+  function origin(apiBase) {
+    return (apiBase || '').replace(/\/$/, '');
+  }
+
+  /** Same email + password as the Atmosphere dashboard. */
+  function loginWithPassword(email, password, apiBase) {
+    return apiJson(origin(apiBase) + '/api/auth/login', {
+      method: 'POST',
+      body: { email: email, password: password },
+    });
+  }
+
+  function loadFieldMe(apiBase, accessToken) {
+    return apiJson(origin(apiBase) + '/api/field-app/me', { accessToken: accessToken });
+  }
+
+  function loadTodayJobs(apiBase, accessToken) {
+    return apiJson(origin(apiBase) + '/api/field-app/today', { accessToken: accessToken }).then(
+      function (body) {
+        return body.jobs || [];
+      },
+    );
+  }
+
   /**
-   * Upload day film via job-share proof path (token auth, no org cookie).
-   * Files as phase "after" for today — one recording = the day's evidence.
+   * Upload day film.
+   *
+   * Job-share link: `{ token }` (no office login).
+   * Dashboard account: `{ jobId, accessToken }` — same session as the website.
    */
   function uploadDayFilm(opts) {
     var token = opts.token;
-    var apiBase = (opts.apiBase || '').replace(/\/$/, '');
+    var jobId = opts.jobId;
+    var accessToken = opts.accessToken;
+    var apiBase = origin(opts.apiBase);
     var blob = opts.blob;
     var mimeType = opts.mimeType || 'video/webm';
     var onStep = opts.onStep || function () {};
@@ -336,67 +393,60 @@
       lastModified: Date.now(),
     });
 
+    var uploadPath = jobId
+      ? apiBase + '/api/field-app/jobs/' + encodeURIComponent(jobId) + '/proof/upload-url'
+      : apiBase + '/api/job-share/' + encodeURIComponent(token) + '/proof/upload-url';
+    var filePath = jobId
+      ? apiBase + '/api/field-app/jobs/' + encodeURIComponent(jobId) + '/proof'
+      : apiBase + '/api/job-share/' + encodeURIComponent(token) + '/proof';
+    var authHeaders = accessToken ? { Authorization: 'Bearer ' + accessToken } : {};
+
     onStep('Reading the recording…');
     return readCapture(file).then(function (facts) {
-      if (!facts.hasAudio && facts.hasAudio !== undefined) {
-        /* always true from recorder */
-      }
       onStep('Getting somewhere to put it…');
-      return fetch(apiBase + '/api/job-share/' + encodeURIComponent(token) + '/proof/upload-url', {
+      return apiJson(uploadPath, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        accessToken: accessToken,
+        headers: authHeaders,
+        body: {
           workDate: todayISO(),
           phase: 'after',
           extension: ext,
-        }),
-      })
-        .then(function (r) {
-          return r.json().then(function (body) {
-            if (!r.ok) throw new Error((body && body.error) || 'Could not mint upload URL.');
-            return body;
-          });
-        })
-        .then(function (slot) {
-          onStep('Uploading video + audio…');
-          // Prefer the absolute signed URL from the API so localhost / static
-          // hosts do not PUT to the wrong origin. Fall back to storageBase + path.
-          var putUrl =
-            slot.uploadUrl ||
-            (storageBase || '') +
-              '/storage/v1/object/upload/sign/job-proofs/' +
-              slot.path +
-              '?token=' +
-              encodeURIComponent(slot.token);
-          return fetch(putUrl, {
-            method: 'PUT',
-            body: file,
-            headers: { 'Content-Type': mimeType },
-          }).then(function (put) {
-            if (!put.ok) throw new Error('The upload did not go through. Try again on better signal.');
-            onStep('Filing it with the office…');
-            return fetch(apiBase + '/api/job-share/' + encodeURIComponent(token) + '/proof', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                workDate: todayISO(),
-                phase: 'after',
-                storagePath: slot.path,
-                byteSize: file.size,
-                durationSeconds: facts.durationSeconds != null ? facts.durationSeconds : undefined,
-                contentHash: facts.contentHash || undefined,
-                capturedAt: facts.capturedAt,
-                lat: facts.lat != null ? facts.lat : undefined,
-                lon: facts.lon != null ? facts.lon : undefined,
-                accuracyM: facts.accuracyM != null ? facts.accuracyM : undefined,
-                frames: facts.frames,
-              }),
-            });
-          });
-        })
-        .then(function (r) {
-          return r.json().then(function (body) {
-            if (!r.ok) throw new Error((body && body.error) || 'Filing failed.');
+        },
+      }).then(function (slot) {
+        onStep('Uploading video + audio…');
+        var putUrl =
+          slot.uploadUrl ||
+          (storageBase || '') +
+            '/storage/v1/object/upload/sign/job-proofs/' +
+            slot.path +
+            '?token=' +
+            encodeURIComponent(slot.token);
+        return fetch(putUrl, {
+          method: 'PUT',
+          body: file,
+          headers: { 'Content-Type': mimeType },
+        }).then(function (put) {
+          if (!put.ok) throw new Error('The upload did not go through. Try again on better signal.');
+          onStep('Filing it with the office…');
+          return apiJson(filePath, {
+            method: 'POST',
+            accessToken: accessToken,
+            headers: authHeaders,
+            body: {
+              workDate: todayISO(),
+              phase: 'after',
+              storagePath: slot.path,
+              byteSize: file.size,
+              durationSeconds: facts.durationSeconds != null ? facts.durationSeconds : undefined,
+              contentHash: facts.contentHash || undefined,
+              capturedAt: facts.capturedAt,
+              lat: facts.lat != null ? facts.lat : undefined,
+              lon: facts.lon != null ? facts.lon : undefined,
+              accuracyM: facts.accuracyM != null ? facts.accuracyM : undefined,
+              frames: facts.frames,
+            },
+          }).then(function (body) {
             return {
               proof: body.proof,
               checks: body.checks || [],
@@ -405,6 +455,7 @@
             };
           });
         });
+      });
     });
   }
 
@@ -437,6 +488,9 @@
     readCapture: readCapture,
     recordDayFilm: recordDayFilm,
     uploadDayFilm: uploadDayFilm,
+    loginWithPassword: loginWithPassword,
+    loadFieldMe: loadFieldMe,
+    loadTodayJobs: loadTodayJobs,
     loadShareJob: loadShareJob,
     loadShareProofs: loadShareProofs,
     currentPosition: currentPosition,

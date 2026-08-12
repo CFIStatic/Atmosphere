@@ -320,6 +320,18 @@
     padding: 7px 10px; border-radius: 8px; background: var(--bg);
   }
   .twin .rooms b { color: var(--ink); font-weight: 650; }
+
+  .auth-form { margin-top: 22px; display: grid; gap: 14px; }
+  .auth-form label { display: block; font-size: 13px; font-weight: 650; color: var(--ink-2); }
+  .auth-form input {
+    display: block; width: 100%; margin-top: 6px; padding: 12px 14px;
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--panel); color: var(--ink); font: inherit;
+  }
+  .auth-form input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .auth-err { color: var(--fail); font-size: 13px; min-height: 1.2em; }
+  .erow[data-selected="1"] { background: var(--accent-soft); margin: 0 -8px; padding-left: 10px; padding-right: 10px; border-radius: 8px; }
+
 </style>
 </head>
 <body>
@@ -372,14 +384,25 @@
     </div>
   </div>
 
-  <!-- ================= BLOCKED: no token, not demo ================= -->
+  <!-- ================= SIGN IN: dashboard credentials, or a job link ================= -->
   <div class="screen" id="s-blocked">
-    <div class="pad" style="padding-top:48px">
-      <h1 class="h1">Open your job link</h1>
+    <div class="pad" style="padding-top:36px">
+      <h1 class="h1">Sign in to Field Capture</h1>
       <p class="lede" id="blocked-msg">
-        Field Capture files a real day film (video + audio) through a job share link.
-        It does not invent a demo day when the link is missing.
+        Use the same email and password as the Atmosphere dashboard. Job share links still work without signing in.
       </p>
+      <form class="auth-form" id="login-form" novalidate>
+        <label for="login-email">Email
+          <input id="login-email" name="email" type="email" autocomplete="username" inputmode="email" required />
+        </label>
+        <label for="login-password">Password
+          <input id="login-password" name="password" type="password" autocomplete="current-password" required minlength="8" />
+        </label>
+        <p class="auth-err" id="login-err" hidden></p>
+        <button class="daybtn" type="submit" id="login-btn">
+          <span class="lbl">Sign in</span>
+        </button>
+      </form>
     </div>
   </div>
 

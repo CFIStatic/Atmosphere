@@ -86,10 +86,15 @@ final class AuthSession: ObservableObject {
                 )
             }
             persist(session: session, email: result.user.email ?? email)
-            let me = try await api.fieldMe()
-            applyProfile(me)
             UserDefaults.standard.set(true, forKey: linkedFlagKey)
             isLinked = true
+            do {
+                let me = try await api.fieldMe()
+                applyProfile(me)
+            } catch {
+                restoreWarning =
+                    "Signed in with your dashboard account. If jobs don’t appear, link this login to the office on the website."
+            }
         } catch {
             lastError = Self.friendlyConnectError(error)
             isLinked = KeychainStore.get(account: refreshAccount) != nil

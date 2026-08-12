@@ -275,10 +275,20 @@ final class AtmosphereClient: ObservableObject {
             )
         }
         guard (200 ... 299).contains(status) else {
-            let text = String(data: data, encoding: .utf8) ?? ""
+            let text = Self.apiErrorMessage(from: data) ?? String(data: data, encoding: .utf8) ?? ""
             throw APIError.http(status: status, body: text)
         }
         return try JSONDecoder().decode(Response.self, from: data)
+    }
+
+    /// Prefer the BFF's `{ error }` field over a raw JSON blob.
+    private static func apiErrorMessage(from data: Data) -> String? {
+        guard
+            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let error = obj["error"] as? String
+        else { return nil }
+        let trimmed = error.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 

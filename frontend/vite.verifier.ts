@@ -17,26 +17,27 @@ const MIME: Record<string, string> = {
 };
 
 /**
- * Serve the standalone Verifier static app at /verifier in dev and preview,
- * and copy it into dist/verifier on production builds.
+ * Serve a sibling static app (Verifier, Field Capture) at `/mount` in dev and
+ * preview, and copy it into dist on production builds.
  *
- * Without this, Vite's SPA fallback answers /verifier/* with index.html and
- * the Evidence Platform iframe on /verifier-library renders blank.
+ * Without this, Vite's SPA fallback answers those URLs with index.html.
  */
-export function verifierStaticPlugin(verifierDir: string, outDir: string): Plugin {
+export function staticAppPlugin(mount: string, sourceDir: string, outDir: string): Plugin {
+  const prefix = mount.startsWith('/') ? mount : `/${mount}`;
+
   function middleware(req: IncomingMessage, res: ServerResponse, next: () => void) {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
 
     const raw = req.url ?? '';
-    if (!raw.startsWith('/verifier')) return next();
+    if (!raw.startsWith(prefix)) return next();
 
     const pathname = raw.split('?')[0] ?? raw;
-    let rel = pathname.slice('/verifier'.length);
+    let rel = pathname.slice(prefix.length);
     if (rel.startsWith('/')) rel = rel.slice(1);
     if (rel === '' || rel.endsWith('/')) rel = `${rel}index.html`.replace(/\/+/g, '/');
 
-    const filePath = path.normalize(path.join(verifierDir, rel));
-    if (!filePath.startsWith(verifierDir)) {
+    const filePath = path.normalize(path.join(sourceDir, rel));
+    if (!filePath.startsWith(sourceDir)) {
       res.statusCode = 403;
       res.end('Forbidden');
       return;
@@ -57,7 +58,7 @@ export function verifierStaticPlugin(verifierDir: string, outDir: string): Plugi
   }
 
   return {
-    name: 'verifier-static',
+    name: `static-app-${prefix.replace(/\W+/g, '-')}`,
     enforce: 'pre',
     configureServer(server) {
       server.middlewares.use(middleware);
@@ -66,9 +67,14 @@ export function verifierStaticPlugin(verifierDir: string, outDir: string): Plugi
       server.middlewares.use(middleware);
     },
     closeBundle() {
-      const target = path.join(outDir, 'verifier');
+      const target = path.join(outDir, prefix.replace(/^\//, ''));
       fs.mkdirSync(outDir, { recursive: true });
-      fs.cpSync(verifierDir, target, { recursive: true });
+      fs.cpSync(sourceDir, target, { recursive: true });
     },
   };
+}
+
+/** @deprecated Use staticAppPlugin('/verifier', …) */
+export function verifierStaticPlugin(verifierDir: string, outDir: string): Plugin {
+  return staticAppPlugin('/verifier', verifierDir, outDir);
 }
