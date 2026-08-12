@@ -2420,13 +2420,19 @@
     }
   }
 
+  function initialsFrom(fullName, email) {
+    var name = (fullName && String(fullName).trim()) || (email && String(email).split('@')[0]) || '';
+    var words = name.split(/[\s._-]+/).filter(Boolean);
+    if (words.length >= 2) return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
+    return name.slice(0, 2).toUpperCase() || '—';
+  }
+
   function applySession(payload) {
     if (!payload || !payload.user) return;
     var u = payload.user;
     var name = u.name || 'Teammate';
     var email = u.email || '';
-    var init = u.initials || '??';
-    // Org name only in the chip — role labels (e.g. Field Technician) stay out of the chrome.
+    var init = u.initials || initialsFrom(name, email);
     var sub = u.orgName || email || 'Atmosphere';
 
     var whoName = document.getElementById('who-name');
@@ -2441,6 +2447,32 @@
     if (menuName) menuName.textContent = name;
     if (menuEmail) menuEmail.textContent = email;
     if (menuMeta) menuMeta.textContent = u.orgName || '';
+  }
+
+  function loadAccountFromApi() {
+    function jsonOrNull(r) { return r.ok ? r.json() : Promise.resolve(null); }
+    Promise.all([
+      fetch('/api/auth/me', { credentials: 'include' }).then(jsonOrNull).catch(function () { return null; }),
+      fetch('/api/profile', { credentials: 'include' }).then(jsonOrNull).catch(function () { return null; }),
+      fetch('/api/org/me', { credentials: 'include' }).then(jsonOrNull).catch(function () { return null; })
+    ]).then(function (parts) {
+      var me = parts[0] && parts[0].user;
+      var profile = parts[1] && parts[1].profile;
+      var membership = parts[2] && parts[2].membership;
+      if (!me && !profile) return;
+      var meta = (me && me.metadata) || {};
+      var fullName = (profile && profile.fullName) || meta.full_name || meta.fullName || meta.name || null;
+      var email = (profile && profile.email) || (me && me.email) || '';
+      var orgName = membership && membership.org && membership.org.name;
+      applySession({
+        user: {
+          name: (fullName && String(fullName).trim()) || (email ? String(email).split('@')[0] : '') || 'Teammate',
+          email: email,
+          initials: initialsFrom(fullName, email),
+          orgName: orgName || null
+        }
+      });
+    });
   }
 
   function initAccountMenu() {
@@ -2520,6 +2552,7 @@
 
   if (EMBEDDED) {
     window.parent.postMessage({ atmosphere: 'request-session' }, '*');
+    loadAccountFromApi();
     var railHead = document.getElementById('rail-head');
     var platformNav = document.getElementById('platform-nav');
     var railFooter = document.getElementById('rail-footer');

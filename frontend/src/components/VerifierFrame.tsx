@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { SpinnerIcon } from './icons';
 import { useAuth } from '../context/AuthContext';
 import { ROLE_LABELS } from '../lib/api';
-import { displayName, initials } from '../lib/display';
+import { displayName, initials, nameFromMetadata } from '../lib/display';
 
 /**
  * The Verifier portal iframe — one persistent instance per operations shell.
@@ -45,12 +45,13 @@ export function VerifierFrame({
 
   const postSession = useCallback(() => {
     if (!user) return;
+    const fullName = profile?.fullName || nameFromMetadata(user.metadata);
     postToFrame({
       atmosphere: 'session',
       user: {
-        name: displayName(profile?.fullName, user.email),
+        name: displayName(fullName, user.email),
         email: profile?.email ?? user.email ?? '',
-        initials: initials(profile?.fullName, user.email),
+        initials: initials(fullName, user.email),
         orgName: membership?.org?.name ?? null,
         roleLabel: membership ? ROLE_LABELS[membership.role] : null,
         role: membership?.role ?? null,
