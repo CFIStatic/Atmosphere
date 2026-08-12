@@ -558,7 +558,7 @@
   .detail {
     position: fixed; inset: 0; z-index: 40; display: none;
     place-items: center;
-    padding: 28px 40px;
+    padding: 16px 20px;
     background: rgba(28, 25, 23, .48);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
@@ -566,7 +566,8 @@
   .detail[data-open="1"] { display: grid; }
   .sheet {
     position: relative;
-    width: min(1080px, 100%);
+    width: min(1440px, 100%);
+    height: 100%;
     max-height: 100%;
     overflow: hidden;
     border-radius: 14px;
@@ -575,11 +576,11 @@
     display: flex; flex-direction: column;
   }
   @media (max-width: 860px) {
-    .detail { padding: 12px; }
+    .detail { padding: 8px; }
     .sheet { border-radius: 10px; }
   }
   .sheethead {
-    display: flex; align-items: flex-start; gap: 14px;
+    display: flex; align-items: flex-start; gap: 14px; flex: none;
     padding: 14px 18px; background: var(--panel); border-bottom: 1px solid var(--line);
   }
   .sheethead h2 { margin: 0; font-size: 15.5px; font-weight: 650; letter-spacing: -0.01em; }
@@ -591,15 +592,15 @@
   }
   .closebtn:hover { background: var(--line-soft); color: var(--ink); }
 
-  .sheetbody { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(340px, 1fr); }
-  @media (max-width: 860px) { .sheetbody { grid-template-columns: 1fr; } }
+  .sheetbody { flex: 1; min-height: 0; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(300px, 0.85fr); }
+  @media (max-width: 860px) { .sheetbody { grid-template-columns: 1fr; overflow-y: auto; } }
 
-  .stage { padding: 16px 18px; border-right: 1px solid var(--line); }
-  .player { background: var(--stage); border-radius: 10px; overflow: hidden; }
-  .player .frame { aspect-ratio: 16 / 10; display: block; width: 100%; }
+  .stage { padding: 16px 18px; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  .player { background: var(--stage); border-radius: 10px; overflow: hidden; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .player .frame { flex: 1; min-height: 240px; display: grid; place-items: center; }
   .player .frame img { width: 100%; height: 100%; object-fit: contain; display: block; }
   .controls {
-    display: flex; align-items: center; gap: 10px; padding: 9px 11px;
+    display: flex; align-items: center; gap: 10px; padding: 9px 11px; flex: none;
     border-top: 1px solid var(--stage-2); color: var(--stage-ink);
   }
   .controls button {
@@ -614,59 +615,12 @@
   }
   .scrub button[aria-pressed="true"] { background: var(--accent); }
   .controls .time { font-family: var(--mono); font-size: 11.5px; color: var(--faint); min-width: 74px; text-align: right; }
-  .framenote { margin-top: 8px; font-size: 11.5px; color: var(--muted); }
 
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-top: 14px; }
-  /* Office product: the clip on the left, the AI dictation reading it aloud
-     on the right of the stage column. Crew never sees this — Field Capture
-     only records; this is the office view of what took place. */
-  .dictation {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    margin-top: 14px;
-    overflow: hidden;
-  }
-  .dictation > .dhead {
-    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
-    padding: 11px 14px 0;
-  }
-  .dictation > .dhead h4 {
-    margin: 0; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
-    color: var(--faint); font-weight: 750;
-  }
-  .dictation > .dhead .livepill {
-    font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
-    color: var(--accent); background: var(--accent-soft);
-    padding: 2px 8px; border-radius: 999px;
-  }
-  .dictation > .dbody {
-    padding: 10px 14px 14px;
-    font-size: 14.5px; line-height: 1.6; color: var(--ink);
-  }
-  .dictation > .dbody p { margin: 0 0 10px; }
-  .dictation > .dbody p:last-child { margin-bottom: 0; }
-  .dictation .entries { margin: 12px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line-soft); }
-  .dictation .entries li {
-    display: grid; grid-template-columns: 52px 1fr; gap: 10px;
-    padding: 9px 0; border-bottom: 1px solid var(--line-soft);
-    font-size: 12.5px; color: var(--ink-2);
-  }
-  .dictation .entries li:last-child { border-bottom: 0; }
-  .dictation .entries .t { font-family: var(--mono); font-size: 11px; color: var(--faint); }
   .player video {
-    display: block; width: 100%; max-height: 360px; background: #1A1815; border-radius: 8px;
+    display: block; width: 100%; height: 100%; max-height: none; object-fit: contain; background: #1A1815;
   }
-  .card > h4 {
-    margin: 0; padding: 11px 14px; font-size: 12px; letter-spacing: .04em;
-    text-transform: uppercase; color: var(--faint); font-weight: 700;
-    border-bottom: 1px solid var(--line-soft);
-  }
-  .card .body { padding: 13px 14px; }
-  .card .body p { margin: 0 0 9px; line-height: 1.55; }
-  .card .body p:last-child { margin-bottom: 0; }
 
-  .side { padding: 16px 18px 60px; }
+  .side { padding: 16px 18px 24px; overflow-y: auto; min-height: 0; }
   .tabs { display: flex; gap: 3px; background: var(--line-soft); padding: 3px; border-radius: 8px; }
   .tabs button {
     flex: 1; border: 0; background: none; padding: 7px 6px; border-radius: 6px;
@@ -899,23 +853,6 @@
             <div class="scrub" id="d-scrub"></div>
             <span class="time" id="d-time">frame 1 / 6</span>
           </div>
-        </div>
-        <p class="framenote">
-          These are the frames the analysis actually read, evenly spaced across the clip. The original
-          file is untouched and downloadable; nothing shown here has been re-encoded.
-        </p>
-        <div class="dictation" id="d-dictation-wrap">
-          <div class="dhead">
-            <h4>AI dictation</h4>
-            <span class="livepill" id="d-dictation-pill">Reading the footage</span>
-          </div>
-          <div class="dbody" id="d-dictation">
-            <p style="color:var(--muted)">Open a clip to hear what the assistant saw.</p>
-          </div>
-        </div>
-        <div class="card">
-          <h4>Against the scope</h4>
-          <div class="body" id="d-analysis"></div>
         </div>
       </section>
 
@@ -1944,11 +1881,6 @@
         '<video controls playsinline preload="metadata" src="' + esc(item._videoUrl) + '"></video>';
       $('#d-scrub').innerHTML = '';
       $('#d-time').textContent = 'full clip · ' + dur(item.duration);
-      var note = document.querySelector('.framenote');
-      if (note) {
-        note.textContent =
-          'The original recording. The AI dictation below describes what is taking place — it is a reading of this footage, not an acceptance.';
-      }
     } else {
       item._frames = item._remoteFrames && item._remoteFrames.length
         ? item._remoteFrames
@@ -1963,11 +1895,6 @@
         b.addEventListener('click', function () { stopPlay(); setFrame(+b.dataset.i); });
       });
       setFrame(0);
-      var note2 = document.querySelector('.framenote');
-      if (note2) {
-        note2.textContent =
-          'These are the frames the analysis actually read, evenly spaced across the clip. The original file is untouched and downloadable; nothing shown here has been re-encoded.';
-      }
     }
 
     renderDictation(item);
@@ -2040,6 +1967,7 @@
     // The spoken description itself lives in renderDictation.
     var a = item.analysis || {};
     var el = $('#d-analysis');
+    if (!el) return;
 
     if (a.state === 'failed') {
       el.innerHTML = '<p style="color:var(--fail)">Scope reading failed with the dictation. Re-run from the platform; the footage is unaffected.</p>';
