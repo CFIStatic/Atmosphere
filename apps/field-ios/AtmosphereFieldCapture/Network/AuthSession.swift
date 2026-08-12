@@ -75,10 +75,9 @@ final class AuthSession: ObservableObject {
     }
 
     /// First-install (or re-connect) only — same email/password as the website.
-    func connectAccount(email: String, password: String, apiBase: String) async {
+    func connectAccount(email: String, password: String) async {
         lastError = nil
         do {
-            try api.useAPIBase(apiBase)
             let result = try await api.login(email: email, password: password)
             guard let session = result.session else {
                 throw APIError.http(
@@ -103,9 +102,9 @@ final class AuthSession: ObservableObject {
             case .notConnectedToInternet, .networkConnectionLost:
                 return "No network. Connect to the internet and try again."
             case .cannotFindHost, .dnsLookupFailed:
-                return "Can’t reach that Atmosphere server. Check the API URL matches the host your website uses."
+                return "Can’t reach Atmosphere right now. Check your connection and try again."
             case .timedOut:
-                return "The Atmosphere server timed out. Try again in a moment."
+                return "Atmosphere timed out. Try again in a moment."
             default:
                 break
             }
@@ -116,7 +115,7 @@ final class AuthSession: ObservableObject {
             }
             if status == 0 || status >= 500 {
                 return body.isEmpty
-                    ? "Couldn’t reach Atmosphere. Check the API URL (same backend as the website)."
+                    ? "Couldn’t reach Atmosphere. Try again in a moment."
                     : body
             }
             if body.localizedCaseInsensitiveContains("invalid") {

@@ -41,10 +41,9 @@ Also set `ATMOSPHERE_API_BASE` to your API (same host as the dashboard), then ru
 on a LiDAR iPhone for RoomPlan.
 
 **Sign in with your website account** on first install (same email/password as
-the Atmosphere dashboard). Under **Server**, point at the same API host the
-website uses (simulator default: `http://127.0.0.1:4000`). Tokens stay in
-Keychain — later launches skip connect and open Today. Day films file into
-`job_proofs` for that org. Disconnect only from Account → Disconnect.
+the Atmosphere dashboard). Tokens stay in Keychain — later launches skip
+connect and open Today. Day films file into `job_proofs` for that org.
+Disconnect only from Account → Disconnect.
 
 **Requirements:** iOS 17+, camera + mic + location when-in-use.
 

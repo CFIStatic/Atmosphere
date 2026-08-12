@@ -4,7 +4,7 @@ import Foundation
  * REST client for Atmosphere Field Capture.
  *
  * Auth: bearer access token from the same Atmosphere login as the dashboard.
- * Base URL from `ATMOSPHERE_API_BASE` Info.plist / environment.
+ * Base URL from `ATMOSPHERE_API_BASE` Info.plist / environment (build-time).
  */
 @MainActor
 final class AtmosphereClient: ObservableObject {
@@ -22,16 +22,6 @@ final class AtmosphereClient: ObservableObject {
 
     static func fromEnvironment() -> AtmosphereClient {
         AtmosphereClient(baseURL: ApiConfig.resolvedBaseURL())
-    }
-
-    /// Point at the dashboard’s API (saved on device for next launches).
-    func useAPIBase(_ raw: String) throws {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed), url.scheme == "http" || url.scheme == "https" else {
-            throw APIError.http(status: 0, body: "Enter a valid API URL, like https://your-atmosphere-host")
-        }
-        ApiConfig.saveBaseString(trimmed)
-        baseURL = ApiConfig.resolvedBaseURL()
     }
 
     // MARK: - Auth (same account as dashboard)

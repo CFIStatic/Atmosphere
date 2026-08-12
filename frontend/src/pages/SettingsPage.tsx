@@ -797,11 +797,6 @@ function FieldCaptureAppSection() {
           On first open, sign in with <strong className="font-semibold text-ink-900">the same email and password</strong>{' '}
           you use here.
         </li>
-        <li>
-          Under <span className="font-medium text-ink-900">Server</span>, set the API URL to the same Atmosphere
-          backend this dashboard talks to (for local Mac testing: <span className="font-mono text-xs">http://127.0.0.1:4000</span>
-          — use your Mac’s LAN IP if the phone is not the simulator).
-        </li>
         <li>Tap <span className="font-medium text-ink-900">Sign in &amp; connect phone</span>. You won’t be asked again on that device.</li>
       </ol>
       <p className="mt-4 text-sm text-ink-600">

@@ -10,8 +10,6 @@ struct SignInView: View {
     @EnvironmentObject private var auth: AuthSession
     @State private var email = ""
     @State private var password = ""
-    @State private var apiBase = ApiConfig.resolvedBaseString()
-    @State private var showServer = false
     @State private var busy = false
 
     var body: some View {
@@ -62,30 +60,6 @@ struct SignInView: View {
                 }
                 .padding(.top, 4)
 
-                DisclosureGroup(isExpanded: $showServer) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Atmosphere API (same backend as the website)")
-                            .font(.system(size: 12))
-                            .foregroundStyle(FieldTheme.faint)
-                        TextField("https://your-atmosphere-host", text: $apiBase)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .keyboardType(.URL)
-                            .padding(12)
-                            .background(FieldTheme.panel)
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
-                            .cornerRadius(10)
-                        Text("Example for a Mac running the API locally: http://127.0.0.1:4000")
-                            .font(.system(size: 11))
-                            .foregroundStyle(FieldTheme.faint)
-                    }
-                    .padding(.top, 8)
-                } label: {
-                    Text("Server")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(FieldTheme.muted)
-                }
-
                 if let err = auth.lastError {
                     Text(err)
                         .font(.system(size: 13))
@@ -97,8 +71,7 @@ struct SignInView: View {
                     Task {
                         await auth.connectAccount(
                             email: email.trimmingCharacters(in: .whitespacesAndNewlines),
-                            password: password,
-                            apiBase: apiBase
+                            password: password
                         )
                         busy = false
                     }
@@ -116,7 +89,7 @@ struct SignInView: View {
                     .foregroundStyle(FieldTheme.bg)
                     .cornerRadius(12)
                 }
-                .disabled(busy || email.isEmpty || password.isEmpty || apiBase.isEmpty)
+                .disabled(busy || email.isEmpty || password.isEmpty)
                 .padding(.top, 6)
 
                 Text("After this, you won’t be asked again on this phone.")
