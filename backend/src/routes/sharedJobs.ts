@@ -618,7 +618,12 @@ jobShareRouter.get('/:token', shareLimiter, async (req: Request, res: Response, 
       .reduce((best: number | null, a) => (best === null || a.revision > best ? a.revision : best), null);
 
     res.json({
-      you: { company: party.company, trade: party.trade, role: party.role },
+      you: {
+        name: party.contact_name,
+        company: party.company,
+        trade: party.trade,
+        role: party.role,
+      },
       job: {
         jobNumber: record.job.job_number,
         title: record.job.title,

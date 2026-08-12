@@ -97,9 +97,16 @@
         state.job = payload;
         var title = (payload.job && payload.job.title) || 'Job';
         var num = (payload.job && payload.job.jobNumber) || '';
+        // Identity comes from the linked account on the job share — the
+        // contact the office invited — never a made-up placeholder.
         var company = (payload.you && payload.you.company) || 'Crew';
+        var person = (payload.you && payload.you.name) || '';
         var who = document.querySelector('.who');
-        if (who) who.innerHTML = '<b>' + escapeHtml(company) + '</b>Field Capture';
+        if (who) {
+          who.innerHTML = person
+            ? '<b>' + escapeHtml(person) + '</b>' + escapeHtml(company)
+            : '<b>' + escapeHtml(company) + '</b>Field Capture';
+        }
         renderExpect([
           {
             name: (num ? num + ' · ' : '') + title,
@@ -315,6 +322,8 @@
   function bootDemo() {
     // Minimal demo path — scripted, never pretend to be live.
     document.body.setAttribute('data-mode', 'demo');
+    var demoWho = document.querySelector('.who');
+    if (demoWho) demoWho.innerHTML = '<b>Demo crew</b>Sample data';
     setStatus('Demo mode (?demo=1) — not uploading.');
     $('#week-wrap').hidden = false;
     var JOBS = [
