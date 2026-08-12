@@ -11,25 +11,20 @@ struct SignInView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var apiBase = ApiConfig.resolvedBaseString()
-    @State private var showServer = false
     @State private var busy = false
+
+    private var serverHint: String {
+        if ApiConfig.isSimulator {
+            return "Simulator default is \(ApiConfig.simulatorDefault). Same backend as the website."
+        }
+        return "On a physical iPhone use your Mac’s LAN IP (e.g. http://192.168.1.20:4000) or your deployed Atmosphere API — not 127.0.0.1."
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                // Same as the website: bars mark beside the Atmosphere wordmark.
-                HStack(alignment: .center, spacing: 10) {
-                    AtmosphereBarsMark(size: 28)
-                    Text("Atmosphere")
-                        .font(.system(size: 28, weight: .bold))
-                        .foregroundStyle(FieldTheme.ink)
-                        .tracking(-0.4)
-                }
-                .padding(.top, 36)
-
-                Text("Field Capture")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(FieldTheme.muted)
+                AtmosphereLogo(markSize: 28, titleSize: 28, subtitle: "Field Capture")
+                    .padding(.top, 36)
 
                 Text("Sign in with your website account")
                     .font(.system(size: 22, weight: .bold))
@@ -62,29 +57,24 @@ struct SignInView: View {
                 }
                 .padding(.top, 4)
 
-                DisclosureGroup(isExpanded: $showServer) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Atmosphere API (same backend as the website)")
-                            .font(.system(size: 12))
-                            .foregroundStyle(FieldTheme.faint)
-                        TextField("https://your-atmosphere-host", text: $apiBase)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .keyboardType(.URL)
-                            .padding(12)
-                            .background(FieldTheme.panel)
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
-                            .cornerRadius(10)
-                        Text("Example for a Mac running the API locally: http://127.0.0.1:4000")
-                            .font(.system(size: 11))
-                            .foregroundStyle(FieldTheme.faint)
-                    }
-                    .padding(.top, 8)
-                } label: {
-                    Text("Server")
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Atmosphere API")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(FieldTheme.muted)
+                    TextField("http://192.168.1.20:4000", text: $apiBase)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                        .textContentType(.URL)
+                        .padding(12)
+                        .background(FieldTheme.panel)
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
+                        .cornerRadius(10)
+                    Text(serverHint)
+                        .font(.system(size: 11))
+                        .foregroundStyle(FieldTheme.faint)
                 }
+                .padding(.top, 4)
 
                 if let err = auth.lastError {
                     Text(err)
@@ -116,7 +106,7 @@ struct SignInView: View {
                     .foregroundStyle(FieldTheme.bg)
                     .cornerRadius(12)
                 }
-                .disabled(busy || email.isEmpty || password.isEmpty || apiBase.isEmpty)
+                .disabled(busy || email.isEmpty || password.isEmpty || apiBase.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .padding(.top, 6)
 
                 Text("After this, you won’t be asked again on this phone.")
@@ -126,5 +116,9 @@ struct SignInView: View {
             .padding(22)
         }
         .background(FieldTheme.bg.ignoresSafeArea())
+        .onAppear {
+            // Recover from legacy builds that saved api.atmosphere.example.
+            apiBase = ApiConfig.resolvedBaseString()
+        }
     }
 }

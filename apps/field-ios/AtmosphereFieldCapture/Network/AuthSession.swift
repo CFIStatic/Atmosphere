@@ -77,6 +77,10 @@ final class AuthSession: ObservableObject {
     /// First-install (or re-connect) only — same email/password as the website.
     func connectAccount(email: String, password: String, apiBase: String) async {
         lastError = nil
+        if let configError = ApiConfig.validationError(for: apiBase) {
+            lastError = configError
+            return
+        }
         do {
             try api.useAPIBase(apiBase)
             let result = try await api.login(email: email, password: password)
@@ -92,20 +96,25 @@ final class AuthSession: ObservableObject {
             UserDefaults.standard.set(true, forKey: linkedFlagKey)
             isLinked = true
         } catch {
-            lastError = Self.friendlyConnectError(error)
+            lastError = Self.friendlyConnectError(error, apiBase: apiBase)
             isLinked = KeychainStore.get(account: refreshAccount) != nil
         }
     }
 
-    private static func friendlyConnectError(_ error: Error) -> String {
-        if let urlErr = error as? URLError {
+    private static func friendlyConnectError(_ error: Error, apiBase: String) -> String {
+        let host = URL(string: apiBase)?.host ?? apiBase
+        if let urlErr = urlError(from: error) {
             switch urlErr.code {
             case .notConnectedToInternet, .networkConnectionLost:
                 return "No network. Connect to the internet and try again."
             case .cannotFindHost, .dnsLookupFailed:
-                return "Can’t reach that Atmosphere server. Check the API URL matches the host your website uses."
+                return "Can’t find server “\(host)”. Use the same API host as your website — not a placeholder like api.atmosphere.example."
+            case .cannotConnectToHost:
+                return "Found “\(host)” but couldn’t connect. Is the Atmosphere API running, and is this phone on the same network?"
             case .timedOut:
                 return "The Atmosphere server timed out. Try again in a moment."
+            case .appTransportSecurityRequiresSecureConnection:
+                return "This API URL must use HTTPS, or enable local networking for http:// LAN addresses."
             default:
                 break
             }
@@ -116,7 +125,7 @@ final class AuthSession: ObservableObject {
             }
             if status == 0 || status >= 500 {
                 return body.isEmpty
-                    ? "Couldn’t reach Atmosphere. Check the API URL (same backend as the website)."
+                    ? "Couldn’t reach Atmosphere at \(host). Check the API URL (same backend as the website)."
                     : body
             }
             if body.localizedCaseInsensitiveContains("invalid") {
@@ -124,7 +133,29 @@ final class AuthSession: ObservableObject {
             }
             return body.isEmpty ? "Sign-in failed (\(status))." : String(body.prefix(240))
         }
-        return error.localizedDescription
+        let description = error.localizedDescription
+        if description.localizedCaseInsensitiveContains("hostname could not be found")
+            || description.localizedCaseInsensitiveContains("server with the specified hostname")
+        {
+            return "Can’t find server “\(host)”. Use the same API host as your website — not a placeholder like api.atmosphere.example."
+        }
+        return description
+    }
+
+    private static func urlError(from error: Error) -> URLError? {
+        if let urlErr = error as? URLError { return urlErr }
+        let ns = error as NSError
+        if ns.domain == NSURLErrorDomain {
+            return URLError(URLError.Code(rawValue: ns.code))
+        }
+        for item in ns.underlyingErrors {
+            if let urlErr = item as? URLError { return urlErr }
+            let nested = item as NSError
+            if nested.domain == NSURLErrorDomain {
+                return URLError(URLError.Code(rawValue: nested.code))
+            }
+        }
+        return nil
     }
 
     /// Explicit disconnect — the only way to return to the connect screen.

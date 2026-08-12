@@ -27,11 +27,14 @@ final class AtmosphereClient: ObservableObject {
     /// Point at the dashboard’s API (saved on device for next launches).
     func useAPIBase(_ raw: String) throws {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed), url.scheme == "http" || url.scheme == "https" else {
-            throw APIError.http(status: 0, body: "Enter a valid API URL, like https://your-atmosphere-host")
+        if let configError = ApiConfig.validationError(for: trimmed) {
+            throw APIError.http(status: 0, body: configError)
         }
         ApiConfig.saveBaseString(trimmed)
-        baseURL = ApiConfig.resolvedBaseURL()
+        guard let url = URL(string: ApiConfig.resolvedBaseString()) else {
+            throw APIError.http(status: 0, body: "Enter a valid API URL, like http://192.168.1.20:4000")
+        }
+        baseURL = url
     }
 
     // MARK: - Auth (same account as dashboard)

@@ -41,8 +41,16 @@ Also set `ATMOSPHERE_API_BASE` to your API (same host as the dashboard), then ru
 on a LiDAR iPhone for RoomPlan.
 
 **Sign in with your website account** on first install (same email/password as
-the Atmosphere dashboard). Under **Server**, point at the same API host the
-website uses (simulator default: `http://127.0.0.1:4000`). Tokens stay in
+the Atmosphere dashboard). Set **Atmosphere API** to the same backend the
+website uses:
+
+| Where you run the app | API URL |
+|---|---|
+| iOS Simulator | `http://127.0.0.1:4000` (default) |
+| Physical iPhone | Mac LAN IP, e.g. `http://192.168.1.20:4000`, or your deployed API |
+
+Do **not** use `api.atmosphere.example` — that placeholder does not resolve and
+shows “A server with the specified hostname could not be found.” Tokens stay in
 Keychain — later launches skip connect and open Today. Day films file into
 `job_proofs` for that org. Disconnect only from Account → Disconnect.
 

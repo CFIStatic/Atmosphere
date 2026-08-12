@@ -716,9 +716,10 @@ function FieldCaptureAppSection() {
           you use here.
         </li>
         <li>
-          Under <span className="font-medium text-ink-900">Server</span>, set the API URL to the same Atmosphere
-          backend this dashboard talks to (for local Mac testing: <span className="font-mono text-xs">http://127.0.0.1:4000</span>
-          — use your Mac’s LAN IP if the phone is not the simulator).
+          Set <span className="font-medium text-ink-900">Atmosphere API</span> to the same backend this dashboard
+          talks to. Simulator: <span className="font-mono text-xs">http://127.0.0.1:4000</span>. Physical iPhone:
+          your Mac’s LAN IP (e.g. <span className="font-mono text-xs">http://192.168.1.20:4000</span>) or your
+          deployed API — never a placeholder host.
         </li>
         <li>Tap <span className="font-medium text-ink-900">Sign in &amp; connect phone</span>. You won’t be asked again on that device.</li>
       </ol>

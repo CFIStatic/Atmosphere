@@ -38,6 +38,7 @@ targets:
         NSCameraUsageDescription: Field Capture films the workday so the office can verify work on site.
         NSMicrophoneUsageDescription: Field Capture records microphone audio with the day film so the office can hear the site, not only see it.
         NSLocationWhenInUseUsageDescription: Location attributes stretches of the day film to the right job.
+        # Simulator default. On a physical device, set Atmosphere API in-app to the Mac LAN IP.
         ATMOSPHERE_API_BASE: http://127.0.0.1:4000
     entitlements:
       path: AtmosphereFieldCapture/FieldCapture.entitlements
