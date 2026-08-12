@@ -781,13 +781,6 @@ export function JobIntakePage() {
               {busy && <SpinnerIcon className="h-4 w-4 animate-spin" />}
               {approveLabel}
             </button>
-            <p className="text-xs text-ink-500">
-              {inviteTotal} invite{inviteTotal === 1 ? '' : 's'}
-              {proposal.scope.length
-                ? ` · ${proposal.scope.length} scope line${proposal.scope.length === 1 ? '' : 's'}`
-                : ' · no scope (AI will describe the video)'}
-              {' · '}job file, brief, and capture links in one step.
-            </p>
           </div>
         </form>
       )}
