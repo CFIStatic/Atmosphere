@@ -1,5 +1,5 @@
 /**
- * Layout and non-chart primitives for Beta Portal / growth analytics.
+ * Layout and non-chart primitives for Business Portal / growth analytics.
  *
  * Matches Atmosphere’s normal console: paper surfaces, glass cards, ink type,
  * brand orange accents. ChartCard always ships a table twin behind a toggle.

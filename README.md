@@ -274,9 +274,9 @@ docker compose up --build
 
 Contact / careers forms default to `jack@jettx.ai`.
 
-### Beta Portal (Atmosphere staff only)
+### Business Portal (Atmosphere staff only)
 
-Internal analytics lives in the **Beta Portal** at **`/beta`**. Tabs cover
+Internal analytics lives in the **Business Portal** at **`/business`**. Tabs cover
 board-ready ARR / MoM growth, customers & usage, model performance, and product
 intelligence. Every figure is Excel-downloadable. Sign in as `jack@jettx.ai`
 (or any email in `ANALYTICS_INTERNAL_EMAILS`) and the portal link appears in
@@ -285,7 +285,7 @@ is configured. Legacy URLs `/analytics` and `/analytics/investor` redirect here.
 
 A/B experiments: seed/manage rows in `public.experiments`, set `status` to
 `running`, instrument with `useExperiment()` in the UI. Results appear on the
-Beta Portal **Product** tab under **A/B tests**.
+Business Portal **Product** tab under **A/B tests**.
 
 ## Related docs
 

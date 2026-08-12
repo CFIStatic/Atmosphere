@@ -267,11 +267,11 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
 
       {access?.scope && (
         <Link
-          to="/beta/board"
+          to="/business/board"
           className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-line bg-paper-0 px-5 py-4 transition hover:border-brand-300 hover:bg-brand-50"
         >
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-brand-600">Beta Portal</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-brand-600">Business Portal</p>
             <p className="mt-1 text-sm font-semibold text-ink-900">
               Internal analytics — ARR, customers, models, growth
             </p>

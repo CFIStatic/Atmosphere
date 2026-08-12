@@ -1,5 +1,5 @@
 /**
- * Demo fixtures for the Beta Portal — plausible 18-month growth history so
+ * Demo fixtures for the Business Portal — plausible 18-month growth history so
  * Board / Growth / Customers / Models / Product all render with real shape.
  */
 

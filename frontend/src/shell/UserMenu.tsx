@@ -27,7 +27,7 @@ export function UserMenu() {
 
   const initials = (user?.email ?? '?').slice(0, 2).toUpperCase();
   const ThemeIcon = preference === 'system' ? Monitor : theme === 'dark' ? Moon : Sun;
-  const canOpenBetaPortal = Boolean(access?.scope);
+  const canOpenBusinessPortal = Boolean(access?.scope);
 
   return (
     <Popover
@@ -101,15 +101,15 @@ export function UserMenu() {
         >
           Settings
         </Button>
-        {canOpenBetaPortal && (
+        {canOpenBusinessPortal && (
           <Button
             variant="ghost"
             size="sm"
             className="w-full justify-start"
             leadingIcon={<BarChart3 className="h-3.5 w-3.5" />}
-            onClick={() => navigate('/beta/board')}
+            onClick={() => navigate('/business/board')}
           >
-            Beta Portal
+            Business Portal
           </Button>
         )}
         <Button

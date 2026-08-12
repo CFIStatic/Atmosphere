@@ -270,15 +270,15 @@ export function DashboardPage() {
               when the queue is empty, so it only appears when it matters. */}
           <EscalationQueue />
 
-          {/* Beta Portal — only rendered for staff with analytics access. */}
+          {/* Business Portal — only rendered for staff with analytics access. */}
           {access?.scope && (
             <Link
-              to="/beta/board"
+              to="/business/board"
               className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-line bg-paper-0 p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50"
             >
               <div>
                 <p className="text-xs font-medium uppercase tracking-wide text-brand-600">
-                  Beta Portal
+                  Business Portal
                 </p>
                 <p className="mt-1.5 text-lg font-semibold text-ink-900">
                   {access.scope === 'internal'

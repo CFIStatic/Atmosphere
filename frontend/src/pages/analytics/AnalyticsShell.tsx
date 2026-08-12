@@ -1,6 +1,6 @@
 /**
  * Legacy analytics chrome — kept for the old Internal/Investor pages.
- * New work uses BetaPortalShell (Atmosphere paper/glass look).
+ * New work uses BusinessPortalShell (Atmosphere paper/glass look).
  */
 
 import type { ReactNode } from 'react';
@@ -61,10 +61,10 @@ export function AnalyticsShell({
             )}
             <button
               type="button"
-              onClick={() => navigate('/beta/board')}
+              onClick={() => navigate('/business/board')}
               className="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink-700 transition hover:bg-paper-200"
             >
-              Beta Portal
+              Business Portal
             </button>
             <button
               type="button"

@@ -1,5 +1,5 @@
 /**
- * Chart palette for Beta Portal / growth analytics — tuned for Atmosphere’s
+ * Chart palette for Business Portal / growth analytics — tuned for Atmosphere’s
  * light paper surfaces (paper-0 / glass-card), not the old dark analytics shell.
  *
  * Colour follows the ENTITY, never its rank. Brand orange leads recurring

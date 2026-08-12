@@ -1,5 +1,5 @@
 /**
- * Chrome for the Beta Portal — Atmosphere's internal analytics surface.
+ * Chrome for the Business Portal — Atmosphere's internal analytics surface.
  *
  * Same paper / glass language as the rest of the console. Tabbed like an
  * investor dataroom: one range filter scopes every tab, Excel sits in the
@@ -15,9 +15,9 @@ import { DownloadExcel, RangeFilter, type RangePresetKey } from '../../component
 import type { AnalyticsScope, RangeParams } from '../../lib/analyticsApi';
 import { analyticsApi } from '../../lib/analyticsApi';
 
-export type BetaTab = 'board' | 'growth' | 'customers' | 'models' | 'product';
+export type BusinessTab = 'board' | 'growth' | 'customers' | 'models' | 'product';
 
-const TABS: { id: BetaTab; label: string; internalOnly?: boolean }[] = [
+const TABS: { id: BusinessTab; label: string; internalOnly?: boolean }[] = [
   { id: 'board', label: 'Board' },
   { id: 'growth', label: 'Growth' },
   { id: 'customers', label: 'Customers', internalOnly: true },
@@ -25,7 +25,7 @@ const TABS: { id: BetaTab; label: string; internalOnly?: boolean }[] = [
   { id: 'product', label: 'Product', internalOnly: true },
 ];
 
-export function BetaPortalShell({
+export function BusinessPortalShell({
   scope,
   activeTab,
   preset,
@@ -36,7 +36,7 @@ export function BetaPortalShell({
   children,
 }: {
   scope: AnalyticsScope;
-  activeTab: BetaTab;
+  activeTab: BusinessTab;
   preset: RangePresetKey;
   onPresetChange: (key: RangePresetKey) => void;
   range: RangeParams;
@@ -79,7 +79,7 @@ export function BetaPortalShell({
             <Logo />
             <div className="h-5 w-px bg-line" aria-hidden />
             <div className="flex flex-col">
-              <span className="text-sm font-semibold tracking-tight text-ink-900">Beta Portal</span>
+              <span className="text-sm font-semibold tracking-tight text-ink-900">Business Portal</span>
               <span className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-500">
                 {scope === 'internal' ? 'Internal analytics' : 'Investor view'}
               </span>
@@ -124,7 +124,7 @@ export function BetaPortalShell({
         </div>
 
         <nav
-          aria-label="Beta Portal sections"
+          aria-label="Business Portal sections"
           className="mt-6 flex flex-wrap gap-1 border-b border-line"
         >
           {visibleTabs.map((tab) => {
@@ -132,7 +132,7 @@ export function BetaPortalShell({
             return (
               <NavLink
                 key={tab.id}
-                to={`/beta/${tab.id}`}
+                to={`/business/${tab.id}`}
                 className={`relative px-3.5 py-2.5 text-sm font-medium transition ${
                   active ? 'text-ink-900' : 'text-ink-500 hover:text-ink-800'
                 }`}
@@ -192,7 +192,7 @@ export function AnalyticsLoading() {
       className="grid min-h-screen place-items-center bg-paper-100 text-brand-500"
     >
       <SpinnerIcon className="animate-spin" width={28} height={28} />
-      <span className="sr-only">Loading Beta Portal…</span>
+      <span className="sr-only">Loading Business Portal…</span>
     </div>
   );
 }

@@ -1771,7 +1771,7 @@ const XACTIMATE_STATUS: XactimateStatus = {
 type Handler = (match: RegExpMatchArray, body: Record<string, unknown>) => { status?: number; body: unknown };
 
 const routes: Array<[string, RegExp, Handler]> = [
-  /* ------------------------------------------------------- Beta Portal */
+  /* ------------------------------------------------------- Business Portal */
   ['GET', /^\/api\/analytics\/access$/, () => ({
     body: { scope: 'internal', displayName: 'Atmosphere staff' },
   })],
@@ -1781,7 +1781,7 @@ const routes: Array<[string, RegExp, Handler]> = [
   ['GET', /^\/api\/analytics\/export$/, () => ({
     status: 503,
     body: {
-      error: 'Excel export needs the live backend — open Beta Portal against a seeded API for downloads.',
+      error: 'Excel export needs the live backend — open Business Portal against a seeded API for downloads.',
       code: 'demo_mode',
     },
   })],

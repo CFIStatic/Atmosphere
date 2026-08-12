@@ -43,19 +43,24 @@ import { getPlatform } from './lib/usePlatform';
 
 // Auth and onboarding stay eager so /login is fast. Everything else loads on demand —
 // dev mode otherwise pulls in every page on the first visit.
-const BetaPortalRoute = lazy(() =>
-  import('./pages/beta/BetaPortalRoutes').then((m) => ({
-    default: m.BetaPortalRoute,
+const BusinessPortalRoute = lazy(() =>
+  import('./pages/business/BusinessPortalRoutes').then((m) => ({
+    default: m.BusinessPortalRoute,
   })),
 );
 const LegacyAnalyticsRedirect = lazy(() =>
-  import('./pages/beta/BetaPortalRoutes').then((m) => ({
+  import('./pages/business/BusinessPortalRoutes').then((m) => ({
     default: m.LegacyAnalyticsRedirect,
   })),
 );
 const LegacyInvestorRedirect = lazy(() =>
-  import('./pages/beta/BetaPortalRoutes').then((m) => ({
+  import('./pages/business/BusinessPortalRoutes').then((m) => ({
     default: m.LegacyInvestorRedirect,
+  })),
+);
+const LegacyBetaPortalRedirect = lazy(() =>
+  import('./pages/business/BusinessPortalRoutes').then((m) => ({
+    default: m.LegacyBetaPortalRedirect,
   })),
 );
 const SettingsPage = lazy(() =>
@@ -420,29 +425,31 @@ export default function App() {
             <Route path="/shared" element={<SharedJobsRedirect />} />
           </Route>
 
-          {/* Beta Portal — internal / investor analytics. Onboarding is required;
+          {/* Business Portal — internal / investor analytics. Onboarding is required;
               the guards inside re-check analytics_staff scope on every load. */}
           <Route
-            path="/beta"
+            path="/business"
             element={
               <ProtectedRoute>
                 <RequireOnboarded>
-                  <Navigate to="/beta/board" replace />
+                  <Navigate to="/business/board" replace />
                 </RequireOnboarded>
               </ProtectedRoute>
             }
           />
           <Route
-            path="/beta/:tab"
+            path="/business/:tab"
             element={
               <ProtectedRoute>
                 <RequireOnboarded>
-                  <BetaPortalRoute />
+                  <BusinessPortalRoute />
                 </RequireOnboarded>
               </ProtectedRoute>
             }
           />
-          {/* Legacy growth-analytics URLs keep working. */}
+          {/* Legacy URLs — Beta Portal rename + older growth analytics. */}
+          <Route path="/beta" element={<Navigate to="/business/board" replace />} />
+          <Route path="/beta/:tab" element={<LegacyBetaPortalRedirect />} />
           <Route
             path="/analytics"
             element={

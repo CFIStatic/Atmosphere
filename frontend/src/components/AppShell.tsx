@@ -352,11 +352,11 @@ function AccountMenu() {
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
   const name = displayName(profile?.fullName, user?.email);
-  const betaPortalTo =
+  const businessPortalTo =
     access?.scope === 'internal'
-      ? '/beta/board'
+      ? '/business/board'
       : access?.scope === 'investor'
-        ? '/beta/board'
+        ? '/business/board'
         : null;
 
   useEffect(() => {
@@ -425,17 +425,17 @@ function AccountMenu() {
             Settings
           </button>
 
-          {betaPortalTo && (
+          {businessPortalTo && (
             <button
               role="menuitem"
               onClick={() => {
                 setOpen(false);
-                navigate(betaPortalTo);
+                navigate(businessPortalTo);
               }}
               className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-ink-800 transition hover:bg-paper-200"
             >
               <ChartIcon width={17} height={17} className="text-ink-500" />
-              Beta Portal
+              Business Portal
             </button>
           )}
 

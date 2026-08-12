@@ -308,7 +308,7 @@ function formatRange(payload: OverviewPayload): string {
 
 function header(payload: OverviewPayload, label: string): string {
   const view = payload.scope === 'internal' ? 'Internal' : 'Investor';
-  return `Atmosphere Beta Portal — ${label} · ${view} · ${formatRange(payload)} · generated ${new Date(
+  return `Atmosphere Business Portal — ${label} · ${view} · ${formatRange(payload)} · generated ${new Date(
     payload.generatedAt,
   )
     .toISOString()
@@ -366,7 +366,7 @@ export function buildWorkbook(payload: OverviewPayload, dataset: Dataset = 'all'
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Atmosphere';
   workbook.created = new Date(payload.generatedAt);
-  workbook.title = `Atmosphere Beta Portal (${payload.scope})`;
+  workbook.title = `Atmosphere Business Portal (${payload.scope})`;
 
   const want = (name: Dataset): boolean => dataset === 'all' || dataset === name;
 
@@ -420,7 +420,7 @@ export function buildWorkbook(payload: OverviewPayload, dataset: Dataset = 'all'
 export function workbookFilename(payload: OverviewPayload, dataset: Dataset): string {
   const stamp = new Date(payload.generatedAt).toISOString().slice(0, 10);
   const view = payload.scope === 'internal' ? 'internal' : 'investor';
-  const suffix = dataset === 'all' ? 'beta-portal' : `beta-${dataset}`;
+  const suffix = dataset === 'all' ? 'business-portal' : `business-${dataset}`;
   return `atmosphere-${suffix}-${view}-${stamp}.xlsx`;
 }
 
@@ -434,18 +434,18 @@ function asFiniteNumber(value: unknown): number {
 }
 
 /**
- * Models / metering workbook for the Beta Portal Models tab.
+ * Models / metering workbook for the Business Portal Models tab.
  * Money is written in dollars from nanodollar cost estimates.
  */
 export function buildMeteringWorkbook(payload: MeteringExportPayload): ExcelJS.Workbook {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Atmosphere';
   workbook.created = new Date(payload.generatedAt);
-  workbook.title = 'Atmosphere Beta Portal — model performance';
+  workbook.title = 'Atmosphere Business Portal — model performance';
 
   const from = new Date(payload.range.from).toISOString().slice(0, 10);
   const to = new Date(payload.range.to).toISOString().slice(0, 10);
-  const note = `Atmosphere — Beta Portal · Models · ${from} → ${to} · generated ${new Date(
+  const note = `Atmosphere — Business Portal · Models · ${from} → ${to} · generated ${new Date(
     payload.generatedAt,
   )
     .toISOString()
@@ -555,7 +555,7 @@ export function buildMeteringWorkbook(payload: MeteringExportPayload): ExcelJS.W
   defs.addRow(['Metric', 'Definition']);
   defs.addRow([
     'AI cost',
-    'Estimated provider cost from private.ai_usage_events (nanodollars → USD). Internal Beta Portal only.',
+    'Estimated provider cost from private.ai_usage_events (nanodollars → USD). Internal Business Portal only.',
   ]);
   defs.addRow([
     'Compute units',
@@ -571,5 +571,5 @@ export function buildMeteringWorkbook(payload: MeteringExportPayload): ExcelJS.W
 
 export function meteringWorkbookFilename(payload: MeteringExportPayload): string {
   const stamp = new Date(payload.generatedAt).toISOString().slice(0, 10);
-  return `atmosphere-beta-models-internal-${stamp}.xlsx`;
+  return `atmosphere-business-models-internal-${stamp}.xlsx`;
 }
