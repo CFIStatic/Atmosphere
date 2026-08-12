@@ -27,6 +27,7 @@ import { TerritoriesPage } from './pages/TerritoriesPage';
 import { SalesWorkPage } from './pages/SalesWorkPage';
 import { SharedDashboardPage } from './pages/SharedDashboardPage';
 import { JobIntakePage } from './pages/JobIntakePage';
+import { FieldContextPage } from './pages/FieldContextPage';
 import { OperationsShell } from './layouts/OperationsShell';
 import { PurchaseOrdersPage } from './pages/PurchaseOrdersPage';
 import { JobSharePage } from './pages/JobSharePage';
@@ -413,6 +414,7 @@ export default function App() {
                 with public share pages at /shared/:token. */}
             <Route path="/job-progress" element={<SharedDashboardPage />} />
             <Route path="/shared" element={<SharedJobsRedirect />} />
+            <Route path="/field-context" element={<FieldContextPage />} />
           </Route>
 
           {/* Growth analytics. Onboarding is required — every figure is scoped to

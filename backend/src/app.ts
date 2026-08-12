@@ -56,6 +56,7 @@ import { scopeDocsRouter } from './routes/scopeDocs.js';
 import { jobIntakeRouter } from './routes/jobIntake.js';
 import { fieldIdentityRouter } from './routes/fieldIdentity.js';
 import { fieldAppRouter } from './routes/fieldApp.js';
+import { fieldContextRouter } from './routes/fieldContext.js';
 import { mediaVideoRouter } from './routes/mediaVideo.js';
 import { mediaCatalogRouter } from './routes/mediaCatalog.js';
 import { geometryRouter } from './routes/geometry.js';
@@ -219,6 +220,7 @@ export function createApp(): Express {
   app.use('/api/operations', jobIntakeRouter);
   app.use('/api/operations', sharedJobsRouter);
   app.use('/api/operations', placesRouter);
+  app.use('/api/operations/field-context', fieldContextRouter);
   app.use('/api/purchasing', purchasingRouter);
   app.use('/api/episodes', episodesRouter);
   app.use('/api/evidence-portal', evidencePortalRouter);

@@ -55,7 +55,7 @@ export const PROOF_BUCKET = 'job-proofs';
 
 const PROOF_SELECT =
   'id, party_id, work_date, phase, storage_path, byte_size, duration_seconds, content_hash, ' +
-  'captured_at, received_at, lat, lon, accuracy_m, state, checks, ai_summary, ai_findings, ' +
+  'captured_at, received_at, lat, lon, accuracy_m, device_context, state, checks, ai_summary, ai_findings, ' +
   'ai_model, ai_material_change, analysis_status, analysis_error, analysed_at, ' +
   'narration, narration_text, narration_status, narration_error, ' +
   'decided_at, decided_note, created_at';
@@ -162,6 +162,10 @@ const recordSchema = z.object({
   lat: z.number().min(-90).max(90).optional(),
   lon: z.number().min(-180).max(180).optional(),
   accuracyM: z.number().min(0).optional(),
+  /** Organized Apple-allowed context snapshotted with the day film. */
+  deviceContext: z.record(z.unknown()).optional(),
+  /** Link to field_capture_sessions when the phone opened one. */
+  contextSessionId: z.string().uuid().optional(),
   /** Stills the phone pulled from the clip, as base64 JPEG. */
   frames: z
     .array(z.object({ atSeconds: z.number().min(0), base64: z.string().min(100).max(4_000_000) }))
@@ -229,6 +233,15 @@ export async function recordProof(party: any, admin: any, body: unknown) {
         lat: input.lat ?? null,
         lon: input.lon ?? null,
         accuracy_m: input.accuracyM ?? null,
+        device_context: input.deviceContext
+          ? {
+              ...input.deviceContext,
+              contextSessionId:
+                input.contextSessionId ??
+                (input.deviceContext as { contextSessionId?: string }).contextSessionId ??
+                null,
+            }
+          : {},
         state: 'checked',
         checks,
       },
@@ -237,6 +250,19 @@ export async function recordProof(party: any, admin: any, body: unknown) {
     .select(PROOF_SELECT)
     .single();
   if (error) throw new HttpError(400, error.message, 'proof_failed');
+
+  if (input.contextSessionId && (proof as any)?.id) {
+    await admin
+      .from('field_capture_sessions')
+      .update({
+        proof_id: (proof as any).id,
+        status: 'completed',
+        ended_at: receivedAt,
+        updated_at: receivedAt,
+      })
+      .eq('id', input.contextSessionId)
+      .eq('org_id', party.org_id);
+  }
 
   if (input.frames?.length) {
     for (const frame of input.frames) {

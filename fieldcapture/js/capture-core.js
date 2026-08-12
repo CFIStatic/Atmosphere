@@ -153,6 +153,52 @@
     });
   }
 
+  /** Browser-safe context Apple/web can expose without tracking IDs. */
+  function webDeviceContext(facts) {
+    var nav = global.navigator || {};
+    var screen = global.screen || {};
+    var conn = nav.connection || nav.mozConnection || nav.webkitConnection || null;
+    return {
+      platform: 'web',
+      device: {
+        model: nav.platform || 'web',
+        systemName: 'Web',
+        systemVersion: nav.userAgent ? String(nav.userAgent).slice(0, 180) : undefined,
+        locale: nav.language || undefined,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || undefined,
+        screenWidth: screen.width || undefined,
+        screenHeight: screen.height || undefined,
+        screenScale: global.devicePixelRatio || undefined,
+      },
+      permissions: {
+        camera: 'prompted',
+        microphone: 'prompted',
+        locationWhenInUse: facts && facts.lat != null ? 'authorized' : 'unavailable',
+      },
+      capabilities: {
+        mediaRecorder: typeof global.MediaRecorder !== 'undefined',
+        geolocation: Boolean(nav.geolocation),
+      },
+      environment: {
+        networkType: conn && conn.effectiveType ? conn.effectiveType : undefined,
+        online: typeof nav.onLine === 'boolean' ? nav.onLine : undefined,
+      },
+      capture: {
+        hasVideo: true,
+        hasAudio: facts && facts.hasAudio !== false,
+        durationSeconds: facts && facts.durationSeconds != null ? facts.durationSeconds : undefined,
+        contentHash: facts && facts.contentHash ? facts.contentHash : undefined,
+      },
+      locationSummary: {
+        sampleCount: facts && facts.lat != null ? 1 : 0,
+        endLat: facts && facts.lat != null ? facts.lat : undefined,
+        endLon: facts && facts.lon != null ? facts.lon : undefined,
+        bestAccuracyM: facts && facts.accuracyM != null ? facts.accuracyM : undefined,
+      },
+      motionSummary: {},
+    };
+  }
+
   function readCapture(file) {
     var positionP = currentPosition();
     return readDuration(file).then(function (durationHint) {
@@ -389,6 +435,7 @@
                 lat: facts.lat != null ? facts.lat : undefined,
                 lon: facts.lon != null ? facts.lon : undefined,
                 accuracyM: facts.accuracyM != null ? facts.accuracyM : undefined,
+                deviceContext: webDeviceContext(facts),
                 frames: facts.frames,
               }),
             });

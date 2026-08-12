@@ -155,6 +155,66 @@ final class AtmosphereClient: ObservableObject {
         var lat: Double?
         var lon: Double?
         var accuracyM: Double?
+        var contextSessionId: String?
+        /// Organized Apple-allowed context; encoded as a JSON object.
+        var deviceContext: AnyEncodable?
+    }
+
+    /// Type-erased Encodable wrapper for dictionary context payloads.
+    struct AnyEncodable: Encodable {
+        let value: [String: Any]
+        init(_ value: [String: Any]) { self.value = value }
+        func encode(to encoder: Encoder) throws {
+            try AnyJSON(value).encode(to: encoder)
+        }
+    }
+
+    private struct AnyJSON: Encodable {
+        let value: Any
+        init(_ value: Any) { self.value = value }
+        func encode(to encoder: Encoder) throws {
+            if let dict = value as? [String: Any] {
+                var container = encoder.container(keyedBy: DynamicKey.self)
+                for (key, nested) in dict {
+                    try container.encode(AnyJSON(nested), forKey: DynamicKey(stringValue: key)!)
+                }
+                return
+            }
+            if let array = value as? [Any] {
+                var container = encoder.unkeyedContainer()
+                for nested in array {
+                    try container.encode(AnyJSON(nested))
+                }
+                return
+            }
+            var container = encoder.singleValueContainer()
+            switch value {
+            case let v as String: try container.encode(v)
+            case let v as Int: try container.encode(v)
+            case let v as Int64: try container.encode(v)
+            case let v as Double: try container.encode(v)
+            case let v as Float: try container.encode(Double(v))
+            case let v as Bool: try container.encode(v)
+            case let v as NSNumber:
+                // Bool is an NSNumber bridging trap — prefer bool when appropriate.
+                if CFGetTypeID(v) == CFBooleanGetTypeID() {
+                    try container.encode(v.boolValue)
+                } else {
+                    try container.encode(v.doubleValue)
+                }
+            case is NSNull:
+                try container.encodeNil()
+            default:
+                try container.encodeNil()
+            }
+        }
+    }
+
+    private struct DynamicKey: CodingKey {
+        var stringValue: String
+        init?(stringValue: String) { self.stringValue = stringValue }
+        var intValue: Int? { nil }
+        init?(intValue: Int) { nil }
     }
 
     struct ProofRecordResponse: Decodable {
@@ -166,6 +226,91 @@ final class AtmosphereClient: ObservableObject {
 
     func completeJobProof(jobId: String, body: ProofRecordBody) async throws -> ProofRecordResponse {
         try await post(path: "/api/field-app/jobs/\(jobId)/proof", body: body)
+    }
+
+    // MARK: - Field context (Apple-allowed capture telemetry)
+
+    struct ContextSessionResponse: Decodable {
+        struct Session: Decodable { let id: String }
+        let session: Session
+    }
+
+    func startContextSession(
+        jobId: String,
+        workDate: String,
+        appVersion: String?,
+        device: [String: Any],
+        permissions: [String: Any],
+        capabilities: [String: Any],
+        environment: [String: Any]
+    ) async throws -> ContextSessionResponse {
+        let body: [String: Any] = [
+            "jobId": jobId,
+            "workDate": workDate,
+            "platform": "ios",
+            "appVersion": appVersion as Any,
+            "device": device,
+            "permissions": permissions,
+            "capabilities": capabilities,
+            "environment": environment,
+        ]
+        return try await postJSON(path: "/api/field-app/context/sessions", object: body)
+    }
+
+    func contextHeartbeat(
+        sessionId: String,
+        device: [String: Any],
+        permissions: [String: Any],
+        capabilities: [String: Any],
+        environment: [String: Any],
+        locations: [FieldContextCollector.LocationSample],
+        motion: [FieldContextCollector.MotionSample]
+    ) async throws -> ContextSessionResponse {
+        let encoder = JSONEncoder()
+        let locData = try encoder.encode(locations)
+        let motionData = try encoder.encode(motion)
+        let locJSON = try JSONSerialization.jsonObject(with: locData)
+        let motionJSON = try JSONSerialization.jsonObject(with: motionData)
+        let body: [String: Any] = [
+            "device": device,
+            "permissions": permissions,
+            "capabilities": capabilities,
+            "environment": environment,
+            "locations": locJSON,
+            "motion": motionJSON,
+        ]
+        return try await postJSON(
+            path: "/api/field-app/context/sessions/\(sessionId)/heartbeat",
+            object: body
+        )
+    }
+
+    func completeContextSession(
+        sessionId: String,
+        proofId: String?,
+        capture: [String: Any],
+        locationSummary: [String: Any],
+        motionSummary: [String: Any],
+        device: [String: Any],
+        permissions: [String: Any],
+        capabilities: [String: Any],
+        environment: [String: Any]
+    ) async throws -> ContextSessionResponse {
+        var body: [String: Any] = [
+            "status": "completed",
+            "capture": capture,
+            "locationSummary": locationSummary,
+            "motionSummary": motionSummary,
+            "device": device,
+            "permissions": permissions,
+            "capabilities": capabilities,
+            "environment": environment,
+        ]
+        if let proofId { body["proofId"] = proofId }
+        return try await postJSON(
+            path: "/api/field-app/context/sessions/\(sessionId)/complete",
+            object: body
+        )
     }
 
     // MARK: - Geometry / twin (org-authenticated)
@@ -249,6 +394,15 @@ final class AtmosphereClient: ObservableObject {
         authed: Bool = true
     ) async throws -> Response {
         let data = try JSONEncoder().encode(body)
+        return try await send(path: path, method: "POST", bodyData: data, authed: authed)
+    }
+
+    private func postJSON<Response: Decodable>(
+        path: String,
+        object: [String: Any],
+        authed: Bool = true
+    ) async throws -> Response {
+        let data = try JSONSerialization.data(withJSONObject: object, options: [])
         return try await send(path: path, method: "POST", bodyData: data, authed: authed)
     }
 

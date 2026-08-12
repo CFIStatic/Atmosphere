@@ -108,7 +108,7 @@ struct TodayView: View {
             }
 
             Button {
-                Task { await session.startDay() }
+                Task { await session.startDay(api: api) }
             } label: {
                 Label("Start the day", systemImage: "video.fill")
                     .font(.system(size: 17, weight: .bold))
