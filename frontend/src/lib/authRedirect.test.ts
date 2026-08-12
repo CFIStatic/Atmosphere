@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { loginHref, resolveAuthRedirect, safeAuthRedirect, signupHref } from './authRedirect';
+import {
+  loginHref,
+  parseSignupIntent,
+  resolveAuthRedirect,
+  safeAuthRedirect,
+  signupHref,
+} from './authRedirect';
 
 describe('safeAuthRedirect', () => {
   it('accepts relative in-app paths', () => {
@@ -39,5 +45,23 @@ describe('signupHref', () => {
     expect(signupHref({ email: 'a@b.co', next: '/usage' })).toBe(
       '/signup?next=%2Fusage&email=a%40b.co',
     );
+  });
+
+  it('adds intent=join when linking to an office account', () => {
+    expect(signupHref({ intent: 'join', email: 'a@b.co' })).toBe(
+      '/signup?email=a%40b.co&intent=join',
+    );
+  });
+});
+
+describe('parseSignupIntent', () => {
+  it('treats join as linking to the office account', () => {
+    expect(parseSignupIntent('join')).toBe('join');
+  });
+
+  it('defaults everything else to creating an organization', () => {
+    expect(parseSignupIntent(null)).toBe('create');
+    expect(parseSignupIntent('create')).toBe('create');
+    expect(parseSignupIntent('other')).toBe('create');
   });
 });

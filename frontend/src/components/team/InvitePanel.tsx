@@ -120,8 +120,8 @@ export function InvitePanel() {
         )}
       </div>
       <p className="mt-1 text-xs text-ink-500">
-        They sign up with their email and enter the code. The invitation keeps the record of who
-        was asked — and shows you who has not turned up.
+        They create an account and link it to this office with the join code. The invitation keeps
+        the record of who was asked — and shows you who has not turned up.
       </p>
 
       <form onSubmit={invite} className="mt-3 flex flex-wrap gap-2">

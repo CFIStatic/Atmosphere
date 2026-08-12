@@ -63,13 +63,15 @@ export function inviteEmail(input: {
     lines.push(`"${input.note.trim()}"`, '');
   }
 
-  lines.push('To join:', '');
+  lines.push('To link your account to this office:', '');
   if (input.origin) {
-    lines.push(`  1. Open ${input.origin}/signup and create an account with this email address.`);
+    lines.push(
+      `  1. Open ${input.origin}/signup?intent=join and create an account with this email address.`,
+    );
   } else {
     lines.push('  1. Open Atmosphere and create an account with this email address.');
   }
-  lines.push('  2. Choose "Join an organization" and enter this code:', '');
+  lines.push('  2. Choose "Link to office account" and enter this code:', '');
   lines.push(`      ${input.joinCode}`, '');
   lines.push(
     'The code is the same for everyone joining this company, so there is nothing',

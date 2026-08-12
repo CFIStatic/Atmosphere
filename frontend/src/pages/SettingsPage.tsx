@@ -12,13 +12,17 @@ import {
   api,
   ApiError,
   CONTRACTOR_TYPE_LABELS,
+  ROLE_LABELS,
+  WORK_TYPE_LABELS,
   type ContractorType,
   type MailStatus,
   type Diagnosis,
   type Integration,
+  type OrgMember,
 } from '../lib/api';
 import { Logo } from '../components/Logo';
 import { BillingSection } from '../components/settings/BillingSection';
+import { InvitePanel } from '../components/team/InvitePanel';
 import { displayName, initials, nameFromMetadata } from '../lib/display';
 import { setPreference, usePreferences, type Preferences } from '../lib/preferences';
 import { usePlatform } from '../lib/usePlatform';
@@ -166,7 +170,13 @@ export function SettingsPage() {
         <div className="mt-8 min-w-0 space-y-6">
           {active === 'profile' && <ProfileSection />}
           {active === 'security' && <SecuritySection />}
-          {active === 'organization' && <OrganizationSection />}
+          {active === 'organization' && (
+            <>
+              <OrganizationSection />
+              <InvitePanel />
+              <LinkedAccountsCard />
+            </>
+          )}
           {active === 'billing' && <BillingSection />}
           {active === 'sending' && <SendingSection />}
           {active === 'contactdata' && <ContactDataSection />}
@@ -618,7 +628,7 @@ function OrganizationSection() {
   }
 
   return (
-    <Card title="Organization" description="The organization your account is linked to.">
+    <Card title="Organization" description="The office account your login is linked to.">
       <ReadOnlyRow label="Name" value={org?.name ?? '—'} />
       <ReadOnlyRow
         label="Invite code"
@@ -672,10 +682,79 @@ function OrganizationSection() {
         <ErrorText message={error} />
       </div>
       <p className="mt-4 text-xs text-ink-500">
-        Share the invite code so teammates can link their account to {org?.name ?? 'your org'}.
+        Share the invite code so teammates can link their account to {org?.name ?? 'this office'}.
         Renaming an organization isn't available yet. Only the org creator can change the company
         type once it is set.
       </p>
+    </Card>
+  );
+}
+
+function LinkedAccountsCard() {
+  const { user } = useAuth();
+  const [members, setMembers] = useState<OrgMember[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getMembers()
+      .then(({ members: next }) => {
+        if (!cancelled) setMembers(next);
+      })
+      .catch(() => {
+        if (!cancelled) setMembers([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <Card
+      title="Linked accounts"
+      description="Everyone whose login is linked to this office account can work in the same workspace."
+    >
+      {members === null ? (
+        <div className="grid place-items-center py-8 text-brand-600">
+          <SpinnerIcon className="animate-spin" width={22} height={22} />
+        </div>
+      ) : members.length === 0 ? (
+        <p className="text-sm text-ink-500">
+          No linked accounts yet. Share the join code so teammates can link theirs.
+        </p>
+      ) : (
+        <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line">
+          {members.map((member) => {
+            const isYou = member.userId === user?.id;
+            const name = displayName(member.fullName, member.email);
+            return (
+              <li
+                key={member.userId}
+                className="flex items-center justify-between gap-4 bg-paper-0 px-4 py-3"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-500 text-sm font-semibold text-white">
+                    {initials(member.fullName, member.email)}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-ink-900">
+                      {name}
+                      {isYou && <span className="ml-2 text-xs font-normal text-brand-600">(you)</span>}
+                    </p>
+                    <p className="truncate text-xs text-ink-500">
+                      {member.email ?? '—'}
+                      {member.workType ? ` · ${WORK_TYPE_LABELS[member.workType]}` : ''}
+                    </p>
+                  </div>
+                </div>
+                <span className="shrink-0 rounded-full border border-line bg-paper-50 px-3 py-1 text-xs font-medium text-ink-700">
+                  {ROLE_LABELS[member.role] ?? member.role}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </Card>
   );
 }

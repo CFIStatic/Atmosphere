@@ -8,10 +8,13 @@
   var APP_ORIGIN = (document.documentElement.getAttribute('data-app-origin') || '')
     .replace(/\/+$/, '');
   if (APP_ORIGIN) {
-    document.querySelectorAll('a[href$="signin.html"], a[href$="signup.html"]')
+    document.querySelectorAll('a[href*="signin.html"], a[href*="signup.html"]')
       .forEach(function (a) {
-        var toSignup = a.getAttribute('href').indexOf('signup') !== -1;
-        a.setAttribute('href', APP_ORIGIN + (toSignup ? '/signup' : '/login'));
+        var href = a.getAttribute('href') || '';
+        var toSignup = href.indexOf('signup') !== -1;
+        var qsIndex = href.indexOf('?');
+        var qs = qsIndex >= 0 ? href.slice(qsIndex) : '';
+        a.setAttribute('href', APP_ORIGIN + (toSignup ? '/signup' : '/login') + qs);
       });
   }
 
@@ -285,9 +288,11 @@
     var signup = authUrl('signup');
     if (!signin) return;
     document.querySelectorAll('a[href]').forEach(function (a) {
-      var href = a.getAttribute('href');
-      if (href === 'signin.html' || href === './signin.html') a.setAttribute('href', signin);
-      else if (href === 'signup.html' || href === './signup.html') a.setAttribute('href', signup);
+      var href = a.getAttribute('href') || '';
+      var path = href.split('?')[0];
+      var qs = href.indexOf('?') >= 0 ? href.slice(href.indexOf('?')) : '';
+      if (path === 'signin.html' || path === './signin.html') a.setAttribute('href', signin + qs);
+      else if (path === 'signup.html' || path === './signup.html') a.setAttribute('href', signup + qs);
     });
     wireAppLinks();
   }
@@ -299,11 +304,11 @@
   var signinTarget = authUrl('signin');
   var signupTarget = authUrl('signup');
   if (signinTarget && authPage === 'signin.html') {
-    location.replace(signinTarget);
+    location.replace(signinTarget + location.search);
     return;
   }
   if (signupTarget && authPage === 'signup.html') {
-    location.replace(signupTarget);
+    location.replace(signupTarget + location.search);
     return;
   }
 

@@ -26,13 +26,25 @@ export function loginHref(next?: string): string {
   return `/login?next=${encodeURIComponent(safe)}`;
 }
 
-/** Build /signup with optional email and return path. */
-export function signupHref(options?: { next?: string; email?: string }): string {
+export type SignupIntent = 'create' | 'join';
+
+/** Create a new organization, or link this login to an existing office account. */
+export function parseSignupIntent(raw: string | null | undefined): SignupIntent {
+  return raw === 'join' ? 'join' : 'create';
+}
+
+/** Build /signup with optional email, return path, and create vs. join intent. */
+export function signupHref(options?: {
+  next?: string;
+  email?: string;
+  intent?: SignupIntent;
+}): string {
   const params = new URLSearchParams();
   const next = options?.next ? safeAuthRedirect(options.next) : null;
   const email = options?.email?.trim();
   if (next) params.set('next', next);
   if (email) params.set('email', email);
+  if (options?.intent === 'join') params.set('intent', 'join');
   const qs = params.toString();
   return qs ? `/signup?${qs}` : '/signup';
 }

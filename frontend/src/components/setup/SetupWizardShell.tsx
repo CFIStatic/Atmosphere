@@ -2,19 +2,26 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Logo } from '../Logo';
 import { CheckIcon } from '../icons';
-import { SETUP_WIZARD_STEPS, type SetupWizardStep } from './setupWizard';
+import {
+  setupWizardCopy,
+  type OrgSetupIntent,
+  type SetupWizardStep,
+} from './setupWizard';
 
 export function SetupWizardShell({
   step,
+  intent = 'create',
   signInHref,
   headerAction,
   children,
 }: {
   step: SetupWizardStep;
+  intent?: OrgSetupIntent;
   signInHref?: string;
   headerAction?: ReactNode;
   children: ReactNode;
 }) {
+  const copy = setupWizardCopy(intent);
   return (
     <div className="cx-aurora relative flex min-h-screen flex-col bg-paper-100">
       <header className="flex items-center justify-between gap-4 px-6 py-6 sm:px-10">
@@ -38,14 +45,12 @@ export function SetupWizardShell({
                 Get started
               </p>
               <h1 className="mt-3 text-3xl font-bold tracking-tight text-ink-900">
-                Create your organization
+                {copy.heading}
               </h1>
-              <p className="mt-3 max-w-md text-base text-ink-600">
-                Four quick steps — about two minutes from account to your first job.
-              </p>
+              <p className="mt-3 max-w-md text-base text-ink-600">{copy.lede}</p>
 
               <ol className="mt-10 space-y-5">
-                {SETUP_WIZARD_STEPS.map((item) => {
+                {copy.steps.map((item) => {
                   const done = item.step < step;
                   const active = item.step === step;
                   return (
@@ -94,13 +99,15 @@ export function SetupStepCard({
   title,
   subtitle,
   children,
+  intent = 'create',
 }: {
   step: SetupWizardStep;
   title: string;
   subtitle: string;
   children: ReactNode;
+  intent?: OrgSetupIntent;
 }) {
-  const label = SETUP_WIZARD_STEPS[step - 1]?.title ?? title;
+  const label = setupWizardCopy(intent).steps[step - 1]?.title ?? title;
   return (
     <div className="rounded-2xl border border-brand-200 bg-paper-0 p-8 shadow-lift shadow-2xl shadow-lift-xl sm:p-10">
       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-600">

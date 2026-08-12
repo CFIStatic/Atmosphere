@@ -6,7 +6,7 @@ import {
   ApiError,
   type Org,
 } from '../lib/api';
-import { loginHref, resolveAuthRedirect } from '../lib/authRedirect';
+import { loginHref, parseSignupIntent, resolveAuthRedirect } from '../lib/authRedirect';
 import { PLATFORM_HOME } from '../lib/platforms';
 import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
 import { getPlatform } from '../lib/usePlatform';
@@ -44,6 +44,7 @@ export function SignupPage() {
       stepParam: searchParams.get('step'),
     }),
   );
+  const orgIntent = parseSignupIntent(searchParams.get('intent'));
 
   // Step 1 — account
   const [fullName, setFullName] = useState('');
@@ -54,7 +55,7 @@ export function SignupPage() {
   const [accountNotice, setAccountNotice] = useState<string | null>(null);
 
   // Step 2 — organization
-  const [mode, setMode] = useState<OrgMode>('create');
+  const [mode, setMode] = useState<OrgMode>(orgIntent === 'join' ? 'join' : 'create');
   const [orgName, setOrgName] = useState('');
   const [joinCode, setJoinCode] = useState('');
 
@@ -71,11 +72,18 @@ export function SignupPage() {
     checkoutOutcome === 'success' || checkoutOutcome === 'cancelled' ? checkoutOutcome : null;
 
   useEffect(() => {
-    document.title = 'Create your organization · Atmosphere';
+    document.title =
+      orgIntent === 'join'
+        ? 'Link to the office account · Atmosphere'
+        : 'Create your organization · Atmosphere';
     return () => {
       document.title = 'Atmosphere';
     };
-  }, []);
+  }, [orgIntent]);
+
+  useEffect(() => {
+    if (orgIntent === 'join') setMode('join');
+  }, [orgIntent]);
 
   useEffect(() => {
     if (!loading && user && !membership && step === 1) {
@@ -217,6 +225,7 @@ export function SignupPage() {
   return (
     <SetupWizardShell
       step={step}
+      intent={orgIntent}
       signInHref={step === 1 ? signInHref : undefined}
       headerAction={
         step > 1 ? (
@@ -233,8 +242,13 @@ export function SignupPage() {
       {step === 1 && !user && (
         <SetupStepCard
           step={1}
+          intent={orgIntent}
           title="Your login details"
-          subtitle="Organization setup starts on the next screen — about two minutes total."
+          subtitle={
+            orgIntent === 'join'
+              ? 'Then you will enter the office join code — about two minutes total.'
+              : 'Organization setup starts on the next screen — about two minutes total.'
+          }
         >
           {accountNotice && (
             <div
@@ -320,8 +334,18 @@ export function SignupPage() {
           </form>
 
           <p className="mt-5 rounded-lg bg-paper-50 px-3.5 py-3 text-xs leading-relaxed text-ink-500">
-            Joining a team that already uses Atmosphere? Create your account here, then choose{' '}
-            <strong className="font-medium text-ink-700">Join with a code</strong> on step 2.
+            {orgIntent === 'join' ? (
+              <>
+                After this login is created, enter the office join code to link your account to
+                that organization.
+              </>
+            ) : (
+              <>
+                Linking to an office that already uses Atmosphere? Create your account here, then
+                choose <strong className="font-medium text-ink-700">Link to office account</strong>{' '}
+                on step 2.
+              </>
+            )}
           </p>
         </SetupStepCard>
       )}
@@ -329,8 +353,13 @@ export function SignupPage() {
       {step === 1 && user && (
         <SetupStepCard
           step={1}
+          intent={orgIntent}
           title="Account ready"
-          subtitle="Your login is set. Continue to name your organization or join with a code."
+          subtitle={
+            orgIntent === 'join'
+              ? 'Your login is set. Continue to link this account to the office organization.'
+              : 'Your login is set. Continue to name your organization or link to an office account.'
+          }
         >
           <PrimaryButton onClick={() => setStep(2)}>Continue to step 2</PrimaryButton>
         </SetupStepCard>
@@ -339,17 +368,22 @@ export function SignupPage() {
       {step === 2 && (
         <SetupStepCard
           step={2}
-          title="Your organization"
-          subtitle="Create a new workspace for your company, or join one that already exists."
+          intent={orgIntent}
+          title={mode === 'join' ? 'Link to the office account' : 'Your organization'}
+          subtitle={
+            mode === 'join'
+              ? 'Enter the join code from your office so this login belongs to that organization.'
+              : 'Create a new workspace for your company, or link to an office account that already exists.'
+          }
         >
           {error && <Alert>{error}</Alert>}
 
           <div className="mt-5 grid grid-cols-2 gap-2 rounded-lg glass-card p-1">
             <ModeTab active={mode === 'create'} onClick={() => setMode('create')}>
-              Create new
+              Create organization
             </ModeTab>
             <ModeTab active={mode === 'join'} onClick={() => setMode('join')}>
-              Join with a code
+              Link to office
             </ModeTab>
           </div>
 
@@ -364,11 +398,11 @@ export function SignupPage() {
                 className={inputClass}
               />
               <p className="mt-2 text-xs text-ink-500">
-                You will get a join code on the next step to invite your crew.
+                You will get a join code on the next step so teammates can link their accounts.
               </p>
             </Field>
           ) : (
-            <Field label="Organization join code" htmlFor="join-code" className="mt-5">
+            <Field label="Office join code" htmlFor="join-code" className="mt-5">
               <input
                 id="join-code"
                 value={joinCode}
@@ -378,7 +412,9 @@ export function SignupPage() {
                 autoCapitalize="characters"
                 className={`${inputClass} font-mono tracking-widest`}
               />
-              <p className="mt-2 text-xs text-ink-500">Ask a teammate or admin for your team&apos;s code.</p>
+              <p className="mt-2 text-xs text-ink-500">
+                Ask someone in the office for the organization join code.
+              </p>
             </Field>
           )}
 
@@ -411,11 +447,12 @@ export function SignupPage() {
       {step === 3 && createdOrg && (
         <SetupStepCard
           step={3}
+          intent={orgIntent}
           title={mode === 'create' ? 'Invite your crew' : 'You are connected'}
           subtitle={
             mode === 'create'
-              ? 'Share this join code with anyone who should work in the same organization.'
-              : `You joined ${createdOrg.name}. You can invite others from Settings later.`
+              ? 'Share this join code so teammates can link their accounts to this office.'
+              : `Your account is linked to ${createdOrg.name}. You can invite others from Settings later.`
           }
         >
           {mode === 'create' && (
@@ -434,7 +471,7 @@ export function SignupPage() {
                 {copied ? 'Copied!' : 'Copy join code'}
               </button>
               <p className="mt-4 text-xs text-ink-500">
-                Teammates choose <strong>Join with a code</strong> when they sign up.
+                Teammates choose <strong>Link to office account</strong> when they sign up.
               </p>
             </div>
           )}
@@ -459,6 +496,7 @@ export function SignupPage() {
       {step === 4 && !membership && (
         <SetupStepCard
           step={4}
+          intent={orgIntent}
           title="Set up billing"
           subtitle="Finish organization setup on step 2 first."
         >

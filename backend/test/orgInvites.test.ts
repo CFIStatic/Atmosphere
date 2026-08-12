@@ -57,7 +57,8 @@ test('the email is from Atmosphere, names the org, and the code stands alone', (
     mail.text.split('\n').some((line) => line.trim() === 'ORTIZ-4481'),
     mail.text,
   );
-  assert.match(mail.text, /app\.atmosphere\.example\/signup/);
+  assert.match(mail.text, /app\.atmosphere\.example\/signup\?intent=join/);
+  assert.match(mail.text, /Link to office account/);
   // A workplace invitation, not marketing: no unsubscribe furniture.
   assert.ok(!/unsubscribe/i.test(mail.text));
 });
