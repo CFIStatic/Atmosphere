@@ -180,24 +180,27 @@ out = f'''<title>Atmosphere — AI for Service Contractors</title>
       if (sel && link.dataset.role) sel.value = link.dataset.role;
     }});
   }});
-  var signinForm = document.getElementById('signin-form');
-  if (signinForm) {{
-    signinForm.addEventListener('submit', function (ev) {{
-      ev.preventDefault();
-      var s = document.getElementById('signin-status');
+  // No form in the preview may submit natively — that would navigate the
+  // single-file page away (on a hosted copy, to a Forbidden URL). Every
+  // submit shows what the real site would do instead.
+  var FORM_NOTES = {{
+    'signin-form': 'Design preview — when hosted, this signs into your account via /api/auth/login and opens the app.',
+    'careers-form': 'Design preview — when hosted, this posts to /api/careers/apply and emails the hiring inbox.',
+    'contact-form': 'Design preview — when hosted, this posts to /api/contact/send and emails the sales inbox.',
+    'signup-form': 'Design preview — when hosted, this opens the app\\'s create-account flow.',
+    'investors-form': 'Design preview — access keys are issued personally; use Request access.'
+  }};
+  document.addEventListener('submit', function (ev) {{
+    var form = ev.target;
+    if (!form || form.tagName !== 'FORM') return;
+    ev.preventDefault();
+    var s = form.querySelector('.form-status');
+    if (s) {{
       s.className = 'form-status ok';
-      s.textContent = 'Design preview — when hosted, this signs into your account via /api/auth/login and opens the app.';
-    }});
-  }}
-  var careersForm = document.getElementById('careers-form');
-  if (careersForm) {{
-    careersForm.addEventListener('submit', function (ev) {{
-      ev.preventDefault();
-      var s = document.getElementById('careers-status');
-      s.className = 'form-status ok';
-      s.textContent = 'Design preview — when hosted, this posts to /api/careers/apply and emails the hiring inbox.';
-    }});
-  }}
+      s.textContent = FORM_NOTES[form.id] ||
+        'Design preview — this form is wired to the backend on the hosted site.';
+    }}
+  }}, true);
 
   var receipt = document.getElementById('receipt');
   var btn = document.getElementById('replay');
