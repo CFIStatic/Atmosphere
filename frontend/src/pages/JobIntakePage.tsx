@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../components/AppShell';
 import { AddressAutocomplete } from '../components/AddressAutocomplete';
 import {
@@ -32,8 +32,7 @@ type ExternalInvite = {
   email: string;
 };
 
-const SAMPLE = `Claim #AM-10428
-Property: 1842 Meridian Ave
+const SAMPLE = `Property: 1842 Meridian Ave
 Austin, TX 78702
 
 Scope of work
@@ -239,7 +238,6 @@ export function JobIntakePage() {
         address: proposal.address,
         city: proposal.city || undefined,
         postalCode: proposal.postalCode || undefined,
-        claimNumber: proposal.claimNumber || undefined,
         briefNote: proposal.briefNote,
         facts: proposal.facts,
         scope,
@@ -251,13 +249,14 @@ export function JobIntakePage() {
       });
       const handoff = handoffFromApprove(res, proposal, scope);
       setResult(res);
-      // Leave intake immediately — seed Job Progress with the new job file so
-      // it paints even if the list/detail GETs lag or race.
+      // Leave intake immediately — seed the job record so it paints even if
+      // the list/detail GETs lag or race.
       navigate(`/job-progress?job=${encodeURIComponent(res.job.id)}`, {
         replace: true,
         state: {
           freshJob: handoff.summary,
           freshRecord: handoff.record,
+          freshInvites: handoff.invites,
           justApproved: true,
         },
       });
@@ -326,25 +325,15 @@ export function JobIntakePage() {
   return (
     <>
       <PageHeader
-        eyebrow="Work Verification Platform"
         title="Start a job"
-        description="Enter the site address, optionally upload or paste scope, then approve once to invite Field Capture. Scope is optional — without it, AI describes the video."
-        action={
-          <Link
-            to="/job-progress"
-            className="text-sm font-medium text-brand-600 hover:text-brand-500"
-          >
-            Back to job progress
-          </Link>
-        }
+        description="Address, optional scope, then approve once to invite Field Capture."
       />
 
       <ol className="mb-6 flex flex-wrap gap-2 text-xs font-medium">
         {(
           [
-            ['paste', '1 · Scope'],
+            ['paste', '1 · Address'],
             ['review', '2 · Review'],
-            ['done', '3 · On dashboard'],
           ] as const
         ).map(([id, label]) => (
           <li
@@ -371,7 +360,7 @@ export function JobIntakePage() {
 
       {step === 'paste' && (
         <form onSubmit={onPropose} className="mx-auto max-w-3xl space-y-4 animate-fade-in-up">
-          <div className="rounded-xl glass-card p-5">
+          <div className="relative z-20 overflow-visible rounded-xl glass-card p-5">
             <h2 className="text-base font-semibold text-ink-900">Enter address here</h2>
             <p className="mt-1 text-sm text-ink-600">
               Where the crew will work. You can fine-tune city and postal on the next step.
@@ -473,7 +462,7 @@ export function JobIntakePage() {
 
       {step === 'review' && proposal && (
         <form onSubmit={onApprove} className="mx-auto max-w-3xl space-y-4 animate-fade-in-up">
-          <div className="rounded-xl glass-card p-5">
+          <div className="relative z-20 overflow-visible rounded-xl glass-card p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-base font-semibold text-ink-900">Review before anyone sees it</h2>
@@ -485,7 +474,7 @@ export function JobIntakePage() {
             </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <label className="block text-xs font-medium text-ink-600">
+              <label className="block text-xs font-medium text-ink-600 sm:col-span-2">
                 Job title
                 <input
                   className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
@@ -493,22 +482,6 @@ export function JobIntakePage() {
                   onChange={(e) => setProposal({ ...proposal, title: e.target.value })}
                   required
                 />
-              </label>
-              <label className="block text-xs font-medium text-ink-600">
-                Work type
-                <select
-                  className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
-                  value={proposal.workType}
-                  onChange={(e) =>
-                    setProposal({
-                      ...proposal,
-                      workType: e.target.value as IntakeProposal['workType'],
-                    })
-                  }
-                >
-                  <option value="mitigation">Mitigation</option>
-                  <option value="construction">Construction</option>
-                </select>
               </label>
               <label className="block text-xs font-medium text-ink-600 sm:col-span-2">
                 Site address
@@ -541,14 +514,6 @@ export function JobIntakePage() {
                   className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
                   value={proposal.postalCode}
                   onChange={(e) => setProposal({ ...proposal, postalCode: e.target.value })}
-                />
-              </label>
-              <label className="block text-xs font-medium text-ink-600">
-                Claim #
-                <input
-                  className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
-                  value={proposal.claimNumber}
-                  onChange={(e) => setProposal({ ...proposal, claimNumber: e.target.value })}
                 />
               </label>
             </div>
@@ -778,7 +743,7 @@ export function JobIntakePage() {
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 pb-8">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-8 pt-2">
             <button
               type="button"
               className="rounded-lg px-4 py-2 text-sm font-medium text-ink-600"
@@ -797,13 +762,6 @@ export function JobIntakePage() {
               {busy && <SpinnerIcon className="h-4 w-4 animate-spin" />}
               {approveLabel}
             </button>
-            <p className="text-xs text-ink-500">
-              {inviteTotal} invite{inviteTotal === 1 ? '' : 's'}
-              {proposal.scope.length
-                ? ` · ${proposal.scope.length} scope line${proposal.scope.length === 1 ? '' : 's'}`
-                : ' · no scope (AI will describe the video)'}
-              {' · '}job file, brief, and capture links in one step.
-            </p>
           </div>
         </form>
       )}

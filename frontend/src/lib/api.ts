@@ -1001,6 +1001,8 @@ export type IntakeApproveResult = {
   briefRevision: number;
   scopeSaved: number;
   invites: IntakeCaptureInvite[];
+  /** List chip for the job file — prefer this over reconstructing from job. */
+  jobFile?: SharedJobSummary;
   /** First invitee — back-compat with older UI. */
   party: { id: string; company: string };
   sharePath: string;

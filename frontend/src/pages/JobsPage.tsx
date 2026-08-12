@@ -15,7 +15,6 @@ import {
   type JobSummary,
   type JobPriority,
   type LossType,
-  type WorkType,
 } from '../lib/api';
 import { AppShell, PageHeader, PanelSpinner, EmptyState, ErrorNote } from '../components/AppShell';
 import { SpinnerIcon, PlusIcon } from '../components/icons';
@@ -88,24 +87,6 @@ function NewJobForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: 
         </div>
 
         <div>
-          <label className={labelClass} htmlFor="job-work-type">
-            Work type
-          </label>
-          <select
-            id="job-work-type"
-            value={form.workType}
-            onChange={(e) => set('workType', e.target.value as WorkType)}
-            className={`mt-1 ${inputClass}`}
-          >
-            {(Object.keys(WORK_TYPE_LABELS) as WorkType[]).map((v) => (
-              <option key={v} value={v}>
-                {WORK_TYPE_LABELS[v]}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
           <label className={labelClass} htmlFor="job-loss-type">
             Loss type
           </label>
@@ -140,18 +121,6 @@ function NewJobForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: 
               </option>
             ))}
           </select>
-        </div>
-
-        <div className="sm:col-span-2">
-          <label className={labelClass} htmlFor="job-claim">
-            Claim number
-          </label>
-          <input
-            id="job-claim"
-            value={form.claimNumber ?? ''}
-            onChange={(e) => set('claimNumber', e.target.value)}
-            className={`mt-1 ${inputClass}`}
-          />
         </div>
       </div>
 

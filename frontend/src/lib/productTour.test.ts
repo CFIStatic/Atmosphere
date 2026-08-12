@@ -29,4 +29,14 @@ describe('productTour storage', () => {
     expect(withTourQuery('/verifier-library')).toBe('/verifier-library?tour=1');
     expect(withTourQuery('/usage?period=month')).toBe('/usage?period=month&tour=1');
   });
+
+  it('covers Dashboard without a separate Job Progress nav step', () => {
+    const ids = WORK_VERIFICATION_TOUR.steps.map((s) => s.id);
+    expect(ids).toContain('verification-library');
+    expect(ids).toContain('job-record');
+    expect(WORK_VERIFICATION_TOUR.steps.some((s) => s.target === 'nav-job-progress')).toBe(
+      false,
+    );
+    expect(WORK_VERIFICATION_TOUR.steps.some((s) => s.route === '/job-progress')).toBe(false);
+  });
 });

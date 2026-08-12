@@ -12,6 +12,7 @@ import {
   shareRecipientAllowed,
   shareState,
 } from '../verifier/library.js';
+import { jobTitleForIntake } from '../verifier/intakePropose.js';
 import { shareEmail } from '../verifier/shareEmail.js';
 import { progressShareEmail } from '../verifier/progressShareEmail.js';
 import { buildMailSender } from '../campaigns/mail/index.js';
@@ -186,7 +187,7 @@ async function actorLabelFor(supabase: any, userId: string): Promise<string> {
 
 evidencePortalRouter.use(requireAuth);
 
-/** GET /api/evidence-portal/library — every clip on every job, newest first. */
+/** GET /api/evidence-portal/library — every job file, plus every clip, newest first. */
 evidencePortalRouter.get('/library', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { q } = z.object({ q: z.string().max(120).optional() }).parse(req.query);
@@ -212,8 +213,61 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
           .some((hay: string) => hay.toLowerCase().includes(needle)),
       );
     }
+
+    // Job files exist before any clip does — Start a job should show the
+    // name on the Dashboard so footage has a folder to land in.
+    let jobs: Array<{ jobId: string; jobName: string; jobNumber: number | null }> = [];
+    const { data: jobRows, error: jobsError } = await supabase
+      .from('crm_jobs')
+      .select('id, title, job_number, created_at, property_id')
+      .eq('org_id', orgId)
+      .order('created_at', { ascending: false })
+      .limit(200);
+    if (jobsError) {
+      console.warn('[library] crm_jobs unavailable:', jobsError.message);
+    } else {
+      const propertyIds = [
+        ...new Set(
+          ((jobRows ?? []) as any[])
+            .map((j) => j.property_id as string | null)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ];
+      const addrByProperty = new Map<string, string>();
+      if (propertyIds.length) {
+        const { data: props, error: propsError } = await supabase
+          .from('crm_properties')
+          .select('id, address_line1')
+          .in('id', propertyIds);
+        if (propsError) {
+          console.warn('[library] crm_properties unavailable:', propsError.message);
+        } else {
+          for (const p of (props ?? []) as any[]) {
+            if (p.id && p.address_line1) addrByProperty.set(p.id, String(p.address_line1));
+          }
+        }
+      }
+      jobs = ((jobRows ?? []) as any[]).map((j) => ({
+        jobId: j.id as string,
+        jobName: jobTitleForIntake(j.title, addrByProperty.get(j.property_id) ?? ''),
+        jobNumber: (j.job_number as number | null) ?? null,
+      }));
+    }
+    const seen = new Set(jobs.map((j) => j.jobId));
+    for (const item of items) {
+      const id = (item as any).jobId as string | undefined;
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      jobs.push({
+        jobId: id,
+        jobName: ((item as any).jobName as string) || 'Job',
+        jobNumber: ((item as any).jobNumber as number | null) ?? null,
+      });
+    }
+
     res.json({
       items,
+      jobs,
       counts: {
         total: items.length,
         flagged: items.filter((i: any) => i.flagged).length,

@@ -6,7 +6,6 @@ import {
   type CrmAccount,
   type LeadSource,
   type LossType,
-  type WorkType,
 } from '../../lib/api';
 import { CloseIcon, SpinnerIcon } from '../icons';
 
@@ -24,7 +23,6 @@ export function NewLeadDialog({
 }) {
   const [title, setTitle] = useState('');
   const [source, setSource] = useState<LeadSource>('phone');
-  const [workType, setWorkType] = useState<WorkType>('mitigation');
   const [lossType, setLossType] = useState<LossType>('water');
   const [value, setValue] = useState('');
   const [accountId, setAccountId] = useState('');
@@ -48,7 +46,7 @@ export function NewLeadDialog({
       await api.createLead({
         title: title.trim(),
         source,
-        workType,
+        workType: 'mitigation',
         lossType,
         estimatedValue: value ? Number(value) : null,
         accountId: accountId || null,
@@ -114,16 +112,6 @@ export function NewLeadDialog({
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Kind of work">
-              <select
-                value={workType}
-                onChange={(e) => setWorkType(e.target.value as WorkType)}
-                className="glass-field w-full rounded-lg px-3 py-2 text-sm text-ink-900 outline-none"
-              >
-                <option value="mitigation">Mitigation</option>
-                <option value="construction">Construction</option>
-              </select>
-            </Field>
             <Field label="Loss type">
               <select
                 value={lossType}

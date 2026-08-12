@@ -161,18 +161,14 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
     Icon: DecisionIcon,
     metrics: ['openJobs', 'crewOnJobs', 'awaitingApproval', 'scheduledToday', 'blockedJobs', 'atRiskProjects'],
     groups: [
-      // All office navigation lives in the Verifier sidebar (Dashboard,
-      // Start a job, Job files, Settings). Nothing duplicated here.
-      /* Restore when a shell page needs its own rail again:
       {
-        label: 'Set up',
+        label: 'Work',
         items: [
           { to: '/intake', label: 'Start a job', Icon: BoltIcon },
-          { to: '/job-progress', label: 'Job files', Icon: UsersIcon },
+          { to: '/verifier-library', label: 'Dashboard', Icon: DecisionIcon },
         ],
       },
       SYSTEM,
-      */
     ],
   },
 
@@ -270,9 +266,9 @@ export const VISIBLE_PLATFORM_IDS: PlatformId[] = ['operations', 'field'];
 
 export const PLATFORM_HOME: Record<PlatformId, string> = {
   sales: '/sales',
-  // Office home is Job Progress (job files). The video library lives at
-  // /verifier-library — opening there after login looked like an empty dashboard.
-  operations: '/job-progress',
+  // Office home is the Dashboard — job folders and clips. A job name opens
+  // the record at /job-progress?job=; that route stays out of the rail.
+  operations: '/verifier-library',
   field: '/field',
   manager: '/manager',
 };

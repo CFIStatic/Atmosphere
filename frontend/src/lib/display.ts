@@ -13,6 +13,16 @@ export function displayName(fullName?: string | null, email?: string | null): st
   return 'Teammate';
 }
 
+/** Display name stored on the auth user when the profile row has not caught up. */
+export function nameFromMetadata(metadata?: Record<string, unknown> | null): string | null {
+  if (!metadata) return null;
+  for (const key of ['full_name', 'fullName', 'name'] as const) {
+    const value = metadata[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
+
 /** Up to two letters for an avatar bubble, derived from the same name. */
 export function initials(fullName?: string | null, email?: string | null): string {
   const name = displayName(fullName, email);

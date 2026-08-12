@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { PageHeader, EmptyState } from '../components/AppShell';
+import { PageHeader } from '../components/AppShell';
 import {
   api,
   type SharedJobSummary,
   type SharedJobRecord,
   type JobScopeItem,
   type ScopeState,
+  type IntakeCaptureInvite,
 } from '../lib/api';
 import { SpinnerIcon } from '../components/icons';
-import { JobProgressDashboard, jobListStatus } from '../components/shared/JobProgressDashboard';
+import { JobProgressDashboard } from '../components/shared/JobProgressDashboard';
 import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPanel';
 import { ScopeDocPanel } from '../components/shared/ScopeDocPanel';
 import { JobReadinessPanel } from '../components/shared/JobReadinessPanel';
@@ -18,6 +19,7 @@ import { useFeatureTimer } from '../hooks/useFeatureTimer';
 type HandoffState = {
   freshJob?: SharedJobSummary;
   freshRecord?: SharedJobRecord;
+  freshInvites?: IntakeCaptureInvite[];
   justApproved?: boolean;
 };
 
@@ -79,34 +81,65 @@ function ago(iso: string | null): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
+function placeholderRecord(jobId: string, title: string, jobNumber: number | null = null): SharedJobRecord {
+  return {
+    job: { id: jobId, jobNumber, title, status: null, claimNumber: null },
+    brief: null,
+    revisions: [],
+    currentRevision: null,
+    parties: [],
+    scope: [],
+    money: { approved: 0, pending: 0, unpricedApprovals: 0 },
+    messages: [],
+    risks: [],
+  };
+}
+
 export function SharedDashboardPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedJob = searchParams.get('job');
+  const requestedTitle = searchParams.get('title');
+  const requestedNumber = searchParams.get('number');
+  const parsedNumber = requestedNumber != null && requestedNumber !== '' ? Number(requestedNumber) : null;
+  const jobNumberHint = Number.isFinite(parsedNumber) ? parsedNumber : null;
   const handoff = (location.state as HandoffState | null) ?? null;
   const freshFromNav = handoff?.freshJob;
   const freshRecord = handoff?.freshRecord;
   const [justApproved, setJustApproved] = useState(Boolean(handoff?.justApproved));
+  const [freshInvites, setFreshInvites] = useState<IntakeCaptureInvite[]>(
+    () => handoff?.freshInvites ?? [],
+  );
+  const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
   useFeatureTimer('job_files');
   const openSeq = useRef(0);
-  const recordIdRef = useRef<string | null>(freshRecord?.job.id ?? null);
+  const recordIdRef = useRef<string | null>(freshRecord?.job.id ?? requestedJob ?? null);
   const seededId = requestedJob || freshFromNav?.jobId || freshRecord?.job.id || null;
 
   const [list, setList] = useState<SharedJobSummary[] | null>(() =>
     freshFromNav ? [freshFromNav] : null,
   );
   const [openId, setOpenId] = useState<string | null>(seededId);
-  const [record, setRecord] = useState<SharedJobRecord | null>(() => freshRecord ?? null);
-  // If intake already handed us the file, don't flash a blank loading state.
-  const [loading, setLoading] = useState(Boolean(seededId) && !freshRecord);
+  const [record, setRecord] = useState<SharedJobRecord | null>(() =>
+    freshRecord ??
+    (requestedJob
+      ? placeholderRecord(requestedJob, requestedTitle || 'Job', jobNumberHint)
+      : null),
+  );
   const [error, setError] = useState<string | null>(null);
   const [readinessKey, setReadinessKey] = useState(0);
   const [shareFormOpen, setShareFormOpen] = useState(false);
 
+  const stayOnRecord = Boolean(requestedJob || freshFromNav || freshRecord);
+
   useEffect(() => {
     recordIdRef.current = record?.job.id ?? null;
   }, [record]);
+
+  useEffect(() => {
+    if (!stayOnRecord) navigate('/verifier-library', { replace: true });
+  }, [stayOnRecord, navigate]);
 
   function openShare() {
     setShareFormOpen(true);
@@ -126,13 +159,14 @@ export function SharedDashboardPage() {
     setShareFormOpen(false);
     if (opts?.syncUrl !== false) {
       // Preserve intake handoff state — setSearchParams drops it otherwise.
-      setSearchParams(jobId ? { job: jobId } : {}, {
+      const next: Record<string, string> = jobId ? { job: jobId } : {};
+      if (requestedTitle) next.title = requestedTitle;
+      if (requestedNumber) next.number = requestedNumber;
+      setSearchParams(next, {
         replace: true,
         state: location.state,
       });
     }
-    // Keep showing a seeded record while we refresh from the API.
-    if (recordIdRef.current !== jobId) setLoading(true);
     setError(null);
     try {
       const next = await api.sharedJob(jobId);
@@ -155,11 +189,16 @@ export function SharedDashboardPage() {
       if (recordIdRef.current === jobId) {
         // keep painted record; soft-fail
       } else {
-        setRecord(null);
-        setError(err instanceof Error ? err.message : 'Could not open that record.');
+        const listed = (list ?? []).find((j) => j.jobId === jobId);
+        setRecord(
+          placeholderRecord(
+            jobId,
+            listed?.title || requestedTitle || 'Job',
+            listed?.jobNumber ?? jobNumberHint,
+          ),
+        );
+        setError(null);
       }
-    } finally {
-      if (seq === openSeq.current) setLoading(false);
     }
   }
 
@@ -195,12 +234,13 @@ export function SharedDashboardPage() {
   }
 
   useEffect(() => {
+    if (!stayOnRecord) return;
     if (freshFromNav) ensureListed(freshFromNav);
     void loadList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Deep-link from Approve & invite: /job-progress?job=<id>
+  // Deep-link from Dashboard job name or Approve & invite: /job-progress?job=<id>
   // When intake already seeded the file, loadList's refresh is enough — a
   // second openJob here raced and could leave the dashboard stuck on Loading.
   useEffect(() => {
@@ -227,11 +267,20 @@ export function SharedDashboardPage() {
     }
   }
 
+  if (!stayOnRecord) return null;
+
   return (
     <>
+      <button
+        type="button"
+        onClick={() => navigate('/verifier-library')}
+        className="mb-3 text-sm font-medium text-ink-500 hover:text-ink-800"
+      >
+        ← Dashboard
+      </button>
       <PageHeader
-        title="Job Progress"
-        description="See where each job stands — what's done, what's happening on site, and what needs a decision."
+        title={record?.job.title ?? 'Job'}
+        description="What is happening on site, what has already been done, and what is still ahead."
         action={
           record ? (
             <button
@@ -241,29 +290,87 @@ export function SharedDashboardPage() {
             >
               Share
             </button>
-          ) : null
+          ) : undefined
         }
       />
 
       {justApproved && record && (
         <div
           role="status"
-          className="mt-4 flex flex-wrap items-start justify-between gap-3 rounded-xl border border-success-200 bg-success-50/70 px-4 py-3"
+          className="mt-4 space-y-3 rounded-xl border border-success-200 bg-success-50/70 px-4 py-3"
         >
-          <div>
-            <p className="text-sm font-semibold text-success-700">Job created</p>
-            <p className="mt-0.5 text-sm text-ink-700">
-              <span className="font-medium text-ink-900">{record.job.title}</span> is on Job
-              Progress. Field Capture invites are out — footage will land here as they film.
-            </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-success-700">Job created</p>
+              <p className="mt-0.5 text-sm text-ink-700">
+                <span className="font-medium text-ink-900">{record.job.title}</span> is ready
+                {freshInvites.length
+                  ? freshInvites.every((i) => i.emailed || !i.email)
+                    ? ' — Field Capture invites went out.'
+                    : ' — invite links are ready below (some emails did not send).'
+                  : '.'}{' '}
+                Footage will land on the Dashboard as they film.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="shrink-0 text-sm font-medium text-ink-500 hover:text-ink-800"
+              onClick={() => {
+                setJustApproved(false);
+                setFreshInvites([]);
+              }}
+            >
+              Dismiss
+            </button>
           </div>
-          <button
-            type="button"
-            className="shrink-0 text-sm font-medium text-ink-500 hover:text-ink-800"
-            onClick={() => setJustApproved(false)}
-          >
-            Dismiss
-          </button>
+          {freshInvites.length > 0 && (
+            <ul className="space-y-2 border-t border-success-200/70 pt-3">
+              {freshInvites.map((inv) => {
+                const path = inv.external
+                  ? inv.sharePath
+                  : inv.fieldCapturePath || inv.sharePath;
+                const href =
+                  typeof window !== 'undefined' ? `${window.location.origin}${path}` : path;
+                return (
+                  <li
+                    key={inv.id}
+                    className="flex flex-wrap items-center gap-2 rounded-lg bg-paper-0/70 px-3 py-2"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-ink-900">{inv.name}</p>
+                      <p className="truncate text-xs text-ink-500">
+                        {inv.email ?? 'No email on file'}
+                        {' · '}
+                        {inv.emailed
+                          ? 'Emailed'
+                          : inv.email
+                            ? 'Email did not send — copy the link'
+                            : 'Copy their capture link'}
+                      </p>
+                    </div>
+                    <code className="max-w-[14rem] truncate rounded-md bg-paper-100 px-2 py-1 text-[11px] text-ink-700 sm:max-w-xs">
+                      {href}
+                    </code>
+                    <button
+                      type="button"
+                      className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-ink-900"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(href).then(
+                          () => {
+                            setCopiedInviteId(inv.id);
+                            window.setTimeout(() => setCopiedInviteId(null), 2000);
+                          },
+                          () => undefined,
+                        );
+                      }}
+                    >
+                      {copiedInviteId === inv.id ? 'Copied' : 'Copy link'}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       )}
 
@@ -273,82 +380,22 @@ export function SharedDashboardPage() {
         </p>
       )}
 
-      {list === null && !record ? (
-        <p className="mt-6 text-sm text-ink-600">Loading…</p>
-      ) : (list?.length ?? 0) === 0 && !record && !loading ? (
-        <div className="mt-6">
-          <EmptyState
-            title="No jobs yet"
-            hint="Start a job to set scope and invite the crew — field capture will build the work history here."
-          />
-          <div className="mt-4">
-            <button
-              type="button"
-              onClick={() => navigate('/intake')}
-              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900"
-            >
-              Start a job from scope
-            </button>
-          </div>
-        </div>
-      ) : (
+      {record ? (
         <>
-          {(list?.length ?? 0) >= 1 && (
-            <div className="mt-6 flex gap-2 overflow-x-auto pb-1">
-              {(list ?? []).map((job) => {
-                const on = openId === job.jobId;
-                const status = jobListStatus(job);
-                return (
-                  <button
-                    key={job.jobId}
-                    type="button"
-                    onClick={() => void openJob(job.jobId)}
-                    aria-pressed={on}
-                    className={`shrink-0 rounded-xl border px-4 py-2.5 text-left transition ${
-                      on
-                        ? 'border-brand-300 bg-brand-600/10'
-                        : 'border-line bg-paper-0/60 hover:border-brand-200'
-                    }`}
-                  >
-                    <span className="block text-sm font-semibold text-ink-900">
-                      {job.jobNumber !== null && (
-                        <span className="tabular-nums text-ink-500">#{job.jobNumber} </span>
-                      )}
-                      {job.title}
-                    </span>
-                    <span
-                      className={`mt-0.5 block text-[11px] font-medium ${
-                        status.tone === 'danger' ? 'text-danger-600' : 'text-success-600'
-                      }`}
-                    >
-                      {status.label}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
           <div className="mt-4">
-            {loading && !record ? (
-              <p className="text-sm text-ink-600">Loading…</p>
-            ) : !record ? (
-              <p className="text-sm text-ink-600">Pick a job.</p>
-            ) : (
-              <>
-                <JobProgressDashboard
-                  jobId={record.job.id}
-                  record={record}
-                  initialProof={
-                    justApproved
-                      ? {
-                          days: [],
-                          counts: { days: 0, payable: 0, contradicted: 0, awaitingAfter: 0 },
-                          siteKnown: Boolean(record.brief?.facts?.['Site address']),
-                        }
-                      : undefined
-                  }
-                />
+            <JobProgressDashboard
+              jobId={record.job.id}
+              record={record}
+              initialProof={
+                justApproved
+                  ? {
+                      days: [],
+                      counts: { days: 0, payable: 0, contradicted: 0, awaitingAfter: 0 },
+                      siteKnown: Boolean(record.brief?.facts?.['Site address']),
+                    }
+                  : undefined
+              }
+            />
 
                 <details className="mt-4 rounded-xl glass-card group">
                   <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-ink-900 marker:content-none [&::-webkit-details-marker]:hidden">
@@ -379,11 +426,9 @@ export function SharedDashboardPage() {
                     <Thread record={record} onPosted={() => void openJob(record.job.id)} />
                   </div>
                 </details>
-              </>
-            )}
           </div>
 
-          {shareFormOpen && record && (
+          {shareFormOpen && (
             <ShareJobProgressPanel
               jobId={record.job.id}
               creating
@@ -393,6 +438,8 @@ export function SharedDashboardPage() {
             />
           )}
         </>
+      ) : (
+        <p className="mt-6 text-sm text-ink-600">Loading…</p>
       )}
     </>
   );

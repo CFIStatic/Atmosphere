@@ -19,7 +19,7 @@ import {
 } from '../lib/api';
 import { Logo } from '../components/Logo';
 import { BillingSection } from '../components/settings/BillingSection';
-import { displayName, initials } from '../lib/display';
+import { displayName, initials, nameFromMetadata } from '../lib/display';
 import { setPreference, usePreferences, type Preferences } from '../lib/preferences';
 import { usePlatform } from '../lib/usePlatform';
 import type { PlatformId } from '../lib/platforms';
@@ -324,7 +324,8 @@ function formatDate(value: string | null | undefined): string {
 
 function ProfileSection() {
   const { user, profile, setProfile } = useAuth();
-  const [name, setName] = useState(profile?.fullName ?? '');
+  const resolvedName = profile?.fullName || nameFromMetadata(user?.metadata);
+  const [name, setName] = useState(resolvedName ?? '');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -332,10 +333,12 @@ function ProfileSection() {
   // The profile arrives asynchronously; adopt it unless the user has already
   // started typing, which would otherwise be overwritten mid-edit.
   useEffect(() => {
-    setName((current) => (current === '' ? (profile?.fullName ?? '') : current));
-  }, [profile?.fullName]);
+    const incoming = profile?.fullName || nameFromMetadata(user?.metadata) || '';
+    setName((current) => (current === '' ? incoming : current));
+  }, [profile?.fullName, user?.metadata]);
 
-  const dirty = name.trim() !== (profile?.fullName ?? '');
+  const storedName = profile?.fullName ?? '';
+  const dirty = name.trim() !== storedName;
 
   async function save() {
     setSaving(true);

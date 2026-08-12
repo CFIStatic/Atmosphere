@@ -2,17 +2,16 @@
  * Demo mode — a mocked backend behind the real UI.
  *
  * Built with `VITE_DEMO=1`, the app installs this fetch interceptor before it
- * boots and every `/api/*` call is answered in-page from the fixtures below:
- * a plausible restoration company mid-week, so every surface renders the way
- * it does in production. The mock is stateful where the story needs it —
- * signing out, signing back in, creating an organization, and joining with
- * the demo code all work — and everything else answers 503 with a note that
- * the surface needs the live backend.
+ * boots. Account, org, and the job library prefer the live API whenever it
+ * answers, so Settings and Dashboard show the signed-in tenant rather than the
+ * Dana Ortiz fixture. Remaining `/api/*` calls are answered in-page from the
+ * fixtures below so surfaces without a live backend still render.
  *
  * Nothing here ships in a normal build: `main.tsx` only imports this module
  * when VITE_DEMO is set, so production bundles never contain it.
  */
 import { DEMO_ESTIMATE, DEMO_ESTIMATE_SOURCES, DEMO_ESTIMATE_TAKEOFF } from './demoEstimate';
+import { isLiveFirstPath } from './liveFirst';
 import type {
   AgentMemory,
   Escalation,
@@ -42,6 +41,8 @@ import type {
   WebRun,
   XactimateStatus,
 } from '../lib/api';
+
+const realFetch = window.fetch.bind(window);
 
 /* ------------------------------------------------------------------ state */
 
@@ -1194,8 +1195,30 @@ function evidencePortalLibrary() {
       });
     }
   }
+  const jobs: Array<{ jobId: string; jobName: string; jobNumber: number | null }> = [];
+  const seen = new Set<string>();
+  for (const j of SHARED_JOBS) {
+    jobs.push({ jobId: j.jobId, jobName: j.title, jobNumber: j.jobNumber ?? null });
+    seen.add(j.jobId);
+  }
+  for (const j of JOBS) {
+    if (seen.has(j.jobId)) continue;
+    jobs.push({ jobId: j.jobId, jobName: j.title, jobNumber: j.jobNumber ?? null });
+    seen.add(j.jobId);
+  }
+  for (const item of items) {
+    const id = String(item.jobId ?? '');
+    if (!id || seen.has(id)) continue;
+    jobs.push({
+      jobId: id,
+      jobName: String(item.jobName ?? 'Job'),
+      jobNumber: (item.jobNumber as number | null) ?? null,
+    });
+    seen.add(id);
+  }
   return {
     items,
+    jobs,
     counts: {
       total: items.length,
       flagged: items.filter((i) => i.flagged).length,
@@ -1741,7 +1764,12 @@ const CRM_SYNC_STATE: {
   seeded: boolean;
 } = { connected: {}, conflicts: [], seeded: false };
 
-function emptySharedRecord(jobId: string, jobNumber: number, title: string, claimNumber: string | null) {
+function emptySharedRecord(
+  jobId: string,
+  jobNumber: number | null,
+  title: string,
+  claimNumber: string | null,
+) {
   return {
     job: { id: jobId, jobNumber, title, status: 'in_progress', claimNumber },
     brief: null,
@@ -1751,7 +1779,7 @@ function emptySharedRecord(jobId: string, jobNumber: number, title: string, clai
     scope: [],
     messages: [],
     risks: [],
-    money: { approved: 0, pending: 0 },
+    money: { approved: 0, pending: 0, unpricedApprovals: 0 },
   };
 }
 
@@ -1763,7 +1791,11 @@ const XACTIMATE_STATUS: XactimateStatus = {
 
 /* ------------------------------------------------------------ interceptor */
 
-type Handler = (match: RegExpMatchArray, body: Record<string, unknown>) => { status?: number; body: unknown };
+type HandlerResult = { status?: number; body: unknown };
+type Handler = (
+  match: RegExpMatchArray,
+  body: Record<string, unknown>,
+) => HandlerResult | Promise<HandlerResult>;
 
 const routes: Array<[string, RegExp, Handler]> = [
   ['POST', /^\/api\/auth\/login$/, (_m, b) => {
@@ -2429,26 +2461,27 @@ const routes: Array<[string, RegExp, Handler]> = [
           reason: excluded ? 'Called out as exclusion in the source text.' : undefined,
         };
       });
-    const claim = text.match(/claim\s*#?\s*([A-Z0-9-]+)/i)?.[1] ?? 'AM-DEMO';
+    const typedAddress = String(b.address ?? '').trim();
     const addressLine = text
       .split(/\r?\n/)
       .map((l) => l.trim())
-      .find((l) => /\d{1,5}\s+\w+/.test(l) && /(Ave|St|Street|Rd|Road|Blvd|Dr)\b/i.test(l));
-    const address = (addressLine ?? '1842 Meridian Ave')
+      .find((l) => /\d{1,5}\s+\w+/.test(l) && /(Ave|St|Street|Rd|Road|Blvd|Dr|Court|Ct)\b/i.test(l));
+    const address = (typedAddress || addressLine || '1842 Meridian Ave')
       .replace(/^(property|address|site)\s*[:\-]\s*/i, '')
       .slice(0, 200);
+    const jobName = (address.split(',')[0] || address).trim();
     return {
       body: {
         proposal: {
-          title: `Work at ${address}`,
+          title: jobName,
           workType: /mitigat|water|flood/i.test(text) ? 'mitigation' : 'construction',
           address,
           city: 'Austin',
           postalCode: '78702',
-          claimNumber: claim,
+          claimNumber: '',
           briefNote:
             'First published facts for the crew. Edit anything that looks wrong before you approve.',
-          facts: { 'Claim #': claim, Site: address, Source: 'Scope / claim text (office intake)' },
+          facts: { Site: address, Source: 'Scope / claim text (office intake)' },
           scope: lines.length
             ? lines
             : [{ title: 'Confirm scope with the office', state: 'included' }],
@@ -2521,7 +2554,7 @@ const routes: Array<[string, RegExp, Handler]> = [
       scheduledStart: null,
       source: 'scope_document',
     };
-    // Surface on the Job Progress list AND openable record in this demo session.
+    // Surface on the Dashboard and as an openable record in this demo session.
     const jobNumber = 9000 + (SHARED_JOBS.length % 900);
     const title = String(b.title ?? 'New job');
     SHARED_JOBS.unshift({
@@ -2602,6 +2635,17 @@ const routes: Array<[string, RegExp, Handler]> = [
         briefRevision: 1,
         scopeSaved: scope.length,
         invites,
+        jobFile: {
+          jobId: id,
+          jobNumber,
+          title,
+          status: 'scheduled',
+          parties: invites.length,
+          currentRevision: 1,
+          behind: 0,
+          awaiting: invites.length,
+          exclusions: scope.filter((s: { state?: string }) => s.state === 'excluded').length,
+        },
         party: { id: primary.id, company: primary.name },
         sharePath: primary.sharePath,
         fieldCapturePath: primary.fieldCapturePath,
@@ -2791,18 +2835,94 @@ const routes: Array<[string, RegExp, Handler]> = [
     return { body: { dryRun: false, moved, total } };
   }],
 
-  /* ------------------------------------------- Google Places (intake) */
+  /* ------------------------------------------- Address lookup (intake) */
   ['GET', /^\/api\/operations\/places\/status$/, () => ({
-    body: { configured: false },
+    body: { configured: true, provider: 'osm' },
   })],
-  ['POST', /^\/api\/operations\/places\/autocomplete$/, () => ({
-    status: 503,
-    body: { error: 'Google Maps is not configured in demo.', code: 'maps_unconfigured' },
-  })],
-  ['POST', /^\/api\/operations\/places\/details$/, () => ({
-    status: 503,
-    body: { error: 'Google Maps is not configured in demo.', code: 'maps_unconfigured' },
-  })],
+  ['POST', /^\/api\/operations\/places\/autocomplete$/, async (_m, b) => {
+    const q = String(b.input ?? '').trim();
+    if (q.length < 2) return { body: { suggestions: [], configured: true, provider: 'osm' } };
+    try {
+      const url = new URL('https://photon.komoot.io/api/');
+      url.searchParams.set('q', q);
+      url.searchParams.set('limit', '8');
+      url.searchParams.set('lang', 'en');
+      const res = await realFetch(url.toString(), {
+        headers: { Accept: 'application/json' },
+      });
+      const data = (await res.json()) as {
+        features?: Array<{
+          geometry?: { coordinates?: [number, number] };
+          properties?: Record<string, string | number | undefined>;
+        }>;
+      };
+      const suggestions = (data.features ?? []).flatMap((f) => {
+        const p = f.properties ?? {};
+        const osmId = p.osm_id;
+        if (osmId == null) return [];
+        const [lng, lat] = f.geometry?.coordinates ?? [null, null];
+        const line1 = [p.housenumber, p.street].filter(Boolean).join(' ').trim() || String(p.name ?? '');
+        if (!line1) return [];
+        const city = String(p.city || p.locality || p.district || '');
+        const secondary = [city, p.state, p.postcode].filter(Boolean).join(', ');
+        const type = String(p.osm_type || 'N').slice(0, 1).toUpperCase();
+        return [{
+          placeId: `osm:${type}:${osmId}:${lng},${lat}`,
+          description: [line1, secondary].filter(Boolean).join(', '),
+          mainText: line1,
+          secondaryText: secondary,
+        }];
+      });
+      return { body: { suggestions, configured: true, provider: 'osm' } };
+    } catch {
+      return { status: 503, body: { error: 'Address lookup is unavailable.', code: 'places_unavailable' } };
+    }
+  }],
+  ['POST', /^\/api\/operations\/places\/details$/, async (_m, b) => {
+    const placeId = String(b.placeId ?? '');
+    const m = /^osm:[NWR]:(\d+):(-?[\d.]+),(-?[\d.]+)$/i.exec(placeId);
+    if (!m) return { status: 400, body: { error: 'Unknown place.', code: 'osm_place_invalid' } };
+    try {
+      const url = new URL('https://photon.komoot.io/reverse');
+      url.searchParams.set('lon', m[2]!);
+      url.searchParams.set('lat', m[3]!);
+      url.searchParams.set('lang', 'en');
+      const res = await realFetch(url.toString(), { headers: { Accept: 'application/json' } });
+      const data = (await res.json()) as {
+        features?: Array<{
+          geometry?: { coordinates?: [number, number] };
+          properties?: Record<string, string | number | undefined>;
+        }>;
+      };
+      const f = data.features?.[0];
+      const p = f?.properties ?? {};
+      const [lng, lat] = f?.geometry?.coordinates ?? [Number(m[2]), Number(m[3])];
+      const line1 = [p.housenumber, p.street].filter(Boolean).join(' ').trim() || String(p.name ?? '');
+      const city = String(p.city || p.locality || p.district || '');
+      const formatted = [line1, [city, p.state, p.postcode].filter(Boolean).join(', '), p.countrycode || p.country]
+        .filter(Boolean)
+        .join(', ');
+      return {
+        body: {
+          configured: true,
+          provider: 'osm',
+          address: {
+            placeId,
+            formatted,
+            addressLine1: line1,
+            city,
+            postalCode: String(p.postcode || ''),
+            state: String(p.state || ''),
+            country: String(p.countrycode || p.country || ''),
+            lat: typeof lat === 'number' ? lat : null,
+            lng: typeof lng === 'number' ? lng : null,
+          },
+        },
+      };
+    } catch {
+      return { status: 503, body: { error: 'Address lookup is unavailable.', code: 'places_unavailable' } };
+    }
+  }],
 
   /* ------------------------------------------- shared job record */
   ['GET', /^\/api\/operations\/shared$/, () => ({
@@ -2816,9 +2936,31 @@ const routes: Array<[string, RegExp, Handler]> = [
       },
     },
   })],
-  ['GET', /^\/api\/operations\/shared\/([\w-]+)$/, (m) => {
-    const record = SHARED_RECORDS[m[1]];
-    return record ? { body: record } : { status: 404, body: { error: 'job_not_found' } };
+  ['GET', /^\/api\/operations\/shared\/([\w-]+)$/, async (m) => {
+    const id = m[1];
+    if (SHARED_RECORDS[id]) return { body: SHARED_RECORDS[id] };
+    // Dashboard folders may be live org jobs while this mock owns demo ids.
+    try {
+      const res = await realFetch(`/api/operations/shared/${encodeURIComponent(id)}`, {
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const body = await res.json();
+        SHARED_RECORDS[id] = body;
+        return { body };
+      }
+    } catch {
+      /* live API not running */
+    }
+    const listed = SHARED_JOBS.find((j) => j.jobId === id);
+    const record = emptySharedRecord(
+      id,
+      listed?.jobNumber ?? null,
+      listed?.title ?? 'Job',
+      null,
+    );
+    SHARED_RECORDS[id] = record;
+    return { body: record };
   }],
   ['GET', /^\/api\/operations\/shared\/([\w-]+)\/parties\/([\w-]+)\/link$/, (m) => {
     const record = SHARED_RECORDS[m[1]];
@@ -2853,7 +2995,7 @@ const routes: Array<[string, RegExp, Handler]> = [
   }],
   ['POST', /^\/api\/operations\/shared\/([\w-]+)\/messages$/, (m, b) => {
     const record = SHARED_RECORDS[m[1]];
-    const message = { id: `msg-${Date.now()}`, party_id: null, author_label: 'Dana Ortiz', body: String(b.body ?? ''), scope_item_id: null, is_decision: false, created_at: new Date().toISOString() };
+    const message = { id: `msg-${Date.now()}`, party_id: null, author_label: state.fullName || state.email, body: String(b.body ?? ''), scope_item_id: null, is_decision: false, created_at: new Date().toISOString() };
     record?.messages?.unshift(message);
     return { status: 201, body: { message } };
   }],
@@ -3602,12 +3744,48 @@ const routes: Array<[string, RegExp, Handler]> = [
   }],
 ];
 
-const realFetch = window.fetch.bind(window);
+function adoptLiveIdentity(data: unknown) {
+  if (!data || typeof data !== 'object') return;
+  const body = data as Record<string, unknown>;
+  const user = body.user as { email?: string | null } | undefined;
+  if (user?.email) {
+    state.email = user.email;
+    state.signedIn = true;
+  }
+  const profile = body.profile as { email?: string | null; fullName?: string | null } | undefined;
+  if (profile) {
+    if (profile.email) state.email = profile.email;
+    if (profile.fullName !== undefined) state.fullName = profile.fullName;
+  }
+  const membership = body.membership as { org?: { name?: string } | null } | undefined;
+  if (membership?.org?.name) {
+    state.orgName = membership.org.name;
+    state.onboarded = true;
+  }
+}
 
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
   const path = url.replace(/^https?:\/\/[^/]+/, '').split('?')[0];
   if (!path.startsWith('/api/')) return realFetch(input, init);
+
+  // Account, org, and the job library must be the signed-in tenant — never the
+  // Dana Ortiz fixture — whenever the live API answers.
+  if (isLiveFirstPath(path)) {
+    try {
+      const live = await realFetch(input, init);
+      if (live.ok) {
+        try {
+          adoptLiveIdentity(await live.clone().json());
+        } catch {
+          /* not JSON */
+        }
+      }
+      return live;
+    } catch {
+      /* live API unreachable — fall through to demo fixtures */
+    }
+  }
 
   const query = new URLSearchParams((url.split('?')[1] ?? ''));
   LAST_QUERY.leadId = query.get('leadId') ?? undefined;
@@ -3631,7 +3809,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
     if (m !== method) continue;
     const match = path.match(re);
     if (!match) continue;
-    const result = handler(match, body);
+    const result = await Promise.resolve(handler(match, body));
     return new Response(JSON.stringify(result.body), {
       status: result.status ?? 200,
       headers: { 'Content-Type': 'application/json' },

@@ -1,20 +1,25 @@
 import type {
   IntakeApproveResult,
+  IntakeCaptureInvite,
   IntakeProposal,
   SharedJobRecord,
   SharedJobSummary,
 } from './api';
 
-/** Build list + detail payloads so Job Progress can paint before the GET returns. */
+/** Build list + detail payloads so the job record can paint before the GET returns. */
 export function handoffFromApprove(
   res: IntakeApproveResult,
   proposal: IntakeProposal,
   scope: IntakeProposal['scope'],
-): { summary: SharedJobSummary; record: SharedJobRecord } {
+): {
+  summary: SharedJobSummary;
+  record: SharedJobRecord;
+  invites: IntakeCaptureInvite[];
+} {
   const now = new Date().toISOString();
   const revision = res.briefRevision ?? 1;
   const invites = res.invites ?? [];
-  const summary: SharedJobSummary = {
+  const summary: SharedJobSummary = res.jobFile ?? {
     jobId: res.job.id,
     jobNumber: res.job.jobNumber ?? null,
     title: res.job.title,
@@ -36,7 +41,7 @@ export function handoffFromApprove(
       jobNumber: res.job.jobNumber ?? null,
       title: res.job.title,
       status: 'scheduled',
-      claimNumber: proposal.claimNumber || null,
+      claimNumber: null,
     },
     brief: {
       id: `local-${res.job.id}`,
@@ -79,5 +84,5 @@ export function handoffFromApprove(
     risks: [],
   };
 
-  return { summary, record };
+  return { summary, record, invites };
 }

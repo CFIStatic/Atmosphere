@@ -59,9 +59,9 @@ export function TourSimulationPanel({ kind }: { kind: TourSimulation }) {
     case 'job-files':
       return (
         <div className="space-y-2 rounded-xl border border-line bg-paper-0 p-4 text-sm">
-          <SimRow label="Subcontractor link" meta="Expires in 14 days" status="Copy link" />
-          <SimRow label="Scope v3" meta="Uploaded today" status="Active" />
-          <SimRow label="Readiness" meta="2 of 4 shots captured" status="In progress" />
+          <SimRow label="Happening now" meta="Crew on site — waiting on after video" status="On site" />
+          <SimRow label="What happened" meta="Aug 5 — north slope stripped" status="Verified" />
+          <SimRow label="What’s next" meta="Rewire bedroom circuits" status="Queued" />
         </div>
       );
     case 'usage-meter':

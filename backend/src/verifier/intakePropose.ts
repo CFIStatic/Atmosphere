@@ -46,15 +46,35 @@ function looksExcluded(raw: string): boolean {
   return /^(do\s*not|exclude|exclusion|out of scope|not in scope)\b/i.test(raw.trim());
 }
 
+/** Street line only — the job file is the site, not a scope bullet. */
+export function titleFromSiteAddress(address: string): string {
+  const raw = address.trim();
+  if (!raw || /^address to confirm$/i.test(raw)) return 'New job';
+  return (raw.split(',')[0] || raw).trim().slice(0, 200);
+}
+
+export function looksLikeScopeTitle(title: string): boolean {
+  const t = title.trim();
+  if (/^\d+[.)]\s+/.test(t)) return true;
+  return /^(do\s*not|extract|remove|demo|set |monitor|replace|install|dry |contain|paint|clean)\b/i.test(
+    t,
+  );
+}
+
+/** Prefer a human-edited title; never keep a numbered scope line as the job name. */
+export function jobTitleForIntake(title: string | undefined, address: string): string {
+  const t = (title ?? '').trim();
+  if (t && !looksLikeScopeTitle(t)) return t.slice(0, 200);
+  return titleFromSiteAddress(address);
+}
+
 /**
- * Pull a usable address-looking line and a claim number when present.
+ * Pull a usable address-looking line when present.
  */
 function extractMeta(text: string): {
   address: string;
   city: string;
   postalCode: string;
-  claimNumber: string;
-  titleHint: string;
 } {
   const lines = text
     .split(/\r?\n/)
@@ -64,13 +84,8 @@ function extractMeta(text: string): {
   let address = '';
   let city = '';
   let postalCode = '';
-  let claimNumber = '';
-  let titleHint = '';
 
   for (const line of lines.slice(0, 40)) {
-    const claim = line.match(/\b(?:claim|file)\s*(?:#|no\.?|number)?\s*[:\s]?\s*([A-Z0-9-]{5,})\b/i);
-    if (claim && !claimNumber) claimNumber = claim[1]!;
-
     if (
       !address
       && /\d{1,5}\s+\w+/.test(line)
@@ -87,13 +102,9 @@ function extractMeta(text: string): {
         postalCode = m[3]!;
       }
     }
-
-    if (!titleHint && /(?:water|fire|mold|storm|mitigation|rebuild|restoration)/i.test(line) && line.length < 120) {
-      titleHint = line.slice(0, 120);
-    }
   }
 
-  return { address, city, postalCode, claimNumber, titleHint };
+  return { address, city, postalCode };
 }
 
 export function proposeIntakeFromText(
@@ -112,7 +123,7 @@ export function proposeIntakeFromText(
       );
     }
     return {
-      title: `Work at ${forcedAddress}`.slice(0, 200),
+      title: titleFromSiteAddress(forcedAddress),
       workType: 'mitigation',
       address: forcedAddress.slice(0, 200),
       city: '',
@@ -171,13 +182,9 @@ export function proposeIntakeFromText(
   }
 
   const address = forcedAddress || meta.address || 'Address to confirm';
-  const title =
-    meta.titleHint ||
-    (address && address !== 'Address to confirm' ? `Work at ${address}` : 'New job from intake') ||
-    'New job from intake';
+  const title = jobTitleForIntake('', address);
 
   const facts: Record<string, string> = {};
-  if (meta.claimNumber) facts['Claim #'] = meta.claimNumber;
   if (address && address !== 'Address to confirm') facts['Site'] = address;
   facts['Source'] = scope.length
     ? 'Scope / claim text (office intake)'
@@ -193,7 +200,7 @@ export function proposeIntakeFromText(
     address,
     city: meta.city,
     postalCode: meta.postalCode,
-    claimNumber: meta.claimNumber,
+    claimNumber: '',
     briefNote: scope.length
       ? 'First published facts for Field Capture. Edit anything wrong before you approve — approving invites your capture team to film this job.'
       : 'No clear scope lines in the paste. You can add lines below, or approve without scope — AI will describe the video.',

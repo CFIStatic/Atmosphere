@@ -16,8 +16,8 @@ function newSessionToken(): string {
 }
 
 /**
- * Site address field backed by Google Places (via the authenticated BFF).
- * Falls back to a plain text input when Maps is not configured.
+ * Site address field backed by the BFF (Google Places when configured,
+ * otherwise OpenStreetMap). Falls back to a plain text input if lookup fails.
  */
 export function AddressAutocomplete({
   value,
@@ -44,9 +44,11 @@ export function AddressAutocomplete({
   const listId = `${inputId}-list`;
   const sessionRef = useRef(newSessionToken());
   const blurTimer = useRef<number | null>(null);
+  const pickGen = useRef(0);
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
+  const [chosen, setChosen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [active, setActive] = useState(-1);
   const [hint, setHint] = useState<string | null>(null);
@@ -67,19 +69,26 @@ export function AddressAutocomplete({
   }, []);
 
   useEffect(() => {
+    if (chosen) {
+      setOpen(false);
+      setSuggestions([]);
+      return;
+    }
     if (configured === false) return;
     const q = value.trim();
     if (q.length < 3) {
       setSuggestions([]);
+      setOpen(false);
       return;
     }
+    const gen = pickGen.current;
     let cancelled = false;
     const t = window.setTimeout(() => {
       setBusy(true);
       void api
         .placesAutocomplete({ input: q, sessionToken: sessionRef.current })
         .then((res) => {
-          if (cancelled) return;
+          if (cancelled || gen !== pickGen.current) return;
           setConfigured(res.configured);
           setSuggestions(res.suggestions);
           setOpen(res.suggestions.length > 0);
@@ -87,7 +96,7 @@ export function AddressAutocomplete({
           setHint(null);
         })
         .catch((err) => {
-          if (cancelled) return;
+          if (cancelled || gen !== pickGen.current) return;
           const msg = err instanceof Error ? err.message : '';
           if (/maps_unconfigured|not configured/i.test(msg)) {
             setConfigured(false);
@@ -96,20 +105,24 @@ export function AddressAutocomplete({
             setHint('Address lookup unavailable — type the full address.');
           }
           setSuggestions([]);
+          setOpen(false);
         })
         .finally(() => {
-          if (!cancelled) setBusy(false);
+          if (!cancelled && gen === pickGen.current) setBusy(false);
         });
     }, 280);
     return () => {
       cancelled = true;
       window.clearTimeout(t);
     };
-  }, [value, configured]);
+  }, [value, configured, chosen]);
 
   async function pick(s: Suggestion) {
+    pickGen.current += 1;
+    setChosen(true);
     setOpen(false);
     setSuggestions([]);
+    onChange(s.description);
     setBusy(true);
     try {
       const { address } = await api.placesDetails({
@@ -119,9 +132,12 @@ export function AddressAutocomplete({
       sessionRef.current = newSessionToken();
       onChange(address.formatted || address.addressLine1);
       onResolved?.(address);
+      setOpen(false);
+      setSuggestions([]);
       setHint(null);
     } catch {
-      onChange(s.description);
+      setOpen(false);
+      setSuggestions([]);
       setHint('Could not confirm that place — check city and postal below.');
     } finally {
       setBusy(false);
@@ -145,11 +161,11 @@ export function AddressAutocomplete({
   }
 
   return (
-    <div className="relative">
+    <div className={open && !chosen && suggestions.length > 0 ? 'relative z-50' : 'relative'}>
       <input
         id={inputId}
         role="combobox"
-        aria-expanded={open}
+        aria-expanded={open && !chosen}
         aria-controls={listId}
         aria-autocomplete="list"
         aria-activedescendant={active >= 0 ? `${listId}-${active}` : undefined}
@@ -160,11 +176,11 @@ export function AddressAutocomplete({
         autoComplete="street-address"
         placeholder={placeholder ?? 'Start typing a street address…'}
         onChange={(e) => {
+          setChosen(false);
           onChange(e.target.value);
-          setOpen(true);
         }}
         onFocus={() => {
-          if (suggestions.length) setOpen(true);
+          if (!chosen && suggestions.length) setOpen(true);
         }}
         onBlur={() => {
           blurTimer.current = window.setTimeout(() => setOpen(false), 160);
@@ -176,11 +192,11 @@ export function AddressAutocomplete({
           Looking up…
         </span>
       )}
-      {open && suggestions.length > 0 && (
+      {open && !chosen && suggestions.length > 0 && (
         <ul
           id={listId}
           role="listbox"
-          className="absolute z-30 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-line bg-paper-0 py-1 shadow-lg"
+          className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-line bg-paper-0 py-1 shadow-lg"
         >
           {suggestions.map((s, i) => (
             <li key={s.placeId} role="option" aria-selected={i === active} id={`${listId}-${i}`}>
@@ -206,7 +222,7 @@ export function AddressAutocomplete({
       )}
       {configured === false && (
         <p className="mt-1 text-[11px] text-ink-500">
-          Type the full street address. Google address lookup is not configured on this server.
+          Type the full street address — lookup is unavailable right now.
         </p>
       )}
       {hint && <p className="mt-1 text-[11px] text-caution-600">{hint}</p>}

@@ -66,12 +66,12 @@
     --faint: #78716C;
     --accent: #BC4508;
     --accent-soft: #FDF4EE;
-    --pass: #3F7D4C;
-    --pass-soft: #F0F7F1;
-    --fail: #B4361D;
-    --fail-soft: #FDF2F0;
-    --unknown: #946A0B;
-    --unknown-soft: #FDF7EC;
+    --pass: #1F7A3A;
+    --pass-soft: #E7F6EC;
+    --fail: #C62828;
+    --fail-soft: #FDECEC;
+    --unknown: #B45309;
+    --unknown-soft: #FFF6D8;
     /* The media stage stays dark in both themes — footage is reviewed against
        a dark ground — but it is the brand's warm black, not a blue-black. */
     --stage: #1C1917;
@@ -98,12 +98,12 @@
       --faint: #807C74;
       --accent: #F26E22;
       --accent-soft: #31190C;
-      --pass: #7CC98D;
-      --pass-soft: #12261A;
-      --fail: #F07A62;
-      --fail-soft: #301412;
-      --unknown: #E5B84A;
-      --unknown-soft: #2C230E;
+      --pass: #4ADE80;
+      --pass-soft: #14301C;
+      --fail: #F87171;
+      --fail-soft: #3A1414;
+      --unknown: #FBBF24;
+      --unknown-soft: #3A2E0A;
       --stage: #100F0E;
       --stage-2: #26231F;
       --stage-ink: #E8E4DD;
@@ -121,12 +121,12 @@
     --faint: #78716C;
     --accent: #BC4508;
     --accent-soft: #FDF4EE;
-    --pass: #3F7D4C;
-    --pass-soft: #F0F7F1;
-    --fail: #B4361D;
-    --fail-soft: #FDF2F0;
-    --unknown: #946A0B;
-    --unknown-soft: #FDF7EC;
+    --pass: #1F7A3A;
+    --pass-soft: #E7F6EC;
+    --fail: #C62828;
+    --fail-soft: #FDECEC;
+    --unknown: #B45309;
+    --unknown-soft: #FFF6D8;
     --stage: #1C1917;
     --stage-2: #2A2724;
     --stage-ink: #E8E4DD;
@@ -143,12 +143,12 @@
     --faint: #807C74;
     --accent: #F26E22;
     --accent-soft: #31190C;
-    --pass: #7CC98D;
-    --pass-soft: #12261A;
-    --fail: #F07A62;
-    --fail-soft: #301412;
-    --unknown: #E5B84A;
-    --unknown-soft: #2C230E;
+    --pass: #4ADE80;
+    --pass-soft: #14301C;
+    --fail: #F87171;
+    --fail-soft: #3A1414;
+    --unknown: #FBBF24;
+    --unknown-soft: #3A2E0A;
     --stage: #100F0E;
     --stage-2: #26231F;
     --stage-ink: #E8E4DD;
@@ -346,6 +346,8 @@
     overflow-x: hidden;
   }
   body[data-atm-rail-only] .app-frame { overflow: hidden; }
+  /* Intake / job record: keep the office links, hide video filters. */
+  body[data-atm-rail-only] #evidence-nav { display: none; }
   .navitem.nav-icon { justify-content: flex-start; gap: 10px; }
   .navitem.nav-icon svg { flex: none; color: var(--muted); width: 16px; height: 16px; }
   .navitem.nav-icon[aria-current="true"] svg { color: var(--accent); }
@@ -434,8 +436,9 @@
   table { width: 100%; border-collapse: collapse; }
   thead th {
     position: sticky; top: 53px; z-index: 4; background: var(--bg);
-    text-align: left; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase;
-    color: var(--faint); font-weight: 700; padding: 0; white-space: nowrap;
+    text-align: left; font-size: 12px; letter-spacing: 0;
+    text-transform: none;
+    color: var(--muted); font-weight: 600; padding: 0; white-space: nowrap;
     border-bottom: 1px solid var(--line);
   }
   thead th button {
@@ -476,12 +479,18 @@
     display: inline-flex; align-items: center; gap: 5px;
     padding: 3px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 650; white-space: nowrap;
   }
-  .chip.pass { background: var(--pass-soft); color: var(--pass); }
-  .chip.fail { background: var(--fail-soft); color: var(--fail); }
-  .chip.unknown { background: var(--unknown-soft); color: var(--unknown); }
+  .chip.pass, .chip.green { background: var(--pass-soft); color: var(--pass); }
+  .chip.fail, .chip.red { background: var(--fail-soft); color: var(--fail); }
+  .chip.unknown, .chip.yellow { background: var(--unknown-soft); color: var(--unknown); }
   .chip.hold { background: var(--ink); color: var(--panel); }
   .chip.neutral { background: var(--line-soft); color: var(--ink-2); }
   .chip .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  tr.jobrow .chip.unknown .dot,
+  tr.jobrow .chip.yellow .dot { animation: recpulse 1.2s ease-in-out infinite; }
+  @keyframes recpulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .3; }
+  }
 
   .tier {
     display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 11px;
@@ -493,20 +502,82 @@
   /* ---------- job files ---------- */
   tr.jobrow { background: var(--bg); cursor: pointer; }
   tr.jobrow:hover { background: var(--line-soft); }
-  tr.jobrow td { padding: 9px 14px; border-top: 2px solid var(--line); border-bottom: 1px solid var(--line-soft); }
-  .jobfile { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  tr.jobrow td {
+    padding: 10px 10px;
+    border-top: 2px solid var(--line);
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: middle;
+  }
+  tr.jobrow td.jobpreview { width: 96px; padding-right: 4px; }
+  tr.jobrow td.titlecell { padding-left: 18px; }
+  tr.jobrow td.titlecell .t {
+    display: inline-block;
+    vertical-align: middle;
+    max-width: 100%;
+    font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  tr.jobrow td.titlecell .job-open {
+    display: inline-block;
+    vertical-align: middle;
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  tr.jobrow td.titlecell .job-open:hover { color: var(--accent); text-decoration: underline; }
+  tr.jobrow td.titlecell .id { font-weight: 400; margin-left: 6px; }
+  .jobfile { display: inline-flex; align-items: center; gap: 12px; min-width: 0; vertical-align: middle; }
   .jobfile .caret2 { flex: none; color: var(--faint); transition: transform .15s; }
   tr.jobrow[aria-expanded="false"] .caret2 { transform: rotate(-90deg); }
-  .jobfile .folder { flex: none; color: var(--accent); }
-  .jobfile .fname { font-weight: 700; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .jobfile .fname .id { font-weight: 400; margin-left: 4px; }
-  .jobfile .fmeta { margin-left: auto; display: flex; gap: 14px; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
-  .jobfile .fmeta b { color: var(--ink-2); font-weight: 650; font-variant-numeric: tabular-nums; }
-  .jobfile .fmeta .flagged { color: var(--fail); }
-  .jobfile .fmeta .flagged b { color: var(--fail); }
+  .jobfile .folder { flex: none; color: var(--accent); width: 22px; height: 22px; }
+  .job-acts { display: flex; align-items: center; gap: 2px; flex: none; }
+  .job-act {
+    flex: none; width: 26px; height: 26px; border-radius: 6px; border: 1px solid transparent;
+    background: none; color: var(--faint); cursor: pointer; display: grid; place-items: center;
+  }
+  .job-act:hover { color: var(--ink); border-color: var(--line); background: var(--panel); }
+  .job-act:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .sheet-narrow { width: min(520px, 100%); height: auto; max-height: min(88vh, 720px); }
+  .jf-tabs { display: flex; gap: 4px; padding: 10px 16px 0; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .jf-tabs button {
+    border: 0; background: none; padding: 8px 10px; font: inherit; font-size: 13px; font-weight: 600;
+    color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .jf-tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+  .jf-body { padding: 16px 18px 20px; overflow-y: auto; }
+  .jf-body label { display: block; margin-top: 10px; }
+  .jf-body label > span { display: block; font-size: 12px; font-weight: 600; color: var(--ink-2); margin-bottom: 4px; }
+  .jf-body input, .jf-body select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--panel); color: var(--ink); font: inherit; font-size: 13px;
+  }
+  .jf-body .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .jf-submit {
+    margin-top: 14px; width: 100%; border: 0; border-radius: 8px; padding: 10px 14px;
+    background: var(--accent); color: #fff; font: inherit; font-size: 13.5px; font-weight: 650; cursor: pointer;
+  }
+  .jf-submit:disabled { opacity: .55; cursor: default; }
+  .jf-list { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .jf-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+  .jf-list .who { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .jf-list .meta { font-size: 11.5px; color: var(--muted); }
+  .jf-copy { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 3px 9px; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; color: var(--ink-2); }
+  .jf-copy:hover { color: var(--ink); }
+  .jf-note { margin: 0 0 8px; font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+  .jf-made { margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: var(--accent-soft); border: 1px solid var(--line); font-size: 12.5px; }
+  .jf-made code { display: block; margin-top: 4px; font-size: 11px; word-break: break-all; color: var(--ink-2); }
 
   /* ---------- row actions ---------- */
-  td.uploader .cellrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  td.uploader .cellrow {
+    display: inline-flex; align-items: center; justify-content: space-between;
+    gap: 10px; width: 100%; box-sizing: border-box; vertical-align: middle;
+  }
   .kebab {
     flex: none; width: 26px; height: 26px; border-radius: 6px; border: 1px solid transparent;
     background: none; color: var(--faint); cursor: pointer; display: grid; place-items: center;
@@ -549,16 +620,30 @@
   /* ---------- detail ---------- */
   .detail {
     position: fixed; inset: 0; z-index: 40; display: none;
-    background: rgba(28, 25, 23, .55); backdrop-filter: blur(2px);
+    place-items: center;
+    padding: 16px 20px;
+    background: rgba(28, 25, 23, .48);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
   }
-  .detail[data-open="1"] { display: block; }
+  .detail[data-open="1"] { display: grid; }
   .sheet {
-    position: absolute; inset: 0 0 0 auto; width: min(1080px, 100%);
-    background: var(--bg); box-shadow: -20px 0 60px -20px rgba(0,0,0,.5);
+    position: relative;
+    width: min(1440px, 100%);
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+    border-radius: 14px;
+    background: var(--bg);
+    box-shadow: 0 28px 80px -24px rgba(0,0,0,.55);
     display: flex; flex-direction: column;
   }
+  @media (max-width: 860px) {
+    .detail { padding: 8px; }
+    .sheet { border-radius: 10px; }
+  }
   .sheethead {
-    display: flex; align-items: flex-start; gap: 14px;
+    display: flex; align-items: flex-start; gap: 14px; flex: none;
     padding: 14px 18px; background: var(--panel); border-bottom: 1px solid var(--line);
   }
   .sheethead h2 { margin: 0; font-size: 15.5px; font-weight: 650; letter-spacing: -0.01em; }
@@ -570,15 +655,15 @@
   }
   .closebtn:hover { background: var(--line-soft); color: var(--ink); }
 
-  .sheetbody { flex: 1; overflow-y: auto; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(340px, 1fr); }
-  @media (max-width: 860px) { .sheetbody { grid-template-columns: 1fr; } }
+  .sheetbody { flex: 1; min-height: 0; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(300px, 0.85fr); }
+  @media (max-width: 860px) { .sheetbody { grid-template-columns: 1fr; overflow-y: auto; } }
 
-  .stage { padding: 16px 18px; border-right: 1px solid var(--line); }
-  .player { background: var(--stage); border-radius: 10px; overflow: hidden; }
-  .player .frame { aspect-ratio: 16 / 10; display: block; width: 100%; }
+  .stage { padding: 16px 18px; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  .player { background: var(--stage); border-radius: 10px; overflow: hidden; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .player .frame { flex: 1; min-height: 240px; display: grid; place-items: center; }
   .player .frame img { width: 100%; height: 100%; object-fit: contain; display: block; }
   .controls {
-    display: flex; align-items: center; gap: 10px; padding: 9px 11px;
+    display: flex; align-items: center; gap: 10px; padding: 9px 11px; flex: none;
     border-top: 1px solid var(--stage-2); color: var(--stage-ink);
   }
   .controls button {
@@ -593,65 +678,48 @@
   }
   .scrub button[aria-pressed="true"] { background: var(--accent); }
   .controls .time { font-family: var(--mono); font-size: 11.5px; color: var(--faint); min-width: 74px; text-align: right; }
-  .framenote { margin-top: 8px; font-size: 11.5px; color: var(--muted); }
 
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-top: 14px; }
-  /* Office product: the clip on the left, the AI dictation reading it aloud
-     on the right of the stage column. Crew never sees this — Field Capture
-     only records; this is the office view of what took place. */
-  .dictation {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    margin-top: 14px;
-    overflow: hidden;
-  }
-  .dictation > .dhead {
-    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
-    padding: 11px 14px 0;
-  }
-  .dictation > .dhead h4 {
-    margin: 0; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
-    color: var(--faint); font-weight: 750;
-  }
-  .dictation > .dhead .livepill {
-    font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
-    color: var(--accent); background: var(--accent-soft);
-    padding: 2px 8px; border-radius: 999px;
-  }
-  .dictation > .dbody {
-    padding: 10px 14px 14px;
-    font-size: 14.5px; line-height: 1.6; color: var(--ink);
-  }
-  .dictation > .dbody p { margin: 0 0 10px; }
-  .dictation > .dbody p:last-child { margin-bottom: 0; }
-  .dictation .entries { margin: 12px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line-soft); }
-  .dictation .entries li {
-    display: grid; grid-template-columns: 52px 1fr; gap: 10px;
-    padding: 9px 0; border-bottom: 1px solid var(--line-soft);
-    font-size: 12.5px; color: var(--ink-2);
-  }
-  .dictation .entries li:last-child { border-bottom: 0; }
-  .dictation .entries .t { font-family: var(--mono); font-size: 11px; color: var(--faint); }
   .player video {
-    display: block; width: 100%; max-height: 360px; background: #1A1815; border-radius: 8px;
+    display: block; width: 100%; height: 100%; max-height: none; object-fit: contain; background: #1A1815;
   }
-  .card > h4 {
-    margin: 0; padding: 11px 14px; font-size: 12px; letter-spacing: .04em;
-    text-transform: uppercase; color: var(--faint); font-weight: 700;
-    border-bottom: 1px solid var(--line-soft);
-  }
-  .card .body { padding: 13px 14px; }
-  .card .body p { margin: 0 0 9px; line-height: 1.55; }
-  .card .body p:last-child { margin-bottom: 0; }
 
-  .side { padding: 16px 18px 60px; }
+  .side { padding: 16px 18px 24px; overflow-y: auto; min-height: 0; }
   .tabs { display: flex; gap: 3px; background: var(--line-soft); padding: 3px; border-radius: 8px; }
   .tabs button {
     flex: 1; border: 0; background: none; padding: 7px 6px; border-radius: 6px;
     font-size: 12.5px; cursor: pointer; color: var(--muted); font-weight: 550;
   }
   .tabs button[aria-selected="true"] { background: var(--panel); color: var(--ink); font-weight: 650; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+
+  .alog-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+    margin: 0 0 10px;
+  }
+  .alog-head h4 {
+    margin: 0; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--faint); font-weight: 750;
+  }
+  .alog-head .livepill {
+    font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--accent); background: var(--accent-soft);
+    padding: 2px 8px; border-radius: 999px;
+  }
+  .alog { list-style: none; margin: 0; padding: 0; }
+  .alog li {
+    display: grid; grid-template-columns: 52px 1fr; gap: 10px;
+    padding: 10px 8px 10px 10px; border-radius: 8px; cursor: pointer;
+    border-bottom: 1px solid var(--line-soft);
+    font-size: 13px; line-height: 1.45; color: var(--ink-2);
+  }
+  .alog li:last-child { border-bottom: 0; }
+  .alog li.soon { display: none; }
+  .alog li.seen { color: var(--ink); }
+  .alog li.on {
+    display: grid; background: var(--accent-soft); color: var(--ink);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .alog .t { font-family: var(--mono); font-size: 11px; color: var(--faint); padding-top: 2px; }
+  .alog li.on .t { color: var(--accent); font-weight: 700; }
 
   .kv { display: grid; grid-template-columns: 116px minmax(0,1fr); gap: 6px 12px; font-size: 12.5px; }
   .kv dt { color: var(--muted); }
@@ -725,17 +793,13 @@
 
     <div class="rail-body">
     <div class="rail-section" id="platform-nav" hidden>
-      <button type="button" class="navitem nav-icon app-nav" data-screen="dashboard">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-        <span class="label">Dashboard</span>
-      </button>
       <button type="button" class="navitem nav-icon" id="nav-start-job" data-tour="nav-start-job">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
         <span class="label">Start a job</span>
       </button>
-      <button type="button" class="navitem nav-icon" id="nav-jobprogress" data-tour="nav-job-progress">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
-        <span class="label">Job Progress</span>
+      <button type="button" class="navitem nav-icon app-nav" data-screen="dashboard">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span class="label">Dashboard</span>
       </button>
     </div>
 
@@ -809,12 +873,10 @@
       <table id="clip-table">
         <thead>
           <tr id="colheads">
-            <th style="width:96px" data-sort-key="clip" aria-sort="none"><button type="button">Clip <span class="sortcaret" aria-hidden="true">↕</span></button></th>
-            <th data-sort-key="video" aria-sort="none"><button type="button">Video <span class="sortcaret" aria-hidden="true">↕</span></button></th>
-            <th data-sort-key="integrity" aria-sort="none"><button type="button">Integrity <span class="sortcaret" aria-hidden="true">↕</span></button></th>
-            <th data-sort-key="classification" aria-sort="none"><button type="button">Classification <span class="sortcaret" aria-hidden="true">↕</span></button></th>
-            <th data-sort-key="tier" aria-sort="none"><button type="button">Tier <span class="sortcaret" aria-hidden="true">↕</span></button></th>
-            <th data-sort-key="recorded" aria-sort="descending"><button type="button">Recorded <span class="sortcaret" aria-hidden="true">↓</span></button></th>
+            <th style="width:96px" data-sort-key="preview" aria-sort="none"><button type="button">Preview <span class="sortcaret" aria-hidden="true">↕</span></button></th>
+            <th data-sort-key="job" aria-sort="none"><button type="button">Job name <span class="sortcaret" aria-hidden="true">↕</span></button></th>
+            <th data-sort-key="status" aria-sort="none"><button type="button">Status <span class="sortcaret" aria-hidden="true">↕</span></button></th>
+            <th data-sort-key="recorded" aria-sort="descending"><button type="button">Recorded date <span class="sortcaret" aria-hidden="true">↓</span></button></th>
             <th data-sort-key="uploader" aria-sort="none"><button type="button">Uploaded by <span class="sortcaret" aria-hidden="true">↕</span></button></th>
           </tr>
         </thead>
@@ -856,6 +918,38 @@
     Property twin
   </button>
 </div>
+<div class="rowmenu" id="jobmenu" role="menu" aria-label="Job file actions" hidden>
+  <button role="menuitem" data-job-act="share">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M12 4v12"/><path d="M8 8l4-4 4 4"/></svg>
+    Share this job
+  </button>
+  <button role="menuitem" data-job-act="invite">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+    Invite people
+  </button>
+  <button role="menuitem" data-job-act="record">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5A1.5 1.5 0 0 1 5.5 5h4l2 2.5h7A1.5 1.5 0 0 1 20 9v8.5A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5z"/></svg>
+    Open full record
+  </button>
+</div>
+<div class="detail" id="jobfile-sheet" role="dialog" aria-modal="true" aria-labelledby="jf-title">
+  <div class="sheet sheet-narrow">
+    <div class="sheethead">
+      <div>
+        <h2 id="jf-title">Share this job</h2>
+        <div class="meta" id="jf-meta"></div>
+      </div>
+      <button class="closebtn" id="jf-close" aria-label="Close">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="jf-tabs" role="tablist">
+      <button type="button" role="tab" data-jf-tab="share" aria-selected="true">Send a link</button>
+      <button type="button" role="tab" data-jf-tab="invite" aria-selected="false">Add people</button>
+    </div>
+    <div class="jf-body" id="jf-body"></div>
+  </div>
+</div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <div class="detail" id="detail" role="dialog" aria-modal="true" aria-labelledby="d-title">
@@ -881,28 +975,11 @@
             <span class="time" id="d-time">frame 1 / 6</span>
           </div>
         </div>
-        <p class="framenote">
-          These are the frames the analysis actually read, evenly spaced across the clip. The original
-          file is untouched and downloadable; nothing shown here has been re-encoded.
-        </p>
-        <div class="dictation" id="d-dictation-wrap">
-          <div class="dhead">
-            <h4>AI dictation</h4>
-            <span class="livepill" id="d-dictation-pill">Reading the footage</span>
-          </div>
-          <div class="dbody" id="d-dictation">
-            <p style="color:var(--muted)">Open a clip to hear what the assistant saw.</p>
-          </div>
-        </div>
-        <div class="card">
-          <h4>Against the scope</h4>
-          <div class="body" id="d-analysis"></div>
-        </div>
       </section>
 
       <section class="side">
         <div class="tabs" role="tablist">
-          <button role="tab" data-tab="integrity" aria-selected="true">Integrity</button>
+          <button role="tab" data-tab="integrity" aria-selected="true">Scope of work</button>
           <button role="tab" data-tab="custody" aria-selected="false">Chain of custody</button>
           <button role="tab" data-tab="details" aria-selected="false">Details</button>
         </div>
@@ -1360,7 +1437,7 @@
 
   var state = {
     view: 'all', jobs: {}, companies: {}, phases: {}, q: '',
-    /** Column sort: clip | video | integrity | classification | tier | recorded | uploader */
+    /** Column sort: preview | job | status | recorded | uploader */
     sortKey: 'recorded',
     /** asc | desc — toggle on repeated clicks of the same header */
     sortDir: 'desc',
@@ -1390,7 +1467,9 @@
 
   /** The overall integrity verdict, and the rule that governs the whole product. */
   function integrityOf(item) {
-    var v = item.checks.map(function (c) { return c.verdict; });
+    var checks = item.checks || [];
+    if (!checks.length) return 'unknown';
+    var v = checks.map(function (c) { return c.verdict; });
     if (v.indexOf('fail') > -1) return 'fail';
     if (v.indexOf('unknown') > -1) return 'unknown';
     return 'pass';
@@ -1462,14 +1541,12 @@
   }
 
   function sortValue(item, key) {
-    if (key === 'clip') return Number(item.duration) || 0;
-    if (key === 'video') {
+    if (key === 'preview' || key === 'clip') return Number(item.duration) || 0;
+    if (key === 'job' || key === 'video') {
       var job = JOBS[item.job] || {};
       return String(job.name || item.jobName || '') + ' ' + String(item.phase || '');
     }
-    if (key === 'integrity') return integrityRank(item);
-    if (key === 'classification') return analysisChip(item).text.toLowerCase();
-    if (key === 'tier') return Number(item.tier) || 0;
+    if (key === 'status' || key === 'integrity') return integrityRank(item);
     if (key === 'recorded') return String(item.workDate || '') + 'T' + String(item.uploadedAt || '');
     if (key === 'uploader') return String(item.person || '') + ' ' + String(item.company || '');
     return String(item.uploadedAt || '');
@@ -1514,7 +1591,7 @@
     } else {
       state.sortKey = key;
       // Dates / ranks start newest / highest first; names start A→Z.
-      state.sortDir = (key === 'video' || key === 'classification' || key === 'uploader') ? 'asc' : 'desc';
+      state.sortDir = (key === 'job' || key === 'uploader') ? 'asc' : 'desc';
     }
     syncSortHeaders();
     render();
@@ -1529,57 +1606,267 @@
   }
 
   function clipRow(e) {
-    var integ = integrityOf(e);
-    var chip = analysisChip(e);
-    var integLabel = integ === 'pass' ? 'Verified' : integ === 'fail' ? 'Failed' : 'Unverified';
+    var job = JOBS[e.job] || { name: e.jobName || 'Job', number: null };
+    var status = clipStatus(e);
+    var phase = e.phase ? String(e.phase).replace(/_/g, ' ') : 'Video';
+    phase = phase.charAt(0).toUpperCase() + phase.slice(1);
     return '' +
       '<tr tabindex="0" data-id="' + e.id + '">' +
         '<td><span class="thumb"><img alt="" src="' + thumbFor(e) + '" /><span class="dur">' + dur(e.duration) + '</span></span></td>' +
         '<td class="titlecell">' +
-          '<div class="t">' + esc(JOBS[e.job].name.split('—')[0].trim()) + ' · ' + esc(e.phase) + '</div>' +
-          '<div class="s"><span class="id">' + esc(e.id) + '</span> · job #' + JOBS[e.job].number +
+          '<div class="t">' + esc(job.name) + '</div>' +
+          '<div class="s">' + esc(phase) +
             (e.hold && e.hold.on ? ' · <span class="chip hold"><span class="dot"></span>Legal hold</span>' : '') +
           '</div>' +
         '</td>' +
-        '<td><span class="chip ' + integ + '"><span class="dot"></span>' + integLabel + '</span></td>' +
-        '<td><span class="chip ' + chip.cls + '">' + esc(chip.text) + '</span></td>' +
-        '<td><span class="tier">T' + e.tier + '</span></td>' +
+        '<td><span class="chip ' + status.cls + '"><span class="dot"></span>' + status.text + '</span></td>' +
         '<td class="when">' + dayLabel(e.workDate) + '<small>' + stamp(e.uploadedAt) + '</small></td>' +
-        '<td class="when uploader"><span class="cellrow"><span>' + esc(e.person) + '<small>' + esc(e.company) + '</small></span>' +
+        '<td class="when uploader"><span class="cellrow"><span>' + esc(e.person || '—') + '<small>' + esc(e.company || '') + '</small></span>' +
           '<button class="kebab" aria-haspopup="menu" aria-expanded="false" aria-label="Actions for ' + esc(e.id) + '">' +
             '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>' +
           '</button></span></td>' +
       '</tr>';
   }
 
+  function clipInstant(e, keys) {
+    for (var i = 0; i < keys.length; i++) {
+      var v = e[keys[i]];
+      if (!v) continue;
+      var t = Date.parse(keys[i] === 'workDate' ? v + 'T12:00:00' : v);
+      if (!isNaN(t)) return t;
+    }
+    return 0;
+  }
+
+  function latestClip(items, keys) {
+    var best = null;
+    var bestT = -1;
+    items.forEach(function (e) {
+      var t = clipInstant(e, keys);
+      if (t >= bestT) { bestT = t; best = e; }
+    });
+    return best;
+  }
+
+  function isActiveRecording(e) {
+    var a = (e.analysis || {}).state;
+    if (a === 'queued') return true;
+    if (a === 'done' || a === 'paired' || a === 'skipped' || a === 'failed') return false;
+    var t = clipInstant(e, ['uploadedAt', 'capturedAt']);
+    return Boolean(t && (Date.now() - t) < 30 * 60 * 1000);
+  }
+
+  function jobRecordingStatus(items) {
+    if (!items.length) return { cls: 'red', text: 'No recording' };
+    if (items.some(isActiveRecording)) return { cls: 'yellow', text: 'Active recording' };
+    return { cls: 'green', text: 'Recording' };
+  }
+
+  function clipStatus(e) {
+    if (isActiveRecording(e)) return { cls: 'yellow', text: 'Active recording' };
+    var integ = integrityOf(e);
+    if (integ === 'fail') return { cls: 'red', text: 'Failed' };
+    if (needsAttention(e) || integ !== 'pass') return { cls: 'yellow', text: 'Needs review' };
+    return { cls: 'green', text: 'Verified' };
+  }
+
   /**
-   * A job file's header row. The numbers are the file's contents, computed —
-   * ten crews filing a day each reads "10 clips · 10 crews", with nobody
-   * having sorted anything into anything.
+   * Any Dashboard folder can open the job record. Demo keys (cedar / …) map
+   * onto the Job Progress fixtures; org folders use the real job id.
+   */
+  function recordJobId(key) {
+    if (key === 'cedar') return 'job-1038';
+    if (key === 'meridian') return 'job-1041';
+    if (key === 'camden') return 'job-1044';
+    return key;
+  }
+
+  function canOpenJobRecord(key) {
+    return Boolean(key) && key !== 'shared';
+  }
+
+  function openJobRecord(jobKey) {
+    if (!canOpenJobRecord(jobKey)) return;
+    var job = JOBS[jobKey] || {};
+    var id = recordJobId(jobKey);
+    var to = '/job-progress?job=' + encodeURIComponent(id);
+    if (job.name) to += '&title=' + encodeURIComponent(job.name);
+    if (job.number != null) to += '&number=' + encodeURIComponent(String(job.number));
+    if (EMBEDDED) window.parent.postMessage({ atmosphere: 'navigate', to: to }, '*');
+    else location.href = to;
+  }
+
+  var JOB_BOARD = {};
+  var DEMO_SHARES = {};
+  var DEMO_PEOPLE = {
+    cedar: [
+      { name: 'Cedar Ridge HOA', role: 'owner' },
+      { name: 'Delgado Roofing', role: 'subcontractor' }
+    ],
+    meridian: [{ name: 'Property owner', role: 'owner' }],
+    camden: [{ name: 'Camden Court HOA', role: 'owner' }]
+  };
+  var jobSheet = { key: null, tab: 'share', made: null, error: null, busy: false };
+
+  function jsonOrNull(r) { return r.ok ? r.json() : Promise.resolve(null); }
+
+  function roleWord(role) {
+    if (role === 'owner') return 'Homeowner';
+    if (role === 'adjuster') return 'Adjuster';
+    if (role === 'general_contractor') return 'General contractor';
+    if (role === 'subcontractor') return 'Subcontractor';
+    return role || 'On the job';
+  }
+
+  function boardFromClips(key, items) {
+    var daysMap = {};
+    items.forEach(function (e) { if (e.workDate) daysMap[e.workDate] = true; });
+    var dayKeys = Object.keys(daysMap).sort().reverse();
+    var people = (DEMO_PEOPLE[key] || []).slice();
+    var seenC = {};
+    people.forEach(function (p) { seenC[p.name] = 1; });
+    items.forEach(function (e) {
+      if (e.company && !seenC[e.company]) {
+        seenC[e.company] = 1;
+        people.push({ name: e.company, role: 'subcontractor' });
+      }
+    });
+    var scope = [];
+    items.forEach(function (e) {
+      if (e.analysis && e.analysis.scope && e.analysis.scope.length) scope = e.analysis.scope;
+    });
+    var done = scope.filter(function (s) { return s.verdict === 'appears_complete'; }).length;
+    var verifiedDays = 0;
+    dayKeys.forEach(function (d) {
+      var onDay = items.filter(function (e) { return e.workDate === d; });
+      if (onDay.some(function (e) { return integrityOf(e) === 'pass' && !isActiveRecording(e); })) verifiedDays += 1;
+    });
+    var inProgress = items.some(isActiveRecording) ? 1 : 0;
+    var recent = dayKeys.slice(0, 5).map(function (d) {
+      var onDay = items.filter(function (e) { return e.workDate === d; });
+      var active = onDay.some(isActiveRecording);
+      var fail = onDay.some(function (e) { return integrityOf(e) === 'fail'; });
+      var pass = onDay.some(function (e) { return integrityOf(e) === 'pass'; });
+      return {
+        day: d,
+        label: active ? 'Active' : fail ? 'Issue' : pass ? 'Verified' : 'In review',
+        tone: active ? 'caution' : fail ? 'danger' : pass ? 'success' : 'neutral'
+      };
+    });
+    return {
+      status: 'ready',
+      scopePct: scope.length ? Math.round((done / scope.length) * 100) : 0,
+      days: dayKeys.length,
+      verified: verifiedDays,
+      inProgress: inProgress,
+      people: people,
+      shares: DEMO_SHARES[key] || [],
+      recent: recent,
+      attention: null
+    };
+  }
+
+  function boardFromRecord(record, proof, shares) {
+    var scope = (record.scope || []).filter(function (s) { return s.state !== 'excluded'; });
+    var approved = scope.filter(function (s) { return s.state === 'approved'; }).length;
+    var days = (proof && proof.days) || [];
+    var counts = (proof && proof.counts) || {};
+    var risks = (record.risks || []).filter(function (r) { return r.level === 'blocker' || r.level === 'warn'; });
+    var people = (record.parties || []).filter(function (p) { return !p.revoked_at; }).map(function (p) {
+      return { name: p.company, role: p.role, id: p.id, email: p.email };
+    });
+    var recent = days.slice(0, 5).map(function (d) {
+      var label = d.contradicted ? 'Issue' : (d.accepted || d.payable) ? 'Verified' : (d.hasBefore && !d.hasAfter) ? 'On site' : 'In review';
+      var tone = d.contradicted ? 'danger' : (d.accepted || d.payable) ? 'success' : (d.hasBefore && !d.hasAfter) ? 'caution' : 'neutral';
+      return { day: d.workDate, label: label, tone: tone };
+    });
+    return {
+      status: 'ready',
+      scopePct: scope.length ? Math.round((approved / scope.length) * 100) : 0,
+      days: counts.days || days.length,
+      verified: days.filter(function (d) { return d.payable || d.accepted; }).length,
+      inProgress: days.filter(function (d) { return d.hasBefore && !d.hasAfter; }).length,
+      people: people,
+      shares: shares || [],
+      recent: recent,
+      attention: risks[0] ? risks[0].title : null,
+      record: record
+    };
+  }
+
+  function hydrateJobBoard(key) {
+    var items = EVIDENCE.filter(function (e) { return e.job === key; });
+    if (!canOpenJobRecord(key)) {
+      JOB_BOARD[key] = boardFromClips(key, items);
+      return;
+    }
+    var cur = JOB_BOARD[key];
+    if (cur && (cur.status === 'loading' || cur.status === 'ready')) return;
+    JOB_BOARD[key] = { status: 'loading' };
+    Promise.all([
+      fetch('/api/operations/shared/' + encodeURIComponent(key), { credentials: 'include' }).then(jsonOrNull).catch(function () { return null; }),
+      fetch('/api/operations/shared/' + encodeURIComponent(key) + '/proof', { credentials: 'include' }).then(jsonOrNull).catch(function () { return null; }),
+      fetch('/api/evidence-portal/shares?jobId=' + encodeURIComponent(key) + '&kind=progress', { credentials: 'include' }).then(jsonOrNull).catch(function () { return null; })
+    ]).then(function (parts) {
+      var record = parts[0];
+      var proof = parts[1];
+      var sharePayload = parts[2];
+      if (record && record.job) {
+        JOB_BOARD[key] = boardFromRecord(record, proof, (sharePayload && sharePayload.shares) || []);
+      } else {
+        JOB_BOARD[key] = boardFromClips(key, items);
+      }
+      if (jobSheet.key === key) paintJobFileSheet();
+    });
+  }
+
+  /**
+   * A job file's header row — same five columns as a clip, so the folder
+   * icon, name, recording status, latest date, and latest uploader line up.
    */
   function jobRow(key, items, collapsed) {
-    var job = JOBS[key] || { name: items[0].jobName || 'Job', number: null };
-    var crews = {};
-    items.forEach(function (e) { crews[e.company] = true; });
-    var crewN = Object.keys(crews).length;
-    var flagged = items.filter(needsAttention).length;
-    var dates = items.map(function (e) { return e.workDate; }).sort();
-    var span = dates[0] === dates[dates.length - 1]
-      ? dayLabel(dates[0])
-      : dayLabel(dates[0]) + ' – ' + dayLabel(dates[dates.length - 1]);
+    var job = JOBS[key] || { name: (items[0] && items[0].jobName) || 'Job', number: null };
+    var status = jobRecordingStatus(items);
+    var latestRecorded = latestClip(items, ['capturedAt', 'workDate', 'uploadedAt']);
+    var latestUpload = latestClip(items, ['uploadedAt', 'capturedAt']);
+    var recordedDay = '—';
+    var recordedStamp = '';
+    if (latestRecorded) {
+      var daySrc = latestRecorded.workDate ||
+        (latestRecorded.capturedAt && String(latestRecorded.capturedAt).slice(0, 10)) ||
+        (latestRecorded.uploadedAt && String(latestRecorded.uploadedAt).slice(0, 10));
+      recordedDay = daySrc ? dayLabel(daySrc) : '—';
+      recordedStamp = stamp(latestRecorded.capturedAt || latestRecorded.uploadedAt);
+    }
+    var uploader = latestUpload
+      ? esc(latestUpload.person || '—') + '<small>' + esc(latestUpload.company || '') + '</small>'
+      : '—';
+    var nameInner = esc(job.name) + (job.number ? '<span class="id">#' + job.number + '</span>' : '');
+    var nameCell = canOpenJobRecord(key)
+      ? '<button type="button" class="t fname job-open" title="Open job record">' + nameInner + '</button>'
+      : '<div class="t fname">' + nameInner + '</div>';
+    var acts =
+      '<span class="job-acts">' +
+        '<button type="button" class="job-act" data-job-act="invite" title="Invite people" aria-label="Invite people to ' + esc(job.name) + '">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>' +
+        '</button>' +
+        '<button type="button" class="job-act" data-job-act="share" title="Share this job" aria-label="Share ' + esc(job.name) + '">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M12 4v12"/><path d="M8 8l4-4 4 4"/></svg>' +
+        '</button>' +
+        '<button type="button" class="kebab" aria-haspopup="menu" aria-expanded="false" aria-label="Actions for ' + esc(job.name) + '">' +
+          '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>' +
+        '</button>' +
+      '</span>';
     return '' +
       '<tr class="jobrow" tabindex="0" data-job="' + esc(key) + '" aria-expanded="' + String(!collapsed) + '">' +
-        '<td colspan="7"><span class="jobfile">' +
+        '<td class="jobpreview"><span class="jobfile">' +
           '<svg class="caret2" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
-          '<svg class="folder" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 6.5A1.5 1.5 0 0 1 5 5h4l2 2.5h8a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18z"/></svg>' +
-          '<span class="fname">' + esc(job.name) + (job.number ? '<span class="id">#' + job.number + '</span>' : '') + '</span>' +
-          '<span class="fmeta">' +
-            '<span><b>' + items.length + '</b> clip' + (items.length === 1 ? '' : 's') + '</span>' +
-            '<span><b>' + crewN + '</b> crew' + (crewN === 1 ? '' : 's') + '</span>' +
-            (flagged ? '<span class="flagged"><b>' + flagged + '</b> flagged</span>' : '') +
-            '<span>' + span + '</span>' +
-          '</span>' +
+          '<svg class="folder" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 6.5A1.5 1.5 0 0 1 5 5h4l2 2.5h8a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18z"/></svg>' +
         '</span></td>' +
+        '<td class="titlecell">' + nameCell + '</td>' +
+        '<td><span class="chip ' + status.cls + '"><span class="dot"></span>' + status.text + '</span></td>' +
+        '<td class="when">' + recordedDay + (recordedStamp ? '<small>' + recordedStamp + '</small>' : '') + '</td>' +
+        '<td class="when uploader"><span class="cellrow"><span>' + uploader + '</span>' + acts + '</span></td>' +
       '</tr>';
   }
 
@@ -1589,11 +1876,16 @@
     var emptyTitle = document.getElementById('empty-title');
     var emptyBody = document.getElementById('empty-body');
     var clipTable = document.getElementById('clip-table');
-    var hasRows = list.length > 0;
+    var jobFileKeys = Object.keys(JOBS);
+    var showJobFiles = state.groupByJob && jobFileKeys.length > 0 && !state.q && state.view === 'all';
+    var hasRows = list.length > 0 || showJobFiles;
     if (emptyEl) {
       emptyEl.hidden = hasRows;
       if (!hasRows) {
-        if (!EVIDENCE.length) {
+        if (!EVIDENCE.length && !jobFileKeys.length) {
+          if (emptyTitle) emptyTitle.textContent = 'No jobs yet';
+          if (emptyBody) emptyBody.textContent = 'Start a job and the name shows up here. Footage files under it as crews film.';
+        } else if (!EVIDENCE.length) {
           if (emptyTitle) emptyTitle.textContent = 'No clips yet';
           if (emptyBody) emptyBody.textContent = 'When Field Capture uploads a day film, it shows up here.';
         } else {
@@ -1602,7 +1894,7 @@
         }
       }
     }
-    // Keep column headers (Clip, Video, Integrity, …) visible even with no rows.
+    // Keep column headers visible even with no rows.
     if (clipTable) clipTable.hidden = false;
     syncSortHeaders();
 
@@ -1615,23 +1907,32 @@
     }
 
     if (state.groupByJob) {
-      // The filing is automatic because it always was: every clip arrives
-      // knowing its job. The file is a query, not a folder anyone maintains.
+      // Job files exist as soon as the office starts a job. Clips file
+      // themselves under the job they arrived with.
       var order = [];
       var groups = {};
+      jobFileKeys.forEach(function (k) {
+        groups[k] = [];
+        order.push(k);
+      });
       list.forEach(function (e) {
         if (!groups[e.job]) { groups[e.job] = []; order.push(e.job); }
         groups[e.job].push(e);
       });
-      // Order job files by the sort of their first clip (list is already sorted).
-      order.sort(function (ka, kb) {
-        return compareEvidence(groups[ka][0], groups[kb][0]);
-      });
+      if (state.q || state.view !== 'all') {
+        order = order.filter(function (k) { return (groups[k] || []).length > 0; });
+      }
+      if (!jobFileKeys.length) {
+        order.sort(function (ka, kb) {
+          return compareEvidence(groups[ka][0], groups[kb][0]);
+        });
+      }
       $('#resultcount').textContent = list.length + ' of ' + EVIDENCE.length + ' clips · ' +
         order.length + ' job file' + (order.length === 1 ? '' : 's');
       rowsEl.innerHTML = order.map(function (k) {
         var collapsed = !!state.collapsed[k];
-        return jobRow(k, groups[k], collapsed) + (collapsed ? '' : groups[k].map(clipRow).join(''));
+        var clips = collapsed ? '' : (groups[k] || []).map(clipRow).join('');
+        return jobRow(k, groups[k] || [], collapsed) + clips;
       }).join('');
     } else {
       $('#resultcount').textContent = list.length + ' of ' + EVIDENCE.length + ' clips';
@@ -1655,10 +1956,37 @@
         state.collapsed[tr.dataset.job] = !state.collapsed[tr.dataset.job];
         render();
       }
-      tr.addEventListener('click', flip);
+      tr.addEventListener('click', function (ev) {
+        if (ev.target.closest('.job-open, .job-act, .kebab, .job-acts')) return;
+        flip();
+      });
       tr.addEventListener('keydown', function (ev2) {
+        if (ev2.target.closest && ev2.target.closest('.job-open, .job-act, .kebab')) return;
         if (ev2.key === 'Enter' || ev2.key === ' ') { ev2.preventDefault(); flip(); }
       });
+      var openBtn = tr.querySelector('.job-open');
+      if (openBtn) {
+        openBtn.addEventListener('click', function (ev2) {
+          ev2.preventDefault();
+          ev2.stopPropagation();
+          openJobRecord(tr.dataset.job);
+        });
+      }
+      Array.prototype.forEach.call(tr.querySelectorAll('[data-job-act]'), function (btn) {
+        btn.addEventListener('click', function (ev2) {
+          ev2.preventDefault();
+          ev2.stopPropagation();
+          openJobFileSheet(tr.dataset.job, btn.getAttribute('data-job-act'));
+        });
+      });
+      var kb = tr.querySelector('.kebab');
+      if (kb) {
+        kb.addEventListener('click', function (ev2) {
+          ev2.stopPropagation();
+          toggleJobMenu(kb, tr.dataset.job);
+        });
+        kb.addEventListener('keydown', function (ev2) { ev2.stopPropagation(); });
+      }
     });
   }
 
@@ -1688,6 +2016,7 @@
   function toggleMenu(btn, id) {
     if (menuFor === id && !menuEl.hidden) { closeMenu(); return; }
     closeMenu();
+    closeJobMenu();
     menuFor = id; menuBtn = btn;
     btn.setAttribute('aria-expanded', 'true');
     menuEl.hidden = false;
@@ -1708,21 +2037,56 @@
     menuFor = null; menuBtn = null;
   }
 
+  var jobMenuEl = $('#jobmenu');
+  var jobMenuFor = null;
+  var jobMenuBtn = null;
+
+  function toggleJobMenu(btn, jobKey) {
+    if (jobMenuFor === jobKey && jobMenuEl && !jobMenuEl.hidden) { closeJobMenu(); return; }
+    closeMenu();
+    closeJobMenu();
+    jobMenuFor = jobKey; jobMenuBtn = btn;
+    btn.setAttribute('aria-expanded', 'true');
+    jobMenuEl.hidden = false;
+    var r = btn.getBoundingClientRect();
+    var mw = jobMenuEl.offsetWidth, mh = jobMenuEl.offsetHeight;
+    var left = Math.max(8, Math.min(r.right - mw, window.innerWidth - mw - 8));
+    var top = r.bottom + 6;
+    if (top + mh > window.innerHeight - 8) top = r.top - mh - 6;
+    jobMenuEl.style.left = left + 'px';
+    jobMenuEl.style.top = Math.max(8, top) + 'px';
+    jobMenuEl.querySelector('button').focus();
+  }
+
+  function closeJobMenu() {
+    if (!jobMenuEl || jobMenuEl.hidden) return;
+    jobMenuEl.hidden = true;
+    if (jobMenuBtn) jobMenuBtn.setAttribute('aria-expanded', 'false');
+    jobMenuFor = null; jobMenuBtn = null;
+  }
+
   document.addEventListener('click', function (ev) {
     if (!menuEl.hidden && !menuEl.contains(ev.target)) closeMenu();
+    if (jobMenuEl && !jobMenuEl.hidden && !jobMenuEl.contains(ev.target)) closeJobMenu();
   });
   document.addEventListener('keydown', function (ev) {
-    if (menuEl.hidden) return;
-    if (ev.key === 'Escape') { var b = menuBtn; closeMenu(); if (b) b.focus(); }
+    if (ev.key === 'Escape') {
+      var sheet = document.getElementById('jobfile-sheet');
+      if (sheet && sheet.getAttribute('data-open') === '1') { closeJobFileSheet(); return; }
+      if (!menuEl.hidden) { var b = menuBtn; closeMenu(); if (b) b.focus(); return; }
+      if (jobMenuEl && !jobMenuEl.hidden) { var jb = jobMenuBtn; closeJobMenu(); if (jb) jb.focus(); return; }
+    }
+    var openMenu = !menuEl.hidden ? menuEl : (jobMenuEl && !jobMenuEl.hidden ? jobMenuEl : null);
+    if (!openMenu) return;
     if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
       ev.preventDefault();
-      var items = Array.prototype.slice.call(menuEl.querySelectorAll('button'));
+      var items = Array.prototype.slice.call(openMenu.querySelectorAll('button'));
       var i = items.indexOf(document.activeElement);
       items[(ev.key === 'ArrowDown' ? i + 1 : i - 1 + items.length) % items.length].focus();
     }
   });
-  window.addEventListener('resize', closeMenu);
-  window.addEventListener('scroll', closeMenu, true);
+  window.addEventListener('resize', function () { closeMenu(); closeJobMenu(); });
+  window.addEventListener('scroll', function () { closeMenu(); closeJobMenu(); }, true);
 
   var toastTimer = null;
   function toast(msg) {
@@ -1824,6 +2188,268 @@
     }
   }
 
+  if (jobMenuEl) {
+    Array.prototype.forEach.call(jobMenuEl.querySelectorAll('button'), function (b) {
+      b.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        var key = jobMenuFor;
+        var act = b.getAttribute('data-job-act');
+        closeJobMenu();
+        if (!key) return;
+        if (act === 'record') openJobRecord(key);
+        else openJobFileSheet(key, act);
+      });
+    });
+  }
+
+  function copyText(text, okMsg) {
+    var done = function () { toast(okMsg || 'Copied.'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () { window.prompt('Copy this link', text); done(); });
+    } else { window.prompt('Copy this link', text); done(); }
+  }
+
+  function openJobFileSheet(jobKey, tab) {
+    closeJobMenu();
+    hydrateJobBoard(jobKey);
+    jobSheet.key = jobKey;
+    jobSheet.tab = tab === 'invite' ? 'invite' : 'share';
+    jobSheet.made = null;
+    jobSheet.error = null;
+    jobSheet.busy = false;
+    var job = JOBS[jobKey] || { name: 'Job' };
+    var title = document.getElementById('jf-title');
+    var meta = document.getElementById('jf-meta');
+    if (title) title.textContent = jobSheet.tab === 'invite' ? 'Add people to this job' : 'Share this job';
+    if (meta) meta.textContent = job.name + (job.number ? ' · #' + job.number : '');
+    document.querySelectorAll('#jobfile-sheet [data-jf-tab]').forEach(function (btn) {
+      btn.setAttribute('aria-selected', btn.getAttribute('data-jf-tab') === jobSheet.tab ? 'true' : 'false');
+    });
+    var sheet = document.getElementById('jobfile-sheet');
+    if (sheet) sheet.setAttribute('data-open', '1');
+    paintJobFileSheet();
+  }
+
+  function closeJobFileSheet() {
+    var sheet = document.getElementById('jobfile-sheet');
+    if (sheet) sheet.removeAttribute('data-open');
+    jobSheet.key = null;
+  }
+
+  function paintJobFileSheet() {
+    var body = document.getElementById('jf-body');
+    if (!body || !jobSheet.key) return;
+    var key = jobSheet.key;
+    var b = JOB_BOARD[key];
+    var live = canOpenJobRecord(key);
+    if (jobSheet.tab === 'invite') {
+      body.innerHTML =
+        '<p class="jf-note">Add a sub, homeowner, or adjuster to this job file. Subs get a capture link; homeowners and other parties can be sent a read-only progress link from Send a link.</p>' +
+        (jobSheet.error ? '<p class="jf-note" style="color:var(--fail)">' + esc(jobSheet.error) + '</p>' : '') +
+        '<form id="jf-invite-form">' +
+          '<div class="row2">' +
+            '<label><span>Company or name</span><input name="company" required placeholder="Delgado Roofing" /></label>' +
+            '<label><span>Trade / role</span><select name="role">' +
+              '<option value="subcontractor">Subcontractor</option>' +
+              '<option value="owner">Homeowner</option>' +
+              '<option value="adjuster">Adjuster</option>' +
+              '<option value="general_contractor">General contractor</option>' +
+            '</select></label>' +
+          '</div>' +
+          '<div class="row2">' +
+            '<label><span>Trade (optional)</span><input name="trade" placeholder="Roofing" /></label>' +
+            '<label><span>Email (optional)</span><input name="email" type="email" placeholder="crew@example.com" /></label>' +
+          '</div>' +
+          '<button class="jf-submit" type="submit"' + (jobSheet.busy ? ' disabled' : '') + '>Add to this job</button>' +
+        '</form>' +
+        peopleListHtml(b);
+      var form = document.getElementById('jf-invite-form');
+      if (form) form.addEventListener('submit', function (ev) { ev.preventDefault(); submitInvite(form); });
+      return;
+    }
+    body.innerHTML =
+      '<p class="jf-note">Send a read-only progress link — no account needed. Homeowners, HOAs, attorneys, banks, and insurers can see the board and daily site updates.</p>' +
+      (jobSheet.error ? '<p class="jf-note" style="color:var(--fail)">' + esc(jobSheet.error) + '</p>' : '') +
+      '<form id="jf-share-form">' +
+        '<label><span>Who is this for?</span><input name="label" required placeholder="e.g. Cedar Ridge HOA — homeowner" /></label>' +
+        '<label><span>Email them (optional)</span><input name="email" type="email" placeholder="Leave blank to copy the link yourself" /></label>' +
+        '<label><span>Link expires</span><select name="days">' +
+          '<option value="7">In 7 days</option>' +
+          '<option value="30" selected>In 30 days</option>' +
+          '<option value="90">In 90 days</option>' +
+          '<option value="0">Never — until you revoke it</option>' +
+        '</select></label>' +
+        '<button class="jf-submit" type="submit"' + (jobSheet.busy ? ' disabled' : '') + '>Create link</button>' +
+      '</form>' +
+      (jobSheet.made ? '<div class="jf-made">' + esc(jobSheet.made.note) +
+        (jobSheet.made.path ? '<code>' + esc(jobSheet.made.path) + '</code>' : '') + '</div>' : '') +
+      shareListHtml(b, live);
+    var shareForm = document.getElementById('jf-share-form');
+    if (shareForm) shareForm.addEventListener('submit', function (ev) { ev.preventDefault(); submitShare(shareForm); });
+    Array.prototype.forEach.call(body.querySelectorAll('[data-copy]'), function (btn) {
+      btn.addEventListener('click', function () {
+        copyText(btn.getAttribute('data-copy'), 'Link copied.');
+      });
+    });
+  }
+
+  function peopleListHtml(b) {
+    var people = (b && b.people) || [];
+    if (!people.length) return '<p class="jf-note" style="margin-top:14px">Nobody is on this job yet.</p>';
+    return '<ul class="jf-list">' + people.map(function (p) {
+      return '<li><div><div class="who">' + esc(p.name) + '</div><div class="meta">' + esc(roleWord(p.role)) +
+        (p.email ? ' · ' + esc(p.email) : '') + '</div></div></li>';
+    }).join('') + '</ul>';
+  }
+
+  function shareListHtml(b) {
+    var shares = (b && b.shares) || [];
+    if (!shares.length) return '<p class="jf-note" style="margin-top:14px">No progress links issued yet.</p>';
+    return '<ul class="jf-list">' + shares.map(function (s) {
+      var path = s.path || '';
+      var full = path.indexOf('http') === 0 ? path : (location.origin + path);
+      var state = s.state || 'live';
+      return '<li><div><div class="who">' + esc(s.label || 'Share') + '</div><div class="meta">' +
+        esc(state) + (s.recipientEmail || s.recipient_email ? ' · ' + esc(s.recipientEmail || s.recipient_email) : '') +
+        '</div></div>' +
+        (path ? '<button type="button" class="jf-copy" data-copy="' + esc(full) + '">Copy link</button>' : '') +
+        '</li>';
+    }).join('') + '</ul>';
+  }
+
+  function submitShare(form) {
+    var key = jobSheet.key;
+    var label = (form.label.value || '').trim();
+    var email = (form.email.value || '').trim();
+    var days = Number(form.days.value);
+    if (!label) return;
+    jobSheet.busy = true;
+    jobSheet.error = null;
+    paintJobFileSheet();
+    if (!canOpenJobRecord(key)) {
+      var fake = { id: 'demo-' + Date.now(), label: label, path: '/progress/demo-' + key, state: 'live', recipientEmail: email || null };
+      DEMO_SHARES[key] = (DEMO_SHARES[key] || []).concat([fake]);
+      JOB_BOARD[key] = null;
+      hydrateJobBoard(key);
+      jobSheet.made = { note: email ? 'Demo link ready for ' + label + '.' : 'Demo link created. Copy it below.', path: location.origin + fake.path };
+      jobSheet.busy = false;
+      paintJobFileSheet();
+      render();
+      return;
+    }
+    fetch('/api/evidence-portal/shares', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jobId: key,
+        label: label,
+        kind: 'progress',
+        recipientEmail: email || undefined,
+        expiresInDays: days
+      })
+    }).then(function (r) {
+      return r.json().then(function (body) { return { ok: r.ok, body: body }; });
+    }).then(function (res) {
+      jobSheet.busy = false;
+      if (!res.ok) {
+        jobSheet.error = (res.body && (res.body.error || res.body.message)) || 'Could not create the share.';
+        paintJobFileSheet();
+        return;
+      }
+      var path = (res.body.share && res.body.share.path) || (res.body.path);
+      jobSheet.made = {
+        note: res.body.emailed ? 'Emailed. They can open the link directly — no account needed.' : 'Link created. Copy it and send it yourself:',
+        path: path ? (location.origin + path) : ''
+      };
+      JOB_BOARD[key] = null;
+      hydrateJobBoard(key);
+      paintJobFileSheet();
+      render();
+    }).catch(function (err) {
+      jobSheet.busy = false;
+      jobSheet.error = err && err.message ? err.message : 'Could not create the share.';
+      paintJobFileSheet();
+    });
+  }
+
+  function submitInvite(form) {
+    var key = jobSheet.key;
+    var company = (form.company.value || '').trim();
+    var role = form.role.value || 'subcontractor';
+    var trade = (form.trade.value || '').trim();
+    var email = (form.email.value || '').trim();
+    if (!company) return;
+    jobSheet.busy = true;
+    jobSheet.error = null;
+    paintJobFileSheet();
+    if (!canOpenJobRecord(key)) {
+      DEMO_PEOPLE[key] = (DEMO_PEOPLE[key] || []).concat([{ name: company, role: role, email: email || null }]);
+      JOB_BOARD[key] = null;
+      hydrateJobBoard(key);
+      jobSheet.busy = false;
+      jobSheet.made = { note: company + ' added to this job file.' };
+      paintJobFileSheet();
+      render();
+      toast(company + ' added to the job.');
+      return;
+    }
+    fetch('/api/operations/shared/' + encodeURIComponent(key) + '/parties', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        company: company,
+        role: role,
+        trade: trade || null,
+        email: email || null
+      })
+    }).then(function (r) {
+      return r.json().then(function (body) { return { ok: r.ok, body: body }; });
+    }).then(function (res) {
+      jobSheet.busy = false;
+      if (!res.ok) {
+        jobSheet.error = (res.body && (res.body.error || res.body.message)) || 'Could not add that person.';
+        paintJobFileSheet();
+        return;
+      }
+      JOB_BOARD[key] = null;
+      hydrateJobBoard(key);
+      jobSheet.error = null;
+      paintJobFileSheet();
+      render();
+      toast(company + ' added to the job.');
+    }).catch(function (err) {
+      jobSheet.busy = false;
+      jobSheet.error = err && err.message ? err.message : 'Could not add that person.';
+      paintJobFileSheet();
+    });
+  }
+
+  (function initJobFileSheet() {
+    var close = document.getElementById('jf-close');
+    var sheet = document.getElementById('jobfile-sheet');
+    if (close) close.addEventListener('click', closeJobFileSheet);
+    if (sheet) {
+      sheet.addEventListener('click', function (ev) {
+        if (ev.target === sheet) closeJobFileSheet();
+      });
+    }
+    document.querySelectorAll('#jobfile-sheet [data-jf-tab]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        jobSheet.tab = btn.getAttribute('data-jf-tab');
+        jobSheet.made = null;
+        jobSheet.error = null;
+        var title = document.getElementById('jf-title');
+        if (title) title.textContent = jobSheet.tab === 'invite' ? 'Add people to this job' : 'Share this job';
+        document.querySelectorAll('#jobfile-sheet [data-jf-tab]').forEach(function (t) {
+          t.setAttribute('aria-selected', t.getAttribute('data-jf-tab') === jobSheet.tab ? 'true' : 'false');
+        });
+        paintJobFileSheet();
+      });
+    });
+  })();
+
   /* ------------------------------------------------------------------ *
    * Detail
    * ------------------------------------------------------------------ */
@@ -1863,10 +2489,11 @@
         '<video controls playsinline preload="metadata" src="' + esc(item._videoUrl) + '"></video>';
       $('#d-scrub').innerHTML = '';
       $('#d-time').textContent = 'full clip · ' + dur(item.duration);
-      var note = document.querySelector('.framenote');
-      if (note) {
-        note.textContent =
-          'The original recording. The AI dictation below describes what is taking place — it is a reading of this footage, not an acceptance.';
+      var vid = $('#d-frame').querySelector('video');
+      if (vid) {
+        vid.addEventListener('timeupdate', function () { syncAnalysisLog(vid.currentTime); });
+        vid.addEventListener('seeked', function () { syncAnalysisLog(vid.currentTime); });
+        vid.addEventListener('play', function () { syncAnalysisLog(vid.currentTime); });
       }
     } else {
       item._frames = item._remoteFrames && item._remoteFrames.length
@@ -1882,11 +2509,6 @@
         b.addEventListener('click', function () { stopPlay(); setFrame(+b.dataset.i); });
       });
       setFrame(0);
-      var note2 = document.querySelector('.framenote');
-      if (note2) {
-        note2.textContent =
-          'These are the frames the analysis actually read, evenly spaced across the clip. The original file is untouched and downloadable; nothing shown here has been re-encoded.';
-      }
     }
 
     renderDictation(item);
@@ -1948,6 +2570,7 @@
     Array.prototype.forEach.call($('#d-scrub').querySelectorAll('button'), function (b) {
       b.setAttribute('aria-pressed', String(+b.dataset.i === i));
     });
+    syncAnalysisLog(f.at);
   }
 
   function stopPlay() {
@@ -1959,6 +2582,7 @@
     // The spoken description itself lives in renderDictation.
     var a = item.analysis || {};
     var el = $('#d-analysis');
+    if (!el) return;
 
     if (a.state === 'failed') {
       el.innerHTML = '<p style="color:var(--fail)">Scope reading failed with the dictation. Re-run from the platform; the footage is unaffected.</p>';
@@ -2039,6 +2663,122 @@
     el.innerHTML = html;
   }
 
+  function analysisLog(item) {
+    var a = item.analysis || {};
+    var rows = [];
+    var seen = {};
+    function add(at, text, kind) {
+      var t = String(text || '').trim();
+      if (!t) return;
+      var key = at + '|' + t;
+      if (seen[key]) return;
+      seen[key] = true;
+      rows.push({ at: Math.max(0, Number(at) || 0), text: t, kind: kind || 'note' });
+    }
+    (a.dictationEntries || []).forEach(function (e) {
+      add(e.atSeconds, e.text || e.summary, 'read');
+    });
+    (a.timeline || []).forEach(function (t) {
+      add(t.startSeconds, t.summary, 'window');
+    });
+    if (rows.length < 6 && a.changes && a.changes.length) {
+      var d = item.duration || 120;
+      a.changes.forEach(function (c, i) {
+        add(Math.round((i + 1) * d / (a.changes.length + 1)), c, 'change');
+      });
+    }
+    if (rows.length < 2 && a.scope && a.scope.length) {
+      var d2 = item.duration || 120;
+      a.scope.forEach(function (s, i) {
+        var w = VERDICT_WORD[s.verdict];
+        add(
+          Math.round(i * d2 / Math.max(a.scope.length - 1, 1)),
+          s.title + (w ? ' — ' + w[1] : ''),
+          'scope'
+        );
+      });
+    }
+    if (!rows.length && (a.dictation || a.summary)) add(0, a.dictation || a.summary, 'read');
+    if (!rows.length && a.reason) add(0, a.reason, 'note');
+    rows.sort(function (x, y) { return x.at - y.at; });
+    return rows;
+  }
+
+  function currentPlayhead() {
+    var host = $('#d-frame');
+    var vid = host && host.querySelector('video');
+    if (vid) return vid.currentTime || 0;
+    var item = state.open;
+    if (item && item._frames && item._frames[state.frame]) return item._frames[state.frame].at || 0;
+    return 0;
+  }
+
+  function syncAnalysisLog(seconds) {
+    var list = document.getElementById('alog');
+    if (!list) return;
+    var items = list.querySelectorAll('[data-at]');
+    if (!items.length) return;
+    var lastSeen = -1;
+    Array.prototype.forEach.call(items, function (li, i) {
+      if (seconds >= Number(li.getAttribute('data-at'))) lastSeen = i;
+    });
+    if (lastSeen < 0) lastSeen = 0;
+    Array.prototype.forEach.call(items, function (li, i) {
+      li.classList.toggle('on', i === lastSeen);
+      li.classList.toggle('seen', i < lastSeen);
+      li.classList.toggle('soon', i > lastSeen);
+    });
+    var cur = items[lastSeen];
+    if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
+  function seekTo(seconds) {
+    var host = $('#d-frame');
+    var vid = host && host.querySelector('video');
+    if (vid) {
+      vid.currentTime = seconds;
+      syncAnalysisLog(seconds);
+      return;
+    }
+    var item = state.open;
+    if (!item || !item._frames || !item._frames.length) {
+      syncAnalysisLog(seconds);
+      return;
+    }
+    var best = 0;
+    var dist = Infinity;
+    item._frames.forEach(function (f, i) {
+      var d = Math.abs((f.at || 0) - seconds);
+      if (d < dist) { dist = d; best = i; }
+    });
+    stopPlay();
+    setFrame(best);
+  }
+
+  function renderScopeLog(item) {
+    var a = item.analysis || {};
+    var rows = analysisLog(item);
+    var writing = a.state === 'queued' || a.state === 'none';
+    var html = '<div class="alog-head"><h4>AI analysis</h4>' +
+      (writing
+        ? '<span class="livepill">Writing…</span>'
+        : a.state === 'failed'
+          ? '<span class="livepill">Failed</span>'
+          : '<span class="livepill">Reading the footage</span>') +
+      '</div>';
+    if (!rows.length) {
+      html += '<p class="footnote" style="margin-top:4px">' +
+        esc(a.reason || 'The assistant is reading this clip. Notes land here as the footage plays.') +
+        '</p>';
+      return html;
+    }
+    html += '<ul class="alog" id="alog">' + rows.map(function (r, i) {
+      return '<li data-at="' + r.at + '" class="' + (i === 0 ? 'on' : 'soon') + '">' +
+        '<span class="t">' + dur(r.at) + '</span><span>' + esc(r.text) + '</span></li>';
+    }).join('') + '</ul>';
+    return html;
+  }
+
   function setTab(tab) {
     Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
       b.setAttribute('aria-selected', String(b.dataset.tab === tab));
@@ -2048,27 +2788,11 @@
     var el = $('#d-panel');
 
     if (tab === 'integrity') {
-      var integ = integrityOf(item);
-      var head = integ === 'pass'
-        ? ['pass', 'Every check on this clip passed']
-        : integ === 'fail'
-          ? ['fail', 'A check failed — this clip does not stand as proof']
-          : ['unknown', 'Some checks could not run. Unverified is not the same as wrong.'];
-      var html = '<div class="verdictline ' + head[0] + '">' + esc(head[1]) + '</div>';
-      if (item.hold && item.hold.on) {
-        html += '<div class="banner hold"><div><strong>Legal hold.</strong> ' + esc(item.hold.reason) +
-          '<br />Placed by ' + esc(item.hold.by) + ' on ' + stamp(item.hold.at) +
-          '. Retention cannot delete this clip while the hold stands.</div></div>';
-      }
-      html += item.checks.map(function (c) {
-        return '<div class="checkrow"><span class="chip ' + c.verdict + '"><span class="dot"></span>' +
-          (c.verdict === 'pass' ? 'Pass' : c.verdict === 'fail' ? 'Fail' : 'Unknown') + '</span>' +
-          '<span><div class="what">' + esc(c.what) + '</div><div class="detail-txt">' + esc(c.detail) + '</div></span></div>';
-      }).join('');
-      html += '<p class="footnote">Checks run once, at upload, against what the device reported and what the ' +
-        'server observed. They are stored as findings rather than recomputed, so this is what was known when ' +
-        'somebody decided — not what today\'s code would conclude.</p>';
-      el.innerHTML = html;
+      el.innerHTML = renderScopeLog(item);
+      Array.prototype.forEach.call(el.querySelectorAll('#alog [data-at]'), function (li) {
+        li.addEventListener('click', function () { seekTo(Number(li.getAttribute('data-at'))); });
+      });
+      syncAnalysisLog(currentPlayhead());
       return;
     }
 
@@ -2193,8 +2917,9 @@
       return;
     }
     if (activeRoute === '/shared' || activeRoute === '/job-progress') {
-      var jobProgress = document.getElementById('nav-jobprogress');
-      if (jobProgress) jobProgress.setAttribute('aria-current', 'true');
+      // Job record is a Dashboard detail — keep Dashboard lit.
+      var dashOnRecord = document.querySelector('#platform-nav .app-nav[data-screen="dashboard"]');
+      if (dashOnRecord) dashOnRecord.setAttribute('aria-current', 'true');
       return;
     }
     if (activeRoute === '/settings') {
@@ -2218,6 +2943,7 @@
   }
 
   function setActiveRoute(path) {
+    var prev = activeRoute;
     activeRoute = path || '/verifier-library';
     if (activeRoute === '/verifier-library') {
       // Keep Dashboard vs Videos selection; only reset when arriving from
@@ -2225,6 +2951,7 @@
       if (activeRailItem !== 'dashboard' && activeRailItem.indexOf('view:') !== 0) {
         activeRailItem = 'dashboard';
       }
+      if (prev !== '/verifier-library' && !SHARE_TOKEN) loadOrgLibrary();
     } else {
       activeRailItem = '';
     }
@@ -2255,9 +2982,8 @@
   // When the portal is the platform's whole screen, Settings appears at the
   // bottom of this sidebar and hands navigation back to the shell — the
   // portal itself stays a page that knows nothing about the app around it.
-  // Job files is the same handoff for the one thing the portal has no screen
-  // for: setting a job's scope, seeing whether it can be verified yet, and
-  // inviting a subcontractor.
+  // Opening a job name is the same handoff for the record the portal has no
+  // screen for: scope, whether it can be verified yet, and inviting a crew.
   function setScreen(name) {
     var dash = document.getElementById('screen-dashboard');
     if (dash) dash.hidden = name !== 'dashboard';
@@ -2272,13 +2998,19 @@
     }
   }
 
+  function initialsFrom(fullName, email) {
+    var name = (fullName && String(fullName).trim()) || (email && String(email).split('@')[0]) || '';
+    var words = name.split(/[\s._-]+/).filter(Boolean);
+    if (words.length >= 2) return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
+    return name.slice(0, 2).toUpperCase() || '—';
+  }
+
   function applySession(payload) {
     if (!payload || !payload.user) return;
     var u = payload.user;
     var name = u.name || 'Teammate';
     var email = u.email || '';
-    var init = u.initials || '??';
-    // Org name only in the chip — role labels (e.g. Field Technician) stay out of the chrome.
+    var init = u.initials || initialsFrom(name, email);
     var sub = u.orgName || email || 'Atmosphere';
 
     var whoName = document.getElementById('who-name');
@@ -2293,6 +3025,32 @@
     if (menuName) menuName.textContent = name;
     if (menuEmail) menuEmail.textContent = email;
     if (menuMeta) menuMeta.textContent = u.orgName || '';
+  }
+
+  function loadAccountFromApi() {
+    function jsonOrNull(r) { return r.ok ? r.json() : Promise.resolve(null); }
+    Promise.all([
+      fetch('/api/auth/me', { credentials: 'include' }).then(jsonOrNull).catch(function () { return null; }),
+      fetch('/api/profile', { credentials: 'include' }).then(jsonOrNull).catch(function () { return null; }),
+      fetch('/api/org/me', { credentials: 'include' }).then(jsonOrNull).catch(function () { return null; })
+    ]).then(function (parts) {
+      var me = parts[0] && parts[0].user;
+      var profile = parts[1] && parts[1].profile;
+      var membership = parts[2] && parts[2].membership;
+      if (!me && !profile) return;
+      var meta = (me && me.metadata) || {};
+      var fullName = (profile && profile.fullName) || meta.full_name || meta.fullName || meta.name || null;
+      var email = (profile && profile.email) || (me && me.email) || '';
+      var orgName = membership && membership.org && membership.org.name;
+      applySession({
+        user: {
+          name: (fullName && String(fullName).trim()) || (email ? String(email).split('@')[0] : '') || 'Teammate',
+          email: email,
+          initials: initialsFrom(fullName, email),
+          orgName: orgName || null
+        }
+      });
+    });
   }
 
   function initAccountMenu() {
@@ -2344,14 +3102,14 @@
   initAccountMenu();
 
   function goHome() {
-    // Brand / home lands on Job Progress — where approved jobs show up.
-    activeRoute = '/job-progress';
-    activeRailItem = '';
+    // Brand / home lands on the Dashboard — job folders and clips.
+    activeRoute = '/verifier-library';
+    activeRailItem = 'dashboard';
     syncSidebarActive();
     if (EMBEDDED) {
-      window.parent.postMessage({ atmosphere: 'navigate', to: '/job-progress' }, '*');
+      window.parent.postMessage({ atmosphere: 'navigate', to: '/verifier-library' }, '*');
     } else {
-      location.href = '/job-progress';
+      location.href = '/verifier-library';
     }
   }
 
@@ -2372,6 +3130,7 @@
 
   if (EMBEDDED) {
     window.parent.postMessage({ atmosphere: 'request-session' }, '*');
+    loadAccountFromApi();
     var railHead = document.getElementById('rail-head');
     var platformNav = document.getElementById('platform-nav');
     var railFooter = document.getElementById('rail-footer');
@@ -2399,15 +3158,6 @@
         activeRailItem = '';
         syncSidebarActive();
         window.parent.postMessage({ atmosphere: 'navigate', to: '/intake' }, '*');
-      });
-    }
-    var navJobProgress = document.getElementById('nav-jobprogress');
-    if (navJobProgress) {
-      navJobProgress.addEventListener('click', function () {
-        activeRoute = '/job-progress';
-        activeRailItem = '';
-        syncSidebarActive();
-        window.parent.postMessage({ atmosphere: 'navigate', to: '/job-progress' }, '*');
       });
     }
     var navSettings = document.getElementById('nav-settings');
@@ -2616,6 +3366,62 @@
       '</div>';
   }
 
+  function applyOrgLibrary(payload) {
+    ORG_MODE = true;
+    JOBS = {};
+    (payload.jobs || []).forEach(function (j) {
+      if (!j || !j.jobId) return;
+      JOBS[j.jobId] = {
+        key: j.jobId,
+        name: j.jobName || 'Job',
+        number: j.jobNumber != null ? j.jobNumber : null,
+        address: ''
+      };
+    });
+    (payload.items || []).forEach(function (raw) {
+      if (raw.jobId && !JOBS[raw.jobId]) {
+        JOBS[raw.jobId] = {
+          key: raw.jobId,
+          name: raw.jobName || 'Job',
+          number: raw.jobNumber != null ? raw.jobNumber : null,
+          address: ''
+        };
+      }
+    });
+    EVIDENCE = (payload.items || []).map(function (raw) { return mapRemoteItem(raw, raw.jobId); });
+  }
+
+  function loadOrgLibrary() {
+    var wantDemo = new URLSearchParams(location.search).get('demo') === '1';
+    return fetch('/api/evidence-portal/library', { credentials: 'include' })
+      .then(function (r) {
+        if (r.status === 401 || r.status === 403) {
+          if (wantDemo) { boot(); return null; }
+          // Signed-out library: same empty chrome as an org with no uploads —
+          // no sign-in banner shoved above the table, no twin shortcut here.
+          ORG_MODE = false;
+          EVIDENCE = [];
+          JOBS = {};
+          boot();
+          return null;
+        }
+        if (!r.ok) throw new Error('no library');
+        return r.json();
+      })
+      .then(function (payload) {
+        if (!payload) return;
+        applyOrgLibrary(payload);
+        boot();
+      })
+      .catch(function () {
+        if (wantDemo) boot();
+        else {
+          EVIDENCE = [];
+          boot();
+        }
+      });
+  }
+
   if (SHARE_TOKEN) {
     fetch('/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN), { credentials: 'include' })
       .then(function (r) {
@@ -2649,50 +3455,7 @@
       })
       .catch(function () { deadLink(0, null); });
   } else {
-    // No token: this is the platform's own view of the record. Ask the
-    // backend for the whole library; a static or demo context (no session,
-    // no API) falls back to the built-in record, silently — the page must
-    // never look broken for lacking a server.
-    var wantDemo = new URLSearchParams(location.search).get('demo') === '1';
-    fetch('/api/evidence-portal/library', { credentials: 'include' })
-      .then(function (r) {
-        if (r.status === 401 || r.status === 403) {
-          if (wantDemo) { boot(); return null; }
-          // Signed-out library: same empty chrome as an org with no uploads —
-          // no sign-in banner shoved above the table, no twin shortcut here.
-          ORG_MODE = false;
-          EVIDENCE = [];
-          boot();
-          showEmptyLibraryNote();
-          return null;
-        }
-        if (!r.ok) throw new Error('no library');
-        return r.json();
-      })
-      .then(function (payload) {
-        if (!payload) return;
-        ORG_MODE = true;
-        JOBS = {};
-        (payload.items || []).forEach(function (raw) {
-          if (raw.jobId && !JOBS[raw.jobId]) {
-            JOBS[raw.jobId] = {
-              key: raw.jobId,
-              name: raw.jobName || 'Job',
-              number: raw.jobNumber != null ? raw.jobNumber : null,
-              address: ''
-            };
-          }
-        });
-        EVIDENCE = (payload.items || []).map(function (raw) { return mapRemoteItem(raw, raw.jobId); });
-        boot();
-      })
-      .catch(function () {
-        if (wantDemo) boot();
-        else {
-          EVIDENCE = [];
-          boot();
-        }
-      });
+    loadOrgLibrary();
   }
 })();
 </script>
