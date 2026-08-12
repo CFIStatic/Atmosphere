@@ -64,7 +64,7 @@ export const WORK_VERIFICATION_TOUR: ProductTourDefinition = {
     {
       id: 'job-record',
       title: 'The job record',
-      body: 'Each job has one file: scope, parties, Field Capture invites, and a day-by-day timeline of what crews filmed.',
+      body: 'Open a job to see what is happening on site, what has already been done, and what is still ahead. Scope, crew, and documents stay under job setup.',
       route: '/verifier-library',
       simulation: 'job-files',
       placement: 'center',

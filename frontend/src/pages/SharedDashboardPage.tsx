@@ -280,7 +280,7 @@ export function SharedDashboardPage() {
       </button>
       <PageHeader
         title={record?.job.title ?? 'Job'}
-        description="Scope, parties, invites, and proof days for this job."
+        description="What is happening on site, what has already been done, and what is still ahead."
         action={
           record ? (
             <button
