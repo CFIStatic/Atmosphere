@@ -17,10 +17,9 @@ import {
 } from './quality/filter.js';
 import { createClassifyScenesHandler } from './scenes/group.js';
 import {
-  AnthropicVisionAnalyzer,
   createAnalyzeFramesHandler,
-  GeminiVisionAnalyzer,
   MockVisionAnalyzer,
+  RoutedVisionAnalyzer,
   UnconfiguredVisionAnalyzer,
   type VisionAnalyzer,
 } from './ai/analyzer.js';
@@ -64,10 +63,10 @@ async function loadFrameBase64(ctx: PipelineContext, storagePath: string): Promi
 
 export function createDefaultAnalyzer(): VisionAnalyzer {
   const mode = resolveVisionAnalyzerMode();
-  if (mode === 'gemini') return new GeminiVisionAnalyzer();
-  if (mode === 'anthropic') return new AnthropicVisionAnalyzer();
   if (mode === 'mock') return new MockVisionAnalyzer();
-  return new UnconfiguredVisionAnalyzer();
+  if (mode === 'unconfigured') return new UnconfiguredVisionAnalyzer();
+  // Routed picks the cheapest configured provider (Gemini/OpenAI/Grok/Anthropic).
+  return new RoutedVisionAnalyzer();
 }
 
 export function createVerificationOrchestrator(opts?: {

@@ -54,9 +54,29 @@ const DEFAULT_CATALOG: CatalogEntry[] = [
   // ── Google ────────────────────────────────────────────────────────────────
   { key: 'google:flagship', provider: 'google', model: process.env.GOOGLE_MODEL_FLAGSHIP ?? 'gemini-2.5-pro', inputPricePerMTok: 1.25, outputPricePerMTok: 10, tier: 'frontier', contextWindow: 1_000_000 },
   { key: 'google:fast', provider: 'google', model: process.env.GOOGLE_MODEL_FAST ?? 'gemini-2.5-flash', inputPricePerMTok: 0.3, outputPricePerMTok: 2.5, tier: 'fast', contextWindow: 1_000_000 },
+  // Verification primary default — kept as its own key so video routing can pin
+  // Flash without colliding with learning-layer google:fast overrides.
+  {
+    key: 'google:verification-fast',
+    provider: 'google',
+    model: process.env.VERIFICATION_PRIMARY_MODEL ?? 'gemini-2.0-flash',
+    inputPricePerMTok: 0.1,
+    outputPricePerMTok: 0.4,
+    tier: 'fast',
+    contextWindow: 1_000_000,
+  },
 
   // ── xAI (Grok) ────────────────────────────────────────────────────────────
   { key: 'xai:flagship', provider: 'xai', model: process.env.XAI_MODEL_FLAGSHIP ?? 'grok-4', inputPricePerMTok: 3, outputPricePerMTok: 15, tier: 'frontier', contextWindow: 256_000 },
+  {
+    key: 'xai:fast',
+    provider: 'xai',
+    model: process.env.XAI_MODEL_FAST ?? 'grok-3-mini',
+    inputPricePerMTok: 0.3,
+    outputPricePerMTok: 0.5,
+    tier: 'fast',
+    contextWindow: 131_000,
+  },
 
   // ── Open weights ──────────────────────────────────────────────────────────
   // Self-hosted, so "price" is amortised GPU cost per token rather than a

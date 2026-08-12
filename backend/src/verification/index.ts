@@ -48,6 +48,7 @@ export {
   MockVisionAnalyzer,
   GeminiVisionAnalyzer,
   AnthropicVisionAnalyzer,
+  RoutedVisionAnalyzer,
   UnconfiguredVisionAnalyzer,
   shouldEscalate,
   type VisionAnalyzer,
@@ -56,6 +57,7 @@ export {
   MockVerificationProvider,
   MockEscalationProvider,
   UnconfiguredVerificationProvider,
+  RoutedVerificationProvider,
   createDefaultVerifier,
   shouldEscalateVerification,
   workEventVerificationResultSchema,
@@ -68,6 +70,15 @@ export {
   resolveLlmVerifierMode,
   type VerificationCapabilities,
 } from './capabilities.js';
+export {
+  selectVideoRoute,
+  getVideoRoutingPlan,
+  configuredVideoProviders,
+  hasAnyVideoProvider,
+  type VideoRouteTask,
+  type VideoRouteChoice,
+  type VideoRoutingPlan,
+} from './ai/router.js';
 export {
   getProjectVerificationReport,
   getVideoProcessingStatus,

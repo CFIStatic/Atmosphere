@@ -7,11 +7,16 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { isModelProviderConfigured } from '../lib/anthropic.js';
 import { verificationConfig } from './config.js';
+import {
+  getVideoRoutingPlan,
+  hasAnyVideoProvider,
+  type VideoProviderId,
+  type VideoRoutingPlan,
+} from './ai/router.js';
 
-export type AnalyzerMode = 'gemini' | 'anthropic' | 'mock' | 'unconfigured';
-export type VerifierMode = 'anthropic' | 'google' | 'mock' | 'unconfigured';
+export type AnalyzerMode = 'routed' | 'mock' | 'unconfigured';
+export type VerifierMode = 'routed' | 'mock' | 'unconfigured';
 
 export interface VerificationCapabilities {
   /** True when proof narration + deep pipeline can run without mock AI. */
@@ -20,19 +25,24 @@ export interface VerificationCapabilities {
   mockFallbackAllowed: boolean;
   proofNarration: {
     configured: boolean;
-    provider: 'anthropic' | null;
+    provider: VideoProviderId | null;
+    model: string | null;
     detail: string;
   };
   visionAnalyzer: {
     mode: AnalyzerMode;
     model: string | null;
+    provider: VideoProviderId | null;
     detail: string;
   };
   llmVerifier: {
     mode: VerifierMode;
     model: string | null;
+    provider: VideoProviderId | null;
     detail: string;
   };
+  /** Cost-aware route table for the five video tasks. */
+  routing: VideoRoutingPlan;
   ffmpeg: {
     available: boolean;
     path: string;
@@ -42,17 +52,11 @@ export interface VerificationCapabilities {
   keys: {
     anthropic: boolean;
     google: boolean;
+    openai: boolean;
+    xai: boolean;
   };
   /** Env vars an operator should set — names only, never values. */
   requiredEnv: Array<{ name: string; purpose: string; set: boolean }>;
-}
-
-function hasGoogleKey(): boolean {
-  return Boolean(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY);
-}
-
-function hasAnthropicKey(): boolean {
-  return isModelProviderConfigured() || Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
 function mockForced(): boolean {
@@ -68,16 +72,14 @@ function mockFallbackAllowed(): boolean {
 
 export function resolveVisionAnalyzerMode(): AnalyzerMode {
   if (mockForced()) return 'mock';
-  if (hasGoogleKey()) return 'gemini';
-  if (hasAnthropicKey()) return 'anthropic';
+  if (hasAnyVideoProvider()) return 'routed';
   if (mockFallbackAllowed()) return 'mock';
   return 'unconfigured';
 }
 
 export function resolveLlmVerifierMode(): VerifierMode {
   if (mockForced() || process.env.NODE_ENV === 'test') return 'mock';
-  if (hasAnthropicKey()) return 'anthropic';
-  if (hasGoogleKey()) return 'google';
+  if (hasAnyVideoProvider()) return 'routed';
   if (mockFallbackAllowed()) return 'mock';
   return 'unconfigured';
 }
@@ -96,77 +98,65 @@ function probeBinary(bin: string): boolean {
 }
 
 export function getVerificationCapabilities(): VerificationCapabilities {
-  const anthropic = hasAnthropicKey();
-  const google = hasGoogleKey();
+  const routing = getVideoRoutingPlan();
+  const keys = {
+    anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
+    google: Boolean(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY),
+    openai: Boolean(process.env.OPENAI_API_KEY),
+    xai: Boolean(process.env.XAI_API_KEY),
+  };
   const visionMode = resolveVisionAnalyzerMode();
   const verifierMode = resolveLlmVerifierMode();
   const ffmpegOk = probeBinary(verificationConfig.ffmpegPath);
   const ffprobeOk = probeBinary(verificationConfig.ffprobePath);
   const ffmpegAvailable = ffmpegOk && ffprobeOk;
 
-  const proofConfigured = anthropic;
-  const realVision = visionMode === 'gemini' || visionMode === 'anthropic';
-  const realVerifier = verifierMode === 'anthropic' || verifierMode === 'google';
+  const proofRoute = routing.proofNarration;
+  const visionRoute = routing.frameObservation;
+  const verifyRoute = routing.llmVerify;
+
   const ready =
     !mockForced() &&
-    proofConfigured &&
-    realVision &&
-    realVerifier &&
+    visionMode === 'routed' &&
+    verifierMode === 'routed' &&
+    Boolean(proofRoute) &&
     ffmpegAvailable;
-
-  const visionModel =
-    visionMode === 'gemini'
-      ? verificationConfig.primaryModel
-      : visionMode === 'anthropic'
-        ? verificationConfig.escalationModel
-        : visionMode === 'mock'
-          ? 'mock-vision'
-          : null;
-
-  const verifierModel =
-    verifierMode === 'anthropic'
-      ? process.env.VERIFICATION_LLM_VERIFIER_MODEL ?? verificationConfig.escalationModel
-      : verifierMode === 'google'
-        ? process.env.VERIFICATION_LLM_VERIFIER_MODEL ?? verificationConfig.primaryModel
-        : verifierMode === 'mock'
-          ? 'mock-verifier'
-          : null;
 
   return {
     ready,
     mockForced: mockForced(),
     mockFallbackAllowed: mockFallbackAllowed(),
     proofNarration: {
-      configured: proofConfigured,
-      provider: proofConfigured ? 'anthropic' : null,
-      detail: proofConfigured
-        ? 'Anthropic will narrate filed clips and compare before/after days.'
-        : 'Set ANTHROPIC_API_KEY so the office can read filed videos.',
+      configured: Boolean(proofRoute),
+      provider: proofRoute?.provider ?? null,
+      model: proofRoute?.model ?? null,
+      detail: proofRoute
+        ? `Narration routes to ${proofRoute.provider}/${proofRoute.model} (${proofRoute.tier}).`
+        : 'Set at least one of ANTHROPIC_API_KEY, GOOGLE_API_KEY, OPENAI_API_KEY, XAI_API_KEY.',
     },
     visionAnalyzer: {
       mode: visionMode,
-      model: visionModel,
+      model: visionRoute?.model ?? (visionMode === 'mock' ? 'mock-vision' : null),
+      provider: visionRoute?.provider ?? null,
       detail:
-        visionMode === 'gemini'
-          ? 'Gemini Flash reads frames for the deep verification pipeline.'
-          : visionMode === 'anthropic'
-            ? 'Anthropic vision is the frame reader (no Gemini key set).'
-            : visionMode === 'mock'
-              ? 'Mock vision is active — results are fixtures, not model reads.'
-              : 'Set GOOGLE_API_KEY (or GEMINI_API_KEY), or ANTHROPIC_API_KEY for vision.',
+        visionMode === 'routed' && visionRoute
+          ? `Bulk frames → ${visionRoute.provider}/${visionRoute.model}. Escalation → ${routing.frameEscalation?.provider}/${routing.frameEscalation?.model}.`
+          : visionMode === 'mock'
+            ? 'Mock vision is active — results are fixtures, not model reads.'
+            : 'Set GOOGLE_API_KEY (cheapest), OPENAI_API_KEY, XAI_API_KEY, or ANTHROPIC_API_KEY.',
     },
     llmVerifier: {
       mode: verifierMode,
-      model: verifierModel,
+      model: verifyRoute?.model ?? (verifierMode === 'mock' ? 'mock-verifier' : null),
+      provider: verifyRoute?.provider ?? null,
       detail:
-        verifierMode === 'anthropic'
-          ? 'Anthropic is the primary work-event verifier.'
-          : verifierMode === 'google'
-            ? 'Gemini is verifying work events (no Anthropic key).'
-            : verifierMode === 'mock'
-              ? 'Mock verifier is active — decisions are not model-backed.'
-              : 'Set ANTHROPIC_API_KEY (preferred) or GOOGLE_API_KEY for the LLM verifier.',
+        verifierMode === 'routed' && verifyRoute
+          ? `Bulk verify → ${verifyRoute.provider}/${verifyRoute.model}. Disputes → ${routing.llmEscalate?.provider}/${routing.llmEscalate?.model}.`
+          : verifierMode === 'mock'
+            ? 'Mock verifier is active — decisions are not model-backed.'
+            : 'Set at least one model API key for the LLM verifier.',
     },
+    routing,
     ffmpeg: {
       available: ffmpegAvailable,
       path: verificationConfig.ffmpegPath,
@@ -175,17 +165,27 @@ export function getVerificationCapabilities(): VerificationCapabilities {
         : `Install FFmpeg on the worker host (looked for ${verificationConfig.ffmpegPath} / ${verificationConfig.ffprobePath}).`,
     },
     pipelineFromProof: process.env.VERIFICATION_PIPELINE_FROM_PROOF !== 'false',
-    keys: { anthropic, google },
+    keys,
     requiredEnv: [
       {
-        name: 'ANTHROPIC_API_KEY',
-        purpose: 'Proof narration, day comparison, LLM verifier (and vision fallback)',
-        set: anthropic,
+        name: 'GOOGLE_API_KEY',
+        purpose: 'Cheapest frame observations (Gemini Flash) — preferred for bulk vision',
+        set: keys.google,
       },
       {
-        name: 'GOOGLE_API_KEY',
-        purpose: 'Primary low-cost Gemini frame observations (or use GEMINI_API_KEY)',
-        set: google,
+        name: 'OPENAI_API_KEY',
+        purpose: 'OpenAI mini / flagship vision + verify arms',
+        set: keys.openai,
+      },
+      {
+        name: 'XAI_API_KEY',
+        purpose: 'Grok fast / flagship arms',
+        set: keys.xai,
+      },
+      {
+        name: 'ANTHROPIC_API_KEY',
+        purpose: 'Narration + escalation / dispute verifier (accuracy path)',
+        set: keys.anthropic,
       },
       {
         name: 'FFMPEG_PATH',

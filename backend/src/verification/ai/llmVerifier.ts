@@ -26,6 +26,7 @@ import {
   VERIFIER_PROMPT_KEY,
   VERIFIER_PROMPT_VERSION,
 } from '../prompts/registry.js';
+import { hasAnyVideoProvider } from './router.js';
 
 export const LLM_DECISIONS = [
   'verified',
@@ -357,8 +358,57 @@ export class HttpLlmVerificationProvider implements VerificationProvider {
 export class UnconfiguredVerificationProvider implements VerificationProvider {
   async verifyWorkEvent(): Promise<never> {
     throw new Error(
-      'Video LLM verifier is not configured. Set ANTHROPIC_API_KEY (preferred) or GOOGLE_API_KEY / GEMINI_API_KEY, or enable VERIFICATION_USE_MOCK_AI for fixtures.',
+      'Video LLM verifier is not configured. Set OPENAI_API_KEY, GOOGLE_API_KEY / GEMINI_API_KEY, XAI_API_KEY, and/or ANTHROPIC_API_KEY, or enable VERIFICATION_USE_MOCK_AI for fixtures.',
     );
+  }
+}
+
+/**
+ * Cost-aware verifier — cheap arm for bulk work-event checks; escalation
+ * provider swaps in a stronger arm only for disputed / high-risk events.
+ */
+export class RoutedVerificationProvider implements VerificationProvider {
+  constructor(
+    private readonly task: 'llm_verify' | 'llm_escalate' = 'llm_verify',
+    private readonly fetchFn?: typeof fetch,
+  ) {}
+
+  async verifyWorkEvent(input: WorkEventVerificationInput) {
+    const { selectVideoRoute } = await import('./router.js');
+    const { completeTextRoute } = await import('./multimodal.js');
+    const route = selectVideoRoute(this.task);
+    if (!route) {
+      throw new Error(
+        'No LLM verifier provider is configured. Set OPENAI_API_KEY, GOOGLE_API_KEY, XAI_API_KEY, or ANTHROPIC_API_KEY.',
+      );
+    }
+    const started = Date.now();
+    const system = DEFAULT_VERIFIER_SYSTEM;
+    const user = buildUserPayload(input);
+    const result = await completeTextRoute({
+      route,
+      system,
+      userText: user,
+      json: true,
+      fetchFn: this.fetchFn,
+    });
+    const parsed = parseModelJson(result.text, workEventVerificationResultSchema);
+    return {
+      parsed,
+      raw: result.text,
+      provider: result.provider,
+      modelName: result.model,
+      modelVersion: null,
+      promptKey: VERIFIER_PROMPT_KEY,
+      promptVersion: VERIFIER_PROMPT_VERSION,
+      usage: {
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+        latencyMs: result.latencyMs || Date.now() - started,
+        providerRequestId: result.providerRequestId,
+        estimatedCostUsd: result.estimatedCostUsd,
+      },
+    };
   }
 }
 
@@ -366,20 +416,8 @@ export function createDefaultVerifier(): VerificationProvider {
   if (process.env.VERIFICATION_USE_MOCK_AI === 'true' || process.env.NODE_ENV === 'test') {
     return new MockVerificationProvider();
   }
-  if (process.env.ANTHROPIC_API_KEY) {
-    return new HttpLlmVerificationProvider({
-      provider: 'anthropic',
-      model: process.env.VERIFICATION_LLM_VERIFIER_MODEL ?? verificationConfig.escalationModel,
-      apiKey: process.env.ANTHROPIC_API_KEY,
-    });
-  }
-  const googleKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || '';
-  if (googleKey) {
-    return new HttpLlmVerificationProvider({
-      provider: 'google',
-      model: process.env.VERIFICATION_LLM_VERIFIER_MODEL ?? verificationConfig.primaryModel,
-      apiKey: googleKey,
-    });
+  if (hasAnyVideoProvider()) {
+    return new RoutedVerificationProvider('llm_verify');
   }
   if (process.env.VERIFICATION_ALLOW_MOCK_FALLBACK === 'true') {
     return new MockVerificationProvider();
@@ -392,18 +430,14 @@ export function createDefaultEscalationVerifier(): EscalationVerificationProvide
     return new MockEscalationProvider();
   }
   const primary = createDefaultVerifier();
+  const escalation = new RoutedVerificationProvider('llm_escalate');
   return {
     async reviewDisputedEvent(input) {
-      // Prefer a stronger model when Anthropic is configured.
-      if (process.env.ANTHROPIC_API_KEY && !(primary instanceof MockVerificationProvider)) {
-        const esc = new HttpLlmVerificationProvider({
-          provider: 'anthropic',
-          model: verificationConfig.escalationModel,
-          apiKey: process.env.ANTHROPIC_API_KEY,
-        });
-        return esc.verifyWorkEvent(input);
+      try {
+        return await escalation.verifyWorkEvent(input);
+      } catch {
+        return primary.verifyWorkEvent(input);
       }
-      return primary.verifyWorkEvent(input);
     },
   };
 }

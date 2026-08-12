@@ -186,19 +186,30 @@ See `backend/.env.example` section **Video work verification**. Important:
 - report grouping
 - pipeline idempotency + retry
 
-## AI keys (what to set)
+## AI keys + cost-aware routing
 
 Server-only. Never put these in the browser.
 
-| Key | Role |
-|-----|------|
-| `ANTHROPIC_API_KEY` | Proof narration + day comparison; primary LLM verifier; vision fallback when Gemini is unset |
-| `GOOGLE_API_KEY` or `GEMINI_API_KEY` | Primary low-cost Gemini frame observations |
+The video pipeline routes each task to the **cheapest configured** capable model,
+and escalates to a stronger tier only on low confidence, conflicts, or safety flags.
 
-Minimum for a real read: **Anthropic alone** (narration + Anthropic vision + Anthropic verifier).  
-Recommended: **both** (Gemini frames + Anthropic verifier/narration).
+| Key | Role in the route table |
+|-----|-------------------------|
+| `GOOGLE_API_KEY` / `GEMINI_API_KEY` | Preferred for **bulk frames** and **bulk verify** (Flash) |
+| `OPENAI_API_KEY` | Fast/flagship arms when Gemini is absent or for failover |
+| `XAI_API_KEY` | Grok fast/flagship arms |
+| `ANTHROPIC_API_KEY` | **Proof narration** + **escalation / dispute** path (accuracy) |
 
-Check readiness: `GET /api/verification/capabilities` (Settings → Video AI).
+| Task | Default preference (first configured wins) |
+|------|--------------------------------------------|
+| Bulk frame observation | Gemini Flash → OpenAI mini → Grok mini → Haiku |
+| Frame escalation | Sonnet → GPT flagship → Gemini Pro → Grok → Opus |
+| Bulk LLM verify | Gemini Flash → OpenAI mini → Grok mini → Haiku → Sonnet |
+| Dispute escalate | Sonnet → GPT flagship → Gemini Pro → Grok → Opus |
+| Proof narration | Sonnet → Gemini Flash → OpenAI mini → … |
+
+Check readiness + live route table: `GET /api/verification/capabilities`
+(Settings → Video AI).
 
 Unset keys no longer silently mock in non-test deploys unless
 `VERIFICATION_USE_MOCK_AI=true` or `VERIFICATION_ALLOW_MOCK_FALLBACK=true`.

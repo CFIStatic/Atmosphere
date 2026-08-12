@@ -1645,7 +1645,7 @@ function JobSourceCard() {
 
 /**
  * Whether this deployment can actually read filed videos. Keys live on the
- * server — this panel only reports readiness so an operator knows what to set.
+ * server — this panel reports readiness and the cost-aware route table.
  */
 function VideoAiSection() {
   const [caps, setCaps] = useState<VerificationCapabilities | null>(null);
@@ -1669,11 +1669,23 @@ function VideoAiSection() {
     void load();
   }, [load]);
 
+  const routeRows = caps
+    ? (
+        [
+          ['Bulk frames', caps.routing.frameObservation],
+          ['Frame escalation', caps.routing.frameEscalation],
+          ['Bulk verify', caps.routing.llmVerify],
+          ['Dispute escalate', caps.routing.llmEscalate],
+          ['Proof narration', caps.routing.proofNarration],
+        ] as const
+      ).filter(([, route]) => route)
+    : [];
+
   return (
     <div className="space-y-5">
       <Card
         title="Video AI readiness"
-        description="Filed clips are narrated and verified on the server. Keys never leave the backend — set them in the host environment, then refresh here."
+        description="Filed clips are narrated and verified on the server. The router picks the cheapest capable model for bulk work and escalates only when confidence is low."
       >
         {loading ? (
           <p className="text-sm text-ink-600">Checking…</p>
@@ -1690,8 +1702,9 @@ function VideoAiSection() {
             >
               {caps.ready ? (
                 <>
-                  <strong>Live.</strong> Narration, frame reading, and the LLM verifier can run
-                  against real model APIs. FFmpeg is available for frame extraction.
+                  <strong>Live.</strong> Cost-aware routing across{' '}
+                  {caps.routing.configuredProviders.join(', ') || 'configured providers'}. Bulk
+                  frames and verifies use fast tiers; disputes escalate.
                 </>
               ) : caps.mockForced ||
                 caps.visionAnalyzer.mode === 'mock' ||
@@ -1703,34 +1716,33 @@ function VideoAiSection() {
                 </>
               ) : (
                 <>
-                  <strong>Not ready.</strong> Set the missing server keys below (or install FFmpeg
-                  on the worker). Until then, filed videos will skip or fail AI reads instead of
-                  inventing answers.
+                  <strong>Not ready.</strong> Set at least one model key below (Gemini preferred for
+                  cheap frames) and install FFmpeg on the worker.
                 </>
               )}
             </div>
 
             <ReadOnlyRow
-              label="Proof narration"
+              label="Providers configured"
               value={
-                caps.proofNarration.configured
-                  ? `Ready · ${caps.proofNarration.provider}`
-                  : 'Needs ANTHROPIC_API_KEY'
+                caps.routing.configuredProviders.length
+                  ? caps.routing.configuredProviders.join(', ')
+                  : 'None'
               }
             />
             <ReadOnlyRow
-              label="Frame vision"
+              label="Bulk frames"
               value={
-                caps.visionAnalyzer.model
-                  ? `${caps.visionAnalyzer.mode} · ${caps.visionAnalyzer.model}`
+                caps.visionAnalyzer.provider && caps.visionAnalyzer.model
+                  ? `${caps.visionAnalyzer.provider} · ${caps.visionAnalyzer.model}`
                   : caps.visionAnalyzer.mode
               }
             />
             <ReadOnlyRow
-              label="LLM verifier"
+              label="Bulk verify"
               value={
-                caps.llmVerifier.model
-                  ? `${caps.llmVerifier.mode} · ${caps.llmVerifier.model}`
+                caps.llmVerifier.provider && caps.llmVerifier.model
+                  ? `${caps.llmVerifier.provider} · ${caps.llmVerifier.model}`
                   : caps.llmVerifier.mode
               }
             />
@@ -1738,16 +1750,9 @@ function VideoAiSection() {
               label="FFmpeg"
               value={caps.ffmpeg.available ? `Available · ${caps.ffmpeg.path}` : 'Not found on host'}
             />
-            <ReadOnlyRow
-              label="Deep pipeline from proof uploads"
-              value={caps.pipelineFromProof ? 'On' : 'Off'}
-            />
 
             <p className="text-xs text-ink-500">{caps.visionAnalyzer.detail}</p>
             <p className="text-xs text-ink-500">{caps.llmVerifier.detail}</p>
-            {!caps.ffmpeg.available && (
-              <p className="text-xs text-ink-500">{caps.ffmpeg.detail}</p>
-            )}
 
             <div className="pt-1">
               <PrimaryButton onClick={() => void load()} disabled={loading}>
@@ -1758,30 +1763,40 @@ function VideoAiSection() {
         ) : null}
       </Card>
 
+      {routeRows.length > 0 && (
+        <Card
+          title="Cost-aware routes"
+          description="Cheapest configured arm wins for high-volume work. Escalation arms run only on low confidence, conflicts, or safety flags."
+        >
+          <ul className="space-y-2">
+            {routeRows.map(([label, route]) =>
+              route ? (
+                <li
+                  key={label}
+                  className="flex flex-wrap items-start justify-between gap-2 rounded-lg glass-card px-3.5 py-2.5"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-ink-900">{label}</p>
+                    <p className="text-xs text-ink-600">
+                      {route.provider} · {route.model} · {route.tier}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-[11px] text-ink-500">
+                    ${route.inputPricePerMTok}/MTok in
+                  </span>
+                </li>
+              ) : null,
+            )}
+          </ul>
+        </Card>
+      )}
+
       <Card
         title="Server environment"
-        description="Paste keys into the backend host env (or backend/.env for local). Restart the BFF after changing them. Minimum for live analysis: ANTHROPIC_API_KEY. Recommended: also GOOGLE_API_KEY for cheaper Gemini frames."
+        description="Paste keys into the backend host env (or backend/.env for local). Restart the BFF after changing them. Ideal set: Gemini (cheap frames) + Anthropic (escalation) + OpenAI and/or Grok as alternates."
       >
         <dl className="space-y-3 text-sm">
-          {(
-            caps?.requiredEnv ?? [
-              {
-                name: 'ANTHROPIC_API_KEY',
-                purpose: 'Proof narration, day comparison, LLM verifier (and vision fallback)',
-                set: false,
-              },
-              {
-                name: 'GOOGLE_API_KEY',
-                purpose: 'Primary low-cost Gemini frame observations (or use GEMINI_API_KEY)',
-                set: false,
-              },
-              {
-                name: 'FFMPEG_PATH',
-                purpose: 'Server-side frame extraction for long / frame-less uploads',
-                set: false,
-              },
-            ]
-          ).map((row) => (
+          {(caps?.requiredEnv ?? []).map((row) => (
             <div key={row.name} className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <code className="font-mono text-xs text-ink-900">{row.name}</code>
@@ -1789,9 +1804,7 @@ function VideoAiSection() {
               </div>
               <span
                 className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
-                  row.set
-                    ? 'bg-success-50 text-success-600'
-                    : 'bg-paper-200 text-ink-600'
+                  row.set ? 'bg-success-50 text-success-600' : 'bg-paper-200 text-ink-600'
                 }`}
               >
                 {row.set ? 'Set' : 'Missing'}

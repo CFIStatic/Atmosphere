@@ -492,7 +492,7 @@ export class AnthropicVisionAnalyzer implements VisionAnalyzer {
 export class UnconfiguredVisionAnalyzer implements VisionAnalyzer {
   private fail(): never {
     throw new Error(
-      'Video vision AI is not configured. Set GOOGLE_API_KEY (or GEMINI_API_KEY) and/or ANTHROPIC_API_KEY, or enable VERIFICATION_USE_MOCK_AI for fixtures.',
+      'Video vision AI is not configured. Set GOOGLE_API_KEY / GEMINI_API_KEY, OPENAI_API_KEY, XAI_API_KEY, and/or ANTHROPIC_API_KEY, or enable VERIFICATION_USE_MOCK_AI for fixtures.',
     );
   }
 
@@ -507,6 +507,118 @@ export class UnconfiguredVisionAnalyzer implements VisionAnalyzer {
   }
   escalateAnalysis(): Promise<AnalysisResult<FrameObservationParsed>> {
     this.fail();
+  }
+}
+
+/**
+ * Cost-aware vision analyzer — picks the cheapest configured provider for
+ * bulk frames and a stronger arm only when escalateAnalysis is called.
+ */
+export class RoutedVisionAnalyzer implements VisionAnalyzer {
+  constructor(private readonly opts?: { fetchFn?: typeof fetch }) {}
+
+  async analyzeFrame(
+    image: VisionImage,
+    context?: AnalysisContext,
+  ): Promise<AnalysisResult<FrameObservationParsed>> {
+    const scopeNote = context?.scopeLines?.length
+      ? `Job scope lines (note if visible; do not invent completed work):\n${context.scopeLines.map((t) => `- ${t}`).join('\n')}`
+      : 'No job scope attached — describe only what the worker appears to be doing in this frame.';
+    return this.run('frame_observation', FRAME_SYSTEM, frameObservationSchema, [image], [
+      context?.roomHint ? `Room hint: ${context.roomHint}` : 'Analyze this frame.',
+      scopeNote,
+    ].join('\n'));
+  }
+
+  async compareFrames(
+    before: VisionImage,
+    after: VisionImage,
+    _context?: AnalysisContext,
+  ): Promise<AnalysisResult<z.output<typeof frameComparisonSchema>>> {
+    return this.run(
+      'frame_observation',
+      COMPARE_SYSTEM,
+      frameComparisonSchema,
+      [before, after],
+      'Image 1 is before. Image 2 is after.',
+    );
+  }
+
+  async analyzeFrameSequence(
+    images: VisionImage[],
+    context?: AnalysisContext,
+  ): Promise<AnalysisResult<z.output<typeof sequenceAnalysisSchema>>> {
+    return this.run(
+      'frame_observation',
+      SEQUENCE_SYSTEM,
+      sequenceAnalysisSchema,
+      images,
+      context?.roomHint
+        ? `Ordered frames. Room hint: ${context.roomHint}`
+        : 'Ordered frames from one walkthrough.',
+    );
+  }
+
+  async escalateAnalysis(
+    images: VisionImage[],
+    reason: string,
+    context?: AnalysisContext,
+  ): Promise<AnalysisResult<FrameObservationParsed>> {
+    return this.run(
+      'frame_escalation',
+      FRAME_SYSTEM,
+      frameObservationSchema,
+      images,
+      [
+        `Escalation: ${reason}`,
+        context?.roomHint ? `Room hint: ${context.roomHint}` : '',
+        `Analyze ${images.length} frame(s).`,
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    );
+  }
+
+  private async run<S extends z.ZodTypeAny>(
+    task: 'frame_observation' | 'frame_escalation',
+    system: string,
+    schema: S,
+    images: VisionImage[],
+    userNote: string,
+  ): Promise<AnalysisResult<z.output<S>>> {
+    const { selectVideoRoute } = await import('./router.js');
+    const { completeMultimodal } = await import('./multimodal.js');
+    const route = selectVideoRoute(task);
+    if (!route) {
+      throw new Error(
+        'No video vision provider is configured. Set GOOGLE_API_KEY, OPENAI_API_KEY, XAI_API_KEY, or ANTHROPIC_API_KEY.',
+      );
+    }
+    const result = await completeMultimodal({
+      route,
+      system,
+      userText: userNote,
+      images: images.map((img) => ({ mimeType: img.mimeType, base64: img.base64 })),
+      json: true,
+      fetchFn: this.opts?.fetchFn,
+    });
+    const parsed = parseModelJson(result.text, schema);
+    return {
+      parsed,
+      raw: result.text,
+      provider: result.provider,
+      modelName: result.model,
+      modelVersion: null,
+      promptVersion: verificationConfig.promptVersion,
+      usage: {
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+        latencyMs: result.latencyMs,
+        providerRequestId: result.providerRequestId,
+        estimatedCostUsd: result.estimatedCostUsd,
+      },
+      cached: false,
+    };
   }
 }
 

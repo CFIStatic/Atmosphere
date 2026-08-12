@@ -788,6 +788,27 @@ export interface ProofResponse {
   siteKnown: boolean;
 }
 
+export type VideoAiProvider = 'openai' | 'anthropic' | 'google' | 'xai';
+
+export interface VideoRouteChoice {
+  provider: VideoAiProvider;
+  model: string;
+  catalogKey: string;
+  tier: 'frontier' | 'balanced' | 'fast';
+  inputPricePerMTok: number;
+  outputPricePerMTok: number;
+  reason: string;
+}
+
+export interface VideoRoutingPlan {
+  frameObservation: VideoRouteChoice | null;
+  frameEscalation: VideoRouteChoice | null;
+  llmVerify: VideoRouteChoice | null;
+  llmEscalate: VideoRouteChoice | null;
+  proofNarration: VideoRouteChoice | null;
+  configuredProviders: VideoAiProvider[];
+}
+
 /** Server readiness for AI video analysis — booleans and env names only. */
 export interface VerificationCapabilities {
   ready: boolean;
@@ -795,26 +816,30 @@ export interface VerificationCapabilities {
   mockFallbackAllowed: boolean;
   proofNarration: {
     configured: boolean;
-    provider: 'anthropic' | null;
+    provider: VideoAiProvider | null;
+    model: string | null;
     detail: string;
   };
   visionAnalyzer: {
-    mode: 'gemini' | 'anthropic' | 'mock' | 'unconfigured';
+    mode: 'routed' | 'mock' | 'unconfigured';
     model: string | null;
+    provider: VideoAiProvider | null;
     detail: string;
   };
   llmVerifier: {
-    mode: 'anthropic' | 'google' | 'mock' | 'unconfigured';
+    mode: 'routed' | 'mock' | 'unconfigured';
     model: string | null;
+    provider: VideoAiProvider | null;
     detail: string;
   };
+  routing: VideoRoutingPlan;
   ffmpeg: {
     available: boolean;
     path: string;
     detail: string;
   };
   pipelineFromProof: boolean;
-  keys: { anthropic: boolean; google: boolean };
+  keys: { anthropic: boolean; google: boolean; openai: boolean; xai: boolean };
   requiredEnv: Array<{ name: string; purpose: string; set: boolean }>;
 }
 
