@@ -224,17 +224,39 @@ async function request<T>(path: string): Promise<T> {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch {
-    throw new AnalyticsError(0, 'Network error — is the backend running?', 'network_error');
+    throw new AnalyticsError(
+      0,
+      'Atmosphere API is not running. Start it with `cd backend && npm run dev` (port 4000), then try again.',
+      'network_error',
+    );
   }
 
   const text = await res.text();
-  const body = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+  let body: Record<string, unknown> = {};
+  if (text) {
+    try {
+      body = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      body = {};
+    }
+  }
 
   if (!res.ok) {
+    const explicit = typeof body.error === 'string' ? body.error.trim() : '';
+    const emptyOrNonJson = !text.trim() || Object.keys(body).length === 0;
+    const unreachable =
+      res.status === 502 ||
+      res.status === 503 ||
+      res.status === 504 ||
+      (res.status === 500 && emptyOrNonJson);
     throw new AnalyticsError(
       res.status,
-      (body.error as string) ?? `Request failed (${res.status})`,
-      (body.code as string) ?? 'error',
+      explicit ||
+        (unreachable
+          ? 'Atmosphere API is not running. Start it with `cd backend && npm run dev` (port 4000), then try again.'
+          : `Request failed (${res.status})`),
+      (typeof body.code === 'string' && body.code) ||
+        (unreachable ? 'backend_unreachable' : 'error'),
     );
   }
   return body as T;
