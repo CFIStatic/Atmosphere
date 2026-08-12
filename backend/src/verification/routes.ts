@@ -33,6 +33,7 @@ import { monthSpendUsd } from './cost/tracker.js';
 import { linkOutcome } from './timeline/graph.js';
 import { createDatasetExampleFromResult } from './dataset/examples.js';
 import { exportDatasetVersionJsonl } from './dataset/exportJsonl.js';
+import { getVerificationCapabilities } from './capabilities.js';
 
 export const verificationRouter = Router();
 
@@ -69,6 +70,15 @@ function orgReq(req: Request) {
   };
   return r;
 }
+
+/**
+ * GET /api/verification/capabilities
+ * Whether this deployment can analyse video for real. Returns booleans and
+ * env var *names* only — never key material.
+ */
+verificationRouter.get('/capabilities', (_req, res) => {
+  res.json(getVerificationCapabilities());
+});
 
 /** POST /api/verification/videos — create upload record + signed URL */
 verificationRouter.post('/videos', uploadLimiter, async (req, res, next) => {

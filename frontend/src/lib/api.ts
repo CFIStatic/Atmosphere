@@ -788,6 +788,102 @@ export interface ProofResponse {
   siteKnown: boolean;
 }
 
+export type VideoAiProvider = 'openai' | 'anthropic' | 'google' | 'xai';
+
+export interface VideoRouteChoice {
+  provider: VideoAiProvider;
+  model: string;
+  catalogKey: string;
+  tier: 'frontier' | 'balanced' | 'fast';
+  inputPricePerMTok: number;
+  outputPricePerMTok: number;
+  reason: string;
+}
+
+export interface VideoRoutingPlan {
+  frameObservation: VideoRouteChoice | null;
+  frameEscalation: VideoRouteChoice | null;
+  llmVerify: VideoRouteChoice | null;
+  llmEscalate: VideoRouteChoice | null;
+  proofNarration: VideoRouteChoice | null;
+  configuredProviders: VideoAiProvider[];
+}
+
+/** Server readiness for AI video analysis — booleans and env names only. */
+export interface VerificationCapabilities {
+  ready: boolean;
+  mockForced: boolean;
+  mockFallbackAllowed: boolean;
+  proofNarration: {
+    configured: boolean;
+    provider: VideoAiProvider | null;
+    model: string | null;
+    detail: string;
+  };
+  visionAnalyzer: {
+    mode: 'routed' | 'mock' | 'unconfigured';
+    model: string | null;
+    provider: VideoAiProvider | null;
+    detail: string;
+  };
+  llmVerifier: {
+    mode: 'routed' | 'mock' | 'unconfigured';
+    model: string | null;
+    provider: VideoAiProvider | null;
+    detail: string;
+  };
+  routing: VideoRoutingPlan;
+  ffmpeg: {
+    available: boolean;
+    path: string;
+    detail: string;
+  };
+  pipelineFromProof: boolean;
+  keys: { anthropic: boolean; google: boolean; openai: boolean; xai: boolean };
+  requiredEnv: Array<{ name: string; purpose: string; set: boolean }>;
+}
+
+export type VerificationResultStatus =
+  | 'verified'
+  | 'likely_verified'
+  | 'partially_verified'
+  | 'uncertain'
+  | 'contradicted'
+  | 'rejected'
+  | 'human_verified'
+  | 'needs_review';
+
+export interface VerificationTimelineEvent {
+  id: string;
+  observedAt: string | null;
+  roomOrArea: string | null;
+  title: string;
+  activityType: string;
+  status: VerificationResultStatus;
+  systemConfidence: number | null;
+  modelConfidence: number | null;
+  summary: string | null;
+  videoId?: string | null;
+  proofId?: string | null;
+  evidenceFrameIds: string[];
+  videoTimestamps: number[];
+  reviewStatus: string | null;
+}
+
+export interface VerificationJobReport {
+  jobId: string;
+  videoCount: number;
+  processingVideos: number;
+  resultCount: number;
+  byStatus: Record<string, number>;
+  openReviews: number;
+  timeline: VerificationTimelineEvent[];
+  byRoom: Record<string, VerificationTimelineEvent[]>;
+  verified: VerificationTimelineEvent[];
+  uncertain: VerificationTimelineEvent[];
+  rejected: VerificationTimelineEvent[];
+}
+
 export interface ProofQuestion {
   id: string;
   question: string;
@@ -3203,6 +3299,12 @@ export const api = {
       `/api/operations/shared/proof/${proofId}/video`,
       { method: 'GET' },
     ),
+
+  verificationCapabilities: () =>
+    request<VerificationCapabilities>('/api/verification/capabilities', { method: 'GET' }),
+
+  verificationJobReport: (jobId: string) =>
+    request<VerificationJobReport>(`/api/verification/jobs/${jobId}/report`, { method: 'GET' }),
 
   // ---- Territories ----
   territories: () => request<{ items: Territory[] }>('/api/sales/territories', { method: 'GET' }),

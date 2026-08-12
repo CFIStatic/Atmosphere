@@ -18,8 +18,9 @@ import {
 import { createClassifyScenesHandler } from './scenes/group.js';
 import {
   createAnalyzeFramesHandler,
-  GeminiVisionAnalyzer,
   MockVisionAnalyzer,
+  RoutedVisionAnalyzer,
+  UnconfiguredVisionAnalyzer,
   type VisionAnalyzer,
 } from './ai/analyzer.js';
 import {
@@ -45,6 +46,7 @@ import {
   createDatasetExamplesHandler,
 } from './dataset/handlers.js';
 import { verificationConfig } from './config.js';
+import { resolveVisionAnalyzerMode } from './capabilities.js';
 import type { PipelineContext } from './pipeline/orchestrator.js';
 
 async function loadFrameBytes(ctx: PipelineContext, storagePath: string): Promise<Buffer> {
@@ -60,15 +62,11 @@ async function loadFrameBase64(ctx: PipelineContext, storagePath: string): Promi
 }
 
 export function createDefaultAnalyzer(): VisionAnalyzer {
-  if (process.env.VERIFICATION_USE_MOCK_AI === 'true') {
-    return new MockVisionAnalyzer();
-  }
-  const hasGoogle = Boolean(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY);
-  if (hasGoogle) return new GeminiVisionAnalyzer();
-  if (process.env.NODE_ENV === 'test' || process.env.VERIFICATION_ALLOW_MOCK_FALLBACK === 'true') {
-    return new MockVisionAnalyzer();
-  }
-  return new GeminiVisionAnalyzer();
+  const mode = resolveVisionAnalyzerMode();
+  if (mode === 'mock') return new MockVisionAnalyzer();
+  if (mode === 'unconfigured') return new UnconfiguredVisionAnalyzer();
+  // Routed picks the cheapest configured provider (Gemini/OpenAI/Grok/Anthropic).
+  return new RoutedVisionAnalyzer();
 }
 
 export function createVerificationOrchestrator(opts?: {

@@ -1,23 +1,49 @@
 /**
  * AI cost estimation and monthly budget enforcement.
+ *
+ * Prefers the shared model catalog (per-model prices across OpenAI / Anthropic /
+ * Gemini / Grok). Falls back to verificationConfig rates when the model is
+ * unknown so old call sites that only pass a provider still work.
  */
 
+import {
+  estimateCostUsd as catalogEstimateCostUsd,
+  lookupModel,
+} from '../../ai/catalog.js';
+import type { ProviderId } from '../../ai/providers/types.js';
 import { verificationConfig } from '../config.js';
 
 export function estimateCostUsd(
   provider: string,
   inputTokens: number,
   outputTokens: number,
+  model?: string,
 ): number {
-  const p = provider.toLowerCase();
+  const p = provider.toLowerCase() as ProviderId | string;
+  if (model && ['openai', 'anthropic', 'google', 'xai', 'oss'].includes(p)) {
+    const entry = lookupModel(p as ProviderId, model);
+    if (entry) {
+      return Number(
+        catalogEstimateCostUsd(p as ProviderId, model, inputTokens, outputTokens).toFixed(6),
+      );
+    }
+  }
   const inRate =
     p.includes('anthropic') || p.includes('claude')
       ? verificationConfig.anthropicInputPerMTokUsd
-      : verificationConfig.geminiInputPerMTokUsd;
+      : p.includes('openai') || p.includes('gpt')
+        ? 0.25
+        : p.includes('xai') || p.includes('grok')
+          ? 0.3
+          : verificationConfig.geminiInputPerMTokUsd;
   const outRate =
     p.includes('anthropic') || p.includes('claude')
       ? verificationConfig.anthropicOutputPerMTokUsd
-      : verificationConfig.geminiOutputPerMTokUsd;
+      : p.includes('openai') || p.includes('gpt')
+        ? 2
+        : p.includes('xai') || p.includes('grok')
+          ? 0.5
+          : verificationConfig.geminiOutputPerMTokUsd;
   return Number(((inputTokens / 1e6) * inRate + (outputTokens / 1e6) * outRate).toFixed(6));
 }
 

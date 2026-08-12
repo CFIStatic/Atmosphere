@@ -24,6 +24,7 @@ import {
   type Diagnosis,
   type Integration,
   type MemberRole,
+  type VerificationCapabilities,
   type WorkType,
 } from '../lib/api';
 import { usageIntentsForRole } from '../components/setup/verifierSetupOptions';
@@ -46,6 +47,7 @@ import {
   SpinnerIcon,
   UserIcon,
   CreditCardIcon,
+  VideoIcon,
 } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { WORK_VERIFICATION_TOUR, queueProductTour } from '../lib/productTour';
@@ -56,6 +58,7 @@ type SectionId =
   | 'organization'
   | 'billing'
   | 'integrations'
+  | 'videoai'
   | 'sending'
   | 'contactdata'
   | 'preferences';
@@ -93,6 +96,15 @@ const SECTIONS: SettingsSection[] = [
     label: 'Connected apps',
     blurb: 'Your CRM and the data we mirror from it',
     icon: BuildingIcon,
+  },
+  {
+    // Work Verification's model keys. Server env only — this panel reports
+    // readiness so an operator knows whether live analysis will run. Visible
+    // on every platform: capture and office both depend on the same backend.
+    id: 'videoai',
+    label: 'Video AI',
+    blurb: 'Whether the server can read filed videos',
+    icon: VideoIcon,
   },
   {
     // Connecting a mailbox is a Sales concern and an owner decision: it is the
@@ -187,6 +199,7 @@ export function SettingsPage() {
           {active === 'organization' && <OrganizationSection />}
           {active === 'billing' && <BillingSection />}
           {active === 'integrations' && <IntegrationsSection />}
+          {active === 'videoai' && <VideoAiSection />}
           {active === 'sending' && <SendingSection />}
           {active === 'contactdata' && <ContactDataSection />}
           {active === 'preferences' && (
@@ -1627,6 +1640,180 @@ function JobSourceCard() {
         </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * Whether this deployment can actually read filed videos. Keys live on the
+ * server — this panel reports readiness and the cost-aware route table.
+ */
+function VideoAiSection() {
+  const [caps, setCaps] = useState<VerificationCapabilities | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setCaps(await api.verificationCapabilities());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not check video AI readiness.');
+      setCaps(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const routeRows = caps
+    ? (
+        [
+          ['Bulk frames', caps.routing.frameObservation],
+          ['Frame escalation', caps.routing.frameEscalation],
+          ['Bulk verify', caps.routing.llmVerify],
+          ['Dispute escalate', caps.routing.llmEscalate],
+          ['Proof narration', caps.routing.proofNarration],
+        ] as const
+      ).filter(([, route]) => route)
+    : [];
+
+  return (
+    <div className="space-y-5">
+      <Card
+        title="Video AI readiness"
+        description="Filed clips are narrated and verified on the server. The router picks the cheapest capable model for bulk work and escalates only when confidence is low."
+      >
+        {loading ? (
+          <p className="text-sm text-ink-600">Checking…</p>
+        ) : error ? (
+          <ErrorText message={error} />
+        ) : caps ? (
+          <div className="space-y-4">
+            <div
+              className={`rounded-lg border p-4 text-sm ${
+                caps.ready
+                  ? 'border-success-200 bg-success-50 text-success-600'
+                  : 'border-caution-200 bg-caution-50 text-caution-600'
+              }`}
+            >
+              {caps.ready ? (
+                <>
+                  <strong>Live.</strong> Cost-aware routing across{' '}
+                  {caps.routing.configuredProviders.join(', ') || 'configured providers'}. Bulk
+                  frames and verifies use fast tiers; disputes escalate.
+                </>
+              ) : caps.mockForced ||
+                caps.visionAnalyzer.mode === 'mock' ||
+                caps.llmVerifier.mode === 'mock' ? (
+                <>
+                  <strong>Mock mode.</strong> Results are fixtures, not model reads. Turn off
+                  VERIFICATION_USE_MOCK_AI / VERIFICATION_ALLOW_MOCK_FALLBACK and set API keys for
+                  live analysis.
+                </>
+              ) : (
+                <>
+                  <strong>Not ready.</strong> Set at least one model key below (Gemini preferred for
+                  cheap frames) and install FFmpeg on the worker.
+                </>
+              )}
+            </div>
+
+            <ReadOnlyRow
+              label="Providers configured"
+              value={
+                caps.routing.configuredProviders.length
+                  ? caps.routing.configuredProviders.join(', ')
+                  : 'None'
+              }
+            />
+            <ReadOnlyRow
+              label="Bulk frames"
+              value={
+                caps.visionAnalyzer.provider && caps.visionAnalyzer.model
+                  ? `${caps.visionAnalyzer.provider} · ${caps.visionAnalyzer.model}`
+                  : caps.visionAnalyzer.mode
+              }
+            />
+            <ReadOnlyRow
+              label="Bulk verify"
+              value={
+                caps.llmVerifier.provider && caps.llmVerifier.model
+                  ? `${caps.llmVerifier.provider} · ${caps.llmVerifier.model}`
+                  : caps.llmVerifier.mode
+              }
+            />
+            <ReadOnlyRow
+              label="FFmpeg"
+              value={caps.ffmpeg.available ? `Available · ${caps.ffmpeg.path}` : 'Not found on host'}
+            />
+
+            <p className="text-xs text-ink-500">{caps.visionAnalyzer.detail}</p>
+            <p className="text-xs text-ink-500">{caps.llmVerifier.detail}</p>
+
+            <div className="pt-1">
+              <PrimaryButton onClick={() => void load()} disabled={loading}>
+                Refresh
+              </PrimaryButton>
+            </div>
+          </div>
+        ) : null}
+      </Card>
+
+      {routeRows.length > 0 && (
+        <Card
+          title="Cost-aware routes"
+          description="Cheapest configured arm wins for high-volume work. Escalation arms run only on low confidence, conflicts, or safety flags."
+        >
+          <ul className="space-y-2">
+            {routeRows.map(([label, route]) =>
+              route ? (
+                <li
+                  key={label}
+                  className="flex flex-wrap items-start justify-between gap-2 rounded-lg glass-card px-3.5 py-2.5"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-ink-900">{label}</p>
+                    <p className="text-xs text-ink-600">
+                      {route.provider} · {route.model} · {route.tier}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-[11px] text-ink-500">
+                    ${route.inputPricePerMTok}/MTok in
+                  </span>
+                </li>
+              ) : null,
+            )}
+          </ul>
+        </Card>
+      )}
+
+      <Card
+        title="Server environment"
+        description="Paste keys into the backend host env (or backend/.env for local). Restart the BFF after changing them. Ideal set: Gemini (cheap frames) + Anthropic (escalation) + OpenAI and/or Grok as alternates."
+      >
+        <dl className="space-y-3 text-sm">
+          {(caps?.requiredEnv ?? []).map((row) => (
+            <div key={row.name} className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <code className="font-mono text-xs text-ink-900">{row.name}</code>
+                <p className="mt-0.5 text-ink-600">{row.purpose}</p>
+              </div>
+              <span
+                className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
+                  row.set ? 'bg-success-50 text-success-600' : 'bg-paper-200 text-ink-600'
+                }`}
+              >
+                {row.set ? 'Set' : 'Missing'}
+              </span>
+            </div>
+          ))}
+        </dl>
+      </Card>
+    </div>
   );
 }
 

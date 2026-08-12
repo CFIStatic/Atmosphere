@@ -510,7 +510,9 @@ export const config = {
       baseUrl: process.env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com',
     },
     google: {
-      apiKey: process.env.GOOGLE_API_KEY ?? '',
+      // GEMINI_API_KEY is accepted as an alias — video verification historically
+      // used that name; the learning registry and video router share one pool.
+      apiKey: process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || '',
       baseUrl: process.env.GOOGLE_BASE_URL ?? 'https://generativelanguage.googleapis.com',
     },
     xai: {

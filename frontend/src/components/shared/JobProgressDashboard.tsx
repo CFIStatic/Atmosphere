@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, type ProofDay, type ProofResponse, type SharedJobRecord } from '../../lib/api';
 import { ProofOfWork } from './ProofOfWork';
 import { SpinnerIcon } from '../icons';
@@ -6,6 +6,9 @@ import { SpinnerIcon } from '../icons';
 /**
  * The job progress view — one plain-language story: where things stand,
  * what needs attention, and what happened on site recently.
+ *
+ * Proof of work (AI dictation + checks + deep verification) is always mounted
+ * so filed videos surface their analysis as soon as it is ready.
  */
 
 type AttentionItem = { title: string; detail: string; level: 'blocker' | 'warn' };
@@ -18,11 +21,22 @@ function formatDay(iso: string) {
   });
 }
 
+function dayIsAiReading(day: ProofDay): boolean {
+  if (day.analysisStatus === 'queued' || day.analysisStatus === 'running') return true;
+  for (const half of ['before', 'after'] as const) {
+    const status = day.reports?.[half]?.status;
+    if (status === 'queued' || status === 'running') return true;
+  }
+  return false;
+}
+
 function dayStatus(day: ProofDay): { label: string; tone: 'success' | 'caution' | 'danger' | 'neutral' } {
   if (day.contradicted) return { label: 'Issue found', tone: 'danger' };
+  if (dayIsAiReading(day)) return { label: 'AI reading…', tone: 'caution' };
   if (day.accepted || day.payable) return { label: 'Verified', tone: 'success' };
   if (day.hasBefore && !day.hasAfter) return { label: 'Still on site', tone: 'caution' };
   if (day.rejected) return { label: 'Rejected', tone: 'danger' };
+  if (day.aiSummary) return { label: 'AI ready', tone: 'success' };
   return { label: 'Being reviewed', tone: 'neutral' };
 }
 
@@ -30,6 +44,7 @@ function headline(input: {
   scopePct: number;
   daysLogged: number;
   inProgress: number;
+  aiReading: number;
   attention: AttentionItem[];
 }): { title: string; detail: string; tone: 'success' | 'caution' | 'danger' | 'neutral' } {
   const blockers = input.attention.filter((a) => a.level === 'blocker').length;
@@ -45,6 +60,13 @@ function headline(input: {
       title: 'Waiting for the first update',
       detail: 'Once crews film on site, daily progress will show up here automatically.',
       tone: 'neutral',
+    };
+  }
+  if (input.aiReading > 0) {
+    return {
+      title: 'Reading the footage',
+      detail: `The assistant is analysing ${input.aiReading} day${input.aiReading === 1 ? '' : 's'} of video now — results appear below when ready.`,
+      tone: 'caution',
     };
   }
   if (input.inProgress > 0) {
@@ -82,6 +104,8 @@ const BADGE_STYLE = {
   neutral: 'bg-paper-200/60 text-ink-600',
 } as const;
 
+const POLL_MS = 4000;
+
 export function JobProgressDashboard({
   jobId,
   record,
@@ -107,37 +131,64 @@ export function JobProgressDashboard({
 }) {
   const [proof, setProof] = useState<ProofResponse | null>(initialProof ?? null);
   const [loading, setLoading] = useState(!initialProof);
-  const [historyOpen, setHistoryOpen] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    if (initialProof) {
+    let cancelled = false;
+
+    function stopPoll() {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    }
+
+    // Guest / share embeds supply a frozen proof payload — do not hit org APIs.
+    if (readOnly && initialProof) {
       setProof(initialProof);
       setLoading(false);
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
-    let cancelled = false;
-    setLoading(true);
-    api
-      .jobProofs(jobId)
-      .then((res) => {
-        if (!cancelled) setProof(res);
-      })
-      .catch(() => {
-        if (!cancelled) {
+
+    async function refresh(isFirst: boolean) {
+      if (isFirst && !initialProof) setLoading(true);
+      try {
+        const res = await api.jobProofs(jobId);
+        if (cancelled) return;
+        setProof(res);
+        const inFlight = res.days.some(dayIsAiReading);
+        if (inFlight && !pollRef.current) {
+          pollRef.current = setInterval(() => {
+            void refresh(false);
+          }, POLL_MS);
+        }
+        if (!inFlight) stopPoll();
+      } catch {
+        if (!cancelled && !initialProof) {
           setProof({
             days: [],
             counts: { days: 0, payable: 0, contradicted: 0, awaitingAfter: 0 },
             siteKnown: false,
           });
         }
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    }
+
+    if (initialProof) {
+      setProof(initialProof);
+      setLoading(false);
+    }
+    void refresh(true);
+
     return () => {
       cancelled = true;
+      stopPoll();
     };
-  }, [jobId, initialProof]);
+  }, [jobId, initialProof, readOnly]);
 
   const actionable = record.scope.filter((item) => item.state !== 'excluded');
   const scopeApproved = actionable.filter((item) => item.state === 'approved').length;
@@ -145,6 +196,7 @@ export function JobProgressDashboard({
   const daysLoggedComputed = proof?.counts.days ?? 0;
   const verifiedDaysComputed = proof?.days.filter((d) => d.payable || d.accepted).length ?? 0;
   const inProgressComputed = proof?.days.filter((d) => d.hasBefore && !d.hasAfter).length ?? 0;
+  const aiReading = proof?.days.filter(dayIsAiReading).length ?? 0;
 
   const scopePct = metricsOverride?.scopePct ?? scopePctComputed;
   const scopeApprovedDisplay = metricsOverride?.scopeApproved ?? scopeApproved;
@@ -164,7 +216,7 @@ export function JobProgressDashboard({
       }));
   }, [record.risks]);
 
-  const status = headline({ scopePct, daysLogged, inProgress, attention });
+  const status = headline({ scopePct, daysLogged, inProgress, aiReading, attention });
   const recentDays = (proof?.days ?? []).slice(0, 5);
   const siteAddress = record.brief?.facts?.['Site address'] ?? record.brief?.facts?.['Site Address'];
 
@@ -256,63 +308,53 @@ export function JobProgressDashboard({
         </section>
       )}
 
-      {/* Recent work — simple timeline, not the full proof UI */}
-      {!loading && (
+      {/* Recent work — at-a-glance; full AI + checks live in Proof of work below */}
+      {!loading && recentDays.length > 0 && (
         <section className="rounded-xl glass-card p-5">
           <h3 className="text-base font-semibold text-ink-900">Recent work on site</h3>
           <p className="mt-0.5 text-xs text-ink-500">
-            Each day, crews film before they start and again when they finish.
+            Each day, crews film before they start and again when they finish. Open a day below for
+            the AI reading and the footage.
           </p>
 
-          {recentDays.length === 0 ? (
-            <p className="mt-4 rounded-lg border border-line px-4 py-6 text-center text-sm text-ink-600">
-              No field updates yet. Progress will appear here once crews start filming on site.
-            </p>
-          ) : (
-            <ul className="mt-4 divide-y divide-line rounded-lg border border-line">
-              {recentDays.map((day) => {
-                const badge = dayStatus(day);
-                const summary = day.aiSummary ?? day.summary;
-                return (
-                  <li key={`${day.partyId}|${day.workDate}`} className="px-4 py-3.5">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-ink-900">
-                          {formatDay(day.workDate)}
-                          <span className="ml-2 font-normal text-ink-500">{day.company}</span>
-                        </p>
-                        <p className="mt-0.5 text-sm text-ink-700">{summary}</p>
-                      </div>
-                      <span
-                        className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${BADGE_STYLE[badge.tone]}`}
-                      >
-                        {badge.label}
-                      </span>
+          <ul className="mt-4 divide-y divide-line rounded-lg border border-line">
+            {recentDays.map((day) => {
+              const badge = dayStatus(day);
+              const summary =
+                day.aiSummary ??
+                day.reports?.after?.text ??
+                day.reports?.before?.text ??
+                day.summary;
+              return (
+                <li key={`${day.partyId}|${day.workDate}`} className="px-4 py-3.5">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-ink-900">
+                        {formatDay(day.workDate)}
+                        <span className="ml-2 font-normal text-ink-500">{day.company}</span>
+                      </p>
+                      <p className="mt-0.5 text-sm text-ink-700 line-clamp-2">{summary}</p>
                     </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-
-          {(proof?.days.length ?? 0) > 5 && (
-            <button
-              type="button"
-              onClick={() => setHistoryOpen((v) => !v)}
-              className="mt-3 text-sm font-medium text-brand-600 hover:text-brand-700"
-            >
-              {historyOpen ? 'Hide full history' : `Show all ${proof?.days.length} days`}
-            </button>
-          )}
+                    <span
+                      className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${BADGE_STYLE[badge.tone]}`}
+                    >
+                      {badge.label}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         </section>
       )}
 
-      {historyOpen && proof && (
+      {/* Always mounted — this is where AI dictation, checks, and deep verification land */}
+      {!loading && (
         <ProofOfWork
           jobId={readOnly ? undefined : jobId}
-          heading="Full work history"
+          heading="Proof of work"
           readOnly={readOnly}
-          initialData={proof}
+          initialData={proof ?? undefined}
           videoFetcher={videoFetcher}
         />
       )}

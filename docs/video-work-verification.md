@@ -56,6 +56,7 @@ Mounted at `/api/verification` (session auth + org context):
 
 | Method | Path | Purpose |
 |--------|------|---------|
+| GET | `/capabilities` | AI readiness (keys present?, FFmpeg?, mock mode) |
 | POST | `/videos` | Create upload record + signed URL |
 | POST | `/videos/:id/complete` | Finish upload; enqueue pipeline |
 | POST | `/videos/:id/reprocess` | Force new processing job |
@@ -185,6 +186,34 @@ See `backend/.env.example` section **Video work verification**. Important:
 - report grouping
 - pipeline idempotency + retry
 
+## AI keys + cost-aware routing
+
+Server-only. Never put these in the browser.
+
+The video pipeline routes each task to the **cheapest configured** capable model,
+and escalates to a stronger tier only on low confidence, conflicts, or safety flags.
+
+| Key | Role in the route table |
+|-----|-------------------------|
+| `GOOGLE_API_KEY` / `GEMINI_API_KEY` | Preferred for **bulk frames** and **bulk verify** (Flash) |
+| `OPENAI_API_KEY` | Fast/flagship arms when Gemini is absent or for failover |
+| `XAI_API_KEY` | Grok fast/flagship arms |
+| `ANTHROPIC_API_KEY` | **Proof narration** + **escalation / dispute** path (accuracy) |
+
+| Task | Default preference (first configured wins) |
+|------|--------------------------------------------|
+| Bulk frame observation | Gemini Flash → OpenAI mini → Grok mini → Haiku |
+| Frame escalation | Sonnet → GPT flagship → Gemini Pro → Grok → Opus |
+| Bulk LLM verify | Gemini Flash → OpenAI mini → Grok mini → Haiku → Sonnet |
+| Dispute escalate | Sonnet → GPT flagship → Gemini Pro → Grok → Opus |
+| Proof narration | Sonnet → Gemini Flash → OpenAI mini → … |
+
+Check readiness + live route table: `GET /api/verification/capabilities`
+(Settings → Video AI).
+
+Unset keys no longer silently mock in non-test deploys unless
+`VERIFICATION_USE_MOCK_AI=true` or `VERIFICATION_ALLOW_MOCK_FALLBACK=true`.
+
 ## Remaining production risks
 
 1. **FFmpeg on serverless** — extract frames on a worker VM/container, not a 10s Vercel function.
@@ -194,4 +223,3 @@ See `backend/.env.example` section **Video work verification**. Important:
 5. **CRM lat/lon column names** — existing proof on-site check may still read `lat`/`lon` vs `latitude`/`longitude`; unrelated but affects metadata quality inputs.
 6. **Cost** — enforce org budgets in UI; cancel mid-pipeline when exceeded (analyze stage already throws).
 7. **Legal hold / retention** — `retain_until` / `deleted_at` exist; a sweeper job is not included.
-8. **Frontend timeline UI** — reporting API is ready; Wire into `ProofOfWork` / verifier portal as a follow-up.

@@ -304,33 +304,38 @@ export class GeminiVisionAnalyzer implements VisionAnalyzer {
   }
 }
 
-async function escalateWithAnthropic(
-  images: VisionImage[],
-  userText: string,
-): Promise<AnalysisResult<FrameObservationParsed>> {
-  const apiKey = process.env.ANTHROPIC_API_KEY ?? '';
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured');
+async function callAnthropicVision<S extends z.ZodTypeAny>(opts: {
+  apiKey: string;
+  model: string;
+  system: string;
+  userText: string;
+  images: VisionImage[];
+  schema: S;
+  fetchFn?: typeof fetch;
+}): Promise<AnalysisResult<z.output<S>>> {
+  if (!opts.apiKey) throw new Error('ANTHROPIC_API_KEY not configured');
+  const fetchFn = opts.fetchFn ?? fetch;
   const started = Date.now();
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const response = await fetchFn('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      'x-api-key': apiKey,
+      'x-api-key': opts.apiKey,
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: verificationConfig.escalationModel,
+      model: opts.model,
       max_tokens: 2048,
       temperature: 0,
-      system: FRAME_SYSTEM,
+      system: opts.system,
       messages: [
         {
           role: 'user',
           content: [
-            { type: 'text', text: userText },
-            ...images.map((img) => ({
-              type: 'image',
-              source: { type: 'base64', media_type: img.mimeType, data: img.base64 },
+            { type: 'text', text: opts.userText },
+            ...opts.images.map((img) => ({
+              type: 'image' as const,
+              source: { type: 'base64' as const, media_type: img.mimeType, data: img.base64 },
             })),
           ],
         },
@@ -338,7 +343,8 @@ async function escalateWithAnthropic(
     }),
   });
   if (!response.ok) {
-    throw new Error(`Anthropic escalation failed: ${response.status}`);
+    const errText = await response.text().catch(() => '');
+    throw new Error(`Anthropic vision failed: ${response.status}${errText ? ` ${errText.slice(0, 200)}` : ''}`);
   }
   const payload = (await response.json()) as {
     content?: Array<{ type: string; text?: string }>;
@@ -349,14 +355,14 @@ async function escalateWithAnthropic(
     .filter((c) => c.type === 'text')
     .map((c) => c.text ?? '')
     .join('');
-  const parsed = parseModelJson(text, frameObservationSchema);
+  const parsed = parseModelJson(text, opts.schema);
   const inputTokens = payload.usage?.input_tokens ?? 0;
   const outputTokens = payload.usage?.output_tokens ?? 0;
   return {
     parsed,
     raw: text,
     provider: 'anthropic',
-    modelName: verificationConfig.escalationModel,
+    modelName: opts.model,
     modelVersion: null,
     promptVersion: verificationConfig.promptVersion,
     usage: {
@@ -368,6 +374,252 @@ async function escalateWithAnthropic(
     },
     cached: false,
   };
+}
+
+async function escalateWithAnthropic(
+  images: VisionImage[],
+  userText: string,
+): Promise<AnalysisResult<FrameObservationParsed>> {
+  return callAnthropicVision({
+    apiKey: process.env.ANTHROPIC_API_KEY ?? '',
+    model: verificationConfig.escalationModel,
+    system: FRAME_SYSTEM,
+    userText,
+    images,
+    schema: frameObservationSchema,
+  });
+}
+
+/**
+ * Full Anthropic vision path — used when Gemini is unavailable so a single
+ * ANTHROPIC_API_KEY can still drive the deep verification pipeline.
+ */
+export class AnthropicVisionAnalyzer implements VisionAnalyzer {
+  constructor(
+    private readonly opts?: {
+      apiKey?: string;
+      model?: string;
+      fetchFn?: typeof fetch;
+    },
+  ) {}
+
+  private get apiKey(): string {
+    return this.opts?.apiKey || process.env.ANTHROPIC_API_KEY || '';
+  }
+
+  private get model(): string {
+    return this.opts?.model || verificationConfig.escalationModel;
+  }
+
+  async analyzeFrame(
+    image: VisionImage,
+    context?: AnalysisContext,
+  ): Promise<AnalysisResult<FrameObservationParsed>> {
+    const scopeNote = context?.scopeLines?.length
+      ? `Job scope lines (note if visible; do not invent completed work):\n${context.scopeLines.map((t) => `- ${t}`).join('\n')}`
+      : 'No job scope attached — describe only what the worker appears to be doing in this frame.';
+    return callAnthropicVision({
+      apiKey: this.apiKey,
+      model: this.model,
+      system: FRAME_SYSTEM,
+      userText: [
+        context?.roomHint ? `Room hint: ${context.roomHint}` : 'Analyze this frame.',
+        scopeNote,
+      ].join('\n'),
+      images: [image],
+      schema: frameObservationSchema,
+      fetchFn: this.opts?.fetchFn,
+    });
+  }
+
+  async compareFrames(
+    before: VisionImage,
+    after: VisionImage,
+    _context?: AnalysisContext,
+  ): Promise<AnalysisResult<z.output<typeof frameComparisonSchema>>> {
+    return callAnthropicVision({
+      apiKey: this.apiKey,
+      model: this.model,
+      system: COMPARE_SYSTEM,
+      userText: 'Image 1 is before. Image 2 is after.',
+      images: [before, after],
+      schema: frameComparisonSchema,
+      fetchFn: this.opts?.fetchFn,
+    });
+  }
+
+  async analyzeFrameSequence(
+    images: VisionImage[],
+    context?: AnalysisContext,
+  ): Promise<AnalysisResult<z.output<typeof sequenceAnalysisSchema>>> {
+    return callAnthropicVision({
+      apiKey: this.apiKey,
+      model: this.model,
+      system: SEQUENCE_SYSTEM,
+      userText: context?.roomHint
+        ? `Ordered frames. Room hint: ${context.roomHint}`
+        : 'Ordered frames from one walkthrough.',
+      images,
+      schema: sequenceAnalysisSchema,
+      fetchFn: this.opts?.fetchFn,
+    });
+  }
+
+  async escalateAnalysis(
+    images: VisionImage[],
+    reason: string,
+    context?: AnalysisContext,
+  ): Promise<AnalysisResult<FrameObservationParsed>> {
+    return callAnthropicVision({
+      apiKey: this.apiKey,
+      model: this.model,
+      system: FRAME_SYSTEM,
+      userText: [
+        `Escalation: ${reason}`,
+        context?.roomHint ? `Room hint: ${context.roomHint}` : '',
+        `Analyze ${images.length} frame(s).`,
+      ]
+        .filter(Boolean)
+        .join('\n'),
+      images,
+      schema: frameObservationSchema,
+      fetchFn: this.opts?.fetchFn,
+    });
+  }
+}
+
+/** Throws a clear configuration error instead of silently mocking. */
+export class UnconfiguredVisionAnalyzer implements VisionAnalyzer {
+  private fail(): never {
+    throw new Error(
+      'Video vision AI is not configured. Set GOOGLE_API_KEY / GEMINI_API_KEY, OPENAI_API_KEY, XAI_API_KEY, and/or ANTHROPIC_API_KEY, or enable VERIFICATION_USE_MOCK_AI for fixtures.',
+    );
+  }
+
+  analyzeFrame(): Promise<AnalysisResult<FrameObservationParsed>> {
+    this.fail();
+  }
+  compareFrames(): Promise<AnalysisResult<z.output<typeof frameComparisonSchema>>> {
+    this.fail();
+  }
+  analyzeFrameSequence(): Promise<AnalysisResult<z.output<typeof sequenceAnalysisSchema>>> {
+    this.fail();
+  }
+  escalateAnalysis(): Promise<AnalysisResult<FrameObservationParsed>> {
+    this.fail();
+  }
+}
+
+/**
+ * Cost-aware vision analyzer — picks the cheapest configured provider for
+ * bulk frames and a stronger arm only when escalateAnalysis is called.
+ */
+export class RoutedVisionAnalyzer implements VisionAnalyzer {
+  constructor(private readonly opts?: { fetchFn?: typeof fetch }) {}
+
+  async analyzeFrame(
+    image: VisionImage,
+    context?: AnalysisContext,
+  ): Promise<AnalysisResult<FrameObservationParsed>> {
+    const scopeNote = context?.scopeLines?.length
+      ? `Job scope lines (note if visible; do not invent completed work):\n${context.scopeLines.map((t) => `- ${t}`).join('\n')}`
+      : 'No job scope attached — describe only what the worker appears to be doing in this frame.';
+    return this.run('frame_observation', FRAME_SYSTEM, frameObservationSchema, [image], [
+      context?.roomHint ? `Room hint: ${context.roomHint}` : 'Analyze this frame.',
+      scopeNote,
+    ].join('\n'));
+  }
+
+  async compareFrames(
+    before: VisionImage,
+    after: VisionImage,
+    _context?: AnalysisContext,
+  ): Promise<AnalysisResult<z.output<typeof frameComparisonSchema>>> {
+    return this.run(
+      'frame_observation',
+      COMPARE_SYSTEM,
+      frameComparisonSchema,
+      [before, after],
+      'Image 1 is before. Image 2 is after.',
+    );
+  }
+
+  async analyzeFrameSequence(
+    images: VisionImage[],
+    context?: AnalysisContext,
+  ): Promise<AnalysisResult<z.output<typeof sequenceAnalysisSchema>>> {
+    return this.run(
+      'frame_observation',
+      SEQUENCE_SYSTEM,
+      sequenceAnalysisSchema,
+      images,
+      context?.roomHint
+        ? `Ordered frames. Room hint: ${context.roomHint}`
+        : 'Ordered frames from one walkthrough.',
+    );
+  }
+
+  async escalateAnalysis(
+    images: VisionImage[],
+    reason: string,
+    context?: AnalysisContext,
+  ): Promise<AnalysisResult<FrameObservationParsed>> {
+    return this.run(
+      'frame_escalation',
+      FRAME_SYSTEM,
+      frameObservationSchema,
+      images,
+      [
+        `Escalation: ${reason}`,
+        context?.roomHint ? `Room hint: ${context.roomHint}` : '',
+        `Analyze ${images.length} frame(s).`,
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    );
+  }
+
+  private async run<S extends z.ZodTypeAny>(
+    task: 'frame_observation' | 'frame_escalation',
+    system: string,
+    schema: S,
+    images: VisionImage[],
+    userNote: string,
+  ): Promise<AnalysisResult<z.output<S>>> {
+    const { selectVideoRoute } = await import('./router.js');
+    const { completeMultimodal } = await import('./multimodal.js');
+    const route = selectVideoRoute(task);
+    if (!route) {
+      throw new Error(
+        'No video vision provider is configured. Set GOOGLE_API_KEY, OPENAI_API_KEY, XAI_API_KEY, or ANTHROPIC_API_KEY.',
+      );
+    }
+    const result = await completeMultimodal({
+      route,
+      system,
+      userText: userNote,
+      images: images.map((img) => ({ mimeType: img.mimeType, base64: img.base64 })),
+      json: true,
+      fetchFn: this.opts?.fetchFn,
+    });
+    const parsed = parseModelJson(result.text, schema);
+    return {
+      parsed,
+      raw: result.text,
+      provider: result.provider,
+      modelName: result.model,
+      modelVersion: null,
+      promptVersion: verificationConfig.promptVersion,
+      usage: {
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+        latencyMs: result.latencyMs,
+        providerRequestId: result.providerRequestId,
+        estimatedCostUsd: result.estimatedCostUsd,
+      },
+      cached: false,
+    };
+  }
 }
 
 /** Deterministic mock for tests — never calls a paid API. */
