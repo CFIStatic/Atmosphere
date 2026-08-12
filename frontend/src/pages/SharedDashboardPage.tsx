@@ -239,24 +239,15 @@ export function SharedDashboardPage() {
         title="Job Progress"
         description="Each job file — footage files here as crews film."
         action={
-          <div className="flex flex-wrap items-center gap-2">
+          record ? (
             <button
               type="button"
-              onClick={() => navigate('/intake')}
-              className="rounded-lg border border-line bg-paper-0 px-3.5 py-2 text-sm font-semibold text-ink-800 hover:border-brand-200"
+              onClick={openShare}
+              className="rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-semibold text-ink-900"
             >
-              Start a job
+              Share
             </button>
-            {record ? (
-              <button
-                type="button"
-                onClick={openShare}
-                className="rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-semibold text-ink-900"
-              >
-                Share
-              </button>
-            ) : null}
-          </div>
+          ) : undefined
         }
       />
 
