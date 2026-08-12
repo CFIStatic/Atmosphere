@@ -1,6 +1,5 @@
 import { Badge, Card, CardBody, CardHeader } from '../../design';
 import { PageBody, PageHeader } from '../../patterns';
-import { PinSetupCard } from '../../components/PinSetupCard';
 import { useAuth } from '../../context/AuthContext';
 import { labelForRole } from '../../domain/approvals';
 import { ROLE_PROFILES } from '../../domain/permissions';
@@ -14,7 +13,7 @@ export function SettingsPage() {
 
   return (
     <>
-      <PageHeader title="Settings" description="Your account, organization, and sign-in options" />
+      <PageHeader title="Settings" description="Your account and organization" />
 
       <PageBody className="max-w-3xl space-y-4">
         <Card>
@@ -43,13 +42,8 @@ export function SettingsPage() {
                 }
               />
             )}
-            {membership?.workType && (
-              <Row label="Work type" value={titleCase(membership.workType)} />
-            )}
           </CardBody>
         </Card>
-
-        <PinSetupCard />
 
         <Card>
           <CardHeader

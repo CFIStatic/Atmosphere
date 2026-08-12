@@ -19,7 +19,6 @@ import {
 } from '../lib/api';
 import { AppShell, PanelSpinner } from '../components/AppShell';
 import { MemoryFeed } from '../components/MemoryFeed';
-import { PinSetupCard } from '../components/PinSetupCard';
 import { EscalationQueue } from '../components/EscalationQueue';
 import { SpinnerIcon, CheckIcon, MicIcon, MonitorIcon, GlobeIcon, PlugIcon } from '../components/icons';
 import { formatUsd, usedPct } from '../lib/money';
@@ -424,11 +423,6 @@ export function DashboardPage() {
               →
             </span>
           </Link>
-
-          {/* Device PIN */}
-          <div className="mt-4">
-            <PinSetupCard />
-          </div>
 
           {/* Latest activity from the record */}
           <section className="mt-8">
