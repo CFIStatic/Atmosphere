@@ -66,12 +66,12 @@
     --faint: #78716C;
     --accent: #BC4508;
     --accent-soft: #FDF4EE;
-    --pass: #3F7D4C;
-    --pass-soft: #F0F7F1;
-    --fail: #B4361D;
-    --fail-soft: #FDF2F0;
-    --unknown: #946A0B;
-    --unknown-soft: #FDF7EC;
+    --pass: #1F7A3A;
+    --pass-soft: #E7F6EC;
+    --fail: #C62828;
+    --fail-soft: #FDECEC;
+    --unknown: #B45309;
+    --unknown-soft: #FFF6D8;
     /* The media stage stays dark in both themes — footage is reviewed against
        a dark ground — but it is the brand's warm black, not a blue-black. */
     --stage: #1C1917;
@@ -98,12 +98,12 @@
       --faint: #807C74;
       --accent: #F26E22;
       --accent-soft: #31190C;
-      --pass: #7CC98D;
-      --pass-soft: #12261A;
-      --fail: #F07A62;
-      --fail-soft: #301412;
-      --unknown: #E5B84A;
-      --unknown-soft: #2C230E;
+      --pass: #4ADE80;
+      --pass-soft: #14301C;
+      --fail: #F87171;
+      --fail-soft: #3A1414;
+      --unknown: #FBBF24;
+      --unknown-soft: #3A2E0A;
       --stage: #100F0E;
       --stage-2: #26231F;
       --stage-ink: #E8E4DD;
@@ -121,12 +121,12 @@
     --faint: #78716C;
     --accent: #BC4508;
     --accent-soft: #FDF4EE;
-    --pass: #3F7D4C;
-    --pass-soft: #F0F7F1;
-    --fail: #B4361D;
-    --fail-soft: #FDF2F0;
-    --unknown: #946A0B;
-    --unknown-soft: #FDF7EC;
+    --pass: #1F7A3A;
+    --pass-soft: #E7F6EC;
+    --fail: #C62828;
+    --fail-soft: #FDECEC;
+    --unknown: #B45309;
+    --unknown-soft: #FFF6D8;
     --stage: #1C1917;
     --stage-2: #2A2724;
     --stage-ink: #E8E4DD;
@@ -143,12 +143,12 @@
     --faint: #807C74;
     --accent: #F26E22;
     --accent-soft: #31190C;
-    --pass: #7CC98D;
-    --pass-soft: #12261A;
-    --fail: #F07A62;
-    --fail-soft: #301412;
-    --unknown: #E5B84A;
-    --unknown-soft: #2C230E;
+    --pass: #4ADE80;
+    --pass-soft: #14301C;
+    --fail: #F87171;
+    --fail-soft: #3A1414;
+    --unknown: #FBBF24;
+    --unknown-soft: #3A2E0A;
     --stage: #100F0E;
     --stage-2: #26231F;
     --stage-ink: #E8E4DD;
@@ -479,13 +479,14 @@
     display: inline-flex; align-items: center; gap: 5px;
     padding: 3px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 650; white-space: nowrap;
   }
-  .chip.pass { background: var(--pass-soft); color: var(--pass); }
-  .chip.fail { background: var(--fail-soft); color: var(--fail); }
-  .chip.unknown { background: var(--unknown-soft); color: var(--unknown); }
+  .chip.pass, .chip.green { background: var(--pass-soft); color: var(--pass); }
+  .chip.fail, .chip.red { background: var(--fail-soft); color: var(--fail); }
+  .chip.unknown, .chip.yellow { background: var(--unknown-soft); color: var(--unknown); }
   .chip.hold { background: var(--ink); color: var(--panel); }
   .chip.neutral { background: var(--line-soft); color: var(--ink-2); }
   .chip .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-  tr.jobrow .chip.unknown .dot { animation: recpulse 1.2s ease-in-out infinite; }
+  tr.jobrow .chip.unknown .dot,
+  tr.jobrow .chip.yellow .dot { animation: recpulse 1.2s ease-in-out infinite; }
   @keyframes recpulse {
     0%, 100% { opacity: 1; }
     50% { opacity: .3; }
@@ -1380,7 +1381,9 @@
 
   /** The overall integrity verdict, and the rule that governs the whole product. */
   function integrityOf(item) {
-    var v = item.checks.map(function (c) { return c.verdict; });
+    var checks = item.checks || [];
+    if (!checks.length) return 'unknown';
+    var v = checks.map(function (c) { return c.verdict; });
     if (v.indexOf('fail') > -1) return 'fail';
     if (v.indexOf('unknown') > -1) return 'unknown';
     return 'pass';
@@ -1518,14 +1521,7 @@
 
   function clipRow(e) {
     var job = JOBS[e.job] || { name: e.jobName || 'Job', number: null };
-    var integ = integrityOf(e);
-    var status = integ === 'fail'
-      ? { cls: 'fail', text: 'Failed' }
-      : needsAttention(e)
-        ? { cls: 'unknown', text: 'Needs review' }
-        : integ === 'pass'
-          ? { cls: 'pass', text: 'Verified' }
-          : { cls: 'unknown', text: 'Unverified' };
+    var status = clipStatus(e);
     var phase = e.phase ? String(e.phase).replace(/_/g, ' ') : 'Video';
     phase = phase.charAt(0).toUpperCase() + phase.slice(1);
     return '' +
@@ -1575,9 +1571,17 @@
   }
 
   function jobRecordingStatus(items) {
-    if (!items.length) return { cls: 'fail', text: 'No recording' };
-    if (items.some(isActiveRecording)) return { cls: 'unknown', text: 'Active recording' };
-    return { cls: 'pass', text: 'Recording' };
+    if (!items.length) return { cls: 'red', text: 'No recording' };
+    if (items.some(isActiveRecording)) return { cls: 'yellow', text: 'Active recording' };
+    return { cls: 'green', text: 'Recording' };
+  }
+
+  function clipStatus(e) {
+    if (isActiveRecording(e)) return { cls: 'yellow', text: 'Active recording' };
+    var integ = integrityOf(e);
+    if (integ === 'fail') return { cls: 'red', text: 'Failed' };
+    if (needsAttention(e) || integ !== 'pass') return { cls: 'yellow', text: 'Needs review' };
+    return { cls: 'green', text: 'Verified' };
   }
 
   /**
