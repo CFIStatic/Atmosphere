@@ -24,6 +24,7 @@ import {
   type Diagnosis,
   type Integration,
   type MemberRole,
+  type VerificationCapabilities,
   type WorkType,
 } from '../lib/api';
 import { usageIntentsForRole } from '../components/setup/verifierSetupOptions';
@@ -46,6 +47,7 @@ import {
   SpinnerIcon,
   UserIcon,
   CreditCardIcon,
+  VideoIcon,
 } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { WORK_VERIFICATION_TOUR, queueProductTour } from '../lib/productTour';
@@ -56,6 +58,7 @@ type SectionId =
   | 'organization'
   | 'billing'
   | 'integrations'
+  | 'videoai'
   | 'sending'
   | 'contactdata'
   | 'preferences';
@@ -93,6 +96,15 @@ const SECTIONS: SettingsSection[] = [
     label: 'Connected apps',
     blurb: 'Your CRM and the data we mirror from it',
     icon: BuildingIcon,
+  },
+  {
+    // Work Verification's model keys. Server env only — this panel reports
+    // readiness so an operator knows whether live analysis will run. Visible
+    // on every platform: capture and office both depend on the same backend.
+    id: 'videoai',
+    label: 'Video AI',
+    blurb: 'Whether the server can read filed videos',
+    icon: VideoIcon,
   },
   {
     // Connecting a mailbox is a Sales concern and an owner decision: it is the
@@ -187,6 +199,7 @@ export function SettingsPage() {
           {active === 'organization' && <OrganizationSection />}
           {active === 'billing' && <BillingSection />}
           {active === 'integrations' && <IntegrationsSection />}
+          {active === 'videoai' && <VideoAiSection />}
           {active === 'sending' && <SendingSection />}
           {active === 'contactdata' && <ContactDataSection />}
           {active === 'preferences' && (
@@ -1627,6 +1640,167 @@ function JobSourceCard() {
         </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * Whether this deployment can actually read filed videos. Keys live on the
+ * server — this panel only reports readiness so an operator knows what to set.
+ */
+function VideoAiSection() {
+  const [caps, setCaps] = useState<VerificationCapabilities | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setCaps(await api.verificationCapabilities());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not check video AI readiness.');
+      setCaps(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return (
+    <div className="space-y-5">
+      <Card
+        title="Video AI readiness"
+        description="Filed clips are narrated and verified on the server. Keys never leave the backend — set them in the host environment, then refresh here."
+      >
+        {loading ? (
+          <p className="text-sm text-ink-600">Checking…</p>
+        ) : error ? (
+          <ErrorText message={error} />
+        ) : caps ? (
+          <div className="space-y-4">
+            <div
+              className={`rounded-lg border p-4 text-sm ${
+                caps.ready
+                  ? 'border-success-200 bg-success-50 text-success-600'
+                  : 'border-caution-200 bg-caution-50 text-caution-600'
+              }`}
+            >
+              {caps.ready ? (
+                <>
+                  <strong>Live.</strong> Narration, frame reading, and the LLM verifier can run
+                  against real model APIs. FFmpeg is available for frame extraction.
+                </>
+              ) : caps.mockForced ||
+                caps.visionAnalyzer.mode === 'mock' ||
+                caps.llmVerifier.mode === 'mock' ? (
+                <>
+                  <strong>Mock mode.</strong> Results are fixtures, not model reads. Turn off
+                  VERIFICATION_USE_MOCK_AI / VERIFICATION_ALLOW_MOCK_FALLBACK and set API keys for
+                  live analysis.
+                </>
+              ) : (
+                <>
+                  <strong>Not ready.</strong> Set the missing server keys below (or install FFmpeg
+                  on the worker). Until then, filed videos will skip or fail AI reads instead of
+                  inventing answers.
+                </>
+              )}
+            </div>
+
+            <ReadOnlyRow
+              label="Proof narration"
+              value={
+                caps.proofNarration.configured
+                  ? `Ready · ${caps.proofNarration.provider}`
+                  : 'Needs ANTHROPIC_API_KEY'
+              }
+            />
+            <ReadOnlyRow
+              label="Frame vision"
+              value={
+                caps.visionAnalyzer.model
+                  ? `${caps.visionAnalyzer.mode} · ${caps.visionAnalyzer.model}`
+                  : caps.visionAnalyzer.mode
+              }
+            />
+            <ReadOnlyRow
+              label="LLM verifier"
+              value={
+                caps.llmVerifier.model
+                  ? `${caps.llmVerifier.mode} · ${caps.llmVerifier.model}`
+                  : caps.llmVerifier.mode
+              }
+            />
+            <ReadOnlyRow
+              label="FFmpeg"
+              value={caps.ffmpeg.available ? `Available · ${caps.ffmpeg.path}` : 'Not found on host'}
+            />
+            <ReadOnlyRow
+              label="Deep pipeline from proof uploads"
+              value={caps.pipelineFromProof ? 'On' : 'Off'}
+            />
+
+            <p className="text-xs text-ink-500">{caps.visionAnalyzer.detail}</p>
+            <p className="text-xs text-ink-500">{caps.llmVerifier.detail}</p>
+            {!caps.ffmpeg.available && (
+              <p className="text-xs text-ink-500">{caps.ffmpeg.detail}</p>
+            )}
+
+            <div className="pt-1">
+              <PrimaryButton onClick={() => void load()} disabled={loading}>
+                Refresh
+              </PrimaryButton>
+            </div>
+          </div>
+        ) : null}
+      </Card>
+
+      <Card
+        title="Server environment"
+        description="Paste keys into the backend host env (or backend/.env for local). Restart the BFF after changing them. Minimum for live analysis: ANTHROPIC_API_KEY. Recommended: also GOOGLE_API_KEY for cheaper Gemini frames."
+      >
+        <dl className="space-y-3 text-sm">
+          {(
+            caps?.requiredEnv ?? [
+              {
+                name: 'ANTHROPIC_API_KEY',
+                purpose: 'Proof narration, day comparison, LLM verifier (and vision fallback)',
+                set: false,
+              },
+              {
+                name: 'GOOGLE_API_KEY',
+                purpose: 'Primary low-cost Gemini frame observations (or use GEMINI_API_KEY)',
+                set: false,
+              },
+              {
+                name: 'FFMPEG_PATH',
+                purpose: 'Server-side frame extraction for long / frame-less uploads',
+                set: false,
+              },
+            ]
+          ).map((row) => (
+            <div key={row.name} className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <code className="font-mono text-xs text-ink-900">{row.name}</code>
+                <p className="mt-0.5 text-ink-600">{row.purpose}</p>
+              </div>
+              <span
+                className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
+                  row.set
+                    ? 'bg-success-50 text-success-600'
+                    : 'bg-paper-200 text-ink-600'
+                }`}
+              >
+                {row.set ? 'Set' : 'Missing'}
+              </span>
+            </div>
+          ))}
+        </dl>
+      </Card>
+    </div>
   );
 }
 

@@ -47,18 +47,27 @@ export { groupFramesIntoScenes, normalizeRoomType } from './scenes/group.js';
 export {
   MockVisionAnalyzer,
   GeminiVisionAnalyzer,
+  AnthropicVisionAnalyzer,
+  UnconfiguredVisionAnalyzer,
   shouldEscalate,
   type VisionAnalyzer,
 } from './ai/analyzer.js';
 export {
   MockVerificationProvider,
   MockEscalationProvider,
+  UnconfiguredVerificationProvider,
   createDefaultVerifier,
   shouldEscalateVerification,
   workEventVerificationResultSchema,
   type VerificationProvider,
   type WorkEventVerificationResult,
 } from './ai/llmVerifier.js';
+export {
+  getVerificationCapabilities,
+  resolveVisionAnalyzerMode,
+  resolveLlmVerifierMode,
+  type VerificationCapabilities,
+} from './capabilities.js';
 export {
   getProjectVerificationReport,
   getVideoProcessingStatus,

@@ -1,5 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { api, type ProofResponse, type ProofDay, type ProofQuestion } from '../../lib/api';
+import {
+  api,
+  type ProofResponse,
+  type ProofDay,
+  type ProofQuestion,
+  type VerificationJobReport,
+  type VerificationTimelineEvent,
+} from '../../lib/api';
 import { SpinnerIcon } from '../icons';
 
 /**
@@ -94,6 +101,7 @@ export function ProofOfWork({
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [deepReport, setDeepReport] = useState<VerificationJobReport | null>(null);
 
   async function load() {
     if (initialData) {
@@ -102,14 +110,16 @@ export function ProofOfWork({
     }
     if (!jobId) return;
     try {
-      const [proofs, qs] = await Promise.all([
+      const [proofs, qs, report] = await Promise.all([
         api.jobProofs(jobId),
         readOnly
           ? Promise.resolve({ questions: [] as ProofQuestion[] })
           : api.proofQuestions(jobId).catch(() => ({ questions: [] as ProofQuestion[] })),
+        api.verificationJobReport(jobId).catch(() => null),
       ]);
       setData(proofs);
       setQuestions(qs.questions);
+      setDeepReport(report);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load the proof record.');
       setData({ days: [], counts: { days: 0, payable: 0, contradicted: 0, awaitingAfter: 0 }, siteKnown: false });
@@ -522,6 +532,12 @@ export function ProofOfWork({
         </ul>
       )}
 
+      {/* Deep pipeline timeline — separate from the payment-gate day checks.
+          Unknown stays unknown; this never upgrades a day to payable. */}
+      {deepReport && deepReport.resultCount > 0 && (
+        <DeepVerificationTimeline report={deepReport} />
+      )}
+
       {/* Asking the record. Forty jobs and eighty videos a day is nobody's
           afternoon; a question against the summaries is. */}
       {!readOnly && data && data.days.length > 0 && (
@@ -567,6 +583,103 @@ export function ProofOfWork({
         </div>
       )}
     </section>
+  );
+}
+
+const DEEP_STATUS_WORD: Record<string, string> = {
+  verified: 'verified',
+  likely_verified: 'likely',
+  partially_verified: 'partial',
+  uncertain: 'uncertain',
+  contradicted: 'contradicted',
+  rejected: 'rejected',
+  human_verified: 'human verified',
+  needs_review: 'needs review',
+};
+
+const DEEP_STATUS_STYLE: Record<string, string> = {
+  verified: 'bg-success-50 text-success-600',
+  likely_verified: 'bg-success-50 text-success-600',
+  partially_verified: 'bg-caution-50 text-caution-600',
+  uncertain: 'bg-caution-50 text-caution-600',
+  contradicted: 'bg-danger-50 text-danger-600',
+  rejected: 'bg-danger-50 text-danger-600',
+  human_verified: 'bg-success-50 text-success-600',
+  needs_review: 'bg-caution-50 text-caution-600',
+};
+
+/**
+ * Room / activity timeline from the deep verification pipeline.
+ * Sits below payment-gate checks on purpose — it describes work, it does not
+ * release money.
+ */
+function DeepVerificationTimeline({ report }: { report: VerificationJobReport }) {
+  const events = report.timeline.slice(0, 24);
+  return (
+    <div className="mt-4 border-t border-line pt-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-semibold text-ink-900">Work verification timeline</h3>
+        <span className="text-[11px] text-ink-500">
+          {report.videoCount} clip{report.videoCount === 1 ? '' : 's'} · {report.resultCount}{' '}
+          finding{report.resultCount === 1 ? '' : 's'}
+          {report.openReviews > 0 ? ` · ${report.openReviews} in review` : ''}
+        </span>
+      </div>
+      <p className="mt-1 text-[11px] text-ink-500">
+        Frame observations and LLM-verified work events. Uncertain stays uncertain — this does not
+        override the payment checks above.
+      </p>
+      <ul className="mt-2 space-y-1.5">
+        {events.map((event) => (
+          <DeepTimelineRow key={event.id} event={event} />
+        ))}
+      </ul>
+      {report.timeline.length > events.length && (
+        <p className="mt-2 text-[11px] text-ink-400">
+          Showing {events.length} of {report.timeline.length} events.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function DeepTimelineRow({ event }: { event: VerificationTimelineEvent }) {
+  const stamp =
+    event.observedAt != null
+      ? new Date(event.observedAt).toLocaleString(undefined, {
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+        })
+      : null;
+  const confidence =
+    event.systemConfidence != null
+      ? `${Math.round(event.systemConfidence * 100)}%`
+      : event.modelConfidence != null
+        ? `${Math.round(event.modelConfidence * 100)}% model`
+        : null;
+  return (
+    <li className="rounded-lg border border-line px-3 py-2">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[12px] font-medium text-ink-900">{event.title}</p>
+          {event.summary && (
+            <p className="mt-0.5 text-[11px] text-ink-600">{event.summary}</p>
+          )}
+          <p className="mt-1 text-[10.5px] text-ink-400">
+            {[stamp, event.roomOrArea?.replace(/_/g, ' '), confidence].filter(Boolean).join(' · ')}
+          </p>
+        </div>
+        <span
+          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+            DEEP_STATUS_STYLE[event.status] ?? 'bg-paper-200 text-ink-600'
+          }`}
+        >
+          {DEEP_STATUS_WORD[event.status] ?? event.status}
+        </span>
+      </div>
+    </li>
   );
 }
 

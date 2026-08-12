@@ -788,6 +788,74 @@ export interface ProofResponse {
   siteKnown: boolean;
 }
 
+/** Server readiness for AI video analysis — booleans and env names only. */
+export interface VerificationCapabilities {
+  ready: boolean;
+  mockForced: boolean;
+  mockFallbackAllowed: boolean;
+  proofNarration: {
+    configured: boolean;
+    provider: 'anthropic' | null;
+    detail: string;
+  };
+  visionAnalyzer: {
+    mode: 'gemini' | 'anthropic' | 'mock' | 'unconfigured';
+    model: string | null;
+    detail: string;
+  };
+  llmVerifier: {
+    mode: 'anthropic' | 'google' | 'mock' | 'unconfigured';
+    model: string | null;
+    detail: string;
+  };
+  ffmpeg: {
+    available: boolean;
+    path: string;
+    detail: string;
+  };
+  pipelineFromProof: boolean;
+  keys: { anthropic: boolean; google: boolean };
+  requiredEnv: Array<{ name: string; purpose: string; set: boolean }>;
+}
+
+export type VerificationResultStatus =
+  | 'verified'
+  | 'likely_verified'
+  | 'partially_verified'
+  | 'uncertain'
+  | 'contradicted'
+  | 'rejected'
+  | 'human_verified'
+  | 'needs_review';
+
+export interface VerificationTimelineEvent {
+  id: string;
+  observedAt: string | null;
+  roomOrArea: string | null;
+  title: string;
+  activityType: string;
+  status: VerificationResultStatus;
+  systemConfidence: number | null;
+  modelConfidence: number | null;
+  summary: string | null;
+  evidenceFrameIds: string[];
+  videoTimestamps: number[];
+  reviewStatus: string | null;
+}
+
+export interface VerificationJobReport {
+  jobId: string;
+  videoCount: number;
+  resultCount: number;
+  byStatus: Record<string, number>;
+  openReviews: number;
+  timeline: VerificationTimelineEvent[];
+  byRoom: Record<string, VerificationTimelineEvent[]>;
+  verified: VerificationTimelineEvent[];
+  uncertain: VerificationTimelineEvent[];
+  rejected: VerificationTimelineEvent[];
+}
+
 export interface ProofQuestion {
   id: string;
   question: string;
@@ -3203,6 +3271,12 @@ export const api = {
       `/api/operations/shared/proof/${proofId}/video`,
       { method: 'GET' },
     ),
+
+  verificationCapabilities: () =>
+    request<VerificationCapabilities>('/api/verification/capabilities', { method: 'GET' }),
+
+  verificationJobReport: (jobId: string) =>
+    request<VerificationJobReport>(`/api/verification/jobs/${jobId}/report`, { method: 'GET' }),
 
   // ---- Territories ----
   territories: () => request<{ items: Territory[] }>('/api/sales/territories', { method: 'GET' }),

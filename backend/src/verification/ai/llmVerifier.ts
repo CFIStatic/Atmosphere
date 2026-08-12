@@ -353,11 +353,17 @@ export class HttpLlmVerificationProvider implements VerificationProvider {
   }
 }
 
+/** Throws a clear configuration error instead of silently mocking. */
+export class UnconfiguredVerificationProvider implements VerificationProvider {
+  async verifyWorkEvent(): Promise<never> {
+    throw new Error(
+      'Video LLM verifier is not configured. Set ANTHROPIC_API_KEY (preferred) or GOOGLE_API_KEY / GEMINI_API_KEY, or enable VERIFICATION_USE_MOCK_AI for fixtures.',
+    );
+  }
+}
+
 export function createDefaultVerifier(): VerificationProvider {
   if (process.env.VERIFICATION_USE_MOCK_AI === 'true' || process.env.NODE_ENV === 'test') {
-    return new MockVerificationProvider();
-  }
-  if (process.env.VERIFICATION_ALLOW_MOCK_FALLBACK === 'true' && !process.env.ANTHROPIC_API_KEY && !process.env.GOOGLE_API_KEY && !process.env.GEMINI_API_KEY) {
     return new MockVerificationProvider();
   }
   if (process.env.ANTHROPIC_API_KEY) {
@@ -375,7 +381,10 @@ export function createDefaultVerifier(): VerificationProvider {
       apiKey: googleKey,
     });
   }
-  return new MockVerificationProvider();
+  if (process.env.VERIFICATION_ALLOW_MOCK_FALLBACK === 'true') {
+    return new MockVerificationProvider();
+  }
+  return new UnconfiguredVerificationProvider();
 }
 
 export function createDefaultEscalationVerifier(): EscalationVerificationProvider {

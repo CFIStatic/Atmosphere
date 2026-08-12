@@ -1871,6 +1871,95 @@ const routes: Array<[string, RegExp, Handler]> = [
 
   ['GET', /^\/api\/technician\/capabilities$/, () => ({ body: TECH_CAPABILITIES })],
 
+  ['GET', /^\/api\/verification\/capabilities$/, () => ({
+    body: {
+      ready: true,
+      mockForced: false,
+      mockFallbackAllowed: false,
+      proofNarration: {
+        configured: true,
+        provider: 'anthropic',
+        detail: 'Demo mode — narration is fixture-backed.',
+      },
+      visionAnalyzer: {
+        mode: 'mock',
+        model: 'mock-vision',
+        detail: 'Demo mode uses fixture vision reads.',
+      },
+      llmVerifier: {
+        mode: 'mock',
+        model: 'mock-verifier',
+        detail: 'Demo mode uses fixture verifier decisions.',
+      },
+      ffmpeg: { available: true, path: 'ffmpeg', detail: 'Available in demo.' },
+      pipelineFromProof: true,
+      keys: { anthropic: true, google: true },
+      requiredEnv: [
+        {
+          name: 'ANTHROPIC_API_KEY',
+          purpose: 'Proof narration, day comparison, LLM verifier (and vision fallback)',
+          set: true,
+        },
+        {
+          name: 'GOOGLE_API_KEY',
+          purpose: 'Primary low-cost Gemini frame observations (or use GEMINI_API_KEY)',
+          set: true,
+        },
+        {
+          name: 'FFMPEG_PATH',
+          purpose: 'Server-side frame extraction for long / frame-less uploads',
+          set: true,
+        },
+      ],
+    },
+  })],
+  ['GET', /^\/api\/verification\/jobs\/([\w-]+)\/report$/, (m) => ({
+    body: {
+      jobId: m[1],
+      videoCount: 2,
+      resultCount: 2,
+      byStatus: { verified: 1, uncertain: 1 },
+      openReviews: 0,
+      timeline: [
+        {
+          id: 'vr-1',
+          observedAt: '2026-08-05T20:50:00Z',
+          roomOrArea: 'kitchen',
+          title: 'kitchen — drywall removed verified',
+          activityType: 'drywall_removed',
+          status: 'verified',
+          systemConfidence: 0.86,
+          modelConfidence: 0.9,
+          summary: 'Before shows finished drywall; after shows exposed studs on the same wall.',
+          evidenceFrameIds: [],
+          videoTimestamps: [12, 140],
+          reviewStatus: null,
+        },
+        {
+          id: 'vr-2',
+          observedAt: '2026-08-05T20:52:00Z',
+          roomOrArea: 'bathroom',
+          title: 'bathroom — flooring installed uncertain',
+          activityType: 'flooring_installed',
+          status: 'uncertain',
+          systemConfidence: 0.42,
+          modelConfidence: 0.5,
+          summary: 'After frames show new vinyl, but no clear before of the same corner.',
+          evidenceFrameIds: [],
+          videoTimestamps: [210],
+          reviewStatus: null,
+        },
+      ],
+      byRoom: {
+        kitchen: [],
+        bathroom: [],
+      },
+      verified: [],
+      uncertain: [],
+      rejected: [],
+    },
+  })],
+
   ['GET', /^\/api\/web-access\/connections$/, () => ({ body: { connections: WEB_CONNECTIONS } })],
   ['GET', /^\/api\/web-access\/runs$/, () => ({ body: { runs: WEB_RUNS } })],
   ['GET', /^\/api\/web-access\/capabilities$/, () => ({ body: { enabled: true, capacityAvailable: true, maxSteps: 40 } })],
