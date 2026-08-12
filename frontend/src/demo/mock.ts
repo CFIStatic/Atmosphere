@@ -2858,12 +2858,17 @@ const routes: Array<[string, RegExp, Handler]> = [
     return { status: 201, body: { message } };
   }],
 
-  ['GET', /^\/api\/operations\/field-context$/, () => ({
+  ['GET', /^\/api\/analytics\/access$/, () => ({
+    body: { scope: 'internal', displayName: 'Atmosphere staff (demo)' },
+  })],
+
+  ['GET', /^\/api\/analytics\/field-context$/, () => ({
     body: {
       sessions: [
         {
           id: 'fctx-demo-1',
           orgId: 'org-demo',
+          orgName: 'Halcyon Restoration',
           jobId: 'job-1041',
           jobTitle: '#1041 Meridian Ave water loss',
           partyId: 'party-demo',
@@ -2929,11 +2934,12 @@ const routes: Array<[string, RegExp, Handler]> = [
       ],
     },
   })],
-  ['GET', /^\/api\/operations\/field-context\/([\w-]+)$/, (m) => ({
+  ['GET', /^\/api\/analytics\/field-context\/([\w-]+)$/, (m) => ({
     body: {
       session: {
         id: m[1],
         orgId: 'org-demo',
+        orgName: 'Halcyon Restoration',
         jobId: 'job-1041',
         jobTitle: '#1041 Meridian Ave water loss',
         partyId: 'party-demo',

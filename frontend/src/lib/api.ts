@@ -829,6 +829,7 @@ export interface EvidenceItem {
 export interface FieldContextSessionSummary {
   id: string;
   orgId: string;
+  orgName?: string | null;
   jobId: string;
   jobTitle?: string | null;
   partyId: string | null;
@@ -3271,20 +3272,21 @@ export const api = {
       { method: 'GET' },
     ),
 
-  /** Organized Field Capture context (device, GPS trail, motion, …). */
-  fieldContextSessions: (params?: { jobId?: string; limit?: number }) => {
+  /** Atmosphere-internal Field Capture context (never a customer job-file API). */
+  fieldContextSessions: (params?: { orgId?: string; jobId?: string; limit?: number }) => {
     const q = new URLSearchParams();
+    if (params?.orgId) q.set('orgId', params.orgId);
     if (params?.jobId) q.set('jobId', params.jobId);
     if (params?.limit) q.set('limit', String(params.limit));
     const suffix = q.toString() ? `?${q}` : '';
     return request<{ sessions: FieldContextSessionSummary[] }>(
-      `/api/operations/field-context${suffix}`,
+      `/api/analytics/field-context${suffix}`,
       { method: 'GET' },
     );
   },
 
   fieldContextSession: (sessionId: string) =>
-    request<FieldContextSessionDetail>(`/api/operations/field-context/${sessionId}`, {
+    request<FieldContextSessionDetail>(`/api/analytics/field-context/${sessionId}`, {
       method: 'GET',
     }),
 

@@ -27,7 +27,6 @@ import { TerritoriesPage } from './pages/TerritoriesPage';
 import { SalesWorkPage } from './pages/SalesWorkPage';
 import { SharedDashboardPage } from './pages/SharedDashboardPage';
 import { JobIntakePage } from './pages/JobIntakePage';
-import { FieldContextPage } from './pages/FieldContextPage';
 import { OperationsShell } from './layouts/OperationsShell';
 import { PurchaseOrdersPage } from './pages/PurchaseOrdersPage';
 import { JobSharePage } from './pages/JobSharePage';
@@ -52,6 +51,11 @@ const InternalAnalyticsRoute = lazy(() =>
 const InvestorAnalyticsRoute = lazy(() =>
   import('./pages/analytics/AnalyticsRoutes').then((m) => ({
     default: m.InvestorAnalyticsRoute,
+  })),
+);
+const InternalFieldContextRoute = lazy(() =>
+  import('./pages/analytics/AnalyticsRoutes').then((m) => ({
+    default: m.InternalFieldContextRoute,
   })),
 );
 const SettingsPage = lazy(() =>
@@ -414,11 +418,11 @@ export default function App() {
                 with public share pages at /shared/:token. */}
             <Route path="/job-progress" element={<SharedDashboardPage />} />
             <Route path="/shared" element={<SharedJobsRedirect />} />
-            <Route path="/field-context" element={<FieldContextPage />} />
           </Route>
 
-          {/* Growth analytics. Onboarding is required — every figure is scoped to
-              a signed-in staff member, and the guards inside re-check access. */}
+          {/* Growth analytics + internal Field context. Onboarding is required —
+              every figure is scoped to a signed-in Atmosphere staff member, and
+              the guards inside re-check access. Customers never see these. */}
           <Route
             path="/analytics"
             element={
@@ -435,6 +439,16 @@ export default function App() {
               <ProtectedRoute>
                 <RequireOnboarded>
                   <InvestorAnalyticsRoute />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/analytics/field-context"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <InternalFieldContextRoute />
                 </RequireOnboarded>
               </ProtectedRoute>
             }

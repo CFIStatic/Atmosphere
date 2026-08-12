@@ -257,6 +257,7 @@ fieldAppRouter.post(
  * POST /api/field-app/context/sessions
  * Open a context session when the day film starts — device / permission /
  * capability / environment snapshot plus later GPS and motion samples.
+ * Written for Atmosphere-internal review only (not customer job files).
  */
 fieldAppRouter.post(
   '/context/sessions',

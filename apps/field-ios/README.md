@@ -64,8 +64,9 @@ app functionality — never advertising IDs / ATT tracking:
 | **Capture** | A/V seal, duration, hash, storage path |
 
 Synced via `/api/field-app/context/sessions` (+ heartbeat / complete) and
-mirrored onto `job_proofs.device_context`. The office reviews it at
-**Field context** in the Verification sidebar (`/field-context`).
+mirrored onto `job_proofs.device_context`. Atmosphere staff review it at
+**Field context** under internal analytics (`/analytics/field-context`) —
+never on customer Verification / job-file surfaces.
 
 ## Source layout
 

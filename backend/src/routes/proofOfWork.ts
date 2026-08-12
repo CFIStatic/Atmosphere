@@ -53,9 +53,11 @@ import {
 
 export const PROOF_BUCKET = 'job-proofs';
 
+// Intentionally omits device_context — that bundle is Atmosphere-internal and
+// is served only via /api/analytics/field-context, never customer job files.
 const PROOF_SELECT =
   'id, party_id, work_date, phase, storage_path, byte_size, duration_seconds, content_hash, ' +
-  'captured_at, received_at, lat, lon, accuracy_m, device_context, state, checks, ai_summary, ai_findings, ' +
+  'captured_at, received_at, lat, lon, accuracy_m, state, checks, ai_summary, ai_findings, ' +
   'ai_model, ai_material_change, analysis_status, analysis_error, analysed_at, ' +
   'narration, narration_text, narration_status, narration_error, ' +
   'decided_at, decided_note, created_at';

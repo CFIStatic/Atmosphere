@@ -192,6 +192,8 @@ export function createApp(): Express {
   app.use('/api/cyber', cyberRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
+  // More specific than /api/analytics — Field Capture context is Atmosphere-internal only.
+  app.use('/api/analytics/field-context', fieldContextRouter);
   app.use('/api/analytics', analyticsRouter);
   app.use('/api/telemetry', telemetryRouter);
   app.use('/api/profile', profileRouter);
@@ -220,7 +222,6 @@ export function createApp(): Express {
   app.use('/api/operations', jobIntakeRouter);
   app.use('/api/operations', sharedJobsRouter);
   app.use('/api/operations', placesRouter);
-  app.use('/api/operations/field-context', fieldContextRouter);
   app.use('/api/purchasing', purchasingRouter);
   app.use('/api/episodes', episodesRouter);
   app.use('/api/evidence-portal', evidencePortalRouter);

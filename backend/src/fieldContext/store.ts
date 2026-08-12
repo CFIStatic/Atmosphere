@@ -27,13 +27,13 @@ function mergeBundle(existing: unknown, patch: unknown): Record<string, unknown>
   return { ...base, ...(patch as Record<string, unknown>) };
 }
 
-async function loadSession(admin: Admin, orgId: string, sessionId: string) {
-  const { data, error } = await admin
+async function loadSession(admin: Admin, sessionId: string, orgId?: string) {
+  let query = admin
     .from('field_capture_sessions')
     .select(SESSION_SELECT)
-    .eq('org_id', orgId)
-    .eq('id', sessionId)
-    .maybeSingle();
+    .eq('id', sessionId);
+  if (orgId) query = query.eq('org_id', orgId);
+  const { data, error } = await query.maybeSingle();
   if (error) throw new HttpError(500, error.message, 'context_session_failed');
   if (!data) throw new HttpError(404, 'Field context session not found.', 'context_not_found');
   return data as Record<string, any>;
@@ -137,7 +137,7 @@ export async function heartbeatFieldContextSession(
   args: { orgId: string; sessionId: string; body: unknown },
 ) {
   const input = heartbeatSchema.parse(args.body ?? {});
-  const session = await loadSession(admin, args.orgId, args.sessionId);
+  const session = await loadSession(admin, args.sessionId, args.orgId);
   if (session.status !== 'open') {
     throw new HttpError(409, 'This context session is already closed.', 'context_closed');
   }
@@ -190,7 +190,7 @@ export async function completeFieldContextSession(
   args: { orgId: string; sessionId: string; body: unknown },
 ) {
   const input = completeSessionSchema.parse(args.body ?? {});
-  const session = await loadSession(admin, args.orgId, args.sessionId);
+  const session = await loadSession(admin, args.sessionId, args.orgId);
 
   const endedAt = new Date().toISOString();
   const patch: Record<string, unknown> = {
@@ -243,15 +243,15 @@ export async function completeFieldContextSession(
 
 export async function listFieldContextSessions(
   admin: Admin,
-  args: { orgId: string; jobId?: string; limit?: number },
+  args: { orgId?: string; jobId?: string; limit?: number },
 ) {
   const limit = Math.min(Math.max(args.limit ?? 50, 1), 200);
   let query = admin
     .from('field_capture_sessions')
     .select(SESSION_SELECT)
-    .eq('org_id', args.orgId)
     .order('started_at', { ascending: false })
     .limit(limit);
+  if (args.orgId) query = query.eq('org_id', args.orgId);
   if (args.jobId) query = query.eq('job_id', args.jobId);
 
   const { data, error } = await query;
@@ -259,7 +259,9 @@ export async function listFieldContextSessions(
 
   const rows = (data ?? []) as Record<string, any>[];
   const jobIds = [...new Set(rows.map((r) => r.job_id).filter(Boolean))];
+  const orgIds = [...new Set(rows.map((r) => r.org_id).filter(Boolean))];
   const titleById = new Map<string, string>();
+  const orgNameById = new Map<string, string>();
   if (jobIds.length) {
     const { data: jobs } = await admin
       .from('crm_jobs')
@@ -270,20 +272,27 @@ export async function listFieldContextSessions(
       titleById.set(j.id, `${num}${j.title || 'Job'}`.trim());
     }
   }
+  if (orgIds.length) {
+    const { data: orgs } = await admin.from('orgs').select('id, name').in('id', orgIds);
+    for (const o of (orgs ?? []) as any[]) {
+      orgNameById.set(o.id, o.name || 'Organization');
+    }
+  }
 
   return {
     sessions: rows.map((r) => ({
       ...shapeSession(r),
       jobTitle: titleById.get(r.job_id) ?? null,
+      orgName: orgNameById.get(r.org_id) ?? null,
     })),
   };
 }
 
 export async function getFieldContextSession(
   admin: Admin,
-  args: { orgId: string; sessionId: string },
+  args: { sessionId: string; orgId?: string },
 ) {
-  const session = await loadSession(admin, args.orgId, args.sessionId);
+  const session = await loadSession(admin, args.sessionId, args.orgId);
 
   const [{ data: locations }, { data: motion }] = await Promise.all([
     admin
@@ -292,7 +301,6 @@ export async function getFieldContextSession(
         'id, recorded_at, lat, lon, accuracy_m, altitude_m, altitude_accuracy_m, speed_mps, course_deg, floor',
       )
       .eq('session_id', args.sessionId)
-      .eq('org_id', args.orgId)
       .order('recorded_at', { ascending: true })
       .limit(2000),
     admin
@@ -301,24 +309,24 @@ export async function getFieldContextSession(
         'id, recorded_at, activity, confidence, pitch_deg, roll_deg, yaw_deg, pressure_hpa, relative_altitude_m, step_count',
       )
       .eq('session_id', args.sessionId)
-      .eq('org_id', args.orgId)
       .order('recorded_at', { ascending: true })
       .limit(2000),
   ]);
 
   let jobTitle: string | null = null;
-  const { data: job } = await admin
-    .from('crm_jobs')
-    .select('title, job_number')
-    .eq('id', session.job_id)
-    .maybeSingle();
+  let orgName: string | null = null;
+  const [{ data: job }, { data: org }] = await Promise.all([
+    admin.from('crm_jobs').select('title, job_number').eq('id', session.job_id).maybeSingle(),
+    admin.from('orgs').select('name').eq('id', session.org_id).maybeSingle(),
+  ]);
   if (job) {
     const num = (job as any).job_number != null ? `#${(job as any).job_number} ` : '';
     jobTitle = `${num}${(job as any).title || 'Job'}`.trim();
   }
+  if (org) orgName = (org as any).name || null;
 
   return {
-    session: { ...shapeSession(session), jobTitle },
+    session: { ...shapeSession(session), jobTitle, orgName },
     categories: {
       device: session.device ?? {},
       permissions: session.permissions ?? {},

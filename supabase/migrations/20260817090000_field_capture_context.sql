@@ -112,26 +112,6 @@ alter table public.field_capture_sessions enable row level security;
 alter table public.field_location_samples enable row level security;
 alter table public.field_motion_samples enable row level security;
 
-do $$ begin
-  create policy field_capture_sessions_select_member on public.field_capture_sessions
-    for select using (
-      org_id in (select org_id from public.org_members where user_id = auth.uid())
-    );
-exception when duplicate_object then null; end $$;
-
-do $$ begin
-  create policy field_location_samples_select_member on public.field_location_samples
-    for select using (
-      org_id in (select org_id from public.org_members where user_id = auth.uid())
-    );
-exception when duplicate_object then null; end $$;
-
-do $$ begin
-  create policy field_motion_samples_select_member on public.field_motion_samples
-    for select using (
-      org_id in (select org_id from public.org_members where user_id = auth.uid())
-    );
-exception when duplicate_object then null; end $$;
-
--- Writes go through the BFF with the service role (same pattern as job_proofs
--- filing). Members read via RLS for the admin portal.
+-- No org-member policies on purpose. Field context is Atmosphere-internal:
+-- the field-app BFF writes with the service role, and only internal analytics
+-- staff read it through the service role. Customers never see these rows.
