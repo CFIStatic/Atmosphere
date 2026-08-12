@@ -1978,6 +1978,7 @@ const routes: Array<[string, RegExp, Handler]> = [
     body: {
       jobId: m[1],
       videoCount: 2,
+      processingVideos: 0,
       resultCount: 2,
       byStatus: { verified: 1, uncertain: 1 },
       openReviews: 0,

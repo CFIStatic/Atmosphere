@@ -863,6 +863,8 @@ export interface VerificationTimelineEvent {
   systemConfidence: number | null;
   modelConfidence: number | null;
   summary: string | null;
+  videoId?: string | null;
+  proofId?: string | null;
   evidenceFrameIds: string[];
   videoTimestamps: number[];
   reviewStatus: string | null;
@@ -871,6 +873,7 @@ export interface VerificationTimelineEvent {
 export interface VerificationJobReport {
   jobId: string;
   videoCount: number;
+  processingVideos: number;
   resultCount: number;
   byStatus: Record<string, number>;
   openReviews: number;

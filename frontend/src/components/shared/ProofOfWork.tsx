@@ -1,13 +1,32 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   api,
   type ProofResponse,
   type ProofDay,
   type ProofQuestion,
+  type ProofVideoReport,
   type VerificationJobReport,
   type VerificationTimelineEvent,
 } from '../../lib/api';
 import { SpinnerIcon } from '../icons';
+
+const POLL_MS = 4000;
+
+function reportInFlight(report: ProofVideoReport | null | undefined): boolean {
+  return report?.status === 'queued' || report?.status === 'running';
+}
+
+function dayAiInFlight(day: ProofDay): boolean {
+  if (day.analysisStatus === 'queued' || day.analysisStatus === 'running') return true;
+  return reportInFlight(day.reports?.before) || reportInFlight(day.reports?.after);
+}
+
+function proofNeedsPoll(data: ProofResponse | null, deep: VerificationJobReport | null): boolean {
+  if (data?.days.some(dayAiInFlight)) return true;
+  if (deep && deep.processingVideos > 0) return true;
+  if (deep && deep.videoCount > 0 && deep.resultCount === 0) return true;
+  return false;
+}
 
 /**
  * Proof of work.
@@ -94,7 +113,7 @@ export function ProofOfWork({
   initialData?: ProofResponse;
   videoFetcher?: (proofId: string) => Promise<{ url: string }>;
 }) {
-  const [data, setData] = useState<ProofResponse | null>(null);
+  const [data, setData] = useState<ProofResponse | null>(initialData ?? null);
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [questions, setQuestions] = useState<ProofQuestion[]>([]);
   const [question, setQuestion] = useState('');
@@ -102,36 +121,123 @@ export function ProofOfWork({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deepReport, setDeepReport] = useState<VerificationJobReport | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const dataRef = useRef(data);
+  const deepRef = useRef(deepReport);
+  dataRef.current = data;
+  deepRef.current = deepReport;
 
-  async function load() {
-    if (initialData) {
-      setData(initialData);
-      return;
-    }
+  async function loadProofs() {
+    if (!jobId) return null;
+    const proofs = await api.jobProofs(jobId);
+    setData(proofs);
+    return proofs;
+  }
+
+  async function loadExtras() {
     if (!jobId) return;
+    const [qs, report] = await Promise.all([
+      readOnly
+        ? Promise.resolve({ questions: [] as ProofQuestion[] })
+        : api.proofQuestions(jobId).catch(() => ({ questions: [] as ProofQuestion[] })),
+      api.verificationJobReport(jobId).catch(() => null),
+    ]);
+    setQuestions(qs.questions);
+    setDeepReport(report);
+  }
+
+  function focusDay(list: ProofDay[]) {
+    setOpenDay((current) => {
+      if (current) return current;
+      const focus = list.find(
+        (d) => dayAiInFlight(d) || Boolean(d.aiSummary) || Boolean(d.reports?.after?.text),
+      );
+      return focus ? `${focus.partyId}|${focus.workDate}` : null;
+    });
+  }
+
+  /** Full refresh — used after Accept / reanalyse / Ask. */
+  async function load() {
     try {
-      const [proofs, qs, report] = await Promise.all([
-        api.jobProofs(jobId),
-        readOnly
-          ? Promise.resolve({ questions: [] as ProofQuestion[] })
-          : api.proofQuestions(jobId).catch(() => ({ questions: [] as ProofQuestion[] })),
-        api.verificationJobReport(jobId).catch(() => null),
-      ]);
-      setData(proofs);
-      setQuestions(qs.questions);
-      setDeepReport(report);
+      if (jobId) {
+        const proofs = await loadProofs();
+        if (proofs) focusDay(proofs.days);
+        await loadExtras();
+      } else if (initialData) {
+        setData(initialData);
+        focusDay(initialData.days);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load the proof record.');
-      setData({ days: [], counts: { days: 0, payable: 0, contradicted: 0, awaitingAfter: 0 }, siteKnown: false });
+      if (!dataRef.current) {
+        setData({
+          days: [],
+          counts: { days: 0, payable: 0, contradicted: 0, awaitingAfter: 0 },
+          siteKnown: false,
+        });
+      }
     }
   }
 
+  // Keep in sync when the parent refreshes proof (Job Progress polls).
   useEffect(() => {
-    setData(null);
-    setOpenDay(null);
-    void load();
+    if (initialData) {
+      setData(initialData);
+      focusDay(initialData.days);
+    }
+  }, [initialData]);
+
+  // Standalone mount (no parent data) or first paint with a jobId: pull extras / proofs.
+  useEffect(() => {
+    if (!jobId) return;
+    void (async () => {
+      try {
+        if (!initialData) {
+          const proofs = await loadProofs();
+          if (proofs) focusDay(proofs.days);
+        }
+        await loadExtras();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Could not load the proof record.');
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobId, initialData]);
+  }, [jobId]);
+
+  // Poll while narration / day analysis / deep pipeline is still running.
+  // When parent supplies initialData it already polls proofs — we still poll
+  // extras (deep report) and self-refresh proofs if mounted standalone.
+  useEffect(() => {
+    if (!jobId) return;
+
+    function stop() {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    }
+
+    if (proofNeedsPoll(dataRef.current, deepRef.current)) {
+      if (!pollRef.current) {
+        pollRef.current = setInterval(() => {
+          void (async () => {
+            try {
+              if (!initialData) await loadProofs();
+              await loadExtras();
+            } catch {
+              /* keep last good frame */
+            }
+            if (!proofNeedsPoll(dataRef.current, deepRef.current)) stop();
+          })();
+        }, POLL_MS);
+      }
+    } else {
+      stop();
+    }
+
+    return stop;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId, data, deepReport, initialData]);
 
   async function decide(day: ProofDay, decision: 'accepted' | 'rejected') {
     if (!jobId) return;
@@ -330,13 +436,22 @@ export function ProofOfWork({
                       ))}
                     </ul>
 
-                    {/* Below the checks, deliberately. A beautiful summary of
-                        the wrong house is worse than no summary at all. */}
-                    {day.aiSummary && (
+                    {/* Below the checks, deliberately. Narration can land before
+                        the day comparison — show whichever half is ready. */}
+                    {(day.aiSummary ||
+                      day.reports?.before ||
+                      day.reports?.after ||
+                      dayAiInFlight(day)) && (
                       <div className="mt-3 rounded-lg border border-line bg-paper-50/60 p-3">
                         <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">
                           What the footage shows
                         </p>
+                        {dayAiInFlight(day) && !day.aiSummary && (
+                          <p className="mt-1 flex items-center gap-1.5 text-[11px] text-ink-500">
+                            <SpinnerIcon className="animate-spin" width={11} height={11} />
+                            The assistant is reading this day now — this updates when ready.
+                          </p>
+                        )}
                         {day.aiFindings?.scopeCrossRef === false && (
                           <p className="mt-1 text-[11px] text-ink-500">
                             No scope on file — AI described what happened from the frames.
@@ -347,7 +462,9 @@ export function ProofOfWork({
                             Cross-referenced against the agreed scope lines.
                           </p>
                         )}
-                        <p className="mt-1 text-xs text-ink-800">{day.aiSummary}</p>
+                        {day.aiSummary && (
+                          <p className="mt-1 text-xs text-ink-800">{day.aiSummary}</p>
+                        )}
                         {day.aiFindings?.materialBecause && (
                           <p className="mt-1 text-[11px] text-ink-600">
                             <span className="text-ink-500">Why: </span>
@@ -385,7 +502,10 @@ export function ProofOfWork({
                                       )}
                                     </>
                                   ) : (
-                                    <p className="mt-1 text-[11px] text-ink-500">
+                                    <p className="mt-1 flex items-center gap-1.5 text-[11px] text-ink-500">
+                                      {(report.status === 'queued' || report.status === 'running') && (
+                                        <SpinnerIcon className="animate-spin" width={11} height={11} />
+                                      )}
                                       {report.status === 'queued' || report.status === 'running'
                                         ? 'Being written — the model is reading the clip now.'
                                         : report.status === 'failed'
@@ -415,11 +535,6 @@ export function ProofOfWork({
                             ))}
                           </ul>
                         ) : null}
-                        {/* Per scope line. "Not visible" is given the same
-                            weight as the other two on purpose: the camera not
-                            covering the bathroom says nothing about the
-                            bathroom, and somebody withholding a payment has to
-                            be able to tell that apart from work not done. */}
                         {day.aiFindings?.scopeVerdicts?.length ? (
                           <ul className="mt-2 space-y-1 border-t border-line pt-2">
                             {day.aiFindings.scopeVerdicts.map((v) => (
@@ -458,9 +573,6 @@ export function ProofOfWork({
                             Worth a look: {day.aiFindings.concerns.join('; ')}
                           </p>
                         ) : null}
-                        {/* What it could not settle, kept as prominent as what
-                            it could. An empty list here is suspicious, not
-                            reassuring. */}
                         {day.aiFindings?.cannotTell?.length ? (
                           <p className="mt-1.5 text-[11px] text-ink-500">
                             Not visible in the frames: {day.aiFindings.cannotTell.join('; ')}
@@ -534,7 +646,7 @@ export function ProofOfWork({
 
       {/* Deep pipeline timeline — separate from the payment-gate day checks.
           Unknown stays unknown; this never upgrades a day to payable. */}
-      {deepReport && deepReport.resultCount > 0 && (
+      {deepReport && (deepReport.resultCount > 0 || deepReport.videoCount > 0) && (
         <DeepVerificationTimeline report={deepReport} />
       )}
 
@@ -615,6 +727,8 @@ const DEEP_STATUS_STYLE: Record<string, string> = {
  */
 function DeepVerificationTimeline({ report }: { report: VerificationJobReport }) {
   const events = report.timeline.slice(0, 24);
+  const processing =
+    report.processingVideos > 0 || (report.videoCount > 0 && report.resultCount === 0);
   return (
     <div className="mt-4 border-t border-line pt-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -629,11 +743,23 @@ function DeepVerificationTimeline({ report }: { report: VerificationJobReport })
         Frame observations and LLM-verified work events. Uncertain stays uncertain — this does not
         override the payment checks above.
       </p>
-      <ul className="mt-2 space-y-1.5">
-        {events.map((event) => (
-          <DeepTimelineRow key={event.id} event={event} />
-        ))}
-      </ul>
+      {processing && (
+        <p className="mt-2 flex items-center gap-1.5 rounded-lg border border-caution-200 bg-caution-50 px-2.5 py-1.5 text-[11px] text-caution-700">
+          <SpinnerIcon className="animate-spin" width={11} height={11} />
+          {report.processingVideos > 0
+            ? `Analysing ${report.processingVideos} clip${report.processingVideos === 1 ? '' : 's'} — findings appear here when ready.`
+            : 'Deep verification is still running — findings appear here when ready.'}
+        </p>
+      )}
+      {events.length === 0 && !processing ? (
+        <p className="mt-2 text-[11px] text-ink-500">No verified work events yet for this job.</p>
+      ) : (
+        <ul className="mt-2 space-y-1.5">
+          {events.map((event) => (
+            <DeepTimelineRow key={event.id} event={event} />
+          ))}
+        </ul>
+      )}
       {report.timeline.length > events.length && (
         <p className="mt-2 text-[11px] text-ink-400">
           Showing {events.length} of {report.timeline.length} events.

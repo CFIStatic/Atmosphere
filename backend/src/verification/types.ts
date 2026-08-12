@@ -172,6 +172,10 @@ export interface TimelineEvent {
   systemConfidence: number | null;
   modelConfidence: number | null;
   summary: string | null;
+  /** Source verification video, when known. */
+  videoId?: string | null;
+  /** Linked job_proofs row, when the video was filed from Field Capture. */
+  proofId?: string | null;
   evidenceFrameIds: string[];
   videoTimestamps: number[];
   reviewStatus: string | null;

@@ -7,6 +7,8 @@ import type { TimelineEvent, VerificationStatus } from '../types.js';
 export interface ProjectVerificationSummary {
   jobId: string;
   videoCount: number;
+  /** Clips still in uploaded / queued / processing — UI polls while this is > 0. */
+  processingVideos: number;
   resultCount: number;
   byStatus: Record<string, number>;
   openReviews: number;
@@ -75,19 +77,28 @@ export async function getProjectVerificationReport(
 ): Promise<ProjectVerificationSummary> {
   const { data: videos } = await supabase
     .from('verification_videos')
-    .select('id, status')
+    .select('id, status, proof_id')
     .eq('org_id', orgId)
     .eq('job_id', jobId)
     .is('deleted_at', null);
 
+  const processingVideos = (videos ?? []).filter((v: { status: string }) =>
+    ['uploaded', 'queued', 'processing'].includes(v.status),
+  ).length;
+
   const { data: results } = await supabase
     .from('verification_results')
     .select(
-      'id, activity_type, room_or_area, title, summary, status, model_confidence, system_confidence, confidence_breakdown, observed_at, first_evidence_at, last_evidence_at, rule_version, ai_observation, rules_result, verification_evidence(frame_id, role, video_timestamp_seconds)',
+      'id, video_id, activity_type, room_or_area, title, summary, status, model_confidence, system_confidence, confidence_breakdown, observed_at, first_evidence_at, last_evidence_at, rule_version, ai_observation, rules_result, verification_evidence(frame_id, role, video_timestamp_seconds)',
     )
     .eq('org_id', orgId)
     .eq('job_id', jobId)
     .order('observed_at', { ascending: true, nullsFirst: false });
+
+  const proofByVideo = new Map(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (videos ?? []).map((v: any) => [v.id as string, (v.proof_id as string | null) ?? null]),
+  );
 
   const { count: openReviews } = await supabase
     .from('human_review_tasks')
@@ -118,6 +129,8 @@ export async function getProjectVerificationReport(
           ? null
           : Number(row.model_confidence),
       summary: row.summary,
+      videoId: row.video_id ?? null,
+      proofId: row.video_id ? (proofByVideo.get(row.video_id) ?? null) : null,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       evidenceFrameIds: evidence.map((e: any) => e.frame_id).filter(Boolean),
       videoTimestamps: evidence
@@ -149,6 +162,7 @@ export async function getProjectVerificationReport(
   return {
     jobId,
     videoCount: (videos ?? []).length,
+    processingVideos,
     resultCount: (results ?? []).length,
     byStatus,
     openReviews: openReviews ?? 0,
