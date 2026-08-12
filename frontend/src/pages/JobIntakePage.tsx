@@ -362,7 +362,7 @@ export function JobIntakePage() {
 
       {step === 'paste' && (
         <form onSubmit={onPropose} className="mx-auto max-w-3xl space-y-4 animate-fade-in-up">
-          <div className="rounded-xl glass-card p-5">
+          <div className="relative z-20 overflow-visible rounded-xl glass-card p-5">
             <h2 className="text-base font-semibold text-ink-900">Enter address here</h2>
             <p className="mt-1 text-sm text-ink-600">
               Where the crew will work. You can fine-tune city and postal on the next step.
@@ -464,7 +464,7 @@ export function JobIntakePage() {
 
       {step === 'review' && proposal && (
         <form onSubmit={onApprove} className="mx-auto max-w-3xl space-y-4 animate-fade-in-up">
-          <div className="rounded-xl glass-card p-5">
+          <div className="relative z-20 overflow-visible rounded-xl glass-card p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-base font-semibold text-ink-900">Review before anyone sees it</h2>

@@ -145,7 +145,7 @@ export function AddressAutocomplete({
   }
 
   return (
-    <div className="relative">
+    <div className={open && suggestions.length > 0 ? 'relative z-50' : 'relative'}>
       <input
         id={inputId}
         role="combobox"
@@ -180,7 +180,7 @@ export function AddressAutocomplete({
         <ul
           id={listId}
           role="listbox"
-          className="absolute z-30 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-line bg-paper-0 py-1 shadow-lg"
+          className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-line bg-paper-0 py-1 shadow-lg"
         >
           {suggestions.map((s, i) => (
             <li key={s.placeId} role="option" aria-selected={i === active} id={`${listId}-${i}`}>
