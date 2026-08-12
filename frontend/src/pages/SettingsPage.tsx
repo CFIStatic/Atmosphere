@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useState,
   type ButtonHTMLAttributes,
   type FormEvent,
@@ -13,22 +12,12 @@ import {
   api,
   ApiError,
   CONTRACTOR_TYPE_LABELS,
-  ROLE_LABELS,
-  WORK_TYPE_LABELS,
   type ContractorType,
-  type CrmConnections,
-  type CrmSyncConflict,
-  type CrmSyncStatus,
-  type CrmSyncSystem,
   type MailStatus,
   type Diagnosis,
   type Integration,
-  type MemberRole,
-  type WorkType,
 } from '../lib/api';
-import { usageIntentsForRole } from '../components/setup/verifierSetupOptions';
 import { Logo } from '../components/Logo';
-import { PinSetupCard } from '../components/PinSetupCard';
 import { BillingSection } from '../components/settings/BillingSection';
 import { displayName, initials } from '../lib/display';
 import { setPreference, usePreferences, type Preferences } from '../lib/preferences';
@@ -55,7 +44,6 @@ type SectionId =
   | 'security'
   | 'organization'
   | 'billing'
-  | 'integrations'
   | 'sending'
   | 'contactdata'
   | 'preferences';
@@ -71,11 +59,11 @@ interface SettingsSection {
 
 const SECTIONS: SettingsSection[] = [
   { id: 'profile', label: 'Profile', blurb: 'Your name and account details', icon: UserIcon },
-  { id: 'security', label: 'Security', blurb: 'Password and PIN sign-in', icon: ShieldIcon },
+  { id: 'security', label: 'Security', blurb: 'Password and sign-out', icon: ShieldIcon },
   {
     id: 'organization',
     label: 'Organization',
-    blurb: 'Your org, invite code, and role',
+    blurb: 'Your org and invite code',
     icon: BuildingIcon,
   },
   {
@@ -87,12 +75,6 @@ const SECTIONS: SettingsSection[] = [
     blurb: 'Seats, what Atmosphere costs, and past charges',
     icon: CreditCardIcon,
     platform: 'manager',
-  },
-  {
-    id: 'integrations',
-    label: 'Connected apps',
-    blurb: 'Your CRM and the data we mirror from it',
-    icon: BuildingIcon,
   },
   {
     // Connecting a mailbox is a Sales concern and an owner decision: it is the
@@ -153,7 +135,7 @@ export function SettingsPage() {
         <header>
           <h1 className="text-3xl font-bold tracking-tight text-ink-900">Settings</h1>
           <p className="mt-1.5 text-sm text-ink-600">
-            Manage your account, how you sign in, and how Atmosphere behaves on this device.
+            Manage your account, organization, and how Atmosphere behaves on this device.
           </p>
         </header>
 
@@ -186,7 +168,6 @@ export function SettingsPage() {
           {active === 'security' && <SecuritySection />}
           {active === 'organization' && <OrganizationSection />}
           {active === 'billing' && <BillingSection />}
-          {active === 'integrations' && <IntegrationsSection />}
           {active === 'sending' && <SendingSection />}
           {active === 'contactdata' && <ContactDataSection />}
           {active === 'preferences' && (
@@ -436,7 +417,6 @@ function SecuritySection() {
   return (
     <>
       <ChangePasswordCard />
-      <PinSetupCard />
       <SignOutCard />
     </>
   );
@@ -560,7 +540,7 @@ function SignOutCard() {
   return (
     <Card
       title="Sign out"
-      description="Ends the session on this device. Your PIN stays set up, so you can come straight back in with it."
+      description="Ends the session on this device. Sign in again with your email and password to continue."
       tone="danger"
     >
       <button
@@ -583,14 +563,6 @@ function SignOutCard() {
  * Organization
  * -------------------------------------------------------------------------- */
 
-const ROLE_ORDER: MemberRole[] = [
-  'project_manager',
-  'field_technician',
-  'accountant',
-  'office_manager',
-  'sales',
-];
-const WORK_ORDER: WorkType[] = ['mitigation', 'construction'];
 const CONTRACTOR_ORDER: ContractorType[] = [
   'restoration',
   'roofing',
@@ -600,8 +572,6 @@ const CONTRACTOR_ORDER: ContractorType[] = [
 
 function OrganizationSection() {
   const { membership, refreshMembership } = useAuth();
-  const [role, setRole] = useState<MemberRole | null>(membership?.role ?? null);
-  const [workType, setWorkType] = useState<WorkType | null>(membership?.workType ?? null);
   const [contractorType, setContractorType] = useState<ContractorType | null>(
     membership?.org?.contractorType ?? null,
   );
@@ -611,30 +581,11 @@ function OrganizationSection() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    setRole(membership?.role ?? null);
-    setWorkType(membership?.workType ?? null);
     setContractorType(membership?.org?.contractorType ?? null);
-  }, [
-    membership?.role,
-    membership?.workType,
-    membership?.org?.contractorType,
-  ]);
+  }, [membership?.org?.contractorType]);
 
   const org = membership?.org;
-  const dirty = useMemo(
-    () =>
-      role !== membership?.role ||
-      workType !== membership?.workType ||
-      contractorType !== (membership?.org?.contractorType ?? null),
-    [
-      role,
-      workType,
-      contractorType,
-      membership?.role,
-      membership?.workType,
-      membership?.org?.contractorType,
-    ],
-  );
+  const dirty = contractorType !== (membership?.org?.contractorType ?? null);
 
   async function copyCode() {
     if (!org?.joinCode) return;
@@ -648,15 +599,11 @@ function OrganizationSection() {
   }
 
   async function save() {
-    if (!role || !workType) return;
+    if (!contractorType || !dirty) return;
     setSaving(true);
     setError(null);
     try {
-      const contractorChanged = contractorType !== (membership?.org?.contractorType ?? null);
-      if (contractorChanged && contractorType) {
-        await api.updateOrgProfile(contractorType);
-      }
-      await api.updateMembership(role, workType, usageIntentsForRole(role));
+      await api.updateOrgProfile(contractorType);
       await refreshMembership();
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2500);
@@ -668,107 +615,65 @@ function OrganizationSection() {
   }
 
   return (
-    <>
-      <Card title="Organization" description="The organization your account is linked to.">
-        <ReadOnlyRow label="Name" value={org?.name ?? '—'} />
-        <ReadOnlyRow
-          label="Invite code"
-          value={
-            <span className="flex items-center gap-3">
-              <code className="rounded-md border border-line bg-paper-100 px-2.5 py-1 font-mono tracking-widest text-brand-700">
-                {org?.joinCode ?? '—'}
-              </code>
-              {org?.joinCode && (
-                <button
-                  onClick={copyCode}
-                  className="flex items-center gap-1 text-sm text-ink-600 transition hover:text-ink-900"
-                >
-                  {copied ? (
-                    <>
-                      <CheckIcon width={15} height={15} /> Copied
-                    </>
-                  ) : (
-                    'Copy'
-                  )}
-                </button>
-              )}
-            </span>
-          }
-        />
-        <div className="mt-5">
-          <Field label="Company type">
-            <select
-              value={contractorType ?? ''}
-              onChange={(event) =>
-                setContractorType((event.target.value || null) as ContractorType | null)
-              }
-              className={`mt-2 ${INPUT_CLASS}`}
-            >
-              <option value="" className="bg-paper-200/50">
-                Select a company type
+    <Card title="Organization" description="The organization your account is linked to.">
+      <ReadOnlyRow label="Name" value={org?.name ?? '—'} />
+      <ReadOnlyRow
+        label="Invite code"
+        value={
+          <span className="flex items-center gap-3">
+            <code className="rounded-md border border-line bg-paper-100 px-2.5 py-1 font-mono tracking-widest text-brand-700">
+              {org?.joinCode ?? '—'}
+            </code>
+            {org?.joinCode && (
+              <button
+                onClick={copyCode}
+                className="flex items-center gap-1 text-sm text-ink-600 transition hover:text-ink-900"
+              >
+                {copied ? (
+                  <>
+                    <CheckIcon width={15} height={15} /> Copied
+                  </>
+                ) : (
+                  'Copy'
+                )}
+              </button>
+            )}
+          </span>
+        }
+      />
+      <div className="mt-5">
+        <Field label="Company type">
+          <select
+            value={contractorType ?? ''}
+            onChange={(event) =>
+              setContractorType((event.target.value || null) as ContractorType | null)
+            }
+            className={`mt-2 ${INPUT_CLASS}`}
+          >
+            <option value="" className="bg-paper-200/50">
+              Select a company type
+            </option>
+            {CONTRACTOR_ORDER.map((value) => (
+              <option key={value} value={value} className="bg-paper-200/50">
+                {CONTRACTOR_TYPE_LABELS[value]}
               </option>
-              {CONTRACTOR_ORDER.map((value) => (
-                <option key={value} value={value} className="bg-paper-200/50">
-                  {CONTRACTOR_TYPE_LABELS[value]}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
-        <p className="mt-4 text-xs text-ink-500">
-          Share the invite code so teammates can link their account to {org?.name ?? 'your org'}.
-          Renaming an organization isn't available yet. Only the org creator can change the company
-          type once it is set.
-        </p>
-      </Card>
-
-      <Card
-        title="Your role"
-        description="Keep this current if what you do changes — teammates see it in the members list."
-      >
-        <div className="space-y-5">
-          <Field label="Account type">
-            <select
-              value={role ?? ''}
-              onChange={(event) => setRole(event.target.value as MemberRole)}
-              className={`mt-2 ${INPUT_CLASS}`}
-            >
-              {ROLE_ORDER.map((value) => (
-                <option key={value} value={value} className="bg-paper-200/50">
-                  {ROLE_LABELS[value]}
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <Field label="Kind of work">
-            <select
-              value={workType ?? ''}
-              onChange={(event) => setWorkType(event.target.value as WorkType)}
-              className={`mt-2 ${INPUT_CLASS}`}
-            >
-              {WORK_ORDER.map((value) => (
-                <option key={value} value={value} className="bg-paper-200/50">
-                  {WORK_TYPE_LABELS[value]}
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <PrimaryButton
-              onClick={save}
-              busy={saving}
-              disabled={!dirty}
-            >
-              Save changes
-            </PrimaryButton>
-            <Saved show={saved} />
-            <ErrorText message={error} />
-          </div>
-        </div>
-      </Card>
-    </>
+            ))}
+          </select>
+        </Field>
+      </div>
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <PrimaryButton onClick={save} busy={saving} disabled={!dirty || !contractorType}>
+          Save changes
+        </PrimaryButton>
+        <Saved show={saved} />
+        <ErrorText message={error} />
+      </div>
+      <p className="mt-4 text-xs text-ink-500">
+        Share the invite code so teammates can link their account to {org?.name ?? 'your org'}.
+        Renaming an organization isn't available yet. Only the org creator can change the company
+        type once it is set.
+      </p>
+    </Card>
   );
 }
 
@@ -1367,473 +1272,6 @@ function TestLookupCard() {
         </div>
       )}
     </Card>
-  );
-}
-
-/**
- * Connected apps — the customer's own CRM, mirrored.
- *
- * The screen has one job beyond the buttons: make the difference between the
- * two ways of connecting legible, because they are not equivalent and a
- * customer choosing between them deserves to know why.
- *
- * Authorising (Salesforce) means they approve us in their vendor's own UI. We
- * never see a password, their MFA keeps working, and they can cut us off from
- * their admin screen without telling us.
- *
- * Signing in (a CRM with no API) means we hold their password and type it in
- * like a person. It is a real risk they are taking deliberately, so the card
- * says that in those words rather than dressing it as "connecting".
- */
-/**
- * Job files from the CRM the customer already runs.
- *
- * Most companies that buy work verification keep their jobs somewhere else,
- * and the job file should exist before the first video without anybody
- * retyping an address. The card states the deal plainly: the CRM supplies
- * identity — titles, claim numbers, addresses — and nothing else. Evidence,
- * scope and custody never sync.
- *
- * The conflicts block is the one human decision sync refuses to make on its
- * own: the CRM moved an address on a job that already holds footage. The
- * geofence every clip was measured against hangs off that address, so the
- * change waits here for a person, with both choices spelled out.
- */
-function JobSourceCard() {
-  const [status, setStatus] = useState<CrmSyncStatus | null>(null);
-  const [conflicts, setConflicts] = useState<CrmSyncConflict[]>([]);
-  const [system, setSystem] = useState<CrmSyncSystem>('jobnimbus');
-  const [apiKey, setApiKey] = useState('');
-  const [busy, setBusy] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const [s, c] = await Promise.all([api.crmSyncStatus(), api.crmSyncConflicts()]);
-      setStatus(s);
-      setConflicts(c.conflicts);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load the job source.');
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  async function connect(event: FormEvent) {
-    event.preventDefault();
-    setBusy('connect');
-    setError(null);
-    setNote(null);
-    try {
-      const res = await api.connectCrmSync({ system, apiKey });
-      setNote(`Connected — ${res.accountLabel}. Run the first sync to create your job files.`);
-      setApiKey('');
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not connect.');
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function sync(target: CrmSyncSystem) {
-    setBusy(`sync-${target}`);
-    setError(null);
-    setNote(null);
-    try {
-      const { summary } = await api.runCrmSync(target);
-      const parts = [
-        summary.created > 0 && `${summary.created} job file${summary.created === 1 ? '' : 's'} created`,
-        summary.updated > 0 && `${summary.updated} updated`,
-        summary.conflicts > 0 && `${summary.conflicts} waiting on you`,
-        summary.archived > 0 && `${summary.archived} archived`,
-        summary.unchanged > 0 && `${summary.unchanged} unchanged`,
-      ].filter(Boolean);
-      setNote(`Synced. ${parts.length ? parts.join(' · ') : 'Nothing to do.'}`);
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sync failed.');
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function disconnect(target: CrmSyncSystem) {
-    setBusy(`disconnect-${target}`);
-    setError(null);
-    try {
-      await api.disconnectCrmSync(target);
-      setNote('Disconnected. Job files already created stay yours — only the connection is gone.');
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not disconnect.');
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function resolve(conflict: CrmSyncConflict, decision: 'accept_new_address' | 'keep_current') {
-    setBusy(`resolve-${conflict.linkId}`);
-    setError(null);
-    try {
-      await api.resolveCrmSyncConflict(conflict.linkId, decision);
-      setNote(
-        decision === 'accept_new_address'
-          ? 'Address updated. Clips already on file keep the verdicts they were checked with — new footage measures against the new address.'
-          : "Kept the current address. The CRM's version was dismissed.",
-      );
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not record that decision.');
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  const connected = (status?.systems ?? []).filter((s) => s.connected);
-  const connectable = (status?.systems ?? []).filter((s) => !s.connected);
-
-  // The select renders only unconnected systems, so after a connect the
-  // controlled value can name a system that has no option — the browser
-  // would then SHOW the first option while the form POSTs the hidden value,
-  // silently overwriting the connection that just succeeded.
-  useEffect(() => {
-    if (connectable.length && !connectable.some((s) => s.system === system)) {
-      setSystem(connectable[0].system);
-    }
-  }, [connectable, system]);
-
-  return (
-    <Card
-      title="Job files from your CRM"
-      description="Connect the CRM you already run and every job becomes a job file before the first video — titles, claim numbers and addresses sync in, read-only. Evidence, scope and custody never sync out."
-    >
-      {!status ? (
-        <p className="text-sm text-ink-600">Loading…</p>
-      ) : (
-        <div className="space-y-4">
-          {connected.map((row) => (
-            <div key={row.system} className="rounded-lg glass-card p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-ink-900">{row.label}</h3>
-                  <p className="mt-1 text-xs text-success-600">
-                    Connected{row.accountLabel ? ` — ${row.accountLabel}` : ''}
-                  </p>
-                  <p className="mt-0.5 text-xs text-ink-500">
-                    {row.lastSyncAt
-                      ? `Last sync ${new Date(row.lastSyncAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}${
-                          row.lastSummary
-                            ? ` · ${row.lastSummary.created} created, ${row.lastSummary.updated} updated, ${row.lastSummary.unchanged} unchanged`
-                            : ''
-                        }`
-                      : 'Never synced — run the first one to create your job files.'}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <PrimaryButton onClick={() => void sync(row.system)} busy={busy === `sync-${row.system}`}>
-                    Sync now
-                  </PrimaryButton>
-                  <button
-                    onClick={() => void disconnect(row.system)}
-                    disabled={busy === `disconnect-${row.system}`}
-                    className="rounded-lg border border-line px-3 py-2 text-xs font-medium text-ink-700 transition hover:bg-paper-200/50 disabled:opacity-50"
-                  >
-                    Disconnect
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
-
-          {connectable.length > 0 && (
-            <form onSubmit={connect} className="flex flex-wrap items-center gap-2">
-              <select
-                value={system}
-                onChange={(e) => setSystem(e.target.value as CrmSyncSystem)}
-                className="rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
-              >
-                {connectable.map((s) => (
-                  <option key={s.system} value={s.system}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-              <input
-                required
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="API key"
-                className="min-w-[12rem] flex-1 rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
-              />
-              <PrimaryButton busy={busy === 'connect'}>Connect</PrimaryButton>
-            </form>
-          )}
-
-          {conflicts.length > 0 && (
-            <div className="rounded-lg border border-caution-200 bg-caution-50/60 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-caution-600">
-                Waiting on you
-              </p>
-              <ul className="mt-2 space-y-3">
-                {conflicts.map((conflict) => (
-                  <li key={conflict.linkId}>
-                    <p className="text-sm font-medium text-ink-900">
-                      {conflict.jobNumber !== null && (
-                        <span className="tabular-nums text-ink-500">#{conflict.jobNumber} </span>
-                      )}
-                      {conflict.jobTitle ?? conflict.incoming.title}
-                    </p>
-                    <p className="mt-0.5 text-xs text-ink-700">
-                      {conflict.systemLabel} moved this job's address
-                      {conflict.incoming.address
-                        ? ` to ${conflict.incoming.address.line1}${conflict.incoming.address.city ? `, ${conflict.incoming.address.city}` : ''}`
-                        : ''}
-                      . This job already holds footage checked against the current address, so the
-                      change won't apply itself.
-                    </p>
-                    <div className="mt-1.5 flex gap-2">
-                      <button
-                        onClick={() => void resolve(conflict, 'accept_new_address')}
-                        disabled={busy === `resolve-${conflict.linkId}`}
-                        className="rounded-lg bg-brand-600 px-2.5 py-1 text-[11px] font-semibold text-ink-900 disabled:opacity-50"
-                      >
-                        Accept the new address
-                      </button>
-                      <button
-                        onClick={() => void resolve(conflict, 'keep_current')}
-                        disabled={busy === `resolve-${conflict.linkId}`}
-                        className="rounded-lg glass-card px-2.5 py-1 text-[11px] font-medium text-ink-700 disabled:opacity-50"
-                      >
-                        Keep the current one
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {note && <p className="text-sm text-success-600">{note}</p>}
-          <ErrorText message={error} />
-
-          <p className="text-xs text-ink-500">
-            Sync is one-way, into Atmosphere. A job deleted in your CRM archives its link and
-            nothing else — a job file that holds footage is never deleted by a sync.
-          </p>
-        </div>
-      )}
-    </Card>
-  );
-}
-
-function IntegrationsSection() {
-  const [state, setState] = useState<CrmConnections | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
-  const [params, setParams] = useSearchParams();
-
-  const load = useCallback(async () => {
-    try {
-      setState(await api.crmConnections());
-    } catch (err) {
-      setError(
-        err instanceof ApiError && err.code === 'insufficient_role'
-          ? 'Only an owner or admin can manage connected apps.'
-          : err instanceof Error
-            ? err.message
-            : 'Could not load connections.',
-      );
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  // Salesforce sends the browser back here with ?code=&state=. Completing the
-  // exchange server-side is what keeps the client secret off the client.
-  useEffect(() => {
-    const code = params.get('code');
-    const oauthState = params.get('state');
-    if (!code || !oauthState) return;
-
-    setBusy('salesforce');
-    api
-      .completeSalesforce(code, oauthState)
-      .then((res) => {
-        setNote(`Salesforce connected${res.accountLabel ? ` — ${res.accountLabel}` : ''}.`);
-        return load();
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Could not finish connecting.'))
-      .finally(() => {
-        setBusy(null);
-        // Clear the code from the URL so a refresh does not replay a spent one.
-        const next = new URLSearchParams(params);
-        next.delete('code');
-        next.delete('state');
-        setParams(next, { replace: true });
-      });
-  }, [params, setParams, load]);
-
-  async function connect() {
-    setBusy('salesforce');
-    setError(null);
-    try {
-      const { url } = await api.connectSalesforce();
-      window.location.href = url;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not start that connection.');
-      setBusy(null);
-    }
-  }
-
-  async function disconnect() {
-    setBusy('salesforce');
-    setError(null);
-    setNote(null);
-    try {
-      const res = await api.disconnectSalesforce();
-      setNote(
-        res.revokedAtSalesforce
-          ? 'Disconnected and revoked at Salesforce.'
-          : 'Disconnected here. Salesforce did not confirm the revocation — revoke it in Setup → Connected Apps to be certain.',
-      );
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not disconnect.');
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  const connectedSystems = new Set((state?.connected ?? []).map((c) => c.system));
-
-  return (
-    <div className="space-y-5">
-      <JobSourceCard />
-
-      <Card
-        title="Your CRM"
-        description="Mirror the customers, contacts and opportunities you already have, so prospecting knows who you know and never sells you a contact you own."
-      >
-        {!state ? (
-          <p className="text-sm text-ink-600">Loading…</p>
-        ) : (
-          <div className="space-y-3">
-            {state.available.map((crm) => {
-              const isConnected = connectedSystems.has(crm.id);
-              const detail = state.connected.find((c) => c.system === crm.id);
-              const canOauth = crm.method === 'oauth' && state.salesforceConfigured && state.vaultConfigured;
-
-              return (
-                <div key={crm.id} className="rounded-lg glass-card p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-semibold text-ink-900">{crm.name}</h3>
-                        <MethodBadge method={crm.method} />
-                      </div>
-                      <p className="mt-1 text-xs leading-relaxed text-ink-600">{crm.note}</p>
-                      {detail && (
-                        <p className="mt-1.5 text-xs text-success-600">
-                          Connected{detail.accountLabel ? ` — ${detail.accountLabel}` : ''}
-                        </p>
-                      )}
-                    </div>
-
-                    {crm.method === 'oauth' && (
-                      <div className="shrink-0">
-                        {isConnected ? (
-                          <button
-                            onClick={() => void disconnect()}
-                            disabled={busy === crm.id}
-                            className="rounded-lg border border-line px-3 py-2 text-xs font-medium text-ink-700 transition hover:bg-paper-200/50 disabled:opacity-50"
-                          >
-                            Disconnect
-                          </button>
-                        ) : (
-                          <PrimaryButton onClick={() => void connect()} busy={busy === crm.id} disabled={!canOauth}>
-                            Authorise
-                          </PrimaryButton>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* A disabled button with no explanation is a dead end. */}
-                  {crm.method === 'oauth' && !canOauth && !isConnected && (
-                    <p className="mt-2 text-xs text-caution-600">
-                      {!state.salesforceConfigured
-                        ? 'Needs SALESFORCE_CLIENT_ID and SALESFORCE_CLIENT_SECRET on the server.'
-                        : 'Needs INTEGRATIONS_OAUTH_KEY so the grant can be encrypted at rest.'}
-                    </p>
-                  )}
-                  {crm.method === 'browser' && !state.browserCrmEnabled && (
-                    <p className="mt-2 text-xs text-caution-600">
-                      Browser sign-in is switched off on this deployment. Turn it on with
-                      INTEGRATIONS_BROWSER_CRM=true, then add the login under Web access.
-                    </p>
-                  )}
-                  {crm.method === 'browser' && state.browserCrmEnabled && (
-                    <p className="mt-2 text-xs text-ink-500">
-                      Set the sign-in up under Web access — the same vault and audit trail as your
-                      carrier portals.
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-
-            {note && <p className="text-sm text-success-600">{note}</p>}
-            <ErrorText message={error} />
-          </div>
-        )}
-      </Card>
-
-      <Card
-        title="Why authorising beats a password"
-        description="Both routes reach the same data. They are not the same risk, and where a CRM offers the first we use it."
-      >
-        <dl className="space-y-3 text-sm">
-          <div>
-            <dt className="font-medium text-ink-800">Authorising</dt>
-            <dd className="mt-0.5 text-ink-600">
-              You approve us inside your CRM, seeing exactly what is being asked for. We never
-              learn your password, your multi-factor login keeps working, and you can revoke us
-              from your own admin screen without contacting us. The grant is encrypted before it
-              is stored, under a key that is not in the database.
-            </dd>
-          </div>
-          <div>
-            <dt className="font-medium text-ink-800">Signing in as you</dt>
-            <dd className="mt-0.5 text-ink-600">
-              For CRMs that publish no API. We hold your password and type it in the way you
-              would, which means it defeats your multi-factor login and breaks whenever you change
-              it. It is encrypted at rest and only ever sent to the one site you named — but it is
-              a larger thing to hand over, and it is only offered where there is no alternative.
-            </dd>
-          </div>
-        </dl>
-      </Card>
-    </div>
-  );
-}
-
-function MethodBadge({ method }: { method: 'oauth' | 'browser' | 'rest' }) {
-  const style =
-    method === 'oauth'
-      ? 'bg-success-50 text-success-600'
-      : method === 'rest'
-        ? 'bg-brand-50 text-brand-700'
-        : 'bg-caution-50 text-caution-600';
-  const label = method === 'oauth' ? 'authorise' : method === 'rest' ? 'API' : 'browser sign-in';
-  return (
-    <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${style}`}>{label}</span>
   );
 }
 
