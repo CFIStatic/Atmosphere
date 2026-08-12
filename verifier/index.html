@@ -1357,6 +1357,10 @@
     })
   ];
 
+  // Stand-in clips for a job file that exists before Field Capture has
+  // uploaded anything — so the folder on the Dashboard is reviewable.
+  var DEMO_EVIDENCE = EVIDENCE.slice();
+
   // The before half of each analysed pair is not separately analysed; it is read
   // as one half of the day. Rows say so rather than reading as "not analysed".
 
@@ -2705,6 +2709,40 @@
       }
     });
     EVIDENCE = (payload.items || []).map(function (raw) { return mapRemoteItem(raw, raw.jobId); });
+    seedEmptyJobFolders();
+  }
+
+  function cloneDemoClip(src, jobKey, suffix) {
+    var clone = JSON.parse(JSON.stringify(src));
+    clone.id = 'demo-' + suffix + '-' + src.id;
+    clone.job = jobKey;
+    clone.jobName = (JOBS[jobKey] && JOBS[jobKey].name) || src.jobName;
+    clone._remote = false;
+    clone._loaded = false;
+    clone._videoUrl = null;
+    return clone;
+  }
+
+  function seedEmptyJobFolders() {
+    if (!DEMO_EVIDENCE.length) return;
+    var occupied = {};
+    EVIDENCE.forEach(function (e) { occupied[e.job] = true; });
+    Object.keys(JOBS).forEach(function (jobKey) {
+      if (occupied[jobKey]) return;
+      DEMO_EVIDENCE.forEach(function (src, i) {
+        EVIDENCE.push(cloneDemoClip(src, jobKey, String(i)));
+      });
+      var live = cloneDemoClip(DEMO_EVIDENCE[0], jobKey, 'live');
+      var now = new Date();
+      live.id = 'demo-live-' + jobKey.slice(0, 8);
+      live.phase = 'after';
+      live.workDate = now.toISOString().slice(0, 10);
+      live.capturedAt = now.toISOString();
+      live.uploadedAt = now.toISOString();
+      live.analysis = { state: 'queued', reason: 'Queued for analysis. The model has not read the day yet.' };
+      live.hold = null;
+      EVIDENCE.push(live);
+    });
   }
 
   function loadOrgLibrary() {
