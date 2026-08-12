@@ -53,6 +53,11 @@ const InvestorAnalyticsRoute = lazy(() =>
     default: m.InvestorAnalyticsRoute,
   })),
 );
+const AdminPortalRoute = lazy(() =>
+  import('./pages/admin/AdminRoutes').then((m) => ({
+    default: m.AdminPortalRoute,
+  })),
+);
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })),
 );
@@ -433,6 +438,18 @@ export default function App() {
               <ProtectedRoute>
                 <RequireOnboarded>
                   <InvestorAnalyticsRoute />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Atmosphere company support portal — gated by platform_staff. */}
+          <Route
+            path="/admin/*"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <AdminPortalRoute />
                 </RequireOnboarded>
               </ProtectedRoute>
             }

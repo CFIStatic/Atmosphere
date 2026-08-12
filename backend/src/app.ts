@@ -6,6 +6,7 @@ import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
 import { analyticsRouter } from './routes/analytics.js';
+import { platformAdminRouter } from './routes/platformAdmin.js';
 import { telemetryRouter } from './routes/telemetry.js';
 import { profileRouter } from './routes/profile.js';
 import { auditRouter } from './routes/audit.js';
@@ -192,6 +193,7 @@ export function createApp(): Express {
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
   app.use('/api/analytics', analyticsRouter);
+  app.use('/api/admin', platformAdminRouter);
   app.use('/api/telemetry', telemetryRouter);
   app.use('/api/profile', profileRouter);
   app.use('/api/audit', auditRouter);
