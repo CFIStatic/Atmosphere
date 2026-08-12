@@ -133,7 +133,7 @@ sharedJobsRouter.get('/shared', async (req: Request, res: Response, next: NextFu
     }
 
     const jobIds = jobRows.map((j) => j.id as string);
-    const [{ data: statusRows, error: statusError }, { data: partyRowsRaw }] = await Promise.all([
+    const [statusResult, partyResult] = await Promise.all([
       supabase.from('job_share_status').select('*').eq('org_id', orgId).in('job_id', jobIds),
       supabase
         .from('job_parties')
@@ -142,11 +142,14 @@ sharedJobsRouter.get('/shared', async (req: Request, res: Response, next: NextFu
         .in('job_id', jobIds),
     ]);
     // A missing/broken readiness view must not hide jobs the office just created.
-    if (statusError) {
-      console.warn('[shared] job_share_status unavailable:', statusError.message);
+    if (statusResult.error) {
+      console.warn('[shared] job_share_status unavailable:', statusResult.error.message);
+    }
+    if (partyResult.error) {
+      console.warn('[shared] job_parties count unavailable:', partyResult.error.message);
     }
 
-    const rows = (statusRows ?? []) as any[];
+    const rows = (statusResult.data ?? []) as any[];
     const byJob = new Map<string, any[]>();
     for (const row of rows) {
       const list = byJob.get(row.job_id) ?? [];
@@ -155,7 +158,7 @@ sharedJobsRouter.get('/shared', async (req: Request, res: Response, next: NextFu
     }
 
     const partyCountByJob = new Map<string, number>();
-    for (const row of (partyRowsRaw ?? []) as any[]) {
+    for (const row of (partyResult.data ?? []) as any[]) {
       if (row.revoked_at) continue;
       partyCountByJob.set(row.job_id, (partyCountByJob.get(row.job_id) ?? 0) + 1);
     }

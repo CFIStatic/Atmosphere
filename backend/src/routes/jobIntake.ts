@@ -376,9 +376,10 @@ const approveSchema = z.object({
   scope: z
     .array(
       z.object({
-        title: z.string().trim().min(1).max(300),
+        // Matches job_scope_items title check (2–200).
+        title: z.string().trim().min(2).max(200),
         state: z.enum(['included', 'excluded']).default('included'),
-        reason: z.string().max(500).optional(),
+        reason: z.string().max(1000).optional(),
       }),
     )
     .max(60)
@@ -499,94 +500,315 @@ async function deliverPartyInvite(input: {
   return { emailed, recipientHasAccount, attachedToAccount };
 }
 
+type CreatedParty = {
+  id: string;
+  name: string;
+  email: string | null;
+  token: string;
+  external: boolean;
+};
+
+type CreatedJobFile = {
+  job: { id: string; title: string; jobNumber: number | null };
+  briefRevision: number;
+  scopeSaved: number;
+  parties: CreatedParty[];
+  summary: {
+    jobId: string;
+    jobNumber: number | null;
+    title: string;
+    status: string;
+    parties: number;
+    currentRevision: number | null;
+    behind: number;
+    awaiting: number;
+    exclusions: number;
+  };
+};
+
+function scopeLinesForDb(input: z.infer<typeof approveSchema>) {
+  return (input.scope ?? [])
+    .map((line) => ({
+      title: line.title.trim().slice(0, 200),
+      state: line.state,
+      reason: line.reason?.trim() ? line.reason.trim().slice(0, 1000) : undefined,
+    }))
+    .filter((line) => line.title.length >= 2);
+}
+
+/**
+ * Preferred path: one SECURITY DEFINER transaction that creates the full job
+ * file. Falls back to stepwise inserts when the migration is not applied yet.
+ */
+async function createJobFile(
+  supabase: any,
+  orgId: string,
+  userId: string,
+  input: z.infer<typeof approveSchema>,
+): Promise<CreatedJobFile> {
+  const scopeLines = scopeLinesForDb(input);
+  const invitees = input.invitees.map((person) => ({
+    userId: person.userId ?? null,
+    fullName: person.fullName,
+    company: person.company ?? null,
+    email: person.email?.trim().toLowerCase() || null,
+    trade: person.trade ?? null,
+    external: Boolean(person.external || !person.userId),
+  }));
+
+  const rpc = await supabase.rpc('intake_create_job_file', {
+    p_org_id: orgId,
+    p_title: input.title,
+    p_work_type: input.workType,
+    p_address: input.address,
+    p_city: input.city ?? null,
+    p_postal_code: input.postalCode ?? null,
+    p_claim_number: input.claimNumber ?? null,
+    p_brief_note: input.briefNote ?? null,
+    p_facts: input.facts ?? {},
+    p_scope: scopeLines,
+    p_invitees: invitees,
+  });
+
+  if (!rpc.error && rpc.data) {
+    const payload = rpc.data as any;
+    const job = payload.job ?? {};
+    const parties = (payload.parties ?? []) as CreatedParty[];
+    const summary = payload.summary ?? {
+      jobId: job.id,
+      jobNumber: job.jobNumber ?? null,
+      title: job.title,
+      status: 'scheduled',
+      parties: parties.length,
+      currentRevision: payload.briefRevision ?? 1,
+      behind: 0,
+      awaiting: parties.length,
+      exclusions: scopeLines.filter((s) => s.state === 'excluded').length,
+    };
+    return {
+      job: {
+        id: String(job.id),
+        title: String(job.title ?? input.title),
+        jobNumber: job.jobNumber ?? null,
+      },
+      briefRevision: Number(payload.briefRevision ?? 1),
+      scopeSaved: Number(payload.scopeSaved ?? scopeLines.length),
+      parties: parties.map((p) => ({
+        id: String(p.id),
+        name: String(p.name),
+        email: p.email ?? null,
+        token: String(p.token),
+        external: Boolean(p.external),
+      })),
+      summary: {
+        jobId: String(summary.jobId ?? job.id),
+        jobNumber: summary.jobNumber ?? job.jobNumber ?? null,
+        title: String(summary.title ?? job.title ?? input.title),
+        status: String(summary.status ?? 'scheduled'),
+        parties: Number(summary.parties ?? parties.length),
+        currentRevision: summary.currentRevision ?? payload.briefRevision ?? 1,
+        behind: Number(summary.behind ?? 0),
+        awaiting: Number(summary.awaiting ?? parties.length),
+        exclusions: Number(summary.exclusions ?? 0),
+      },
+    };
+  }
+
+  // RPC missing / failed — create stepwise so older databases still work.
+  if (rpc.error) {
+    const msg = String(rpc.error.message ?? rpc.error);
+    const missingFn = /intake_create_job_file|function .* does not exist|PGRST202/i.test(msg);
+    if (!missingFn) {
+      console.warn('[intake] intake_create_job_file failed, falling back:', msg);
+    }
+  }
+  return createJobFileStepwise(supabase, orgId, userId, input, scopeLines, invitees);
+}
+
+async function createJobFileStepwise(
+  supabase: any,
+  orgId: string,
+  userId: string,
+  input: z.infer<typeof approveSchema>,
+  scopeLines: ReturnType<typeof scopeLinesForDb>,
+  invitees: Array<{
+    userId: string | null;
+    fullName: string;
+    company: string | null;
+    email: string | null;
+    trade: string | null;
+    external: boolean;
+  }>,
+): Promise<CreatedJobFile> {
+  // Prefer the service-role client for the write path when available so a
+  // missing GRANT on job_* tables cannot strand a half-created job file.
+  const writer = createAdminClient() ?? supabase;
+
+  const { data: property, error: propertyError } = await writer
+    .from('crm_properties')
+    .insert({
+      org_id: orgId,
+      address_line1: input.address,
+      city: input.city ?? null,
+      postal_code: input.postalCode ?? null,
+    })
+    .select('id')
+    .single();
+  if (propertyError || !property) {
+    throw new HttpError(
+      500,
+      propertyError?.message || 'Could not save the address.',
+      'property_failed',
+    );
+  }
+
+  const { data: job, error: jobError } = await writer
+    .from('crm_jobs')
+    .insert({
+      org_id: orgId,
+      title: input.title,
+      work_type: input.workType,
+      property_id: (property as any).id,
+      claim_number: input.claimNumber || null,
+      status: 'scheduled',
+      created_by: userId,
+    })
+    .select('id, title, job_number')
+    .single();
+  if (jobError || !job) {
+    throw new HttpError(500, jobError?.message || 'Could not create the job.', 'job_failed');
+  }
+  const jobId = (job as any).id as string;
+
+  const { error: intakeError } = await writer.from('job_intake').insert({
+    job_id: jobId,
+    org_id: orgId,
+    source: (scopeLines.length ? 'scope_document' : 'manual') satisfies IntakeSource,
+    source_detail: {
+      enteredFrom: 'intake_package',
+      captureInvites: invitees.length,
+      scopeOptional: scopeLines.length === 0,
+    },
+    entered_by: userId,
+  });
+  if (intakeError) {
+    console.warn('[intake] job_intake insert failed:', intakeError.message);
+  }
+
+  const { data: brief, error: briefError } = await writer
+    .from('job_briefs')
+    .insert({
+      org_id: orgId,
+      job_id: jobId,
+      revision: 0,
+      facts: input.facts ?? {},
+      note: input.briefNote ?? null,
+      created_by: userId,
+    })
+    .select('id, revision')
+    .single();
+  if (briefError || !brief) {
+    throw new HttpError(
+      500,
+      briefError?.message || 'Could not publish the brief.',
+      'brief_failed',
+    );
+  }
+  const revision = (brief as any).revision ?? 1;
+
+  if (scopeLines.length) {
+    const inserted = await writer
+      .from('job_scope_items')
+      .insert(
+        scopeLines.map((line) => ({
+          org_id: orgId,
+          job_id: jobId,
+          title: line.title,
+          state: line.state,
+          reason: line.reason ?? null,
+          revision,
+          created_by: userId,
+        })),
+      )
+      .select('id');
+    if (inserted.error) {
+      throw new HttpError(500, inserted.error.message || 'Could not save scope lines.', 'scope_failed');
+    }
+  }
+
+  const parties: CreatedParty[] = [];
+  for (const person of invitees) {
+    const company = (person.company?.trim() || person.fullName).slice(0, 160);
+    const { data: party, error: partyError } = await writer
+      .from('job_parties')
+      .insert({
+        org_id: orgId,
+        job_id: jobId,
+        company,
+        trade: person.trade || (person.external ? 'subcontractor' : 'field_capture'),
+        contact_name: person.fullName,
+        email: person.email,
+        role: 'subcontractor',
+        invited_at: new Date().toISOString(),
+        created_by: userId,
+      })
+      .select('id, company, access_token, email')
+      .single();
+    if (partyError || !party) {
+      throw new HttpError(
+        500,
+        partyError?.message || `Could not invite ${person.fullName}.`,
+        'party_failed',
+      );
+    }
+    parties.push({
+      id: String((party as any).id),
+      name: String((party as any).company ?? company),
+      email: ((party as any).email as string) ?? person.email,
+      token: String((party as any).access_token),
+      external: person.external,
+    });
+  }
+
+  return {
+    job: {
+      id: jobId,
+      title: (job as any).title,
+      jobNumber: (job as any).job_number ?? null,
+    },
+    briefRevision: revision,
+    scopeSaved: scopeLines.length,
+    parties,
+    summary: {
+      jobId,
+      jobNumber: (job as any).job_number ?? null,
+      title: (job as any).title,
+      status: 'scheduled',
+      parties: parties.length,
+      currentRevision: revision,
+      behind: 0,
+      awaiting: parties.length,
+      exclusions: scopeLines.filter((s) => s.state === 'excluded').length,
+    },
+  };
+}
+
 /**
  * POST /api/operations/intake/approve
  * One approval: job file + scope + published brief + Field Capture invites.
+ * The job file is what Job Progress lists — videos file into it later.
  */
 jobIntakeRouter.post('/intake/approve', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { orgId, supabase, userId } = await requireOrgContext(req);
     const input = approveSchema.parse(req.body ?? {});
 
-    const { data: property, error: propertyError } = await supabase
-      .from('crm_properties')
-      .insert({
-        org_id: orgId,
-        address_line1: input.address,
-        city: input.city ?? null,
-        postal_code: input.postalCode ?? null,
-      })
-      .select('id')
-      .single();
-    if (propertyError || !property) {
-      throw new HttpError(500, 'Could not save the address.', 'property_failed');
-    }
-
-    const { data: job, error: jobError } = await supabase
-      .from('crm_jobs')
-      .insert({
-        org_id: orgId,
-        title: input.title,
-        work_type: input.workType,
-        property_id: (property as any).id,
-        claim_number: input.claimNumber || null,
-        status: 'scheduled',
-        created_by: userId,
-      })
-      .select('id, title, job_number')
-      .single();
-    if (jobError || !job) throw new HttpError(500, 'Could not create the job.', 'job_failed');
-    const jobId = (job as any).id as string;
-
-    const scopeLines = (input.scope ?? []).filter((line) => line.title.trim().length > 0);
-    await supabase.from('job_intake').insert({
-      job_id: jobId,
-      org_id: orgId,
-      source: (scopeLines.length ? 'scope_document' : 'manual') satisfies IntakeSource,
-      source_detail: {
-        enteredFrom: 'intake_package',
-        captureInvites: input.invitees.length,
-        scopeOptional: scopeLines.length === 0,
-      },
-      entered_by: userId,
-    });
-
-    const { data: brief, error: briefError } = await supabase
-      .from('job_briefs')
-      .insert({
-        org_id: orgId,
-        job_id: jobId,
-        revision: 0,
-        facts: input.facts ?? {},
-        note: input.briefNote ?? null,
-        created_by: userId,
-      })
-      .select('id, revision')
-      .single();
-    if (briefError || !brief) {
-      throw new HttpError(500, 'Could not publish the brief.', 'brief_failed');
-    }
-    const revision = (brief as any).revision ?? 1;
-
-    let scopeRows: unknown[] | null = [];
-    if (scopeLines.length) {
-      const inserted = await supabase
-        .from('job_scope_items')
-        .insert(
-          scopeLines.map((line) => ({
-            org_id: orgId,
-            job_id: jobId,
-            title: line.title,
-            state: line.state,
-            reason: line.reason ?? null,
-            revision,
-            created_by: userId,
-          })),
-        )
-        .select('id');
-      if (inserted.error) throw new HttpError(500, 'Could not save scope lines.', 'scope_failed');
-      scopeRows = inserted.data;
-    }
+    const created = await createJobFile(supabase, orgId, userId, input);
+    const jobId = created.job.id;
+    const siteAddress = [input.address, input.city, input.postalCode]
+      .map((part) => (part ?? '').trim())
+      .filter(Boolean)
+      .join(', ');
 
     const invites: Array<{
       id: string;
@@ -601,57 +823,29 @@ jobIntakeRouter.post('/intake/approve', async (req: Request, res: Response, next
       attachedToAccount: boolean;
     }> = [];
 
-    for (const person of input.invitees) {
-      const company = (person.company?.trim() || person.fullName).slice(0, 160);
-      const contactName = person.fullName;
-      const email = person.email?.trim().toLowerCase() || null;
-      const external = Boolean(person.external || !person.userId);
-      const { data: party, error: partyError } = await supabase
-        .from('job_parties')
-        .insert({
-          org_id: orgId,
-          job_id: jobId,
-          company,
-          trade: person.trade || (external ? 'subcontractor' : 'field_capture'),
-          contact_name: contactName,
-          email,
-          role: 'subcontractor',
-          invited_at: new Date().toISOString(),
-          created_by: userId,
-        })
-        .select('id, company, access_token, email')
-        .single();
-      if (partyError || !party) {
-        throw new HttpError(500, `Could not invite ${contactName}.`, 'party_failed');
-      }
-      const token = String((party as any).access_token);
-      const partyId = String((party as any).id);
-      const siteAddress = [input.address, input.city, input.postalCode]
-        .map((part) => (part ?? '').trim())
-        .filter(Boolean)
-        .join(', ');
+    for (const party of created.parties) {
       const delivery = await deliverPartyInvite({
         supabase,
         orgId,
         jobId,
-        jobTitle: (job as any).title,
+        jobTitle: created.job.title,
         siteAddress,
         userId,
-        partyId,
-        company,
-        contactName,
-        email,
-        token,
+        partyId: party.id,
+        company: party.name,
+        contactName: party.name,
+        email: party.email,
+        token: party.token,
       });
-      const emailParam = email ? `?email=${encodeURIComponent(email)}` : '';
+      const emailParam = party.email ? `?email=${encodeURIComponent(party.email)}` : '';
       invites.push({
-        id: partyId,
-        name: company,
-        email: ((party as any).email as string) ?? email,
-        token,
-        sharePath: `/shared/${token}${emailParam}`,
-        fieldCapturePath: `/fieldcapture/index.html?token=${encodeURIComponent(token)}`,
-        external,
+        id: party.id,
+        name: party.name,
+        email: party.email,
+        token: party.token,
+        sharePath: `/shared/${party.token}${emailParam}`,
+        fieldCapturePath: `/fieldcapture/index.html?token=${encodeURIComponent(party.token)}`,
+        external: party.external,
         emailed: delivery.emailed,
         recipientHasAccount: delivery.recipientHasAccount,
         attachedToAccount: delivery.attachedToAccount,
@@ -662,23 +856,42 @@ jobIntakeRouter.post('/intake/approve', async (req: Request, res: Response, next
     await recordAccess(supabase, {
       orgId,
       jobId,
-      action: 'job_created',
+      action: 'uploaded',
       actorId: userId,
       actorLabel: 'Office',
-      detail: `Intake approved — ${(scopeRows ?? []).length} scope lines, brief r${revision}, ${invites.length} invite(s)${emailedCount ? `, ${emailedCount} emailed` : ''}`,
+      detail: `Intake approved — ${created.scopeSaved} scope lines, brief r${created.briefRevision}, ${invites.length} invite(s)${emailedCount ? `, ${emailedCount} emailed` : ''}`,
     }).catch(() => undefined);
 
-    const facts = await factsFor(supabase, jobId);
+    // Confirm the job file is listable before telling the client it exists.
+    const { data: listed, error: listError } = await supabase
+      .from('crm_jobs')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('id', jobId)
+      .maybeSingle();
+    if (listError || !listed) {
+      console.warn(
+        '[intake] job created but not yet visible to org list:',
+        listError?.message ?? 'missing row',
+      );
+    }
+
+    const facts = await factsFor(supabase, jobId).catch(async () => ({
+      scopeLineCount: created.scopeSaved,
+      scopeFromDocument: created.scopeSaved > 0,
+      hasAddress: true,
+      hasCoordinates: false,
+      scheduledStart: null as string | null,
+      partyCount: created.parties.length,
+      intakeSource: (created.scopeSaved > 0 ? 'scope_document' : 'manual') as IntakeSource,
+    }));
     const primary = invites[0]!;
     res.status(201).json({
-      job: {
-        id: jobId,
-        title: (job as any).title,
-        jobNumber: (job as any).job_number ?? null,
-      },
-      briefRevision: revision,
-      scopeSaved: (scopeRows ?? []).length,
+      job: created.job,
+      briefRevision: created.briefRevision,
+      scopeSaved: created.scopeSaved,
       invites,
+      jobFile: created.summary,
       // Back-compat for older UI: first invitee
       party: { id: primary.id, company: primary.name },
       sharePath: primary.sharePath,

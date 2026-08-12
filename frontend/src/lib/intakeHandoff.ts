@@ -19,7 +19,7 @@ export function handoffFromApprove(
   const now = new Date().toISOString();
   const revision = res.briefRevision ?? 1;
   const invites = res.invites ?? [];
-  const summary: SharedJobSummary = {
+  const summary: SharedJobSummary = res.jobFile ?? {
     jobId: res.job.id,
     jobNumber: res.job.jobNumber ?? null,
     title: res.job.title,
