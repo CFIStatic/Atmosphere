@@ -109,7 +109,7 @@ final class AuthSession: ObservableObject {
                 return "No network. Connect to the internet and try again."
             case .cannotFindHost, .dnsLookupFailed:
                 return "Can’t find server “\(host)”. Use the same API host as your website — not a placeholder like api.atmosphere.example."
-            case .cannotConnectToHost, .connectionLost:
+            case .cannotConnectToHost:
                 return "Found “\(host)” but couldn’t connect. Is the Atmosphere API running, and is this phone on the same network?"
             case .timedOut:
                 return "The Atmosphere server timed out. Try again in a moment."
