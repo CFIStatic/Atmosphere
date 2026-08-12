@@ -1,10 +1,6 @@
 /**
- * Chrome shared by both dashboards: header, the single filter row, the export
- * control, and the loading/error/empty states.
- *
- * The filter row sits ABOVE everything it scopes — one range, every card
- * re-rendering against the same slice. Per-card filters would let two cards on
- * the same screen disagree about what "this month" means.
+ * Legacy analytics chrome — kept for the old Internal/Investor pages.
+ * New work uses BusinessPortalShell (Atmosphere paper/glass look).
  */
 
 import type { ReactNode } from 'react';
@@ -38,7 +34,6 @@ export function AnalyticsShell({
   range: RangeParams;
   refreshing: boolean;
   generatedAt?: string;
-  /** Link to the sibling dashboard, when the viewer is allowed both. */
   otherView?: { to: string; label: string };
   children: ReactNode;
 }) {
@@ -46,78 +41,76 @@ export function AnalyticsShell({
   const navigate = useNavigate();
 
   return (
-    <div className="cx-aurora min-h-screen bg-ink-900">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-6 py-4 sm:px-10">
-        <div className="flex items-center gap-4">
-          <Logo className="text-white" />
-          <span className="hidden rounded-full border border-white/10 bg-ink-700/60 px-2.5 py-0.5 text-xs font-medium text-gray-400 sm:inline">
-            {viewLabel}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          {otherView && (
-            <Link
-              to={otherView.to}
-              className="rounded-lg border border-white/10 px-3 py-2 text-sm text-gray-300 transition hover:bg-white/5"
+    <div className="min-h-screen bg-paper-100">
+      <header className="border-b border-line bg-paper-0/80 px-6 py-3.5 backdrop-blur sm:px-10">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Logo />
+            <span className="rounded-full border border-line bg-paper-50 px-2.5 py-0.5 text-xs font-medium text-ink-600">
+              {viewLabel}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {otherView && (
+              <Link
+                to={otherView.to}
+                className="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink-700 transition hover:bg-paper-200"
+              >
+                {otherView.label}
+              </Link>
+            )}
+            <button
+              type="button"
+              onClick={() => navigate('/business/board')}
+              className="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink-700 transition hover:bg-paper-200"
             >
-              {otherView.label}
-            </Link>
-          )}
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="rounded-lg border border-white/10 px-3 py-2 text-sm text-gray-300 transition hover:bg-white/5"
-          >
-            Back to app
-          </button>
-          <button
-            onClick={() => void logout()}
-            className="rounded-lg border border-white/10 bg-ink-700/70 px-3 py-2 text-sm text-gray-200 transition hover:bg-ink-600"
-          >
-            Sign out
-          </button>
+              Business Portal
+            </button>
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm font-medium text-ink-700 transition hover:bg-paper-200"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-7xl px-6 py-8 sm:px-10">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">{title}</h1>
-            <p className="mt-1.5 max-w-2xl text-sm text-gray-400">{strapline}</p>
+            <h1 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">{title}</h1>
+            <p className="mt-1.5 max-w-2xl text-sm text-ink-600">{strapline}</p>
           </div>
           <DownloadExcel href={analyticsApi.exportUrl(range, 'all')} label="Download everything (Excel)" />
         </div>
 
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
           <RangeFilter value={preset} onChange={onPresetChange} />
-          <p className="flex items-center gap-2 text-xs text-gray-600">
+          <p className="flex items-center gap-2 text-xs text-ink-500">
             {refreshing && <SpinnerIcon className="animate-spin" width={12} height={12} />}
             {generatedAt
               ? `Data as of ${new Date(generatedAt).toLocaleString('en-US', {
                   month: 'short',
                   day: 'numeric',
-                  hour: 'numeric',
-                  minute: '2-digit',
+                  year: 'numeric',
                 })}`
               : 'Loading…'}
           </p>
         </div>
 
-        {/* Hold the previous render at reduced opacity on refetch — no skeleton
-            flash, no layout jump. */}
         <div
           className={`transition-opacity duration-200 ${refreshing ? 'opacity-60' : 'opacity-100'}`}
         >
           {children}
         </div>
 
-        <footer className="mt-14 border-t border-white/10 pt-6 text-xs text-gray-600">
+        <footer className="mt-14 border-t border-line pt-6 text-xs text-ink-500">
           <p>
             {scope === 'internal'
               ? 'Internal view — includes customer names and unit economics. Do not forward outside Atmosphere.'
               : 'Investor view — aggregate figures only. No customer names or per-account detail are included.'}
-          </p>
-          <p className="mt-1">
-            Definitions for every metric are on the “Definitions” sheet of the Excel export.
           </p>
         </footer>
       </main>
@@ -130,7 +123,7 @@ export function AnalyticsLoading() {
     <div
       role="status"
       aria-live="polite"
-      className="grid min-h-screen place-items-center bg-ink-900 text-brand-300"
+      className="grid min-h-screen place-items-center bg-paper-100 text-brand-500"
     >
       <SpinnerIcon className="animate-spin" width={28} height={28} />
       <span className="sr-only">Loading analytics…</span>
@@ -140,12 +133,13 @@ export function AnalyticsLoading() {
 
 export function AnalyticsError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div className="mt-10 rounded-xl border border-white/10 bg-ink-800/60 px-6 py-12 text-center">
-      <p className="text-sm font-medium text-gray-200">Could not load analytics</p>
-      <p className="mx-auto mt-1.5 max-w-md text-sm text-gray-500">{message}</p>
+    <div className="mt-10 rounded-xl glass-card px-6 py-12 text-center shadow-card">
+      <p className="text-sm font-semibold text-ink-900">Could not load analytics</p>
+      <p className="mx-auto mt-1.5 max-w-md text-sm text-ink-500">{message}</p>
       <button
+        type="button"
         onClick={onRetry}
-        className="mt-5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-500"
+        className="mt-5 rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-400"
       >
         Try again
       </button>

@@ -88,8 +88,8 @@ export function ExperimentsSection({ range }: { range: RangeParams }) {
       header: 'Experiment',
       render: (row) => (
         <span>
-          <span className="font-medium text-white">{row.experiment}</span>
-          <span className="ml-2 text-[10px] uppercase tracking-wide text-gray-500">
+          <span className="font-medium text-ink-900">{row.experiment}</span>
+          <span className="ml-2 text-[10px] uppercase tracking-wide text-ink-500">
             {row.status}
           </span>
         </span>
@@ -100,8 +100,8 @@ export function ExperimentsSection({ range }: { range: RangeParams }) {
       header: 'Variant',
       render: (row) => (
         <span>
-          <span className="text-white">{row.variant}</span>
-          <span className="ml-1.5 text-xs text-gray-500">{row.label}</span>
+          <span className="text-ink-900">{row.variant}</span>
+          <span className="ml-1.5 text-xs text-ink-500">{row.label}</span>
         </span>
       ),
     },

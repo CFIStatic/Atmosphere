@@ -242,6 +242,7 @@ export const analyticsDatasetSchema = z.enum([
   'plans',
   'retention',
   'accounts',
+  'models',
 ]);
 
 /**

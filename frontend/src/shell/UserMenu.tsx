@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Check, Eye, LogOut, Monitor, Moon, Sun, User } from 'lucide-react';
+import { BarChart3, Check, Eye, LogOut, Monitor, Moon, Sun, User } from 'lucide-react';
 import { Badge, Button, Popover, cn } from '../design';
 import { useAuth } from '../context/AuthContext';
 import { labelForRole } from '../domain/approvals';
@@ -7,6 +7,7 @@ import type { Role } from '../domain/types';
 import { themeLabel } from '../lib/theme';
 import { useTheme } from './ThemeContext';
 import { useViewer } from './ViewerContext';
+import { useAnalyticsAccess } from '../hooks/useAnalytics';
 
 const ROLES: Role[] = [
   'field_technician',
@@ -21,10 +22,12 @@ export function UserMenu() {
   const { user, logout } = useAuth();
   const { role, actualRole, isOverridden, viewAs } = useViewer();
   const { preference, theme, toggle } = useTheme();
+  const { access } = useAnalyticsAccess();
   const navigate = useNavigate();
 
   const initials = (user?.email ?? '?').slice(0, 2).toUpperCase();
   const ThemeIcon = preference === 'system' ? Monitor : theme === 'dark' ? Moon : Sun;
+  const canOpenBusinessPortal = Boolean(access?.scope);
 
   return (
     <Popover
@@ -98,6 +101,17 @@ export function UserMenu() {
         >
           Settings
         </Button>
+        {canOpenBusinessPortal && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start"
+            leadingIcon={<BarChart3 className="h-3.5 w-3.5" />}
+            onClick={() => navigate('/business/board')}
+          >
+            Business Portal
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="sm"

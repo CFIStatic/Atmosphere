@@ -164,7 +164,7 @@ export function FeatureUsageSection({
   const table: Column<FeatureRow>[] = [
     { key: 'rank', header: '#', align: 'right', render: (r) => r.timeRank },
     { key: 'label', header: 'Tool', render: (r) => r.label },
-    { key: 'area', header: 'Area', render: (r) => <span className="text-gray-500">{r.area}</span> },
+    { key: 'area', header: 'Area', render: (r) => <span className="text-ink-500">{r.area}</span> },
     { key: 'hours', header: 'Hours', align: 'right', render: (r) => hours(r.activeHours) },
     { key: 'share', header: 'Share', align: 'right', render: (r) => percent(r.sharePct) },
     { key: 'sessions', header: 'Sessions', align: 'right', render: (r) => count(r.sessions) },
@@ -197,7 +197,7 @@ export function FeatureUsageSection({
         }
       >
         {used.length === 0 ? (
-          <p className="py-10 text-center text-sm text-gray-500">
+          <p className="py-10 text-center text-sm text-ink-500">
             No tool usage recorded in this period yet.
           </p>
         ) : (
@@ -259,7 +259,7 @@ export function PlanMixSection({ plans }: { plans: PlanMixRow[] }) {
     {
       key: 'interval',
       header: 'Billing',
-      render: (r) => <span className="capitalize text-gray-500">{r.billingInterval}</span>,
+      render: (r) => <span className="capitalize text-ink-500">{r.billingInterval}</span>,
     },
     { key: 'orgs', header: 'Orgs', align: 'right', render: (r) => count(r.orgs) },
     { key: 'seats', header: 'Seats', align: 'right', render: (r) => count(r.seats) },
@@ -281,7 +281,7 @@ export function PlanMixSection({ plans }: { plans: PlanMixRow[] }) {
       }
     >
       {plans.length === 0 ? (
-        <p className="py-10 text-center text-sm text-gray-500">No subscriptions yet.</p>
+        <p className="py-10 text-center text-sm text-ink-500">No subscriptions yet.</p>
       ) : (
         <HBarChart
           ariaLabel="Recurring revenue by plan"
@@ -342,7 +342,7 @@ export function RetentionSection({ retention }: { retention: RetentionRow[] }) {
       }
     >
       {cohorts.length === 0 ? (
-        <p className="py-10 text-center text-sm text-gray-500">
+        <p className="py-10 text-center text-sm text-ink-500">
           Not enough history to show cohorts yet.
         </p>
       ) : (

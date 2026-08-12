@@ -68,21 +68,21 @@ function TooltipCard({
   const flip = x > containerWidth - 150;
   return (
     <div
-      className="pointer-events-none absolute z-10 min-w-[9rem] rounded-lg border border-white/10 bg-ink-900/95 px-3 py-2 shadow-xl backdrop-blur"
+      className="pointer-events-none absolute z-10 min-w-[9rem] rounded-lg border border-line bg-paper-0 px-3 py-2 shadow-lift"
       style={{ left: flip ? undefined : x + 12, right: flip ? containerWidth - x + 12 : undefined, top: 8 }}
       role="status"
     >
-      <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">{label}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">{label}</p>
       <ul className="mt-1 space-y-0.5">
         {rows.map((row) => (
           <li key={row.name} className="flex items-center justify-between gap-3 text-xs">
-            <span className="flex items-center gap-1.5 text-gray-400">
+            <span className="flex items-center gap-1.5 text-ink-600">
               {row.color && (
                 <span className="h-2 w-2 rounded-full" style={{ backgroundColor: row.color }} />
               )}
               {row.name}
             </span>
-            <span className="font-medium tabular-nums text-white">{row.value}</span>
+            <span className="font-medium tabular-nums text-ink-900">{row.value}</span>
           </li>
         ))}
       </ul>
@@ -436,17 +436,17 @@ export function HBarChart({
         return (
           <li key={item.key} className="group">
             <div className="flex items-baseline justify-between gap-3">
-              <span className="truncate text-sm text-gray-300">
+              <span className="truncate text-sm text-ink-800">
                 {item.label}
                 {item.sublabel && (
-                  <span className="ml-2 text-xs text-gray-600">{item.sublabel}</span>
+                  <span className="ml-2 text-xs text-ink-500">{item.sublabel}</span>
                 )}
               </span>
-              <span className="shrink-0 text-sm font-medium tabular-nums text-white">
-                {item.value > 0 ? item.display : <span className="text-gray-600">{item.emptyNote ?? item.display}</span>}
+              <span className="shrink-0 text-sm font-semibold tabular-nums text-ink-900">
+                {item.value > 0 ? item.display : <span className="text-ink-500">{item.emptyNote ?? item.display}</span>}
               </span>
             </div>
-            <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-white/5">
+            <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-paper-200">
               <div
                 className="h-full rounded-full transition-[width] duration-500"
                 style={{
@@ -490,14 +490,14 @@ export function RetentionGrid({
         </caption>
         <thead>
           <tr>
-            <th scope="col" className="px-2 py-1 text-left font-medium text-gray-500">
+            <th scope="col" className="px-2 py-1 text-left font-semibold text-ink-500">
               Cohort
             </th>
-            <th scope="col" className="px-2 py-1 text-right font-medium text-gray-500">
+            <th scope="col" className="px-2 py-1 text-right font-semibold text-ink-500">
               Orgs
             </th>
             {offsets.map((offset) => (
-              <th key={offset} scope="col" className="px-1 py-1 text-center font-medium text-gray-500">
+              <th key={offset} scope="col" className="px-1 py-1 text-center font-semibold text-ink-500">
                 M{offset}
               </th>
             ))}
@@ -506,10 +506,10 @@ export function RetentionGrid({
         <tbody>
           {cohorts.map((cohort) => (
             <tr key={cohort.label}>
-              <th scope="row" className="whitespace-nowrap px-2 py-1 text-left font-normal text-gray-400">
+              <th scope="row" className="whitespace-nowrap px-2 py-1 text-left font-normal text-ink-700">
                 {cohort.label}
               </th>
-              <td className="px-2 py-1 text-right tabular-nums text-gray-400">{cohort.size}</td>
+              <td className="px-2 py-1 text-right tabular-nums text-ink-600">{cohort.size}</td>
               {offsets.map((offset) => {
                 const value = cohort.cells[offset] ?? null;
                 const step = stepFor(value);
@@ -548,7 +548,7 @@ export function Legend({ series }: { series: { label: string; color: string }[] 
   return (
     <ul className="flex flex-wrap items-center gap-x-4 gap-y-1">
       {series.map((s) => (
-        <li key={s.label} className="flex items-center gap-1.5 text-xs text-gray-400">
+        <li key={s.label} className="flex items-center gap-1.5 text-xs text-ink-600">
           <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color }} />
           {s.label}
         </li>

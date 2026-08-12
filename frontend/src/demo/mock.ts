@@ -13,6 +13,11 @@
  * when VITE_DEMO is set, so production bundles never contain it.
  */
 import { DEMO_ESTIMATE, DEMO_ESTIMATE_SOURCES, DEMO_ESTIMATE_TAKEOFF } from './demoEstimate';
+import {
+  demoAnalyticsOverview,
+  demoExperiments,
+  demoMeteringAnalytics,
+} from './demoAnalytics';
 import type {
   AgentMemory,
   Escalation,
@@ -1766,6 +1771,22 @@ const XACTIMATE_STATUS: XactimateStatus = {
 type Handler = (match: RegExpMatchArray, body: Record<string, unknown>) => { status?: number; body: unknown };
 
 const routes: Array<[string, RegExp, Handler]> = [
+  /* ------------------------------------------------------- Business Portal */
+  ['GET', /^\/api\/analytics\/access$/, () => ({
+    body: { scope: 'internal', displayName: 'Atmosphere staff' },
+  })],
+  ['GET', /^\/api\/analytics\/overview$/, () => ({ body: demoAnalyticsOverview() })],
+  ['GET', /^\/api\/analytics\/metering$/, () => ({ body: demoMeteringAnalytics() })],
+  ['GET', /^\/api\/analytics\/experiments$/, () => ({ body: demoExperiments })],
+  ['GET', /^\/api\/analytics\/export$/, () => ({
+    status: 503,
+    body: {
+      error: 'Excel export needs the live backend — open Business Portal against a seeded API for downloads.',
+      code: 'demo_mode',
+    },
+  })],
+  ['POST', /^\/api\/telemetry\/feature$/, () => ({ body: { sessionId: 'demo-session' } })],
+
   ['POST', /^\/api\/auth\/login$/, (_m, b) => {
     state.signedIn = true; state.onboarded = true;
     if (typeof b.email === 'string') state.email = b.email;

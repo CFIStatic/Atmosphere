@@ -52,16 +52,16 @@ export function ProductIntelligenceSection({ intel }: { intel: ProductIntelligen
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-ink-800/60 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-3 rounded-xl glass-card px-4 py-3 shadow-card">
         <span
           className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
           style={{
             background:
               intel.confidence === 'high'
-                ? 'rgba(12,163,12,0.15)'
+                ? 'rgba(21,128,61,0.12)'
                 : intel.confidence === 'medium'
-                  ? 'rgba(236,98,32,0.15)'
-                  : 'rgba(208,59,59,0.12)',
+                  ? 'rgba(210,80,10,0.12)'
+                  : 'rgba(185,28,28,0.1)',
             color:
               intel.confidence === 'high'
                 ? CHART.good
@@ -72,7 +72,7 @@ export function ProductIntelligenceSection({ intel }: { intel: ProductIntelligen
         >
           {intel.confidence} confidence
         </span>
-        <p className="text-sm text-gray-400">{intel.confidenceNote}</p>
+        <p className="text-sm text-ink-600">{intel.confidenceNote}</p>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -89,7 +89,7 @@ export function ProductIntelligenceSection({ intel }: { intel: ProductIntelligen
           }
         >
           {intel.areas.every((a) => a.activeHours === 0) ? (
-            <p className="py-10 text-center text-sm text-gray-500">
+            <p className="py-10 text-center text-sm text-ink-500">
               No area usage in this period yet.
             </p>
           ) : (
@@ -124,11 +124,11 @@ export function ProductIntelligenceSection({ intel }: { intel: ProductIntelligen
         subtitle="Rule-based advice from this period’s usage, retention and paying-account behaviour. For the Atmosphere team only."
       >
         {intel.insights.length === 0 ? (
-          <p className="py-8 text-center text-sm text-gray-500">
+          <p className="py-8 text-center text-sm text-ink-500">
             Not enough signal yet for concrete recommendations. Keep telemetry flowing.
           </p>
         ) : (
-          <ul className="divide-y divide-white/5">
+          <ul className="divide-y divide-line">
             {intel.insights.map((insight) => (
               <InsightRow key={insight.id} insight={insight} />
             ))}
@@ -152,19 +152,19 @@ function ToolList({
 }) {
   return (
     <div>
-      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{title}</p>
+      <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-ink-500">{title}</p>
       {rows.length === 0 ? (
-        <p className="mt-3 text-sm text-gray-600">{empty}</p>
+        <p className="mt-3 text-sm text-ink-500">{empty}</p>
       ) : (
         <ol className="mt-2 space-y-2">
           {rows.map((f, i) => (
             <li key={f.featureKey} className="flex items-baseline justify-between gap-2 text-sm">
-              <span className="min-w-0 truncate text-gray-200">
-                <span className="mr-2 text-gray-600">{i + 1}.</span>
+              <span className="min-w-0 truncate text-ink-800">
+                <span className="mr-2 text-ink-500">{i + 1}.</span>
                 {f.label}
-                <span className="ml-1.5 text-xs text-gray-600">{f.area}</span>
+                <span className="ml-1.5 text-xs text-ink-500">{f.area}</span>
               </span>
-              <span className={hot ? 'shrink-0 text-gray-300' : 'shrink-0 text-gray-500'}>
+              <span className={hot ? 'shrink-0 font-medium text-ink-900' : 'shrink-0 text-ink-500'}>
                 {hours(f.activeHours)}
               </span>
             </li>
@@ -183,20 +183,20 @@ function InsightRow({ insight }: { insight: ProductInsight }) {
           className="inline-block rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
           style={{
             color: KIND_COLOR[insight.kind],
-            background: `${KIND_COLOR[insight.kind]}22`,
+            background: `${KIND_COLOR[insight.kind]}18`,
           }}
         >
           {KIND_LABEL[insight.kind]}
         </span>
-        <p className="text-[11px] uppercase tracking-wide text-gray-600">
+        <p className="text-[11px] uppercase tracking-wide text-ink-500">
           {PRIORITY_LABEL[insight.priority]} priority
         </p>
       </div>
       <div className="min-w-0 flex-1">
-        <p className="font-medium text-white">{insight.title}</p>
-        <p className="mt-1 text-sm leading-relaxed text-gray-400">{insight.rationale}</p>
-        <p className="mt-2 text-sm leading-relaxed text-gray-200">
-          <span className="font-medium text-brand-400">Do this: </span>
+        <p className="font-semibold text-ink-900">{insight.title}</p>
+        <p className="mt-1 text-sm leading-relaxed text-ink-600">{insight.rationale}</p>
+        <p className="mt-2 text-sm leading-relaxed text-ink-800">
+          <span className="font-semibold text-brand-600">Do this: </span>
           {insight.action}
         </p>
       </div>

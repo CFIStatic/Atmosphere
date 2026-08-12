@@ -14,6 +14,7 @@ import { usePlatform } from '../lib/usePlatform';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { Logo } from './Logo';
 import {
+  ChartIcon,
   ChevronDownIcon,
   CloseIcon,
   GaugeIcon,
@@ -27,6 +28,7 @@ import {
   SpinnerIcon,
   SunIcon,
 } from './icons';
+import { useAnalyticsAccess } from '../hooks/useAnalytics';
 
 /**
  * Every destination the jump palette can reach — visible platforms only.
@@ -343,12 +345,19 @@ function JumpPalette() {
 function AccountMenu() {
   const { user, profile, membership, logout } = useAuth();
   const { confirmSignOut } = usePreferences();
+  const { access } = useAnalyticsAccess();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
   const name = displayName(profile?.fullName, user?.email);
+  const businessPortalTo =
+    access?.scope === 'internal'
+      ? '/business/board'
+      : access?.scope === 'investor'
+        ? '/business/board'
+        : null;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -415,6 +424,20 @@ function AccountMenu() {
             <SettingsIcon width={17} height={17} className="text-ink-500" />
             Settings
           </button>
+
+          {businessPortalTo && (
+            <button
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                navigate(businessPortalTo);
+              }}
+              className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-ink-800 transition hover:bg-paper-200"
+            >
+              <ChartIcon width={17} height={17} className="text-ink-500" />
+              Business Portal
+            </button>
+          )}
 
           <button
             role="menuitem"
