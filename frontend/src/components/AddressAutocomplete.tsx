@@ -44,6 +44,7 @@ export function AddressAutocomplete({
   const listId = `${inputId}-list`;
   const sessionRef = useRef(newSessionToken());
   const blurTimer = useRef<number | null>(null);
+  const pickedLock = useRef(false);
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
@@ -67,6 +68,11 @@ export function AddressAutocomplete({
   }, []);
 
   useEffect(() => {
+    if (pickedLock.current) {
+      setOpen(false);
+      setSuggestions([]);
+      return;
+    }
     if (configured === false) return;
     const q = value.trim();
     if (q.length < 3) {
@@ -108,8 +114,10 @@ export function AddressAutocomplete({
   }, [value, configured]);
 
   async function pick(s: Suggestion) {
+    pickedLock.current = true;
     setOpen(false);
     setSuggestions([]);
+    onChange(s.description);
     setBusy(true);
     try {
       const { address } = await api.placesDetails({
@@ -121,7 +129,6 @@ export function AddressAutocomplete({
       onResolved?.(address);
       setHint(null);
     } catch {
-      onChange(s.description);
       setHint('Could not confirm that place — check city and postal below.');
     } finally {
       setBusy(false);
@@ -160,6 +167,7 @@ export function AddressAutocomplete({
         autoComplete="street-address"
         placeholder={placeholder ?? 'Start typing a street address…'}
         onChange={(e) => {
+          pickedLock.current = false;
           onChange(e.target.value);
           setOpen(true);
         }}

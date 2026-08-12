@@ -1196,8 +1196,30 @@ function evidencePortalLibrary() {
       });
     }
   }
+  const jobs: Array<{ jobId: string; jobName: string; jobNumber: number | null }> = [];
+  const seen = new Set<string>();
+  for (const j of SHARED_JOBS) {
+    jobs.push({ jobId: j.jobId, jobName: j.title, jobNumber: j.jobNumber ?? null });
+    seen.add(j.jobId);
+  }
+  for (const j of JOBS) {
+    if (seen.has(j.jobId)) continue;
+    jobs.push({ jobId: j.jobId, jobName: j.title, jobNumber: j.jobNumber ?? null });
+    seen.add(j.jobId);
+  }
+  for (const item of items) {
+    const id = String(item.jobId ?? '');
+    if (!id || seen.has(id)) continue;
+    jobs.push({
+      jobId: id,
+      jobName: String(item.jobName ?? 'Job'),
+      jobNumber: (item.jobNumber as number | null) ?? null,
+    });
+    seen.add(id);
+  }
   return {
     items,
+    jobs,
     counts: {
       total: items.length,
       flagged: items.filter((i) => i.flagged).length,

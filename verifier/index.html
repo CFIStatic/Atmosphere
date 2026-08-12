@@ -1560,15 +1560,17 @@
    * having sorted anything into anything.
    */
   function jobRow(key, items, collapsed) {
-    var job = JOBS[key] || { name: items[0].jobName || 'Job', number: null };
+    var job = JOBS[key] || { name: (items[0] && items[0].jobName) || 'Job', number: null };
     var crews = {};
     items.forEach(function (e) { crews[e.company] = true; });
     var crewN = Object.keys(crews).length;
     var flagged = items.filter(needsAttention).length;
     var dates = items.map(function (e) { return e.workDate; }).sort();
-    var span = dates[0] === dates[dates.length - 1]
-      ? dayLabel(dates[0])
-      : dayLabel(dates[0]) + ' – ' + dayLabel(dates[dates.length - 1]);
+    var span = !items.length
+      ? 'Waiting for video'
+      : dates[0] === dates[dates.length - 1]
+        ? dayLabel(dates[0])
+        : dayLabel(dates[0]) + ' – ' + dayLabel(dates[dates.length - 1]);
     return '' +
       '<tr class="jobrow" tabindex="0" data-job="' + esc(key) + '" aria-expanded="' + String(!collapsed) + '">' +
         '<td colspan="7"><span class="jobfile">' +
@@ -1591,11 +1593,16 @@
     var emptyTitle = document.getElementById('empty-title');
     var emptyBody = document.getElementById('empty-body');
     var clipTable = document.getElementById('clip-table');
-    var hasRows = list.length > 0;
+    var jobFileKeys = Object.keys(JOBS);
+    var showJobFiles = state.groupByJob && jobFileKeys.length > 0 && !state.q && state.view === 'all';
+    var hasRows = list.length > 0 || showJobFiles;
     if (emptyEl) {
       emptyEl.hidden = hasRows;
       if (!hasRows) {
-        if (!EVIDENCE.length) {
+        if (!EVIDENCE.length && !jobFileKeys.length) {
+          if (emptyTitle) emptyTitle.textContent = 'No jobs yet';
+          if (emptyBody) emptyBody.textContent = 'Start a job and the name shows up here. Footage files under it as crews film.';
+        } else if (!EVIDENCE.length) {
           if (emptyTitle) emptyTitle.textContent = 'No clips yet';
           if (emptyBody) emptyBody.textContent = 'When Field Capture uploads a day film, it shows up here.';
         } else {
@@ -1617,23 +1624,31 @@
     }
 
     if (state.groupByJob) {
-      // The filing is automatic because it always was: every clip arrives
-      // knowing its job. The file is a query, not a folder anyone maintains.
+      // Job files exist as soon as the office starts a job. Clips file
+      // themselves under the job they arrived with.
       var order = [];
       var groups = {};
+      jobFileKeys.forEach(function (k) {
+        groups[k] = [];
+        order.push(k);
+      });
       list.forEach(function (e) {
         if (!groups[e.job]) { groups[e.job] = []; order.push(e.job); }
         groups[e.job].push(e);
       });
-      // Order job files by the sort of their first clip (list is already sorted).
-      order.sort(function (ka, kb) {
-        return compareEvidence(groups[ka][0], groups[kb][0]);
-      });
+      if (state.q || state.view !== 'all') {
+        order = order.filter(function (k) { return (groups[k] || []).length > 0; });
+      }
+      if (!jobFileKeys.length) {
+        order.sort(function (ka, kb) {
+          return compareEvidence(groups[ka][0], groups[kb][0]);
+        });
+      }
       $('#resultcount').textContent = list.length + ' of ' + EVIDENCE.length + ' clips · ' +
         order.length + ' job file' + (order.length === 1 ? '' : 's');
       rowsEl.innerHTML = order.map(function (k) {
         var collapsed = !!state.collapsed[k];
-        return jobRow(k, groups[k], collapsed) + (collapsed ? '' : groups[k].map(clipRow).join(''));
+        return jobRow(k, groups[k] || [], collapsed) + (collapsed ? '' : (groups[k] || []).map(clipRow).join(''));
       }).join('');
     } else {
       $('#resultcount').textContent = list.length + ' of ' + EVIDENCE.length + ' clips';
@@ -2220,6 +2235,7 @@
   }
 
   function setActiveRoute(path) {
+    var prev = activeRoute;
     activeRoute = path || '/verifier-library';
     if (activeRoute === '/verifier-library') {
       // Keep Dashboard vs Videos selection; only reset when arriving from
@@ -2227,6 +2243,7 @@
       if (activeRailItem !== 'dashboard' && activeRailItem.indexOf('view:') !== 0) {
         activeRailItem = 'dashboard';
       }
+      if (prev !== '/verifier-library' && !SHARE_TOKEN) loadOrgLibrary();
     } else {
       activeRailItem = '';
     }
@@ -2618,6 +2635,62 @@
       '</div>';
   }
 
+  function applyOrgLibrary(payload) {
+    ORG_MODE = true;
+    JOBS = {};
+    (payload.jobs || []).forEach(function (j) {
+      if (!j || !j.jobId) return;
+      JOBS[j.jobId] = {
+        key: j.jobId,
+        name: j.jobName || 'Job',
+        number: j.jobNumber != null ? j.jobNumber : null,
+        address: ''
+      };
+    });
+    (payload.items || []).forEach(function (raw) {
+      if (raw.jobId && !JOBS[raw.jobId]) {
+        JOBS[raw.jobId] = {
+          key: raw.jobId,
+          name: raw.jobName || 'Job',
+          number: raw.jobNumber != null ? raw.jobNumber : null,
+          address: ''
+        };
+      }
+    });
+    EVIDENCE = (payload.items || []).map(function (raw) { return mapRemoteItem(raw, raw.jobId); });
+  }
+
+  function loadOrgLibrary() {
+    var wantDemo = new URLSearchParams(location.search).get('demo') === '1';
+    return fetch('/api/evidence-portal/library', { credentials: 'include' })
+      .then(function (r) {
+        if (r.status === 401 || r.status === 403) {
+          if (wantDemo) { boot(); return null; }
+          // Signed-out library: same empty chrome as an org with no uploads —
+          // no sign-in banner shoved above the table, no twin shortcut here.
+          ORG_MODE = false;
+          EVIDENCE = [];
+          JOBS = {};
+          boot();
+          return null;
+        }
+        if (!r.ok) throw new Error('no library');
+        return r.json();
+      })
+      .then(function (payload) {
+        if (!payload) return;
+        applyOrgLibrary(payload);
+        boot();
+      })
+      .catch(function () {
+        if (wantDemo) boot();
+        else {
+          EVIDENCE = [];
+          boot();
+        }
+      });
+  }
+
   if (SHARE_TOKEN) {
     fetch('/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN), { credentials: 'include' })
       .then(function (r) {
@@ -2651,50 +2724,7 @@
       })
       .catch(function () { deadLink(0, null); });
   } else {
-    // No token: this is the platform's own view of the record. Ask the
-    // backend for the whole library; a static or demo context (no session,
-    // no API) falls back to the built-in record, silently — the page must
-    // never look broken for lacking a server.
-    var wantDemo = new URLSearchParams(location.search).get('demo') === '1';
-    fetch('/api/evidence-portal/library', { credentials: 'include' })
-      .then(function (r) {
-        if (r.status === 401 || r.status === 403) {
-          if (wantDemo) { boot(); return null; }
-          // Signed-out library: same empty chrome as an org with no uploads —
-          // no sign-in banner shoved above the table, no twin shortcut here.
-          ORG_MODE = false;
-          EVIDENCE = [];
-          boot();
-          showEmptyLibraryNote();
-          return null;
-        }
-        if (!r.ok) throw new Error('no library');
-        return r.json();
-      })
-      .then(function (payload) {
-        if (!payload) return;
-        ORG_MODE = true;
-        JOBS = {};
-        (payload.items || []).forEach(function (raw) {
-          if (raw.jobId && !JOBS[raw.jobId]) {
-            JOBS[raw.jobId] = {
-              key: raw.jobId,
-              name: raw.jobName || 'Job',
-              number: raw.jobNumber != null ? raw.jobNumber : null,
-              address: ''
-            };
-          }
-        });
-        EVIDENCE = (payload.items || []).map(function (raw) { return mapRemoteItem(raw, raw.jobId); });
-        boot();
-      })
-      .catch(function () {
-        if (wantDemo) boot();
-        else {
-          EVIDENCE = [];
-          boot();
-        }
-      });
+    loadOrgLibrary();
   }
 })();
 </script>
