@@ -95,9 +95,12 @@ export async function getProjectVerificationReport(
     .eq('job_id', jobId)
     .order('observed_at', { ascending: true, nullsFirst: false });
 
-  const proofByVideo = new Map(
+  const proofByVideo = new Map<string, string | null>(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (videos ?? []).map((v: any) => [v.id as string, (v.proof_id as string | null) ?? null]),
+    (videos ?? []).map((v: any) => [
+      String(v.id),
+      typeof v.proof_id === 'string' ? v.proof_id : null,
+    ]),
   );
 
   const { count: openReviews } = await supabase
