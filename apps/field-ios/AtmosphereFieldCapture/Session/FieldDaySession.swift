@@ -35,10 +35,44 @@ final class FieldDaySession: ObservableObject {
         }
     }
 
+    /// Quick Add — type a job name on site; the office sees the file and can finish details later.
+    /// Returns true when the job file was created and selected for filming.
+    @discardableResult
+    func quickAdd(title: String, api: AtmosphereClient) async -> Bool {
+        let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard name.count >= 2 else {
+            lastError = "Enter a job name (at least a couple of characters)."
+            return false
+        }
+        lastError = nil
+        do {
+            let job = try await api.quickAddJob(title: name)
+            if !jobs.contains(where: { $0.id == job.id }) {
+                jobs.insert(job, at: 0)
+            }
+            activeJobId = job.id
+            return true
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
+    /// Quick Add then open the camera — the call-in path when office has not opened a file yet.
+    /// Returns whether the job file was created. Camera start is separate so the
+    /// Quick Add sheet can dismiss as soon as the backend answers (camera
+    /// permission must not look like a hung API call).
+    @discardableResult
+    func quickAddAndStart(title: String, api: AtmosphereClient) async -> Bool {
+        guard await quickAdd(title: title, api: api) else { return false }
+        await startDay()
+        return true
+    }
+
     func startDay() async {
         lastError = nil
         guard activeJobId != nil || !jobs.isEmpty else {
-            lastError = "No job to film. Create or schedule a job in the Atmosphere dashboard first."
+            lastError = "No job to film. Tap + Quick Add to name one, or wait for the office."
             return
         }
         if activeJobId == nil { activeJobId = jobs.first?.id }

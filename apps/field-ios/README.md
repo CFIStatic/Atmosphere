@@ -70,6 +70,9 @@ AtmosphereFieldCapture/
 1. **First launch only:** Connect Atmosphere account (same as dashboard).
 2. Later launches open Today already connected.
 3. Confirm today’s jobs (tap one if several) → **Start the day**.
+   Or tap the **+** (Quick Add), type a job name from a call → **Add & start
+   filming**. That creates the job file for the office Job files list so they
+   can finish address/scope later.
 4. Hold **Finish the day** — proof upload into that job → optional RoomPlan twin.
 
 AI dictation and twin review stay in the **office Verifier**.
@@ -78,9 +81,10 @@ AI dictation and twin review stay in the **office Verifier**.
 
 1. `POST /api/auth/login` → `{ user, session: { accessToken, refreshToken } }`
 2. `GET /api/field-app/me` + `GET /api/field-app/today` (Bearer)
-3. `POST /api/field-app/jobs/:jobId/proof/upload-url` → signed PUT URL
-4. PUT video bytes → `POST /api/field-app/jobs/:jobId/proof` (creates `job_proofs`)
-5. Optional: `POST /api/geometry/sessions` + `…/ingest` for RoomPlan
+3. `POST /api/field-app/jobs/quick-add` `{ title }` → job file + Field Capture party (Job files)
+4. `POST /api/field-app/jobs/:jobId/proof/upload-url` → signed PUT URL
+5. PUT video bytes → `POST /api/field-app/jobs/:jobId/proof` (creates `job_proofs`)
+6. Optional: `POST /api/geometry/sessions` + `…/ingest` for RoomPlan
 
 See also `docs/media-storage.md` and `backend/src/geometry/`.
 

@@ -3392,6 +3392,25 @@ export const api = {
   createJob: (input: CreateJobInput) =>
     request<{ job: Job }>('/api/jobs', { method: 'POST', body: JSON.stringify(input) }),
 
+  /**
+   * Field Capture Quick Add — name-only job file from the truck when the office
+   * has not opened one yet. Creates the job + Field Capture party so it shows
+   * on Job files; address and scope can be finished later from the office.
+   */
+  fieldQuickAddJob: (input: { title: string; workType?: WorkType }) =>
+    request<{
+      job: {
+        id: string;
+        number: string;
+        name: string;
+        address: string;
+        at: string;
+        status: string | null;
+        placed: boolean;
+      };
+      party: { id: string };
+    }>('/api/field-app/jobs/quick-add', { method: 'POST', body: JSON.stringify(input) }),
+
   getJob: (id: string) => request<JobDetail>(`/api/jobs/${id}`, { method: 'GET' }),
 
   updateJob: (id: string, patch: Partial<CreateJobInput>) =>

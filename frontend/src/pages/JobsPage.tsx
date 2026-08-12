@@ -34,6 +34,78 @@ const inputClass =
   'w-full rounded-lg border border-line glass-field px-3 py-2 text-sm text-ink-900 placeholder:text-ink-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400';
 const labelClass = 'block text-xs font-medium uppercase tracking-wide text-ink-500';
 
+function QuickAddForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: () => void }) {
+  const [title, setTitle] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await api.fieldQuickAddJob({ title: title.trim() });
+      onCreated();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not quick-add that job.');
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form
+      onSubmit={submit}
+      className="mb-6 animate-fade-in-up rounded-xl glass-card p-5 backdrop-blur"
+    >
+      <h2 className="text-base font-semibold text-ink-900">Quick Add</h2>
+      <p className="mt-1 text-sm text-ink-600">
+        Got a call and the office has not opened a file yet? Name the job, film into it, and they
+        can finish address and scope from Job files.
+      </p>
+
+      <div className="mt-4">
+        <label className={labelClass} htmlFor="quick-add-name">
+          Job name
+        </label>
+        <input
+          id="quick-add-name"
+          required
+          autoFocus
+          minLength={2}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Call-in — 14 Alder St water"
+          className={`mt-1 ${inputClass}`}
+        />
+      </div>
+
+      {error && (
+        <div className="mt-4">
+          <ErrorNote message={error} />
+        </div>
+      )}
+
+      <div className="mt-5 flex gap-3">
+        <button
+          type="submit"
+          disabled={saving || title.trim().length < 2}
+          className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-500 disabled:opacity-50"
+        >
+          {saving && <SpinnerIcon className="animate-spin" width={16} height={16} />}
+          {saving ? 'Adding…' : 'Add job'}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink-700 transition hover:bg-paper-200"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
 function NewJobForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: () => void }) {
   const [form, setForm] = useState<CreateJobInput>({ title: '', workType: 'mitigation' });
   const [saving, setSaving] = useState(false);
@@ -238,12 +310,14 @@ function JobCard({ job }: { job: JobSummary }) {
   );
 }
 
+type CreateMode = 'full' | 'quick' | null;
+
 export function JobsPage() {
   useFeatureTimer('jobs');
   const [jobs, setJobs] = useState<JobSummary[] | null>(null);
   const [status, setStatus] = useState('open');
   const [search, setSearch] = useState('');
-  const [creating, setCreating] = useState(false);
+  const [createMode, setCreateMode] = useState<CreateMode>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -263,33 +337,44 @@ export function JobsPage() {
     return () => clearTimeout(timer);
   }, [load, search]);
 
+  function finishCreate() {
+    setCreateMode(null);
+    setJobs(null);
+    void load();
+  }
+
   return (
     <AppShell>
       <PageHeader
         title="Jobs"
         description="Every job the organization has opened. Each one carries its own complete history."
         action={
-          !creating && (
-            <button
-              onClick={() => setCreating(true)}
-              className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-500"
-            >
-              <PlusIcon width={17} height={17} />
-              Open a job
-            </button>
+          !createMode && (
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setCreateMode('quick')}
+                className="flex items-center gap-2 rounded-lg border border-line bg-paper-100 px-4 py-2 text-sm font-semibold text-ink-800 transition hover:bg-paper-200"
+              >
+                <PlusIcon width={17} height={17} />
+                Quick Add
+              </button>
+              <button
+                onClick={() => setCreateMode('full')}
+                className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-500"
+              >
+                Open a job
+              </button>
+            </div>
           )
         }
       />
 
-      {creating && (
-        <NewJobForm
-          onCreated={() => {
-            setCreating(false);
-            setJobs(null);
-            void load();
-          }}
-          onCancel={() => setCreating(false)}
-        />
+      {createMode === 'quick' && (
+        <QuickAddForm onCreated={finishCreate} onCancel={() => setCreateMode(null)} />
+      )}
+
+      {createMode === 'full' && (
+        <NewJobForm onCreated={finishCreate} onCancel={() => setCreateMode(null)} />
       )}
 
       <div className="mb-5 flex flex-wrap items-center gap-3">

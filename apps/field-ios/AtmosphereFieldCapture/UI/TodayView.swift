@@ -5,6 +5,10 @@ struct TodayView: View {
     @EnvironmentObject private var auth: AuthSession
     @EnvironmentObject private var api: AtmosphereClient
 
+    @State private var showQuickAdd = false
+    @State private var quickAddTitle = ""
+    @State private var quickAddBusy = false
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -20,7 +24,7 @@ struct TodayView: View {
                         .foregroundStyle(FieldTheme.ink)
 
                     Text(
-                        "One button, once a day. Tap when you get to your first job and hold when you are done. The film is video + audio — filed to \(auth.orgName ?? "your organization") so the office can open it in the evidence library."
+                        "One button, once a day. Tap when you get to your first job and hold when you are done. Got a call and the office has not opened a file? Tap + Quick Add, name the job, and film — they finish the details later."
                     )
                     .font(.system(size: 15))
                     .foregroundStyle(FieldTheme.muted)
@@ -30,15 +34,15 @@ struct TodayView: View {
                             .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(FieldTheme.faint)
                             .textCase(.uppercase)
+
                         if session.loadingJobs {
                             Text("Loading jobs from your account…")
                                 .font(.system(size: 13))
                                 .foregroundStyle(FieldTheme.muted)
                         } else if session.jobs.isEmpty {
-                            Text("No open jobs yet. Create a job in the Atmosphere dashboard, then pull to refresh.")
-                                .font(.system(size: 13))
-                                .foregroundStyle(FieldTheme.muted)
+                            emptyQuickAddCard
                         }
+
                         ForEach(session.jobs) { job in
                             Button {
                                 session.activeJobId = job.id
@@ -70,6 +74,30 @@ struct TodayView: View {
                             }
                             .buttonStyle(.plain)
                             .foregroundStyle(FieldTheme.ink)
+                        }
+
+                        if !session.jobs.isEmpty {
+                            Button {
+                                openQuickAdd()
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 14, weight: .bold))
+                                    Text("Quick Add — name a job from a call")
+                                        .font(.system(size: 14, weight: .semibold))
+                                    Spacer()
+                                }
+                                .foregroundStyle(FieldTheme.accent)
+                                .padding(12)
+                                .background(FieldTheme.panel)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(FieldTheme.accent.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                                )
+                                .cornerRadius(10)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Quick Add job")
                         }
                     }
 
@@ -120,6 +148,105 @@ struct TodayView: View {
             }
             .padding(18)
         }
+        .sheet(isPresented: $showQuickAdd) {
+            quickAddSheet
+        }
+    }
+
+    private var emptyQuickAddCard: some View {
+        Button {
+            openQuickAdd()
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(FieldTheme.bg)
+                        .frame(width: 36, height: 36)
+                        .background(FieldTheme.accent)
+                        .clipShape(Circle())
+                    Text("Quick Add")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(FieldTheme.ink)
+                }
+                Text("No open jobs yet. Name the job from the call and start filming — the office will see the file and can finish address and scope later.")
+                    .font(.system(size: 13.5))
+                    .foregroundStyle(FieldTheme.muted)
+                    .multilineTextAlignment(.leading)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .background(FieldTheme.panel)
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(FieldTheme.accent))
+            .cornerRadius(12)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Quick Add job")
+    }
+
+    private var quickAddSheet: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Name the job so the office sees a file. Then film — they can fill in address and scope later.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(FieldTheme.muted)
+
+                TextField("Job name", text: $quickAddTitle)
+                    .textInputAutocapitalization(.sentences)
+                    .submitLabel(.go)
+                    .onSubmit {
+                        Task { await submitQuickAdd(andStart: true) }
+                    }
+                    .padding(12)
+                    .background(FieldTheme.panel)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
+                    .cornerRadius(10)
+
+                Button {
+                    Task { await submitQuickAdd(andStart: true) }
+                } label: {
+                    HStack {
+                        if quickAddBusy { ProgressView() }
+                        Label(
+                            quickAddBusy ? "Starting…" : "Add & start filming",
+                            systemImage: "video.fill"
+                        )
+                        .font(.system(size: 16, weight: .bold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(FieldTheme.ink)
+                    .foregroundStyle(FieldTheme.bg)
+                    .cornerRadius(12)
+                }
+                .disabled(quickAddBusy || quickAddTitle.trimmingCharacters(in: .whitespacesAndNewlines).count < 2)
+
+                Button {
+                    Task { await submitQuickAdd(andStart: false) }
+                } label: {
+                    Text("Add job only")
+                        .font(.system(size: 14, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .foregroundStyle(FieldTheme.muted)
+                }
+                .disabled(quickAddBusy || quickAddTitle.trimmingCharacters(in: .whitespacesAndNewlines).count < 2)
+
+                Spacer()
+            }
+            .padding(18)
+            .background(FieldTheme.bg.ignoresSafeArea())
+            .navigationTitle("Quick Add")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showQuickAdd = false }
+                        .disabled(quickAddBusy)
+                }
+            }
+        }
+        .presentationDetents([.medium])
+        .interactiveDismissDisabled(quickAddBusy)
     }
 
     private var header: some View {
@@ -135,6 +262,17 @@ struct TodayView: View {
                     .lineLimit(1)
             }
             Spacer()
+            Button {
+                openQuickAdd()
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(FieldTheme.bg)
+                    .frame(width: 38, height: 38)
+                    .background(FieldTheme.accent)
+                    .clipShape(Circle())
+            }
+            .accessibilityLabel("Quick Add job")
             Menu {
                 if let email = auth.email {
                     Text(email)
@@ -156,5 +294,24 @@ struct TodayView: View {
         .padding(.vertical, 14)
         .background(FieldTheme.panel)
         .overlay(alignment: .bottom) { FieldTheme.line.frame(height: 1) }
+    }
+
+    private func openQuickAdd() {
+        quickAddTitle = ""
+        showQuickAdd = true
+    }
+
+    private func submitQuickAdd(andStart: Bool) async {
+        quickAddBusy = true
+        let created = await session.quickAdd(title: quickAddTitle, api: api)
+        quickAddBusy = false
+        guard created else { return }
+
+        // Dismiss as soon as the job file exists so a slow camera permission
+        // prompt never looks like the backend hanging.
+        showQuickAdd = false
+        if andStart {
+            await session.startDay()
+        }
     }
 }

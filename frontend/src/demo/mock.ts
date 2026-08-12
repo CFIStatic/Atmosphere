@@ -2410,6 +2410,69 @@ const routes: Array<[string, RegExp, Handler]> = [
       },
     };
   }],
+  ['POST', /^\/api\/field-app\/jobs\/quick-add$/, (_m, b) => {
+    const id = `job-quick-${Date.now()}`;
+    const title = String(b.title ?? 'Quick Add job').trim() || 'Quick Add job';
+    const now = new Date().toISOString();
+    const jobNumber = 9000 + (SHARED_JOBS.length % 900);
+    MANUAL_JOBS[id] = {
+      hasAddress: false,
+      hasCoordinates: false,
+      scopeLineCount: 0,
+      scheduledStart: now,
+      source: 'manual',
+    };
+    // Surface on Field My jobs and office Job files in this demo session.
+    JOBS.unshift({
+      jobId: id,
+      jobNumber,
+      title,
+      status: 'scheduled',
+      priority: 3,
+      workType: 'construction',
+      ownerId: 'demo-user-1',
+      claimNumber: null,
+      taskCount: 0,
+      tasksDone: 0,
+      crewSize: 0,
+      minutesLogged: 0,
+      eventCount: 1,
+      lastEvent: 'Quick Add from Field Capture',
+      lastEventAt: now,
+      contractAmount: 0,
+      invoicedAmount: 0,
+      paidAmount: 0,
+      scheduledStart: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    SHARED_JOBS.unshift({
+      jobId: id,
+      jobNumber,
+      title,
+      status: 'scheduled',
+      parties: 1,
+      currentRevision: 0,
+      behind: 1,
+      awaiting: 0,
+      exclusions: 0,
+    });
+    return {
+      status: 201,
+      body: {
+        job: {
+          id,
+          number: `#${jobNumber}`,
+          name: title,
+          address: 'Address TBD',
+          at: 'Today',
+          status: 'scheduled',
+          placed: false,
+        },
+        party: { id: `party-quick-${Date.now()}` },
+      },
+    };
+  }],
   ['POST', /^\/api\/operations\/intake\/propose$/, (_m, b) => {
     const text = String(b.text ?? '');
     const lines = text
