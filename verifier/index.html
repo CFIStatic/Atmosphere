@@ -502,14 +502,23 @@
   /* ---------- job files ---------- */
   tr.jobrow { background: var(--bg); cursor: pointer; }
   tr.jobrow:hover { background: var(--line-soft); }
-  tr.jobrow td { padding: 9px 10px; border-top: 2px solid var(--line); border-bottom: 1px solid var(--line-soft); }
+  tr.jobrow td {
+    padding: 10px 10px;
+    border-top: 2px solid var(--line);
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: middle;
+  }
   tr.jobrow td.jobpreview { width: 96px; padding-right: 4px; }
   tr.jobrow td.titlecell { padding-left: 18px; }
   tr.jobrow td.titlecell .t {
+    display: inline-block;
+    vertical-align: middle;
+    max-width: 100%;
     font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   tr.jobrow td.titlecell .job-open {
-    display: block;
+    display: inline-block;
+    vertical-align: middle;
     max-width: 100%;
     margin: 0;
     padding: 0;
@@ -522,7 +531,7 @@
   }
   tr.jobrow td.titlecell .job-open:hover { color: var(--accent); text-decoration: underline; }
   tr.jobrow td.titlecell .id { font-weight: 400; margin-left: 6px; }
-  .jobfile { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .jobfile { display: inline-flex; align-items: center; gap: 12px; min-width: 0; vertical-align: middle; }
   .jobfile .caret2 { flex: none; color: var(--faint); transition: transform .15s; }
   tr.jobrow[aria-expanded="false"] .caret2 { transform: rotate(-90deg); }
   .jobfile .folder { flex: none; color: var(--accent); width: 22px; height: 22px; }
@@ -565,7 +574,10 @@
   .jf-made code { display: block; margin-top: 4px; font-size: 11px; word-break: break-all; color: var(--ink-2); }
 
   /* ---------- row actions ---------- */
-  td.uploader .cellrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  td.uploader .cellrow {
+    display: inline-flex; align-items: center; justify-content: space-between;
+    gap: 10px; width: 100%; box-sizing: border-box; vertical-align: middle;
+  }
   .kebab {
     flex: none; width: 26px; height: 26px; border-radius: 6px; border: 1px solid transparent;
     background: none; color: var(--faint); cursor: pointer; display: grid; place-items: center;
