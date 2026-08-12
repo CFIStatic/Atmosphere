@@ -436,8 +436,9 @@
   table { width: 100%; border-collapse: collapse; }
   thead th {
     position: sticky; top: 53px; z-index: 4; background: var(--bg);
-    text-align: left; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase;
-    color: var(--faint); font-weight: 700; padding: 0; white-space: nowrap;
+    text-align: left; font-size: 12px; letter-spacing: 0;
+    text-transform: none;
+    color: var(--muted); font-weight: 600; padding: 0; white-space: nowrap;
     border-bottom: 1px solid var(--line);
   }
   thead th button {
@@ -495,8 +496,6 @@
   /* ---------- job files ---------- */
   tr.jobrow { background: var(--bg); cursor: pointer; }
   tr.jobrow:hover { background: var(--line-soft); }
-  tr.jobrow.is-empty { cursor: default; }
-  tr.jobrow.is-empty:hover { background: var(--bg); }
   tr.jobrow td { padding: 9px 14px; border-top: 2px solid var(--line); border-bottom: 1px solid var(--line-soft); }
   .jobfile { display: flex; align-items: center; gap: 10px; min-width: 0; }
   .jobfile .caret2 { flex: none; color: var(--faint); transition: transform .15s; }
@@ -813,12 +812,10 @@
       <table id="clip-table">
         <thead>
           <tr id="colheads">
-            <th style="width:96px" data-sort-key="clip" aria-sort="none"><button type="button">Clip <span class="sortcaret" aria-hidden="true">↕</span></button></th>
-            <th data-sort-key="video" aria-sort="none"><button type="button">Video <span class="sortcaret" aria-hidden="true">↕</span></button></th>
-            <th data-sort-key="integrity" aria-sort="none"><button type="button">Integrity <span class="sortcaret" aria-hidden="true">↕</span></button></th>
-            <th data-sort-key="classification" aria-sort="none"><button type="button">Classification <span class="sortcaret" aria-hidden="true">↕</span></button></th>
-            <th data-sort-key="tier" aria-sort="none"><button type="button">Tier <span class="sortcaret" aria-hidden="true">↕</span></button></th>
-            <th data-sort-key="recorded" aria-sort="descending"><button type="button">Recorded <span class="sortcaret" aria-hidden="true">↓</span></button></th>
+            <th style="width:96px" data-sort-key="preview" aria-sort="none"><button type="button">Preview <span class="sortcaret" aria-hidden="true">↕</span></button></th>
+            <th data-sort-key="job" aria-sort="none"><button type="button">Job name <span class="sortcaret" aria-hidden="true">↕</span></button></th>
+            <th data-sort-key="status" aria-sort="none"><button type="button">Status <span class="sortcaret" aria-hidden="true">↕</span></button></th>
+            <th data-sort-key="recorded" aria-sort="descending"><button type="button">Recorded date <span class="sortcaret" aria-hidden="true">↓</span></button></th>
             <th data-sort-key="uploader" aria-sort="none"><button type="button">Uploaded by <span class="sortcaret" aria-hidden="true">↕</span></button></th>
           </tr>
         </thead>
@@ -1364,7 +1361,7 @@
 
   var state = {
     view: 'all', jobs: {}, companies: {}, phases: {}, q: '',
-    /** Column sort: clip | video | integrity | classification | tier | recorded | uploader */
+    /** Column sort: preview | job | status | recorded | uploader */
     sortKey: 'recorded',
     /** asc | desc — toggle on repeated clicks of the same header */
     sortDir: 'desc',
@@ -1466,14 +1463,12 @@
   }
 
   function sortValue(item, key) {
-    if (key === 'clip') return Number(item.duration) || 0;
-    if (key === 'video') {
+    if (key === 'preview' || key === 'clip') return Number(item.duration) || 0;
+    if (key === 'job' || key === 'video') {
       var job = JOBS[item.job] || {};
       return String(job.name || item.jobName || '') + ' ' + String(item.phase || '');
     }
-    if (key === 'integrity') return integrityRank(item);
-    if (key === 'classification') return analysisChip(item).text.toLowerCase();
-    if (key === 'tier') return Number(item.tier) || 0;
+    if (key === 'status' || key === 'integrity') return integrityRank(item);
     if (key === 'recorded') return String(item.workDate || '') + 'T' + String(item.uploadedAt || '');
     if (key === 'uploader') return String(item.person || '') + ' ' + String(item.company || '');
     return String(item.uploadedAt || '');
@@ -1518,7 +1513,7 @@
     } else {
       state.sortKey = key;
       // Dates / ranks start newest / highest first; names start A→Z.
-      state.sortDir = (key === 'video' || key === 'classification' || key === 'uploader') ? 'asc' : 'desc';
+      state.sortDir = (key === 'job' || key === 'uploader') ? 'asc' : 'desc';
     }
     syncSortHeaders();
     render();
@@ -1533,23 +1528,29 @@
   }
 
   function clipRow(e) {
+    var job = JOBS[e.job] || { name: e.jobName || 'Job', number: null };
     var integ = integrityOf(e);
-    var chip = analysisChip(e);
-    var integLabel = integ === 'pass' ? 'Verified' : integ === 'fail' ? 'Failed' : 'Unverified';
+    var status = integ === 'fail'
+      ? { cls: 'fail', text: 'Failed' }
+      : needsAttention(e)
+        ? { cls: 'unknown', text: 'Needs review' }
+        : integ === 'pass'
+          ? { cls: 'pass', text: 'Verified' }
+          : { cls: 'unknown', text: 'Unverified' };
+    var phase = e.phase ? String(e.phase).replace(/_/g, ' ') : 'Video';
+    phase = phase.charAt(0).toUpperCase() + phase.slice(1);
     return '' +
       '<tr tabindex="0" data-id="' + e.id + '">' +
         '<td><span class="thumb"><img alt="" src="' + thumbFor(e) + '" /><span class="dur">' + dur(e.duration) + '</span></span></td>' +
         '<td class="titlecell">' +
-          '<div class="t">' + esc(JOBS[e.job].name.split('—')[0].trim()) + ' · ' + esc(e.phase) + '</div>' +
-          '<div class="s"><span class="id">' + esc(e.id) + '</span> · job #' + JOBS[e.job].number +
+          '<div class="t">' + esc(job.name) + '</div>' +
+          '<div class="s">' + esc(phase) +
             (e.hold && e.hold.on ? ' · <span class="chip hold"><span class="dot"></span>Legal hold</span>' : '') +
           '</div>' +
         '</td>' +
-        '<td><span class="chip ' + integ + '"><span class="dot"></span>' + integLabel + '</span></td>' +
-        '<td><span class="chip ' + chip.cls + '">' + esc(chip.text) + '</span></td>' +
-        '<td><span class="tier">T' + e.tier + '</span></td>' +
+        '<td><span class="chip ' + status.cls + '"><span class="dot"></span>' + status.text + '</span></td>' +
         '<td class="when">' + dayLabel(e.workDate) + '<small>' + stamp(e.uploadedAt) + '</small></td>' +
-        '<td class="when uploader"><span class="cellrow"><span>' + esc(e.person) + '<small>' + esc(e.company) + '</small></span>' +
+        '<td class="when uploader"><span class="cellrow"><span>' + esc(e.person || '—') + '<small>' + esc(e.company || '') + '</small></span>' +
           '<button class="kebab" aria-haspopup="menu" aria-expanded="false" aria-label="Actions for ' + esc(e.id) + '">' +
             '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>' +
           '</button></span></td>' +
@@ -1574,22 +1575,16 @@
       : dates[0] === dates[dates.length - 1]
         ? dayLabel(dates[0])
         : dayLabel(dates[0]) + ' – ' + dayLabel(dates[dates.length - 1]);
-    var caret = empty
-      ? ''
-      : '<svg class="caret2" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-    var attrs = empty
-      ? ' class="jobrow is-empty" data-job="' + esc(key) + '"'
-      : ' class="jobrow" tabindex="0" data-job="' + esc(key) + '" aria-expanded="' + String(!collapsed) + '"';
     var meta = empty
       ? '<span>Waiting for video</span>'
       : '<span><b>' + items.length + '</b> clip' + (items.length === 1 ? '' : 's') + '</span>' +
-        '<span><b>' + crewN + '</b> crew' + (crewN === 1 ? '' : 's') + '</span>' +
+        (crewN ? '<span><b>' + crewN + '</b> crew' + (crewN === 1 ? '' : 's') + '</span>' : '') +
         (flagged ? '<span class="flagged"><b>' + flagged + '</b> flagged</span>' : '') +
         '<span>' + span + '</span>';
     return '' +
-      '<tr' + attrs + '>' +
-        '<td colspan="7"><span class="jobfile">' +
-          caret +
+      '<tr class="jobrow" tabindex="0" data-job="' + esc(key) + '" aria-expanded="' + String(!collapsed) + '">' +
+        '<td colspan="5"><span class="jobfile">' +
+          '<svg class="caret2" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
           '<svg class="folder" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 6.5A1.5 1.5 0 0 1 5 5h4l2 2.5h8a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18z"/></svg>' +
           '<span class="fname">' + esc(job.name) + (job.number ? '<span class="id">#' + job.number + '</span>' : '') + '</span>' +
           '<span class="fmeta">' + meta + '</span>' +
@@ -1677,7 +1672,7 @@
       kb.addEventListener('keydown', function (ev2) { ev2.stopPropagation(); });
     });
 
-    Array.prototype.forEach.call(rowsEl.querySelectorAll('tr.jobrow:not(.is-empty)'), function (tr) {
+    Array.prototype.forEach.call(rowsEl.querySelectorAll('tr.jobrow'), function (tr) {
       function flip() {
         state.collapsed[tr.dataset.job] = !state.collapsed[tr.dataset.job];
         render();
