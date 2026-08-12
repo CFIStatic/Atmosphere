@@ -318,93 +318,277 @@
     };
   }
 
-  /**
-   * Upload day film via job-share proof path (token auth, no org cookie).
-   * Files as phase "after" for today — one recording = the day's evidence.
-   */
-  function uploadDayFilm(opts) {
-    var token = opts.token;
-    var apiBase = (opts.apiBase || '').replace(/\/$/, '');
-    var blob = opts.blob;
-    var mimeType = opts.mimeType || 'video/webm';
-    var onStep = opts.onStep || function () {};
-    var storageBase = opts.storageBase || '';
+  /* ----------------------------------------------------------------------
+     Offline-first day queue.
 
-    var ext = mimeType.indexOf('mp4') >= 0 ? 'mp4' : 'webm';
-    var file = new File([blob], 'field-day.' + ext, {
-      type: mimeType,
-      lastModified: Date.now(),
+     Rural sites often have no signal at all. A finished recording is
+     therefore SAVED to this device first (IndexedDB) — with its facts and
+     its work date fixed at capture time — and uploaded whenever the phone
+     next has internet: on app open, on the browser's back-online signal,
+     or on the retry timer. A day filmed offline on Tuesday files as
+     Tuesday no matter when signal returns.
+     ---------------------------------------------------------------------- */
+
+  var DB_NAME = 'atmosphere-fieldcapture';
+  var DB_STORE = 'pending-days';
+
+  function openQueueDb() {
+    if (!global.indexedDB) return Promise.reject(new Error('No on-device storage.'));
+    return new Promise(function (resolve, reject) {
+      var req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = function () {
+        var db = req.result;
+        if (!db.objectStoreNames.contains(DB_STORE)) {
+          db.createObjectStore(DB_STORE, { keyPath: 'id', autoIncrement: true });
+        }
+      };
+      req.onsuccess = function () {
+        resolve(req.result);
+      };
+      req.onerror = function () {
+        reject(req.error || new Error('On-device storage failed to open.'));
+      };
     });
+  }
 
-    onStep('Reading the recording…');
+  function queueTx(mode, run) {
+    return openQueueDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(DB_STORE, mode);
+        var req = run(tx.objectStore(DB_STORE));
+        tx.oncomplete = function () {
+          db.close();
+          resolve(req && req.result);
+        };
+        tx.onabort = tx.onerror = function () {
+          db.close();
+          reject(tx.error || new Error('On-device storage failed.'));
+        };
+      });
+    });
+  }
+
+  function queueAll() {
+    return queueTx('readonly', function (store) {
+      return store.getAll();
+    });
+  }
+
+  function pendingCount() {
+    return queueTx('readonly', function (store) {
+      return store.count();
+    }).catch(function () {
+      return 0;
+    });
+  }
+
+  /**
+   * Persist a finished recording on this device. Facts (hash, GPS, frames,
+   * duration) are read now — none of that needs internet — so the later
+   * upload is pure network. Resolves { id, entry, facts, saved }; id is null
+   * when on-device storage is unavailable (the caller should upload from
+   * memory immediately in that case).
+   */
+  function saveDayFilm(opts) {
+    var mimeType = opts.mimeType || 'video/webm';
+    var ext = mimeType.indexOf('mp4') >= 0 ? 'mp4' : 'webm';
+    var savedAtMs = Date.now();
+    var file = new File([opts.blob], 'field-day.' + ext, {
+      type: mimeType,
+      lastModified: savedAtMs,
+    });
     return readCapture(file).then(function (facts) {
-      if (!facts.hasAudio && facts.hasAudio !== undefined) {
-        /* always true from recorder */
-      }
-      onStep('Getting somewhere to put it…');
-      return fetch(apiBase + '/api/job-share/' + encodeURIComponent(token) + '/proof/upload-url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workDate: todayISO(),
-          phase: 'after',
-          extension: ext,
-        }),
+      var entry = {
+        token: opts.token,
+        apiBase: opts.apiBase || '',
+        storageBase: opts.storageBase || '',
+        mimeType: mimeType,
+        workDate: todayISO(),
+        savedAtMs: savedAtMs,
+        blob: opts.blob,
+        facts: facts,
+      };
+      return queueTx('readwrite', function (store) {
+        return store.add(entry);
       })
-        .then(function (r) {
-          return r.json().then(function (body) {
-            if (!r.ok) throw new Error((body && body.error) || 'Could not mint upload URL.');
-            return body;
-          });
+        .then(function (id) {
+          entry.id = id;
+          return { id: id, entry: entry, facts: facts, saved: true };
         })
-        .then(function (slot) {
-          onStep('Uploading video + audio…');
-          // Prefer the absolute signed URL from the API so localhost / static
-          // hosts do not PUT to the wrong origin. Fall back to storageBase + path.
-          var putUrl =
-            slot.uploadUrl ||
-            (storageBase || '') +
-              '/storage/v1/object/upload/sign/job-proofs/' +
-              slot.path +
-              '?token=' +
-              encodeURIComponent(slot.token);
-          return fetch(putUrl, {
-            method: 'PUT',
-            body: file,
-            headers: { 'Content-Type': mimeType },
-          }).then(function (put) {
-            if (!put.ok) throw new Error('The upload did not go through. Try again on better signal.');
-            onStep('Filing it with the office…');
-            return fetch(apiBase + '/api/job-share/' + encodeURIComponent(token) + '/proof', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                workDate: todayISO(),
-                phase: 'after',
-                storagePath: slot.path,
-                byteSize: file.size,
-                durationSeconds: facts.durationSeconds != null ? facts.durationSeconds : undefined,
-                contentHash: facts.contentHash || undefined,
-                capturedAt: facts.capturedAt,
-                lat: facts.lat != null ? facts.lat : undefined,
-                lon: facts.lon != null ? facts.lon : undefined,
-                accuracyM: facts.accuracyM != null ? facts.accuracyM : undefined,
-                frames: facts.frames,
-              }),
-            });
-          });
-        })
-        .then(function (r) {
-          return r.json().then(function (body) {
-            if (!r.ok) throw new Error((body && body.error) || 'Filing failed.');
-            return {
-              proof: body.proof,
-              checks: body.checks || [],
-              problems: body.problems || [],
-              facts: facts,
-            };
+        .catch(function () {
+          return { id: null, entry: entry, facts: facts, saved: false };
+        });
+    });
+  }
+
+  function entryFile(entry) {
+    var ext = (entry.mimeType || '').indexOf('mp4') >= 0 ? 'mp4' : 'webm';
+    return new File([entry.blob], 'field-day.' + ext, {
+      type: entry.mimeType || 'video/webm',
+      lastModified: entry.savedAtMs || Date.now(),
+    });
+  }
+
+  /**
+   * Upload one saved entry via the job-share proof path (token auth, no org
+   * cookie). Files as phase "after" for the entry's own work date.
+   */
+  function uploadSavedEntry(entry, onStep) {
+    onStep = onStep || function () {};
+    var apiBase = (entry.apiBase || '').replace(/\/$/, '');
+    var token = entry.token;
+    var facts = entry.facts;
+    var file = entryFile(entry);
+    var ext = (entry.mimeType || '').indexOf('mp4') >= 0 ? 'mp4' : 'webm';
+
+    onStep('Getting somewhere to put it…');
+    return fetch(apiBase + '/api/job-share/' + encodeURIComponent(token) + '/proof/upload-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        workDate: entry.workDate,
+        phase: 'after',
+        extension: ext,
+      }),
+    })
+      .then(function (r) {
+        return r.json().then(function (body) {
+          if (!r.ok) throw new Error((body && body.error) || 'Could not mint upload URL.');
+          return body;
+        });
+      })
+      .then(function (slot) {
+        onStep('Uploading video + audio…');
+        // Prefer the absolute signed URL from the API so localhost / static
+        // hosts do not PUT to the wrong origin. Fall back to storageBase + path.
+        var putUrl =
+          slot.uploadUrl ||
+          (entry.storageBase || '') +
+            '/storage/v1/object/upload/sign/job-proofs/' +
+            slot.path +
+            '?token=' +
+            encodeURIComponent(slot.token);
+        return fetch(putUrl, {
+          method: 'PUT',
+          body: file,
+          headers: { 'Content-Type': entry.mimeType || 'video/webm' },
+        }).then(function (put) {
+          if (!put.ok) throw new Error('The upload did not go through. Try again on better signal.');
+          onStep('Filing it with the office…');
+          return fetch(apiBase + '/api/job-share/' + encodeURIComponent(token) + '/proof', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              workDate: entry.workDate,
+              phase: 'after',
+              storagePath: slot.path,
+              byteSize: file.size,
+              durationSeconds: facts.durationSeconds != null ? facts.durationSeconds : undefined,
+              contentHash: facts.contentHash || undefined,
+              capturedAt: facts.capturedAt,
+              lat: facts.lat != null ? facts.lat : undefined,
+              lon: facts.lon != null ? facts.lon : undefined,
+              accuracyM: facts.accuracyM != null ? facts.accuracyM : undefined,
+              frames: facts.frames,
+            }),
           });
         });
+      })
+      .then(function (r) {
+        return r.json().then(function (body) {
+          if (!r.ok) throw new Error((body && body.error) || 'Filing failed.');
+          return {
+            proof: body.proof,
+            checks: body.checks || [],
+            problems: body.problems || [],
+            facts: facts,
+          };
+        });
+      });
+  }
+
+  /**
+   * Try to upload every day saved on this device, oldest first. Deletes an
+   * entry only after the office has confirmed the filing. Stops at the first
+   * failure — that is almost always signal, and the rest would fail the same
+   * way. Never runs twice at once.
+   */
+  var flushing = false;
+  function flushQueue(opts) {
+    opts = opts || {};
+    var onStep = opts.onStep || function () {};
+    if (flushing) return Promise.resolve({ busy: true, uploaded: [], remaining: -1, error: null });
+    flushing = true;
+    var uploaded = [];
+    return queueAll()
+      .then(function (entries) {
+        entries.sort(function (a, b) {
+          return (a.id || 0) - (b.id || 0);
+        });
+        function next(index) {
+          if (index >= entries.length) {
+            return { uploaded: uploaded, remaining: entries.length - uploaded.length, error: null };
+          }
+          if (navigator.onLine === false) {
+            return {
+              uploaded: uploaded,
+              remaining: entries.length - uploaded.length,
+              error: new Error('No internet connection.'),
+            };
+          }
+          var entry = entries[index];
+          return uploadSavedEntry(entry, onStep)
+            .then(function (result) {
+              uploaded.push({ id: entry.id, result: result });
+              return queueTx('readwrite', function (store) {
+                return store.delete(entry.id);
+              }).then(function () {
+                return next(index + 1);
+              });
+            })
+            .catch(function (err) {
+              return { uploaded: uploaded, remaining: entries.length - uploaded.length, error: err };
+            });
+        }
+        return next(0);
+      })
+      .catch(function (err) {
+        return { uploaded: uploaded, remaining: 0, error: err };
+      })
+      .then(function (res) {
+        flushing = false;
+        return res;
+      });
+  }
+
+  /**
+   * Upload day film immediately from memory (legacy path — used only when
+   * on-device storage is unavailable). Files as phase "after" for today.
+   */
+  function uploadDayFilm(opts) {
+    var onStep = opts.onStep || function () {};
+    var mimeType = opts.mimeType || 'video/webm';
+    var savedAtMs = Date.now();
+    var ext = mimeType.indexOf('mp4') >= 0 ? 'mp4' : 'webm';
+    var file = new File([opts.blob], 'field-day.' + ext, {
+      type: mimeType,
+      lastModified: savedAtMs,
+    });
+    onStep('Reading the recording…');
+    return readCapture(file).then(function (facts) {
+      return uploadSavedEntry(
+        {
+          token: opts.token,
+          apiBase: opts.apiBase || '',
+          storageBase: opts.storageBase || '',
+          mimeType: mimeType,
+          workDate: todayISO(),
+          savedAtMs: savedAtMs,
+          blob: opts.blob,
+          facts: facts,
+        },
+        onStep,
+      );
     });
   }
 
@@ -437,6 +621,10 @@
     readCapture: readCapture,
     recordDayFilm: recordDayFilm,
     uploadDayFilm: uploadDayFilm,
+    saveDayFilm: saveDayFilm,
+    uploadSavedEntry: uploadSavedEntry,
+    flushQueue: flushQueue,
+    pendingCount: pendingCount,
     loadShareJob: loadShareJob,
     loadShareProofs: loadShareProofs,
     currentPosition: currentPosition,

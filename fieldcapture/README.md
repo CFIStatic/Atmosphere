@@ -43,3 +43,29 @@ build and office `verifier/twin.html` — not marketing copy on the crew home.
 ## Native
 
 See `apps/field-ios/` for the App Store Swift client (same A/V + upload contract).
+
+## Offline — built for rural sites
+
+Crews film where there is often no signal at all, so the app is offline-first
+end to end:
+
+- **The app opens with no internet.** `sw.js` keeps the shell (page + scripts)
+  on the device after the first visit; the job and the week's filed days are
+  cached on-device too, so the home screen still shows the real job offline.
+- **A finished day is saved before any network is tried.** The recording goes
+  into IndexedDB with its facts — SHA-256, GPS, frames, duration — and its
+  **work date fixed at capture time**, so a Tuesday filmed offline files as
+  Tuesday no matter when signal returns.
+- **Upload happens by itself.** The queue drains on app open, on the
+  browser's back-online event, and on a 2-minute retry tick; an entry is
+  deleted only after the office confirms the filing. The home screen shows a
+  badge while days wait on the phone.
+
+## Real data only
+
+Everything live mode displays comes from the job file, never a placeholder:
+the header identity is the linked party's `contact_name` + `company` from the
+share, "what today expects" is the shared job itself, and "this week" is the
+party's actual filed days (acceptance and open problems included) from
+`GET /api/job-share/:token/proof`. The scripted `?demo=1` mode labels itself
+"Demo crew / Sample data" so it can never be mistaken for a real account.

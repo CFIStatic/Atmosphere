@@ -88,42 +88,165 @@
     el.style.color = isErr ? 'var(--fail)' : 'var(--muted)';
   }
 
+  var JOB_CACHE_KEY = 'atmosphere.fc.job.' + TOKEN;
+  var DAYS_CACHE_KEY = 'atmosphere.fc.days.' + TOKEN;
+
+  /**
+   * "This week" is the party's real filed days from the job file — work date,
+   * acceptance, and open problems as the office actually recorded them —
+   * never sample rows.
+   */
+  function renderWeek(days) {
+    var wrap = $('#week-wrap');
+    if (!wrap) return;
+    if (!days || !days.length) {
+      wrap.hidden = true;
+      return;
+    }
+    wrap.hidden = false;
+    $('#week').innerHTML = days
+      .slice(0, 7)
+      .map(function (d) {
+        var when = new Date(d.workDate + 'T12:00:00');
+        var label = isNaN(when.getTime())
+          ? d.workDate
+          : when.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+        var chip = d.accepted
+          ? ['pass', 'Accepted']
+          : d.problems && d.problems.length
+            ? ['warm', 'Needs eyes']
+            : ['wait', 'Filed'];
+        return (
+          '<div class="weekrow"><span class="what">' +
+          escapeHtml(label + (d.summary ? ' · ' + d.summary : '')) +
+          '</span><span class="chip ' +
+          chip[0] +
+          '"><span class="dot"></span>' +
+          chip[1] +
+          '</span></div>'
+        );
+      })
+      .join('');
+  }
+
+  function loadWeek() {
+    Core.loadShareProofs(TOKEN, API_BASE)
+      .then(function (payload) {
+        try {
+          localStorage.setItem(DAYS_CACHE_KEY, JSON.stringify(payload.days || []));
+        } catch (e) {
+          /* ignore */
+        }
+        renderWeek(payload.days || []);
+      })
+      .catch(function () {
+        // Offline — show the last known real days, or nothing. Never samples.
+        var cached = null;
+        try {
+          cached = JSON.parse(localStorage.getItem(DAYS_CACHE_KEY) || 'null');
+        } catch (e) {
+          cached = null;
+        }
+        if (cached) renderWeek(cached);
+      });
+  }
+
+  function applyJobPayload(payload, offline) {
+    state.job = payload;
+    var title = (payload.job && payload.job.title) || 'Job';
+    var num = (payload.job && payload.job.jobNumber) || '';
+    // Identity comes from the linked account on the job share — the
+    // contact the office invited — never a made-up placeholder.
+    var company = (payload.you && payload.you.company) || 'Crew';
+    var person = (payload.you && payload.you.name) || '';
+    var who = document.querySelector('.who');
+    if (who) {
+      who.innerHTML = person
+        ? '<b>' + escapeHtml(person) + '</b>' + escapeHtml(company)
+        : '<b>' + escapeHtml(company) + '</b>Field Capture';
+    }
+    renderExpect([
+      {
+        name: (num ? num + ' · ' : '') + title,
+        addr: payload.job && payload.job.claimNumber ? 'Claim ' + payload.job.claimNumber : 'Shared job',
+        at: 'Today',
+        placed: true,
+      },
+    ]);
+    setStatus(
+      offline
+        ? 'No signal — using the last loaded job. Filming still works; the day uploads itself when signal returns.'
+        : 'Ready — tap Start. Records video + microphone.',
+    );
+    $('#daybtn').disabled = false;
+    loadWeek();
+  }
+
   function bootLive() {
     show('s-home');
     setStatus('Loading job…');
     $('#week-wrap').hidden = true;
     Core.loadShareJob(TOKEN, API_BASE)
       .then(function (payload) {
-        state.job = payload;
-        var title = (payload.job && payload.job.title) || 'Job';
-        var num = (payload.job && payload.job.jobNumber) || '';
-        // Identity comes from the linked account on the job share — the
-        // contact the office invited — never a made-up placeholder.
-        var company = (payload.you && payload.you.company) || 'Crew';
-        var person = (payload.you && payload.you.name) || '';
-        var who = document.querySelector('.who');
-        if (who) {
-          who.innerHTML = person
-            ? '<b>' + escapeHtml(person) + '</b>' + escapeHtml(company)
-            : '<b>' + escapeHtml(company) + '</b>Field Capture';
+        // Remember the job on this device so the app still opens — and can
+        // still film — at a site with no signal at all.
+        try {
+          localStorage.setItem(JOB_CACHE_KEY, JSON.stringify(payload));
+        } catch (e) {
+          /* private mode — offline boot just won't be available */
         }
-        renderExpect([
-          {
-            name: (num ? num + ' · ' : '') + title,
-            addr: payload.job && payload.job.claimNumber ? 'Claim ' + payload.job.claimNumber : 'Shared job',
-            at: 'Today',
-            placed: true,
-          },
-        ]);
-        setStatus('Ready — tap Start. Records video + microphone.');
-        $('#daybtn').disabled = false;
+        applyJobPayload(payload, false);
       })
       .catch(function (err) {
+        var cached = null;
+        try {
+          cached = JSON.parse(localStorage.getItem(JOB_CACHE_KEY) || 'null');
+        } catch (e) {
+          cached = null;
+        }
+        if (cached) {
+          applyJobPayload(cached, true);
+          return;
+        }
         setStatus(err.message || 'Could not open this link.', true);
         $('#daybtn').disabled = true;
         show('s-blocked');
         $('#blocked-msg').textContent = err.message || 'This link is invalid or expired.';
       });
+  }
+
+  /* ---------- offline queue surface ---------- */
+
+  function updatePendingBadge() {
+    var el = $('#pending');
+    if (!el || !Core.pendingCount) return;
+    Core.pendingCount().then(function (n) {
+      if (n > 0) {
+        el.hidden = false;
+        el.textContent =
+          n === 1
+            ? '1 day film is saved on this phone — it uploads itself when the phone has internet.'
+            : n + ' day films are saved on this phone — they upload themselves when the phone has internet.';
+      } else {
+        el.hidden = true;
+      }
+    });
+  }
+
+  function autoFlush() {
+    if (!LIVE) return;
+    Core.flushQueue({}).then(function (flush) {
+      if (flush.uploaded && flush.uploaded.length) {
+        setStatus(
+          'Uploaded ' +
+            flush.uploaded.length +
+            ' saved day film' +
+            (flush.uploaded.length === 1 ? '' : 's') +
+            ' to the job. ✓',
+        );
+      }
+      updatePendingBadge();
+    });
   }
 
   function bootBlocked() {
@@ -175,24 +298,47 @@
     if (!state.recorder) return;
     if (state.stopWatch) state.stopWatch();
     $('#stopbtn').querySelector('.lbl').textContent = 'Finishing…';
+    var onStep = function (step) {
+      $('#upload-step').textContent = step;
+    };
     state.recorder
       .stop()
       .then(function (clip) {
         openDoorUploading();
-        return Core.uploadDayFilm({
+        onStep('Saving on this phone…');
+        // The recording is safe on the device BEFORE any network is tried —
+        // rural sites often have none, and the footage must survive that.
+        return Core.saveDayFilm({
           token: TOKEN,
           apiBase: API_BASE,
           storageBase: STORAGE_BASE,
           blob: clip.blob,
           mimeType: clip.mimeType,
-          onStep: function (step) {
-            $('#upload-step').textContent = step;
-          },
         });
       })
-      .then(function (result) {
-        state.uploadResult = result;
-        renderDoorLive(result);
+      .then(function (saved) {
+        updatePendingBadge();
+        if (saved.id == null) {
+          // On-device storage unavailable (e.g. private browsing) — the
+          // immediate upload is the only path, as before.
+          return Core.uploadSavedEntry(saved.entry, onStep).then(function (result) {
+            state.uploadResult = result;
+            renderDoorLive(result);
+          });
+        }
+        return Core.flushQueue({ onStep: onStep }).then(function (flush) {
+          var mine = null;
+          for (var i = 0; i < flush.uploaded.length; i++) {
+            if (flush.uploaded[i].id === saved.id) mine = flush.uploaded[i].result;
+          }
+          updatePendingBadge();
+          if (mine) {
+            state.uploadResult = mine;
+            renderDoorLive(mine);
+          } else {
+            renderDoorQueued(saved);
+          }
+        });
       })
       .catch(function (err) {
         $('#upload-step').textContent = err.message || 'Upload failed.';
@@ -263,6 +409,32 @@
       '<span class="mono">proof ' +
       escapeHtml((result.proof && result.proof.id) || 'filed') +
       '</span></div>';
+    $('#doneline').classList.add('on');
+    $('#donebtn').classList.add('on');
+  }
+
+  function renderDoorQueued(saved) {
+    var facts = saved.facts || {};
+    var rows = [];
+    rows.push(
+      '<div class="lrow on"><span>Filmed live — video + audio</span><em>mic track required</em><span class="ok">✓</span></div>',
+    );
+    rows.push(
+      '<div class="lrow on"><span>Saved on this phone</span><em>' +
+        (facts.durationSeconds ? Math.round(facts.durationSeconds) + 's · ' : '') +
+        'filed as ' +
+        escapeHtml(saved.entry.workDate) +
+        '</em><span class="ok">✓</span></div>',
+    );
+    rows.push(
+      '<div class="lrow on"><span>No signal right now</span><em>uploads itself when internet returns</em><span class="ok">→</span></div>',
+    );
+    $('#ledger').innerHTML = rows.join('');
+    var jobName = state.job && state.job.job ? state.job.job.title : 'Job';
+    $('#daytl').innerHTML =
+      '<div class="tlrow"><b>' +
+      escapeHtml(jobName) +
+      '</b><span>Your day is done and the film is safe on this phone. The next time the phone has internet — tonight at home, or back in town — it files itself to the job. Just do not clear this browser’s data.</span></div>';
     $('#doneline').classList.add('on');
     $('#donebtn').classList.add('on');
   }
@@ -338,7 +510,7 @@
     renderExpect(JOBS);
     var WEEK = [
       { what: 'Mon · Meridian after', chip: ['pass', 'Accepted'] },
-      { what: 'Tue · Cedar Ridge', chip: ['warn', 'Needs eyes'] },
+      { what: 'Tue · Cedar Ridge', chip: ['warm', 'Needs eyes'] },
     ];
     $('#week').innerHTML = WEEK.map(function (w) {
       return (
@@ -396,10 +568,24 @@
     setStatus(LIVE ? 'Ready for another day on this link.' : '');
   });
 
+  // The service worker keeps the app shell on this device, so the page
+  // itself opens at a site with no signal at all.
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    navigator.serviceWorker.register('sw.js').catch(function () {
+      /* http without SW support — the app still works online */
+    });
+  }
+
   if (LIVE) {
     document.body.setAttribute('data-mode', 'live');
     $('#daybtn').addEventListener('click', startLiveDay);
     bootLive();
+    // Days saved while offline upload themselves: on open, the moment the
+    // browser reports internet again, and on a slow retry tick in between.
+    updatePendingBadge();
+    autoFlush();
+    window.addEventListener('online', autoFlush);
+    setInterval(autoFlush, 2 * 60 * 1000);
   } else if (DEMO) {
     bootDemo();
   } else {

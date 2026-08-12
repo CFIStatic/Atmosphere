@@ -125,6 +125,13 @@
   /* No back button: the app is one button and the two screens it moves
      between. There is nowhere to go back to. */
 
+  /* Days filmed offline, waiting on this phone for signal. */
+  .pending {
+    margin-top: 12px; padding: 10px 12px; border-radius: 10px;
+    background: var(--warn-soft); color: var(--warn);
+    font-size: 12.5px; line-height: 1.5; font-weight: 600;
+  }
+
   /* ---------- screens ---------- */
   .screen { flex: 1; display: none; flex-direction: column; }
   .screen[data-on="1"] { display: flex; }
@@ -150,6 +157,7 @@
   .chip .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
   .chip.pass { background: var(--pass-soft); color: var(--pass); }
   .chip.warm { background: var(--accent-soft); color: var(--accent); }
+  .chip.wait { background: var(--line-soft); color: var(--muted); }
 
   /* ---------- the one button ----------
      There is exactly one control in this app, and it lives in the same
@@ -356,6 +364,7 @@
       </div>
 
       <p class="lede" id="live-status" style="margin-top:14px;font-size:13px;color:var(--muted)"></p>
+      <p class="pending" id="pending" hidden></p>
     </div>
 
     <div class="recwrap">

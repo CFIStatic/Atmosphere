@@ -100,8 +100,11 @@ function isAllowedFrontendOrigin(origin: string): boolean {
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const websiteDir = process.env.WEBSITE_DIR ?? path.resolve(moduleDir, '../../website');
 const appDistDir = process.env.APP_DIST_DIR ?? path.resolve(moduleDir, '../../frontend/dist');
+const fieldcaptureDir =
+  process.env.FIELDCAPTURE_DIR ?? path.resolve(moduleDir, '../../fieldcapture');
 const hasWebsite = fs.existsSync(path.join(websiteDir, 'index.html'));
 const hasAppDist = fs.existsSync(path.join(appDistDir, 'index.html'));
+const hasFieldcapture = fs.existsSync(path.join(fieldcaptureDir, 'index.html'));
 
 export function createApp(): Express {
   const app = express();
@@ -305,6 +308,12 @@ export function createApp(): Express {
   app.use('/api/contact', contactRouter);
 
   // ---------- Single-origin hosting (see the note above createApp) ----------
+  // The crew app lives at /fieldcapture — the exact path job-share links use
+  // (see jobIntake's fieldCapturePath) — so a share link opens the real
+  // capture surface on this same origin.
+  if (hasFieldcapture) {
+    app.use('/fieldcapture', express.static(fieldcaptureDir));
+  }
   if (hasWebsite) {
     // Website pages are served with `data-app-origin` stamped to this very
     // origin whenever the dashboard build is co-hosted — the same stamp the
