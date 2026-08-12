@@ -82,7 +82,7 @@
     if (!root) return;
     if (!jobs.length) {
       root.innerHTML =
-        '<div class="erow"><span class="t"><b>No open jobs yet</b><span>Ask the office to start a job, then refresh.</span></span></div>';
+        '<div class="erow"><span class="t"><b>Nothing on the schedule for today</b><span>Ask the office to start or schedule a job, then refresh.</span></span></div>';
       return;
     }
     root.innerHTML = jobs
@@ -97,10 +97,11 @@
           escapeHtml(j.name) +
           '</b><span>' +
           escapeHtml(j.addr) +
+          (j.filmed ? ' <span class="filmedpin">· filmed today</span>' : '') +
           (j.placed ? '' : ' <span class="warnpin">· cannot be placed from GPS</span>') +
           '</span></span>' +
           '<span class="at">' +
-          escapeHtml(j.at || '') +
+          escapeHtml(j.filmed ? 'Filmed' : j.at || '') +
           '</span></div>'
         );
       })
@@ -189,9 +190,12 @@
         addr: j.address || '',
         at: j.at || 'Today',
         placed: Boolean(j.placed),
+        filmed: Boolean(j.filmed),
       };
     });
-    if (!state.activeJobId && state.jobs[0]) state.activeJobId = state.jobs[0].id;
+    if (!state.activeJobId || !state.jobs.some(function (j) { return j.id === state.activeJobId; })) {
+      state.activeJobId = state.jobs[0] ? state.jobs[0].id : null;
+    }
     var who = document.querySelector('.who');
     if (who) {
       var name = (me.user && (me.user.fullName || me.user.email)) || 'You';
@@ -204,7 +208,7 @@
     setStatus(
       state.activeJobId
         ? 'Ready — tap Start. Records video + microphone.'
-        : 'No open jobs yet. Ask the office to start one.',
+        : 'Nothing on the schedule for today. Ask the office to start a job.',
     );
     show('s-home');
   }

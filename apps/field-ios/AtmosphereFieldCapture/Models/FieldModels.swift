@@ -14,6 +14,7 @@ struct ExpectedJob: Identifiable, Equatable, Codable {
     let at: String
     let placed: Bool
     let status: String?
+    let filmed: Bool?
 
     init(
         id: String,
@@ -22,7 +23,8 @@ struct ExpectedJob: Identifiable, Equatable, Codable {
         address: String,
         at: String,
         placed: Bool,
-        status: String? = nil
+        status: String? = nil,
+        filmed: Bool? = nil
     ) {
         self.id = id
         self.number = number
@@ -31,6 +33,7 @@ struct ExpectedJob: Identifiable, Equatable, Codable {
         self.at = at
         self.placed = placed
         self.status = status
+        self.filmed = filmed
     }
 }
 

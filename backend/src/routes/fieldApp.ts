@@ -6,6 +6,13 @@ import { requireOrgContext } from '../lib/orgContext.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { badRequest, HttpError, serviceUnavailable } from '../lib/errors.js';
 import { createUploadUrl, recordProof } from './proofOfWork.js';
+import {
+  DEFAULT_FIELD_TIMEZONE,
+  formatTodayAt,
+  pickTodayJobs,
+  todayKey,
+  type TodayJobInput,
+} from '../field/todayJobs.js';
 
 /**
  * Field Capture (App Store) ↔ platform account bridge.
@@ -61,26 +68,61 @@ fieldAppRouter.get('/me', async (req: Request, res: Response, next: NextFunction
   }
 });
 
+async function orgTimezone(
+  supabase: Awaited<ReturnType<typeof requireOrgContext>>['supabase'],
+  orgId: string,
+): Promise<string> {
+  const { data } = await supabase
+    .from('pm_automation_settings')
+    .select('timezone')
+    .eq('org_id', orgId)
+    .maybeSingle();
+  const zone = (data as { timezone?: string } | null)?.timezone?.trim();
+  return zone || DEFAULT_FIELD_TIMEZONE;
+}
+
 /**
  * GET /api/field-app/today
- * Active jobs the signed-in org member can film against.
+ * The job(s) for this calendar day: scheduled today, already filmed today,
+ * or currently in progress. Opening the app has to show the work we are on.
  */
 fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { orgId, supabase } = await requireOrgContext(req);
+    const timeZone = await orgTimezone(supabase, orgId);
+    const day = todayKey(new Date(), timeZone);
 
-    const { data: jobs, error } = await supabase
-      .from('crm_jobs')
-      .select('id, job_number, title, status, scheduled_start, property_id')
-      .eq('org_id', orgId)
-      .not('status', 'in', '("completed","cancelled","lost","archived")')
-      .order('scheduled_start', { ascending: true, nullsFirst: false })
-      .limit(50);
+    const [{ data: jobs, error }, proofsResult] = await Promise.all([
+      supabase
+        .from('crm_jobs')
+        .select('id, job_number, title, status, scheduled_start, property_id')
+        .eq('org_id', orgId)
+        .order('scheduled_start', { ascending: true, nullsFirst: false })
+        .limit(200),
+      supabase.from('job_proofs').select('job_id').eq('org_id', orgId).eq('work_date', day),
+    ]);
 
     if (error) throw new HttpError(500, error.message, 'field_jobs_failed');
 
-    const rows = (jobs ?? []) as any[];
-    const propertyIds = [...new Set(rows.map((j) => j.property_id).filter(Boolean))];
+    const filmedIds = [
+      ...new Set(
+        ((proofsResult.data ?? []) as { job_id?: string }[])
+          .map((p) => p.job_id)
+          .filter(Boolean),
+      ),
+    ] as string[];
+
+    const inputs: TodayJobInput[] = ((jobs ?? []) as any[]).map((j) => ({
+      id: j.id as string,
+      jobNumber: (j.job_number as number | null) ?? null,
+      title: (j.title as string | null) ?? null,
+      status: (j.status as string | null) ?? null,
+      scheduledStart: (j.scheduled_start as string | null) ?? null,
+      propertyId: (j.property_id as string | null) ?? null,
+    }));
+
+    const picked = pickTodayJobs(inputs, filmedIds, day, timeZone);
+    const propertyIds = [...new Set(picked.map((j) => j.propertyId).filter(Boolean))] as string[];
     const addressById = new Map<string, string>();
     if (propertyIds.length) {
       const { data: props } = await supabase
@@ -93,22 +135,19 @@ fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunct
       }
     }
 
-    const out = rows.map((j) => ({
-      id: j.id as string,
-      number: j.job_number != null ? `#${j.job_number}` : '',
-      name: (j.title as string) || 'Job',
-      address: (j.property_id && addressById.get(j.property_id)) || 'Address on file',
-      at: j.scheduled_start
-        ? new Date(j.scheduled_start).toLocaleTimeString('en-US', {
-            hour: 'numeric',
-            minute: '2-digit',
-          })
-        : 'Today',
+    const out = picked.map((j) => ({
+      id: j.id,
+      number: j.jobNumber != null ? `#${j.jobNumber}` : '',
+      name: j.title || 'Job',
+      address: (j.propertyId && addressById.get(j.propertyId)) || 'Address on file',
+      at: formatTodayAt(j.scheduledStart, j.filmed, timeZone),
       status: j.status ?? null,
-      placed: Boolean(j.scheduled_start),
+      placed: Boolean(j.scheduledStart) || j.filmed,
+      filmed: j.filmed,
+      reason: j.reason,
     }));
 
-    res.json({ jobs: out });
+    res.json({ jobs: out, today: day });
   } catch (err) {
     next(err);
   }

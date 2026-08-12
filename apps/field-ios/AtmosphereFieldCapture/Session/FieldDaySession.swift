@@ -26,7 +26,7 @@ final class FieldDaySession: ObservableObject {
         do {
             let list = try await api.todayJobs()
             jobs = list
-            if activeJobId == nil {
+            if activeJobId == nil || !list.contains(where: { $0.id == activeJobId }) {
                 activeJobId = list.first?.id
             }
         } catch {
@@ -38,7 +38,7 @@ final class FieldDaySession: ObservableObject {
     func startDay() async {
         lastError = nil
         guard activeJobId != nil || !jobs.isEmpty else {
-            lastError = "No job to film. Create or schedule a job in the Atmosphere dashboard first."
+            lastError = "No job for today. Create or schedule a job in the Atmosphere dashboard first."
             return
         }
         if activeJobId == nil { activeJobId = jobs.first?.id }

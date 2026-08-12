@@ -26,16 +26,16 @@ struct TodayView: View {
                     .foregroundStyle(FieldTheme.muted)
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("What today expects of you")
+                        Text("Today's jobs")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(FieldTheme.faint)
                             .textCase(.uppercase)
                         if session.loadingJobs {
-                            Text("Loading jobs from your account…")
+                            Text("Loading today's jobs from your account…")
                                 .font(.system(size: 13))
                                 .foregroundStyle(FieldTheme.muted)
                         } else if session.jobs.isEmpty {
-                            Text("No open jobs yet. Create a job in the Atmosphere dashboard, then pull to refresh.")
+                            Text("Nothing on the schedule for today. Create or schedule a job in the Atmosphere dashboard, then pull to refresh.")
                                 .font(.system(size: 13))
                                 .foregroundStyle(FieldTheme.muted)
                         }
@@ -51,9 +51,9 @@ struct TodayView: View {
                                             .foregroundStyle(FieldTheme.muted)
                                     }
                                     Spacer()
-                                    Text(job.at)
+                                    Text(job.filmed == true ? "Filmed" : job.at)
                                         .font(FieldTheme.mono)
-                                        .foregroundStyle(FieldTheme.faint)
+                                        .foregroundStyle(job.filmed == true ? FieldTheme.pass : FieldTheme.faint)
                                     if session.activeJobId == job.id {
                                         Text("●")
                                             .foregroundStyle(FieldTheme.accent)

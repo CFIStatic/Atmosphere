@@ -191,13 +191,22 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
         .slice(0, 5);
     }
     if (platformId === 'field') {
-      return list
+      const workedToday = (jobs ?? []).filter(
+        (j) =>
+          j.status !== 'cancelled' &&
+          (isToday(j.scheduledStart) || isToday(j.lastEventAt) || j.status === 'in_progress'),
+      );
+      const pool = workedToday.length ? workedToday : list;
+      return [...pool]
         .sort((a, b) => {
+          const aToday = isToday(a.lastEventAt) || isToday(a.scheduledStart) ? 0 : 1;
+          const bToday = isToday(b.lastEventAt) || isToday(b.scheduledStart) ? 0 : 1;
+          if (aToday !== bToday) return aToday - bToday;
           const at = a.scheduledStart ? Date.parse(a.scheduledStart) : Number.MAX_SAFE_INTEGER;
           const bt = b.scheduledStart ? Date.parse(b.scheduledStart) : Number.MAX_SAFE_INTEGER;
           return at - bt;
         })
-        .slice(0, 5);
+        .slice(0, 8);
     }
     if (platformId === 'sales') {
       return list
@@ -212,12 +221,12 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
         return ab - bb || a.priority - b.priority;
       })
       .slice(0, 5);
-  }, [open, platformId]);
+  }, [jobs, open, platformId]);
 
   const ATTENTION_TITLE: Record<PlatformId, string> = {
     sales: 'Work to win',
     operations: 'Needs attention',
-    field: 'Next on site',
+    field: "Today's jobs",
     manager: 'Money in play',
   };
 
@@ -314,7 +323,13 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
             <div>
               <h2 className="text-[15px] font-semibold text-ink-900">{ATTENTION_TITLE[platformId]}</h2>
               <p className="mt-0.5 text-xs text-ink-500">
-                {jobs ? `${attention.length} of ${open.length} active jobs` : 'Loading…'}
+                {jobs
+                  ? platformId === 'field'
+                    ? attention.length
+                      ? `${attention.length} job${attention.length === 1 ? '' : 's'} for today`
+                      : 'Nothing scheduled or filmed today'
+                    : `${attention.length} of ${open.length} active jobs`
+                  : 'Loading…'}
               </p>
             </div>
             <Link to="/jobs" className="text-xs font-medium text-brand-600 hover:text-brand-700">

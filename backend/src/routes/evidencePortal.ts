@@ -17,6 +17,7 @@ import { shareEmail } from '../verifier/shareEmail.js';
 import { progressShareEmail } from '../verifier/progressShareEmail.js';
 import { buildMailSender } from '../campaigns/mail/index.js';
 import { config } from '../config.js';
+import { sortJobsForOpen, todayKey } from '../field/todayJobs.js';
 
 /**
  * The evidence portal's backend: two doors into one record.
@@ -216,7 +217,12 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
 
     // Job files exist before any clip does — Start a job should show the
     // name on the Dashboard so footage has a folder to land in.
-    let jobs: Array<{ jobId: string; jobName: string; jobNumber: number | null }> = [];
+    let jobs: Array<{
+      jobId: string;
+      jobName: string;
+      jobNumber: number | null;
+      createdAt?: string | null;
+    }> = [];
     const { data: jobRows, error: jobsError } = await supabase
       .from('crm_jobs')
       .select('id, title, job_number, created_at, property_id')
@@ -251,6 +257,7 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
         jobId: j.id as string,
         jobName: jobTitleForIntake(j.title, addrByProperty.get(j.property_id) ?? ''),
         jobNumber: (j.job_number as number | null) ?? null,
+        createdAt: (j.created_at as string | null) ?? null,
       }));
     }
     const seen = new Set(jobs.map((j) => j.jobId));
@@ -262,12 +269,23 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
         jobId: id,
         jobName: ((item as any).jobName as string) || 'Job',
         jobNumber: ((item as any).jobNumber as number | null) ?? null,
+        createdAt: ((item as any).uploadedAt as string | null) ?? null,
       });
     }
 
+    const lastWorkDateByJob = new Map<string, string>();
+    for (const item of items) {
+      const id = (item as any).jobId as string | undefined;
+      const workDate = (item as any).workDate as string | undefined;
+      if (!id || !workDate) continue;
+      const prev = lastWorkDateByJob.get(id);
+      if (!prev || workDate > prev) lastWorkDateByJob.set(id, workDate);
+    }
+    jobs = sortJobsForOpen(jobs, lastWorkDateByJob, todayKey());
+
     res.json({
       items,
-      jobs,
+      jobs: jobs.map(({ jobId, jobName, jobNumber }) => ({ jobId, jobName, jobNumber })),
       counts: {
         total: items.length,
         flagged: items.filter((i: any) => i.flagged).length,
