@@ -628,6 +628,36 @@
   }
   .tabs button[aria-selected="true"] { background: var(--panel); color: var(--ink); font-weight: 650; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
 
+  .alog-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+    margin: 0 0 10px;
+  }
+  .alog-head h4 {
+    margin: 0; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--faint); font-weight: 750;
+  }
+  .alog-head .livepill {
+    font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--accent); background: var(--accent-soft);
+    padding: 2px 8px; border-radius: 999px;
+  }
+  .alog { list-style: none; margin: 0; padding: 0; }
+  .alog li {
+    display: grid; grid-template-columns: 52px 1fr; gap: 10px;
+    padding: 10px 8px 10px 10px; border-radius: 8px; cursor: pointer;
+    border-bottom: 1px solid var(--line-soft);
+    font-size: 13px; line-height: 1.45; color: var(--ink-2);
+  }
+  .alog li:last-child { border-bottom: 0; }
+  .alog li.soon { display: none; }
+  .alog li.seen { color: var(--ink); }
+  .alog li.on {
+    display: grid; background: var(--accent-soft); color: var(--ink);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .alog .t { font-family: var(--mono); font-size: 11px; color: var(--faint); padding-top: 2px; }
+  .alog li.on .t { color: var(--accent); font-weight: 700; }
+
   .kv { display: grid; grid-template-columns: 116px minmax(0,1fr); gap: 6px 12px; font-size: 12.5px; }
   .kv dt { color: var(--muted); }
   .kv dd { margin: 0; color: var(--ink); word-break: break-word; }
@@ -1881,6 +1911,12 @@
         '<video controls playsinline preload="metadata" src="' + esc(item._videoUrl) + '"></video>';
       $('#d-scrub').innerHTML = '';
       $('#d-time').textContent = 'full clip · ' + dur(item.duration);
+      var vid = $('#d-frame').querySelector('video');
+      if (vid) {
+        vid.addEventListener('timeupdate', function () { syncAnalysisLog(vid.currentTime); });
+        vid.addEventListener('seeked', function () { syncAnalysisLog(vid.currentTime); });
+        vid.addEventListener('play', function () { syncAnalysisLog(vid.currentTime); });
+      }
     } else {
       item._frames = item._remoteFrames && item._remoteFrames.length
         ? item._remoteFrames
@@ -1956,6 +1992,7 @@
     Array.prototype.forEach.call($('#d-scrub').querySelectorAll('button'), function (b) {
       b.setAttribute('aria-pressed', String(+b.dataset.i === i));
     });
+    syncAnalysisLog(f.at);
   }
 
   function stopPlay() {
@@ -2048,6 +2085,122 @@
     el.innerHTML = html;
   }
 
+  function analysisLog(item) {
+    var a = item.analysis || {};
+    var rows = [];
+    var seen = {};
+    function add(at, text, kind) {
+      var t = String(text || '').trim();
+      if (!t) return;
+      var key = at + '|' + t;
+      if (seen[key]) return;
+      seen[key] = true;
+      rows.push({ at: Math.max(0, Number(at) || 0), text: t, kind: kind || 'note' });
+    }
+    (a.dictationEntries || []).forEach(function (e) {
+      add(e.atSeconds, e.text || e.summary, 'read');
+    });
+    (a.timeline || []).forEach(function (t) {
+      add(t.startSeconds, t.summary, 'window');
+    });
+    if (rows.length < 6 && a.changes && a.changes.length) {
+      var d = item.duration || 120;
+      a.changes.forEach(function (c, i) {
+        add(Math.round((i + 1) * d / (a.changes.length + 1)), c, 'change');
+      });
+    }
+    if (rows.length < 2 && a.scope && a.scope.length) {
+      var d2 = item.duration || 120;
+      a.scope.forEach(function (s, i) {
+        var w = VERDICT_WORD[s.verdict];
+        add(
+          Math.round(i * d2 / Math.max(a.scope.length - 1, 1)),
+          s.title + (w ? ' — ' + w[1] : ''),
+          'scope'
+        );
+      });
+    }
+    if (!rows.length && (a.dictation || a.summary)) add(0, a.dictation || a.summary, 'read');
+    if (!rows.length && a.reason) add(0, a.reason, 'note');
+    rows.sort(function (x, y) { return x.at - y.at; });
+    return rows;
+  }
+
+  function currentPlayhead() {
+    var host = $('#d-frame');
+    var vid = host && host.querySelector('video');
+    if (vid) return vid.currentTime || 0;
+    var item = state.open;
+    if (item && item._frames && item._frames[state.frame]) return item._frames[state.frame].at || 0;
+    return 0;
+  }
+
+  function syncAnalysisLog(seconds) {
+    var list = document.getElementById('alog');
+    if (!list) return;
+    var items = list.querySelectorAll('[data-at]');
+    if (!items.length) return;
+    var lastSeen = -1;
+    Array.prototype.forEach.call(items, function (li, i) {
+      if (seconds >= Number(li.getAttribute('data-at'))) lastSeen = i;
+    });
+    if (lastSeen < 0) lastSeen = 0;
+    Array.prototype.forEach.call(items, function (li, i) {
+      li.classList.toggle('on', i === lastSeen);
+      li.classList.toggle('seen', i < lastSeen);
+      li.classList.toggle('soon', i > lastSeen);
+    });
+    var cur = items[lastSeen];
+    if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
+  function seekTo(seconds) {
+    var host = $('#d-frame');
+    var vid = host && host.querySelector('video');
+    if (vid) {
+      vid.currentTime = seconds;
+      syncAnalysisLog(seconds);
+      return;
+    }
+    var item = state.open;
+    if (!item || !item._frames || !item._frames.length) {
+      syncAnalysisLog(seconds);
+      return;
+    }
+    var best = 0;
+    var dist = Infinity;
+    item._frames.forEach(function (f, i) {
+      var d = Math.abs((f.at || 0) - seconds);
+      if (d < dist) { dist = d; best = i; }
+    });
+    stopPlay();
+    setFrame(best);
+  }
+
+  function renderScopeLog(item) {
+    var a = item.analysis || {};
+    var rows = analysisLog(item);
+    var writing = a.state === 'queued' || a.state === 'none';
+    var html = '<div class="alog-head"><h4>AI analysis</h4>' +
+      (writing
+        ? '<span class="livepill">Writing…</span>'
+        : a.state === 'failed'
+          ? '<span class="livepill">Failed</span>'
+          : '<span class="livepill">Reading the footage</span>') +
+      '</div>';
+    if (!rows.length) {
+      html += '<p class="footnote" style="margin-top:4px">' +
+        esc(a.reason || 'The assistant is reading this clip. Notes land here as the footage plays.') +
+        '</p>';
+      return html;
+    }
+    html += '<ul class="alog" id="alog">' + rows.map(function (r, i) {
+      return '<li data-at="' + r.at + '" class="' + (i === 0 ? 'on' : 'soon') + '">' +
+        '<span class="t">' + dur(r.at) + '</span><span>' + esc(r.text) + '</span></li>';
+    }).join('') + '</ul>';
+    return html;
+  }
+
   function setTab(tab) {
     Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
       b.setAttribute('aria-selected', String(b.dataset.tab === tab));
@@ -2057,27 +2210,11 @@
     var el = $('#d-panel');
 
     if (tab === 'integrity') {
-      var integ = integrityOf(item);
-      var head = integ === 'pass'
-        ? ['pass', 'Every check on this clip passed']
-        : integ === 'fail'
-          ? ['fail', 'A check failed — this clip does not stand as proof']
-          : ['unknown', 'Some checks could not run. Unverified is not the same as wrong.'];
-      var html = '<div class="verdictline ' + head[0] + '">' + esc(head[1]) + '</div>';
-      if (item.hold && item.hold.on) {
-        html += '<div class="banner hold"><div><strong>Legal hold.</strong> ' + esc(item.hold.reason) +
-          '<br />Placed by ' + esc(item.hold.by) + ' on ' + stamp(item.hold.at) +
-          '. Retention cannot delete this clip while the hold stands.</div></div>';
-      }
-      html += item.checks.map(function (c) {
-        return '<div class="checkrow"><span class="chip ' + c.verdict + '"><span class="dot"></span>' +
-          (c.verdict === 'pass' ? 'Pass' : c.verdict === 'fail' ? 'Fail' : 'Unknown') + '</span>' +
-          '<span><div class="what">' + esc(c.what) + '</div><div class="detail-txt">' + esc(c.detail) + '</div></span></div>';
-      }).join('');
-      html += '<p class="footnote">Checks run once, at upload, against what the device reported and what the ' +
-        'server observed. They are stored as findings rather than recomputed, so this is what was known when ' +
-        'somebody decided — not what today\'s code would conclude.</p>';
-      el.innerHTML = html;
+      el.innerHTML = renderScopeLog(item);
+      Array.prototype.forEach.call(el.querySelectorAll('#alog [data-at]'), function (li) {
+        li.addEventListener('click', function () { seekTo(Number(li.getAttribute('data-at'))); });
+      });
+      syncAnalysisLog(currentPlayhead());
       return;
     }
 
@@ -2680,7 +2817,11 @@
       live.workDate = now.toISOString().slice(0, 10);
       live.capturedAt = now.toISOString();
       live.uploadedAt = now.toISOString();
-      live.analysis = { state: 'queued', reason: 'Queued for analysis. The model has not read the day yet.' };
+      live.analysis = {
+        state: 'queued',
+        reason: 'Queued for analysis. The model has not read the day yet.',
+        dictationEntries: (DEMO_EVIDENCE[0].analysis && DEMO_EVIDENCE[0].analysis.dictationEntries) || []
+      };
       live.hold = null;
       EVIDENCE.push(live);
     });
