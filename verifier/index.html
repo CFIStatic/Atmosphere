@@ -557,13 +557,26 @@
   /* ---------- detail ---------- */
   .detail {
     position: fixed; inset: 0; z-index: 40; display: none;
-    background: rgba(28, 25, 23, .55); backdrop-filter: blur(2px);
+    place-items: center;
+    padding: 28px 40px;
+    background: rgba(28, 25, 23, .48);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
   }
-  .detail[data-open="1"] { display: block; }
+  .detail[data-open="1"] { display: grid; }
   .sheet {
-    position: absolute; inset: 0 0 0 auto; width: min(1080px, 100%);
-    background: var(--bg); box-shadow: -20px 0 60px -20px rgba(0,0,0,.5);
+    position: relative;
+    width: min(1080px, 100%);
+    max-height: 100%;
+    overflow: hidden;
+    border-radius: 14px;
+    background: var(--bg);
+    box-shadow: 0 28px 80px -24px rgba(0,0,0,.55);
     display: flex; flex-direction: column;
+  }
+  @media (max-width: 860px) {
+    .detail { padding: 12px; }
+    .sheet { border-radius: 10px; }
   }
   .sheethead {
     display: flex; align-items: flex-start; gap: 14px;
@@ -578,7 +591,7 @@
   }
   .closebtn:hover { background: var(--line-soft); color: var(--ink); }
 
-  .sheetbody { flex: 1; overflow-y: auto; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(340px, 1fr); }
+  .sheetbody { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(340px, 1fr); }
   @media (max-width: 860px) { .sheetbody { grid-template-columns: 1fr; } }
 
   .stage { padding: 16px 18px; border-right: 1px solid var(--line); }
