@@ -166,7 +166,6 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
         items: [
           { to: '/intake', label: 'Start a job', Icon: BoltIcon },
           { to: '/verifier-library', label: 'Dashboard', Icon: DecisionIcon },
-          { to: '/job-progress', label: 'Job Progress', Icon: UsersIcon },
         ],
       },
       SYSTEM,
@@ -267,9 +266,9 @@ export const VISIBLE_PLATFORM_IDS: PlatformId[] = ['operations', 'field'];
 
 export const PLATFORM_HOME: Record<PlatformId, string> = {
   sales: '/sales',
-  // Office home is Job Progress (job files). The video library lives at
-  // /verifier-library — opening there after login looked like an empty dashboard.
-  operations: '/job-progress',
+  // Office home is the Dashboard — job folders and clips. A job name opens
+  // the record at /job-progress?job=; that route stays out of the rail.
+  operations: '/verifier-library',
   field: '/field',
   manager: '/manager',
 };

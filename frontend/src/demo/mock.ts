@@ -2550,7 +2550,7 @@ const routes: Array<[string, RegExp, Handler]> = [
       scheduledStart: null,
       source: 'scope_document',
     };
-    // Surface on the Job Progress list AND openable record in this demo session.
+    // Surface on the Dashboard and as an openable record in this demo session.
     const jobNumber = 9000 + (SHARED_JOBS.length % 900);
     const title = String(b.title ?? 'New job');
     SHARED_JOBS.unshift({

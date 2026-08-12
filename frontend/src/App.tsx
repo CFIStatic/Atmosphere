@@ -254,14 +254,15 @@ function DemoRouteBridge() {
   return null;
 }
 
-/** Preserve ?job= (and intake handoff state) when moving /shared → /job-progress. */
+/** Preserve ?job= (and intake handoff state) when moving /shared → the job record. */
 function SharedJobsRedirect() {
   const location = useLocation();
   const [params] = useSearchParams();
   const q = params.toString();
+  const job = params.get('job');
   return (
     <Navigate
-      to={q ? `/job-progress?${q}` : '/job-progress'}
+      to={job ? `/job-progress?${q}` : '/verifier-library'}
       replace
       state={location.state}
     />
@@ -408,9 +409,10 @@ export default function App() {
           >
             <Route path="/verifier-library" element={null} />
             <Route path="/intake" element={<JobIntakePage />} />
-            {/* Canonical office Job Progress. /shared stays as a redirect so
-                old bookmarks and rail links keep working without colliding
-                with public share pages at /shared/:token. */}
+            {/* Job record (opened from a Dashboard job name). /shared stays as
+                a redirect so old bookmarks keep working without colliding with
+                public share pages at /shared/:token. Bare /job-progress sends
+                people to the Dashboard. */}
             <Route path="/job-progress" element={<SharedDashboardPage />} />
             <Route path="/shared" element={<SharedJobsRedirect />} />
           </Route>

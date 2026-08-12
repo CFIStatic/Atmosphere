@@ -799,7 +799,7 @@ async function createJobFileStepwise(
 /**
  * POST /api/operations/intake/approve
  * One approval: job file + scope + published brief + Field Capture invites.
- * The job file is what Job Progress lists — videos file into it later.
+ * The job file is what the Dashboard lists — videos file into it later.
  */
 jobIntakeRouter.post('/intake/approve', async (req: Request, res: Response, next: NextFunction) => {
   try {

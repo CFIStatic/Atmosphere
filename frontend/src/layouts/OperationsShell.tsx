@@ -6,7 +6,7 @@ const RAIL_W = 220;
 
 /**
  * Operations routes share one persistent Verifier iframe. The library fills
- * the screen; intake and job progress render beside the same anchored rail.
+ * the screen; intake and the job record render beside the same anchored rail.
  */
 export function OperationsShell() {
   const { pathname } = useLocation();

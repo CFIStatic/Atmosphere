@@ -1,5 +1,5 @@
 /**
- * E2E: Approve & invite must land on Job Progress with the new job visible.
+ * E2E: Approve & invite must land on the job record with the new job visible.
  *
  *   VITE_DEMO=1 npm run dev -- --host --port 5174
  *   node scripts/e2e-approve-handoff.mjs
@@ -61,8 +61,8 @@ try {
   const approve = page.getByRole('button', { name: /Approve & invite|Publish brief/i });
   await approve.click();
 
-  // Must land on Job Progress with the job painted (not empty library).
-  await page.getByRole('heading', { name: 'Job Progress' }).waitFor({ timeout: 15_000 });
+  // Must land on the job record (not the empty Dashboard library).
+  await page.getByRole('heading', { name: uniqueTitle }).waitFor({ timeout: 15_000 });
   await page.getByText('Job created').waitFor({ timeout: 10_000 });
   await page.getByText(uniqueTitle).first().waitFor({ timeout: 10_000 });
   // Invite links / copy actions must be available right after approve.
@@ -70,12 +70,12 @@ try {
   await page.screenshot({ path: `${OUT}/03-job-progress.png` });
 
   const body = await page.locator('body').innerText();
-  const hasEmptyLibrary = /No clips yet/i.test(body) && !/Job Progress/i.test(body);
+  const hasEmptyLibrary = /No clips yet/i.test(body) && !/Job created/i.test(body);
   if (hasEmptyLibrary) {
-    throw new Error('Landed on empty video library instead of Job Progress');
+    throw new Error('Landed on empty video library instead of the job record');
   }
   if (!body.includes(uniqueTitle)) {
-    throw new Error(`Job title "${uniqueTitle}" not visible on Job Progress`);
+    throw new Error(`Job title "${uniqueTitle}" not visible on the job record`);
   }
   if (!body.includes('Job created')) {
     throw new Error('Missing "Job created" success banner');
@@ -84,7 +84,7 @@ try {
     throw new Error('Missing invite delivery status / copy link after approve');
   }
 
-  console.log('PASS: Approve & invite opened Job Progress with', uniqueTitle);
+  console.log('PASS: Approve & invite opened the job record with', uniqueTitle);
   console.log('screenshots:', `${OUT}/01-intake.png`, `${OUT}/02-review.png`, `${OUT}/03-job-progress.png`);
   if (errors.length) {
     console.log('console noise (non-fatal):', errors.slice(0, 5));

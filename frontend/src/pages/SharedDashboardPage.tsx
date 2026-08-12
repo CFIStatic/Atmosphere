@@ -10,7 +10,7 @@ import {
   type IntakeCaptureInvite,
 } from '../lib/api';
 import { SpinnerIcon } from '../components/icons';
-import { JobProgressDashboard, jobListStatus } from '../components/shared/JobProgressDashboard';
+import { JobProgressDashboard } from '../components/shared/JobProgressDashboard';
 import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPanel';
 import { ScopeDocPanel } from '../components/shared/ScopeDocPanel';
 import { JobReadinessPanel } from '../components/shared/JobReadinessPanel';
@@ -110,9 +110,15 @@ export function SharedDashboardPage() {
   const [readinessKey, setReadinessKey] = useState(0);
   const [shareFormOpen, setShareFormOpen] = useState(false);
 
+  const stayOnRecord = Boolean(requestedJob || freshFromNav || freshRecord);
+
   useEffect(() => {
     recordIdRef.current = record?.job.id ?? null;
   }, [record]);
+
+  useEffect(() => {
+    if (!stayOnRecord) navigate('/verifier-library', { replace: true });
+  }, [stayOnRecord, navigate]);
 
   function openShare() {
     setShareFormOpen(true);
@@ -201,12 +207,13 @@ export function SharedDashboardPage() {
   }
 
   useEffect(() => {
+    if (!stayOnRecord) return;
     if (freshFromNav) ensureListed(freshFromNav);
     void loadList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Deep-link from Approve & invite: /job-progress?job=<id>
+  // Deep-link from Dashboard job name or Approve & invite: /job-progress?job=<id>
   // When intake already seeded the file, loadList's refresh is enough — a
   // second openJob here raced and could leave the dashboard stuck on Loading.
   useEffect(() => {
@@ -233,11 +240,20 @@ export function SharedDashboardPage() {
     }
   }
 
+  if (!stayOnRecord) return null;
+
   return (
     <>
+      <button
+        type="button"
+        onClick={() => navigate('/verifier-library')}
+        className="mb-3 text-sm font-medium text-ink-500 hover:text-ink-800"
+      >
+        ← Dashboard
+      </button>
       <PageHeader
-        title="Job Progress"
-        description="Each job file — footage files here as crews film."
+        title={record?.job.title ?? 'Job'}
+        description="Scope, parties, invites, and proof days for this job."
         action={
           record ? (
             <button
@@ -260,14 +276,13 @@ export function SharedDashboardPage() {
             <div>
               <p className="text-sm font-semibold text-success-700">Job created</p>
               <p className="mt-0.5 text-sm text-ink-700">
-                <span className="font-medium text-ink-900">{record.job.title}</span> is on Job
-                Progress
+                <span className="font-medium text-ink-900">{record.job.title}</span> is ready
                 {freshInvites.length
                   ? freshInvites.every((i) => i.emailed || !i.email)
                     ? ' — Field Capture invites went out.'
                     : ' — invite links are ready below (some emails did not send).'
                   : '.'}{' '}
-                Footage will land here as they film.
+                Footage will land on the Dashboard as they film.
               </p>
             </div>
             <button
@@ -340,65 +355,29 @@ export function SharedDashboardPage() {
 
       {list === null && !record ? (
         <p className="mt-6 text-sm text-ink-600">Loading…</p>
-      ) : (list?.length ?? 0) === 0 && !record && !loading ? (
+      ) : !record && !loading ? (
         <div className="mt-6">
           <EmptyState
-            title="No jobs yet"
-            hint="Start a job to set the address and invite the crew. Footage files here."
+            title="Job not found"
+            hint="It may have been removed, or this link is out of date. Jobs live on the Dashboard."
           />
           <div className="mt-4">
             <button
               type="button"
-              onClick={() => navigate('/intake')}
+              onClick={() => navigate('/verifier-library')}
               className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900"
             >
-              Start a job
+              Back to Dashboard
             </button>
           </div>
         </div>
       ) : (
         <>
-          {(list?.length ?? 0) >= 1 && (
-            <div className="mt-6 flex gap-2 overflow-x-auto pb-1">
-              {(list ?? []).map((job) => {
-                const on = openId === job.jobId;
-                const status = jobListStatus(job);
-                return (
-                  <button
-                    key={job.jobId}
-                    type="button"
-                    onClick={() => void openJob(job.jobId)}
-                    aria-pressed={on}
-                    className={`shrink-0 rounded-xl border px-4 py-2.5 text-left transition ${
-                      on
-                        ? 'border-brand-300 bg-brand-600/10'
-                        : 'border-line bg-paper-0/60 hover:border-brand-200'
-                    }`}
-                  >
-                    <span className="block text-sm font-semibold text-ink-900">
-                      {job.jobNumber !== null && (
-                        <span className="tabular-nums text-ink-500">#{job.jobNumber} </span>
-                      )}
-                      {job.title}
-                    </span>
-                    <span
-                      className={`mt-0.5 block text-[11px] font-medium ${
-                        status.tone === 'danger' ? 'text-danger-600' : 'text-success-600'
-                      }`}
-                    >
-                      {status.label}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
           <div className="mt-4">
             {loading && !record ? (
               <p className="text-sm text-ink-600">Loading…</p>
             ) : !record ? (
-              <p className="text-sm text-ink-600">Pick a job.</p>
+              <p className="text-sm text-ink-600">Loading…</p>
             ) : (
               <>
                 <JobProgressDashboard

@@ -6,7 +6,7 @@ import type {
   SharedJobSummary,
 } from './api';
 
-/** Build list + detail payloads so Job Progress can paint before the GET returns. */
+/** Build list + detail payloads so the job record can paint before the GET returns. */
 export function handoffFromApprove(
   res: IntakeApproveResult,
   proposal: IntakeProposal,

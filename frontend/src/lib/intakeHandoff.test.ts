@@ -3,7 +3,7 @@ import { handoffFromApprove } from './intakeHandoff';
 import type { IntakeApproveResult, IntakeProposal } from './api';
 
 describe('handoffFromApprove', () => {
-  it('builds a list summary and openable record for Job Progress', () => {
+  it('builds a list summary and openable record for the job file', () => {
     const proposal: IntakeProposal = {
       title: 'Meridian water loss',
       workType: 'mitigation',

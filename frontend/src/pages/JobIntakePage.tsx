@@ -249,8 +249,8 @@ export function JobIntakePage() {
       });
       const handoff = handoffFromApprove(res, proposal, scope);
       setResult(res);
-      // Leave intake immediately — seed Job Progress with the new job file so
-      // it paints even if the list/detail GETs lag or race.
+      // Leave intake immediately — seed the job record so it paints even if
+      // the list/detail GETs lag or race.
       navigate(`/job-progress?job=${encodeURIComponent(res.job.id)}`, {
         replace: true,
         state: {

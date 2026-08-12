@@ -346,7 +346,7 @@
     overflow-x: hidden;
   }
   body[data-atm-rail-only] .app-frame { overflow: hidden; }
-  /* Intake / Job Progress: keep the three office links, hide video filters. */
+  /* Intake / job record: keep the office links, hide video filters. */
   body[data-atm-rail-only] #evidence-nav { display: none; }
   .navitem.nav-icon { justify-content: flex-start; gap: 10px; }
   .navitem.nav-icon svg { flex: none; color: var(--muted); width: 16px; height: 16px; }
@@ -508,6 +508,19 @@
   tr.jobrow td.titlecell .t {
     font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
+  tr.jobrow td.titlecell .job-open {
+    display: block;
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  tr.jobrow td.titlecell .job-open:hover { color: var(--accent); text-decoration: underline; }
   tr.jobrow td.titlecell .id { font-weight: 400; margin-left: 6px; }
   .jobfile { display: flex; align-items: center; gap: 12px; min-width: 0; }
   .jobfile .caret2 { flex: none; color: var(--faint); transition: transform .15s; }
@@ -738,10 +751,6 @@
       <button type="button" class="navitem nav-icon app-nav" data-screen="dashboard">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
         <span class="label">Dashboard</span>
-      </button>
-      <button type="button" class="navitem nav-icon" id="nav-jobprogress" data-tour="nav-job-progress">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
-        <span class="label">Job Progress</span>
       </button>
     </div>
 
@@ -1585,6 +1594,21 @@
   }
 
   /**
+   * Org library keys are job UUIDs. Demo folders (cedar / meridian / …) are
+   * not openable records — clicking those names still expands the folder.
+   */
+  function canOpenJobRecord(key) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key || '');
+  }
+
+  function openJobRecord(jobKey) {
+    if (!canOpenJobRecord(jobKey)) return;
+    var to = '/job-progress?job=' + encodeURIComponent(jobKey);
+    if (EMBEDDED) window.parent.postMessage({ atmosphere: 'navigate', to: to }, '*');
+    else location.href = to;
+  }
+
+  /**
    * A job file's header row — same five columns as a clip, so the folder
    * icon, name, recording status, latest date, and latest uploader line up.
    */
@@ -1605,17 +1629,17 @@
     var uploader = latestUpload
       ? esc(latestUpload.person || '—') + '<small>' + esc(latestUpload.company || '') + '</small>'
       : '—';
+    var nameInner = esc(job.name) + (job.number ? '<span class="id">#' + job.number + '</span>' : '');
+    var nameCell = canOpenJobRecord(key)
+      ? '<button type="button" class="t fname job-open" title="Open job record">' + nameInner + '</button>'
+      : '<div class="t fname">' + nameInner + '</div>';
     return '' +
       '<tr class="jobrow" tabindex="0" data-job="' + esc(key) + '" aria-expanded="' + String(!collapsed) + '">' +
         '<td class="jobpreview"><span class="jobfile">' +
           '<svg class="caret2" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
           '<svg class="folder" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 6.5A1.5 1.5 0 0 1 5 5h4l2 2.5h8a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18z"/></svg>' +
         '</span></td>' +
-        '<td class="titlecell">' +
-          '<div class="t fname">' + esc(job.name) +
-            (job.number ? '<span class="id">#' + job.number + '</span>' : '') +
-          '</div>' +
-        '</td>' +
+        '<td class="titlecell">' + nameCell + '</td>' +
         '<td><span class="chip ' + status.cls + '"><span class="dot"></span>' + status.text + '</span></td>' +
         '<td class="when">' + recordedDay + (recordedStamp ? '<small>' + recordedStamp + '</small>' : '') + '</td>' +
         '<td class="when uploader"><span class="cellrow"><span>' + uploader + '</span></span></td>' +
@@ -1707,10 +1731,22 @@
         state.collapsed[tr.dataset.job] = !state.collapsed[tr.dataset.job];
         render();
       }
-      tr.addEventListener('click', flip);
+      tr.addEventListener('click', function (ev) {
+        if (ev.target.closest('.job-open')) return;
+        flip();
+      });
       tr.addEventListener('keydown', function (ev2) {
+        if (ev2.target.closest && ev2.target.closest('.job-open')) return;
         if (ev2.key === 'Enter' || ev2.key === ' ') { ev2.preventDefault(); flip(); }
       });
+      var openBtn = tr.querySelector('.job-open');
+      if (openBtn) {
+        openBtn.addEventListener('click', function (ev2) {
+          ev2.preventDefault();
+          ev2.stopPropagation();
+          openJobRecord(tr.dataset.job);
+        });
+      }
     });
   }
 
@@ -2343,8 +2379,9 @@
       return;
     }
     if (activeRoute === '/shared' || activeRoute === '/job-progress') {
-      var jobProgress = document.getElementById('nav-jobprogress');
-      if (jobProgress) jobProgress.setAttribute('aria-current', 'true');
+      // Job record is a Dashboard detail — keep Dashboard lit.
+      var dashOnRecord = document.querySelector('#platform-nav .app-nav[data-screen="dashboard"]');
+      if (dashOnRecord) dashOnRecord.setAttribute('aria-current', 'true');
       return;
     }
     if (activeRoute === '/settings') {
@@ -2407,9 +2444,8 @@
   // When the portal is the platform's whole screen, Settings appears at the
   // bottom of this sidebar and hands navigation back to the shell — the
   // portal itself stays a page that knows nothing about the app around it.
-  // Job files is the same handoff for the one thing the portal has no screen
-  // for: setting a job's scope, seeing whether it can be verified yet, and
-  // inviting a subcontractor.
+  // Opening a job name is the same handoff for the record the portal has no
+  // screen for: scope, whether it can be verified yet, and inviting a crew.
   function setScreen(name) {
     var dash = document.getElementById('screen-dashboard');
     if (dash) dash.hidden = name !== 'dashboard';
@@ -2528,14 +2564,14 @@
   initAccountMenu();
 
   function goHome() {
-    // Brand / home lands on Job Progress — where approved jobs show up.
-    activeRoute = '/job-progress';
-    activeRailItem = '';
+    // Brand / home lands on the Dashboard — job folders and clips.
+    activeRoute = '/verifier-library';
+    activeRailItem = 'dashboard';
     syncSidebarActive();
     if (EMBEDDED) {
-      window.parent.postMessage({ atmosphere: 'navigate', to: '/job-progress' }, '*');
+      window.parent.postMessage({ atmosphere: 'navigate', to: '/verifier-library' }, '*');
     } else {
-      location.href = '/job-progress';
+      location.href = '/verifier-library';
     }
   }
 
@@ -2584,15 +2620,6 @@
         activeRailItem = '';
         syncSidebarActive();
         window.parent.postMessage({ atmosphere: 'navigate', to: '/intake' }, '*');
-      });
-    }
-    var navJobProgress = document.getElementById('nav-jobprogress');
-    if (navJobProgress) {
-      navJobProgress.addEventListener('click', function () {
-        activeRoute = '/job-progress';
-        activeRailItem = '';
-        syncSidebarActive();
-        window.parent.postMessage({ atmosphere: 'navigate', to: '/job-progress' }, '*');
       });
     }
     var navSettings = document.getElementById('nav-settings');
