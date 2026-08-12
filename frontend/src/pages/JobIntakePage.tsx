@@ -258,6 +258,7 @@ export function JobIntakePage() {
         state: {
           freshJob: handoff.summary,
           freshRecord: handoff.record,
+          freshInvites: handoff.invites,
           justApproved: true,
         },
       });

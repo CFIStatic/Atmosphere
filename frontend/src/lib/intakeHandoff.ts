@@ -1,5 +1,6 @@
 import type {
   IntakeApproveResult,
+  IntakeCaptureInvite,
   IntakeProposal,
   SharedJobRecord,
   SharedJobSummary,
@@ -10,7 +11,11 @@ export function handoffFromApprove(
   res: IntakeApproveResult,
   proposal: IntakeProposal,
   scope: IntakeProposal['scope'],
-): { summary: SharedJobSummary; record: SharedJobRecord } {
+): {
+  summary: SharedJobSummary;
+  record: SharedJobRecord;
+  invites: IntakeCaptureInvite[];
+} {
   const now = new Date().toISOString();
   const revision = res.briefRevision ?? 1;
   const invites = res.invites ?? [];
@@ -79,5 +84,5 @@ export function handoffFromApprove(
     risks: [],
   };
 
-  return { summary, record };
+  return { summary, record, invites };
 }

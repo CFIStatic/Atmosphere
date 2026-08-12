@@ -133,11 +133,14 @@ sharedJobsRouter.get('/shared', async (req: Request, res: Response, next: NextFu
     }
 
     const jobIds = jobRows.map((j) => j.id as string);
-    const { data: statusRows, error: statusError } = await supabase
-      .from('job_share_status')
-      .select('*')
-      .eq('org_id', orgId)
-      .in('job_id', jobIds);
+    const [{ data: statusRows, error: statusError }, { data: partyRowsRaw }] = await Promise.all([
+      supabase.from('job_share_status').select('*').eq('org_id', orgId).in('job_id', jobIds),
+      supabase
+        .from('job_parties')
+        .select('job_id, revoked_at')
+        .eq('org_id', orgId)
+        .in('job_id', jobIds),
+    ]);
     // A missing/broken readiness view must not hide jobs the office just created.
     if (statusError) {
       console.warn('[shared] job_share_status unavailable:', statusError.message);
@@ -151,18 +154,25 @@ sharedJobsRouter.get('/shared', async (req: Request, res: Response, next: NextFu
       byJob.set(row.job_id, list);
     }
 
+    const partyCountByJob = new Map<string, number>();
+    for (const row of (partyRowsRaw ?? []) as any[]) {
+      if (row.revoked_at) continue;
+      partyCountByJob.set(row.job_id, (partyCountByJob.get(row.job_id) ?? 0) + 1);
+    }
+
     const out = jobRows.map((job) => {
       const partyRows = byJob.get(job.id) ?? [];
       const awaiting = partyRows.length
         ? Math.max(...partyRows.map((r) => Number(r.awaiting_answer ?? 0)), 0)
         : 0;
       const behind = partyRows.filter((r) => !r.revoked_at && !r.up_to_date).length;
+      const liveParties = partyCountByJob.get(job.id) ?? partyRows.filter((r) => !r.revoked_at).length;
       return {
         jobId: job.id as string,
         jobNumber: job.job_number ?? null,
         title: (job.title as string) ?? 'Job',
         status: (job.status as string) ?? null,
-        parties: partyRows.filter((r) => !r.revoked_at).length,
+        parties: liveParties,
         currentRevision: partyRows[0]?.current_revision ?? null,
         behind,
         awaiting,

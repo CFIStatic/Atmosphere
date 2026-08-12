@@ -7,6 +7,7 @@ import {
   type SharedJobRecord,
   type JobScopeItem,
   type ScopeState,
+  type IntakeCaptureInvite,
 } from '../lib/api';
 import { SpinnerIcon } from '../components/icons';
 import { JobProgressDashboard, jobListStatus } from '../components/shared/JobProgressDashboard';
@@ -18,6 +19,7 @@ import { useFeatureTimer } from '../hooks/useFeatureTimer';
 type HandoffState = {
   freshJob?: SharedJobSummary;
   freshRecord?: SharedJobRecord;
+  freshInvites?: IntakeCaptureInvite[];
   justApproved?: boolean;
 };
 
@@ -88,6 +90,10 @@ export function SharedDashboardPage() {
   const freshFromNav = handoff?.freshJob;
   const freshRecord = handoff?.freshRecord;
   const [justApproved, setJustApproved] = useState(Boolean(handoff?.justApproved));
+  const [freshInvites, setFreshInvites] = useState<IntakeCaptureInvite[]>(
+    () => handoff?.freshInvites ?? [],
+  );
+  const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
   useFeatureTimer('job_files');
   const openSeq = useRef(0);
   const recordIdRef = useRef<string | null>(freshRecord?.job.id ?? null);
@@ -248,22 +254,81 @@ export function SharedDashboardPage() {
       {justApproved && record && (
         <div
           role="status"
-          className="mt-4 flex flex-wrap items-start justify-between gap-3 rounded-xl border border-success-200 bg-success-50/70 px-4 py-3"
+          className="mt-4 space-y-3 rounded-xl border border-success-200 bg-success-50/70 px-4 py-3"
         >
-          <div>
-            <p className="text-sm font-semibold text-success-700">Job created</p>
-            <p className="mt-0.5 text-sm text-ink-700">
-              <span className="font-medium text-ink-900">{record.job.title}</span> is on Job
-              Progress. Field Capture invites are out — footage will land here as they film.
-            </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-success-700">Job created</p>
+              <p className="mt-0.5 text-sm text-ink-700">
+                <span className="font-medium text-ink-900">{record.job.title}</span> is on Job
+                Progress
+                {freshInvites.length
+                  ? freshInvites.every((i) => i.emailed || !i.email)
+                    ? ' — Field Capture invites went out.'
+                    : ' — invite links are ready below (some emails did not send).'
+                  : '.'}{' '}
+                Footage will land here as they film.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="shrink-0 text-sm font-medium text-ink-500 hover:text-ink-800"
+              onClick={() => {
+                setJustApproved(false);
+                setFreshInvites([]);
+              }}
+            >
+              Dismiss
+            </button>
           </div>
-          <button
-            type="button"
-            className="shrink-0 text-sm font-medium text-ink-500 hover:text-ink-800"
-            onClick={() => setJustApproved(false)}
-          >
-            Dismiss
-          </button>
+          {freshInvites.length > 0 && (
+            <ul className="space-y-2 border-t border-success-200/70 pt-3">
+              {freshInvites.map((inv) => {
+                const path = inv.external
+                  ? inv.sharePath
+                  : inv.fieldCapturePath || inv.sharePath;
+                const href =
+                  typeof window !== 'undefined' ? `${window.location.origin}${path}` : path;
+                return (
+                  <li
+                    key={inv.id}
+                    className="flex flex-wrap items-center gap-2 rounded-lg bg-paper-0/70 px-3 py-2"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-ink-900">{inv.name}</p>
+                      <p className="truncate text-xs text-ink-500">
+                        {inv.email ?? 'No email on file'}
+                        {' · '}
+                        {inv.emailed
+                          ? 'Emailed'
+                          : inv.email
+                            ? 'Email did not send — copy the link'
+                            : 'Copy their capture link'}
+                      </p>
+                    </div>
+                    <code className="max-w-[14rem] truncate rounded-md bg-paper-100 px-2 py-1 text-[11px] text-ink-700 sm:max-w-xs">
+                      {href}
+                    </code>
+                    <button
+                      type="button"
+                      className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-ink-900"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(href).then(
+                          () => {
+                            setCopiedInviteId(inv.id);
+                            window.setTimeout(() => setCopiedInviteId(null), 2000);
+                          },
+                          () => undefined,
+                        );
+                      }}
+                    >
+                      {copiedInviteId === inv.id ? 'Copied' : 'Copy link'}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       )}
 
