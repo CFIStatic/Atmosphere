@@ -56,7 +56,7 @@ export const WORK_VERIFICATION_TOUR: ProductTourDefinition = {
     {
       id: 'verification-library',
       title: 'Dashboard',
-      body: 'Jobs and clips land here after you start a job. Expand a folder to see the progress board and footage. Use + to invite people, the share icon to send a homeowner or adjuster a link, and the dots for more actions.',
+      body: 'Jobs and clips land here after you start a job. Use + to invite people, the share icon to send a homeowner or adjuster a link, and the dots for more actions. Expand a folder to review footage.',
       route: '/verifier-library',
       simulation: 'verification-library',
       placement: 'center',

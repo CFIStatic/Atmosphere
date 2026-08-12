@@ -534,31 +534,6 @@
   .job-act:hover { color: var(--ink); border-color: var(--line); background: var(--panel); }
   .job-act:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-  tr.jobboard { background: var(--panel); cursor: default; }
-  tr.jobboard td { padding: 0 10px 12px 10px; border-bottom: 1px solid var(--line); }
-  .job-board {
-    margin-left: 96px;
-    padding: 12px 14px;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    background: var(--bg);
-  }
-  .job-board-top { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px; }
-  .job-board h3 { margin: 0; font-size: 13.5px; font-weight: 650; color: var(--ink); }
-  .job-board .sub { margin: 3px 0 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
-  .job-board .pct { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ink); }
-  .job-board .bar { margin-top: 8px; height: 6px; border-radius: 99px; background: var(--line-soft); overflow: hidden; }
-  .job-board .bar > span { display: block; height: 100%; border-radius: 99px; background: var(--accent); }
-  .job-board-stats { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 10px; }
-  .job-board-stats div { min-width: 4.5rem; }
-  .job-board-stats dt { font-size: 11px; color: var(--faint); }
-  .job-board-stats dd { margin: 1px 0 0; font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--ink); }
-  .job-board-stats dd.warn { color: var(--unknown); }
-  .job-board-stats dd.ok { color: var(--pass); }
-  .job-board-people, .job-board-days { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-  .job-board-label { font-size: 11px; font-weight: 650; color: var(--faint); text-transform: uppercase; letter-spacing: .04em; margin-right: 4px; }
-  .job-board .muted { font-size: 12px; color: var(--muted); }
-
   .sheet-narrow { width: min(520px, 100%); height: auto; max-height: min(88vh, 720px); }
   .jf-tabs { display: flex; gap: 4px; padding: 10px 16px 0; background: var(--panel); border-bottom: 1px solid var(--line); }
   .jf-tabs button {
@@ -1724,14 +1699,6 @@
     return role || 'On the job';
   }
 
-  function boardHeadline(b) {
-    if (b.attention) return { title: 'Needs your attention', detail: b.attention, tone: 'danger' };
-    if (!b.days) return { title: 'Waiting for the first update', detail: 'Once crews film on site, daily progress shows up here.', tone: 'neutral' };
-    if (b.inProgress) return { title: 'Work happening on site', detail: 'A crew is on site — waiting for end-of-day video.', tone: 'caution' };
-    if (b.scopePct >= 90) return { title: 'Nearly complete', detail: b.scopePct + '% of tracked work items are done.', tone: 'success' };
-    return { title: 'Work is moving forward', detail: b.days + ' day' + (b.days === 1 ? '' : 's') + ' of field updates on record.', tone: 'success' };
-  }
-
   function boardFromClips(key, items) {
     var daysMap = {};
     items.forEach(function (e) { if (e.workDate) daysMap[e.workDate] = true; });
@@ -1830,44 +1797,8 @@
       } else {
         JOB_BOARD[key] = boardFromClips(key, items);
       }
-      render();
       if (jobSheet.key === key) paintJobFileSheet();
     });
-  }
-
-  function jobBoardRow(key, items) {
-    hydrateJobBoard(key);
-    var b = JOB_BOARD[key];
-    if (!b || b.status === 'loading') {
-      return '<tr class="jobboard"><td colspan="5"><div class="job-board"><p class="muted">Loading progress…</p></div></td></tr>';
-    }
-    var h = boardHeadline(b);
-    var people = (b.people || []).map(function (p) {
-      return '<span class="chip neutral">' + esc(p.name) + (p.role ? ' · ' + esc(roleWord(p.role)) : '') + '</span>';
-    }).join('');
-    var recent = (b.recent || []).map(function (d) {
-      var cls = d.tone === 'success' ? 'green' : d.tone === 'danger' ? 'red' : d.tone === 'caution' ? 'yellow' : 'neutral';
-      return '<span class="chip ' + cls + '">' + esc(dayLabel(d.day)) + ' · ' + esc(d.label) + '</span>';
-    }).join('');
-    return '' +
-      '<tr class="jobboard"><td colspan="5"><div class="job-board">' +
-        '<div class="job-board-top">' +
-          '<div><h3>' + esc(h.title) + '</h3><p class="sub">' + esc(h.detail) + '</p></div>' +
-          (b.scopePct ? '<div class="pct">' + b.scopePct + '%</div>' : '') +
-        '</div>' +
-        (b.scopePct ? '<div class="bar" aria-hidden="true"><span style="width:' + Math.max(b.scopePct, 2) + '%"></span></div>' : '') +
-        '<dl class="job-board-stats">' +
-          '<div><dt>Days on site</dt><dd>' + (b.days || 0) + '</dd></div>' +
-          '<div><dt>Verified</dt><dd class="ok">' + (b.verified || 0) + '</dd></div>' +
-          '<div><dt>On site now</dt><dd' + (b.inProgress ? ' class="warn"' : '') + '>' + (b.inProgress || 0) + '</dd></div>' +
-        '</dl>' +
-        '<div class="job-board-people"><span class="job-board-label">On this job</span>' +
-          (people || '<span class="muted">Nobody invited yet — use + to add a sub, homeowner, or adjuster.</span>') +
-        '</div>' +
-        '<div class="job-board-days"><span class="job-board-label">Recent</span>' +
-          (recent || '<span class="muted">No field days yet.</span>') +
-        '</div>' +
-      '</div></td></tr>';
   }
 
   /**
@@ -1982,8 +1913,7 @@
       rowsEl.innerHTML = order.map(function (k) {
         var collapsed = !!state.collapsed[k];
         var clips = collapsed ? '' : (groups[k] || []).map(clipRow).join('');
-        var board = collapsed ? '' : jobBoardRow(k, groups[k] || []);
-        return jobRow(k, groups[k] || [], collapsed) + board + clips;
+        return jobRow(k, groups[k] || [], collapsed) + clips;
       }).join('');
     } else {
       $('#resultcount').textContent = list.length + ' of ' + EVIDENCE.length + ' clips';
