@@ -1765,7 +1765,11 @@ const XACTIMATE_STATUS: XactimateStatus = {
 
 /* ------------------------------------------------------------ interceptor */
 
-type Handler = (match: RegExpMatchArray, body: Record<string, unknown>) => { status?: number; body: unknown };
+type HandlerResult = { status?: number; body: unknown };
+type Handler = (
+  match: RegExpMatchArray,
+  body: Record<string, unknown>,
+) => HandlerResult | Promise<HandlerResult>;
 
 const routes: Array<[string, RegExp, Handler]> = [
   ['POST', /^\/api\/auth\/login$/, (_m, b) => {
