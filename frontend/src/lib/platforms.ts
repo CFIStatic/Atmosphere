@@ -161,18 +161,15 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
     Icon: DecisionIcon,
     metrics: ['openJobs', 'crewOnJobs', 'awaitingApproval', 'scheduledToday', 'blockedJobs', 'atRiskProjects'],
     groups: [
-      // All office navigation lives in the Verifier sidebar (Dashboard,
-      // Start a job, Job files, Settings). Nothing duplicated here.
-      /* Restore when a shell page needs its own rail again:
       {
-        label: 'Set up',
+        label: 'Work',
         items: [
           { to: '/intake', label: 'Start a job', Icon: BoltIcon },
-          { to: '/job-progress', label: 'Job files', Icon: UsersIcon },
+          { to: '/verifier-library', label: 'Dashboard', Icon: DecisionIcon },
+          { to: '/job-progress', label: 'Job Progress', Icon: UsersIcon },
         ],
       },
       SYSTEM,
-      */
     ],
   },
 

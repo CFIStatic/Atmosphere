@@ -346,6 +346,8 @@
     overflow-x: hidden;
   }
   body[data-atm-rail-only] .app-frame { overflow: hidden; }
+  /* Intake / Job Progress: keep the three office links, hide video filters. */
+  body[data-atm-rail-only] #evidence-nav { display: none; }
   .navitem.nav-icon { justify-content: flex-start; gap: 10px; }
   .navitem.nav-icon svg { flex: none; color: var(--muted); width: 16px; height: 16px; }
   .navitem.nav-icon[aria-current="true"] svg { color: var(--accent); }
@@ -725,13 +727,13 @@
 
     <div class="rail-body">
     <div class="rail-section" id="platform-nav" hidden>
-      <button type="button" class="navitem nav-icon app-nav" data-screen="dashboard">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-        <span class="label">Dashboard</span>
-      </button>
       <button type="button" class="navitem nav-icon" id="nav-start-job" data-tour="nav-start-job">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
         <span class="label">Start a job</span>
+      </button>
+      <button type="button" class="navitem nav-icon app-nav" data-screen="dashboard">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span class="label">Dashboard</span>
       </button>
       <button type="button" class="navitem nav-icon" id="nav-jobprogress" data-tour="nav-job-progress">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>

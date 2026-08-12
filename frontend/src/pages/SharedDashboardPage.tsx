@@ -237,17 +237,26 @@ export function SharedDashboardPage() {
     <>
       <PageHeader
         title="Job Progress"
-        description="See where each job stands — what's done, what's happening on site, and what needs a decision."
+        description="Each job file — footage files here as crews film."
         action={
-          record ? (
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={openShare}
-              className="rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-semibold text-ink-900"
+              onClick={() => navigate('/intake')}
+              className="rounded-lg border border-line bg-paper-0 px-3.5 py-2 text-sm font-semibold text-ink-800 hover:border-brand-200"
             >
-              Share
+              Start a job
             </button>
-          ) : null
+            {record ? (
+              <button
+                type="button"
+                onClick={openShare}
+                className="rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-semibold text-ink-900"
+              >
+                Share
+              </button>
+            ) : null}
+          </div>
         }
       />
 
@@ -344,7 +353,7 @@ export function SharedDashboardPage() {
         <div className="mt-6">
           <EmptyState
             title="No jobs yet"
-            hint="Start a job to set scope and invite the crew — field capture will build the work history here."
+            hint="Start a job to set the address and invite the crew. Footage files here."
           />
           <div className="mt-4">
             <button
@@ -352,7 +361,7 @@ export function SharedDashboardPage() {
               onClick={() => navigate('/intake')}
               className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900"
             >
-              Start a job from scope
+              Start a job
             </button>
           </div>
         </div>

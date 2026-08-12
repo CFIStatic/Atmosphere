@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../components/AppShell';
 import { AddressAutocomplete } from '../components/AddressAutocomplete';
 import {
@@ -327,25 +327,15 @@ export function JobIntakePage() {
   return (
     <>
       <PageHeader
-        eyebrow="Work Verification Platform"
         title="Start a job"
-        description="Enter the site address, optionally upload or paste scope, then approve once to invite Field Capture. Scope is optional — without it, AI describes the video."
-        action={
-          <Link
-            to="/job-progress"
-            className="text-sm font-medium text-brand-600 hover:text-brand-500"
-          >
-            Back to job progress
-          </Link>
-        }
+        description="Address, optional scope, then approve once to invite Field Capture."
       />
 
       <ol className="mb-6 flex flex-wrap gap-2 text-xs font-medium">
         {(
           [
-            ['paste', '1 · Scope'],
+            ['paste', '1 · Address'],
             ['review', '2 · Review'],
-            ['done', '3 · On dashboard'],
           ] as const
         ).map(([id, label]) => (
           <li
