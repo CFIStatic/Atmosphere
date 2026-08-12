@@ -2435,7 +2435,6 @@ const routes: Array<[string, RegExp, Handler]> = [
           reason: excluded ? 'Called out as exclusion in the source text.' : undefined,
         };
       });
-    const claim = text.match(/claim\s*#?\s*([A-Z0-9-]+)/i)?.[1] ?? 'AM-DEMO';
     const addressLine = text
       .split(/\r?\n/)
       .map((l) => l.trim())
@@ -2451,10 +2450,10 @@ const routes: Array<[string, RegExp, Handler]> = [
           address,
           city: 'Austin',
           postalCode: '78702',
-          claimNumber: claim,
+          claimNumber: '',
           briefNote:
             'First published facts for the crew. Edit anything that looks wrong before you approve.',
-          facts: { 'Claim #': claim, Site: address, Source: 'Scope / claim text (office intake)' },
+          facts: { Site: address, Source: 'Scope / claim text (office intake)' },
           scope: lines.length
             ? lines
             : [{ title: 'Confirm scope with the office', state: 'included' }],

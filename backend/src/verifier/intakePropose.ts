@@ -47,13 +47,12 @@ function looksExcluded(raw: string): boolean {
 }
 
 /**
- * Pull a usable address-looking line and a claim number when present.
+ * Pull a usable address-looking line when present.
  */
 function extractMeta(text: string): {
   address: string;
   city: string;
   postalCode: string;
-  claimNumber: string;
   titleHint: string;
 } {
   const lines = text
@@ -64,13 +63,9 @@ function extractMeta(text: string): {
   let address = '';
   let city = '';
   let postalCode = '';
-  let claimNumber = '';
   let titleHint = '';
 
   for (const line of lines.slice(0, 40)) {
-    const claim = line.match(/\b(?:claim|file)\s*(?:#|no\.?|number)?\s*[:\s]?\s*([A-Z0-9-]{5,})\b/i);
-    if (claim && !claimNumber) claimNumber = claim[1]!;
-
     if (
       !address
       && /\d{1,5}\s+\w+/.test(line)
@@ -93,7 +88,7 @@ function extractMeta(text: string): {
     }
   }
 
-  return { address, city, postalCode, claimNumber, titleHint };
+  return { address, city, postalCode, titleHint };
 }
 
 export function proposeIntakeFromText(
@@ -177,7 +172,6 @@ export function proposeIntakeFromText(
     'New job from intake';
 
   const facts: Record<string, string> = {};
-  if (meta.claimNumber) facts['Claim #'] = meta.claimNumber;
   if (address && address !== 'Address to confirm') facts['Site'] = address;
   facts['Source'] = scope.length
     ? 'Scope / claim text (office intake)'
@@ -193,7 +187,7 @@ export function proposeIntakeFromText(
     address,
     city: meta.city,
     postalCode: meta.postalCode,
-    claimNumber: meta.claimNumber,
+    claimNumber: '',
     briefNote: scope.length
       ? 'First published facts for Field Capture. Edit anything wrong before you approve — approving invites your capture team to film this job.'
       : 'No clear scope lines in the paste. You can add lines below, or approve without scope — AI will describe the video.',

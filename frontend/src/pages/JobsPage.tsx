@@ -122,18 +122,6 @@ function NewJobForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: 
             ))}
           </select>
         </div>
-
-        <div className="sm:col-span-2">
-          <label className={labelClass} htmlFor="job-claim">
-            Claim number
-          </label>
-          <input
-            id="job-claim"
-            value={form.claimNumber ?? ''}
-            onChange={(e) => set('claimNumber', e.target.value)}
-            className={`mt-1 ${inputClass}`}
-          />
-        </div>
       </div>
 
       {error && (

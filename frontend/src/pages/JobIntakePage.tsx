@@ -32,8 +32,7 @@ type ExternalInvite = {
   email: string;
 };
 
-const SAMPLE = `Claim #AM-10428
-Property: 1842 Meridian Ave
+const SAMPLE = `Property: 1842 Meridian Ave
 Austin, TX 78702
 
 Scope of work
@@ -239,7 +238,6 @@ export function JobIntakePage() {
         address: proposal.address,
         city: proposal.city || undefined,
         postalCode: proposal.postalCode || undefined,
-        claimNumber: proposal.claimNumber || undefined,
         briefNote: proposal.briefNote,
         facts: proposal.facts,
         scope,
@@ -516,14 +514,6 @@ export function JobIntakePage() {
                   className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
                   value={proposal.postalCode}
                   onChange={(e) => setProposal({ ...proposal, postalCode: e.target.value })}
-                />
-              </label>
-              <label className="block text-xs font-medium text-ink-600">
-                Claim #
-                <input
-                  className="glass-field mt-1 w-full rounded-lg px-3 py-2 text-sm text-ink-900"
-                  value={proposal.claimNumber}
-                  onChange={(e) => setProposal({ ...proposal, claimNumber: e.target.value })}
                 />
               </label>
             </div>

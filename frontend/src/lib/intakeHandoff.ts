@@ -41,7 +41,7 @@ export function handoffFromApprove(
       jobNumber: res.job.jobNumber ?? null,
       title: res.job.title,
       status: 'scheduled',
-      claimNumber: proposal.claimNumber || null,
+      claimNumber: null,
     },
     brief: {
       id: `local-${res.job.id}`,

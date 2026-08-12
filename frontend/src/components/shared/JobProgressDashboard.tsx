@@ -181,7 +181,6 @@ export function JobProgressDashboard({
               {record.job.title}
             </h2>
             <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-ink-500">
-              {record.job.claimNumber && <span>Claim {record.job.claimNumber}</span>}
               {siteAddress && <span>{siteAddress}</span>}
             </div>
           </div>
