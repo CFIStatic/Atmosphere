@@ -53,6 +53,11 @@ const InvestorAnalyticsRoute = lazy(() =>
     default: m.InvestorAnalyticsRoute,
   })),
 );
+const InternalFieldContextRoute = lazy(() =>
+  import('./pages/analytics/AnalyticsRoutes').then((m) => ({
+    default: m.InternalFieldContextRoute,
+  })),
+);
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })),
 );
@@ -415,8 +420,9 @@ export default function App() {
             <Route path="/shared" element={<SharedJobsRedirect />} />
           </Route>
 
-          {/* Growth analytics. Onboarding is required — every figure is scoped to
-              a signed-in staff member, and the guards inside re-check access. */}
+          {/* Growth analytics + internal Field context. Onboarding is required —
+              every figure is scoped to a signed-in Atmosphere staff member, and
+              the guards inside re-check access. Customers never see these. */}
           <Route
             path="/analytics"
             element={
@@ -433,6 +439,16 @@ export default function App() {
               <ProtectedRoute>
                 <RequireOnboarded>
                   <InvestorAnalyticsRoute />
+                </RequireOnboarded>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/analytics/field-context"
+            element={
+              <ProtectedRoute>
+                <RequireOnboarded>
+                  <InternalFieldContextRoute />
                 </RequireOnboarded>
               </ProtectedRoute>
             }

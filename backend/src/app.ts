@@ -56,6 +56,7 @@ import { scopeDocsRouter } from './routes/scopeDocs.js';
 import { jobIntakeRouter } from './routes/jobIntake.js';
 import { fieldIdentityRouter } from './routes/fieldIdentity.js';
 import { fieldAppRouter } from './routes/fieldApp.js';
+import { fieldContextRouter } from './routes/fieldContext.js';
 import { mediaVideoRouter } from './routes/mediaVideo.js';
 import { mediaCatalogRouter } from './routes/mediaCatalog.js';
 import { geometryRouter } from './routes/geometry.js';
@@ -191,6 +192,8 @@ export function createApp(): Express {
   app.use('/api/cyber', cyberRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
+  // More specific than /api/analytics — Field Capture context is Atmosphere-internal only.
+  app.use('/api/analytics/field-context', fieldContextRouter);
   app.use('/api/analytics', analyticsRouter);
   app.use('/api/telemetry', telemetryRouter);
   app.use('/api/profile', profileRouter);

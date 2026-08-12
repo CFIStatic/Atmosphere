@@ -6,7 +6,12 @@ import Foundation
 final class SiteLocator: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published private(set) var siteLabel: String = "Getting your bearings…"
     @Published private(set) var coordinate: CLLocationCoordinate2D?
+    @Published private(set) var accuracyM: Double?
+    @Published private(set) var lastLocation: CLLocation?
     @Published private(set) var unsure: Bool = false
+
+    /// Optional sink for Field Context trail samples.
+    var onLocation: ((CLLocation) -> Void)?
 
     private let manager = CLLocationManager()
     private var jobs: [ExpectedJob] = []
@@ -15,7 +20,9 @@ final class SiteLocator: NSObject, ObservableObject, CLLocationManagerDelegate {
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyBest
+        manager.distanceFilter = 8
         manager.allowsBackgroundLocationUpdates = false
+        manager.pausesLocationUpdatesAutomatically = true
     }
 
     func configure(jobs: [ExpectedJob]) {
@@ -25,16 +32,23 @@ final class SiteLocator: NSObject, ObservableObject, CLLocationManagerDelegate {
     func start() {
         manager.requestWhenInUseAuthorization()
         manager.startUpdatingLocation()
+        if CLLocationManager.headingAvailable() {
+            manager.startUpdatingHeading()
+        }
     }
 
     func stop() {
         manager.stopUpdatingLocation()
+        manager.stopUpdatingHeading()
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let loc = locations.last else { return }
         Task { @MainActor in
             self.coordinate = loc.coordinate
+            self.lastLocation = loc
+            self.accuracyM = loc.horizontalAccuracy >= 0 ? loc.horizontalAccuracy : nil
+            self.onLocation?(loc)
             // Attribution is derived; until the backend geofence is wired we
             // show the nearest expected job address as a soft hint.
             if let first = jobs.first(where: \.placed) {

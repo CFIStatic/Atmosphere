@@ -46,7 +46,27 @@ website uses (simulator default: `http://127.0.0.1:4000`). Tokens stay in
 Keychain — later launches skip connect and open Today. Day films file into
 `job_proofs` for that org. Disconnect only from Account → Disconnect.
 
-**Requirements:** iOS 17+, camera + mic + location when-in-use.
+**Requirements:** iOS 17+, camera + mic + location when-in-use + motion (optional).
+
+## Field context (Apple-allowed collection)
+
+While a day film rolls, the app attests operational signals Apple allows for
+app functionality — never advertising IDs / ATT tracking:
+
+| Bundle | Examples |
+|---|---|
+| **Device & app** | Model, OS, app/build, locale, timezone, screen, IDFV |
+| **Permissions** | Camera, mic, when-in-use location, motion availability |
+| **Capabilities** | LiDAR, cameras, barometer, pedometer, activity |
+| **Environment** | Battery, thermal, network type, free disk |
+| **Location trail** | GPS samples (accuracy, altitude, speed, course) |
+| **Motion** | Activity class, attitude, barometer, steps |
+| **Capture** | A/V seal, duration, hash, storage path |
+
+Synced via `/api/field-app/context/sessions` (+ heartbeat / complete) and
+mirrored onto `job_proofs.device_context`. Atmosphere staff review it at
+**Field context** under internal analytics (`/analytics/field-context`) —
+never on customer Verification / job-file surfaces.
 
 ## Source layout
 

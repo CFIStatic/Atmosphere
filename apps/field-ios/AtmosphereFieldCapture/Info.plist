@@ -34,6 +34,8 @@
 	<string>Field Capture records microphone audio with the day film so the office can hear the site, not only see it.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Location attributes stretches of the day film to the right job — you never pick a job by hand.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Motion and barometer readings help confirm the phone was carried on site during the day film.</string>
 	<key>ATMOSPHERE_API_BASE</key>
 	<string>http://127.0.0.1:4000</string>
 	<key>NSAppTransportSecurity</key>

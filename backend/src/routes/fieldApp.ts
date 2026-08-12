@@ -6,6 +6,11 @@ import { requireOrgContext } from '../lib/orgContext.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { badRequest, HttpError, serviceUnavailable } from '../lib/errors.js';
 import { createUploadUrl, recordProof } from './proofOfWork.js';
+import {
+  completeFieldContextSession,
+  heartbeatFieldContextSession,
+  startFieldContextSession,
+} from '../fieldContext/store.js';
 
 /**
  * Field Capture (App Store) ↔ platform account bridge.
@@ -241,6 +246,89 @@ fieldAppRouter.post(
         access_token: party.access_token,
       };
       res.status(201).json(await recordProof(partyRow, admin, req.body));
+    } catch (err) {
+      if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid request'));
+      else next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/field-app/context/sessions
+ * Open a context session when the day film starts — device / permission /
+ * capability / environment snapshot plus later GPS and motion samples.
+ * Written for Atmosphere-internal review only (not customer job files).
+ */
+fieldAppRouter.post(
+  '/context/sessions',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { orgId, userId, supabase } = await requireOrgContext(req);
+      const body = (req.body ?? {}) as { jobId?: string };
+      if (!body.jobId) throw badRequest('jobId is required');
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', userId)
+        .maybeSingle();
+      const party = await ensureFieldParty(
+        supabase,
+        orgId,
+        body.jobId,
+        userId,
+        req.user?.email,
+        (profile as { full_name?: string } | null)?.full_name,
+      );
+      const admin = await adminOrThrow();
+      const result = await startFieldContextSession(admin, {
+        orgId,
+        userId,
+        partyId: party.id,
+        body: req.body,
+      });
+      res.status(201).json(result);
+    } catch (err) {
+      if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid request'));
+      else next(err);
+    }
+  },
+);
+
+/** POST /api/field-app/context/sessions/:sessionId/heartbeat */
+fieldAppRouter.post(
+  '/context/sessions/:sessionId/heartbeat',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { orgId } = await requireOrgContext(req);
+      const admin = await adminOrThrow();
+      res.json(
+        await heartbeatFieldContextSession(admin, {
+          orgId,
+          sessionId: req.params.sessionId,
+          body: req.body,
+        }),
+      );
+    } catch (err) {
+      if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid request'));
+      else next(err);
+    }
+  },
+);
+
+/** POST /api/field-app/context/sessions/:sessionId/complete */
+fieldAppRouter.post(
+  '/context/sessions/:sessionId/complete',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { orgId } = await requireOrgContext(req);
+      const admin = await adminOrThrow();
+      res.json(
+        await completeFieldContextSession(admin, {
+          orgId,
+          sessionId: req.params.sessionId,
+          body: req.body,
+        }),
+      );
     } catch (err) {
       if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid request'));
       else next(err);

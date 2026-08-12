@@ -11,6 +11,7 @@ import { useAnalyticsAccess } from '../../hooks/useAnalytics';
 import { AnalyticsLoading } from './AnalyticsShell';
 import { InternalAnalyticsPage } from './InternalAnalyticsPage';
 import { InvestorAnalyticsPage } from './InvestorAnalyticsPage';
+import { FieldContextPage } from '../FieldContextPage';
 
 /** Internal dashboard: full detail. Investor-scope users are sent to their own view. */
 export function InternalAnalyticsRoute() {
@@ -31,6 +32,17 @@ export function InvestorAnalyticsRoute() {
   if (!access?.scope) return <NoAccess />;
 
   return <InvestorAnalyticsPage canSeeInternal={access.scope === 'internal'} />;
+}
+
+/** Field Capture context — Atmosphere staff only; never a customer surface. */
+export function InternalFieldContextRoute() {
+  const { access, loading } = useAnalyticsAccess();
+
+  if (loading) return <AnalyticsLoading />;
+  if (!access?.scope) return <NoAccess />;
+  if (access.scope !== 'internal') return <Navigate to="/analytics/investor" replace />;
+
+  return <FieldContextPage />;
 }
 
 function NoAccess() {

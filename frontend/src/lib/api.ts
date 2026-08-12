@@ -825,6 +825,74 @@ export interface EvidenceItem {
   lastViewedAt: string | null;
 }
 
+/** One Field Capture filming window with organized Apple-allowed context. */
+export interface FieldContextSessionSummary {
+  id: string;
+  orgId: string;
+  orgName?: string | null;
+  jobId: string;
+  jobTitle?: string | null;
+  partyId: string | null;
+  userId: string | null;
+  proofId: string | null;
+  workDate: string | null;
+  status: string;
+  platform: string;
+  appVersion: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  device: Record<string, unknown>;
+  permissions: Record<string, unknown>;
+  capabilities: Record<string, unknown>;
+  environment: Record<string, unknown>;
+  capture: Record<string, unknown>;
+  locationSummary: Record<string, unknown>;
+  motionSummary: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FieldContextLocationSample {
+  id: string;
+  recordedAt: string;
+  lat: number | null;
+  lon: number | null;
+  accuracyM: number | null;
+  altitudeM: number | null;
+  altitudeAccuracyM: number | null;
+  speedMps: number | null;
+  courseDeg: number | null;
+  floor: number | null;
+}
+
+export interface FieldContextMotionSample {
+  id: string;
+  recordedAt: string;
+  activity: string | null;
+  confidence: number | null;
+  pitchDeg: number | null;
+  rollDeg: number | null;
+  yawDeg: number | null;
+  pressureHpa: number | null;
+  relativeAltitudeM: number | null;
+  stepCount: number | null;
+}
+
+export interface FieldContextSessionDetail {
+  session: FieldContextSessionSummary;
+  categories: {
+    device: Record<string, unknown>;
+    permissions: Record<string, unknown>;
+    capabilities: Record<string, unknown>;
+    environment: Record<string, unknown>;
+    capture: Record<string, unknown>;
+    locationSummary: Record<string, unknown>;
+    motionSummary: Record<string, unknown>;
+  };
+  locations: FieldContextLocationSample[];
+  motion: FieldContextMotionSample[];
+}
+
 export interface CustodyEntry {
   id: string;
   action: string;
@@ -3243,6 +3311,24 @@ export const api = {
       `/api/operations/shared/proof/${proofId}/video`,
       { method: 'GET' },
     ),
+
+  /** Atmosphere-internal Field Capture context (never a customer job-file API). */
+  fieldContextSessions: (params?: { orgId?: string; jobId?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.orgId) q.set('orgId', params.orgId);
+    if (params?.jobId) q.set('jobId', params.jobId);
+    if (params?.limit) q.set('limit', String(params.limit));
+    const suffix = q.toString() ? `?${q}` : '';
+    return request<{ sessions: FieldContextSessionSummary[] }>(
+      `/api/analytics/field-context${suffix}`,
+      { method: 'GET' },
+    );
+  },
+
+  fieldContextSession: (sessionId: string) =>
+    request<FieldContextSessionDetail>(`/api/analytics/field-context/${sessionId}`, {
+      method: 'GET',
+    }),
 
   // ---- Territories ----
   territories: () => request<{ items: Territory[] }>('/api/sales/territories', { method: 'GET' }),

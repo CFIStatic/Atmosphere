@@ -142,6 +142,7 @@ export function InternalAnalyticsPage() {
       refreshing={refreshing}
       generatedAt={data?.generatedAt}
       otherView={{ to: '/analytics/investor', label: 'Investor view' }}
+      extraLinks={[{ to: '/analytics/field-context', label: 'Field context' }]}
     >
       {error && <AnalyticsError message={error.message} onRetry={reload} />}
 

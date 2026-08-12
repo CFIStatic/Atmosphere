@@ -18,6 +18,7 @@ final class FieldDaySession: ObservableObject {
     let recorder = DayFilmRecorder()
     let locator = SiteLocator()
     let roomPlan = RoomPlanBridge()
+    let context = FieldContextCollector()
 
     func loadToday(api: AtmosphereClient) async {
         loadingJobs = true
@@ -35,7 +36,7 @@ final class FieldDaySession: ObservableObject {
         }
     }
 
-    func startDay() async {
+    func startDay(api: AtmosphereClient) async {
         lastError = nil
         guard activeJobId != nil || !jobs.isEmpty else {
             lastError = "No job to film. Create or schedule a job in the Atmosphere dashboard first."
@@ -45,9 +46,18 @@ final class FieldDaySession: ObservableObject {
         do {
             try await recorder.prepare()
             locator.configure(jobs: jobs)
+            locator.onLocation = { [weak self] location in
+                self?.context.noteLocation(location)
+            }
+            context.startCollecting()
             locator.start()
             try recorder.startDay()
             phase = .recording
+
+            if let jobId = activeJobId {
+                let workDate = Self.todayStamp()
+                try? await context.openSession(api: api, jobId: jobId, workDate: workDate)
+            }
         } catch {
             lastError = error.localizedDescription
         }
@@ -83,6 +93,19 @@ final class FieldDaySession: ObservableObject {
             let uploaded = try await MediaUploadClient.uploadFile(localURL: url, uploadURL: uploadURL)
 
             let iso = ISO8601DateFormatter().string(from: Date())
+            let captureFacts: [String: Any] = [
+                "hasVideo": true,
+                "hasAudio": true,
+                "durationSeconds": tracks.duration,
+                "byteSize": uploaded.byteSize,
+                "contentHash": uploaded.sha256Hex as Any,
+                "contentType": "video/mp4",
+                "storagePath": begin.path,
+                "workDate": workDate,
+                "phase": "after",
+            ]
+            let deviceContext = context.organizedDeviceContext(capture: captureFacts)
+
             let recorded = try await api.completeJobProof(
                 jobId: jobId,
                 body: .init(
@@ -95,8 +118,16 @@ final class FieldDaySession: ObservableObject {
                     capturedAt: iso,
                     lat: locator.coordinate?.latitude,
                     lon: locator.coordinate?.longitude,
-                    accuracyM: nil
+                    accuracyM: locator.accuracyM ?? context.lastAccuracyM,
+                    contextSessionId: context.sessionId,
+                    deviceContext: .init(deviceContext)
                 )
+            )
+
+            await context.completeSession(
+                api: api,
+                proofId: recorded.proof?.id,
+                capture: captureFacts
             )
 
             let videoRef = recorded.proof?.id ?? begin.path
@@ -154,7 +185,7 @@ final class FieldDaySession: ObservableObject {
 
             manifest = DayFilmManifest(
                 mediaId: recorded.proof?.id,
-                sessionId: nil,
+                sessionId: context.sessionId,
                 twinId: twinId,
                 geometrySessionId: geometrySessionId,
                 videoRef: videoRef,
@@ -167,12 +198,19 @@ final class FieldDaySession: ObservableObject {
             )
 
             let jobName = jobs.first(where: { $0.id == jobId })?.name ?? jobId
+            let accuracyLabel = locator.accuracyM.map { String(format: "±%.0fm", $0) } ?? "GPS"
             doorChecks = [
-                DoorCheck(id: "1", label: "Filmed on site", detail: siteLabel, ok: true),
+                DoorCheck(id: "1", label: "Filmed on site", detail: "\(siteLabel) · \(accuracyLabel)", ok: true),
                 DoorCheck(id: "2", label: "Video + audio sealed", detail: "mic track present", ok: true),
                 DoorCheck(id: "3", label: "Filed to \(jobName)", detail: "office evidence library", ok: true),
                 DoorCheck(
                     id: "4",
+                    label: "Capture context",
+                    detail: context.sessionId != nil ? "device + trail filed" : "partial",
+                    ok: context.sessionId != nil
+                ),
+                DoorCheck(
+                    id: "5",
                     label: "Twin session",
                     detail: twinId ?? "—",
                     ok: twinId != nil
@@ -187,6 +225,7 @@ final class FieldDaySession: ObservableObject {
             doorChecks = [
                 DoorCheck(id: "err", label: "Upload issue", detail: error.localizedDescription, ok: false),
             ]
+            context.stopCollecting()
         }
     }
 

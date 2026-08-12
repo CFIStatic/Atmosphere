@@ -16,7 +16,11 @@ targets:
     type: application
     platform: iOS
     sources:
-      - AtmosphereFieldCapture
+      - path: AtmosphereFieldCapture
+        excludes:
+          - PrivacyInfo.xcprivacy
+    resources:
+      - path: AtmosphereFieldCapture/PrivacyInfo.xcprivacy
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.atmosphere.fieldcapture
@@ -38,6 +42,7 @@ targets:
         NSCameraUsageDescription: Field Capture films the workday so the office can verify work on site.
         NSMicrophoneUsageDescription: Field Capture records microphone audio with the day film so the office can hear the site, not only see it.
         NSLocationWhenInUseUsageDescription: Location attributes stretches of the day film to the right job.
+        NSMotionUsageDescription: Motion and barometer readings help confirm the phone was carried on site during the day film.
         ATMOSPHERE_API_BASE: http://127.0.0.1:4000
     entitlements:
       path: AtmosphereFieldCapture/FieldCapture.entitlements

@@ -27,6 +27,7 @@ export function AnalyticsShell({
   refreshing,
   generatedAt,
   otherView,
+  extraLinks,
   children,
 }: {
   scope: AnalyticsScope;
@@ -40,6 +41,8 @@ export function AnalyticsShell({
   generatedAt?: string;
   /** Link to the sibling dashboard, when the viewer is allowed both. */
   otherView?: { to: string; label: string };
+  /** Extra internal-only destinations (e.g. Field context). */
+  extraLinks?: Array<{ to: string; label: string }>;
   children: ReactNode;
 }) {
   const { logout } = useAuth();
@@ -55,6 +58,15 @@ export function AnalyticsShell({
           </span>
         </div>
         <div className="flex items-center gap-2">
+          {extraLinks?.map((link) => (
+            <Link
+              key={link.to}
+              to={link.to}
+              className="rounded-lg border border-white/10 px-3 py-2 text-sm text-gray-300 transition hover:bg-white/5"
+            >
+              {link.label}
+            </Link>
+          ))}
           {otherView && (
             <Link
               to={otherView.to}
