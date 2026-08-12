@@ -176,6 +176,29 @@ Actions → Variables) to the backend's https origin — the workflow stamps it
 into the forms' `data-api` on the next deploy. Until then, submitting shows
 a clear could-not-reach message rather than silently failing.
 
+### Single-origin hosting — the site, the app, and the API together
+
+The site and the dashboard are one web app, and the Express backend can host
+them that way. Whenever the static bundles are present next to it —
+`website/` and `frontend/dist` (override with `WEBSITE_DIR` /
+`APP_DIST_DIR`) — the backend serves everything on one origin:
+
+```sh
+(cd frontend && npm run build)
+(cd backend && npm run build && npm start)
+```
+
+Marketing pages come up at `/`, the dashboard SPA owns its routes
+(`/login`, `/dashboard`, …), and the API stays under `/api`. Served this
+way, every page is stamped with `data-app-origin` pointing back at the same
+origin, so the CTAs and the sign-in flow route into the app with zero
+configuration — and because it is all one origin, the session cookie set by
+`signin.html` is the very cookie the dashboard reads: sign in on the
+website, land in the app. In production set `FRONTEND_ORIGIN` to that
+public origin. (The Docker image ships the backend alone today, so this
+layer stays off there; the split Pages + `WEBSITE_API_ORIGIN` +
+`WEBSITE_APP_ORIGIN` deployment keeps working unchanged.)
+
 ### Connecting the site to the product
 
 The marketing → account creation → product chain is wired but dormant until

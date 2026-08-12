@@ -2,6 +2,9 @@ import express, { type Express } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { orgRouter } from './routes/org.js';
@@ -83,6 +86,23 @@ function isAllowedFrontendOrigin(origin: string): boolean {
   return Boolean(alt && config.frontendOrigins.includes(alt));
 }
 
+/**
+ * Single-origin hosting. The marketing site and the dashboard are one web
+ * app: when the static bundles are present next to this package (or pointed
+ * at via WEBSITE_DIR / APP_DIST_DIR), this server hosts everything on one
+ * origin — marketing pages at `/`, the React app on its routes (/login,
+ * /dashboard, …), and the API at /api. Same origin means the session cookie
+ * set by the website's sign-in page is the very cookie the dashboard reads:
+ * sign in on the website, land in the app. Either directory can be absent
+ * (e.g. the Docker image today ships the backend alone) and that hosting
+ * layer simply stays off.
+ */
+const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+const websiteDir = process.env.WEBSITE_DIR ?? path.resolve(moduleDir, '../../website');
+const appDistDir = process.env.APP_DIST_DIR ?? path.resolve(moduleDir, '../../frontend/dist');
+const hasWebsite = fs.existsSync(path.join(websiteDir, 'index.html'));
+const hasAppDist = fs.existsSync(path.join(appDistDir, 'index.html'));
+
 export function createApp(): Express {
   const app = express();
 
@@ -98,8 +118,12 @@ export function createApp(): Express {
   // Behind a proxy/load balancer (needed for correct secure-cookie + rate-limit IP).
   app.set('trust proxy', 1);
 
-  // Security headers.
-  app.use(helmet());
+  // Security headers. When this server also hosts the site and the app,
+  // helmet's default Content-Security-Policy is withheld: it blocks the
+  // site's inline theme script and the media the dashboard loads, and those
+  // pages previously shipped from nginx/Pages with no CSP at all — API-only
+  // deployments keep the full default set.
+  app.use(helmet(hasWebsite || hasAppDist ? { contentSecurityPolicy: false } : {}));
 
   // Structured access logs + request ids (before routers so every path is covered).
   app.use(requestLog);
@@ -279,6 +303,49 @@ export function createApp(): Express {
   app.use('/api/email-marketing', emailMarketingRouter);
   app.use('/api/careers', careersRouter);
   app.use('/api/contact', contactRouter);
+
+  // ---------- Single-origin hosting (see the note above createApp) ----------
+  if (hasWebsite) {
+    // Website pages are served with `data-app-origin` stamped to this very
+    // origin whenever the dashboard build is co-hosted — the same stamp the
+    // Pages deploy workflow applies — so the site's sign-in and signup
+    // surfaces route into the app without any per-host configuration.
+    const pageCache = new Map<string, string>();
+    app.get(/^\/(?:[\w-]+\.html)?$/, (req, res, next) => {
+      const name = req.path === '/' ? 'index.html' : req.path.slice(1);
+      const file = path.join(websiteDir, name);
+      if (!fs.existsSync(file)) return next();
+      // The Host header is caller-controlled; only echo it into the page as
+      // an attribute when it looks like a plain host, never markup.
+      const host = req.get('host') ?? '';
+      if (!hasAppDist || !/^[\w.-]+(:\d+)?$/.test(host)) {
+        res.sendFile(file);
+        return;
+      }
+      const origin = `${req.protocol}://${host}`;
+      const key = `${name} ${origin}`;
+      let html = pageCache.get(key);
+      if (!html) {
+        html = fs
+          .readFileSync(file, 'utf8')
+          .replace('<html lang="en">', `<html lang="en" data-app-origin="${origin}">`);
+        if (pageCache.size < 200) pageCache.set(key, html);
+      }
+      res.type('html').send(html);
+    });
+    app.use(express.static(websiteDir));
+  }
+  if (hasAppDist) {
+    app.use(express.static(appDistDir));
+    // SPA fallback: the React router owns every remaining extensionless path.
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api/') || req.path.includes('.')) {
+        next();
+        return;
+      }
+      res.sendFile(path.join(appDistDir, 'index.html'));
+    });
+  }
 
   // 404 + error handling (must be last).
   app.use(notFound);
