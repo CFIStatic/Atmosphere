@@ -4,7 +4,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { HttpError, badRequest } from '../lib/errors.js';
 import { assessReadiness, type IntakeSource, type JobFacts } from '../verifier/readiness.js';
-import { proposeIntakeFromText } from '../verifier/intakePropose.js';
+import { jobTitleForIntake, proposeIntakeFromText } from '../verifier/intakePropose.js';
 import { partyInviteEmail } from '../verifier/partyInviteEmail.js';
 import { sendSystemMail } from '../lib/systemMail.js';
 import { createAdminClient } from '../lib/supabase.js';
@@ -142,6 +142,7 @@ jobIntakeRouter.post('/jobs/quick-start', async (req: Request, res: Response, ne
   try {
     const { orgId, supabase, userId } = await requireOrgContext(req);
     const input = quickStartSchema.parse(req.body);
+    const jobTitle = jobTitleForIntake(input.title, input.address);
 
     const { data: property, error: propertyError } = await supabase
       .from('crm_properties')
@@ -161,7 +162,7 @@ jobIntakeRouter.post('/jobs/quick-start', async (req: Request, res: Response, ne
       .from('crm_jobs')
       .insert({
         org_id: orgId,
-        title: input.title,
+        title: jobTitle,
         work_type: input.workType,
         property_id: (property as any).id,
         scheduled_start: input.scheduledStart ?? null,
@@ -547,6 +548,7 @@ async function createJobFile(
   input: z.infer<typeof approveSchema>,
 ): Promise<CreatedJobFile> {
   const scopeLines = scopeLinesForDb(input);
+  const jobTitle = jobTitleForIntake(input.title, input.address);
   const invitees = input.invitees.map((person) => ({
     userId: person.userId ?? null,
     fullName: person.fullName,
@@ -558,7 +560,7 @@ async function createJobFile(
 
   const rpc = await supabase.rpc('intake_create_job_file', {
     p_org_id: orgId,
-    p_title: input.title,
+    p_title: jobTitle,
     p_work_type: input.workType,
     p_address: input.address,
     p_city: input.city ?? null,
@@ -643,6 +645,7 @@ async function createJobFileStepwise(
   // Prefer the service-role client for the write path when available so a
   // missing GRANT on job_* tables cannot strand a half-created job file.
   const writer = createAdminClient() ?? supabase;
+  const jobTitle = jobTitleForIntake(input.title, input.address);
 
   const { data: property, error: propertyError } = await writer
     .from('crm_properties')
@@ -666,7 +669,7 @@ async function createJobFileStepwise(
     .from('crm_jobs')
     .insert({
       org_id: orgId,
-      title: input.title,
+      title: jobTitle,
       work_type: input.workType,
       property_id: (property as any).id,
       claim_number: input.claimNumber || null,

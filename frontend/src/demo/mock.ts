@@ -2457,17 +2457,19 @@ const routes: Array<[string, RegExp, Handler]> = [
           reason: excluded ? 'Called out as exclusion in the source text.' : undefined,
         };
       });
+    const typedAddress = String(b.address ?? '').trim();
     const addressLine = text
       .split(/\r?\n/)
       .map((l) => l.trim())
-      .find((l) => /\d{1,5}\s+\w+/.test(l) && /(Ave|St|Street|Rd|Road|Blvd|Dr)\b/i.test(l));
-    const address = (addressLine ?? '1842 Meridian Ave')
+      .find((l) => /\d{1,5}\s+\w+/.test(l) && /(Ave|St|Street|Rd|Road|Blvd|Dr|Court|Ct)\b/i.test(l));
+    const address = (typedAddress || addressLine || '1842 Meridian Ave')
       .replace(/^(property|address|site)\s*[:\-]\s*/i, '')
       .slice(0, 200);
+    const jobName = (address.split(',')[0] || address).trim();
     return {
       body: {
         proposal: {
-          title: `Work at ${address}`,
+          title: jobName,
           workType: /mitigat|water|flood/i.test(text) ? 'mitigation' : 'construction',
           address,
           city: 'Austin',

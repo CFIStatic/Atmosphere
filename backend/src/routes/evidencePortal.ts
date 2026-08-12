@@ -12,6 +12,7 @@ import {
   shareRecipientAllowed,
   shareState,
 } from '../verifier/library.js';
+import { jobTitleForIntake } from '../verifier/intakePropose.js';
 import { shareEmail } from '../verifier/shareEmail.js';
 import { progressShareEmail } from '../verifier/progressShareEmail.js';
 import { buildMailSender } from '../campaigns/mail/index.js';
@@ -218,16 +219,37 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
     let jobs: Array<{ jobId: string; jobName: string; jobNumber: number | null }> = [];
     const { data: jobRows, error: jobsError } = await supabase
       .from('crm_jobs')
-      .select('id, title, job_number, created_at')
+      .select('id, title, job_number, created_at, property_id')
       .eq('org_id', orgId)
       .order('created_at', { ascending: false })
       .limit(200);
     if (jobsError) {
       console.warn('[library] crm_jobs unavailable:', jobsError.message);
     } else {
+      const propertyIds = [
+        ...new Set(
+          ((jobRows ?? []) as any[])
+            .map((j) => j.property_id as string | null)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ];
+      const addrByProperty = new Map<string, string>();
+      if (propertyIds.length) {
+        const { data: props, error: propsError } = await supabase
+          .from('crm_properties')
+          .select('id, address_line1')
+          .in('id', propertyIds);
+        if (propsError) {
+          console.warn('[library] crm_properties unavailable:', propsError.message);
+        } else {
+          for (const p of (props ?? []) as any[]) {
+            if (p.id && p.address_line1) addrByProperty.set(p.id, String(p.address_line1));
+          }
+        }
+      }
       jobs = ((jobRows ?? []) as any[]).map((j) => ({
         jobId: j.id as string,
-        jobName: (j.title as string) || 'Job',
+        jobName: jobTitleForIntake(j.title, addrByProperty.get(j.property_id) ?? ''),
         jobNumber: (j.job_number as number | null) ?? null,
       }));
     }

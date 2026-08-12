@@ -46,6 +46,28 @@ function looksExcluded(raw: string): boolean {
   return /^(do\s*not|exclude|exclusion|out of scope|not in scope)\b/i.test(raw.trim());
 }
 
+/** Street line only — the job file is the site, not a scope bullet. */
+export function titleFromSiteAddress(address: string): string {
+  const raw = address.trim();
+  if (!raw || /^address to confirm$/i.test(raw)) return 'New job';
+  return (raw.split(',')[0] || raw).trim().slice(0, 200);
+}
+
+export function looksLikeScopeTitle(title: string): boolean {
+  const t = title.trim();
+  if (/^\d+[.)]\s+/.test(t)) return true;
+  return /^(do\s*not|extract|remove|demo|set |monitor|replace|install|dry |contain|paint|clean)\b/i.test(
+    t,
+  );
+}
+
+/** Prefer a human-edited title; never keep a numbered scope line as the job name. */
+export function jobTitleForIntake(title: string | undefined, address: string): string {
+  const t = (title ?? '').trim();
+  if (t && !looksLikeScopeTitle(t)) return t.slice(0, 200);
+  return titleFromSiteAddress(address);
+}
+
 /**
  * Pull a usable address-looking line when present.
  */
@@ -53,7 +75,6 @@ function extractMeta(text: string): {
   address: string;
   city: string;
   postalCode: string;
-  titleHint: string;
 } {
   const lines = text
     .split(/\r?\n/)
@@ -63,7 +84,6 @@ function extractMeta(text: string): {
   let address = '';
   let city = '';
   let postalCode = '';
-  let titleHint = '';
 
   for (const line of lines.slice(0, 40)) {
     if (
@@ -82,13 +102,9 @@ function extractMeta(text: string): {
         postalCode = m[3]!;
       }
     }
-
-    if (!titleHint && /(?:water|fire|mold|storm|mitigation|rebuild|restoration)/i.test(line) && line.length < 120) {
-      titleHint = line.slice(0, 120);
-    }
   }
 
-  return { address, city, postalCode, titleHint };
+  return { address, city, postalCode };
 }
 
 export function proposeIntakeFromText(
@@ -107,7 +123,7 @@ export function proposeIntakeFromText(
       );
     }
     return {
-      title: `Work at ${forcedAddress}`.slice(0, 200),
+      title: titleFromSiteAddress(forcedAddress),
       workType: 'mitigation',
       address: forcedAddress.slice(0, 200),
       city: '',
@@ -166,10 +182,7 @@ export function proposeIntakeFromText(
   }
 
   const address = forcedAddress || meta.address || 'Address to confirm';
-  const title =
-    meta.titleHint ||
-    (address && address !== 'Address to confirm' ? `Work at ${address}` : 'New job from intake') ||
-    'New job from intake';
+  const title = jobTitleForIntake('', address);
 
   const facts: Record<string, string> = {};
   if (address && address !== 'Address to confirm') facts['Site'] = address;
