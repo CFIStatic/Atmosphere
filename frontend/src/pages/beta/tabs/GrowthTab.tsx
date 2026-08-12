@@ -7,7 +7,6 @@ import {
   count,
   money,
   moneyCompact,
-  percent,
   type OverviewPayload,
   type RangeParams,
 } from '../../../lib/analyticsApi';
