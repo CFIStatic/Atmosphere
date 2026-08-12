@@ -6,6 +6,7 @@ import { config } from '../config.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { sendSystemMail } from '../lib/systemMail.js';
 import { invitesAnsweredBy, inviteEmail } from '../org/invites.js';
+import { normalizeJoinCode, LookupThrottle } from '../org/joinLookup.js';
 import { MEMBER_ROLES } from '../lib/validation.js';
 import {
   createOrgSchema,
@@ -16,6 +17,58 @@ import {
 import { HttpError } from '../lib/errors.js';
 
 export const orgRouter = Router();
+
+/**
+ * The one org route that runs before login: resolving a join code to the
+ * company's name. The signup page calls it when somebody arrives through the
+ * invite QR code or link (`/signup?join=CODE`) so the very first screen can
+ * say who they are joining — before they have an account to be authenticated
+ * with. Mounted in app.ts ahead of orgRouter, whose requireAuth would
+ * otherwise turn every scan into a 401.
+ */
+export const orgJoinLookupRouter = Router();
+
+// 30 lookups a minute per address: a person scanning a QR code needs one.
+const joinLookupThrottle = new LookupThrottle(30, 60_000);
+
+orgJoinLookupRouter.get(
+  '/join-lookup/:code',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const code = normalizeJoinCode(req.params.code);
+      if (!code) {
+        throw new HttpError(400, 'That does not look like a join code.', 'invalid_join_code');
+      }
+      if (!joinLookupThrottle.allow(req.ip ?? 'unknown', Date.now())) {
+        throw new HttpError(429, 'Too many lookups — try again in a minute.', 'lookup_throttled');
+      }
+
+      // Service role, because the caller is anonymous by design and RLS keeps
+      // orgs closed to strangers. Without the key the flow still works — the
+      // signup page just cannot name the company ahead of joining.
+      const admin = createAdminClient();
+      if (!admin) {
+        throw new HttpError(503, 'Join code lookup is not available on this server.', 'lookup_unavailable');
+      }
+
+      const { data, error } = await admin
+        .from('orgs')
+        .select('name')
+        .eq('join_code', code)
+        .maybeSingle();
+      if (error) throw new HttpError(500, error.message, 'lookup_failed');
+      if (!data) {
+        throw new HttpError(404, 'That join code did not match any organization.', 'unknown_join_code');
+      }
+
+      // The name and nothing else. Holding the code already entitles somebody
+      // to join this org; it does not entitle them to its member list or id.
+      res.json({ org: { name: (data as { name: string }).name } });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 // Every org route requires an authenticated session.
 orgRouter.use(requireAuth);

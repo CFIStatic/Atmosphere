@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api, humanize, type MemberRole, type OrgInvite } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
 import { SpinnerIcon } from '../icons';
+import { JoinQrCard } from './JoinQrCard';
 
 /**
  * Adding somebody to the team.
@@ -9,6 +10,11 @@ import { SpinnerIcon } from '../icons';
  * Joining has always worked by code, and that stays — it works on a job site.
  * What this adds is the record around it: who was asked, whether they have
  * turned up, and a way to withdraw an ask that went to the wrong address.
+ *
+ * The code travels three ways from this panel: read aloud, emailed, and as a
+ * QR code a crew member scans with their phone. All three land on signup with
+ * the company filled in; the account that comes out is linked to the
+ * organization and rides its billing.
  *
  * The email is best-effort and the panel is built to make that unremarkable.
  * If Atmosphere mail is not configured on the server, "we could not email it"
@@ -164,6 +170,12 @@ export function InvitePanel() {
         <p role="alert" className="mt-2 text-xs text-danger-600">
           {error}
         </p>
+      )}
+
+      {joinCode && (
+        <div className="mt-4 rounded-lg border border-line bg-paper-50 p-4">
+          <JoinQrCard code={joinCode} />
+        </div>
       )}
 
       {invites !== null && invites.length > 0 && (

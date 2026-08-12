@@ -20,6 +20,8 @@ import {
   type SetupWizardStep,
 } from '../components/setup/setupWizard';
 import { resolveVerifierSetup } from '../components/setup/verifierSetupOptions';
+import { JoinQrCard } from '../components/team/JoinQrCard';
+import { normalizeJoinCode } from '../lib/joinLink';
 import { EyeIcon, EyeOffIcon, SpinnerIcon, CheckIcon } from '../components/icons';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -53,10 +55,35 @@ export function SignupPage() {
   const [accountSubmitting, setAccountSubmitting] = useState(false);
   const [accountNotice, setAccountNotice] = useState<string | null>(null);
 
+  // Arriving through the invite QR code / link: /signup?join=CODE. The code is
+  // the same org join code as ever, just carried in the URL — so the scan
+  // lands with "join" preselected and the code already typed.
+  const invitedJoinCode = normalizeJoinCode(searchParams.get('join'));
+
   // Step 2 — organization
-  const [mode, setMode] = useState<OrgMode>('create');
+  const [mode, setMode] = useState<OrgMode>(invitedJoinCode ? 'join' : 'create');
   const [orgName, setOrgName] = useState('');
-  const [joinCode, setJoinCode] = useState('');
+  const [joinCode, setJoinCode] = useState(invitedJoinCode ?? '');
+
+  // Who the code belongs to, when the server can say — the difference between
+  // "enter a code" and "you are joining Ortiz Restoration". Best-effort: no
+  // name, same flow.
+  const [invitedOrgName, setInvitedOrgName] = useState<string | null>(null);
+  useEffect(() => {
+    if (!invitedJoinCode) return;
+    let cancelled = false;
+    api
+      .lookupJoinCode(invitedJoinCode)
+      .then((res) => {
+        if (!cancelled) setInvitedOrgName(res.org.name);
+      })
+      .catch(() => {
+        /* unknown code or lookup unavailable — the form still works */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [invitedJoinCode]);
 
   // Step 3 — invite / join result
   const [createdOrg, setCreatedOrg] = useState<Org | null>(null);
@@ -236,6 +263,8 @@ export function SignupPage() {
           title="Your login details"
           subtitle="Organization setup starts on the next screen — about two minutes total."
         >
+          {invitedJoinCode && <InvitedBanner orgName={invitedOrgName} />}
+
           {accountNotice && (
             <div
               role="status"
@@ -342,6 +371,8 @@ export function SignupPage() {
           title="Your organization"
           subtitle="Create a new workspace for your company, or join one that already exists."
         >
+          {invitedJoinCode && <InvitedBanner orgName={invitedOrgName} />}
+
           {error && <Alert>{error}</Alert>}
 
           <div className="mt-5 grid grid-cols-2 gap-2 rounded-lg glass-card p-1">
@@ -378,7 +409,11 @@ export function SignupPage() {
                 autoCapitalize="characters"
                 className={`${inputClass} font-mono tracking-widest`}
               />
-              <p className="mt-2 text-xs text-ink-500">Ask a teammate or admin for your team&apos;s code.</p>
+              <p className="mt-2 text-xs text-ink-500">
+                {invitedJoinCode && joinCode === invitedJoinCode
+                  ? 'Filled in from your invite — just continue.'
+                  : 'Ask a teammate or admin for your team’s code.'}
+              </p>
             </Field>
           )}
 
@@ -439,6 +474,12 @@ export function SignupPage() {
             </div>
           )}
 
+          {mode === 'create' && createdOrg.joinCode && (
+            <div className="mt-4 rounded-xl border border-line bg-paper-50 p-5">
+              <JoinQrCard code={createdOrg.joinCode} />
+            </div>
+          )}
+
           <div className="mt-7 flex flex-wrap items-center justify-between gap-3">
             <span className="text-xs text-ink-500">You can update your profile anytime in Settings.</span>
             <PrimaryButton onClick={() => setStep(4)}>
@@ -475,6 +516,32 @@ export function SignupPage() {
 
 const inputClass =
   'w-full rounded-lg glass-card px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200';
+
+/**
+ * Shown when signup opened from the invite QR code / link. Two jobs: name the
+ * company when the server can (so the person knows the scan took them to the
+ * right place), and say out loud that no card will be asked for — the account
+ * lands under the company's billing, which is the whole point of arriving
+ * through the invite.
+ */
+function InvitedBanner({ orgName }: { orgName: string | null }) {
+  return (
+    <div
+      role="status"
+      className="mt-6 rounded-lg border border-brand-200 bg-brand-50 px-3.5 py-3 text-sm text-ink-800"
+    >
+      {orgName ? (
+        <>
+          You&apos;re joining <strong className="font-semibold">{orgName}</strong>.
+        </>
+      ) : (
+        <>You&apos;ve been invited to join a company on Atmosphere.</>
+      )}{' '}
+      Create your login and your account is connected to the company automatically — billing is
+      already handled by them, so you won&apos;t be asked for payment details.
+    </div>
+  );
+}
 
 function Alert({ children }: { children: ReactNode }) {
   return (

@@ -4,7 +4,7 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
-import { orgRouter } from './routes/org.js';
+import { orgRouter, orgJoinLookupRouter } from './routes/org.js';
 import { analyticsRouter } from './routes/analytics.js';
 import { telemetryRouter } from './routes/telemetry.js';
 import { profileRouter } from './routes/profile.js';
@@ -190,6 +190,9 @@ export function createApp(): Express {
   app.use('/api', healthRouter);
   app.use('/api/cyber', cyberRouter);
   app.use('/api/auth', authRouter);
+  // Before orgRouter: the join-code lookup serves the signup page's QR / link
+  // landing, so it must answer before requireAuth turns the scan into a 401.
+  app.use('/api/org', orgJoinLookupRouter);
   app.use('/api/org', orgRouter);
   app.use('/api/analytics', analyticsRouter);
   app.use('/api/telemetry', telemetryRouter);

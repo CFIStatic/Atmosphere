@@ -57,7 +57,10 @@ test('the email is from Atmosphere, names the org, and the code stands alone', (
     mail.text.split('\n').some((line) => line.trim() === 'ORTIZ-4481'),
     mail.text,
   );
-  assert.match(mail.text, /app\.atmosphere\.example\/signup/);
+  // The link is the same deep link the invite QR encodes: signup opens in
+  // join mode with the code carried along, so the email and the QR land in
+  // one place.
+  assert.match(mail.text, /app\.atmosphere\.example\/signup\?join=ORTIZ-4481/);
   // A workplace invitation, not marketing: no unsubscribe furniture.
   assert.ok(!/unsubscribe/i.test(mail.text));
 });

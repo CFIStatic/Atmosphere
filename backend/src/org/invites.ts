@@ -65,11 +65,18 @@ export function inviteEmail(input: {
 
   lines.push('To join:', '');
   if (input.origin) {
-    lines.push(`  1. Open ${input.origin}/signup and create an account with this email address.`);
+    // The ?join= link is the same one behind the QR code in the invite panel:
+    // signup opens in join mode with the code already filled in, and the
+    // account comes out connected to the company. The code still stands alone
+    // below for anyone reading this on a phone and typing on a laptop.
+    lines.push(
+      `  1. Open ${input.origin}/signup?join=${encodeURIComponent(input.joinCode)} and create an account with this email address.`,
+    );
+    lines.push('  2. Your company is filled in from the link — or enter this code yourself:', '');
   } else {
     lines.push('  1. Open Atmosphere and create an account with this email address.');
+    lines.push('  2. Choose "Join an organization" and enter this code:', '');
   }
-  lines.push('  2. Choose "Join an organization" and enter this code:', '');
   lines.push(`      ${input.joinCode}`, '');
   lines.push(
     'The code is the same for everyone joining this company, so there is nothing',

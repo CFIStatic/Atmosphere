@@ -2818,6 +2818,16 @@ export const api = {
   // ---- Invitations ----
   orgInvites: () => request<{ invites: OrgInvite[] }>('/api/org/invites', { method: 'GET' }),
 
+  /**
+   * Who is behind a join code — for the signup page when somebody arrives via
+   * the invite QR / link, before they have an account. Unauthenticated on the
+   * server; failure only costs the "you are joining <company>" banner.
+   */
+  lookupJoinCode: (code: string) =>
+    request<{ org: { name: string } }>(`/api/org/join-lookup/${encodeURIComponent(code)}`, {
+      method: 'GET',
+    }),
+
   createOrgInvite: (input: { email: string; role?: MemberRole; note?: string }) =>
     request<{ invite: OrgInvite; emailed: boolean; joinCode: string }>('/api/org/invites', {
       method: 'POST',
