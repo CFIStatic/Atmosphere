@@ -485,6 +485,11 @@
   .chip.hold { background: var(--ink); color: var(--panel); }
   .chip.neutral { background: var(--line-soft); color: var(--ink-2); }
   .chip .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  tr.jobrow .chip.unknown .dot { animation: recpulse 1.2s ease-in-out infinite; }
+  @keyframes recpulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .3; }
+  }
 
   .tier {
     display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 11px;
@@ -496,17 +501,17 @@
   /* ---------- job files ---------- */
   tr.jobrow { background: var(--bg); cursor: pointer; }
   tr.jobrow:hover { background: var(--line-soft); }
-  tr.jobrow td { padding: 9px 14px; border-top: 2px solid var(--line); border-bottom: 1px solid var(--line-soft); }
-  .jobfile { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  tr.jobrow td { padding: 9px 10px; border-top: 2px solid var(--line); border-bottom: 1px solid var(--line-soft); }
+  tr.jobrow td.jobpreview { width: 96px; padding-right: 4px; }
+  tr.jobrow td.titlecell { padding-left: 18px; }
+  tr.jobrow td.titlecell .t {
+    font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  tr.jobrow td.titlecell .id { font-weight: 400; margin-left: 6px; }
+  .jobfile { display: flex; align-items: center; gap: 12px; min-width: 0; }
   .jobfile .caret2 { flex: none; color: var(--faint); transition: transform .15s; }
   tr.jobrow[aria-expanded="false"] .caret2 { transform: rotate(-90deg); }
-  .jobfile .folder { flex: none; color: var(--accent); }
-  .jobfile .fname { font-weight: 700; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .jobfile .fname .id { font-weight: 400; margin-left: 4px; }
-  .jobfile .fmeta { margin-left: auto; display: flex; gap: 14px; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
-  .jobfile .fmeta b { color: var(--ink-2); font-weight: 650; font-variant-numeric: tabular-nums; }
-  .jobfile .fmeta .flagged { color: var(--fail); }
-  .jobfile .fmeta .flagged b { color: var(--fail); }
+  .jobfile .folder { flex: none; color: var(--accent); width: 22px; height: 22px; }
 
   /* ---------- row actions ---------- */
   td.uploader .cellrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -1557,38 +1562,75 @@
       '</tr>';
   }
 
+  function clipInstant(e, keys) {
+    for (var i = 0; i < keys.length; i++) {
+      var v = e[keys[i]];
+      if (!v) continue;
+      var t = Date.parse(keys[i] === 'workDate' ? v + 'T12:00:00' : v);
+      if (!isNaN(t)) return t;
+    }
+    return 0;
+  }
+
+  function latestClip(items, keys) {
+    var best = null;
+    var bestT = -1;
+    items.forEach(function (e) {
+      var t = clipInstant(e, keys);
+      if (t >= bestT) { bestT = t; best = e; }
+    });
+    return best;
+  }
+
+  function isActiveRecording(e) {
+    var a = (e.analysis || {}).state;
+    if (a === 'queued') return true;
+    if (a === 'done' || a === 'paired' || a === 'skipped' || a === 'failed') return false;
+    var t = clipInstant(e, ['uploadedAt', 'capturedAt']);
+    return Boolean(t && (Date.now() - t) < 30 * 60 * 1000);
+  }
+
+  function jobRecordingStatus(items) {
+    if (!items.length) return { cls: 'fail', text: 'No recording' };
+    if (items.some(isActiveRecording)) return { cls: 'unknown', text: 'Active recording' };
+    return { cls: 'pass', text: 'Recording' };
+  }
+
   /**
-   * A job file's header row. The numbers are the file's contents, computed —
-   * ten crews filing a day each reads "10 clips · 10 crews", with nobody
-   * having sorted anything into anything.
+   * A job file's header row — same five columns as a clip, so the folder
+   * icon, name, recording status, latest date, and latest uploader line up.
    */
   function jobRow(key, items, collapsed) {
     var job = JOBS[key] || { name: (items[0] && items[0].jobName) || 'Job', number: null };
-    var empty = !items.length;
-    var crews = {};
-    items.forEach(function (e) { crews[e.company] = true; });
-    var crewN = Object.keys(crews).length;
-    var flagged = items.filter(needsAttention).length;
-    var dates = items.map(function (e) { return e.workDate; }).sort();
-    var span = empty
-      ? 'Waiting for video'
-      : dates[0] === dates[dates.length - 1]
-        ? dayLabel(dates[0])
-        : dayLabel(dates[0]) + ' – ' + dayLabel(dates[dates.length - 1]);
-    var meta = empty
-      ? '<span>Waiting for video</span>'
-      : '<span><b>' + items.length + '</b> clip' + (items.length === 1 ? '' : 's') + '</span>' +
-        (crewN ? '<span><b>' + crewN + '</b> crew' + (crewN === 1 ? '' : 's') + '</span>' : '') +
-        (flagged ? '<span class="flagged"><b>' + flagged + '</b> flagged</span>' : '') +
-        '<span>' + span + '</span>';
+    var status = jobRecordingStatus(items);
+    var latestRecorded = latestClip(items, ['capturedAt', 'workDate', 'uploadedAt']);
+    var latestUpload = latestClip(items, ['uploadedAt', 'capturedAt']);
+    var recordedDay = '—';
+    var recordedStamp = '';
+    if (latestRecorded) {
+      var daySrc = latestRecorded.workDate ||
+        (latestRecorded.capturedAt && String(latestRecorded.capturedAt).slice(0, 10)) ||
+        (latestRecorded.uploadedAt && String(latestRecorded.uploadedAt).slice(0, 10));
+      recordedDay = daySrc ? dayLabel(daySrc) : '—';
+      recordedStamp = stamp(latestRecorded.capturedAt || latestRecorded.uploadedAt);
+    }
+    var uploader = latestUpload
+      ? esc(latestUpload.person || '—') + '<small>' + esc(latestUpload.company || '') + '</small>'
+      : '—';
     return '' +
       '<tr class="jobrow" tabindex="0" data-job="' + esc(key) + '" aria-expanded="' + String(!collapsed) + '">' +
-        '<td colspan="5"><span class="jobfile">' +
+        '<td class="jobpreview"><span class="jobfile">' +
           '<svg class="caret2" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
-          '<svg class="folder" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 6.5A1.5 1.5 0 0 1 5 5h4l2 2.5h8a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18z"/></svg>' +
-          '<span class="fname">' + esc(job.name) + (job.number ? '<span class="id">#' + job.number + '</span>' : '') + '</span>' +
-          '<span class="fmeta">' + meta + '</span>' +
+          '<svg class="folder" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 6.5A1.5 1.5 0 0 1 5 5h4l2 2.5h8a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18z"/></svg>' +
         '</span></td>' +
+        '<td class="titlecell">' +
+          '<div class="t fname">' + esc(job.name) +
+            (job.number ? '<span class="id">#' + job.number + '</span>' : '') +
+          '</div>' +
+        '</td>' +
+        '<td><span class="chip ' + status.cls + '"><span class="dot"></span>' + status.text + '</span></td>' +
+        '<td class="when">' + recordedDay + (recordedStamp ? '<small>' + recordedStamp + '</small>' : '') + '</td>' +
+        '<td class="when uploader"><span class="cellrow"><span>' + uploader + '</span></span></td>' +
       '</tr>';
   }
 
