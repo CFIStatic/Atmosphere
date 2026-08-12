@@ -73,9 +73,9 @@ npm run check:migrations --prefix backend
 
 `db/*.sql` are reference/installers — prefer the timestamped migrations.
 
-### Internal analytics access
+### Beta Portal (internal analytics) access
 
-`/analytics` is gated by `public.analytics_staff`. Atmosphere staff emails in
+`/beta` (and legacy `/analytics`) is gated by `public.analytics_staff`. Atmosphere staff emails in
 `ANALYTICS_INTERNAL_EMAILS` (default: `jack@jettx.ai`) are **auto-granted** on
 the next `/api/analytics/access` probe when `SUPABASE_SERVICE_ROLE_KEY` is set —
 no SQL step in preview.
@@ -89,7 +89,7 @@ cd backend && npm run analytics:grant -- someone@company.com internal
 A/B experiments live in `public.experiments` (see migration
 `20260816090000_product_experiments_and_verification_catalog.sql`). Flip
 `status` to `running` to start assigning variants; results appear on
-`/analytics` under **A/B tests**.
+`/beta/product` under **A/B tests**.
 
 ## Health checks
 

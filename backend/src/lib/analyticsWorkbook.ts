@@ -19,6 +19,7 @@ import type {
   RetentionRow,
   SummaryPayload,
 } from './analytics.js';
+import { nanosToCents } from './money.js';
 
 export type Dataset =
   | 'all'
@@ -27,7 +28,31 @@ export type Dataset =
   | 'features'
   | 'plans'
   | 'retention'
-  | 'accounts';
+  | 'accounts'
+  | 'models';
+
+/** Shape returned by admin_metering_analytics — used for the Models workbook. */
+export interface MeteringExportPayload {
+  generatedAt: string;
+  range: { from: string; to: string };
+  byCustomer: Array<{
+    orgId: string;
+    orgName: string;
+    eventCount: number;
+    aiCostNanos: number;
+    computeUnits: number;
+    distinctJobs: number;
+  }>;
+  byWorkflow: Array<{ workflowId: string; eventCount: number; aiCostNanos: number }>;
+  byAgent: Array<{ agentType: string; eventCount: number; aiCostNanos: number }>;
+  byModel: Array<{ provider: string; model: string; eventCount: number; aiCostNanos: number }>;
+  totals: {
+    eventCount: number;
+    aiCostNanos: number;
+    computeUnits: number;
+    distinctOrgs: number;
+  };
+}
 
 const MONEY = '$#,##0.00';
 const COUNT = '#,##0';
@@ -283,7 +308,7 @@ function formatRange(payload: OverviewPayload): string {
 
 function header(payload: OverviewPayload, label: string): string {
   const view = payload.scope === 'internal' ? 'Internal' : 'Investor';
-  return `Atmosphere — ${label} · ${view} view · ${formatRange(payload)} · generated ${new Date(
+  return `Atmosphere Beta Portal — ${label} · ${view} · ${formatRange(payload)} · generated ${new Date(
     payload.generatedAt,
   )
     .toISOString()
@@ -341,7 +366,7 @@ export function buildWorkbook(payload: OverviewPayload, dataset: Dataset = 'all'
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Atmosphere';
   workbook.created = new Date(payload.generatedAt);
-  workbook.title = `Atmosphere growth analytics (${payload.scope})`;
+  workbook.title = `Atmosphere Beta Portal (${payload.scope})`;
 
   const want = (name: Dataset): boolean => dataset === 'all' || dataset === name;
 
@@ -395,6 +420,156 @@ export function buildWorkbook(payload: OverviewPayload, dataset: Dataset = 'all'
 export function workbookFilename(payload: OverviewPayload, dataset: Dataset): string {
   const stamp = new Date(payload.generatedAt).toISOString().slice(0, 10);
   const view = payload.scope === 'internal' ? 'internal' : 'investor';
-  const suffix = dataset === 'all' ? 'growth-analytics' : `growth-${dataset}`;
+  const suffix = dataset === 'all' ? 'beta-portal' : `beta-${dataset}`;
   return `atmosphere-${suffix}-${view}-${stamp}.xlsx`;
+}
+
+function asFiniteNumber(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+}
+
+/**
+ * Models / metering workbook for the Beta Portal Models tab.
+ * Money is written in dollars from nanodollar cost estimates.
+ */
+export function buildMeteringWorkbook(payload: MeteringExportPayload): ExcelJS.Workbook {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Atmosphere';
+  workbook.created = new Date(payload.generatedAt);
+  workbook.title = 'Atmosphere Beta Portal — model performance';
+
+  const from = new Date(payload.range.from).toISOString().slice(0, 10);
+  const to = new Date(payload.range.to).toISOString().slice(0, 10);
+  const note = `Atmosphere — Beta Portal · Models · ${from} → ${to} · generated ${new Date(
+    payload.generatedAt,
+  )
+    .toISOString()
+    .replace('T', ' ')
+    .slice(0, 16)} UTC`;
+
+  const summarySheet = workbook.addWorksheet('Summary');
+  summarySheet.addRow([note]);
+  summarySheet.getRow(1).font = { italic: true, size: 10, color: { argb: 'FF6B7280' } };
+  summarySheet.addRow([]);
+  summarySheet.addRow(['Metric', 'Value', 'Unit']);
+  const summaryRows: [string, number, string][] = [
+    ['AI cost (period)', nanosToCents(asFiniteNumber(payload.totals.aiCostNanos)) / 100, 'USD'],
+    ['Events', asFiniteNumber(payload.totals.eventCount), 'count'],
+    ['Compute units', asFiniteNumber(payload.totals.computeUnits), 'count'],
+    ['Distinct orgs', asFiniteNumber(payload.totals.distinctOrgs), 'count'],
+  ];
+  for (const [metric, value, unit] of summaryRows) {
+    const row = summarySheet.addRow([metric, value, unit]);
+    row.getCell(2).numFmt = unit === 'USD' ? MONEY : COUNT;
+  }
+  summarySheet.getColumn(1).width = 22;
+  summarySheet.getColumn(2).width = 16;
+  summarySheet.getColumn(3).width = 10;
+  dressSheet(summarySheet, 3, 3);
+  summarySheet.getRow(3).eachCell((cell) => {
+    cell.numFmt = 'General';
+  });
+
+  addTable(
+    workbook,
+    'By model',
+    [
+      { header: 'Provider', width: 14, value: (r) => r.provider },
+      { header: 'Model', width: 28, value: (r) => r.model },
+      { header: 'Events', width: 12, format: COUNT, value: (r) => r.eventCount },
+      {
+        header: 'AI cost',
+        width: 14,
+        format: MONEY,
+        value: (r) => nanosToCents(asFiniteNumber(r.aiCostNanos)) / 100,
+      },
+    ],
+    payload.byModel,
+    note,
+  );
+
+  addTable(
+    workbook,
+    'By customer',
+    [
+      { header: 'Organization', width: 28, value: (r) => r.orgName },
+      { header: 'Events', width: 12, format: COUNT, value: (r) => asFiniteNumber(r.eventCount) },
+      { header: 'Jobs', width: 10, format: COUNT, value: (r) => asFiniteNumber(r.distinctJobs) },
+      {
+        header: 'Compute units',
+        width: 14,
+        format: COUNT,
+        value: (r) => asFiniteNumber(r.computeUnits),
+      },
+      {
+        header: 'AI cost',
+        width: 14,
+        format: MONEY,
+        value: (r) => nanosToCents(asFiniteNumber(r.aiCostNanos)) / 100,
+      },
+    ],
+    payload.byCustomer,
+    note,
+  );
+
+  addTable(
+    workbook,
+    'By workflow',
+    [
+      { header: 'Workflow', width: 28, value: (r) => r.workflowId },
+      { header: 'Events', width: 12, format: COUNT, value: (r) => asFiniteNumber(r.eventCount) },
+      {
+        header: 'AI cost',
+        width: 14,
+        format: MONEY,
+        value: (r) => nanosToCents(asFiniteNumber(r.aiCostNanos)) / 100,
+      },
+    ],
+    payload.byWorkflow,
+    note,
+  );
+
+  addTable(
+    workbook,
+    'By agent',
+    [
+      { header: 'Agent', width: 28, value: (r) => r.agentType },
+      { header: 'Events', width: 12, format: COUNT, value: (r) => asFiniteNumber(r.eventCount) },
+      {
+        header: 'AI cost',
+        width: 14,
+        format: MONEY,
+        value: (r) => nanosToCents(asFiniteNumber(r.aiCostNanos)) / 100,
+      },
+    ],
+    payload.byAgent,
+    note,
+  );
+
+  const defs = workbook.addWorksheet('Definitions');
+  defs.addRow(['Metric', 'Definition']);
+  defs.addRow([
+    'AI cost',
+    'Estimated provider cost from private.ai_usage_events (nanodollars → USD). Internal Beta Portal only.',
+  ]);
+  defs.addRow([
+    'Compute units',
+    'Metered compute units attributed to AI usage events in the selected period.',
+  ]);
+  defs.getColumn(1).width = 18;
+  defs.getColumn(2).width = 100;
+  defs.getColumn(2).alignment = { wrapText: true, vertical: 'top' };
+  dressSheet(defs, 2);
+
+  return workbook;
+}
+
+export function meteringWorkbookFilename(payload: MeteringExportPayload): string {
+  const stamp = new Date(payload.generatedAt).toISOString().slice(0, 10);
+  return `atmosphere-beta-models-internal-${stamp}.xlsx`;
 }

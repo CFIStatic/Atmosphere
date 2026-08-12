@@ -21,6 +21,7 @@ import { formatUsd } from '../lib/money';
 import { LEAD_STAGE_LABELS, humanize } from '../lib/api';
 import { METRIC_LABELS, PLATFORMS, type MetricKey, type PlatformId } from '../lib/platforms';
 import { AlertIcon } from '../components/icons';
+import { useAnalyticsAccess } from '../hooks/useAnalytics';
 
 const OPEN_STATUSES = new Set(['draft', 'scheduled', 'in_progress', 'on_hold']);
 
@@ -55,6 +56,7 @@ function isToday(iso: string | null): boolean {
 export function PlatformHomePage({ platform: platformId }: { platform: PlatformId }) {
   const platform = PLATFORMS[platformId];
   const { user, profile } = useAuth();
+  const { access } = useAnalyticsAccess();
 
   const [jobs, setJobs] = useState<JobSummary[] | null>(null);
   const [pm, setPm] = useState<PmOverview | null>(null);
@@ -262,6 +264,26 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
           return <Kpi key={key} label={METRIC_LABELS[key].label} value={value} sub={sub} />;
         })}
       </div>
+
+      {access?.scope && (
+        <Link
+          to="/beta/board"
+          className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-line bg-paper-0 px-5 py-4 transition hover:border-brand-300 hover:bg-brand-50"
+        >
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-brand-600">Beta Portal</p>
+            <p className="mt-1 text-sm font-semibold text-ink-900">
+              Internal analytics — ARR, customers, models, growth
+            </p>
+            <p className="mt-0.5 text-xs text-ink-500">
+              Investor-ready board view · every figure Excel-downloadable
+            </p>
+          </div>
+          <span aria-hidden className="shrink-0 text-xl text-brand-600">
+            →
+          </span>
+        </Link>
+      )}
 
       <div className="mt-6 grid gap-4 lg:grid-cols-5">
         {platformId === 'sales' && (

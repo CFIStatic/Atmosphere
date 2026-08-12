@@ -17,7 +17,14 @@ import {
   scopeAtLeast,
 } from '../lib/analytics.js';
 import { ensureAllowlistedAnalyticsAccess } from '../lib/analyticsAccess.js';
-import { buildWorkbook, workbookFilename, type Dataset } from '../lib/analyticsWorkbook.js';
+import {
+  buildMeteringWorkbook,
+  buildWorkbook,
+  meteringWorkbookFilename,
+  workbookFilename,
+  type Dataset,
+  type MeteringExportPayload,
+} from '../lib/analyticsWorkbook.js';
 import { getAdminMeteringAnalytics } from '../metering/periodAggregation.js';
 
 export const analyticsRouter = Router();
@@ -161,12 +168,12 @@ analyticsRouter.get(
 );
 
 /**
- * GET /api/analytics/export?dataset=all|summary|monthly|features|plans|retention|accounts
+ * GET /api/analytics/export?dataset=all|summary|monthly|features|plans|retention|accounts|models
  *
  * Streams a real .xlsx. The workbook is assembled from the same payload the
  * dashboard renders, so an export can never disagree with the screen — and an
- * investor-scope caller cannot obtain the Accounts sheet, because the payload it
- * is built from has no accounts in it.
+ * investor-scope caller cannot obtain the Accounts or Models sheets, because
+ * those require internal scope.
  */
 analyticsRouter.get('/export', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -179,7 +186,10 @@ analyticsRouter.get('/export', async (req: Request, res: Response, next: NextFun
     }
     const dataset: Dataset = datasetParsed.data;
 
-    if (dataset === 'accounts' && !scopeAtLeast(scope, 'internal')) {
+    if (
+      (dataset === 'accounts' || dataset === 'models') &&
+      !scopeAtLeast(scope, 'internal')
+    ) {
       throw new HttpError(
         403,
         'This report is limited to the internal Atmosphere team.',
@@ -188,9 +198,39 @@ analyticsRouter.get('/export', async (req: Request, res: Response, next: NextFun
     }
 
     const supabase = createUserClient(req.accessToken!);
-    const payload = await getOverview(supabase, scope, from, to, months);
-    const workbook = buildWorkbook(payload, dataset);
-    const filename = workbookFilename(payload, dataset);
+
+    let filename: string;
+    let buffer: ArrayBuffer;
+
+    if (dataset === 'models') {
+      const metering = (await getAdminMeteringAnalytics(
+        supabase,
+        from.toISOString(),
+        to.toISOString(),
+      )) as Omit<MeteringExportPayload, 'generatedAt' | 'range'>;
+      const payload: MeteringExportPayload = {
+        generatedAt: new Date().toISOString(),
+        range: { from: from.toISOString(), to: to.toISOString() },
+        byCustomer: metering.byCustomer ?? [],
+        byWorkflow: metering.byWorkflow ?? [],
+        byAgent: metering.byAgent ?? [],
+        byModel: metering.byModel ?? [],
+        totals: metering.totals ?? {
+          eventCount: 0,
+          aiCostNanos: 0,
+          computeUnits: 0,
+          distinctOrgs: 0,
+        },
+      };
+      const workbook = buildMeteringWorkbook(payload);
+      filename = meteringWorkbookFilename(payload);
+      buffer = await workbook.xlsx.writeBuffer();
+    } else {
+      const payload = await getOverview(supabase, scope, from, to, months);
+      const workbook = buildWorkbook(payload, dataset);
+      filename = workbookFilename(payload, dataset);
+      buffer = await workbook.xlsx.writeBuffer();
+    }
 
     res.setHeader(
       'Content-Type',
@@ -200,7 +240,6 @@ analyticsRouter.get('/export', async (req: Request, res: Response, next: NextFun
     // A spreadsheet of company revenue should not sit in an intermediary cache.
     res.setHeader('Cache-Control', 'no-store');
 
-    const buffer = await workbook.xlsx.writeBuffer();
     res.end(Buffer.from(buffer));
   } catch (err) {
     next(err);

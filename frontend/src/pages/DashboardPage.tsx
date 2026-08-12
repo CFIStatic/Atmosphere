@@ -270,25 +270,25 @@ export function DashboardPage() {
               when the queue is empty, so it only appears when it matters. */}
           <EscalationQueue />
 
-          {/* Growth analytics — only rendered for staff with dashboard access. */}
+          {/* Beta Portal — only rendered for staff with analytics access. */}
           {access?.scope && (
             <Link
-              to={access.scope === 'internal' ? '/analytics' : '/analytics/investor'}
+              to="/beta/board"
               className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-line bg-paper-0 p-5 shadow-card transition hover:border-brand-300 hover:bg-brand-50"
             >
               <div>
                 <p className="text-xs font-medium uppercase tracking-wide text-brand-600">
-                  Growth analytics
+                  Beta Portal
                 </p>
                 <p className="mt-1.5 text-lg font-semibold text-ink-900">
                   {access.scope === 'internal'
-                    ? 'Where the product is used — and what to cut'
-                    : 'Investor dashboard'}
+                    ? 'Internal analytics — ARR, customers, models'
+                    : 'Investor board view'}
                 </p>
                 <p className="mt-1 text-sm text-ink-600">
                   {access.scope === 'internal'
-                    ? 'Hottest features, dead weight to bury, and stickiness plays for the Atmosphere team.'
-                    : 'User growth, seats, MRR/ARR, and aggregate product engagement.'}
+                    ? 'ARR, usage by customer, model performance, and product growth — Excel-ready.'
+                    : 'ARR, MoM growth, users, and aggregate engagement for investor presentations.'}
                 </p>
               </div>
               <span aria-hidden="true" className="shrink-0 text-2xl text-brand-600">

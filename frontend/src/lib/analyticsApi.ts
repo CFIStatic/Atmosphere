@@ -201,7 +201,49 @@ export type ExportDataset =
   | 'features'
   | 'plans'
   | 'retention'
-  | 'accounts';
+  | 'accounts'
+  | 'models';
+
+export interface MeteringByCustomer {
+  orgId: string;
+  orgName: string;
+  eventCount: number;
+  aiCostNanos: number;
+  computeUnits: number;
+  distinctJobs: number;
+}
+
+export interface MeteringByWorkflow {
+  workflowId: string;
+  eventCount: number;
+  aiCostNanos: number;
+}
+
+export interface MeteringByAgent {
+  agentType: string;
+  eventCount: number;
+  aiCostNanos: number;
+}
+
+export interface MeteringByModel {
+  provider: string;
+  model: string;
+  eventCount: number;
+  aiCostNanos: number;
+}
+
+export interface MeteringAnalytics {
+  byCustomer: MeteringByCustomer[];
+  byWorkflow: MeteringByWorkflow[];
+  byAgent: MeteringByAgent[];
+  byModel: MeteringByModel[];
+  totals: {
+    eventCount: number;
+    aiCostNanos: number;
+    computeUnits: number;
+    distinctOrgs: number;
+  };
+}
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
@@ -280,6 +322,10 @@ export const analyticsApi = {
     request<{ experiments: ExperimentStats[] }>(
       `/api/analytics/experiments?${rangeQuery(range)}`,
     ),
+
+  /** AI cost by model / customer / workflow — internal scope only. */
+  metering: (range: RangeParams) =>
+    request<MeteringAnalytics>(`/api/analytics/metering?${rangeQuery(range)}`),
 
   /** Absolute URL for an Excel download — used as an anchor href, so the browser
    *  handles the file save and cookies ride along automatically. */

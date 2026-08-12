@@ -274,16 +274,18 @@ docker compose up --build
 
 Contact / careers forms default to `jack@jettx.ai`.
 
-### Internal monitoring (Atmosphere staff only)
+### Beta Portal (Atmosphere staff only)
 
-Time spent in the product is measured via feature heartbeats and shown on
-**`/analytics`**. Sign in as `jack@jettx.ai` (or any email in
-`ANALYTICS_INTERNAL_EMAILS`) and the dashboard link appears automatically —
-the BFF upserts `analytics_staff` when the service role key is configured.
+Internal analytics lives in the **Beta Portal** at **`/beta`**. Tabs cover
+board-ready ARR / MoM growth, customers & usage, model performance, and product
+intelligence. Every figure is Excel-downloadable. Sign in as `jack@jettx.ai`
+(or any email in `ANALYTICS_INTERNAL_EMAILS`) and the portal link appears in
+the account menu — the BFF upserts `analytics_staff` when the service role key
+is configured. Legacy URLs `/analytics` and `/analytics/investor` redirect here.
 
 A/B experiments: seed/manage rows in `public.experiments`, set `status` to
 `running`, instrument with `useExperiment()` in the UI. Results appear on the
-internal analytics dashboard under **A/B tests**.
+Beta Portal **Product** tab under **A/B tests**.
 
 ## Related docs
 
