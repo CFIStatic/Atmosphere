@@ -124,16 +124,11 @@ struct TodayView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            AtmosphereBarsMark(size: 22)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Atmosphere")
-                    .font(.system(size: 16, weight: .heavy))
-                    .foregroundStyle(FieldTheme.ink)
-                Text(auth.orgName ?? "Field Capture")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(FieldTheme.muted)
-                    .lineLimit(1)
-            }
+            AtmosphereLogo(
+                markSize: 22,
+                titleSize: 16,
+                subtitle: auth.orgName ?? "Field Capture"
+            )
             Spacer()
             Menu {
                 if let email = auth.email {
