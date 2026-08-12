@@ -1,5 +1,6 @@
 import path from 'path';
 import { defineConfig } from 'vite';
+import { atmosphereApiProxy } from './vite.apiProxy';
 
 /**
  * Dev server for the corporate marketing site.
@@ -17,11 +18,7 @@ export default defineConfig({
     // Allow Cloudflare quick-tunnel Host headers in local/cloud-agent previews.
     allowedHosts: true,
     proxy: {
-      '/api': {
-        target: process.env.VITE_BACKEND_URL ?? 'http://localhost:4000',
-        changeOrigin: true,
-        ws: true,
-      },
+      '/api': atmosphereApiProxy(),
     },
   },
 });

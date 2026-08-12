@@ -2314,6 +2314,46 @@ export class ApiError extends Error {
   }
 }
 
+/** Safe JSON parse — Vite's dead-proxy path used to return empty/text bodies. */
+export function parseApiJson(text: string): Record<string, unknown> {
+  if (!text) return {};
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+const BACKEND_UNREACHABLE_MESSAGE =
+  'Atmosphere API is not running. Start it with `cd backend && npm run dev` (port 4000), then try again.';
+
+/**
+ * Turn opaque gateway / proxy failures into an actionable message.
+ * Empty-body 500s are the classic Vite-proxy-when-API-is-down signature.
+ */
+export function apiFailureMessage(
+  status: number,
+  body: Record<string, unknown>,
+  rawText: string,
+  fallbackPrefix = 'Request failed',
+): { message: string; code: string } {
+  const explicit = typeof body.error === 'string' ? body.error.trim() : '';
+  const code = typeof body.code === 'string' && body.code ? body.code : 'error';
+  if (explicit) return { message: explicit, code };
+
+  const emptyOrNonJson = !rawText.trim() || Object.keys(body).length === 0;
+  if (
+    status === 502 ||
+    status === 503 ||
+    status === 504 ||
+    (status === 500 && emptyOrNonJson)
+  ) {
+    return { message: BACKEND_UNREACHABLE_MESSAGE, code: 'backend_unreachable' };
+  }
+
+  return { message: `${fallbackPrefix} (${status})`, code };
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   let res: Response;
   try {
@@ -2326,15 +2366,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       },
     });
   } catch {
-    throw new ApiError(0, 'Network error — is the backend running?', 'network_error');
+    throw new ApiError(0, BACKEND_UNREACHABLE_MESSAGE, 'network_error');
   }
 
   const text = await res.text();
-  const body = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+  const body = parseApiJson(text);
 
   if (!res.ok) {
-    const message = (body.error as string) ?? `Request failed (${res.status})`;
-    throw new ApiError(res.status, message, (body.code as string) ?? 'error');
+    const { message, code } = apiFailureMessage(res.status, body, text);
+    throw new ApiError(res.status, message, code);
   }
 
   return body as T;
@@ -3392,17 +3432,19 @@ export const api = {
         body: clip,
       });
     } catch {
-      throw new ApiError(0, 'Network error — is the backend running?', 'network_error');
+      throw new ApiError(0, BACKEND_UNREACHABLE_MESSAGE, 'network_error');
     }
 
     const text = await res.text();
-    const body = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+    const body = parseApiJson(text);
     if (!res.ok) {
-      throw new ApiError(
+      const { message, code } = apiFailureMessage(
         res.status,
-        (body.error as string) ?? `Transcription failed (${res.status})`,
-        (body.code as string) ?? 'error',
+        body,
+        text,
+        'Transcription failed',
       );
+      throw new ApiError(res.status, message, code);
     }
     return body as { text: string };
   },

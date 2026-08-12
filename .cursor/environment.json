@@ -1,6 +1,7 @@
 {
   "name": "Atmosphere",
   "install": "cd backend && npm install && cd ../frontend && npm install",
+  "start": "bash .cursor/ensure-api.sh --background",
   "ports": [
     { "name": "website", "port": 5173 },
     { "name": "app", "port": 5174 },
@@ -9,8 +10,8 @@
   "terminals": [
     {
       "name": "backend",
-      "command": "cd backend && npm run dev",
-      "description": "Express API on :4000"
+      "command": "bash .cursor/ensure-api.sh --foreground",
+      "description": "Express API on :4000 (idempotent — follows logs if start already launched it)"
     },
     {
       "name": "website",
