@@ -21,8 +21,13 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.atmosphere.fieldcapture
         PRODUCT_NAME: Field Capture
-        DEVELOPMENT_TEAM: "" # set your Team in Xcode → Signing & Capabilities
+        # Simulator: no Apple Team required — just press Run.
+        # Physical iPhone: Xcode → Signing & Capabilities → your Personal Team.
         CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
+        CODE_SIGNING_ALLOWED[sdk=iphonesimulator*]: "NO"
+        CODE_SIGNING_REQUIRED[sdk=iphonesimulator*]: "NO"
+        CODE_SIGN_IDENTITY[sdk=iphonesimulator*]: "-"
         CURRENT_PROJECT_VERSION: 1
         MARKETING_VERSION: 0.1.0
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

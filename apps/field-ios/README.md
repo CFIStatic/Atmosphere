@@ -34,9 +34,12 @@ xcodegen generate
 open AtmosphereFieldCapture.xcodeproj
 ```
 
-**If Build Failed:** almost always Signing. In Xcode → target **AtmosphereFieldCapture**
-→ **Signing & Capabilities** → check **Automatically manage signing** → pick your
-**Team** (Apple ID). Then Product → Clean Build Folder → Run.
+**Simulator:** no Apple Team needed. After `xcodegen generate`, pick any iPhone
+simulator and press Run (⌘R). Signing is off for `iphonesimulator`.
+
+**Physical iPhone:** Xcode → target **AtmosphereFieldCapture** → **Signing &
+Capabilities** → **Automatically manage signing** → pick your Personal Team
+(your Apple ID is enough). Then Product → Clean Build Folder → Run.
 
 The phone signs in against the same Atmosphere project as the website — no
 Server / API URL field. Run on a LiDAR iPhone for RoomPlan. Simulator can
