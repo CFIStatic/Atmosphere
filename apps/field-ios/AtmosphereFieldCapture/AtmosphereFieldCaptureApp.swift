@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 /**
@@ -59,7 +60,8 @@ struct RootView: View {
             }
         }
         .background(FieldTheme.bg.ignoresSafeArea())
-        .onChange(of: auth.isLinked) { _, linked in
+        // iOS 14+ — the two-parameter onChange(of:initial:_:) needs iOS 17.
+        .onReceive(auth.$isLinked.dropFirst()) { linked in
             if linked {
                 Task { await session.loadToday(api: api) }
             }
