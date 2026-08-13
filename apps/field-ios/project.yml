@@ -7,6 +7,7 @@ options:
   createIntermediateGroups: true
 settings:
   base:
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
     SWIFT_VERSION: "5.9"
     TARGETED_DEVICE_FAMILY: "1"
     INFOPLIST_FILE: AtmosphereFieldCapture/Info.plist
@@ -15,10 +16,12 @@ targets:
   AtmosphereFieldCapture:
     type: application
     platform: iOS
+    deploymentTarget: "17.0"
     sources:
       - AtmosphereFieldCapture
     settings:
       base:
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
         PRODUCT_BUNDLE_IDENTIFIER: com.atmosphere.fieldcapture
         PRODUCT_NAME: Field Capture
         # Simulator: no Apple Team required — just press Run.
