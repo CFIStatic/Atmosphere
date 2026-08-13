@@ -1,0 +1,396 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AFC000000000000000000202 /* DayFilmRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000102 /* DayFilmRecorder.swift */; };
+		AFC000000000000000000203 /* CapturePermissions.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000103 /* CapturePermissions.swift */; };
+		AFC000000000000000000204 /* SiteLocator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000104 /* SiteLocator.swift */; };
+		AFC000000000000000000205 /* RoomPlanBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000105 /* RoomPlanBridge.swift */; };
+		AFC000000000000000000206 /* AtmosphereClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000106 /* AtmosphereClient.swift */; };
+		AFC000000000000000000207 /* MediaUploadClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000107 /* MediaUploadClient.swift */; };
+		AFC000000000000000000208 /* AuthSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000108 /* AuthSession.swift */; };
+		AFC000000000000000000209 /* ApiConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000109 /* ApiConfig.swift */; };
+		AFC00000000000000000020A /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000010A /* KeychainStore.swift */; };
+		AFC00000000000000000020B /* FieldDaySession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000010B /* FieldDaySession.swift */; };
+		AFC00000000000000000020C /* TodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000010C /* TodayView.swift */; };
+		AFC00000000000000000020D /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000010D /* SignInView.swift */; };
+		AFC00000000000000000020E /* RecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000010E /* RecordingView.swift */; };
+		AFC00000000000000000020F /* DoorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000010F /* DoorView.swift */; };
+		AFC000000000000000000210 /* FieldTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000110 /* FieldTheme.swift */; };
+		AFC000000000000000000211 /* AtmosphereBarsMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000111 /* AtmosphereBarsMark.swift */; };
+		AFC000000000000000000212 /* FieldModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000112 /* FieldModels.swift */; };
+		AFC000000000000000000213 /* AtmosphereFieldCaptureApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000101 /* AtmosphereFieldCaptureApp.swift */; };
+		AFC000000000000000000215 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000115 /* Assets.xcassets */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		AFC000000000000000000020 /* Field Capture.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Field Capture.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		AFC000000000000000000101 /* AtmosphereFieldCaptureApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AtmosphereFieldCaptureApp.swift; sourceTree = "<group>"; };
+		AFC000000000000000000102 /* DayFilmRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayFilmRecorder.swift; sourceTree = "<group>"; };
+		AFC000000000000000000103 /* CapturePermissions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapturePermissions.swift; sourceTree = "<group>"; };
+		AFC000000000000000000104 /* SiteLocator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiteLocator.swift; sourceTree = "<group>"; };
+		AFC000000000000000000105 /* RoomPlanBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomPlanBridge.swift; sourceTree = "<group>"; };
+		AFC000000000000000000106 /* AtmosphereClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AtmosphereClient.swift; sourceTree = "<group>"; };
+		AFC000000000000000000107 /* MediaUploadClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaUploadClient.swift; sourceTree = "<group>"; };
+		AFC000000000000000000108 /* AuthSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSession.swift; sourceTree = "<group>"; };
+		AFC000000000000000000109 /* ApiConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApiConfig.swift; sourceTree = "<group>"; };
+		AFC00000000000000000010A /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		AFC00000000000000000010B /* FieldDaySession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldDaySession.swift; sourceTree = "<group>"; };
+		AFC00000000000000000010C /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
+		AFC00000000000000000010D /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
+		AFC00000000000000000010E /* RecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingView.swift; sourceTree = "<group>"; };
+		AFC00000000000000000010F /* DoorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoorView.swift; sourceTree = "<group>"; };
+		AFC000000000000000000110 /* FieldTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldTheme.swift; sourceTree = "<group>"; };
+		AFC000000000000000000111 /* AtmosphereBarsMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AtmosphereBarsMark.swift; sourceTree = "<group>"; };
+		AFC000000000000000000112 /* FieldModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldModels.swift; sourceTree = "<group>"; };
+		AFC000000000000000000113 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AFC000000000000000000114 /* FieldCapture.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FieldCapture.entitlements; sourceTree = "<group>"; };
+		AFC000000000000000000115 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		AFC000000000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		AFC000000000000000000010 = {
+			isa = PBXGroup;
+			children = (
+				AFC000000000000000000012 /* AtmosphereFieldCapture */,
+				AFC000000000000000000011 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		AFC000000000000000000011 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AFC000000000000000000020 /* Field Capture.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		AFC000000000000000000012 /* AtmosphereFieldCapture */ = {
+			isa = PBXGroup;
+			children = (
+				AFC000000000000000000101 /* AtmosphereFieldCaptureApp.swift */,
+				AFC000000000000000000013 /* Capture */,
+				AFC000000000000000000014 /* Location */,
+				AFC000000000000000000015 /* Geometry */,
+				AFC000000000000000000016 /* Network */,
+				AFC000000000000000000017 /* Session */,
+				AFC000000000000000000018 /* UI */,
+				AFC000000000000000000019 /* Theme */,
+				AFC00000000000000000001A /* Models */,
+				AFC000000000000000000115 /* Assets.xcassets */,
+				AFC000000000000000000113 /* Info.plist */,
+				AFC000000000000000000114 /* FieldCapture.entitlements */,
+			);
+			path = AtmosphereFieldCapture;
+			sourceTree = "<group>";
+		};
+		AFC000000000000000000013 /* Capture */ = {
+			isa = PBXGroup;
+			children = (
+				AFC000000000000000000102 /* DayFilmRecorder.swift */,
+				AFC000000000000000000103 /* CapturePermissions.swift */,
+			);
+			path = Capture;
+			sourceTree = "<group>";
+		};
+		AFC000000000000000000014 /* Location */ = {
+			isa = PBXGroup;
+			children = (
+				AFC000000000000000000104 /* SiteLocator.swift */,
+			);
+			path = Location;
+			sourceTree = "<group>";
+		};
+		AFC000000000000000000015 /* Geometry */ = {
+			isa = PBXGroup;
+			children = (
+				AFC000000000000000000105 /* RoomPlanBridge.swift */,
+			);
+			path = Geometry;
+			sourceTree = "<group>";
+		};
+		AFC000000000000000000016 /* Network */ = {
+			isa = PBXGroup;
+			children = (
+				AFC000000000000000000106 /* AtmosphereClient.swift */,
+				AFC000000000000000000107 /* MediaUploadClient.swift */,
+				AFC000000000000000000108 /* AuthSession.swift */,
+				AFC000000000000000000109 /* ApiConfig.swift */,
+				AFC00000000000000000010A /* KeychainStore.swift */,
+			);
+			path = Network;
+			sourceTree = "<group>";
+		};
+		AFC000000000000000000017 /* Session */ = {
+			isa = PBXGroup;
+			children = (
+				AFC00000000000000000010B /* FieldDaySession.swift */,
+			);
+			path = Session;
+			sourceTree = "<group>";
+		};
+		AFC000000000000000000018 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				AFC00000000000000000010C /* TodayView.swift */,
+				AFC00000000000000000010D /* SignInView.swift */,
+				AFC00000000000000000010E /* RecordingView.swift */,
+				AFC00000000000000000010F /* DoorView.swift */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		AFC000000000000000000019 /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				AFC000000000000000000110 /* FieldTheme.swift */,
+				AFC000000000000000000111 /* AtmosphereBarsMark.swift */,
+			);
+			path = Theme;
+			sourceTree = "<group>";
+		};
+		AFC00000000000000000001A /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				AFC000000000000000000112 /* FieldModels.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AFC000000000000000000002 /* AtmosphereFieldCapture */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AFC000000000000000000402 /* Build configuration list for PBXNativeTarget "AtmosphereFieldCapture" */;
+			buildPhases = (
+				AFC000000000000000000003 /* Sources */,
+				AFC000000000000000000005 /* Frameworks */,
+				AFC000000000000000000004 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AtmosphereFieldCapture;
+			productName = "Field Capture";
+			productReference = AFC000000000000000000020 /* Field Capture.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AFC000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					AFC000000000000000000002 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = AFC000000000000000000401 /* Build configuration list for PBXProject "AtmosphereFieldCapture" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = AFC000000000000000000010;
+			productRefGroup = AFC000000000000000000011 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AFC000000000000000000002 /* AtmosphereFieldCapture */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		AFC000000000000000000004 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AFC000000000000000000215 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		AFC000000000000000000003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AFC000000000000000000213 /* AtmosphereFieldCaptureApp.swift in Sources */,
+				AFC000000000000000000202 /* DayFilmRecorder.swift in Sources */,
+				AFC000000000000000000203 /* CapturePermissions.swift in Sources */,
+				AFC000000000000000000204 /* SiteLocator.swift in Sources */,
+				AFC000000000000000000205 /* RoomPlanBridge.swift in Sources */,
+				AFC000000000000000000206 /* AtmosphereClient.swift in Sources */,
+				AFC000000000000000000207 /* MediaUploadClient.swift in Sources */,
+				AFC000000000000000000208 /* AuthSession.swift in Sources */,
+				AFC000000000000000000209 /* ApiConfig.swift in Sources */,
+				AFC00000000000000000020A /* KeychainStore.swift in Sources */,
+				AFC00000000000000000020B /* FieldDaySession.swift in Sources */,
+				AFC00000000000000000020C /* TodayView.swift in Sources */,
+				AFC00000000000000000020D /* SignInView.swift in Sources */,
+				AFC00000000000000000020E /* RecordingView.swift in Sources */,
+				AFC00000000000000000020F /* DoorView.swift in Sources */,
+				AFC000000000000000000210 /* FieldTheme.swift in Sources */,
+				AFC000000000000000000211 /* AtmosphereBarsMark.swift in Sources */,
+				AFC000000000000000000212 /* FieldModels.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		AFC000000000000000000301 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		AFC000000000000000000302 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.9;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		AFC000000000000000000303 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = AtmosphereFieldCapture/FieldCapture.entitlements;
+				CODE_SIGN_IDENTITY[sdk=iphonesimulator*] = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGNING_ALLOWED[sdk=iphonesimulator*] = NO;
+				CODE_SIGNING_REQUIRED[sdk=iphonesimulator*] = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AtmosphereFieldCapture/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.atmosphere.fieldcapture;
+				PRODUCT_NAME = "Field Capture";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		AFC000000000000000000304 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = AtmosphereFieldCapture/FieldCapture.entitlements;
+				CODE_SIGN_IDENTITY[sdk=iphonesimulator*] = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGNING_ALLOWED[sdk=iphonesimulator*] = NO;
+				CODE_SIGNING_REQUIRED[sdk=iphonesimulator*] = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AtmosphereFieldCapture/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.atmosphere.fieldcapture;
+				PRODUCT_NAME = "Field Capture";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AFC000000000000000000401 /* Build configuration list for PBXProject "AtmosphereFieldCapture" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AFC000000000000000000301 /* Debug */,
+				AFC000000000000000000302 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AFC000000000000000000402 /* Build configuration list for PBXNativeTarget "AtmosphereFieldCapture" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AFC000000000000000000303 /* Debug */,
+				AFC000000000000000000304 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = AFC000000000000000000001 /* Project object */;
+}

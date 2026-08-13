@@ -27,15 +27,17 @@ Swift: `DayFilmRecorder` always adds an `AVCaptureDevice` audio input and
 
 ## Open in Xcode
 
+The Xcode project is in the repo. From the Atmosphere folder:
+
 ```bash
-brew install xcodegen   # once
-cd apps/field-ios
-xcodegen generate
-open AtmosphereFieldCapture.xcodeproj
+git checkout main
+git pull origin main
+open apps/field-ios/AtmosphereFieldCapture.xcodeproj
 ```
 
-**Simulator:** no Apple Team needed. After `xcodegen generate`, pick any iPhone
-simulator and press Run (⌘R). Signing is off for `iphonesimulator`.
+You do not need `xcodegen`. Pick an iPhone simulator and press Run (⌘R).
+
+**Simulator:** no Apple Team needed. Signing is off for `iphonesimulator`.
 
 **Physical iPhone:** Xcode → target **AtmosphereFieldCapture** → **Signing &
 Capabilities** → **Automatically manage signing** → pick your Personal Team
