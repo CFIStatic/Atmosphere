@@ -51,7 +51,8 @@ the Atmosphere dashboard). Tokens stay in Keychain — later launches skip
 connect and open Today. Day films file into `job_proofs` for that org.
 Disconnect only from Account → Disconnect.
 
-**Requirements:** iOS 17+, camera + mic + location when-in-use.
+**Requirements:** iOS 16+, camera + mic + location when-in-use. RoomPlan
+twin capture additionally needs a LiDAR iPhone.
 
 ## Source layout
 

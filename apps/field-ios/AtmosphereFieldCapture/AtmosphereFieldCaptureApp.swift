@@ -59,7 +59,7 @@ struct RootView: View {
             }
         }
         .background(FieldTheme.bg.ignoresSafeArea())
-        .onChange(of: auth.isLinked) { _, linked in
+        .onChange(of: auth.isLinked) { linked in
             if linked {
                 Task { await session.loadToday(api: api) }
             }
