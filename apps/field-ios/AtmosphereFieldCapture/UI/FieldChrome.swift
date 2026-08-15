@@ -60,12 +60,17 @@ struct FieldJobCard: View {
                     Text(job.address)
                         .font(.system(size: 12))
                         .foregroundStyle(FieldTheme.muted)
+                    if !job.number.isEmpty {
+                        Text(job.number)
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundStyle(FieldTheme.faint)
+                    }
                     Text(job.roleLabel)
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(FieldTheme.faint)
                 }
                 Spacer()
-                Text(job.filmed == true ? "Filmed" : job.at)
+                Text(job.filmed == true ? (job.filmedOn ?? job.at) : job.at)
                     .font(FieldTheme.mono)
                     .foregroundStyle(job.filmed == true ? FieldTheme.pass : FieldTheme.faint)
                 if selected {

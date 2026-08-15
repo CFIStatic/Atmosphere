@@ -33,3 +33,42 @@ export function restrictToAssigned<T extends { id: string }>(
   if (!assignedIds.size) return [];
   return jobs.filter((job) => assignedIds.has(job.id));
 }
+
+export interface SearchableFieldJob {
+  name?: string | null;
+  address?: string | null;
+  number?: string | null;
+  status?: string | null;
+  at?: string | null;
+  filmedOn?: string | null;
+  role?: string | null;
+}
+
+/** Match every token against name, address, number, status, date, or role. */
+export function searchFieldJobs<T extends SearchableFieldJob>(jobs: T[], query: string): T[] {
+  const tokens = query
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!tokens.length) return jobs;
+  return jobs.filter((job) => {
+    const hay = [job.name, job.address, job.number, job.status, job.at, job.filmedOn, job.role]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return tokens.every((token) => hay.includes(token));
+  });
+}
+
+export function lastFilmedByJob(proofs: { jobId?: string; workDate?: string | null }[]): Map<string, string> {
+  const last = new Map<string, string>();
+  for (const row of proofs) {
+    const id = row.jobId ?? '';
+    const day = (row.workDate ?? '').trim();
+    if (!id || !day) continue;
+    const prev = last.get(id);
+    if (!prev || day > prev) last.set(id, day);
+  }
+  return last;
+}

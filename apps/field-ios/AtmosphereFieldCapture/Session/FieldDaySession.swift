@@ -7,6 +7,7 @@ final class FieldDaySession: ObservableObject {
     @Published var tab: FieldTab = .today
     @Published var jobs: [ExpectedJob] = []
     @Published var assignedJobs: [ExpectedJob] = []
+    @Published var jobSearch: String = ""
     @Published var activeJobId: String?
     @Published var elapsedSeconds: Int = 0
     @Published var siteLabel: String = "Getting your bearings…"
@@ -44,6 +45,14 @@ final class FieldDaySession: ObservableObject {
         }
     }
 
+    func refreshHistory(api: AtmosphereClient) async {
+        do {
+            assignedJobs = try await api.assignedJobs(query: jobSearch)
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
     func createJob(
         api: AtmosphereClient,
         name: String,
@@ -61,14 +70,11 @@ final class FieldDaySession: ObservableObject {
                 city: city.isEmpty ? nil : city,
                 notes: notes.isEmpty ? nil : notes
             )
-            if !assignedJobs.contains(where: { $0.id == job.id }) {
-                assignedJobs.insert(job, at: 0)
-            }
             if !jobs.contains(where: { $0.id == job.id }) {
                 jobs.insert(job, at: 0)
             }
             activeJobId = job.id
-            tab = .jobs
+            tab = .today
             return true
         } catch {
             lastError = error.localizedDescription
@@ -212,6 +218,28 @@ final class FieldDaySession: ObservableObject {
             )
 
             let jobName = (jobs + assignedJobs).first(where: { $0.id == jobId })?.name ?? jobId
+            if let filmed = (jobs + assignedJobs).first(where: { $0.id == jobId }) {
+                let stamp = Self.todayStamp()
+                let record = ExpectedJob(
+                    id: filmed.id,
+                    number: filmed.number,
+                    name: filmed.name,
+                    address: filmed.address,
+                    at: stamp,
+                    placed: true,
+                    status: filmed.status,
+                    filmed: true,
+                    filmedOn: stamp,
+                    assigned: true,
+                    role: filmed.role,
+                    workType: filmed.workType
+                )
+                assignedJobs.removeAll { $0.id == record.id }
+                assignedJobs.insert(record, at: 0)
+                if let idx = jobs.firstIndex(where: { $0.id == record.id }) {
+                    jobs[idx] = record
+                }
+            }
             doorChecks = [
                 DoorCheck(id: "1", label: "Filmed on site", detail: siteLabel, ok: true),
                 DoorCheck(id: "2", label: "Video + audio sealed", detail: "mic track present", ok: true),

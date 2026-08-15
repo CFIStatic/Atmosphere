@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeAssignedJobs, restrictToAssigned } from '../src/field/assignedJobs.js';
+import {
+  lastFilmedByJob,
+  mergeAssignedJobs,
+  restrictToAssigned,
+  searchFieldJobs,
+} from '../src/field/assignedJobs.js';
 import { fieldCreateJobSchema } from '../src/lib/validation.js';
 
 test('owned jobs and live assignments both count as mine', () => {
@@ -42,4 +47,51 @@ test('field create job: name, address, and default work type', () => {
 test('field create job: reject a blank name or a one-letter address', () => {
   assert.throws(() => fieldCreateJobSchema.parse({ name: 'A', address: '12 Main' }));
   assert.throws(() => fieldCreateJobSchema.parse({ name: 'Kitchen', address: '12' }));
+});
+
+test('my jobs search matches name, address, number, or filmed date', () => {
+  const jobs = [
+    {
+      name: '1847 Oak Ridge — kitchen water',
+      address: '1847 Oak Ridge Dr, Charleston',
+      number: '#1041',
+      filmedOn: '2026-08-12',
+      status: 'completed',
+    },
+    {
+      name: '22 Harbor Walk — drywall',
+      address: '22 Harbor Walk, Mount Pleasant',
+      number: '#1044',
+      filmedOn: '2026-08-08',
+      status: 'in_progress',
+      role: 'crew',
+    },
+  ];
+  assert.deepEqual(
+    searchFieldJobs(jobs, 'oak charleston').map((j) => j.number),
+    ['#1041'],
+  );
+  assert.deepEqual(
+    searchFieldJobs(jobs, '1044').map((j) => j.number),
+    ['#1044'],
+  );
+  assert.deepEqual(
+    searchFieldJobs(jobs, '2026-08-08').map((j) => j.number),
+    ['#1044'],
+  );
+  assert.deepEqual(
+    searchFieldJobs(jobs, 'crew').map((j) => j.number),
+    ['#1044'],
+  );
+  assert.equal(searchFieldJobs(jobs, '  ').length, 2);
+});
+
+test('last filmed date is the newest work_date per job', () => {
+  const last = lastFilmedByJob([
+    { jobId: 'a', workDate: '2026-08-01' },
+    { jobId: 'a', workDate: '2026-08-12' },
+    { jobId: 'b', workDate: '2026-07-04' },
+  ]);
+  assert.equal(last.get('a'), '2026-08-12');
+  assert.equal(last.get('b'), '2026-07-04');
 });

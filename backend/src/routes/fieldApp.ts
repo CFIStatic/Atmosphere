@@ -24,7 +24,7 @@ import {
   todayKey,
   type TodayJobInput,
 } from '../field/todayJobs.js';
-import { mergeAssignedJobs, restrictToAssigned } from '../field/assignedJobs.js';
+import { lastFilmedByJob, mergeAssignedJobs, restrictToAssigned, searchFieldJobs } from '../field/assignedJobs.js';
 
 /**
  * Field Capture (App Store) ↔ platform account bridge.
@@ -261,6 +261,7 @@ function asFieldJob(
     propertyId: string | null;
     workType?: string | null;
     filmed?: boolean;
+    filmedOn?: string | null;
   },
   addressById: Map<string, string>,
   roleById: Map<string, string>,
@@ -272,14 +273,30 @@ function asFieldJob(
     number: job.jobNumber != null ? `#${job.jobNumber}` : '',
     name: job.title || 'Job',
     address: (job.propertyId && addressById.get(job.propertyId)) || 'Address on file',
-    at: formatTodayAt(job.scheduledStart, filmed, timeZone),
+    at: job.filmedOn
+      ? formatHistoryAt(job.filmedOn, timeZone)
+      : formatTodayAt(job.scheduledStart, filmed, timeZone),
     status: job.status ?? null,
     placed: Boolean(job.scheduledStart) || filmed,
     filmed,
+    filmedOn: job.filmedOn ?? null,
     assigned: true,
     role: roleById.get(job.id) ?? 'crew',
     workType: job.workType ?? null,
   };
+}
+
+function formatHistoryAt(day: string, timeZone: string): string {
+  try {
+    return new Date(`${day}T12:00:00`).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: timeZone || DEFAULT_FIELD_TIMEZONE,
+    });
+  } catch {
+    return day;
+  }
 }
 
 /**
@@ -349,59 +366,64 @@ fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunct
 
 /**
  * GET /api/field-app/jobs
- * Every open (or filmed) job assigned to this login — not just today's.
+ * Historical record of day films this login has already recorded.
+ * `?q=` searches name, address, job number, status, or filmed date.
  */
 fieldAppRouter.get('/jobs', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { orgId, userId, supabase } = await requireOrgContext(req);
     const timeZone = await orgTimezone(supabase, orgId);
-    const day = todayKey(new Date(), timeZone);
     const assigned = await loadAssigned(supabase, orgId, userId);
     if (!assigned.ids.size) {
       res.json({ jobs: [] });
       return;
     }
 
+    const ids = [...assigned.ids];
     const [{ data: jobs, error }, proofsResult] = await Promise.all([
       supabase
         .from('crm_jobs')
         .select('id, job_number, title, status, scheduled_start, property_id, work_type')
         .eq('org_id', orgId)
-        .in('id', [...assigned.ids])
-        .order('scheduled_start', { ascending: true, nullsFirst: false })
+        .in('id', ids)
         .limit(200),
-      supabase.from('job_proofs').select('job_id').eq('org_id', orgId).eq('work_date', day),
+      supabase.from('job_proofs').select('job_id, work_date').eq('org_id', orgId).in('job_id', ids),
     ]);
     if (error) throw new HttpError(500, error.message, 'field_jobs_failed');
 
-    const filmedIds = new Set(
-      ((proofsResult.data ?? []) as { job_id?: string }[]).map((p) => p.job_id).filter(Boolean),
+    const lastFilmed = lastFilmedByJob(
+      ((proofsResult.data ?? []) as { job_id?: string; work_date?: string }[]).map((row) => ({
+        jobId: row.job_id,
+        workDate: row.work_date,
+      })),
     );
-    const rows = ((jobs ?? []) as JobRow[]).filter((j) => j.status !== 'cancelled' || filmedIds.has(j.id));
+    const rows = ((jobs ?? []) as JobRow[]).filter((j) => lastFilmed.has(j.id));
+    rows.sort((a, b) => (lastFilmed.get(b.id) ?? '').localeCompare(lastFilmed.get(a.id) ?? ''));
     const addressById = await addressByPropertyIds(
       supabase,
       [...new Set(rows.map((j) => j.property_id).filter(Boolean))] as string[],
     );
 
-    res.json({
-      jobs: rows.map((j) =>
-        asFieldJob(
-          {
-            id: j.id,
-            jobNumber: j.job_number ?? null,
-            title: j.title ?? null,
-            status: j.status ?? null,
-            scheduledStart: j.scheduled_start ?? null,
-            propertyId: j.property_id ?? null,
-            workType: j.work_type ?? null,
-            filmed: filmedIds.has(j.id),
-          },
-          addressById,
-          assigned.roleById,
-          timeZone,
-        ),
+    const mapped = rows.map((j) =>
+      asFieldJob(
+        {
+          id: j.id,
+          jobNumber: j.job_number ?? null,
+          title: j.title ?? null,
+          status: j.status ?? null,
+          scheduledStart: j.scheduled_start ?? null,
+          propertyId: j.property_id ?? null,
+          workType: j.work_type ?? null,
+          filmed: true,
+          filmedOn: lastFilmed.get(j.id) ?? null,
+        },
+        addressById,
+        assigned.roleById,
+        timeZone,
       ),
-    });
+    );
+    const q = typeof req.query.q === 'string' ? req.query.q : '';
+    res.json({ jobs: searchFieldJobs(mapped, q) });
   } catch (err) {
     next(err);
   }
@@ -410,7 +432,7 @@ fieldAppRouter.get('/jobs', async (req: Request, res: Response, next: NextFuncti
 /**
  * POST /api/field-app/jobs
  * Open a job from the phone and assign it to this login so it appears on
- * My Jobs and (if scheduled today) Today.
+ * Today. After a day film is filed, it lands in My jobs.
  */
 fieldAppRouter.post('/jobs', async (req: Request, res: Response, next: NextFunction) => {
   try {

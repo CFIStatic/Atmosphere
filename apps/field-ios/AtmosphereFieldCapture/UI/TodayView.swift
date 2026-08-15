@@ -35,7 +35,7 @@ struct TodayView: View {
                                 .font(.system(size: 13))
                                 .foregroundStyle(FieldTheme.muted)
                         } else if session.jobs.isEmpty {
-                            Text("Nothing assigned to you today. Open My jobs to see the rest of your work, or add a job from this phone.")
+                            Text("Nothing assigned to you today. Add a job from this phone, or ask the office to put you on one. My jobs is the record of days you have already filmed.")
                                 .font(.system(size: 13))
                                 .foregroundStyle(FieldTheme.muted)
                             HStack(spacing: 16) {

@@ -21,6 +21,7 @@ struct ExpectedJob: Identifiable, Equatable, Codable {
     let placed: Bool
     let status: String?
     let filmed: Bool?
+    let filmedOn: String?
     let assigned: Bool?
     let role: String?
     let workType: String?
@@ -34,6 +35,7 @@ struct ExpectedJob: Identifiable, Equatable, Codable {
         placed: Bool,
         status: String? = nil,
         filmed: Bool? = nil,
+        filmedOn: String? = nil,
         assigned: Bool? = nil,
         role: String? = nil,
         workType: String? = nil
@@ -46,9 +48,22 @@ struct ExpectedJob: Identifiable, Equatable, Codable {
         self.placed = placed
         self.status = status
         self.filmed = filmed
+        self.filmedOn = filmedOn
         self.assigned = assigned
         self.role = role
         self.workType = workType
+    }
+
+    func matches(_ query: String) -> Bool {
+        let tokens = query
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .split(whereSeparator: { $0.isWhitespace })
+        if tokens.isEmpty { return true }
+        let hay = [name, address, number, status ?? "", at, filmedOn ?? "", roleLabel]
+            .joined(separator: " ")
+            .lowercased()
+        return tokens.allSatisfy { hay.contains($0) }
     }
 
     var roleLabel: String {

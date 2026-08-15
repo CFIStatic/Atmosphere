@@ -54,7 +54,8 @@ describe('phone home-screen manifests', () => {
     expect(html).toContain('Start the day');
     expect(html).toContain('Hold to finish the day');
     expect(html).toContain('Add job &amp; assign to me');
-    expect(html).toContain('Assigned to you');
+    expect(html).toContain('A historical record of every job this login has filmed');
+    expect(html).toContain('id="jobs-search"');
     expect(html).toContain('class="tabbar"');
     expect(html).not.toMatch(/Mitigation|Construction/);
   });

@@ -270,16 +270,19 @@ final class AtmosphereClient: ObservableObject {
         return try await todayJobsViaSupabase()
     }
 
-    func assignedJobs() async throws -> [ExpectedJob] {
+    func assignedJobs(query: String = "") async throws -> [ExpectedJob] {
         if usesBFF {
             do {
-                let res: TodayResponse = try await get(path: "/api/field-app/jobs")
+                let path = query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? "/api/field-app/jobs"
+                    : "/api/field-app/jobs?q=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query)"
+                let res: TodayResponse = try await get(path: path)
                 return res.jobs
             } catch {
                 if !Self.isUnreachable(error) { throw error }
             }
         }
-        return try await assignedJobsViaSupabase()
+        return try await assignedJobsViaSupabase(query: query)
     }
 
     struct FieldJobDraft: Encodable {
@@ -515,6 +518,7 @@ final class AtmosphereClient: ObservableObject {
 
     private struct ProofRow: Decodable {
         let job_id: String
+        let work_date: String?
     }
 
     private struct PropertyRow: Decodable {
@@ -998,6 +1002,10 @@ final class AtmosphereClient: ObservableObject {
     }
 
     private func assignedJobIds(orgId: String) async throws -> Set<String> {
+        try await assignedJobsMeta(orgId: orgId).ids
+    }
+
+    private func assignedJobsMeta(orgId: String) async throws -> (ids: Set<String>, roles: [String: String]) {
         let userId = jwtClaim("sub") ?? ""
         let crew: [AssignmentRow] = try await supabaseRest(
             path: "/rest/v1/job_assignments",
@@ -1016,13 +1024,16 @@ final class AtmosphereClient: ObservableObject {
                 URLQueryItem(name: "owner_id", value: "eq.\(userId)"),
             ]
         )
-        return Set(crew.map(\.job_id) + owned.map(\.id))
+        var roles: [String: String] = [:]
+        for job in owned { roles[job.id] = "owner" }
+        for row in crew { roles[row.job_id] = (row.role_on_job?.isEmpty == false) ? row.role_on_job! : "crew" }
+        return (Set(roles.keys), roles)
     }
 
-    private func assignedJobsViaSupabase() async throws -> [ExpectedJob] {
+    private func assignedJobsViaSupabase(query: String = "") async throws -> [ExpectedJob] {
         let membership = try await requireMembership()
-        let today = Self.todayISODate()
-        let assignedIds = try await assignedJobIds(orgId: membership.org_id)
+        let meta = try await assignedJobsMeta(orgId: membership.org_id)
+        let assignedIds = meta.ids
         guard !assignedIds.isEmpty else { return [] }
         let jobs: [JobRow] = try await supabaseRest(
             path: "/rest/v1/crm_jobs",
@@ -1030,21 +1041,26 @@ final class AtmosphereClient: ObservableObject {
                 URLQueryItem(name: "select", value: "id,job_number,title,status,scheduled_start,property_id"),
                 URLQueryItem(name: "org_id", value: "eq.\(membership.org_id)"),
                 URLQueryItem(name: "id", value: "in.(\(assignedIds.joined(separator: ",")))"),
-                URLQueryItem(name: "order", value: "scheduled_start.asc.nullslast"),
                 URLQueryItem(name: "limit", value: "200"),
             ]
         )
         let proofs: [ProofRow] = try await supabaseRest(
             path: "/rest/v1/job_proofs",
             query: [
-                URLQueryItem(name: "select", value: "job_id"),
+                URLQueryItem(name: "select", value: "job_id,work_date"),
                 URLQueryItem(name: "org_id", value: "eq.\(membership.org_id)"),
-                URLQueryItem(name: "work_date", value: "eq.\(today)"),
+                URLQueryItem(name: "job_id", value: "in.(\(assignedIds.joined(separator: ",")))"),
             ]
         )
-        let filmedIds = Set(proofs.map(\.job_id))
-        let open = jobs.filter { ($0.status ?? "") != "cancelled" || filmedIds.contains($0.id) }
-        let propertyIds = Array(Set(open.compactMap(\.property_id)))
+        var lastFilmed: [String: String] = [:]
+        for proof in proofs {
+            guard let day = proof.work_date, !day.isEmpty else { continue }
+            if let prev = lastFilmed[proof.job_id], prev >= day { continue }
+            lastFilmed[proof.job_id] = day
+        }
+        let filmed = jobs.filter { lastFilmed[$0.id] != nil }
+            .sorted { (lastFilmed[$0.id] ?? "") > (lastFilmed[$1.id] ?? "") }
+        let propertyIds = Array(Set(filmed.compactMap(\.property_id)))
         var addressById: [String: String] = [:]
         if !propertyIds.isEmpty {
             let properties: [PropertyRow] = try await supabaseRest(
@@ -1062,20 +1078,23 @@ final class AtmosphereClient: ObservableObject {
                 if !line.isEmpty { addressById[property.id] = line }
             }
         }
-        return open.map { job in
-            let filmed = filmedIds.contains(job.id)
+        let mapped = filmed.map { job in
+            let day = lastFilmed[job.id]
             return ExpectedJob(
                 id: job.id,
                 number: job.job_number.map { "#\($0)" } ?? "",
                 name: job.title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "Job",
                 address: job.property_id.flatMap { addressById[$0] } ?? "Address on file",
-                at: Self.formatTodayAt(job.scheduled_start, filmed: filmed),
-                placed: job.scheduled_start != nil || filmed,
+                at: day ?? "Filmed",
+                placed: true,
                 status: job.status,
-                filmed: filmed,
-                assigned: true
+                filmed: true,
+                filmedOn: day,
+                assigned: true,
+                role: meta.roles[job.id]
             )
         }
+        return mapped.filter { $0.matches(query) }
     }
 
     private func createFieldJobViaSupabase(_ draft: FieldJobDraft) async throws -> ExpectedJob {

@@ -120,8 +120,8 @@ AtmosphereFieldCapture/
 
 1. **First launch only:** Create an Atmosphere account or sign in (same as the website), then **Link to office account** with the office join code.
 2. Later launches open Today already connected.
-3. Confirm today’s assigned jobs (or open **My jobs** / **Add job**) → **Start the day**.
-4. Hold **Finish the day** — proof upload into that job → optional RoomPlan twin.
+3. Confirm today’s assigned jobs (or **Add job**) → **Start the day**. **My jobs** is the filmed record — search by name, address, job number, status, date, or role.
+4. Hold **Finish the day** — proof upload into that job → optional RoomPlan twin. The job then lands on **My jobs**.
 
 AI dictation and twin review stay in the **office Verifier**.
 
@@ -132,8 +132,8 @@ On a physical iPhone the app talks to the Atmosphere Supabase project
 
 1. Create account: BFF `POST /api/field-app/register` (email + password + join code or new office name), or Supabase `POST /auth/v1/signup` plus `create_org` / `join_org`
 2. Sign-in: `POST /auth/v1/token?grant_type=password` (or BFF `POST /api/auth/login`)
-3. Profile + assigned jobs: BFF `GET /api/field-app/today` and `GET /api/field-app/jobs` (or `job_assignments` + `crm_jobs`)
-4. Add a job from the phone: BFF `POST /api/field-app/jobs` (creates the property, job, and assigns this login)
+3. Today’s assigned jobs: BFF `GET /api/field-app/today`. Filmed history: `GET /api/field-app/jobs?q=` (name, address, job number, status, date, role)
+4. Add a job from the phone: BFF `POST /api/field-app/jobs` (creates the property, job, and assigns this login — it shows on Today until filmed)
 5. Day film: upload into the `job-proofs` bucket, then insert `job_proofs`
 6. Optional RoomPlan twin still uses the BFF geometry routes when one is running
 

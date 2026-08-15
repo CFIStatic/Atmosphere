@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var STORAGE_KEY = 'atmosphere.iosPreview.v2';
+  var STORAGE_KEY = 'atmosphere.iosPreview.v3';
   var OFFICES = {
     COASTAL: 'Coastal Drying LLC',
     COASTALDRY: 'Coastal Drying LLC',
@@ -13,6 +13,7 @@
       id: 'job-oak',
       name: '1847 Oak Ridge — kitchen water',
       address: '1847 Oak Ridge Dr, Charleston',
+      number: '#1041',
       at: '7:30a',
       filmed: false,
       assigned: true,
@@ -22,10 +23,49 @@
       id: 'job-harbor',
       name: '22 Harbor Walk — drywall',
       address: '22 Harbor Walk, Mount Pleasant',
+      number: '#1044',
       at: '1:00p',
       filmed: false,
       assigned: true,
       role: 'crew',
+    },
+  ];
+  var DEMO_HISTORY = [
+    {
+      id: 'job-pine',
+      name: '91 Pine Street — category 2',
+      address: '91 Pine St, North Charleston',
+      number: '#1038',
+      at: 'Aug 12, 2026',
+      filmedOn: '2026-08-12',
+      filmed: true,
+      status: 'completed',
+      assigned: true,
+      role: 'lead',
+    },
+    {
+      id: 'job-king',
+      name: '440 King — contents packout',
+      address: '440 King St, Charleston',
+      number: '#1029',
+      at: 'Aug 8, 2026',
+      filmedOn: '2026-08-08',
+      filmed: true,
+      status: 'completed',
+      assigned: true,
+      role: 'crew',
+    },
+    {
+      id: 'job-folly',
+      name: '12 Folly Beach — storm loss',
+      address: '12 Arctic Ave, Folly Beach',
+      number: '#1014',
+      at: 'Jul 22, 2026',
+      filmedOn: '2026-07-22',
+      filmed: true,
+      status: 'in_progress',
+      assigned: true,
+      role: 'lead',
     },
   ];
 
@@ -44,6 +84,8 @@
     signupMode: 'join',
     officeMode: 'join',
     jobs: DEMO_JOBS.map(copyJob),
+    history: DEMO_HISTORY.map(copyJob),
+    jobSearch: '',
     activeJobId: DEMO_JOBS[0].id,
     elapsed: 0,
     holdTimer: null,
@@ -57,11 +99,30 @@
       id: job.id,
       name: job.name,
       address: job.address,
+      number: job.number || '',
       at: job.at,
+      filmedOn: job.filmedOn || '',
+      status: job.status || '',
       filmed: Boolean(job.filmed),
       assigned: job.assigned !== false,
       role: job.role || 'crew',
     };
+  }
+
+  function matchesJob(job, query) {
+    var tokens = String(query || '')
+      .trim()
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (!tokens.length) return true;
+    var hay = [job.name, job.address, job.number, job.status, job.at, job.filmedOn, roleLabel(job.role)]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return tokens.every(function (token) {
+      return hay.indexOf(token) !== -1;
+    });
   }
 
   function roleLabel(role) {
@@ -86,11 +147,13 @@
         elapsed: 0,
         screen: saved.screen === 'recording' ? 'today' : saved.screen || 'signin',
       });
+      if (!state.history || !state.history.length) state.history = DEMO_HISTORY.map(copyJob);
       if (state.jobs && state.jobs.length) return;
     } catch (e) {
       /* ignore */
     }
     state.jobs = DEMO_JOBS.map(copyJob);
+    state.history = DEMO_HISTORY.map(copyJob);
   }
 
   function persist() {
@@ -106,6 +169,8 @@
           fullName: state.fullName,
           orgName: state.orgName,
           jobs: state.jobs,
+          history: state.history,
+          jobSearch: state.jobSearch,
           activeJobId: state.activeJobId,
         })
       );
@@ -167,13 +232,16 @@
     btn.type = 'button';
     btn.className = 'job' + (state.activeJobId === job.id ? ' on' : '');
     btn.innerHTML =
-      '<div><b></b><span></span><span class="role"></span></div>' +
+      '<div><b></b><span></span><span class="number"></span><span class="role"></span></div>' +
       '<div class="meta' + (job.filmed ? ' filmed' : '') + '"></div>' +
       (state.activeJobId === job.id ? '<div class="dot">●</div>' : '');
     btn.querySelector('b').textContent = job.name;
     btn.querySelector('span').textContent = job.address;
+    var numberEl = btn.querySelector('.number');
+    if (job.number) numberEl.textContent = job.number;
+    else numberEl.remove();
     btn.querySelector('.role').textContent = roleLabel(job.role);
-    btn.querySelector('.meta').textContent = job.filmed ? 'Filmed' : job.at;
+    btn.querySelector('.meta').textContent = job.filmed ? job.filmedOn || job.at || 'Filmed' : job.at;
     btn.addEventListener('click', function () {
       onPick(job);
     });
@@ -187,7 +255,7 @@
     if (!state.jobs.length) {
       var empty = document.createElement('p');
       empty.className = 'lede';
-      empty.textContent = 'Nothing assigned to you today. Open My jobs to see the rest of your work, or add a job from this phone.';
+      empty.textContent = 'Nothing assigned to you today. Add a job from this phone, or ask the office to put you on one. My jobs is the record of days you have already filmed.';
       root.appendChild(empty);
       return;
     }
@@ -207,17 +275,43 @@
     var root = $('assigned-list');
     if (!root) return;
     root.innerHTML = '';
-    if (!state.jobs.length) {
+    var history = state.history || [];
+    var filtered = history.filter(function (job) {
+      return matchesJob(job, state.jobSearch);
+    });
+    var count = $('jobs-count');
+    if (count) {
+      count.hidden = !history.length || !filtered.length;
+      count.textContent = filtered.length ? filtered.length + ' recorded' : '';
+    }
+    if ($('jobs-search') && $('jobs-search').value !== (state.jobSearch || '')) {
+      $('jobs-search').value = state.jobSearch || '';
+    }
+    if (!history.length) {
       var empty = document.createElement('p');
       empty.className = 'lede';
-      empty.textContent = 'Nothing is assigned to you yet. Add a job from this phone, or ask the office to put you on a job.';
+      empty.textContent =
+        'No filmed jobs yet. Finish a day on Today and it lands here as a record. Assigned work that has not been filmed stays on Today.';
       root.appendChild(empty);
       return;
     }
-    state.jobs.forEach(function (job) {
+    if (!filtered.length) {
+      var none = document.createElement('p');
+      none.className = 'lede';
+      none.textContent =
+        'Nothing in the record matches “' +
+        state.jobSearch +
+        '”. Try the job name, street, city, job number, or a filmed date.';
+      root.appendChild(none);
+      return;
+    }
+    filtered.forEach(function (job) {
       root.appendChild(
         jobCard(job, function (picked) {
           state.activeJobId = picked.id;
+          if (!state.jobs.some(function (row) { return row.id === picked.id; })) {
+            state.jobs.unshift(copyJob(picked));
+          }
           show('today');
         })
       );
@@ -331,6 +425,7 @@
     state.fullName = overrides.fullName || state.fullName || 'Andre Boone';
     state.orgName = overrides.orgName || state.orgName || 'Coastal Drying LLC';
     if (!state.jobs.length) state.jobs = DEMO_JOBS.map(copyJob);
+    if (!state.history || !state.history.length) state.history = DEMO_HISTORY.map(copyJob);
     if (!state.activeJobId) state.activeJobId = state.jobs[0].id;
   }
 
@@ -413,6 +508,7 @@
       id: 'job-' + Date.now(),
       name: name,
       address: city ? address + ', ' + city : address,
+      number: '',
       at: 'Today',
       filmed: false,
       assigned: true,
@@ -424,7 +520,7 @@
     $('add-address').value = '';
     $('add-city').value = '';
     $('add-notes').value = '';
-    show('jobs');
+    show('today');
   }
 
   function startDay() {
@@ -489,7 +585,15 @@
     var duration = Math.max(state.elapsed, 12);
     stopRecording(true);
     var job = state.jobs.find(function (j) { return j.id === state.activeJobId; }) || state.jobs[0];
-    if (job) job.filmed = true;
+    if (job) {
+      var stamp = new Date().toISOString().slice(0, 10);
+      job.filmed = true;
+      job.filmedOn = stamp;
+      job.at = stamp;
+      job.status = job.status || 'completed';
+      state.history = (state.history || []).filter(function (row) { return row.id !== job.id; });
+      state.history.unshift(copyJob(job));
+    }
     var checks = [
       { label: 'Filmed on site', detail: state.siteLabel, ok: true },
       { label: 'Video + audio sealed', detail: 'mic track present', ok: true },
@@ -582,6 +686,13 @@
     if ($('jobs-account-btn')) $('jobs-account-btn').addEventListener('click', toggleAccount);
     if ($('add-account-btn')) $('add-account-btn').addEventListener('click', toggleAccount);
     $('add-submit').addEventListener('click', createJob);
+    if ($('jobs-search')) {
+      $('jobs-search').addEventListener('input', function () {
+        state.jobSearch = $('jobs-search').value || '';
+        persist();
+        renderAssigned();
+      });
+    }
     document.querySelectorAll('.tabbar button').forEach(function (btn) {
       btn.addEventListener('click', function () {
         jump(btn.getAttribute('data-tab'));
@@ -600,6 +711,8 @@
       state.email = '';
       state.orgName = '';
       state.jobs = DEMO_JOBS.map(copyJob);
+      state.history = DEMO_HISTORY.map(copyJob);
+      state.jobSearch = '';
       show('signin');
     });
     $('start-day').addEventListener('click', startDay);

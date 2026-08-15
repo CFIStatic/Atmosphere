@@ -459,6 +459,21 @@ h1 {
   font-weight: 600;
   color: var(--faint);
 }
+.job .number {
+  display: block;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+}
+.field.search { margin: 14px 0 10px; }
+.record-count {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 8px;
+}
 
 .rec-screen {
   position: relative;

@@ -25,7 +25,7 @@ struct AddJobView: View {
                         .foregroundStyle(FieldTheme.ink)
 
                     Text(
-                        "Opens the job in your office account and assigns it to you. It shows up under My jobs and, if it is for today, on Today."
+                        "Opens the job in your office account and assigns it to you. It shows on Today until you film it — then it becomes a record on My jobs."
                     )
                     .font(.system(size: 15))
                     .foregroundStyle(FieldTheme.muted)
