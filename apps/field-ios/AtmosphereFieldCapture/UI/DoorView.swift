@@ -9,7 +9,7 @@ struct DoorView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Checked at the door")
                         .font(.system(size: 26, weight: .bold))
-                    Text("Before anyone watches it, your day is checked as evidence. Video and audio both sealed. If you were offline, the film stays on this phone until it can file.")
+                    Text("Before anyone watches it, your day is checked as evidence. Video and audio both sealed. Saved on this phone if you were offline — it files when you have a signal.")
                         .font(.system(size: 14))
                         .foregroundStyle(FieldTheme.muted)
 
