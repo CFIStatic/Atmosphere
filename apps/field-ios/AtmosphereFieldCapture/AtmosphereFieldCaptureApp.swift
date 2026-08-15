@@ -30,7 +30,7 @@ struct AtmosphereFieldCaptureApp: App {
                 .task {
                     auth.bindAPIRefresh()
                     await auth.restore()
-                    if auth.isLinked {
+                    if auth.isLinked, !auth.needsOfficeLink {
                         await session.loadToday(api: api)
                     }
                 }
@@ -42,11 +42,18 @@ struct RootView: View {
     @EnvironmentObject private var session: FieldDaySession
     @EnvironmentObject private var auth: AuthSession
     @EnvironmentObject private var api: AtmosphereClient
+    @State private var showSignUp = false
 
     var body: some View {
         Group {
             if !auth.isLinked {
-                SignInView()
+                if showSignUp {
+                    SignUpView(onSignIn: { showSignUp = false })
+                } else {
+                    SignInView(onCreateAccount: { showSignUp = true })
+                }
+            } else if auth.needsOfficeLink {
+                OfficeLinkView()
             } else {
                 switch session.phase {
                 case .today:
@@ -60,7 +67,12 @@ struct RootView: View {
         }
         .background(FieldTheme.bg.ignoresSafeArea())
         .onChange(of: auth.isLinked) { linked in
-            if linked {
+            if linked, !auth.needsOfficeLink {
+                Task { await session.loadToday(api: api) }
+            }
+        }
+        .onChange(of: auth.needsOfficeLink) { needsOffice in
+            if auth.isLinked, !needsOffice {
                 Task { await session.loadToday(api: api) }
             }
         }

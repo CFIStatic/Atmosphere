@@ -2386,6 +2386,15 @@ export interface AuthResponse {
   user: AuthUser | null;
   needsEmailConfirmation?: boolean;
   message?: string;
+  /** Present for native / Field Capture clients; the website uses httpOnly cookies. */
+  session?: {
+    accessToken: string;
+    refreshToken: string;
+    expiresIn?: number | null;
+    expiresAt?: number | null;
+  };
+  org?: Org | null;
+  orgError?: string;
 }
 
 export const api = {
@@ -2394,6 +2403,26 @@ export const api = {
     request<AuthResponse>('/api/auth/signup', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
+    }),
+
+  /** Field Capture iOS — create the website account and join or start an office. */
+  fieldRegister: (input: {
+    email: string;
+    password: string;
+    fullName?: string;
+    joinCode?: string;
+    orgName?: string;
+  }) =>
+    request<AuthResponse>('/api/field-app/register', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  /** Field Capture iOS — link an already-signed-in login to an office. */
+  fieldLinkOffice: (input: { joinCode?: string; orgName?: string; fullName?: string }) =>
+    request<{ org: Org }>('/api/field-app/office', {
+      method: 'POST',
+      body: JSON.stringify(input),
     }),
 
   login: (email: string, password: string) =>

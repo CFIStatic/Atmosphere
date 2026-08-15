@@ -11,10 +11,14 @@ import Foundation
 final class AuthSession: ObservableObject {
     /// True after the phone has been linked (Keychain has a refresh token).
     @Published private(set) var isLinked = false
+    /// Signed in but not yet a member of an office — show the join/create screen.
+    @Published private(set) var needsOfficeLink = false
     @Published private(set) var email: String?
     @Published private(set) var orgName: String?
     @Published private(set) var fullName: String?
     @Published var lastError: String?
+    /// Shown after signup when Atmosphere asked the user to confirm email first.
+    @Published var confirmationNotice: String?
     /// Soft banner while linked but the network/profile refresh failed.
     @Published var restoreWarning: String?
 
@@ -51,16 +55,26 @@ final class AuthSession: ObservableObject {
             try await ensureFreshAccess()
             let me = try await api.fieldMe()
             applyProfile(me)
+            needsOfficeLink = false
             lastError = nil
         } catch {
+            if isNoOrganization(error) {
+                needsOfficeLink = true
+                lastError = nil
+                return
+            }
             if isUnauthorized(error) {
                 do {
                     try await ensureFreshAccess(forceRefresh: true)
                     let me = try await api.fieldMe()
                     applyProfile(me)
+                    needsOfficeLink = false
                     lastError = nil
                 } catch {
-                    if isUnauthorized(error) {
+                    if isNoOrganization(error) {
+                        needsOfficeLink = true
+                        lastError = nil
+                    } else if isUnauthorized(error) {
                         // Session truly dead — only then ask to connect again.
                         clearLink()
                         lastError = "This phone was disconnected. Connect your Atmosphere account once to continue."
@@ -85,20 +99,113 @@ final class AuthSession: ObservableObject {
                     body: "Signed in on the website account, but no session came back. Confirm your email if Atmosphere asked you to."
                 )
             }
-            persist(session: session, email: result.user.email ?? email)
+            persist(session: session, email: result.user?.email ?? email)
             UserDefaults.standard.set(true, forKey: linkedFlagKey)
             isLinked = true
-            do {
-                let me = try await api.fieldMe()
-                applyProfile(me)
-            } catch {
-                restoreWarning =
-                    "Signed in with your dashboard account. If jobs don’t appear, link this login to the office on the website."
-            }
+            await refreshProfileOrMarkOffice()
         } catch {
             lastError = Self.friendlyConnectError(error)
             isLinked = KeychainStore.get(account: refreshAccount) != nil
         }
+    }
+
+    /// Create a new Atmosphere account from the phone (same login as the website).
+    func createAccount(
+        email: String,
+        password: String,
+        fullName: String,
+        joinCode: String?,
+        orgName: String?
+    ) async {
+        lastError = nil
+        confirmationNotice = nil
+        do {
+            let result = try await api.registerAccount(
+                email: email,
+                password: password,
+                fullName: fullName.isEmpty ? nil : fullName,
+                joinCode: joinCode,
+                orgName: orgName
+            )
+            if result.needsEmailConfirmation == true {
+                confirmationNotice = result.message
+                    ?? "Account created. Check your email to confirm, then sign in on this phone."
+                return
+            }
+            guard let session = result.session else {
+                throw APIError.http(
+                    status: 0,
+                    body: "Account created, but no session came back. Confirm your email if Atmosphere asked you to, then sign in."
+                )
+            }
+            persist(session: session, email: result.user?.email ?? email)
+            UserDefaults.standard.set(true, forKey: linkedFlagKey)
+            isLinked = true
+            let trimmedName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedName.isEmpty {
+                self.fullName = trimmedName
+            }
+            if let org = result.org {
+                self.orgName = org.name
+                UserDefaults.standard.set(org.name, forKey: orgAccount)
+                needsOfficeLink = false
+                lastError = nil
+            } else if let orgError = result.orgError, !orgError.isEmpty {
+                needsOfficeLink = true
+                lastError = orgError
+            } else {
+                await refreshProfileOrMarkOffice()
+            }
+        } catch {
+            lastError = Self.friendlyCreateError(error)
+            isLinked = KeychainStore.get(account: refreshAccount) != nil
+        }
+    }
+
+    /// Join or start an office after the login already exists on this phone.
+    func linkOffice(joinCode: String?, orgName: String?) async {
+        lastError = nil
+        do {
+            let org = try await api.linkOffice(joinCode: joinCode, orgName: orgName, fullName: fullName)
+            self.orgName = org.name
+            UserDefaults.standard.set(org.name, forKey: orgAccount)
+            needsOfficeLink = false
+            await refreshProfileOrMarkOffice()
+        } catch {
+            lastError = Self.friendlyCreateError(error)
+        }
+    }
+
+    private func refreshProfileOrMarkOffice() async {
+        do {
+            let me = try await api.fieldMe()
+            applyProfile(me)
+            needsOfficeLink = false
+            lastError = nil
+        } catch {
+            if isNoOrganization(error) {
+                needsOfficeLink = true
+            } else {
+                restoreWarning =
+                    "Signed in with your dashboard account. If jobs don’t appear, link this login to the office."
+            }
+        }
+    }
+
+    private static func friendlyCreateError(_ error: Error) -> String {
+        if case let APIError.http(status, body) = error {
+            if status == 400 {
+                return body.isEmpty
+                    ? "Unable to create an account with those details. If you already have an account, try signing in."
+                    : String(body.prefix(240))
+            }
+            if status == 429 {
+                return body.isEmpty
+                    ? "Too many attempts. Wait a few minutes and try again."
+                    : String(body.prefix(240))
+            }
+        }
+        return friendlyConnectError(error)
     }
 
     private static func friendlyConnectError(_ error: Error) -> String {
@@ -164,6 +271,7 @@ final class AuthSession: ObservableObject {
         orgName = UserDefaults.standard.string(forKey: orgAccount)
         fullName = UserDefaults.standard.string(forKey: nameAccount)
         isLinked = linked && (refresh != nil || access != nil)
+        needsOfficeLink = isLinked && orgName == nil
 
         // Repair flag if Keychain still has tokens from an older build.
         if isLinked, !flagged {
@@ -198,6 +306,8 @@ final class AuthSession: ObservableObject {
         api.accessToken = nil
         api.refreshToken = nil
         isLinked = false
+        needsOfficeLink = false
+        confirmationNotice = nil
         email = nil
         orgName = nil
         fullName = nil
@@ -222,7 +332,17 @@ final class AuthSession: ObservableObject {
     }
 
     private func isUnauthorized(_ error: Error) -> Bool {
-        if case let APIError.http(status, _) = error { return status == 401 || status == 403 }
+        if case let APIError.http(status, _) = error { return status == 401 }
         return false
+    }
+
+    private func isNoOrganization(_ error: Error) -> Bool {
+        guard case let APIError.http(status, body) = error, status == 403 else { return false }
+        let lower = body.lowercased()
+        return lower.contains("organization")
+            || lower.contains("office")
+            || lower.contains("not linked")
+            || lower.contains("onboard")
+            || body.isEmpty
     }
 }

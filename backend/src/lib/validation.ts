@@ -197,6 +197,85 @@ export type CreateOrgInput = z.infer<typeof createOrgSchema>;
 export type JoinOrgInput = z.infer<typeof joinOrgSchema>;
 export type UpdateOrgProfileInput = z.infer<typeof updateOrgProfileSchema>;
 
+/**
+ * Field Capture (iOS) account creation. Same email/password rules as website
+ * signup, plus either an office join code or a new office name so the phone
+ * can file day films into an organization on the first launch.
+ */
+export const FIELD_APP_ONBOARDING = {
+  role: 'field_technician',
+  workType: 'construction',
+  contractorType: 'other',
+  usageIntents: ['field_work'],
+} as const;
+
+export const fieldRegisterSchema = z
+  .object({
+    email: emailField,
+    password: passwordField,
+    fullName: z
+      .string()
+      .trim()
+      .min(2, 'Enter your first and last name')
+      .max(80, 'Name must be at most 80 characters')
+      .optional(),
+    joinCode: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^[A-Z0-9]{6,12}$/, 'Enter a valid join code')
+      .optional(),
+    orgName: z
+      .string()
+      .trim()
+      .min(2, 'Organization name is too short')
+      .max(80, 'Organization name is too long')
+      .optional(),
+  })
+  .refine((value) => Boolean(value.joinCode || value.orgName), {
+    message: 'Enter an office join code or a new office name.',
+    path: ['joinCode'],
+  })
+  .refine((value) => !(value.joinCode && value.orgName), {
+    message: 'Choose either a join code or a new office name, not both.',
+    path: ['orgName'],
+  });
+
+export type FieldRegisterInput = z.infer<typeof fieldRegisterSchema>;
+
+/** Signed-in Field Capture user linking this phone to an office. */
+export const fieldOfficeSchema = z
+  .object({
+    fullName: z
+      .string()
+      .trim()
+      .min(2, 'Enter your first and last name')
+      .max(80, 'Name must be at most 80 characters')
+      .optional(),
+    joinCode: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^[A-Z0-9]{6,12}$/, 'Enter a valid join code')
+      .optional(),
+    orgName: z
+      .string()
+      .trim()
+      .min(2, 'Organization name is too short')
+      .max(80, 'Organization name is too long')
+      .optional(),
+  })
+  .refine((value) => Boolean(value.joinCode || value.orgName), {
+    message: 'Enter an office join code or a new office name.',
+    path: ['joinCode'],
+  })
+  .refine((value) => !(value.joinCode && value.orgName), {
+    message: 'Choose either a join code or a new office name, not both.',
+    path: ['orgName'],
+  });
+
+export type FieldOfficeInput = z.infer<typeof fieldOfficeSchema>;
+
 /* ---------------------------------------------------------------------------
  * Growth analytics
  * ------------------------------------------------------------------------ */

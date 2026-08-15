@@ -1,10 +1,15 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
+import type { Session, User } from '@supabase/supabase-js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
-import { createAdminClient } from '../lib/supabase.js';
+import { createAdminClient, createUserClient } from '../lib/supabase.js';
 import { badRequest, HttpError, serviceUnavailable } from '../lib/errors.js';
+import { setSessionCookies } from '../lib/session.js';
+import { FIELD_APP_ONBOARDING, fieldOfficeSchema, fieldRegisterSchema } from '../lib/validation.js';
+import { createPasswordAccount, publicUser, sessionTokens } from '../auth/passwordAccount.js';
+import { authLimiter } from './auth.js';
 import { createUploadUrl, recordProof } from './proofOfWork.js';
 import {
   DEFAULT_FIELD_TIMEZONE,
@@ -23,6 +28,167 @@ import {
  */
 export const fieldAppRouter = Router();
 
+function serializeFieldOrg(org: {
+  id?: string;
+  name?: string;
+  join_code?: string;
+  contractor_type?: string | null;
+} | null) {
+  if (!org?.id) return null;
+  return {
+    id: org.id,
+    name: org.name ?? 'Organization',
+    joinCode: org.join_code ?? null,
+    contractorType: org.contractor_type ?? null,
+  };
+}
+
+async function saveFieldProfile(accessToken: string, user: User, fullName?: string) {
+  const supabase = createUserClient(accessToken);
+  await supabase.from('profiles').upsert(
+    {
+      id: user.id,
+      email: user.email,
+      ...(fullName ? { full_name: fullName, updated_at: new Date().toISOString() } : {}),
+    },
+    { onConflict: 'id' },
+  );
+  return supabase;
+}
+
+async function saveFieldUsageIntents(
+  supabase: ReturnType<typeof createUserClient>,
+  userId: string,
+) {
+  const admin = createAdminClient();
+  const writer = admin ?? supabase;
+  const { error } = await writer
+    .from('org_members')
+    .update({ usage_intents: [...FIELD_APP_ONBOARDING.usageIntents] })
+    .eq('user_id', userId);
+  if (
+    error &&
+    !/usage_intents|column .* does not exist|permission denied for function is_org_member/i.test(
+      error.message,
+    )
+  ) {
+    throw new HttpError(500, error.message, 'usage_intents_failed');
+  }
+}
+
+async function linkFieldOffice(
+  accessToken: string,
+  user: User,
+  input: { joinCode?: string; orgName?: string; fullName?: string },
+) {
+  const supabase = await saveFieldProfile(accessToken, user, input.fullName);
+
+  if (input.joinCode) {
+    const { data, error } = await supabase.rpc('join_org', {
+      p_code: input.joinCode,
+      p_role: FIELD_APP_ONBOARDING.role,
+      p_work_type: FIELD_APP_ONBOARDING.workType,
+    });
+    if (error) {
+      const message = /invalid join code/i.test(error.message)
+        ? 'That join code did not match any organization.'
+        : error.message;
+      throw new HttpError(400, message, 'join_org_failed');
+    }
+    await saveFieldUsageIntents(supabase, user.id);
+    return serializeFieldOrg(data);
+  }
+
+  const { data, error } = await supabase.rpc('create_org', {
+    p_name: input.orgName,
+    p_role: FIELD_APP_ONBOARDING.role,
+    p_work_type: FIELD_APP_ONBOARDING.workType,
+  });
+  if (error) throw new HttpError(400, error.message, 'create_org_failed');
+
+  const { data: orgWithType, error: typeError } = await supabase.rpc('set_org_contractor_type', {
+    p_contractor_type: FIELD_APP_ONBOARDING.contractorType,
+  });
+  if (
+    typeError &&
+    !/could not find|does not exist|schema cache|contractor_type/i.test(typeError.message)
+  ) {
+    throw new HttpError(400, typeError.message, 'contractor_type_failed');
+  }
+
+  await saveFieldUsageIntents(supabase, user.id);
+  return serializeFieldOrg(orgWithType ?? data);
+}
+
+function writeFieldSession(
+  res: Response,
+  status: 200 | 201,
+  user: User,
+  session: Session,
+  extra: Record<string, unknown> = {},
+) {
+  setSessionCookies(res, session);
+  res.status(status).json({
+    user: publicUser(user),
+    needsEmailConfirmation: false,
+    session: sessionTokens(session),
+    ...extra,
+  });
+}
+
+/**
+ * POST /api/field-app/register
+ *
+ * Native Field Capture onboarding: create the same Atmosphere account the
+ * website uses, then join or start an office so day films have an org to
+ * land in. Public — there is no session yet. Authenticated field-app
+ * routes are mounted below.
+ */
+fieldAppRouter.post(
+  '/register',
+  authLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const input = fieldRegisterSchema.parse(req.body);
+      const created = await createPasswordAccount(input.email, input.password);
+
+      if (created.kind === 'error') throw created.error;
+
+      if (created.kind === 'confirm') {
+        res.status(201).json({
+          user: created.user ? publicUser(created.user) : null,
+          needsEmailConfirmation: true,
+          message: created.message,
+          org: null,
+        });
+        return;
+      }
+
+      try {
+        const org = await linkFieldOffice(created.session.access_token, created.user, {
+          fullName: input.fullName,
+          joinCode: input.joinCode,
+          orgName: input.orgName,
+        });
+        writeFieldSession(res, created.status, created.user, created.session, { org });
+      } catch (err) {
+        // Account exists and the phone has tokens — do not roll that back
+        // because the office step failed. The app can retry linking.
+        if (err instanceof HttpError && (err.code === 'join_org_failed' || err.code === 'create_org_failed')) {
+          writeFieldSession(res, created.status, created.user, created.session, {
+            org: null,
+            orgError: err.message,
+          });
+          return;
+        }
+        throw err;
+      }
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 fieldAppRouter.use(requireAuth);
 
 const limiter = rateLimit({
@@ -35,6 +201,25 @@ const limiter = rateLimit({
 fieldAppRouter.use(limiter);
 
 const FIELD_PARTY_COMPANY = 'Field Capture';
+
+/**
+ * POST /api/field-app/office
+ * Link an already-signed-in Field Capture user to an office (join code or
+ * new organization). Used when email confirmation delayed the office step,
+ * or when register created the login but the join code was wrong.
+ */
+fieldAppRouter.post('/office', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user || !req.accessToken) {
+      throw new HttpError(401, 'Not authenticated', 'unauthorized');
+    }
+    const input = fieldOfficeSchema.parse(req.body);
+    const org = await linkFieldOffice(req.accessToken, req.user, input);
+    res.status(201).json({ org });
+  } catch (err) {
+    next(err);
+  }
+});
 
 /** GET /api/field-app/me — who is signed in and which org receives uploads. */
 fieldAppRouter.get('/me', async (req: Request, res: Response, next: NextFunction) => {
