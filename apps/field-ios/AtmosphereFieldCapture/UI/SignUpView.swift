@@ -53,7 +53,6 @@ struct SignUpView: View {
                     Text("Atmosphere")
                         .font(.system(size: 28, weight: .bold))
                         .foregroundStyle(FieldTheme.ink)
-                        .tracking(-0.4)
                 }
                 .padding(.top, 36)
 
@@ -123,7 +122,7 @@ struct SignUpView: View {
                             ProgressView().tint(FieldTheme.bg)
                         } else {
                             Text(step == 1 ? "Continue" : "Create account & connect phone")
-                                .fontWeight(.bold)
+                                .font(.system(size: 16, weight: .bold))
                         }
                     }
                     .frame(maxWidth: .infinity)

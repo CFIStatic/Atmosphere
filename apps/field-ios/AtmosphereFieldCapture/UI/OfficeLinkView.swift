@@ -40,7 +40,6 @@ struct OfficeLinkView: View {
                     Text("Atmosphere")
                         .font(.system(size: 28, weight: .bold))
                         .foregroundStyle(FieldTheme.ink)
-                        .tracking(-0.4)
                 }
                 .padding(.top, 36)
 
@@ -70,14 +69,10 @@ struct OfficeLinkView: View {
                 .padding(.top, 4)
 
                 if mode == .join {
-                    TextField("Office join code", text: $joinCode)
-                        .textInputAutocapitalization(.characters)
-                        .autocorrectionDisabled()
-                        .padding(12)
-                        .background(FieldTheme.panel)
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
-                        .cornerRadius(10)
-                        .onChange(of: joinCode) { value in
+                    TextField("Office join code", text: Binding(
+                        get: { joinCode },
+                        set: { value in
+                            joinCode = value
                             previewTask?.cancel()
                             previewTask = Task {
                                 try? await Task.sleep(nanoseconds: 350_000_000)
@@ -85,6 +80,13 @@ struct OfficeLinkView: View {
                                 await auth.previewOffice(joinCode: value)
                             }
                         }
+                    ))
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .padding(12)
+                        .background(FieldTheme.panel)
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
+                        .cornerRadius(10)
 
                     if let name = auth.officePreviewName, mode == .join {
                         Text("This code belongs to \(name).")
@@ -126,7 +128,7 @@ struct OfficeLinkView: View {
                             ProgressView().tint(FieldTheme.bg)
                         } else {
                             Text(mode == .join ? "Link to office account" : "Start office & connect phone")
-                                .fontWeight(.bold)
+                                .font(.system(size: 16, weight: .bold))
                         }
                     }
                     .frame(maxWidth: .infinity)

@@ -27,26 +27,53 @@ Swift: `DayFilmRecorder` always adds an `AVCaptureDevice` audio input and
 
 ## Open in Xcode
 
-The Xcode project is in the repo. From the Atmosphere folder:
+The Xcode project is in the repo. You do not need `xcodegen`.
+
+The project on `main` builds on iOS 16 (no iOS 17-only `onChange`):
 
 ```bash
+cd /path/to/Atmosphere
 git checkout main
 git pull origin main
 open apps/field-ios/AtmosphereFieldCapture.xcodeproj
 ```
 
-You do not need `xcodegen`. Pick an iPhone simulator and press Run (⌘R).
-
 **Simulator:** no Apple Team needed. Signing is off for `iphonesimulator`.
+Pick any iPhone simulator and press Run (⌘R).
 
-**Physical iPhone:** Xcode → target **AtmosphereFieldCapture** → **Signing &
-Capabilities** → **Automatically manage signing** → pick your Personal Team
-(your Apple ID is enough). Then Product → Clean Build Folder → Run.
+**Physical iPhone (cable, for testing):**
 
-The phone signs in against the same Atmosphere project as the website — no
-Server / API URL field. Run on a LiDAR iPhone for RoomPlan. Simulator can
-optionally talk to a local BFF at `http://127.0.0.1:4000` when `npm run dev`
-is running; a physical device never uses localhost.
+1. Unlock the iPhone, plug it into the Mac, and tap **Trust This Computer**.
+   Unlock again if the phone asks for the passcode.
+2. On the iPhone: **Settings → Privacy & Security → Developer Mode → On**.
+   Restart the phone if iOS asks, then confirm.
+3. In Xcode: **Xcode → Settings → Accounts** → add your Apple ID (free is
+   enough). That creates a Personal Team.
+4. Left sidebar → blue **AtmosphereFieldCapture** project → target
+   **AtmosphereFieldCapture** → **Signing & Capabilities**.
+   Check **Automatically manage signing**. Team = your Personal Team.
+   If the bundle id `com.atmosphere.fieldcapture` is taken on that team,
+   change it to something unique like `com.yourname.fieldcapture`.
+5. Toolbar destination (the device menu next to the Play button) → your
+   iPhone, not a simulator.
+6. **Product → Clean Build Folder**, then press Run (⌘R). Keep the phone
+   unlocked while it installs.
+7. First install: iPhone **Settings → General → VPN & Device Management**
+   (or **Device Management**) → your Apple ID → **Trust**. Open **Field
+   Capture** from the home screen.
+
+A Personal Team build expires after 7 days — Run from Xcode again to refresh.
+The phone signs in with the same email/password as the Atmosphere website.
+A physical iPhone never uses localhost; it talks to the hosted Atmosphere
+project. RoomPlan needs a LiDAR iPhone.
+
+To use the **web** Field Capture on the phone instead (no Xcode):
+
+```bash
+bash scripts/host-phone.sh
+```
+
+Open the printed `/fieldcapture/` URL in Safari, then Share → Add to Home Screen.
 
 **Create an account or sign in** on first install (same email/password as the
 Atmosphere website). Link the phone to the office with the join code from

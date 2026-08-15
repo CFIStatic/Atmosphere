@@ -22,7 +22,6 @@ struct SignInView: View {
                     Text("Atmosphere")
                         .font(.system(size: 28, weight: .bold))
                         .foregroundStyle(FieldTheme.ink)
-                        .tracking(-0.4)
                 }
                 .padding(.top, 36)
 
@@ -87,7 +86,8 @@ struct SignInView: View {
                         if busy {
                             ProgressView().tint(FieldTheme.bg)
                         } else {
-                            Text("Sign in & connect phone").fontWeight(.bold)
+                            Text("Sign in & connect phone")
+                                .font(.system(size: 16, weight: .bold))
                         }
                     }
                     .frame(maxWidth: .infinity)

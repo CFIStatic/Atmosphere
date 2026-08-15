@@ -64,6 +64,7 @@ import { requestLog } from './middleware/requestLog.js';
 import { cyberMonitor } from './cyber/index.js';
 import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
 import { verificationHook, pumpVerificationQueue } from './lib/verifierRunner.js';
+import { isCloudflareQuickTunnelOrigin } from './lib/previewOrigins.js';
 
 /**
  * Match a browser Origin against FRONTEND_ORIGIN.
@@ -115,10 +116,7 @@ export function createApp(): Express {
           callback(null, true);
           return;
         }
-        if (
-          !config.isProduction &&
-          /^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/i.test(origin)
-        ) {
+        if (!config.isProduction && isCloudflareQuickTunnelOrigin(origin)) {
           callback(null, true);
           return;
         }
