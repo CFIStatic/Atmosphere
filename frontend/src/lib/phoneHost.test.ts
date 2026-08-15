@@ -31,6 +31,24 @@ describe('phone home-screen manifests', () => {
     expect(manifest.icons.some((icon) => icon.src.includes('atmosphere-192.png'))).toBe(true);
   });
 
+  it('keeps the live Field Capture app on the same send / measure / invite rules', () => {
+    const html = readFileSync(resolve(repoRoot, 'fieldcapture/index.html'), 'utf8');
+    const app = readFileSync(resolve(repoRoot, 'fieldcapture/js/app.js'), 'utf8');
+    const core = readFileSync(resolve(repoRoot, 'fieldcapture/js/capture-core.js'), 'utf8');
+    expect(html).toContain('Accept a job invite');
+    expect(html).toContain('Accept this job');
+    expect(html).toContain('Saved on this phone');
+    expect(html).toContain('Each person uses their own login');
+    expect(html).not.toContain('Job share links still work without signing in');
+    expect(html).not.toMatch(/RoomPlan/);
+    expect(app).toContain('consumePendingInvite');
+    expect(app).toContain('savePendingFilm');
+    expect(app).toContain('if (state.account) finishLiveDay()');
+    expect(app).not.toContain('no office login');
+    expect(core).toContain('acceptFieldInvite');
+    expect(core).toContain('savePendingFilm');
+  });
+
   it('tunnels the Vite app so a phone can open HTTPS', () => {
     const script = readFileSync(resolve(repoRoot, 'scripts/host-phone.sh'), 'utf8');
     expect(script).toContain('trycloudflare.com');

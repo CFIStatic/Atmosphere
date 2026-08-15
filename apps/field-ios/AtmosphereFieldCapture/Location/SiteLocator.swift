@@ -24,10 +24,15 @@ final class SiteLocator: NSObject, ObservableObject, CLLocationManagerDelegate {
 
     func start() {
         manager.requestWhenInUseAuthorization()
+        // Keep a fix for the whole day film. Do not scan rooms in the
+        // background — only where the crew is while the camera is rolling.
+        manager.pausesLocationUpdatesAutomatically = false
+        manager.activityType = .otherNavigation
         manager.startUpdatingLocation()
     }
 
     func stop() {
+        manager.pausesLocationUpdatesAutomatically = true
         manager.stopUpdatingLocation()
     }
 

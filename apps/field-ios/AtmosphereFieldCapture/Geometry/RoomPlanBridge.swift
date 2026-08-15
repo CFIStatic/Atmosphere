@@ -9,8 +9,10 @@ import RealityKit
 /**
  * On-device room measurement for the property digital twin.
  *
- * LiDAR iPhones present `RoomCaptureViewController`. Simulator / older
- * devices skip the pass so the day film still files.
+ * LiDAR iPhones present `RoomCaptureViewController` for a short, explicit
+ * walk. This does **not** run in the background or under the day film —
+ * RoomPlan needs the camera on screen and cannot share it with the MP4.
+ * Simulator / older devices skip the pass so the day film still files.
  */
 @MainActor
 final class RoomPlanBridge: ObservableObject {

@@ -6,9 +6,9 @@ Native iPhone client: **one button to film the day (video + microphone)**, plus
 Branch focus: `cursor/field-capture-app-build-out-2764` (“Field Capture App Build out”).
 
 The web `fieldcapture/` app is production with **dashboard email/password**
-(same as the office console) or `?token=` (job-share link). This Swift app is
-what ships on the App Store with RoomPlan + the same audiovisual day film
-contract.
+(same as the office console). Job invites are accepted after sign-in. This
+Swift app is what ships on the App Store with the same audiovisual day film
+contract, plus a short measure walk on a LiDAR iPhone when a job has none.
 
 ## Audiovisual day film (required)
 

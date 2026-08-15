@@ -371,11 +371,101 @@
     );
   }
 
+  function acceptFieldInvite(apiBase, accessToken, token, name) {
+    return apiJson(origin(apiBase) + '/api/field-app/invites/accept', {
+      method: 'POST',
+      accessToken: accessToken,
+      body: { token: token, name: name || undefined },
+    }).then(function (body) {
+      return body.job;
+    });
+  }
+
+  function acceptShareBrief(apiBase, token, name, revision) {
+    return apiJson(origin(apiBase) + '/api/job-share/' + encodeURIComponent(token) + '/accept', {
+      method: 'POST',
+      body: { name: name, revision: revision },
+    });
+  }
+
+  var QUEUE_DB = 'atmosphere.fieldcapture';
+  var QUEUE_STORE = 'pendingFilms';
+
+  function openQueueDb() {
+    return new Promise(function (resolve, reject) {
+      if (!global.indexedDB) {
+        reject(new Error('This browser cannot keep a day film offline.'));
+        return;
+      }
+      var req = indexedDB.open(QUEUE_DB, 1);
+      req.onupgradeneeded = function () {
+        if (!req.result.objectStoreNames.contains(QUEUE_STORE)) {
+          req.result.createObjectStore(QUEUE_STORE, { keyPath: 'id' });
+        }
+      };
+      req.onsuccess = function () {
+        resolve(req.result);
+      };
+      req.onerror = function () {
+        reject(req.error || new Error('Could not open the offline film store.'));
+      };
+    });
+  }
+
+  function savePendingFilm(item) {
+    return openQueueDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(QUEUE_STORE, 'readwrite');
+        tx.objectStore(QUEUE_STORE).put(item);
+        tx.oncomplete = function () {
+          resolve(item);
+        };
+        tx.onerror = function () {
+          reject(tx.error || new Error('Could not save the day film on this phone.'));
+        };
+      });
+    });
+  }
+
+  function loadPendingFilms() {
+    return openQueueDb()
+      .then(function (db) {
+        return new Promise(function (resolve, reject) {
+          var tx = db.transaction(QUEUE_STORE, 'readonly');
+          var req = tx.objectStore(QUEUE_STORE).getAll();
+          req.onsuccess = function () {
+            resolve(req.result || []);
+          };
+          req.onerror = function () {
+            reject(req.error);
+          };
+        });
+      })
+      .catch(function () {
+        return [];
+      });
+  }
+
+  function removePendingFilm(id) {
+    return openQueueDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(QUEUE_STORE, 'readwrite');
+        tx.objectStore(QUEUE_STORE).delete(id);
+        tx.oncomplete = function () {
+          resolve();
+        };
+        tx.onerror = function () {
+          reject(tx.error);
+        };
+      });
+    });
+  }
+
   /**
    * Upload day film.
    *
-   * Job-share link: `{ token }` (no office login).
-   * Dashboard account: `{ jobId, accessToken }` — same session as the website.
+   * Signed-in account: `{ jobId, accessToken }`.
+   * Invite fallback only: `{ token }` after this login accepted a job.
    */
   function uploadDayFilm(opts) {
     var token = opts.token;
@@ -493,6 +583,11 @@
     loadTodayJobs: loadTodayJobs,
     loadShareJob: loadShareJob,
     loadShareProofs: loadShareProofs,
+    acceptFieldInvite: acceptFieldInvite,
+    acceptShareBrief: acceptShareBrief,
+    savePendingFilm: savePendingFilm,
+    loadPendingFilms: loadPendingFilms,
+    removePendingFilm: removePendingFilm,
     currentPosition: currentPosition,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

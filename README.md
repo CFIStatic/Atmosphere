@@ -58,9 +58,9 @@ are prompted to create one with that exact address.
 
 ### Field Capture (crew)
 
-- **Web:** `fieldcapture/?token=<job-share-token>` — one-button video + mic
+- **Web:** `fieldcapture/` — own login, accept job invites in-app, save the day film on the phone and file when online
 - **My jobs** (`/my-jobs`) — after claiming a link with email/phone OTP
-- **iOS (App Store path):** `apps/field-ios/` — same upload contract; RoomPlan twin later
+- **iOS (App Store path):** `apps/field-ios/` — same upload contract; measure walk on a LiDAR iPhone when a job has none
 - **iOS browser host:** `apps/field-ios/preview/` on `:5175` or `/ios` — phone-framed Swift screens (no upload)
 
 ## Architecture
