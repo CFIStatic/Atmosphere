@@ -21,7 +21,6 @@ struct SignInView: View {
                     Text("Atmosphere")
                         .font(.system(size: 28, weight: .bold))
                         .foregroundStyle(FieldTheme.ink)
-                        .tracking(-0.4)
                 }
                 .padding(.top, 36)
 
