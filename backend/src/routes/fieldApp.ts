@@ -4,11 +4,12 @@ import { z } from 'zod';
 import type { Session, User } from '@supabase/supabase-js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
-import { createAdminClient, createUserClient } from '../lib/supabase.js';
+import { createAdminClient } from '../lib/supabase.js';
 import { badRequest, HttpError, serviceUnavailable } from '../lib/errors.js';
 import { setSessionCookies } from '../lib/session.js';
-import { FIELD_APP_ONBOARDING, fieldOfficeSchema, fieldRegisterSchema } from '../lib/validation.js';
+import { fieldOfficePreviewSchema, fieldOfficeSchema, fieldRegisterSchema } from '../lib/validation.js';
 import { createPasswordAccount, publicUser, sessionTokens } from '../auth/passwordAccount.js';
+import { linkFieldOffice, previewOfficeByJoinCode } from '../field/officeLink.js';
 import { authLimiter } from './auth.js';
 import { createUploadUrl, recordProof } from './proofOfWork.js';
 import {
@@ -27,98 +28,6 @@ import {
  * evidence library and job record see them — not a parallel catalog-only path.
  */
 export const fieldAppRouter = Router();
-
-function serializeFieldOrg(org: {
-  id?: string;
-  name?: string;
-  join_code?: string;
-  contractor_type?: string | null;
-} | null) {
-  if (!org?.id) return null;
-  return {
-    id: org.id,
-    name: org.name ?? 'Organization',
-    joinCode: org.join_code ?? null,
-    contractorType: org.contractor_type ?? null,
-  };
-}
-
-async function saveFieldProfile(accessToken: string, user: User, fullName?: string) {
-  const supabase = createUserClient(accessToken);
-  await supabase.from('profiles').upsert(
-    {
-      id: user.id,
-      email: user.email,
-      ...(fullName ? { full_name: fullName, updated_at: new Date().toISOString() } : {}),
-    },
-    { onConflict: 'id' },
-  );
-  return supabase;
-}
-
-async function saveFieldUsageIntents(
-  supabase: ReturnType<typeof createUserClient>,
-  userId: string,
-) {
-  const admin = createAdminClient();
-  const writer = admin ?? supabase;
-  const { error } = await writer
-    .from('org_members')
-    .update({ usage_intents: [...FIELD_APP_ONBOARDING.usageIntents] })
-    .eq('user_id', userId);
-  if (
-    error &&
-    !/usage_intents|column .* does not exist|permission denied for function is_org_member/i.test(
-      error.message,
-    )
-  ) {
-    throw new HttpError(500, error.message, 'usage_intents_failed');
-  }
-}
-
-async function linkFieldOffice(
-  accessToken: string,
-  user: User,
-  input: { joinCode?: string; orgName?: string; fullName?: string },
-) {
-  const supabase = await saveFieldProfile(accessToken, user, input.fullName);
-
-  if (input.joinCode) {
-    const { data, error } = await supabase.rpc('join_org', {
-      p_code: input.joinCode,
-      p_role: FIELD_APP_ONBOARDING.role,
-      p_work_type: FIELD_APP_ONBOARDING.workType,
-    });
-    if (error) {
-      const message = /invalid join code/i.test(error.message)
-        ? 'That join code did not match any organization.'
-        : error.message;
-      throw new HttpError(400, message, 'join_org_failed');
-    }
-    await saveFieldUsageIntents(supabase, user.id);
-    return serializeFieldOrg(data);
-  }
-
-  const { data, error } = await supabase.rpc('create_org', {
-    p_name: input.orgName,
-    p_role: FIELD_APP_ONBOARDING.role,
-    p_work_type: FIELD_APP_ONBOARDING.workType,
-  });
-  if (error) throw new HttpError(400, error.message, 'create_org_failed');
-
-  const { data: orgWithType, error: typeError } = await supabase.rpc('set_org_contractor_type', {
-    p_contractor_type: FIELD_APP_ONBOARDING.contractorType,
-  });
-  if (
-    typeError &&
-    !/could not find|does not exist|schema cache|contractor_type/i.test(typeError.message)
-  ) {
-    throw new HttpError(400, typeError.message, 'contractor_type_failed');
-  }
-
-  await saveFieldUsageIntents(supabase, user.id);
-  return serializeFieldOrg(orgWithType ?? data);
-}
 
 function writeFieldSession(
   res: Response,
@@ -174,7 +83,10 @@ fieldAppRouter.post(
       } catch (err) {
         // Account exists and the phone has tokens — do not roll that back
         // because the office step failed. The app can retry linking.
-        if (err instanceof HttpError && (err.code === 'join_org_failed' || err.code === 'create_org_failed')) {
+        if (
+          err instanceof HttpError &&
+          (err.code === 'join_org_failed' || err.code === 'create_org_failed' || err.code === 'already_linked')
+        ) {
           writeFieldSession(res, created.status, created.user, created.session, {
             org: null,
             orgError: err.message,
@@ -216,6 +128,23 @@ fieldAppRouter.post('/office', async (req: Request, res: Response, next: NextFun
     const input = fieldOfficeSchema.parse(req.body);
     const org = await linkFieldOffice(req.accessToken, req.user, input);
     res.status(201).json({ org });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/field-app/office/preview
+ * Confirm a join code before the phone attaches this login to that office.
+ */
+fieldAppRouter.post('/office/preview', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!req.accessToken) {
+      throw new HttpError(401, 'Not authenticated', 'unauthorized');
+    }
+    const { joinCode } = fieldOfficePreviewSchema.parse(req.body);
+    const org = await previewOfficeByJoinCode(req.accessToken, joinCode);
+    res.json({ org });
   } catch (err) {
     next(err);
   }

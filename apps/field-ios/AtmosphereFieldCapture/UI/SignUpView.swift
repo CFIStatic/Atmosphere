@@ -160,6 +160,13 @@ struct SignUpView: View {
             .padding(22)
         }
         .background(FieldTheme.bg.ignoresSafeArea())
+        .onAppear {
+            if let pending = auth.pendingJoinCode, !pending.isEmpty {
+                joinCode = pending
+                mode = .join
+                step = 2
+            }
+        }
     }
 
     private var accountFields: some View {

@@ -2425,6 +2425,13 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
+  /** Field Capture iOS — confirm a join code before attaching this login. */
+  fieldPreviewOffice: (joinCode: string) =>
+    request<{ org: { name: string; joinCode: string } }>('/api/field-app/office/preview', {
+      method: 'POST',
+      body: JSON.stringify({ joinCode }),
+    }),
+
   login: (email: string, password: string) =>
     request<AuthResponse>('/api/auth/login', {
       method: 'POST',

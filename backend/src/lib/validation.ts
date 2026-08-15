@@ -276,6 +276,17 @@ export const fieldOfficeSchema = z
 
 export type FieldOfficeInput = z.infer<typeof fieldOfficeSchema>;
 
+/** Confirm an office join code before attaching the Field Capture login. */
+export const fieldOfficePreviewSchema = z.object({
+  joinCode: z
+    .string({ required_error: 'Join code is required' })
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z0-9]{6,12}$/, 'Enter a valid join code'),
+});
+
+export type FieldOfficePreviewInput = z.infer<typeof fieldOfficePreviewSchema>;
+
 /* ---------------------------------------------------------------------------
  * Growth analytics
  * ------------------------------------------------------------------------ */

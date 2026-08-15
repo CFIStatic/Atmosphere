@@ -1,8 +1,11 @@
 import SwiftUI
 
 /**
- * Shown when this phone is signed in but the login is not in an office yet.
- * Same join-or-create choice as signup step 2.
+ * Link this Field Capture login to an office account.
+ *
+ * Primary path: enter the office join code from Atmosphere Settings.
+ * Shown after signup, after sign-in without an org, from Account, or from
+ * an `atmosphere-field://join?code=` link.
  */
 struct OfficeLinkView: View {
     @EnvironmentObject private var auth: AuthSession
@@ -10,11 +13,14 @@ struct OfficeLinkView: View {
     @State private var joinCode = ""
     @State private var orgName = ""
     @State private var busy = false
+    @State private var previewTask: Task<Void, Never>?
 
     private enum Mode {
         case join
         case create
     }
+
+    private var canCancel: Bool { !auth.needsOfficeLink }
 
     private var canSubmit: Bool {
         switch mode {
@@ -42,16 +48,14 @@ struct OfficeLinkView: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(FieldTheme.muted)
 
-                Text("Link this phone to an office")
+                Text("Link to office account")
                     .font(.system(size: 22, weight: .bold))
                     .foregroundStyle(FieldTheme.ink)
                     .padding(.top, 10)
 
-                Text(
-                    "You’re signed in as \(auth.email ?? "this account"), but this login is not in an office yet. Join with a code or start a new office."
-                )
-                .font(.system(size: 14))
-                .foregroundStyle(FieldTheme.muted)
+                Text(lede)
+                    .font(.system(size: 14))
+                    .foregroundStyle(FieldTheme.muted)
 
                 if let err = auth.lastError {
                     Text(err)
@@ -73,6 +77,24 @@ struct OfficeLinkView: View {
                         .background(FieldTheme.panel)
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
                         .cornerRadius(10)
+                        .onChange(of: joinCode) { value in
+                            previewTask?.cancel()
+                            previewTask = Task {
+                                try? await Task.sleep(nanoseconds: 350_000_000)
+                                guard !Task.isCancelled else { return }
+                                await auth.previewOffice(joinCode: value)
+                            }
+                        }
+
+                    if let name = auth.officePreviewName, mode == .join {
+                        Text("This code belongs to \(name).")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(FieldTheme.pass)
+                    } else {
+                        Text("Ask the office for the 6–12 character code in Atmosphere → Settings → Organization.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(FieldTheme.faint)
+                    }
                 } else {
                     TextField("Office name", text: $orgName)
                         .textContentType(.organizationName)
@@ -80,6 +102,9 @@ struct OfficeLinkView: View {
                         .background(FieldTheme.panel)
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
                         .cornerRadius(10)
+                    Text("Only if this company does not have an Atmosphere office yet. You can invite the crew from the website with a join code.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(FieldTheme.faint)
                 }
 
                 Button {
@@ -100,7 +125,8 @@ struct OfficeLinkView: View {
                         if busy {
                             ProgressView().tint(FieldTheme.bg)
                         } else {
-                            Text("Connect to office").fontWeight(.bold)
+                            Text(mode == .join ? "Link to office account" : "Start office & connect phone")
+                                .fontWeight(.bold)
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -112,20 +138,50 @@ struct OfficeLinkView: View {
                 .disabled(busy || !canSubmit)
                 .padding(.top, 6)
 
-                Button {
-                    Task { await auth.disconnectAccount() }
-                } label: {
-                    Text("Use a different account")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(FieldTheme.muted)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
+                if canCancel {
+                    Button {
+                        auth.cancelOfficeLink()
+                    } label: {
+                        Text("Cancel")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(FieldTheme.muted)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                    }
+                    .disabled(busy)
+                } else {
+                    Button {
+                        Task { await auth.disconnectAccount() }
+                    } label: {
+                        Text("Use a different account")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(FieldTheme.muted)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                    }
+                    .disabled(busy)
                 }
-                .disabled(busy)
             }
             .padding(22)
         }
         .background(FieldTheme.bg.ignoresSafeArea())
+        .onAppear {
+            if let pending = auth.pendingJoinCode, !pending.isEmpty {
+                joinCode = pending
+                mode = .join
+                Task { await auth.previewOffice(joinCode: pending) }
+            }
+        }
+    }
+
+    private var lede: String {
+        if let email = auth.email, auth.needsOfficeLink {
+            return "You’re signed in as \(email). Enter the office join code so this phone files day films to that company."
+        }
+        if let current = auth.orgName, !auth.needsOfficeLink {
+            return "This phone is linked to \(current). Enter a different office code to move this login, or cancel."
+        }
+        return "Enter the office join code from Atmosphere Settings so this login belongs to that company."
     }
 
     private func modeButton(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {

@@ -147,6 +147,25 @@ final class AtmosphereClient: ObservableObject {
         )
     }
 
+    struct OfficePreview: Decodable {
+        let name: String
+        let joinCode: String?
+    }
+
+    func previewOffice(joinCode: String) async throws -> OfficePreview {
+        struct Body: Encodable { let joinCode: String }
+        struct Res: Decodable { let org: OfficePreview }
+        if usesBFF {
+            do {
+                let res: Res = try await post(path: "/api/field-app/office/preview", body: Body(joinCode: joinCode))
+                return res.org
+            } catch {
+                if !Self.isUnreachable(error) { throw error }
+            }
+        }
+        return try await previewOfficeViaSupabase(joinCode: joinCode)
+    }
+
     func linkOffice(joinCode: String?, orgName: String?, fullName: String? = nil) async throws -> FieldOrg {
         struct Body: Encodable {
             let joinCode: String?
@@ -658,6 +677,26 @@ final class AtmosphereClient: ObservableObject {
                 orgError: message
             )
         }
+    }
+
+    private func previewOfficeViaSupabase(joinCode: String) async throws -> OfficePreview {
+        struct Body: Encodable { let p_code: String }
+        struct Row: Decodable {
+            let name: String?
+            let join_code: String?
+        }
+        let data = try await supabaseRestData(
+            path: "/rest/v1/rpc/preview_org_by_join_code",
+            method: "POST",
+            json: Body(p_code: joinCode.uppercased())
+        )
+        if let row = try? decoder.decode(Row.self, from: data), let name = row.name?.nilIfEmpty {
+            return OfficePreview(name: name, joinCode: row.join_code ?? joinCode)
+        }
+        if let rows = try? decoder.decode([Row].self, from: data), let name = rows.first?.name?.nilIfEmpty {
+            return OfficePreview(name: name, joinCode: rows.first?.join_code ?? joinCode)
+        }
+        throw APIError.http(status: 400, body: "That join code did not match any organization.")
     }
 
     private func linkOfficeViaSupabase(

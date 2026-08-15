@@ -13,6 +13,12 @@ final class AuthSession: ObservableObject {
     @Published private(set) var isLinked = false
     /// Signed in but not yet a member of an office — show the join/create screen.
     @Published private(set) var needsOfficeLink = false
+    /// User opened Link to office from Account, or a join-code deep link arrived.
+    @Published private(set) var showOfficeLink = false
+    /// Join code from a deep link or the Account flow, prefilled on the link screen.
+    @Published var pendingJoinCode: String?
+    /// Office name returned by preview, when the typed code matches.
+    @Published var officePreviewName: String?
     @Published private(set) var email: String?
     @Published private(set) var orgName: String?
     @Published private(set) var fullName: String?
@@ -149,6 +155,8 @@ final class AuthSession: ObservableObject {
                 self.orgName = org.name
                 UserDefaults.standard.set(org.name, forKey: orgAccount)
                 needsOfficeLink = false
+                showOfficeLink = false
+                pendingJoinCode = nil
                 lastError = nil
             } else if let orgError = result.orgError, !orgError.isEmpty {
                 needsOfficeLink = true
@@ -162,6 +170,56 @@ final class AuthSession: ObservableObject {
         }
     }
 
+    /// Open the office-link screen from Account, even if this phone is already connected.
+    func beginOfficeLink() {
+        lastError = nil
+        officePreviewName = nil
+        showOfficeLink = true
+    }
+
+    func cancelOfficeLink() {
+        if needsOfficeLink { return }
+        showOfficeLink = false
+        officePreviewName = nil
+        lastError = nil
+    }
+
+    /// `atmosphere-field://join?code=8F3A9C2B` from the office or an invite.
+    func handleOpenURL(_ url: URL) {
+        guard url.scheme?.lowercased() == "atmosphere-field" else { return }
+        let host = url.host?.lowercased()
+        var code: String?
+        if host == "join" {
+            if let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems {
+                code = items.first(where: { $0.name == "code" })?.value
+            }
+            if code == nil {
+                let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                if !path.isEmpty { code = path }
+            }
+        }
+        let trimmed = code?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() ?? ""
+        guard (6 ... 12).contains(trimmed.count) else { return }
+        pendingJoinCode = trimmed
+        if isLinked {
+            showOfficeLink = true
+        }
+    }
+
+    func previewOffice(joinCode: String) async {
+        let code = joinCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard (6 ... 12).contains(code.count) else {
+            officePreviewName = nil
+            return
+        }
+        do {
+            let preview = try await api.previewOffice(joinCode: code)
+            officePreviewName = preview.name
+        } catch {
+            officePreviewName = nil
+        }
+    }
+
     /// Join or start an office after the login already exists on this phone.
     func linkOffice(joinCode: String?, orgName: String?) async {
         lastError = nil
@@ -170,6 +228,9 @@ final class AuthSession: ObservableObject {
             self.orgName = org.name
             UserDefaults.standard.set(org.name, forKey: orgAccount)
             needsOfficeLink = false
+            showOfficeLink = false
+            pendingJoinCode = nil
+            officePreviewName = nil
             await refreshProfileOrMarkOffice()
         } catch {
             lastError = Self.friendlyCreateError(error)
@@ -307,6 +368,9 @@ final class AuthSession: ObservableObject {
         api.refreshToken = nil
         isLinked = false
         needsOfficeLink = false
+        showOfficeLink = false
+        pendingJoinCode = nil
+        officePreviewName = nil
         confirmationNotice = nil
         email = nil
         orgName = nil

@@ -52,7 +52,7 @@ struct RootView: View {
                 } else {
                     SignInView(onCreateAccount: { showSignUp = true })
                 }
-            } else if auth.needsOfficeLink {
+            } else if auth.needsOfficeLink || auth.showOfficeLink {
                 OfficeLinkView()
             } else {
                 switch session.phase {
@@ -72,9 +72,12 @@ struct RootView: View {
             }
         }
         .onChange(of: auth.needsOfficeLink) { needsOffice in
-            if auth.isLinked, !needsOffice {
+            if auth.isLinked, !needsOffice, !auth.showOfficeLink {
                 Task { await session.loadToday(api: api) }
             }
+        }
+        .onOpenURL { url in
+            auth.handleOpenURL(url)
         }
     }
 }

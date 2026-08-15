@@ -1850,6 +1850,14 @@ const routes: Array<[string, RegExp, Handler]> = [
       },
     };
   }],
+  ['POST', /^\/api\/field-app\/office\/preview$/, (_m, b) => {
+    if (!state.signedIn) return { status: 401, body: { error: 'Not authenticated', code: 'unauthorized' } };
+    const joinCode = typeof b.joinCode === 'string' ? b.joinCode.trim().toUpperCase() : '';
+    if (joinCode !== state.joinCode) {
+      return { status: 400, body: { error: 'That join code did not match any organization.', code: 'join_org_failed' } };
+    }
+    return { body: { org: { name: state.orgName, joinCode } } };
+  }],
   ['POST', /^\/api\/field-app\/office$/, (_m, b) => {
     if (!state.signedIn) return { status: 401, body: { error: 'Not authenticated', code: 'unauthorized' } };
     const joinCode = typeof b.joinCode === 'string' ? b.joinCode.trim().toUpperCase() : '';
