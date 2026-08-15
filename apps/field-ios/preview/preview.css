@@ -229,6 +229,15 @@ h1 {
 .mono { font-family: var(--mono); }
 
 .field { display: block; margin-top: 10px; }
+.field .lbl {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 6px;
+}
 .field input {
   width: 100%;
   padding: 12px;
@@ -416,7 +425,38 @@ h1 {
 .rooms b { font-weight: 600; }
 .rooms span { font-family: var(--mono); color: var(--muted); }
 
-.dock { padding: 18px; }
+.dock { padding: 18px 18px 8px; }
+
+.tabbar {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-around;
+  padding: 6px 8px 22px;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+}
+.tabbar[hidden] { display: none !important; }
+.tabbar button {
+  flex: 1;
+  border: 0;
+  background: none;
+  color: var(--faint);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 6px 4px 4px;
+  cursor: pointer;
+}
+.tabbar button[aria-current="true"] { color: var(--accent); }
+.tab-ico { display: block; font-size: 16px; margin-bottom: 2px; }
+
+.job .role {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--faint);
+}
 
 .rec-screen {
   position: relative;

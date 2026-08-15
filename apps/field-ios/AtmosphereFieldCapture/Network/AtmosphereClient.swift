@@ -270,6 +270,55 @@ final class AtmosphereClient: ObservableObject {
         return try await todayJobsViaSupabase()
     }
 
+    func assignedJobs() async throws -> [ExpectedJob] {
+        if usesBFF {
+            do {
+                let res: TodayResponse = try await get(path: "/api/field-app/jobs")
+                return res.jobs
+            } catch {
+                if !Self.isUnreachable(error) { throw error }
+            }
+        }
+        return try await assignedJobsViaSupabase()
+    }
+
+    struct FieldJobDraft: Encodable {
+        let name: String
+        let address: String
+        let city: String?
+        let notes: String?
+        let workType: String
+    }
+
+    struct CreatedJobResponse: Decodable {
+        let job: ExpectedJob
+    }
+
+    func createFieldJob(
+        name: String,
+        address: String,
+        city: String?,
+        notes: String?,
+        workType: String
+    ) async throws -> ExpectedJob {
+        let body = FieldJobDraft(
+            name: name,
+            address: address,
+            city: city,
+            notes: notes,
+            workType: workType
+        )
+        if usesBFF {
+            do {
+                let res: CreatedJobResponse = try await post(path: "/api/field-app/jobs", body: body)
+                return res.job
+            } catch {
+                if !Self.isUnreachable(error) { throw error }
+            }
+        }
+        return try await createFieldJobViaSupabase(body)
+    }
+
     struct ProofUploadUrlResponse: Decodable {
         let path: String
         let token: String?
@@ -907,7 +956,9 @@ final class AtmosphereClient: ObservableObject {
             ]
         )
         let filmedIds = Set(proofs.map(\.job_id))
-        let picked = Self.pickTodayJobs(jobs, filmedIds: filmedIds, today: today)
+        let assignedIds = try await assignedJobIds(orgId: membership.org_id)
+        let scoped = jobs.filter { assignedIds.contains($0.id) }
+        let picked = Self.pickTodayJobs(scoped, filmedIds: filmedIds, today: today)
         let propertyIds = Array(Set(picked.compactMap(\.property_id)))
         var addressById: [String: String] = [:]
         if !propertyIds.isEmpty {
@@ -936,9 +987,188 @@ final class AtmosphereClient: ObservableObject {
                 at: Self.formatTodayAt(job.scheduled_start, filmed: filmed),
                 placed: job.scheduled_start != nil || filmed,
                 status: job.status,
-                filmed: filmed
+                filmed: filmed,
+                assigned: true
             )
         }
+    }
+
+    private struct AssignmentRow: Decodable {
+        let job_id: String
+        let role_on_job: String?
+    }
+
+    private func assignedJobIds(orgId: String) async throws -> Set<String> {
+        let userId = jwtClaim("sub") ?? ""
+        let crew: [AssignmentRow] = try await supabaseRest(
+            path: "/rest/v1/job_assignments",
+            query: [
+                URLQueryItem(name: "select", value: "job_id,role_on_job"),
+                URLQueryItem(name: "org_id", value: "eq.\(orgId)"),
+                URLQueryItem(name: "user_id", value: "eq.\(userId)"),
+                URLQueryItem(name: "released_at", value: "is.null"),
+            ]
+        )
+        let owned: [JobRow] = try await supabaseRest(
+            path: "/rest/v1/crm_jobs",
+            query: [
+                URLQueryItem(name: "select", value: "id,job_number,title,status,scheduled_start,property_id"),
+                URLQueryItem(name: "org_id", value: "eq.\(orgId)"),
+                URLQueryItem(name: "owner_id", value: "eq.\(userId)"),
+            ]
+        )
+        return Set(crew.map(\.job_id) + owned.map(\.id))
+    }
+
+    private func assignedJobsViaSupabase() async throws -> [ExpectedJob] {
+        let membership = try await requireMembership()
+        let today = Self.todayISODate()
+        let assignedIds = try await assignedJobIds(orgId: membership.org_id)
+        guard !assignedIds.isEmpty else { return [] }
+        let jobs: [JobRow] = try await supabaseRest(
+            path: "/rest/v1/crm_jobs",
+            query: [
+                URLQueryItem(name: "select", value: "id,job_number,title,status,scheduled_start,property_id"),
+                URLQueryItem(name: "org_id", value: "eq.\(membership.org_id)"),
+                URLQueryItem(name: "id", value: "in.(\(assignedIds.joined(separator: ",")))"),
+                URLQueryItem(name: "order", value: "scheduled_start.asc.nullslast"),
+                URLQueryItem(name: "limit", value: "200"),
+            ]
+        )
+        let proofs: [ProofRow] = try await supabaseRest(
+            path: "/rest/v1/job_proofs",
+            query: [
+                URLQueryItem(name: "select", value: "job_id"),
+                URLQueryItem(name: "org_id", value: "eq.\(membership.org_id)"),
+                URLQueryItem(name: "work_date", value: "eq.\(today)"),
+            ]
+        )
+        let filmedIds = Set(proofs.map(\.job_id))
+        let open = jobs.filter { ($0.status ?? "") != "cancelled" || filmedIds.contains($0.id) }
+        let propertyIds = Array(Set(open.compactMap(\.property_id)))
+        var addressById: [String: String] = [:]
+        if !propertyIds.isEmpty {
+            let properties: [PropertyRow] = try await supabaseRest(
+                path: "/rest/v1/crm_properties",
+                query: [
+                    URLQueryItem(name: "select", value: "id,address_line1,city"),
+                    URLQueryItem(name: "id", value: "in.(\(propertyIds.joined(separator: ",")))"),
+                ]
+            )
+            for property in properties {
+                let line = [property.address_line1, property.city]
+                    .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                    .joined(separator: ", ")
+                if !line.isEmpty { addressById[property.id] = line }
+            }
+        }
+        return open.map { job in
+            let filmed = filmedIds.contains(job.id)
+            return ExpectedJob(
+                id: job.id,
+                number: job.job_number.map { "#\($0)" } ?? "",
+                name: job.title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "Job",
+                address: job.property_id.flatMap { addressById[$0] } ?? "Address on file",
+                at: Self.formatTodayAt(job.scheduled_start, filmed: filmed),
+                placed: job.scheduled_start != nil || filmed,
+                status: job.status,
+                filmed: filmed,
+                assigned: true
+            )
+        }
+    }
+
+    private func createFieldJobViaSupabase(_ draft: FieldJobDraft) async throws -> ExpectedJob {
+        let membership = try await requireMembership()
+        let userId = jwtClaim("sub") ?? ""
+        struct PropertyInsert: Encodable {
+            let org_id: String
+            let address_line1: String
+            let city: String?
+            let created_by: String?
+        }
+        let properties: [PropertyRow] = try await supabaseRest(
+            path: "/rest/v1/crm_properties",
+            method: "POST",
+            json: PropertyInsert(
+                org_id: membership.org_id,
+                address_line1: draft.address,
+                city: draft.city,
+                created_by: userId
+            ),
+            extraHeaders: ["Prefer": "return=representation"]
+        )
+        guard let property = properties.first else {
+            throw APIError.http(status: 400, body: "Could not save the address.")
+        }
+        struct JobInsert: Encodable {
+            let org_id: String
+            let title: String
+            let description: String?
+            let work_type: String
+            let status: String
+            let property_id: String
+            let owner_id: String?
+            let scheduled_start: String
+            let created_by: String?
+        }
+        let now = ISO8601DateFormatter().string(from: Date())
+        let created: [JobRow] = try await supabaseRest(
+            path: "/rest/v1/crm_jobs",
+            method: "POST",
+            json: JobInsert(
+                org_id: membership.org_id,
+                title: draft.name,
+                description: draft.notes,
+                work_type: draft.workType,
+                status: "scheduled",
+                property_id: property.id,
+                owner_id: userId.isEmpty ? nil : userId,
+                scheduled_start: now,
+                created_by: userId.isEmpty ? nil : userId
+            ),
+            extraHeaders: ["Prefer": "return=representation"]
+        )
+        guard let job = created.first else {
+            throw APIError.http(status: 400, body: "Could not open that job.")
+        }
+        struct AssignmentInsert: Encodable {
+            let org_id: String
+            let job_id: String
+            let user_id: String
+            let role_on_job: String
+            let assigned_by: String?
+        }
+        if !userId.isEmpty {
+            let _: Ack = try await supabaseRest(
+                path: "/rest/v1/job_assignments",
+                method: "POST",
+                json: AssignmentInsert(
+                    org_id: membership.org_id,
+                    job_id: job.id,
+                    user_id: userId,
+                    role_on_job: "lead",
+                    assigned_by: userId
+                ),
+                extraHeaders: ["Prefer": "return=minimal"]
+            )
+        }
+        let city = draft.city?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let address = city.isEmpty ? draft.address : "\(draft.address), \(city)"
+        return ExpectedJob(
+            id: job.id,
+            number: job.job_number.map { "#\($0)" } ?? "",
+            name: draft.name,
+            address: address,
+            at: "Today",
+            placed: true,
+            status: "scheduled",
+            filmed: false,
+            assigned: true,
+            role: "lead",
+            workType: draft.workType
+        )
     }
 
     private func beginProofUploadViaSupabase(

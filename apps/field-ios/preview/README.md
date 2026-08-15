@@ -13,6 +13,8 @@ Open `http://127.0.0.1:5175/`. The Vite app also mounts this folder at `/ios`.
 | Query | Effect |
 |---|---|
 | `?screen=today` | Jump straight to Today |
+| `?screen=jobs` | Assigned jobs |
+| `?screen=add` | Add a job |
 | `?screen=recording` | Start a preview day film |
 | `?screen=door` | Open the door checks |
 

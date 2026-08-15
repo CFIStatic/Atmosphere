@@ -7,7 +7,7 @@ struct TodayView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
+            FieldHeader()
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     Text(Date.now, format: .dateTime.weekday(.wide).month(.abbreviated).day())
@@ -35,41 +35,20 @@ struct TodayView: View {
                                 .font(.system(size: 13))
                                 .foregroundStyle(FieldTheme.muted)
                         } else if session.jobs.isEmpty {
-                            Text("Nothing on the schedule for today. Create or schedule a job in the Atmosphere dashboard, then pull to refresh.")
+                            Text("Nothing assigned to you today. Open My jobs to see the rest of your work, or add a job from this phone.")
                                 .font(.system(size: 13))
                                 .foregroundStyle(FieldTheme.muted)
+                            HStack(spacing: 16) {
+                                Button("My jobs") { session.tab = .jobs }
+                                Button("Add a job") { session.tab = .add }
+                            }
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(FieldTheme.accent)
                         }
                         ForEach(session.jobs) { job in
-                            Button {
+                            FieldJobCard(job: job, selected: session.activeJobId == job.id) {
                                 session.activeJobId = job.id
-                            } label: {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(job.name).font(.system(size: 14, weight: .semibold))
-                                        Text(job.address)
-                                            .font(.system(size: 12))
-                                            .foregroundStyle(FieldTheme.muted)
-                                    }
-                                    Spacer()
-                                    Text(job.filmed == true ? "Filmed" : job.at)
-                                        .font(FieldTheme.mono)
-                                        .foregroundStyle(job.filmed == true ? FieldTheme.pass : FieldTheme.faint)
-                                    if session.activeJobId == job.id {
-                                        Text("●")
-                                            .foregroundStyle(FieldTheme.accent)
-                                            .font(.system(size: 10))
-                                    }
-                                }
-                                .padding(12)
-                                .background(FieldTheme.panel)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .stroke(session.activeJobId == job.id ? FieldTheme.accent : FieldTheme.line)
-                                )
-                                .cornerRadius(10)
                             }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(FieldTheme.ink)
                         }
                     }
 
@@ -120,46 +99,6 @@ struct TodayView: View {
             }
             .padding(18)
         }
-    }
-
-    private var header: some View {
-        HStack(spacing: 10) {
-            AtmosphereBarsMark(size: 22)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Atmosphere")
-                    .font(.system(size: 16, weight: .heavy))
-                    .foregroundStyle(FieldTheme.ink)
-                Text(auth.orgName ?? "Field Capture")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(FieldTheme.muted)
-                    .lineLimit(1)
-            }
-            Spacer()
-            Menu {
-                if let email = auth.email {
-                    Text(email)
-                }
-                if let office = auth.orgName {
-                    Text("Office: \(office)")
-                }
-                Button("Link to office account") {
-                    auth.beginOfficeLink()
-                }
-                Button("Disconnect this phone", role: .destructive) {
-                    Task {
-                        await auth.disconnectAccount()
-                        session.jobs = []
-                    }
-                }
-            } label: {
-                Text("Account")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(FieldTheme.muted)
-            }
-        }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
-        .background(FieldTheme.panel)
-        .overlay(alignment: .bottom) { FieldTheme.line.frame(height: 1) }
+        .background(FieldTheme.bg)
     }
 }

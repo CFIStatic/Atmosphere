@@ -4,7 +4,9 @@ import Foundation
 @MainActor
 final class FieldDaySession: ObservableObject {
     @Published var phase: FieldPhase = .today
+    @Published var tab: FieldTab = .today
     @Published var jobs: [ExpectedJob] = []
+    @Published var assignedJobs: [ExpectedJob] = []
     @Published var activeJobId: String?
     @Published var elapsedSeconds: Int = 0
     @Published var siteLabel: String = "Getting your bearings…"
@@ -12,6 +14,7 @@ final class FieldDaySession: ObservableObject {
     @Published var twinRooms: [TwinRoomSummary] = []
     @Published var lastError: String?
     @Published var uploading: Bool = false
+    @Published var creatingJob: Bool = false
     @Published var manifest: DayFilmManifest?
     @Published var loadingJobs: Bool = false
 
@@ -24,27 +27,74 @@ final class FieldDaySession: ObservableObject {
         lastError = nil
         defer { loadingJobs = false }
         do {
-            let list = try await api.todayJobs()
+            async let today = api.todayJobs()
+            async let mine = api.assignedJobs()
+            let list = try await today
+            let assigned = try await mine
             jobs = list
-            if activeJobId == nil || !list.contains(where: { $0.id == activeJobId }) {
-                activeJobId = list.first?.id
+            assignedJobs = assigned
+            let pool = list + assigned
+            if activeJobId == nil || !pool.contains(where: { $0.id == activeJobId }) {
+                activeJobId = list.first?.id ?? assigned.first?.id
             }
         } catch {
             lastError = error.localizedDescription
             jobs = []
+            assignedJobs = []
         }
+    }
+
+    func createJob(
+        api: AtmosphereClient,
+        name: String,
+        address: String,
+        city: String,
+        notes: String,
+        workType: String
+    ) async -> Bool {
+        creatingJob = true
+        lastError = nil
+        defer { creatingJob = false }
+        do {
+            let job = try await api.createFieldJob(
+                name: name,
+                address: address,
+                city: city.isEmpty ? nil : city,
+                notes: notes.isEmpty ? nil : notes,
+                workType: workType
+            )
+            if !assignedJobs.contains(where: { $0.id == job.id }) {
+                assignedJobs.insert(job, at: 0)
+            }
+            if !jobs.contains(where: { $0.id == job.id }) {
+                jobs.insert(job, at: 0)
+            }
+            activeJobId = job.id
+            tab = .jobs
+            return true
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
+    func selectJob(_ id: String) {
+        activeJobId = id
+        tab = .today
+        phase = .today
     }
 
     func startDay() async {
         lastError = nil
-        guard activeJobId != nil || !jobs.isEmpty else {
-            lastError = "No job for today. Create or schedule a job in the Atmosphere dashboard first."
+        let pool = jobs + assignedJobs.filter { job in !jobs.contains(where: { $0.id == job.id }) }
+        guard activeJobId != nil || !pool.isEmpty else {
+            lastError = "No job assigned to you. Add a job from this phone, or ask the office to put you on one."
             return
         }
-        if activeJobId == nil { activeJobId = jobs.first?.id }
+        if activeJobId == nil { activeJobId = pool.first?.id }
         do {
             try await recorder.prepare()
-            locator.configure(jobs: jobs)
+            locator.configure(jobs: pool)
             locator.start()
             try recorder.startDay()
             phase = .recording
@@ -163,7 +213,7 @@ final class FieldDaySession: ObservableObject {
                 capturedAt: Date()
             )
 
-            let jobName = jobs.first(where: { $0.id == jobId })?.name ?? jobId
+            let jobName = (jobs + assignedJobs).first(where: { $0.id == jobId })?.name ?? jobId
             doorChecks = [
                 DoorCheck(id: "1", label: "Filmed on site", detail: siteLabel, ok: true),
                 DoorCheck(id: "2", label: "Video + audio sealed", detail: "mic track present", ok: true),

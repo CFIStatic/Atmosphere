@@ -47,9 +47,13 @@ describe('phone home-screen manifests', () => {
     expect(html).toContain('id="s-signup"');
     expect(html).toContain('id="s-office"');
     expect(html).toContain('id="s-today"');
+    expect(html).toContain('id="s-jobs"');
+    expect(html).toContain('id="s-add"');
     expect(html).toContain('id="s-recording"');
     expect(html).toContain('id="s-door"');
     expect(html).toContain('Start the day');
     expect(html).toContain('Hold to finish the day');
+    expect(html).toContain('Add job &amp; assign to me');
+    expect(html).toContain('Assigned to you');
   });
 });

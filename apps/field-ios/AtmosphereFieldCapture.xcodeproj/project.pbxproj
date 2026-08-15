@@ -21,6 +21,9 @@
 		AFC00000000000000000020D /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000010D /* SignInView.swift */; };
 		AFC000000000000000000216 /* SignUpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000116 /* SignUpView.swift */; };
 		AFC000000000000000000217 /* OfficeLinkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000117 /* OfficeLinkView.swift */; };
+		AFC000000000000000000218 /* FieldChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000118 /* FieldChrome.swift */; };
+		AFC000000000000000000219 /* MyJobsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000119 /* MyJobsView.swift */; };
+		AFC00000000000000000021A /* AddJobView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000011A /* AddJobView.swift */; };
 		AFC00000000000000000020E /* RecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000010E /* RecordingView.swift */; };
 		AFC00000000000000000020F /* DoorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000010F /* DoorView.swift */; };
 		AFC000000000000000000210 /* FieldTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000110 /* FieldTheme.swift */; };
@@ -47,6 +50,9 @@
 		AFC00000000000000000010D /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
 		AFC000000000000000000116 /* SignUpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignUpView.swift; sourceTree = "<group>"; };
 		AFC000000000000000000117 /* OfficeLinkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficeLinkView.swift; sourceTree = "<group>"; };
+		AFC000000000000000000118 /* FieldChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldChrome.swift; sourceTree = "<group>"; };
+		AFC000000000000000000119 /* MyJobsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyJobsView.swift; sourceTree = "<group>"; };
+		AFC00000000000000000011A /* AddJobView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddJobView.swift; sourceTree = "<group>"; };
 		AFC00000000000000000010E /* RecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingView.swift; sourceTree = "<group>"; };
 		AFC00000000000000000010F /* DoorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoorView.swift; sourceTree = "<group>"; };
 		AFC000000000000000000110 /* FieldTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldTheme.swift; sourceTree = "<group>"; };
@@ -152,6 +158,9 @@
 			isa = PBXGroup;
 			children = (
 				AFC00000000000000000010C /* TodayView.swift */,
+				AFC000000000000000000118 /* FieldChrome.swift */,
+				AFC000000000000000000119 /* MyJobsView.swift */,
+				AFC00000000000000000011A /* AddJobView.swift */,
 				AFC00000000000000000010D /* SignInView.swift */,
 				AFC000000000000000000116 /* SignUpView.swift */,
 				AFC000000000000000000117 /* OfficeLinkView.swift */,
@@ -259,6 +268,9 @@
 				AFC00000000000000000020A /* KeychainStore.swift in Sources */,
 				AFC00000000000000000020B /* FieldDaySession.swift in Sources */,
 				AFC00000000000000000020C /* TodayView.swift in Sources */,
+				AFC000000000000000000218 /* FieldChrome.swift in Sources */,
+				AFC000000000000000000219 /* MyJobsView.swift in Sources */,
+				AFC00000000000000000021A /* AddJobView.swift in Sources */,
 				AFC00000000000000000020D /* SignInView.swift in Sources */,
 				AFC000000000000000000216 /* SignUpView.swift in Sources */,
 				AFC000000000000000000217 /* OfficeLinkView.swift in Sources */,

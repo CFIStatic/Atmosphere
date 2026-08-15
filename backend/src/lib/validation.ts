@@ -553,6 +553,26 @@ const optionalDate = z
   .optional()
   .nullable();
 
+/** Crew opens a job from Field Capture and is assigned to it. */
+export const fieldCreateJobSchema = z.object({
+  name: z
+    .string({ required_error: 'Enter a job name' })
+    .trim()
+    .min(2, 'Enter a job name')
+    .max(200, 'Job name is too long'),
+  address: z
+    .string({ required_error: 'Enter the site address' })
+    .trim()
+    .min(3, 'Enter the site address')
+    .max(200, 'Address is too long'),
+  city: optionalText(120),
+  notes: optionalText(4000),
+  workType: z.enum(WORK_TYPES).optional().default('mitigation'),
+  scheduledStart: optionalDate,
+});
+
+export type FieldCreateJobInput = z.infer<typeof fieldCreateJobSchema>;
+
 /**
  * Opening a job writes to `crm_jobs`. This is the field-facing subset — the
  * fuller CRUD, with financials and the links to accounts, contacts and

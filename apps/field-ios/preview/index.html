@@ -33,6 +33,8 @@
         <button type="button" data-jump="signup">Sign up</button>
         <button type="button" data-jump="office">Office link</button>
         <button type="button" data-jump="today">Today</button>
+        <button type="button" data-jump="jobs">My jobs</button>
+        <button type="button" data-jump="add">Add job</button>
         <button type="button" data-jump="recording">Recording</button>
         <button type="button" data-jump="door">Door</button>
       </nav>
@@ -55,6 +57,12 @@
           </div>
 
           <div class="app" id="app">
+            <div class="account-menu" id="account-menu" hidden>
+              <p id="account-email"></p>
+              <p id="account-office"></p>
+              <button type="button" id="account-link">Link to office account</button>
+              <button type="button" class="danger" id="account-disconnect">Disconnect this phone</button>
+            </div>
             <!-- SIGN IN -->
             <section class="screen" id="s-signin" data-on="1">
               <div class="scroll">
@@ -186,12 +194,6 @@
                 </div>
                 <button type="button" class="account-btn" id="account-btn">Account</button>
               </header>
-              <div class="account-menu" id="account-menu" hidden>
-                <p id="account-email"></p>
-                <p id="account-office"></p>
-                <button type="button" id="account-link">Link to office account</button>
-                <button type="button" class="danger" id="account-disconnect">Disconnect this phone</button>
-              </div>
               <div class="scroll today-scroll">
                 <p class="daterow" id="today-date"></p>
                 <h1 class="today-h">Start it and go to work</h1>
@@ -211,6 +213,63 @@
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17 10.5V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3.5l5 4v-11z"/></svg>
                   Start the day
                 </button>
+              </div>
+            </section>
+
+            <!-- MY JOBS -->
+            <section class="screen" id="s-jobs">
+              <header class="app-header">
+                <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+                  <rect y="0" width="22" height="2.8" fill="#A8A29E"/>
+                  <rect y="4.8" width="22" height="2.8" fill="#78716C"/>
+                  <rect y="9.6" width="22" height="2.8" fill="#57534E"/>
+                  <rect y="14.4" width="22" height="2.8" fill="#292524"/>
+                  <rect y="19.2" width="22" height="2.8" fill="#F2670C"/>
+                </svg>
+                <div class="app-header-copy">
+                  <strong>Atmosphere</strong>
+                  <span id="jobs-org">Field Capture</span>
+                </div>
+                <button type="button" class="account-btn" id="jobs-account-btn">Account</button>
+              </header>
+              <div class="scroll today-scroll">
+                <h1 class="today-h">Assigned to you</h1>
+                <p class="lede">These are the jobs the office put on you, plus any you opened from this phone. Tap one to film it today.</p>
+                <div id="assigned-list"></div>
+                <p class="err" id="jobs-err" hidden></p>
+              </div>
+            </section>
+
+            <!-- ADD JOB -->
+            <section class="screen" id="s-add">
+              <header class="app-header">
+                <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+                  <rect y="0" width="22" height="2.8" fill="#A8A29E"/>
+                  <rect y="4.8" width="22" height="2.8" fill="#78716C"/>
+                  <rect y="9.6" width="22" height="2.8" fill="#57534E"/>
+                  <rect y="14.4" width="22" height="2.8" fill="#292524"/>
+                  <rect y="19.2" width="22" height="2.8" fill="#F2670C"/>
+                </svg>
+                <div class="app-header-copy">
+                  <strong>Atmosphere</strong>
+                  <span id="add-org">Field Capture</span>
+                </div>
+                <button type="button" class="account-btn" id="add-account-btn">Account</button>
+              </header>
+              <div class="scroll today-scroll">
+                <h1 class="today-h">Add a job</h1>
+                <p class="lede">Opens the job in your office account and assigns it to you. It shows up under My jobs and, if it is for today, on Today.</p>
+                <label class="field"><span class="lbl">Job name</span><input id="add-name" type="text" placeholder="Kitchen water — Oak Ridge" /></label>
+                <label class="field"><span class="lbl">Site address</span><input id="add-address" type="text" placeholder="1847 Oak Ridge Dr" /></label>
+                <label class="field"><span class="lbl">City</span><input id="add-city" type="text" placeholder="Charleston" /></label>
+                <p class="step">Work type</p>
+                <div class="mode-row">
+                  <button type="button" class="mode on" data-work-type="mitigation">Mitigation</button>
+                  <button type="button" class="mode" data-work-type="construction">Construction</button>
+                </div>
+                <label class="field"><span class="lbl">Notes (optional)</span><input id="add-notes" type="text" placeholder="What you are walking into" /></label>
+                <p class="err" id="add-err" hidden></p>
+                <button type="button" class="primary" id="add-submit" disabled>Add job &amp; assign to me</button>
               </div>
             </section>
 
@@ -253,6 +312,20 @@
             </section>
           </div>
 
+          <nav class="tabbar" id="tabbar" hidden>
+            <button type="button" data-tab="today">
+              <span class="tab-ico" aria-hidden="true">☀</span>
+              Today
+            </button>
+            <button type="button" data-tab="jobs">
+              <span class="tab-ico" aria-hidden="true">☰</span>
+              My jobs
+            </button>
+            <button type="button" data-tab="add">
+              <span class="tab-ico" aria-hidden="true">＋</span>
+              Add job
+            </button>
+          </nav>
           <div class="home-indicator" aria-hidden="true"></div>
         </div>
       </div>

@@ -58,7 +58,7 @@ struct RootView: View {
             } else {
                 switch session.phase {
                 case .today:
-                    TodayView()
+                    FieldShellView()
                 case .recording:
                     RecordingView()
                 case .door:

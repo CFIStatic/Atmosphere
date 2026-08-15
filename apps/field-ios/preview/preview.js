@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var STORAGE_KEY = 'atmosphere.iosPreview.v1';
+  var STORAGE_KEY = 'atmosphere.iosPreview.v2';
   var OFFICES = {
     COASTAL: 'Coastal Drying LLC',
     COASTALDRY: 'Coastal Drying LLC',
@@ -15,6 +15,8 @@
       address: '1847 Oak Ridge Dr, Charleston',
       at: '7:30a',
       filmed: false,
+      assigned: true,
+      role: 'lead',
     },
     {
       id: 'job-harbor',
@@ -22,10 +24,13 @@
       address: '22 Harbor Walk, Mount Pleasant',
       at: '1:00p',
       filmed: false,
+      assigned: true,
+      role: 'crew',
     },
   ];
 
-  var SCREENS = ['signin', 'signup', 'office', 'today', 'recording', 'door'];
+  var SCREENS = ['signin', 'signup', 'office', 'today', 'jobs', 'add', 'recording', 'door'];
+  var TABBED = { today: true, jobs: true, add: true };
 
   var state = {
     screen: 'signin',
@@ -39,6 +44,7 @@
     signupMode: 'join',
     officeMode: 'join',
     jobs: DEMO_JOBS.map(copyJob),
+    workType: 'mitigation',
     activeJobId: DEMO_JOBS[0].id,
     elapsed: 0,
     holdTimer: null,
@@ -54,7 +60,17 @@
       address: job.address,
       at: job.at,
       filmed: Boolean(job.filmed),
+      assigned: job.assigned !== false,
+      role: job.role || 'crew',
+      workType: job.workType || 'mitigation',
     };
+  }
+
+  function roleLabel(role) {
+    if (role === 'lead') return 'Lead';
+    if (role === 'owner') return 'Yours';
+    if (role === 'supervisor') return 'Supervisor';
+    return 'Assigned';
   }
 
   function $(id) {
@@ -109,6 +125,11 @@
     document.querySelectorAll('.stage-nav button').forEach(function (btn) {
       btn.setAttribute('aria-current', btn.getAttribute('data-jump') === name ? 'true' : 'false');
     });
+    var tabbar = $('tabbar');
+    if (tabbar) tabbar.hidden = !TABBED[name];
+    document.querySelectorAll('.tabbar button').forEach(function (btn) {
+      btn.setAttribute('aria-current', btn.getAttribute('data-tab') === name ? 'true' : 'false');
+    });
     persist();
     render();
   }
@@ -143,39 +164,73 @@
     return value.indexOf('@') !== -1 && value.indexOf('.') !== -1;
   }
 
+  function jobCard(job, onPick) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'job' + (state.activeJobId === job.id ? ' on' : '');
+    btn.innerHTML =
+      '<div><b></b><span></span><span class="role"></span></div>' +
+      '<div class="meta' + (job.filmed ? ' filmed' : '') + '"></div>' +
+      (state.activeJobId === job.id ? '<div class="dot">●</div>' : '');
+    btn.querySelector('b').textContent = job.name;
+    btn.querySelector('span').textContent = job.address;
+    btn.querySelector('.role').textContent = roleLabel(job.role);
+    btn.querySelector('.meta').textContent = job.filmed ? 'Filmed' : job.at;
+    btn.addEventListener('click', function () {
+      onPick(job);
+    });
+    return btn;
+  }
+
   function renderJobs() {
     var root = $('job-list');
     if (!root) return;
     root.innerHTML = '';
     if (!state.jobs.length) {
-      root.textContent = 'Nothing on the schedule for today. Create or schedule a job in the Atmosphere dashboard, then pull to refresh.';
-      root.style.fontSize = '13px';
-      root.style.color = 'var(--muted)';
+      var empty = document.createElement('p');
+      empty.className = 'lede';
+      empty.textContent = 'Nothing assigned to you today. Open My jobs to see the rest of your work, or add a job from this phone.';
+      root.appendChild(empty);
       return;
     }
     state.jobs.forEach(function (job) {
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'job' + (state.activeJobId === job.id ? ' on' : '');
-      btn.innerHTML =
-        '<div><b></b><span></span></div>' +
-        '<div class="meta' + (job.filmed ? ' filmed' : '') + '"></div>' +
-        (state.activeJobId === job.id ? '<div class="dot">●</div>' : '');
-      btn.querySelector('b').textContent = job.name;
-      btn.querySelector('span').textContent = job.address;
-      btn.querySelector('.meta').textContent = job.filmed ? 'Filmed' : job.at;
-      btn.addEventListener('click', function () {
-        state.activeJobId = job.id;
-        persist();
-        renderJobs();
-      });
-      root.appendChild(btn);
+      root.appendChild(
+        jobCard(job, function (picked) {
+          state.activeJobId = picked.id;
+          persist();
+          renderJobs();
+          renderAssigned();
+        })
+      );
+    });
+  }
+
+  function renderAssigned() {
+    var root = $('assigned-list');
+    if (!root) return;
+    root.innerHTML = '';
+    if (!state.jobs.length) {
+      var empty = document.createElement('p');
+      empty.className = 'lede';
+      empty.textContent = 'Nothing is assigned to you yet. Add a job from this phone, or ask the office to put you on a job.';
+      root.appendChild(empty);
+      return;
+    }
+    state.jobs.forEach(function (job) {
+      root.appendChild(
+        jobCard(job, function (picked) {
+          state.activeJobId = picked.id;
+          show('today');
+        })
+      );
     });
   }
 
   function render() {
     var org = state.orgName || 'Field Capture';
     if ($('today-org')) $('today-org').textContent = org;
+    if ($('jobs-org')) $('jobs-org').textContent = org;
+    if ($('add-org')) $('add-org').textContent = org;
     if ($('today-date')) $('today-date').textContent = todayLabel();
     if ($('today-lede')) {
       $('today-lede').textContent =
@@ -240,6 +295,10 @@
     if ($('site-label')) $('site-label').textContent = state.siteLabel;
 
     renderJobs();
+    renderAssigned();
+    document.querySelectorAll('[data-work-type]').forEach(function (btn) {
+      btn.classList.toggle('on', btn.getAttribute('data-work-type') === state.workType);
+    });
     syncButtons();
   }
 
@@ -263,6 +322,10 @@
         ? validJoin(($('office-code') || {}).value)
         : (($('office-org') || {}).value || '').trim().length >= 2;
     if ($('office-btn')) $('office-btn').disabled = !officeOk;
+
+    var addName = (($('add-name') || {}).value || '').trim();
+    var addAddress = (($('add-address') || {}).value || '').trim();
+    if ($('add-submit')) $('add-submit').disabled = addName.length < 2 || addAddress.length < 3;
   }
 
   function ensureDemoAccount(overrides) {
@@ -291,6 +354,11 @@
       ensureDemoAccount({});
       state.showOfficeLink = true;
       show('office');
+      return;
+    }
+    if (name === 'jobs' || name === 'add') {
+      ensureDemoAccount({});
+      show(name);
       return;
     }
     ensureDemoAccount({});
@@ -339,6 +407,30 @@
     state.needsOfficeLink = false;
     state.showOfficeLink = false;
     show('today');
+  }
+
+  function createJob() {
+    var name = ($('add-name').value || '').trim();
+    var address = ($('add-address').value || '').trim();
+    var city = ($('add-city').value || '').trim();
+    if (name.length < 2 || address.length < 3) return;
+    var job = {
+      id: 'job-' + Date.now(),
+      name: name,
+      address: city ? address + ', ' + city : address,
+      at: 'Today',
+      filmed: false,
+      assigned: true,
+      role: 'lead',
+      workType: state.workType,
+    };
+    state.jobs.unshift(job);
+    state.activeJobId = job.id;
+    $('add-name').value = '';
+    $('add-address').value = '';
+    $('add-city').value = '';
+    $('add-notes').value = '';
+    show('jobs');
   }
 
   function startDay() {
@@ -441,7 +533,7 @@
   }
 
   function bind() {
-    ['signin-email', 'signin-password', 'signup-name', 'signup-email', 'signup-password', 'signup-code', 'signup-org', 'office-code', 'office-org']
+    ['signin-email', 'signin-password', 'signup-name', 'signup-email', 'signup-password', 'signup-code', 'signup-org', 'office-code', 'office-org', 'add-name', 'add-address', 'add-city', 'add-notes']
       .forEach(function (id) {
         var el = $(id);
         if (el) el.addEventListener('input', function () {
@@ -489,8 +581,23 @@
       state.showOfficeLink = false;
       show('today');
     });
-    $('account-btn').addEventListener('click', function () {
+    function toggleAccount() {
       $('account-menu').hidden = !$('account-menu').hidden;
+    }
+    $('account-btn').addEventListener('click', toggleAccount);
+    if ($('jobs-account-btn')) $('jobs-account-btn').addEventListener('click', toggleAccount);
+    if ($('add-account-btn')) $('add-account-btn').addEventListener('click', toggleAccount);
+    $('add-submit').addEventListener('click', createJob);
+    document.querySelectorAll('[data-work-type]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        state.workType = btn.getAttribute('data-work-type');
+        render();
+      });
+    });
+    document.querySelectorAll('.tabbar button').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        jump(btn.getAttribute('data-tab'));
+      });
     });
     $('account-link').addEventListener('click', function () {
       $('account-menu').hidden = true;
@@ -544,7 +651,14 @@
     document.addEventListener('click', function (event) {
       var menu = $('account-menu');
       if (!menu || menu.hidden) return;
-      if (menu.contains(event.target) || event.target === $('account-btn')) return;
+      if (
+        menu.contains(event.target) ||
+        event.target === $('account-btn') ||
+        event.target === $('jobs-account-btn') ||
+        event.target === $('add-account-btn')
+      ) {
+        return;
+      }
       menu.hidden = true;
     });
   }
