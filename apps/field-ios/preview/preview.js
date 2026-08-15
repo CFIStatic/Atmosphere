@@ -116,7 +116,7 @@
       .split(/\s+/)
       .filter(Boolean);
     if (!tokens.length) return true;
-    var hay = [job.name, job.address, job.number, job.status, job.at, job.filmedOn, roleLabel(job.role)]
+    var hay = [job.name, job.address, job.number, job.status, job.at, job.filmedOn, job.role, roleLabel(job.role)]
       .filter(Boolean)
       .join(' ')
       .toLowerCase();
@@ -127,6 +127,7 @@
 
   function roleLabel(role) {
     if (role === 'lead') return 'Lead';
+    if (role === 'crew') return 'Crew';
     if (role === 'owner') return 'Yours';
     if (role === 'supervisor') return 'Supervisor';
     return 'Assigned';

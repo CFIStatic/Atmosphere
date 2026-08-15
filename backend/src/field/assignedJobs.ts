@@ -53,12 +53,31 @@ export function searchFieldJobs<T extends SearchableFieldJob>(jobs: T[], query: 
     .filter(Boolean);
   if (!tokens.length) return jobs;
   return jobs.filter((job) => {
-    const hay = [job.name, job.address, job.number, job.status, job.at, job.filmedOn, job.role]
+    const hay = [job.name, job.address, job.number, job.status, job.at, job.filmedOn, job.role, roleLabel(job.role)]
       .filter(Boolean)
       .join(' ')
       .toLowerCase();
     return tokens.every((token) => hay.includes(token));
   });
+}
+
+function roleLabel(role?: string | null): string {
+  switch ((role ?? '').toLowerCase()) {
+    case 'lead':
+      return 'Lead';
+    case 'crew':
+      return 'Crew';
+    case 'owner':
+      return 'Yours';
+    case 'supervisor':
+      return 'Supervisor';
+    case 'estimator':
+      return 'Estimator';
+    case 'observer':
+      return 'Observer';
+    default:
+      return role ?? '';
+  }
 }
 
 export function lastFilmedByJob(proofs: { jobId?: string; workDate?: string | null }[]): Map<string, string> {

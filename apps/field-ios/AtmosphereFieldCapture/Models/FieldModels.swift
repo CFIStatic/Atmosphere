@@ -60,7 +60,7 @@ struct ExpectedJob: Identifiable, Equatable, Codable {
             .lowercased()
             .split(whereSeparator: { $0.isWhitespace })
         if tokens.isEmpty { return true }
-        let hay = [name, address, number, status ?? "", at, filmedOn ?? "", roleLabel]
+        let hay = [name, address, number, status ?? "", at, filmedOn ?? "", role ?? "", roleLabel]
             .joined(separator: " ")
             .lowercased()
         return tokens.allSatisfy { hay.contains($0) }
@@ -69,6 +69,7 @@ struct ExpectedJob: Identifiable, Equatable, Codable {
     var roleLabel: String {
         switch (role ?? "").lowercased() {
         case "lead": return "Lead"
+        case "crew": return "Crew"
         case "owner": return "Yours"
         case "supervisor": return "Supervisor"
         case "estimator": return "Estimator"
