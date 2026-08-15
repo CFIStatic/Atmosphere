@@ -3,6 +3,8 @@ import Foundation
 enum FieldPhase: Equatable {
     case today
     case recording
+    case sending
+    case measuring
     case door
 }
 

@@ -33,6 +33,7 @@ struct AtmosphereFieldCaptureApp: App {
                     if auth.isLinked, !auth.needsOfficeLink {
                         await session.loadToday(api: api)
                     }
+                    await session.restorePendingUpload(api: api)
                 }
         }
     }
@@ -46,13 +47,18 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if !auth.isLinked {
+            if session.showInvite {
+                InviteJobView()
+            } else if !auth.isLinked && !session.isShareMode {
                 if showSignUp {
                     SignUpView(onSignIn: { showSignUp = false })
                 } else {
-                    SignInView(onCreateAccount: { showSignUp = true })
+                    SignInView(
+                        onCreateAccount: { showSignUp = true },
+                        onOpenInvite: { session.showInvite = true }
+                    )
                 }
-            } else if auth.needsOfficeLink || auth.showOfficeLink {
+            } else if (auth.needsOfficeLink || auth.showOfficeLink) && !session.isShareMode {
                 OfficeLinkView()
             } else {
                 switch session.phase {
@@ -60,6 +66,10 @@ struct RootView: View {
                     FieldShellView()
                 case .recording:
                     RecordingView()
+                case .sending:
+                    SendingView()
+                case .measuring:
+                    MeasureView()
                 case .door:
                     DoorView()
                 }
@@ -78,7 +88,11 @@ struct RootView: View {
             }
         }
         .onOpenURL { url in
-            auth.handleOpenURL(url)
+            if ShareLink.token(from: url) != nil {
+                Task { await session.openInvite(api: api, raw: url.absoluteString) }
+            } else {
+                auth.handleOpenURL(url)
+            }
         }
     }
 }

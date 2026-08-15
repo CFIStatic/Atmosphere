@@ -57,6 +57,12 @@ describe('phone home-screen manifests', () => {
     expect(html).toContain('A historical record of every job this login has filmed');
     expect(html).toContain('id="jobs-search"');
     expect(html).toContain('class="tabbar"');
+    expect(html).toContain('id="s-invite"');
+    expect(html).toContain('id="s-sending"');
+    expect(html).toContain('id="s-measure"');
+    expect(html).toContain('Have an invite link?');
+    expect(html).toContain('Still sending');
+    expect(html).toContain('Start RoomPlan');
     expect(html).not.toMatch(/Mitigation|Construction/);
     const css = readFileSync(resolve(repoRoot, 'apps/field-ios/preview/preview.css'), 'utf8');
     expect(css).toContain('prefers-color-scheme: dark');

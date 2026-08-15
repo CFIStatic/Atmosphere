@@ -9,6 +9,7 @@ import SwiftUI
 struct SignInView: View {
     @EnvironmentObject private var auth: AuthSession
     var onCreateAccount: () -> Void = {}
+    var onOpenInvite: () -> Void = {}
     @State private var email = ""
     @State private var password = ""
     @State private var busy = false
@@ -98,6 +99,15 @@ struct SignInView: View {
                 }
                 .disabled(busy || email.isEmpty || password.isEmpty)
                 .padding(.top, 6)
+
+                Button(action: onOpenInvite) {
+                    Text("Have an invite link?")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(FieldTheme.accent)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                }
+                .disabled(busy)
 
                 Button(action: onCreateAccount) {
                     Text("New here? Create an account")

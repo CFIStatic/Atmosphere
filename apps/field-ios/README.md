@@ -156,6 +156,7 @@ The app follows the iPhone’s **Light / Dark** appearance — it does not lock 
 
 ## Still to wire in Xcode
 
-- UIKit host for `RoomCaptureViewController` → real room list + USDZ
-- Background `URLSession` for multi‑GB day uploads on poor signal
 - App Store Connect listing, TestFlight, privacy nutrition labels
+- Associated Domains so `https://…/shared/{token}` opens the app without the custom scheme
+
+Invite links: `atmosphere-field://share?token=…` or a pasted `/shared/…` URL. Day films upload from a background `URLSession` (file on disk, retry on drop). After the film files, RoomPlan presents `RoomCaptureViewController` and ships rooms + USDZ.

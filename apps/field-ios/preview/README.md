@@ -13,9 +13,13 @@ Open `http://127.0.0.1:5175/`. The Vite app also mounts this folder at `/ios`.
 | Query | Effect |
 |---|---|
 | `?screen=today` | Jump straight to Today |
-| `?screen=jobs` | Assigned jobs |
+| `?screen=jobs` | Filmed history |
 | `?screen=add` | Add a job |
+| `?screen=invite` | Accept an office invite |
+| `?screen=sending` | Background upload progress |
+| `?screen=measure` | RoomPlan pass |
 | `?screen=recording` | Start a preview day film |
 | `?screen=door` | Open the door checks |
+| `?token=` | Open the invite screen from a share link |
 
 Preview join codes that resolve an office name: `COASTAL`, `ATMOSPHERE`, `DEMOOFFICE`.

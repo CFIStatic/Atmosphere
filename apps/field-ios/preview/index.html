@@ -32,7 +32,10 @@
         <button type="button" data-jump="signin">Sign in</button>
         <button type="button" data-jump="signup">Sign up</button>
         <button type="button" data-jump="office">Office link</button>
+        <button type="button" data-jump="invite">Invite</button>
         <button type="button" data-jump="recording">Recording</button>
+        <button type="button" data-jump="sending">Sending</button>
+        <button type="button" data-jump="measure">Measure</button>
         <button type="button" data-jump="door">Door</button>
       </nav>
       <p class="stage-hint">
@@ -89,6 +92,7 @@
                 <p class="notice" id="signin-notice" hidden></p>
                 <p class="err" id="signin-err" hidden></p>
                 <button type="button" class="primary" id="signin-btn" disabled>Sign in &amp; connect phone</button>
+                <button type="button" class="link-accent" id="goto-invite">Have an invite link?</button>
                 <button type="button" class="link-accent" id="goto-signup">New here? Create an account</button>
                 <p class="faint">After this, you won’t be asked again on this phone.</p>
               </div>
@@ -268,6 +272,72 @@
                 <label class="field"><span class="lbl">Notes (optional)</span><input id="add-notes" type="text" placeholder="What you are walking into" /></label>
                 <p class="err" id="add-err" hidden></p>
                 <button type="button" class="primary" id="add-submit" disabled>Add job &amp; assign to me</button>
+              </div>
+            </section>
+
+            <!-- INVITE -->
+            <section class="screen" id="s-invite">
+              <div class="scroll">
+                <div class="wordmark">
+                  <svg width="28" height="28" viewBox="0 0 22 22" aria-hidden="true">
+                    <rect y="0" width="22" height="2.8" fill="#A8A29E"/>
+                    <rect y="4.8" width="22" height="2.8" fill="#78716C"/>
+                    <rect y="9.6" width="22" height="2.8" fill="#57534E"/>
+                    <rect y="14.4" width="22" height="2.8" fill="#292524"/>
+                    <rect y="19.2" width="22" height="2.8" fill="#F2670C"/>
+                  </svg>
+                  <span>Atmosphere</span>
+                </div>
+                <p class="kicker">Invite</p>
+                <h1 id="invite-title">1847 Oak Ridge — kitchen water</h1>
+                <p class="lede" id="invite-lede">Coastal Drying sent this job. Review the do-not lines, accept the brief, then film. No office login required to start.</p>
+                <div class="twin-card">
+                  <h3>Do not</h3>
+                  <p>Do not pull cabinets. Do not enter the attic.</p>
+                </div>
+                <div class="twin-card">
+                  <h3>In scope</h3>
+                  <p>Extract kitchen water, set drying, photograph meters.</p>
+                </div>
+                <label class="field"><input id="invite-name" type="text" placeholder="Your name" /></label>
+                <p class="err" id="invite-err" hidden></p>
+                <button type="button" class="primary" id="invite-accept">Accept the brief</button>
+                <button type="button" class="link-muted" id="invite-cancel">Not now</button>
+              </div>
+            </section>
+
+            <!-- SENDING -->
+            <section class="screen" id="s-sending">
+              <div class="scroll">
+                <div class="wordmark">
+                  <svg width="28" height="28" viewBox="0 0 22 22" aria-hidden="true">
+                    <rect y="0" width="22" height="2.8" fill="#A8A29E"/>
+                    <rect y="4.8" width="22" height="2.8" fill="#78716C"/>
+                    <rect y="9.6" width="22" height="2.8" fill="#57534E"/>
+                    <rect y="14.4" width="22" height="2.8" fill="#292524"/>
+                    <rect y="19.2" width="22" height="2.8" fill="#F2670C"/>
+                  </svg>
+                  <span>Atmosphere</span>
+                </div>
+                <h1 class="today-h">Still sending</h1>
+                <p class="lede" id="sending-lede">Still sending your day film. You can lock the phone — the file stays here until Atmosphere has it.</p>
+                <div class="send-track"><div class="send-bar" id="send-bar"></div></div>
+                <p class="mono faint" id="send-pct">0%</p>
+              </div>
+            </section>
+
+            <!-- MEASURE -->
+            <section class="screen" id="s-measure">
+              <div class="scroll">
+                <h1 class="today-h">Measure the property</h1>
+                <p class="lede">Walk the rooms once. RoomPlan builds the twin the office opens — the day film is already filed.</p>
+                <div class="twin-card">
+                  <h3>RoomPlan</h3>
+                  <p>On a LiDAR iPhone this opens the system scan. This preview files a sample USDZ + room list.</p>
+                </div>
+                <div class="rooms" id="measure-rooms"></div>
+                <button type="button" class="primary" id="measure-start">Start RoomPlan</button>
+                <button type="button" class="link-muted" id="measure-skip">Skip for now</button>
               </div>
             </section>
 

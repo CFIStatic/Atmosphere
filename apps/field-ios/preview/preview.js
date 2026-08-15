@@ -69,7 +69,7 @@
     },
   ];
 
-  var SCREENS = ['signin', 'signup', 'office', 'today', 'jobs', 'add', 'recording', 'door'];
+  var SCREENS = ['signin', 'signup', 'office', 'invite', 'today', 'jobs', 'add', 'recording', 'sending', 'measure', 'door'];
   var TABBED = { today: true, jobs: true, add: true };
 
   var state = {
@@ -92,6 +92,8 @@
     tickTimer: null,
     siteLabel: 'Getting your bearings…',
     lastError: '',
+    sendTimer: null,
+    sendPct: 0,
   };
 
   function copyJob(job) {
@@ -107,6 +109,24 @@
       assigned: job.assigned !== false,
       role: job.role || 'crew',
     };
+  }
+
+  function extractShareToken(raw) {
+    var trimmed = String(raw || '').trim();
+    if (!trimmed) return null;
+    try {
+      var url = new URL(trimmed, location.origin);
+      var q = url.searchParams.get('token') || url.searchParams.get('share');
+      if (q && q.length >= 6) return q;
+      var parts = url.pathname.split('/').filter(Boolean);
+      var idx = parts.findIndex(function (part) { return part.toLowerCase() === 'shared'; });
+      if (idx >= 0 && parts[idx + 1]) return decodeURIComponent(parts[idx + 1]);
+      if (url.protocol === 'atmosphere-field:') {
+        return q || (parts[0] ? decodeURIComponent(parts[0]) : null);
+      }
+    } catch (e) { /* raw token */ }
+    if (/^[A-Za-z0-9+/=_-]{8,200}$/.test(trimmed)) return trimmed;
+    return null;
   }
 
   function matchesJob(job, query) {
@@ -447,6 +467,20 @@
       show('office');
       return;
     }
+    if (name === 'invite') {
+      show('invite');
+      return;
+    }
+    if (name === 'sending') {
+      ensureDemoAccount({});
+      startSending();
+      return;
+    }
+    if (name === 'measure') {
+      ensureDemoAccount({});
+      showMeasure();
+      return;
+    }
     if (name === 'jobs' || name === 'add') {
       ensureDemoAccount({});
       show(name);
@@ -628,7 +662,45 @@
       roomRoot.appendChild(el);
     });
     $('door-manifest').textContent = 'hasAudio=true · ' + duration + 's · media preview-day-film';
-    show('door');
+    startSending();
+  }
+
+  function startSending() {
+    state.sendPct = 0;
+    show('sending');
+    if ($('send-bar')) $('send-bar').style.width = '0%';
+    if ($('send-pct')) $('send-pct').textContent = '0%';
+    clearInterval(state.sendTimer);
+    state.sendTimer = setInterval(function () {
+      state.sendPct = Math.min(100, state.sendPct + 8);
+      if ($('send-bar')) $('send-bar').style.width = state.sendPct + '%';
+      if ($('send-pct')) $('send-pct').textContent = state.sendPct + '%';
+      if (state.sendPct >= 100) {
+        clearInterval(state.sendTimer);
+        state.sendTimer = null;
+        showMeasure();
+      }
+    }, 180);
+  }
+
+  function showMeasure() {
+    var rooms = [
+      { name: 'Kitchen', detail: '168 SF' },
+      { name: 'Hall', detail: '42 SF' },
+      { name: 'Living', detail: '210 SF' },
+    ];
+    var root = $('measure-rooms');
+    if (root) {
+      root.innerHTML = '';
+      rooms.forEach(function (room) {
+        var el = document.createElement('div');
+        el.innerHTML = '<b></b><span></span>';
+        el.querySelector('b').textContent = room.name;
+        el.querySelector('span').textContent = room.detail;
+        root.appendChild(el);
+      });
+    }
+    show('measure');
   }
 
   function bind() {
@@ -647,6 +719,30 @@
       });
 
     $('signin-btn').addEventListener('click', signIn);
+    if ($('goto-invite')) {
+      $('goto-invite').addEventListener('click', function () { show('invite'); });
+    }
+    if ($('invite-accept')) {
+      $('invite-accept').addEventListener('click', function () {
+        var name = (($('invite-name') || {}).value || '').trim();
+        if (name.length < 2) {
+          $('invite-err').hidden = false;
+          $('invite-err').textContent = 'Type your name to accept the brief.';
+          return;
+        }
+        ensureDemoAccount({ fullName: name });
+        show('today');
+      });
+    }
+    if ($('invite-cancel')) {
+      $('invite-cancel').addEventListener('click', function () { show('signin'); });
+    }
+    if ($('measure-start')) {
+      $('measure-start').addEventListener('click', function () { show('door'); });
+    }
+    if ($('measure-skip')) {
+      $('measure-skip').addEventListener('click', function () { show('door'); });
+    }
     $('goto-signup').addEventListener('click', function () {
       state.signupStep = 1;
       show('signup');
@@ -804,8 +900,11 @@
   setInterval(tickClock, 15000);
 
   var params = new URLSearchParams(location.search);
+  var inviteToken = extractShareToken(location.href);
   var start = params.get('screen') || params.get('jump');
-  if (start && SCREENS.indexOf(start) !== -1) {
+  if (inviteToken && !start) {
+    show('invite');
+  } else if (start && SCREENS.indexOf(start) !== -1) {
     jump(start);
   } else if (state.isLinked && !state.needsOfficeLink && !state.showOfficeLink) {
     show('today');

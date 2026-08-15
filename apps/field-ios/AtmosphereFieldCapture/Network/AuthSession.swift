@@ -186,8 +186,12 @@ final class AuthSession: ObservableObject {
 
     /// `atmosphere-field://join?code=8F3A9C2B` from the office or an invite.
     func handleOpenURL(_ url: URL) {
+        if url.scheme?.lowercased() == "https" || url.scheme?.lowercased() == "http" {
+            return
+        }
         guard url.scheme?.lowercased() == "atmosphere-field" else { return }
         let host = url.host?.lowercased()
+        if host == "share" || host == "shared" { return }
         var code: String?
         if host == "join" {
             if let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems {

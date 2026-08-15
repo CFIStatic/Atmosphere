@@ -325,6 +325,7 @@ final class AtmosphereClient: ObservableObject {
         let path: String
         let token: String?
         let uploadUrl: String
+        let downloadUrl: String?
     }
 
     func beginJobProofUpload(
@@ -370,12 +371,123 @@ final class AtmosphereClient: ObservableObject {
             }
             headers["x-upsert"] = "true"
         }
-        return try await MediaUploadClient.uploadFile(
+        return try await MediaUploadClient.shared.uploadFile(
             localURL: localURL,
             uploadURL: uploadURL,
             method: isStorage ? "POST" : "PUT",
             headers: headers
         )
+    }
+
+    func uploadMesh(localURL: URL, begin: ProofUploadUrlResponse) async throws -> (byteSize: Int64, sha256Hex: String) {
+        guard let uploadURL = URL(string: begin.uploadUrl) else {
+            throw APIError.http(status: 0, body: "Bad mesh upload URL")
+        }
+        var headers: [String: String] = ["Content-Type": "model/vnd.usdz+zip"]
+        if begin.uploadUrl.contains("/storage/v1/object/") {
+            headers["apikey"] = supabaseAnonKey
+            if let accessToken {
+                headers["Authorization"] = "Bearer \(accessToken)"
+            }
+            headers["x-upsert"] = "true"
+        }
+        return try await MediaUploadClient.shared.uploadFile(
+            localURL: localURL,
+            uploadURL: uploadURL,
+            method: begin.uploadUrl.contains("/storage/v1/object/") ? "POST" : "PUT",
+            headers: headers,
+            contentType: "model/vnd.usdz+zip"
+        )
+    }
+
+    // MARK: - Job share (invite token, no office login)
+
+    struct ShareJobView: Decodable {
+        struct You: Decodable {
+            let company: String?
+            let trade: String?
+            let role: String?
+        }
+        struct Job: Decodable {
+            let jobNumber: Int?
+            let title: String?
+            let claimNumber: String?
+            let scheduledStart: String?
+        }
+        struct Brief: Decodable {
+            let revision: Int?
+            let note: String?
+            let facts: [String: String]?
+        }
+        struct ScopeItem: Decodable, Identifiable {
+            let id: String
+            let state: String?
+            let title: String
+            let detail: String?
+        }
+        let you: You?
+        let job: Job
+        let brief: Brief?
+        let currentRevision: Int?
+        let acknowledgedRevision: Int?
+        let clear: Bool?
+        let because: String?
+        let scope: [ScopeItem]?
+    }
+
+    func loadShareJob(token: String) async throws -> ShareJobView {
+        let encoded = ShareLink.encode(token)
+        return try await get(path: "/api/job-share/\(encoded)", authed: false)
+    }
+
+    func acceptShareBrief(token: String, name: String, revision: Int) async throws {
+        struct Body: Encodable {
+            let name: String
+            let revision: Int
+        }
+        struct Ok: Decodable { let ok: Bool? }
+        let encoded = ShareLink.encode(token)
+        let _: Ok = try await post(
+            path: "/api/job-share/\(encoded)/accept",
+            body: Body(name: name, revision: revision),
+            authed: false
+        )
+    }
+
+    func beginShareProofUpload(
+        token: String,
+        workDate: String,
+        phase: String = "after",
+        fileExtension: String = "mp4"
+    ) async throws -> ProofUploadUrlResponse {
+        struct Body: Encodable {
+            let workDate: String
+            let phase: String
+            let `extension`: String
+        }
+        let encoded = ShareLink.encode(token)
+        return try await post(
+            path: "/api/job-share/\(encoded)/proof/upload-url",
+            body: Body(workDate: workDate, phase: phase, extension: fileExtension),
+            authed: false
+        )
+    }
+
+    func completeShareProof(token: String, body: ProofRecordBody) async throws -> ProofRecordResponse {
+        let encoded = ShareLink.encode(token)
+        return try await post(path: "/api/job-share/\(encoded)/proof", body: body, authed: false)
+    }
+
+    func beginMeshUpload(jobId: String, shareToken: String?) async throws -> ProofUploadUrlResponse {
+        if let shareToken, !shareToken.isEmpty {
+            let encoded = ShareLink.encode(shareToken)
+            return try await post(
+                path: "/api/job-share/\(encoded)/mesh/upload-url",
+                body: EmptyJSON(),
+                authed: false
+            )
+        }
+        return try await post(path: "/api/field-app/jobs/\(jobId)/mesh/upload-url", body: EmptyJSON())
     }
 
     struct ProofRecordBody: Encodable {
@@ -1481,8 +1593,8 @@ final class AtmosphereClient: ObservableObject {
     /// Decodable stand-in when the API returns `{}` or a body we ignore.
     private struct Ack: Decodable {}
 
-    private func get<Response: Decodable>(path: String) async throws -> Response {
-        try await send(path: path, method: "GET", bodyData: nil, authed: true)
+    private func get<Response: Decodable>(path: String, authed: Bool = true) async throws -> Response {
+        try await send(path: path, method: "GET", bodyData: nil, authed: authed)
     }
 
     private func post<Body: Encodable, Response: Decodable>(
