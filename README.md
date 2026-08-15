@@ -183,6 +183,24 @@ Serve `fieldcapture/` and open with a live token:
 
 Without `token`, live upload is refused (no invented demo day unless `demo=1`).
 
+### Open on your phone
+
+The office console and Field Capture are installable on a phone (Safari → Share
+→ **Add to Home Screen**). They need HTTPS, so do not point the phone at
+`localhost`.
+
+With the API on `:4000` and the Vite app on `:5174`:
+
+```bash
+bash scripts/host-phone.sh
+```
+
+That prints two HTTPS URLs. Open **Field Capture** to film the day; open
+**Office** to sign in to the same account as the desktop app.
+
+The native iPhone app is `apps/field-ios/` — Xcode → your Personal Team → Run
+on the device. It talks to the Atmosphere project directly (not localhost).
+
 ### Verifier
 
 Open `/verifier/?embed=1` from the office shell, or serve `verifier/` standalone

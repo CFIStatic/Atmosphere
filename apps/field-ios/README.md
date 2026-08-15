@@ -39,9 +39,29 @@ You do not need `xcodegen`. Pick an iPhone simulator and press Run (⌘R).
 
 **Simulator:** no Apple Team needed. Signing is off for `iphonesimulator`.
 
-**Physical iPhone:** Xcode → target **AtmosphereFieldCapture** → **Signing &
-Capabilities** → **Automatically manage signing** → pick your Personal Team
-(your Apple ID is enough). Then Product → Clean Build Folder → Run.
+**Physical iPhone (main):**
+
+1. Plug the phone in, unlock it, and tap **Trust** if asked.
+2. Xcode → target **AtmosphereFieldCapture** → **Signing & Capabilities** →
+   **Automatically manage signing** → pick your Personal Team (your Apple ID
+   is enough).
+3. On the phone: Settings → Privacy & Security → **Developer Mode** → on
+   (iOS 16+), then restart if iOS asks.
+4. Product → Destination → your iPhone → Clean Build Folder → Run.
+
+The first install may sit behind Settings → General → VPN & Device Management
+until you trust the developer certificate.
+
+Same account as the website — no Server / API URL field. A physical iPhone
+never uses localhost; it signs in to the hosted Atmosphere project.
+
+To use the **web** Field Capture from `main` on the phone instead (no Xcode):
+
+```bash
+bash scripts/host-phone.sh
+```
+
+Open the printed `/fieldcapture/` URL in Safari, then Share → Add to Home Screen.
 
 The phone signs in against the same Atmosphere project as the website — no
 Server / API URL field. Run on a LiDAR iPhone for RoomPlan. Simulator can

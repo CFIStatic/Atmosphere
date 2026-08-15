@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 /**
@@ -59,7 +60,8 @@ struct RootView: View {
             }
         }
         .background(FieldTheme.bg.ignoresSafeArea())
-        .onChange(of: auth.isLinked) { linked in
+        // iOS 16-compatible: the two-parameter / `initial:` onChange APIs are iOS 17+.
+        .onReceive(auth.$isLinked.dropFirst()) { linked in
             if linked {
                 Task { await session.loadToday(api: api) }
             }

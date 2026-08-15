@@ -14,6 +14,14 @@ subs who were invited to one job.
 
 ## Run live
 
+On a phone, use HTTPS (Safari will not give the camera on `http://`):
+
+```bash
+bash scripts/host-phone.sh
+```
+
+Open the printed `/fieldcapture/` URL, then Share → **Add to Home Screen**.
+
 Serve this folder next to the API (same origin or pass `?api=`):
 
 ```
