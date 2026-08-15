@@ -8,6 +8,7 @@ import SwiftUI
  */
 struct SignInView: View {
     @EnvironmentObject private var auth: AuthSession
+    var onCreateAccount: () -> Void = {}
     @State private var email = ""
     @State private var password = ""
     @State private var busy = false
@@ -60,6 +61,12 @@ struct SignInView: View {
                 }
                 .padding(.top, 4)
 
+                if let notice = auth.confirmationNotice {
+                    Text(notice)
+                        .font(.system(size: 13))
+                        .foregroundStyle(FieldTheme.pass)
+                }
+
                 if let err = auth.lastError {
                     Text(err)
                         .font(.system(size: 13))
@@ -91,6 +98,16 @@ struct SignInView: View {
                 }
                 .disabled(busy || email.isEmpty || password.isEmpty)
                 .padding(.top, 6)
+
+                Button(action: onCreateAccount) {
+                    Text("New here? Create an account")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(FieldTheme.accent)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                }
+                .disabled(busy)
+                .padding(.top, 4)
 
                 Text("After this, you won’t be asked again on this phone.")
                     .font(.system(size: 12))

@@ -59,6 +59,7 @@ test('the email is from Atmosphere, names the org, and the code stands alone', (
   );
   assert.match(mail.text, /app\.atmosphere\.example\/signup\?intent=join/);
   assert.match(mail.text, /Link to office account/);
+  assert.match(mail.text, /Field Capture iPhone app/);
   // A workplace invitation, not marketing: no unsubscribe furniture.
   assert.ok(!/unsubscribe/i.test(mail.text));
 });

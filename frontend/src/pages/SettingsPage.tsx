@@ -173,6 +173,7 @@ export function SettingsPage() {
           {active === 'organization' && (
             <>
               <OrganizationSection />
+              <FieldCaptureAppSection />
               <InvitePanel />
               <LinkedAccountsCard />
             </>
@@ -180,12 +181,7 @@ export function SettingsPage() {
           {active === 'billing' && <BillingSection />}
           {active === 'sending' && <SendingSection />}
           {active === 'contactdata' && <ContactDataSection />}
-          {active === 'preferences' && (
-            <>
-              <FieldCaptureAppSection />
-              <PreferencesSection />
-            </>
-          )}
+          {active === 'preferences' && <PreferencesSection />}
         </div>
       </div>
     </div>
@@ -782,26 +778,75 @@ const TOGGLES: { key: BooleanPreference; label: string; description: string }[] 
 ];
 
 /**
- * How the Field Capture iPhone app signs in with the same Atmosphere account
- * as this dashboard — one-time connect on the phone, then it stays linked.
+ * How a Field Capture iPhone login attaches to this office account.
+ * The join code is the same one teammates type on the website.
  */
 function FieldCaptureAppSection() {
+  const { membership } = useAuth();
+  const joinCode = membership?.org?.joinCode ?? null;
+  const [copied, setCopied] = useState(false);
+
+  async function copyCode() {
+    if (!joinCode) return;
+    try {
+      await navigator.clipboard.writeText(joinCode);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      window.prompt('Office join code for Field Capture', joinCode);
+    }
+  }
+
   return (
     <Card
       title="Field Capture app"
-      description="The iPhone app uses the same Atmosphere login as this website. Connect the phone once; day films land in your organization’s evidence library."
+      description="Link a phone login to this office so day films land in your evidence library — even if the crew created the account on the iPhone."
     >
-      <ol className="list-decimal space-y-2 pl-5 text-sm text-ink-700">
-        <li>Install Field Capture from the App Store build (or Xcode).</li>
+      <div className="rounded-lg border border-line bg-paper-50 px-4 py-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Office join code</p>
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <code className="rounded-md border border-line bg-paper-0 px-2.5 py-1 font-mono tracking-widest text-brand-700">
+            {joinCode ?? '—'}
+          </code>
+          {joinCode && (
+            <button
+              type="button"
+              onClick={() => void copyCode()}
+              className="flex items-center gap-1 text-sm text-ink-600 transition hover:text-ink-900"
+            >
+              {copied ? (
+                <>
+                  <CheckIcon width={15} height={15} /> Copied
+                </>
+              ) : (
+                'Copy code'
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+      <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm text-ink-700">
+        <li>Install Field Capture and create an account or sign in on the phone.</li>
         <li>
-          On first open, sign in with <strong className="font-semibold text-ink-900">the same email and password</strong>{' '}
-          you use here.
+          Tap <strong className="font-semibold text-ink-900">Link to office account</strong> and enter the
+          code above
+          {joinCode ? (
+            <>
+              {' '}
+              (or open <code className="font-mono text-xs">atmosphere-field://join?code={joinCode}</code> on
+              the phone)
+            </>
+          ) : null}
+          .
         </li>
-        <li>Tap <span className="font-medium text-ink-900">Sign in &amp; connect phone</span>. You won’t be asked again on that device.</li>
+        <li>
+          Or sign in with <strong className="font-semibold text-ink-900">the same email and password</strong>{' '}
+          already linked to this office — the phone connects automatically.
+        </li>
       </ol>
       <p className="mt-4 text-sm text-ink-600">
-        Jobs you film on the phone appear in Verifier / evidence for your org. Disconnect only from the app’s
-        Account menu if you hand the phone to someone else.
+        After that, jobs filmed on the phone appear in Verifier / evidence for {membership?.org?.name ?? 'this office'}.
+        Disconnect only from the app’s Account menu if you hand the phone to someone else.
       </p>
     </Card>
   );

@@ -139,7 +139,12 @@ struct TodayView: View {
                 if let email = auth.email {
                     Text(email)
                 }
-                Text("Connected — you only set this up once")
+                if let office = auth.orgName {
+                    Text("Office: \(office)")
+                }
+                Button("Link to office account") {
+                    auth.beginOfficeLink()
+                }
                 Button("Disconnect this phone", role: .destructive) {
                     Task {
                         await auth.disconnectAccount()

@@ -1,6 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
-import type { Session, User } from '@supabase/supabase-js';
 import { config } from '../config.js';
 import { createAnonClient, createUserClient, createAdminClient } from '../lib/supabase.js';
 import {
@@ -29,21 +28,9 @@ import {
 } from '../lib/deviceCrypto.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { recordEvent } from '../lib/memory.js';
+import { createPasswordAccount, publicUser, sessionTokens } from '../auth/passwordAccount.js';
 
 export const authRouter = Router();
-
-/**
- * Tokens for native clients (Field Capture). The dashboard keeps using
- * httpOnly cookies; the phone stores these in Keychain and sends Bearer.
- */
-function sessionTokens(session: Session) {
-  return {
-    accessToken: session.access_token,
-    refreshToken: session.refresh_token,
-    expiresIn: session.expires_in ?? null,
-    expiresAt: session.expires_at ?? null,
-  };
-}
 
 /**
  * Rate limiter for authentication endpoints to blunt credential-stuffing and
@@ -51,7 +38,7 @@ function sessionTokens(session: Session) {
  * local / preview iteration is not blocked by our own limiter (Supabase may
  * still rate-limit independently).
  */
-const authLimiter = rateLimit({
+export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: config.isProduction ? 20 : 200,
   standardHeaders: true,
@@ -64,72 +51,12 @@ const authLimiter = rateLimit({
   },
 });
 
-/** Only expose non-sensitive fields of the Supabase user to the client. */
-function publicUser(user: User) {
-  return {
-    id: user.id,
-    email: user.email,
-    createdAt: user.created_at,
-    lastSignInAt: user.last_sign_in_at ?? null,
-    emailConfirmed: Boolean(user.email_confirmed_at ?? user.confirmed_at),
-    metadata: user.user_metadata ?? {},
-  };
-}
-
-/**
- * Create a session for a just-created (or already-existing) user and write
- * cookies. Returns true when a session was established.
- */
-async function establishPasswordSession(
-  res: Response,
-  email: string,
-  password: string,
-  status: 200 | 201,
-): Promise<boolean> {
-  const supabase = createAnonClient();
-  const signedIn = await supabase.auth.signInWithPassword({ email, password });
-  if (signedIn.error || !signedIn.data.session) {
-    console.warn('[signup] password sign-in failed:', signedIn.error?.message);
-    return false;
-  }
-  setSessionCookies(res, signedIn.data.session);
-  res.status(status).json({
-    user: signedIn.data.user ? publicUser(signedIn.data.user) : null,
-    needsEmailConfirmation: false,
-    session: sessionTokens(signedIn.data.session),
-  });
-  return true;
-}
-
-/**
- * Non-production path: create any email via the admin API with email already
- * confirmed. Avoids Supabase's built-in SMTP rate limit (~2 confirmation emails
- * / hour), which otherwise blocks "new user" signup during local/preview work.
- */
-async function signupViaAdmin(email: string, password: string, res: Response): Promise<boolean> {
-  const admin = createAdminClient();
-  if (!admin) return false;
-
-  const created = await admin.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-  });
-
-  if (created.error) {
-    console.warn('[signup] admin.createUser:', created.error.message);
-    if (/already|registered|exists/i.test(created.error.message)) {
-      return establishPasswordSession(res, email, password, 200);
-    }
-    return false;
-  }
-
-  return establishPasswordSession(res, email, password, 201);
-}
-
 /**
  * POST /api/auth/signup
  * Creates a new account for any valid email + password.
+ *
+ * Returns session tokens in the JSON body for native clients (Field Capture
+ * stores them in Keychain). The dashboard also receives httpOnly cookies.
  *
  * Development / preview: prefers admin.createUser (service role) so signup
  * works for arbitrary emails without burning Supabase's built-in email quota.
@@ -138,76 +65,24 @@ async function signupViaAdmin(email: string, password: string, res: Response): P
 authRouter.post('/signup', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email, password } = credentialsSchema.parse(req.body);
+    const result = await createPasswordAccount(email, password);
 
-    // Local / preview: any email, no confirmation mail, immediate session.
-    if (!config.isProduction) {
-      const viaAdmin = await signupViaAdmin(email, password, res);
-      if (viaAdmin) return;
+    if (result.kind === 'error') throw result.error;
 
-      if (!createAdminClient()) {
-        console.warn(
-          '[signup] SUPABASE_SERVICE_ROLE_KEY is unset — public Auth signup will hit email rate limits. Set the service role key in backend/.env for unrestricted local signups.',
-        );
-      }
-    }
-
-    const supabase = createAnonClient();
-    const { data, error } = await supabase.auth.signUp({ email, password });
-
-    // Same distinction as login: an unreachable auth service is an outage, not
-    // a problem with what the user typed.
-    if (error && isTransient(error)) {
-      console.warn('[signup] upstream failure:', error.status, error.message);
-      throw serviceUnavailable();
-    }
-
-    if (error) {
-      console.warn('[signup] supabase error:', error.status, error.message);
-
-      // Public path rate-limited — last-chance admin bypass (also covers prod
-      // if an operator has the service role on the BFF).
-      if (error.status === 429) {
-        if (await signupViaAdmin(email, password, res)) return;
-        throw new HttpError(
-          429,
-          'Too many sign-up attempts right now. Set SUPABASE_SERVICE_ROLE_KEY on the BFF for unrestricted local signups, or wait a few minutes and try again.',
-          'rate_limited',
-        );
-      }
-
-      // Log the real cause server-side, but return a generic message so we do
-      // not reveal whether the email is already registered (account enumeration).
-      throw new HttpError(
-        400,
-        'Unable to create an account with those details. If you already have an account, try signing in.',
-        'signup_failed',
-      );
-    }
-
-    if (data.session) {
-      setSessionCookies(res, data.session);
+    if (result.kind === 'confirm') {
       res.status(201).json({
-        user: data.user ? publicUser(data.user) : null,
-        needsEmailConfirmation: false,
-        session: sessionTokens(data.session),
+        user: result.user ? publicUser(result.user) : null,
+        needsEmailConfirmation: true,
+        message: result.message,
       });
       return;
     }
 
-    // No session => email confirmation required. In non-production, confirm
-    // via admin when available so preview is not blocked waiting on an inbox.
-    if (!config.isProduction && data.user?.id) {
-      const admin = createAdminClient();
-      if (admin) {
-        await admin.auth.admin.updateUserById(data.user.id, { email_confirm: true });
-        if (await establishPasswordSession(res, email, password, 201)) return;
-      }
-    }
-
-    res.status(201).json({
-      user: data.user ? publicUser(data.user) : null,
-      needsEmailConfirmation: true,
-      message: 'Account created. Check your email to confirm before signing in.',
+    setSessionCookies(res, result.session);
+    res.status(result.status).json({
+      user: publicUser(result.user),
+      needsEmailConfirmation: false,
+      session: sessionTokens(result.session),
     });
   } catch (err) {
     next(err);

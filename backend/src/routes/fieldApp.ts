@@ -1,10 +1,16 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
+import type { Session, User } from '@supabase/supabase-js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { badRequest, HttpError, serviceUnavailable } from '../lib/errors.js';
+import { setSessionCookies } from '../lib/session.js';
+import { fieldOfficePreviewSchema, fieldOfficeSchema, fieldRegisterSchema } from '../lib/validation.js';
+import { createPasswordAccount, publicUser, sessionTokens } from '../auth/passwordAccount.js';
+import { linkFieldOffice, previewOfficeByJoinCode } from '../field/officeLink.js';
+import { authLimiter } from './auth.js';
 import { createUploadUrl, recordProof } from './proofOfWork.js';
 import {
   DEFAULT_FIELD_TIMEZONE,
@@ -23,6 +29,78 @@ import {
  */
 export const fieldAppRouter = Router();
 
+function writeFieldSession(
+  res: Response,
+  status: 200 | 201,
+  user: User,
+  session: Session,
+  extra: Record<string, unknown> = {},
+) {
+  setSessionCookies(res, session);
+  res.status(status).json({
+    user: publicUser(user),
+    needsEmailConfirmation: false,
+    session: sessionTokens(session),
+    ...extra,
+  });
+}
+
+/**
+ * POST /api/field-app/register
+ *
+ * Native Field Capture onboarding: create the same Atmosphere account the
+ * website uses, then join or start an office so day films have an org to
+ * land in. Public — there is no session yet. Authenticated field-app
+ * routes are mounted below.
+ */
+fieldAppRouter.post(
+  '/register',
+  authLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const input = fieldRegisterSchema.parse(req.body);
+      const created = await createPasswordAccount(input.email, input.password);
+
+      if (created.kind === 'error') throw created.error;
+
+      if (created.kind === 'confirm') {
+        res.status(201).json({
+          user: created.user ? publicUser(created.user) : null,
+          needsEmailConfirmation: true,
+          message: created.message,
+          org: null,
+        });
+        return;
+      }
+
+      try {
+        const org = await linkFieldOffice(created.session.access_token, created.user, {
+          fullName: input.fullName,
+          joinCode: input.joinCode,
+          orgName: input.orgName,
+        });
+        writeFieldSession(res, created.status, created.user, created.session, { org });
+      } catch (err) {
+        // Account exists and the phone has tokens — do not roll that back
+        // because the office step failed. The app can retry linking.
+        if (
+          err instanceof HttpError &&
+          (err.code === 'join_org_failed' || err.code === 'create_org_failed' || err.code === 'already_linked')
+        ) {
+          writeFieldSession(res, created.status, created.user, created.session, {
+            org: null,
+            orgError: err.message,
+          });
+          return;
+        }
+        throw err;
+      }
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 fieldAppRouter.use(requireAuth);
 
 const limiter = rateLimit({
@@ -35,6 +113,42 @@ const limiter = rateLimit({
 fieldAppRouter.use(limiter);
 
 const FIELD_PARTY_COMPANY = 'Field Capture';
+
+/**
+ * POST /api/field-app/office
+ * Link an already-signed-in Field Capture user to an office (join code or
+ * new organization). Used when email confirmation delayed the office step,
+ * or when register created the login but the join code was wrong.
+ */
+fieldAppRouter.post('/office', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user || !req.accessToken) {
+      throw new HttpError(401, 'Not authenticated', 'unauthorized');
+    }
+    const input = fieldOfficeSchema.parse(req.body);
+    const org = await linkFieldOffice(req.accessToken, req.user, input);
+    res.status(201).json({ org });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/field-app/office/preview
+ * Confirm a join code before the phone attaches this login to that office.
+ */
+fieldAppRouter.post('/office/preview', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!req.accessToken) {
+      throw new HttpError(401, 'Not authenticated', 'unauthorized');
+    }
+    const { joinCode } = fieldOfficePreviewSchema.parse(req.body);
+    const org = await previewOfficeByJoinCode(req.accessToken, joinCode);
+    res.json({ org });
+  } catch (err) {
+    next(err);
+  }
+});
 
 /** GET /api/field-app/me — who is signed in and which org receives uploads. */
 fieldAppRouter.get('/me', async (req: Request, res: Response, next: NextFunction) => {

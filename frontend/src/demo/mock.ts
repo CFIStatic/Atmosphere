@@ -1808,6 +1808,70 @@ const routes: Array<[string, RegExp, Handler]> = [
     if (typeof b.email === 'string') state.email = b.email;
     return { body: { user: user(), needsEmailConfirmation: false } };
   }],
+  ['POST', /^\/api\/field-app\/register$/, (_m, b) => {
+    const email = typeof b.email === 'string' ? b.email : '';
+    const password = typeof b.password === 'string' ? b.password : '';
+    const joinCode = typeof b.joinCode === 'string' ? b.joinCode.trim().toUpperCase() : '';
+    const orgName = typeof b.orgName === 'string' ? b.orgName.trim() : '';
+    if (!email.includes('@') || password.length < 8) {
+      return { status: 400, body: { error: 'Password must be at least 8 characters', code: 'validation_error' } };
+    }
+    if (!joinCode && orgName.length < 2) {
+      return { status: 400, body: { error: 'Enter an office join code or a new office name.', code: 'validation_error' } };
+    }
+    if (joinCode && joinCode !== state.joinCode) {
+      state.signedIn = true;
+      state.onboarded = false;
+      state.email = email;
+      if (typeof b.fullName === 'string') state.fullName = b.fullName;
+      return {
+        status: 201,
+        body: {
+          user: user(),
+          needsEmailConfirmation: false,
+          session: { accessToken: 'demo-access', refreshToken: 'demo-refresh' },
+          org: null,
+          orgError: 'That join code did not match any organization.',
+        },
+      };
+    }
+    state.signedIn = true;
+    state.onboarded = true;
+    state.email = email;
+    if (typeof b.fullName === 'string') state.fullName = b.fullName;
+    if (orgName) state.orgName = orgName;
+    return {
+      status: 201,
+      body: {
+        user: user(),
+        needsEmailConfirmation: false,
+        session: { accessToken: 'demo-access', refreshToken: 'demo-refresh' },
+        org: membership().org,
+      },
+    };
+  }],
+  ['POST', /^\/api\/field-app\/office\/preview$/, (_m, b) => {
+    if (!state.signedIn) return { status: 401, body: { error: 'Not authenticated', code: 'unauthorized' } };
+    const joinCode = typeof b.joinCode === 'string' ? b.joinCode.trim().toUpperCase() : '';
+    if (joinCode !== state.joinCode) {
+      return { status: 400, body: { error: 'That join code did not match any organization.', code: 'join_org_failed' } };
+    }
+    return { body: { org: { name: state.orgName, joinCode } } };
+  }],
+  ['POST', /^\/api\/field-app\/office$/, (_m, b) => {
+    if (!state.signedIn) return { status: 401, body: { error: 'Not authenticated', code: 'unauthorized' } };
+    const joinCode = typeof b.joinCode === 'string' ? b.joinCode.trim().toUpperCase() : '';
+    const orgName = typeof b.orgName === 'string' ? b.orgName.trim() : '';
+    if (joinCode && joinCode !== state.joinCode) {
+      return { status: 400, body: { error: 'That join code did not match any organization.', code: 'join_org_failed' } };
+    }
+    if (!joinCode && orgName.length < 2) {
+      return { status: 400, body: { error: 'Enter an office join code or a new office name.', code: 'validation_error' } };
+    }
+    if (orgName) state.orgName = orgName;
+    state.onboarded = true;
+    return { status: 201, body: { org: membership().org } };
+  }],
   ['POST', /^\/api\/auth\/logout$/, () => { state.signedIn = false; return { body: { ok: true } }; }],
   ['GET', /^\/api\/auth\/me$/, () =>
     state.signedIn ? { body: { user: user() } } : { status: 401, body: { error: 'Not signed in', code: 'unauthenticated' } }],

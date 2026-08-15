@@ -51,8 +51,19 @@ final class AtmosphereClient: ObservableObject {
     }
 
     struct AuthResponse: Decodable {
-        let user: PublicUser
+        let user: PublicUser?
         let session: SessionTokens?
+        let needsEmailConfirmation: Bool?
+        let message: String?
+        let org: FieldOrg?
+        let orgError: String?
+    }
+
+    struct FieldOrg: Decodable {
+        let id: String
+        let name: String
+        let joinCode: String?
+        let role: String?
     }
 
     private struct PasswordLoginBody: Encodable {
@@ -77,6 +88,107 @@ final class AtmosphereClient: ObservableObject {
             }
         }
         return try await loginViaSupabase(email: email, password: password)
+    }
+
+    private struct RegisterBody: Encodable {
+        let email: String
+        let password: String
+        let fullName: String?
+        let joinCode: String?
+        let orgName: String?
+    }
+
+    /// Create the same Atmosphere account the website uses, then join or start an office.
+    func registerAccount(
+        email: String,
+        password: String,
+        fullName: String?,
+        joinCode: String?,
+        orgName: String?
+    ) async throws -> AuthResponse {
+        let body = RegisterBody(
+            email: email,
+            password: password,
+            fullName: fullName,
+            joinCode: joinCode,
+            orgName: orgName
+        )
+        if usesBFF {
+            do {
+                return try await post(path: "/api/field-app/register", body: body, authed: false)
+            } catch {
+                if Self.isUnreachable(error) {
+                    return try await registerViaSupabase(
+                        email: email,
+                        password: password,
+                        fullName: fullName,
+                        joinCode: joinCode,
+                        orgName: orgName
+                    )
+                }
+                if case let APIError.http(status, _) = error, status == 404 {
+                    return try await registerViaLegacyBFF(
+                        email: email,
+                        password: password,
+                        fullName: fullName,
+                        joinCode: joinCode,
+                        orgName: orgName
+                    )
+                }
+                throw error
+            }
+        }
+        return try await registerViaSupabase(
+            email: email,
+            password: password,
+            fullName: fullName,
+            joinCode: joinCode,
+            orgName: orgName
+        )
+    }
+
+    struct OfficePreview: Decodable {
+        let name: String
+        let joinCode: String?
+    }
+
+    func previewOffice(joinCode: String) async throws -> OfficePreview {
+        struct Body: Encodable { let joinCode: String }
+        struct Res: Decodable { let org: OfficePreview }
+        if usesBFF {
+            do {
+                let res: Res = try await post(path: "/api/field-app/office/preview", body: Body(joinCode: joinCode))
+                return res.org
+            } catch {
+                if !Self.isUnreachable(error) { throw error }
+            }
+        }
+        return try await previewOfficeViaSupabase(joinCode: joinCode)
+    }
+
+    func linkOffice(joinCode: String?, orgName: String?, fullName: String? = nil) async throws -> FieldOrg {
+        struct Body: Encodable {
+            let joinCode: String?
+            let orgName: String?
+            let fullName: String?
+        }
+        let body = Body(joinCode: joinCode, orgName: orgName, fullName: fullName)
+        if usesBFF {
+            do {
+                let res: OfficeResponse = try await post(path: "/api/field-app/office", body: body)
+                guard let org = res.org else {
+                    throw APIError.http(status: 400, body: "Could not link this phone to an office.")
+                }
+                return org
+            } catch {
+                if !Self.isUnreachable(error) { throw error }
+            }
+        }
+        return try await linkOfficeViaSupabase(joinCode: joinCode, orgName: orgName, fullName: fullName)
+    }
+
+    private struct OfficeResponse: Decodable {
+        let org: FieldOrg?
     }
 
     func refresh(refreshToken: String) async throws -> AuthResponse {
@@ -380,6 +492,307 @@ final class AtmosphereClient: ObservableObject {
         return try await supabaseAuthToken(grantType: "password", json: Body(email: email, password: password))
     }
 
+    private func signupViaSupabase(email: String, password: String) async throws -> AuthResponse {
+        struct Body: Encodable {
+            let email: String
+            let password: String
+        }
+        var request = URLRequest(url: try makeSupabaseURL(path: "/auth/v1/signup"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.httpBody = try encoder.encode(Body(email: email, password: password))
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let parsed = try? decoder.decode(GoTrueTokenResponse.self, from: data)
+        if status == 400 || status == 401 || status == 422 {
+            let raw = parsed?.error_description ?? parsed?.msg ?? parsed?.error
+                ?? String(data: data, encoding: .utf8) ?? ""
+            throw APIError.http(
+                status: 400,
+                body: raw.isEmpty
+                    ? "Unable to create an account with those details. If you already have an account, try signing in."
+                    : raw
+            )
+        }
+        guard (200 ... 299).contains(status) else {
+            let text = parsed?.error_description ?? parsed?.msg ?? String(data: data, encoding: .utf8) ?? ""
+            throw APIError.http(status: status, body: text)
+        }
+        if let access = parsed?.access_token, let refresh = parsed?.refresh_token {
+            return AuthResponse(
+                user: PublicUser(id: parsed?.user?.id ?? jwtClaim("sub", in: access) ?? "", email: parsed?.user?.email),
+                session: SessionTokens(
+                    accessToken: access,
+                    refreshToken: refresh,
+                    expiresIn: parsed?.expires_in,
+                    expiresAt: parsed?.expires_at
+                ),
+                needsEmailConfirmation: false,
+                message: nil,
+                org: nil,
+                orgError: nil
+            )
+        }
+        return AuthResponse(
+            user: parsed?.user.map { PublicUser(id: $0.id, email: $0.email) },
+            session: nil,
+            needsEmailConfirmation: true,
+            message: "Account created. Check your email to confirm before signing in.",
+            org: nil,
+            orgError: nil
+        )
+    }
+
+    private func registerViaLegacyBFF(
+        email: String,
+        password: String,
+        fullName: String?,
+        joinCode: String?,
+        orgName: String?
+    ) async throws -> AuthResponse {
+        let result = try await post(
+            path: "/api/auth/signup",
+            body: PasswordLoginBody(email: email, password: password),
+            authed: false
+        )
+        if result.needsEmailConfirmation == true || result.session == nil {
+            return result
+        }
+        accessToken = result.session?.accessToken
+        refreshToken = result.session?.refreshToken
+        do {
+            let org = try await linkOfficeViaBFF(joinCode: joinCode, orgName: orgName, fullName: fullName)
+            return AuthResponse(
+                user: result.user,
+                session: result.session,
+                needsEmailConfirmation: false,
+                message: nil,
+                org: org,
+                orgError: nil
+            )
+        } catch {
+            let message = (error as? APIError).flatMap {
+                if case let .http(_, body) = $0 { return body } else { return nil }
+            } ?? error.localizedDescription
+            return AuthResponse(
+                user: result.user,
+                session: result.session,
+                needsEmailConfirmation: false,
+                message: nil,
+                org: nil,
+                orgError: message
+            )
+        }
+    }
+
+    private func linkOfficeViaBFF(joinCode: String?, orgName: String?, fullName: String?) async throws -> FieldOrg {
+        if let fullName, !fullName.isEmpty {
+            struct ProfileBody: Encodable { let fullName: String }
+            struct ProfileRes: Decodable { let profile: ProfileRow? }
+            let _: ProfileRes = try await post(path: "/api/profile", body: ProfileBody(fullName: fullName))
+        }
+        if let joinCode, !joinCode.isEmpty {
+            struct JoinBody: Encodable {
+                let joinCode: String
+                let role: String
+                let workType: String
+                let usageIntents: [String]
+            }
+            let res: OfficeResponse = try await post(
+                path: "/api/org/join",
+                body: JoinBody(
+                    joinCode: joinCode,
+                    role: "field_technician",
+                    workType: "construction",
+                    usageIntents: ["field_work"]
+                )
+            )
+            guard let org = res.org else {
+                throw APIError.http(status: 400, body: "That join code did not match any organization.")
+            }
+            return org
+        }
+        struct CreateBody: Encodable {
+            let name: String
+            let role: String
+            let workType: String
+            let contractorType: String
+            let usageIntents: [String]
+        }
+        let res: OfficeResponse = try await post(
+            path: "/api/org",
+            body: CreateBody(
+                name: orgName ?? "",
+                role: "field_technician",
+                workType: "construction",
+                contractorType: "other",
+                usageIntents: ["field_work"]
+            )
+        )
+        guard let org = res.org else {
+            throw APIError.http(status: 400, body: "Could not start that office.")
+        }
+        return org
+    }
+
+    private func registerViaSupabase(
+        email: String,
+        password: String,
+        fullName: String?,
+        joinCode: String?,
+        orgName: String?
+    ) async throws -> AuthResponse {
+        let created = try await signupViaSupabase(email: email, password: password)
+        if created.needsEmailConfirmation == true || created.session == nil {
+            return created
+        }
+        accessToken = created.session?.accessToken
+        refreshToken = created.session?.refreshToken
+        do {
+            let org = try await linkOfficeViaSupabase(
+                joinCode: joinCode,
+                orgName: orgName,
+                fullName: fullName
+            )
+            return AuthResponse(
+                user: created.user,
+                session: created.session,
+                needsEmailConfirmation: false,
+                message: nil,
+                org: org,
+                orgError: nil
+            )
+        } catch {
+            let message = (error as? APIError).flatMap {
+                if case let .http(_, body) = $0 { return body } else { return nil }
+            } ?? error.localizedDescription
+            return AuthResponse(
+                user: created.user,
+                session: created.session,
+                needsEmailConfirmation: false,
+                message: nil,
+                org: nil,
+                orgError: message
+            )
+        }
+    }
+
+    private func previewOfficeViaSupabase(joinCode: String) async throws -> OfficePreview {
+        struct Body: Encodable { let p_code: String }
+        struct Row: Decodable {
+            let name: String?
+            let join_code: String?
+        }
+        let data = try await supabaseRestData(
+            path: "/rest/v1/rpc/preview_org_by_join_code",
+            method: "POST",
+            json: Body(p_code: joinCode.uppercased())
+        )
+        if let row = try? decoder.decode(Row.self, from: data), let name = row.name?.nilIfEmpty {
+            return OfficePreview(name: name, joinCode: row.join_code ?? joinCode)
+        }
+        if let rows = try? decoder.decode([Row].self, from: data), let name = rows.first?.name?.nilIfEmpty {
+            return OfficePreview(name: name, joinCode: rows.first?.join_code ?? joinCode)
+        }
+        throw APIError.http(status: 400, body: "That join code did not match any organization.")
+    }
+
+    private func linkOfficeViaSupabase(
+        joinCode: String?,
+        orgName: String?,
+        fullName: String?
+    ) async throws -> FieldOrg {
+        if let fullName, !fullName.isEmpty {
+            struct Profile: Encodable {
+                let id: String
+                let email: String?
+                let full_name: String
+            }
+            let _: [ProfileRow] = try await supabaseRest(
+                path: "/rest/v1/profiles",
+                method: "POST",
+                query: [URLQueryItem(name: "on_conflict", value: "id")],
+                json: Profile(id: jwtClaim("sub") ?? "", email: jwtClaim("email"), full_name: fullName),
+                extraHeaders: ["Prefer": "resolution=merge-duplicates,return=representation"]
+            )
+        }
+        if let joinCode, !joinCode.isEmpty {
+            struct Join: Encodable {
+                let p_code: String
+                let p_role: String
+                let p_work_type: String
+            }
+            let org = try await supabaseRpcOrg(
+                path: "/rest/v1/rpc/join_org",
+                json: Join(p_code: joinCode.uppercased(), p_role: "field_technician", p_work_type: "construction")
+            )
+            return org
+        }
+        struct Create: Encodable {
+            let p_name: String
+            let p_role: String
+            let p_work_type: String
+        }
+        let org = try await supabaseRpcOrg(
+            path: "/rest/v1/rpc/create_org",
+            json: Create(p_name: orgName ?? "", p_role: "field_technician", p_work_type: "construction")
+        )
+        struct Contractor: Encodable { let p_contractor_type: String }
+        do {
+            let _: FieldOrg = try await supabaseRpcOrg(
+                path: "/rest/v1/rpc/set_org_contractor_type",
+                json: Contractor(p_contractor_type: "other")
+            )
+        } catch {
+            /* optional until the questionnaire migration is applied */
+        }
+        return org
+    }
+
+    private struct OrgRow: Decodable {
+        let id: String
+        let name: String?
+        let join_code: String?
+    }
+
+    private func supabaseRpcOrg<Body: Encodable>(path: String, json: Body) async throws -> FieldOrg {
+        let data = try await supabaseRestData(path: path, method: "POST", json: json)
+        if let row = try? decoder.decode(OrgRow.self, from: data) {
+            return FieldOrg(id: row.id, name: row.name?.nilIfEmpty ?? "Organization", joinCode: row.join_code, role: nil)
+        }
+        if let rows = try? decoder.decode([OrgRow].self, from: data), let row = rows.first {
+            return FieldOrg(id: row.id, name: row.name?.nilIfEmpty ?? "Organization", joinCode: row.join_code, role: nil)
+        }
+        let text = Self.apiErrorMessage(from: data) ?? String(data: data, encoding: .utf8) ?? ""
+        throw APIError.http(status: 400, body: text.isEmpty ? "Could not link this phone to an office." : text)
+    }
+
+    private func supabaseRestData<Body: Encodable>(
+        path: String,
+        method: String,
+        json: Body
+    ) async throws -> Data {
+        let url = try makeSupabaseURL(path: path)
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
+        if let accessToken {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = try encoder.encode(json)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200 ... 299).contains(status) else {
+            let text = Self.apiErrorMessage(from: data) ?? String(data: data, encoding: .utf8) ?? ""
+            throw APIError.http(status: status, body: text)
+        }
+        return data
+    }
+
     private func refreshViaSupabase(refreshToken: String) async throws -> AuthResponse {
         struct Body: Encodable {
             let refresh_token: String
@@ -429,7 +842,11 @@ final class AtmosphereClient: ObservableObject {
                 refreshToken: refresh,
                 expiresIn: parsed?.expires_in,
                 expiresAt: parsed?.expires_at
-            )
+            ),
+            needsEmailConfirmation: false,
+            message: nil,
+            org: nil,
+            orgError: nil
         )
     }
 

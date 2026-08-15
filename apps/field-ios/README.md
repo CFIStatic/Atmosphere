@@ -48,10 +48,13 @@ Server / API URL field. Run on a LiDAR iPhone for RoomPlan. Simulator can
 optionally talk to a local BFF at `http://127.0.0.1:4000` when `npm run dev`
 is running; a physical device never uses localhost.
 
-**Sign in with your website account** on first install (same email/password as
-the Atmosphere dashboard). Tokens stay in Keychain — later launches skip
-connect and open Today. Day films file into `job_proofs` for that org.
-Disconnect only from Account → Disconnect.
+**Create an account or sign in** on first install (same email/password as the
+Atmosphere website). Link the phone to the office with the join code from
+Atmosphere → Settings → Organization (**Link to office account**), or start a
+new office from the phone. A join link `atmosphere-field://join?code=…` opens
+that screen. Tokens stay in Keychain — later launches skip connect and open
+Today. Day films file into `job_proofs` for that org. Disconnect only from
+Account → Disconnect.
 
 **Requirements:** iOS 16+, camera + mic + location when-in-use. RoomPlan
 twin capture additionally needs a LiDAR iPhone.
@@ -68,14 +71,15 @@ AtmosphereFieldCapture/
   Network/AtmosphereClient.swift    # /api/media/catalog + /api/geometry
   Network/MediaUploadClient.swift   # signed PUT / multipart
   Session/FieldDaySession.swift     # today → record → door → upload
-  UI/TodayView.swift · RecordingView.swift · DoorView.swift
+  UI/TodayView.swift · SignInView.swift · SignUpView.swift · OfficeLinkView.swift
+  UI/RecordingView.swift · DoorView.swift
   Theme/FieldTheme.swift
   Info.plist
 ```
 
 ## Crew flow
 
-1. **First launch only:** Connect Atmosphere account (same as dashboard).
+1. **First launch only:** Create an Atmosphere account or sign in (same as the website), then **Link to office account** with the office join code.
 2. Later launches open Today already connected.
 3. Confirm today’s jobs (tap one if several) → **Start the day**.
 4. Hold **Finish the day** — proof upload into that job → optional RoomPlan twin.
@@ -87,10 +91,11 @@ AI dictation and twin review stay in the **office Verifier**.
 On a physical iPhone the app talks to the Atmosphere Supabase project
 (same users and jobs as the website). A local BFF is optional in Simulator.
 
-1. Sign-in: `POST /auth/v1/token?grant_type=password` (or BFF `POST /api/auth/login`)
-2. Profile + today’s jobs: `my_org_membership` + `crm_jobs` / `job_proofs` (or BFF `/api/field-app/*`)
-3. Day film: upload into the `job-proofs` bucket, then insert `job_proofs`
-4. Optional RoomPlan twin still uses the BFF geometry routes when one is running
+1. Create account: BFF `POST /api/field-app/register` (email + password + join code or new office name), or Supabase `POST /auth/v1/signup` plus `create_org` / `join_org`
+2. Sign-in: `POST /auth/v1/token?grant_type=password` (or BFF `POST /api/auth/login`)
+3. Profile + today’s jobs: `my_org_membership` + `crm_jobs` / `job_proofs` (or BFF `/api/field-app/*`)
+4. Day film: upload into the `job-proofs` bucket, then insert `job_proofs`
+5. Optional RoomPlan twin still uses the BFF geometry routes when one is running
 
 See also `docs/media-storage.md` and `backend/src/geometry/`.
 

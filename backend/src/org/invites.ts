@@ -74,6 +74,11 @@ export function inviteEmail(input: {
   lines.push('  2. Choose "Link to office account" and enter this code:', '');
   lines.push(`      ${input.joinCode}`, '');
   lines.push(
+    'On the Field Capture iPhone app, sign in (or create the account there),',
+    'then choose "Link to office account" and enter the same code.',
+    '',
+  );
+  lines.push(
     'The code is the same for everyone joining this company, so there is nothing',
     'personal in this link to lose. If you were not expecting this, you can ignore it.',
   );
