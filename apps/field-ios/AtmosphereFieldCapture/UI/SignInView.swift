@@ -79,7 +79,8 @@ struct SignInView: View {
                         if busy {
                             ProgressView().tint(FieldTheme.bg)
                         } else {
-                            Text("Sign in & connect phone").fontWeight(.bold)
+                            Text("Sign in & connect phone")
+                                .font(.system(size: 16, weight: .bold))
                         }
                     }
                     .frame(maxWidth: .infinity)

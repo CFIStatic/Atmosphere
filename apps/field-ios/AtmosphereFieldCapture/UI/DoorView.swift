@@ -23,8 +23,8 @@ struct DoorView: View {
                                     .foregroundStyle(FieldTheme.muted)
                                     .lineLimit(1)
                                 Text(row.ok ? "✓" : "!")
+                                    .font(.system(size: 13, weight: .bold))
                                     .foregroundStyle(row.ok ? FieldTheme.pass : FieldTheme.rec)
-                                    .fontWeight(.bold)
                             }
                             .font(.system(size: 13))
                             .padding(12)
@@ -42,7 +42,7 @@ struct DoorView: View {
                             .textCase(.uppercase)
                         ForEach(session.twinRooms) { room in
                             HStack {
-                                Text(room.name).fontWeight(.semibold)
+                                Text(room.name).font(.system(size: 13, weight: .semibold))
                                 Spacer()
                                 Text(room.detail).font(FieldTheme.mono).foregroundStyle(FieldTheme.muted)
                             }
