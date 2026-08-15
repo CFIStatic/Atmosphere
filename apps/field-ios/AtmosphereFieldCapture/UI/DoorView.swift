@@ -84,7 +84,7 @@ struct DoorView: View {
                     }
                     .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(red: 0.941, green: 0.969, blue: 0.945))
+                    .background(FieldTheme.passWash)
                     .cornerRadius(11)
                 }
                 .padding(18)

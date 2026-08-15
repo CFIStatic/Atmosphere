@@ -773,8 +773,33 @@
     if ($('status-time')) $('status-time').textContent = label;
   }
 
+  function applyDeviceScheme() {
+    var params = new URLSearchParams(location.search);
+    var forced = params.get('scheme');
+    var root = document.documentElement;
+    if (forced === 'dark' || forced === 'light') {
+      root.setAttribute('data-scheme', forced);
+    } else {
+      root.removeAttribute('data-scheme');
+    }
+    var dark =
+      forced === 'dark' ||
+      (forced !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', dark ? '#141210' : '#FBFAF7');
+  }
+
   load();
   bind();
+  applyDeviceScheme();
+  if (window.matchMedia) {
+    var schemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    if (schemeQuery.addEventListener) {
+      schemeQuery.addEventListener('change', applyDeviceScheme);
+    } else if (schemeQuery.addListener) {
+      schemeQuery.addListener(applyDeviceScheme);
+    }
+  }
   tickClock();
   setInterval(tickClock, 15000);
 

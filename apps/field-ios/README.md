@@ -152,6 +152,7 @@ See also `docs/media-storage.md` and `backend/src/geometry/`.
 Home-screen / App Store icon is the Atmosphere **five bars** mark
 (`Assets.xcassets/AppIcon.appiconset`) — same bars as the web logo, orange base.
 In-app header uses `AtmosphereBarsMark`.
+The app follows the iPhone’s **Light / Dark** appearance — it does not lock to light mode.
 
 ## Still to wire in Xcode
 

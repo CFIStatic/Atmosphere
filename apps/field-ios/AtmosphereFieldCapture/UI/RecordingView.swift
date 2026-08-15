@@ -65,7 +65,7 @@ struct RecordingView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 18)
             .background(holding ? FieldTheme.accent : FieldTheme.ink)
-            .foregroundStyle(.white)
+            .foregroundStyle(FieldTheme.bg)
             .cornerRadius(12)
             .gesture(
                 DragGesture(minimumDistance: 0)

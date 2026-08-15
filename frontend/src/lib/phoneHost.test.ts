@@ -58,5 +58,12 @@ describe('phone home-screen manifests', () => {
     expect(html).toContain('id="jobs-search"');
     expect(html).toContain('class="tabbar"');
     expect(html).not.toMatch(/Mitigation|Construction/);
+    const css = readFileSync(resolve(repoRoot, 'apps/field-ios/preview/preview.css'), 'utf8');
+    expect(css).toContain('prefers-color-scheme: dark');
+    const app = readFileSync(
+      resolve(repoRoot, 'apps/field-ios/AtmosphereFieldCapture/AtmosphereFieldCaptureApp.swift'),
+      'utf8',
+    );
+    expect(app).not.toContain('preferredColorScheme(.light)');
   });
 });

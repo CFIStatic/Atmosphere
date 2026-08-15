@@ -27,7 +27,6 @@ struct AtmosphereFieldCaptureApp: App {
                 .environmentObject(session)
                 .environmentObject(api)
                 .environmentObject(auth)
-                .preferredColorScheme(.light)
                 .task {
                     auth.bindAPIRefresh()
                     await auth.restore()
