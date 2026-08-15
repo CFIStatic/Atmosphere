@@ -23,6 +23,14 @@ struct MyJobsView: View {
                     .font(.system(size: 15))
                     .foregroundStyle(FieldTheme.muted)
 
+                    Button {
+                        session.beginInvite()
+                    } label: {
+                        Text("Accept a job invite")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(FieldTheme.accent)
+                    }
+
                     searchField
 
                     if session.loadingJobs {

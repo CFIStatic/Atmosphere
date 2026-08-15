@@ -321,6 +321,19 @@ final class AtmosphereClient: ObservableObject {
         return try await createFieldJobViaSupabase(body)
     }
 
+    /// Accept a job invite onto this signed-in account (adds it to Today).
+    func acceptFieldInvite(token: String, name: String?) async throws -> ExpectedJob {
+        struct Body: Encodable {
+            let token: String
+            let name: String?
+        }
+        let res: CreatedJobResponse = try await post(
+            path: "/api/field-app/invites/accept",
+            body: Body(token: token, name: name)
+        )
+        return res.job
+    }
+
     struct ProofUploadUrlResponse: Decodable {
         let path: String
         let token: String?
@@ -400,7 +413,7 @@ final class AtmosphereClient: ObservableObject {
         )
     }
 
-    // MARK: - Job share (invite token, no office login)
+    // MARK: - Job share (invite preview + fallback when the office API is down)
 
     struct ShareJobView: Decodable {
         struct You: Decodable {

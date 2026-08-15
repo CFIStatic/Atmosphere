@@ -573,6 +573,18 @@ export const fieldCreateJobSchema = z.object({
 
 export type FieldCreateJobInput = z.infer<typeof fieldCreateJobSchema>;
 
+/** Signed-in Field Capture user accepts a job invite onto this login. */
+export const fieldAcceptInviteSchema = z.object({
+  token: z
+    .string({ required_error: 'Paste the invite link' })
+    .trim()
+    .min(6, 'That invite link is not valid.')
+    .max(200, 'That invite link is not valid.'),
+  name: z.string().trim().min(1).max(160).optional(),
+});
+
+export type FieldAcceptInviteInput = z.infer<typeof fieldAcceptInviteSchema>;
+
 /**
  * Opening a job writes to `crm_jobs`. This is the field-facing subset — the
  * fuller CRUD, with financials and the links to accounts, contacts and

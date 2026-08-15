@@ -7,13 +7,15 @@ struct MeasureView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             AtmosphereBarsMark(size: 28)
-            Text("Measure the property")
+            Text("Measure the building")
                 .font(.system(size: 28, weight: .bold))
                 .foregroundStyle(FieldTheme.ink)
             Text(
                 session.roomPlan.lidarAvailable
-                    ? "Walk the rooms once. RoomPlan builds the twin the office opens — the day film is already filed."
-                    : "This phone cannot run RoomPlan (needs LiDAR). Skip and the office still has the day film."
+                    ? (session.measureReturn == .door
+                        ? "Walk the rooms once. The day film is already saved on this phone."
+                        : "Walk the rooms once. The office gets the rooms with the day film.")
+                    : "This phone cannot measure rooms (needs LiDAR). Skip and keep the day film."
             )
             .font(.system(size: 15))
             .foregroundStyle(FieldTheme.muted)
@@ -38,7 +40,7 @@ struct MeasureView: View {
                 Button {
                     session.roomPlan.beginCapture()
                 } label: {
-                    Text("Start RoomPlan")
+                    Text("Start measuring")
                         .font(.system(size: 16, weight: .bold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
@@ -52,7 +54,7 @@ struct MeasureView: View {
                 Button {
                     Task { await session.finishMeasure(api: api) }
                 } label: {
-                    Text("File the twin")
+                    Text("Save measurements")
                         .font(.system(size: 16, weight: .bold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
@@ -78,6 +80,9 @@ struct MeasureView: View {
         }
         .padding(22)
         .background(FieldTheme.bg.ignoresSafeArea())
+        .onAppear {
+            session.roomPlan.detectCapabilities()
+        }
         .fullScreenCover(isPresented: $session.roomPlan.isPresentingCapture) {
             RoomCaptureHost(
                 onComplete: { rooms, mesh in

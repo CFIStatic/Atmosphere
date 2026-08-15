@@ -85,7 +85,7 @@ private final class UnavailableMeasureController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
         let button = UIButton(type: .system)
-        button.setTitle("RoomPlan needs a LiDAR iPhone", for: .normal)
+        button.setTitle("Measuring needs a LiDAR iPhone", for: .normal)
         button.addTarget(self, action: #selector(cancel), for: .touchUpInside)
         button.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(button)

@@ -3,7 +3,6 @@ import Foundation
 enum FieldPhase: Equatable {
     case today
     case recording
-    case sending
     case measuring
     case door
 }
@@ -12,6 +11,18 @@ enum FieldTab: String, Equatable {
     case today
     case jobs
     case add
+}
+
+enum MeasureOffer: String, Equatable, Identifiable, Hashable {
+    case beforeRecord
+    case afterRecord
+
+    var id: String { rawValue }
+}
+
+enum MeasureReturn: Equatable {
+    case record
+    case door
 }
 
 struct ExpectedJob: Identifiable, Equatable, Codable {
@@ -47,8 +58,8 @@ struct ExpectedJob: Identifiable, Equatable, Codable {
         self.name = name
         self.address = address
         self.at = at
-        self.placed = placed
         self.status = status
+        self.placed = placed
         self.filmed = filmed
         self.filmedOn = filmedOn
         self.assigned = assigned

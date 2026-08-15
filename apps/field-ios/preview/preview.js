@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var STORAGE_KEY = 'atmosphere.iosPreview.v3';
+  var STORAGE_KEY = 'atmosphere.iosPreview.v4';
   var OFFICES = {
     COASTAL: 'Coastal Drying LLC',
     COASTALDRY: 'Coastal Drying LLC',
@@ -69,7 +69,7 @@
     },
   ];
 
-  var SCREENS = ['signin', 'signup', 'office', 'invite', 'today', 'jobs', 'add', 'recording', 'sending', 'measure', 'door'];
+  var SCREENS = ['signin', 'signup', 'office', 'invite', 'today', 'jobs', 'add', 'recording', 'measure', 'measure-offer', 'door'];
   var TABBED = { today: true, jobs: true, add: true };
 
   var state = {
@@ -92,8 +92,10 @@
     tickTimer: null,
     siteLabel: 'Getting your bearings…',
     lastError: '',
-    sendTimer: null,
-    sendPct: 0,
+    measuredJobIds: [],
+    measureReturn: null,
+    queued: false,
+    queuedText: '',
   };
 
   function copyJob(job) {
@@ -193,6 +195,7 @@
           history: state.history,
           jobSearch: state.jobSearch,
           activeJobId: state.activeJobId,
+          measuredJobIds: state.measuredJobIds || [],
         })
       );
     } catch (e) {
@@ -347,10 +350,17 @@
     if ($('today-date')) $('today-date').textContent = todayLabel();
     if ($('today-lede')) {
       $('today-lede').textContent =
-        'One button, once a day. Tap when you get to your first job and hold when you are done. The film is video + audio — filed to ' +
+        'One button, once a day. Tap when you get to your first job and hold when you are done. The film is video + audio — saved on this phone, then filed to ' +
         org +
-        ' so the office can open it in the evidence library.';
+        ' when you have a signal.';
     }
+    var queueText = state.queuedText || '';
+    ['today-queue', 'door-queue'].forEach(function (id) {
+      if ($(id)) {
+        $(id).hidden = !queueText;
+        $(id).textContent = queueText;
+      }
+    });
     if ($('account-email')) $('account-email').textContent = state.email || '';
     if ($('account-office')) $('account-office').textContent = state.orgName ? 'Office: ' + state.orgName : '';
     if ($('today-err')) {
@@ -468,12 +478,14 @@
       return;
     }
     if (name === 'invite') {
+      ensureDemoAccount({});
       show('invite');
       return;
     }
-    if (name === 'sending') {
+    if (name === 'measure-offer') {
       ensureDemoAccount({});
-      startSending();
+      state.measureReturn = 'record';
+      show('measure-offer');
       return;
     }
     if (name === 'measure') {
@@ -492,7 +504,7 @@
       return;
     }
     if (name === 'door') {
-      finishDay();
+      finishDay({ skipOffer: true });
       return;
     }
     show('today');
@@ -504,6 +516,10 @@
     if (!email || !password) return;
     $('signin-err').hidden = true;
     ensureDemoAccount({ email: email });
+    if (extractShareToken(location.href)) {
+      show('invite');
+      return;
+    }
     show('today');
   }
 
@@ -558,7 +574,17 @@
     show('today');
   }
 
-  function startDay() {
+  function jobIsMeasured(jobId) {
+    return (state.measuredJobIds || []).indexOf(jobId) !== -1;
+  }
+
+  function markMeasured(jobId) {
+    if (!jobId || jobIsMeasured(jobId)) return;
+    state.measuredJobIds = (state.measuredJobIds || []).concat([jobId]);
+    persist();
+  }
+
+  function beginRecording() {
     var job = state.jobs.find(function (j) { return j.id === state.activeJobId; }) || state.jobs[0];
     if (!job) {
       state.lastError = 'No job for today. Create or schedule a job in the Atmosphere dashboard first.';
@@ -576,6 +602,25 @@
       if ($('rec-clock')) $('rec-clock').textContent = formatClock(state.elapsed);
       if ($('rec-clock-sm')) $('rec-clock-sm').textContent = formatClock(state.elapsed);
     }, 1000);
+  }
+
+  function startDay() {
+    var job = state.jobs.find(function (j) { return j.id === state.activeJobId; }) || state.jobs[0];
+    if (!job) {
+      state.lastError = 'No job for today. Create or schedule a job in the Atmosphere dashboard first.';
+      show('today');
+      return;
+    }
+    if (!jobIsMeasured(job.id)) {
+      state.measureReturn = 'record';
+      if ($('offer-lede')) {
+        $('offer-lede').textContent =
+          'This job does not have building measurements yet. Take them now, before you start recording, or skip and we will ask again when you finish.';
+      }
+      show('measure-offer');
+      return;
+    }
+    beginRecording();
   }
 
   function startCamera() {
@@ -616,7 +661,8 @@
     }
   }
 
-  function finishDay() {
+  function finishDay(opts) {
+    var skipOffer = opts && opts.skipOffer;
     var duration = Math.max(state.elapsed, 12);
     stopRecording(true);
     var job = state.jobs.find(function (j) { return j.id === state.activeJobId; }) || state.jobs[0];
@@ -629,17 +675,20 @@
       state.history = (state.history || []).filter(function (row) { return row.id !== job.id; });
       state.history.unshift(copyJob(job));
     }
+    var measured = job && jobIsMeasured(job.id);
     var checks = [
       { label: 'Filmed on site', detail: state.siteLabel, ok: true },
       { label: 'Video + audio sealed', detail: 'mic track present', ok: true },
-      { label: 'Filed to ' + (job ? job.name : 'today'), detail: 'office evidence library', ok: true },
-      { label: 'Twin session', detail: 'twin_preview_1', ok: true },
+      { label: 'Saved on this phone', detail: 'uploads when you’re online', ok: true },
+      { label: 'Building measurements', detail: measured ? 'On file' : 'Not taken', ok: measured },
     ];
-    var rooms = [
-      { name: 'Kitchen', detail: '168 SF' },
-      { name: 'Hall', detail: '42 SF' },
-      { name: 'Living', detail: '210 SF' },
-    ];
+    var rooms = measured
+      ? [
+          { name: 'Kitchen', detail: '168 SF' },
+          { name: 'Hall', detail: '42 SF' },
+          { name: 'Living', detail: '210 SF' },
+        ]
+      : [{ name: 'Measurements not taken', detail: 'Offer again only if this job still has none' }];
     var list = $('door-checks');
     list.innerHTML = '';
     checks.forEach(function (row) {
@@ -662,25 +711,18 @@
       roomRoot.appendChild(el);
     });
     $('door-manifest').textContent = 'hasAudio=true · ' + duration + 's · media preview-day-film';
-    startSending();
-  }
-
-  function startSending() {
-    state.sendPct = 0;
-    show('sending');
-    if ($('send-bar')) $('send-bar').style.width = '0%';
-    if ($('send-pct')) $('send-pct').textContent = '0%';
-    clearInterval(state.sendTimer);
-    state.sendTimer = setInterval(function () {
-      state.sendPct = Math.min(100, state.sendPct + 8);
-      if ($('send-bar')) $('send-bar').style.width = state.sendPct + '%';
-      if ($('send-pct')) $('send-pct').textContent = state.sendPct + '%';
-      if (state.sendPct >= 100) {
-        clearInterval(state.sendTimer);
-        state.sendTimer = null;
-        showMeasure();
+    state.queued = true;
+    state.queuedText = 'Saved on this phone — files when you’re online.';
+    if (!skipOffer && job && !jobIsMeasured(job.id)) {
+      state.measureReturn = 'door';
+      if ($('offer-lede')) {
+        $('offer-lede').textContent =
+          'You have not measured this building yet. Take the measurements now, or skip — we will not ask again until a job has none.';
       }
-    }, 180);
+      show('measure-offer');
+      return;
+    }
+    show('door');
   }
 
   function showMeasure() {
@@ -719,29 +761,90 @@
       });
 
     $('signin-btn').addEventListener('click', signIn);
-    if ($('goto-invite')) {
-      $('goto-invite').addEventListener('click', function () { show('invite'); });
-    }
     if ($('invite-accept')) {
       $('invite-accept').addEventListener('click', function () {
         var name = (($('invite-name') || {}).value || '').trim();
         if (name.length < 2) {
           $('invite-err').hidden = false;
-          $('invite-err').textContent = 'Type your name to accept the brief.';
+          $('invite-err').textContent = 'Type your name to accept this job.';
           return;
         }
         ensureDemoAccount({ fullName: name });
+        var invited = {
+          id: 'job-invite-' + Date.now(),
+          name: '12 Broad Street — extra crew',
+          address: '12 Broad St, Charleston',
+          number: '#1048',
+          at: 'Today',
+          filmed: false,
+          assigned: true,
+          role: 'crew',
+        };
+        if (!state.jobs.some(function (row) { return row.id === invited.id; })) {
+          state.jobs.unshift(invited);
+        }
+        state.activeJobId = invited.id;
         show('today');
       });
     }
     if ($('invite-cancel')) {
-      $('invite-cancel').addEventListener('click', function () { show('signin'); });
+      $('invite-cancel').addEventListener('click', function () {
+        show(state.isLinked ? 'today' : 'signin');
+      });
+    }
+    function afterMeasure(didMeasure) {
+      var job = state.jobs.find(function (j) { return j.id === state.activeJobId; }) || state.jobs[0];
+      if (didMeasure && job) markMeasured(job.id);
+      if (state.measureReturn === 'record') {
+        state.measureReturn = null;
+        beginRecording();
+        return;
+      }
+      state.measureReturn = null;
+      if (didMeasure && $('twin-rooms')) {
+        var rooms = [
+          { name: 'Kitchen', detail: '168 SF' },
+          { name: 'Hall', detail: '42 SF' },
+          { name: 'Living', detail: '210 SF' },
+        ];
+        $('twin-rooms').innerHTML = '';
+        rooms.forEach(function (room) {
+          var el = document.createElement('div');
+          el.innerHTML = '<b></b><span></span>';
+          el.querySelector('b').textContent = room.name;
+          el.querySelector('span').textContent = room.detail;
+          $('twin-rooms').appendChild(el);
+        });
+      }
+      show('door');
     }
     if ($('measure-start')) {
-      $('measure-start').addEventListener('click', function () { show('door'); });
+      $('measure-start').addEventListener('click', function () { afterMeasure(true); });
     }
     if ($('measure-skip')) {
-      $('measure-skip').addEventListener('click', function () { show('door'); });
+      $('measure-skip').addEventListener('click', function () { afterMeasure(false); });
+    }
+    if ($('offer-yes')) {
+      $('offer-yes').addEventListener('click', function () {
+        if ($('measure-lede')) {
+          $('measure-lede').textContent =
+            state.measureReturn === 'door'
+              ? 'Walk the rooms once. The day film is already saved on this phone.'
+              : 'Walk the rooms once. The office gets the rooms with the day film.';
+        }
+        showMeasure();
+      });
+    }
+    if ($('offer-no')) {
+      $('offer-no').addEventListener('click', function () {
+        if (state.measureReturn === 'record') {
+          state.measureReturn = null;
+          beginRecording();
+          return;
+        }
+        state.measureReturn = null;
+        show('door');
+      });
     }
     $('goto-signup').addEventListener('click', function () {
       state.signupStep = 1;
@@ -795,6 +898,19 @@
         jump(btn.getAttribute('data-tab'));
       });
     });
+    if ($('account-invite')) {
+      $('account-invite').addEventListener('click', function () {
+        $('account-menu').hidden = true;
+        ensureDemoAccount({});
+        show('invite');
+      });
+    }
+    if ($('jobs-invite')) {
+      $('jobs-invite').addEventListener('click', function () {
+        ensureDemoAccount({});
+        show('invite');
+      });
+    }
     $('account-link').addEventListener('click', function () {
       $('account-menu').hidden = true;
       state.showOfficeLink = true;
@@ -903,7 +1019,8 @@
   var inviteToken = extractShareToken(location.href);
   var start = params.get('screen') || params.get('jump');
   if (inviteToken && !start) {
-    show('invite');
+    if (state.isLinked && !state.needsOfficeLink) show('invite');
+    else show('signin');
   } else if (start && SCREENS.indexOf(start) !== -1) {
     jump(start);
   } else if (state.isLinked && !state.needsOfficeLink && !state.showOfficeLink) {

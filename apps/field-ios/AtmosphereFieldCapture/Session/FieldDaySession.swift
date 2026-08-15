@@ -1,6 +1,7 @@
 import Foundation
 
-/// Orchestrates today → record (A/V) → door → upload into the org evidence library.
+/// Orchestrates today → record (A/V) → door. Day films save on the phone and
+/// file to the Atmosphere dashboard when a path is available.
 @MainActor
 final class FieldDaySession: ObservableObject {
     @Published var phase: FieldPhase = .today
@@ -18,23 +19,54 @@ final class FieldDaySession: ObservableObject {
     @Published var creatingJob: Bool = false
     @Published var manifest: DayFilmManifest?
     @Published var loadingJobs: Bool = false
-    @Published var shareToken: String?
-    @Published var shareJob: AtmosphereClient.ShareJobView?
     @Published var showInvite = false
+    @Published var invitePaste = ""
     @Published var acceptName = ""
     @Published var acceptingBrief = false
     @Published var uploadProgress: Double = 0
-    @Published var sendingDetail = "Still sending your day film…"
-    @Published var pendingUpload: PendingDayUpload?
+    @Published var queuedUploads: [PendingDayUpload] = []
+    @Published var filmFiled = false
+    @Published var measureOffer: MeasureOffer?
+    @Published var measureReturn: MeasureReturn = .door
+    @Published var shareJob: AtmosphereClient.ShareJobView?
+    @Published var reviewingToken: String?
 
     let recorder = DayFilmRecorder()
     let locator = SiteLocator()
     let roomPlan = RoomPlanBridge()
+    let reachability = UploadReachability()
+    private var processingQueue = false
 
-    var isShareMode: Bool { shareToken != nil }
+    var queueBanner: String? {
+        let waiting = queuedUploads.filter { !$0.filed }
+        guard !waiting.isEmpty else { return nil }
+        if uploading {
+            let pct = Int(uploadProgress * 100)
+            return waiting.count == 1
+                ? "Sending the day film to the dashboard… \(pct)%"
+                : "Sending \(waiting.count) day films to the dashboard… \(pct)%"
+        }
+        if !reachability.isOnline {
+            return waiting.count == 1
+                ? "Saved on this phone — files when you’re online."
+                : "\(waiting.count) day films saved on this phone — file when you’re online."
+        }
+        return "Saved on this phone — sending when the signal holds."
+    }
+
+    func inviteToken(for jobId: String?) -> String? {
+        guard let jobId else { return nil }
+        return AcceptedInviteStore.token(for: jobId)
+    }
+
+    func needsMeasurements(for jobId: String?) -> Bool {
+        guard let jobId, !jobId.isEmpty else { return true }
+        if MeasuredJobStore.contains(jobId) { return false }
+        if !roomPlan.rooms.isEmpty { return false }
+        return true
+    }
 
     func loadToday(api: AtmosphereClient) async {
-        if isShareMode { return }
         loadingJobs = true
         lastError = nil
         defer { loadingJobs = false }
@@ -43,15 +75,15 @@ final class FieldDaySession: ObservableObject {
             async let mine = api.assignedJobs()
             let list = try await today
             let assigned = try await mine
-            jobs = list
+            jobs = mergeInvites(list)
             assignedJobs = assigned
-            let pool = list + assigned
+            let pool = jobs + assignedJobs
             if activeJobId == nil || !pool.contains(where: { $0.id == activeJobId }) {
-                activeJobId = list.first?.id ?? assigned.first?.id
+                activeJobId = jobs.first?.id ?? assigned.first?.id
             }
         } catch {
             lastError = error.localizedDescription
-            jobs = []
+            jobs = mergeInvites([])
             assignedJobs = []
         }
     }
@@ -93,6 +125,14 @@ final class FieldDaySession: ObservableObject {
         }
     }
 
+    func beginInvite() {
+        lastError = nil
+        shareJob = nil
+        reviewingToken = nil
+        invitePaste = ""
+        showInvite = true
+    }
+
     func openInvite(api: AtmosphereClient, raw: String) async {
         lastError = nil
         guard let token = ShareLink.token(from: raw) else {
@@ -100,82 +140,80 @@ final class FieldDaySession: ObservableObject {
             showInvite = true
             return
         }
+        PendingInviteStore.save(token)
         do {
             let view = try await api.loadShareJob(token: token)
-            shareToken = token
+            reviewingToken = token
             shareJob = view
             showInvite = true
-            acceptName = ""
-            let job = ExpectedJob(
-                id: token,
-                number: view.job.jobNumber.map { "#\($0)" } ?? "",
-                name: view.job.title ?? "Job",
-                address: view.brief?.facts?["address"] ?? view.you?.company ?? "Invite",
-                at: "Today",
-                placed: true,
-                assigned: true,
-                role: view.you?.role
-            )
-            jobs = [job]
-            activeJobId = job.id
+            if acceptName.trimmingCharacters(in: .whitespacesAndNewlines).count < 2 {
+                acceptName = ""
+            }
         } catch {
             lastError = error.localizedDescription
             showInvite = true
         }
     }
 
-    func dismissInvite() {
-        if shareJob == nil {
-            showInvite = false
-            shareToken = nil
-        } else if shareJob?.clear == true || shareJob?.acknowledgedRevision == shareJob?.currentRevision {
-            showInvite = false
-        } else {
-            showInvite = false
-            shareToken = nil
-            shareJob = nil
-        }
+    func consumePendingInvite(api: AtmosphereClient) async {
+        guard let token = PendingInviteStore.load() else { return }
+        await openInvite(api: api, raw: token)
     }
 
-    func acceptBrief(api: AtmosphereClient) async -> Bool {
-        guard let token = shareToken, let revision = shareJob?.currentRevision else {
-            lastError = "This invite has no brief to accept yet."
+    func dismissInvite() {
+        showInvite = false
+        PendingInviteStore.clear()
+    }
+
+    func acceptBrief(api: AtmosphereClient, signedInName: String?) async -> Bool {
+        guard let token = reviewingToken else {
+            lastError = "Paste an invite link to accept a job."
             return false
         }
-        let name = acceptName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard name.count >= 2 else {
-            lastError = "Type your name to accept the brief."
-            return false
+        var name = acceptName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if name.count < 2 {
+            name = (signedInName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         }
         acceptingBrief = true
         lastError = nil
         defer { acceptingBrief = false }
         do {
-            try await api.acceptShareBrief(token: token, name: name, revision: revision)
-            shareJob = try? await api.loadShareJob(token: token)
+            let job = try await api.acceptFieldInvite(token: token, name: name.isEmpty ? nil : name)
+            addAcceptedJob(job, shareToken: nil)
+            PendingInviteStore.clear()
             showInvite = false
             tab = .today
             phase = .today
             return true
         } catch {
+            if let revision = shareJob?.currentRevision, name.count >= 2 {
+                do {
+                    try await api.acceptShareBrief(token: token, name: name, revision: revision)
+                    let job = jobFromShare(token: token)
+                    addAcceptedJob(job, shareToken: token)
+                    PendingInviteStore.clear()
+                    showInvite = false
+                    tab = .today
+                    phase = .today
+                    return true
+                } catch {
+                    lastError = error.localizedDescription
+                    return false
+                }
+            }
             lastError = error.localizedDescription
             return false
         }
     }
 
     func restorePendingUpload(api: AtmosphereClient) async {
-        guard let pending = PendingUploadStore.load() else { return }
-        let url = URL(fileURLWithPath: pending.localPath)
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            PendingUploadStore.clear()
-            return
+        queuedUploads = PendingUploadStore.loadAll()
+        reachability.onOnline = { [weak self] in
+            guard let self else { return }
+            Task { await self.processQueue(api: api) }
         }
-        pendingUpload = pending
-        shareToken = pending.shareToken
-        activeJobId = pending.jobId
-        phase = .sending
-        sendingDetail = "Still sending your day film…"
-        await sendPending(api: api)
+        reachability.start()
+        await processQueue(api: api)
     }
 
     func selectJob(_ id: String) {
@@ -184,21 +222,39 @@ final class FieldDaySession: ObservableObject {
         phase = .today
     }
 
-    func startDay() async {
+    func requestStartDay() {
         lastError = nil
         let pool = jobs + assignedJobs.filter { job in !jobs.contains(where: { $0.id == job.id }) }
-        if let share = shareJob, share.clear == false,
-           share.acknowledgedRevision != share.currentRevision
-        {
-            lastError = share.because ?? "Accept the brief before you film."
-            showInvite = true
-            return
-        }
         guard activeJobId != nil || !pool.isEmpty else {
-            lastError = "No job assigned to you. Add a job from this phone, or ask the office to put you on one."
+            lastError = "No job assigned to you. Add a job from this phone, accept an invite, or ask the office to put you on one."
             return
         }
         if activeJobId == nil { activeJobId = pool.first?.id }
+        if needsMeasurements(for: activeJobId) {
+            measureOffer = .beforeRecord
+            return
+        }
+        Task { await beginRecording() }
+    }
+
+    func acceptMeasureOffer() {
+        measureReturn = measureOffer == .beforeRecord ? .record : .door
+        measureOffer = nil
+        roomPlan.detectCapabilities()
+        phase = .measuring
+    }
+
+    func declineMeasureOffer() {
+        let offer = measureOffer
+        measureOffer = nil
+        if offer == .beforeRecord {
+            Task { await beginRecording() }
+        }
+    }
+
+    func beginRecording() async {
+        lastError = nil
+        let pool = jobs + assignedJobs.filter { job in !jobs.contains(where: { $0.id == job.id }) }
         do {
             try await recorder.prepare()
             locator.configure(jobs: pool)
@@ -207,6 +263,7 @@ final class FieldDaySession: ObservableObject {
             phase = .recording
         } catch {
             lastError = error.localizedDescription
+            phase = .today
         }
     }
 
@@ -228,38 +285,136 @@ final class FieldDaySession: ObservableObject {
                 throw APIError.http(status: 0, body: "No job selected for this day film.")
             }
             let durable = try PendingUploadStore.persistRecording(temp)
-            var pending = PendingDayUpload(
+            let pending = PendingDayUpload(
                 localPath: durable.path,
                 jobId: jobId,
-                shareToken: shareToken,
+                shareToken: inviteToken(for: jobId),
                 workDate: Self.todayStamp(),
                 durationSeconds: tracks.duration,
                 lat: locator.coordinate?.latitude,
-                lon: locator.coordinate?.longitude,
-                storagePath: nil,
-                uploadUrl: nil,
-                byteSize: nil,
-                sha256Hex: nil,
-                attempt: 0
+                lon: locator.coordinate?.longitude
             )
-            PendingUploadStore.save(pending)
-            pendingUpload = pending
-            uploadProgress = 0
-            sendingDetail = "Still sending your day film…"
+            PendingUploadStore.upsert(pending)
+            queuedUploads = PendingUploadStore.loadAll()
+            filmFiled = false
             recorder.teardown()
-            phase = .sending
-            await sendPending(api: api)
+            applyDoorDraft(jobId: jobId, filed: false)
+            if needsMeasurements(for: jobId) {
+                measureOffer = .afterRecord
+            }
+            phase = .door
+            Task { await processQueue(api: api) }
         } catch {
             lastError = error.localizedDescription
             phase = .door
             doorChecks = [
-                DoorCheck(id: "err", label: "Upload issue", detail: error.localizedDescription, ok: false),
+                DoorCheck(id: "err", label: "Save issue", detail: error.localizedDescription, ok: false),
             ]
         }
     }
 
-    func sendPending(api: AtmosphereClient) async {
-        guard var pending = pendingUpload else { return }
+    func processQueue(api: AtmosphereClient) async {
+        guard !processingQueue else { return }
+        processingQueue = true
+        defer { processingQueue = false }
+        queuedUploads = PendingUploadStore.loadAll()
+        for item in queuedUploads where !item.filed {
+            await sendOne(item, api: api)
+        }
+        queuedUploads = PendingUploadStore.loadAll()
+    }
+
+    func skipMeasure() {
+        if measureReturn == .record {
+            Task { await beginRecording() }
+            return
+        }
+        applyTwinFallback(pending: true)
+        refreshDoorTwin()
+        phase = .door
+    }
+
+    func finishMeasure(api: AtmosphereClient) async {
+        lastError = nil
+        let rooms = roomPlan.asIngestRooms()
+        let jobId = activeJobId ?? queuedUploads.last?.jobId
+        guard !rooms.isEmpty else {
+            skipMeasure()
+            return
+        }
+        do {
+            var mesh: AtmosphereClient.IngestBody.MeshPayload?
+            if let meshURL = roomPlan.meshLocalURL, let jobId {
+                let begin = try await api.beginMeshUpload(jobId: jobId, shareToken: inviteToken(for: jobId))
+                _ = try await api.uploadMesh(localURL: meshURL, begin: begin)
+                if let download = begin.downloadUrl {
+                    mesh = .init(format: "usdz", url: download, producedBy: "roomplan")
+                }
+            }
+            let geo = try await api.openGeometrySession(
+                lidarAvailable: roomPlan.lidarAvailable,
+                label: "Field day \(Self.todayStamp())",
+                videoRef: manifest?.videoRef
+            )
+            try await api.ingestGeometry(
+                sessionId: geo.session.id,
+                body: .init(
+                    source: "roomplan",
+                    rooms: rooms,
+                    mesh: mesh,
+                    videoRef: manifest?.videoRef,
+                    work: nil
+                )
+            )
+            if var next = manifest {
+                next.twinId = geo.twin.id
+                next.geometrySessionId = geo.session.id
+                manifest = next
+            }
+            twinRooms = rooms.map {
+                TwinRoomSummary(
+                    id: $0.name,
+                    name: $0.name,
+                    detail: $0.floorAreaSqFt.map { "\(Int($0)) SF" }
+                        ?? "\($0.lengthFt ?? 0)×\($0.widthFt ?? 0) ft"
+                )
+            }
+            if let jobId { MeasuredJobStore.add(jobId) }
+            if measureReturn == .record {
+                phase = .today
+                await beginRecording()
+            } else {
+                refreshDoorTwin()
+                phase = .door
+            }
+        } catch {
+            lastError = error.localizedDescription
+            if let jobId { MeasuredJobStore.add(jobId) }
+            twinRooms = rooms.map {
+                TwinRoomSummary(
+                    id: $0.name,
+                    name: $0.name,
+                    detail: $0.floorAreaSqFt.map { "\(Int($0)) SF" } ?? "Measured on this phone"
+                )
+            }
+            if measureReturn == .record {
+                await beginRecording()
+            } else {
+                refreshDoorTwin()
+                phase = .door
+            }
+        }
+    }
+
+    func backToToday() {
+        phase = .today
+        elapsedSeconds = 0
+        lastError = nil
+        measureOffer = nil
+    }
+
+    private func sendOne(_ seed: PendingDayUpload, api: AtmosphereClient) async {
+        var pending = seed
         uploading = true
         lastError = nil
         MediaUploadClient.shared.onProgress = { [weak self] value in
@@ -273,10 +428,14 @@ final class FieldDaySession: ObservableObject {
         }
         do {
             let file = URL(fileURLWithPath: pending.localPath)
+            guard FileManager.default.fileExists(atPath: file.path) else {
+                PendingUploadStore.remove(id: pending.id)
+                return
+            }
             pending.attempt += 1
-            sendingDetail = pending.attempt > 1
-                ? "Signal dropped — retrying the same film…"
-                : "Still sending your day film…"
+            PendingUploadStore.upsert(pending)
+            queuedUploads = PendingUploadStore.loadAll()
+
             let begin: AtmosphereClient.ProofUploadUrlResponse
             if let token = pending.shareToken, !token.isEmpty {
                 begin = try await api.beginShareProofUpload(token: token, workDate: pending.workDate)
@@ -285,13 +444,12 @@ final class FieldDaySession: ObservableObject {
             }
             pending.storagePath = begin.path
             pending.uploadUrl = begin.uploadUrl
-            PendingUploadStore.save(pending)
-            pendingUpload = pending
+            PendingUploadStore.upsert(pending)
 
             let uploaded = try await api.uploadProofMedia(localURL: file, begin: begin)
             pending.byteSize = uploaded.byteSize
             pending.sha256Hex = uploaded.sha256Hex
-            PendingUploadStore.save(pending)
+            PendingUploadStore.upsert(pending)
 
             let iso = ISO8601DateFormatter().string(from: Date())
             let body = AtmosphereClient.ProofRecordBody(
@@ -318,8 +476,8 @@ final class FieldDaySession: ObservableObject {
             manifest = DayFilmManifest(
                 mediaId: recorded.proof?.id,
                 sessionId: nil,
-                twinId: nil,
-                geometrySessionId: nil,
+                twinId: manifest?.twinId,
+                geometrySessionId: manifest?.geometrySessionId,
                 videoRef: recorded.proof?.id ?? begin.path,
                 durationSeconds: pending.durationSeconds,
                 byteSize: uploaded.byteSize,
@@ -328,71 +486,51 @@ final class FieldDaySession: ObservableObject {
                 hasVideo: true,
                 capturedAt: Date()
             )
-            roomPlan.detectCapabilities()
-            sendingDetail = "Day film is filed. Measure the property when you can."
-            phase = .measuring
+            filmFiled = true
+            try? FileManager.default.removeItem(atPath: pending.localPath)
+            PendingUploadStore.remove(id: pending.id)
+            applyDoorDraft(jobId: pending.jobId, filed: true)
         } catch {
             lastError = error.localizedDescription
-            sendingDetail = "Still holding the film on this phone. We’ll send it when the signal holds."
         }
     }
 
-    func skipMeasure() {
-        applyTwinFallback(pending: true)
-        finishToDoor()
-    }
-
-    func finishMeasure(api: AtmosphereClient) async {
-        lastError = nil
-        let rooms = roomPlan.asIngestRooms()
-        guard !rooms.isEmpty else {
-            skipMeasure()
-            return
-        }
-        do {
-            var mesh: AtmosphereClient.IngestBody.MeshPayload?
-            if let meshURL = roomPlan.meshLocalURL, let jobId = pendingUpload?.jobId ?? activeJobId {
-                let begin = try await api.beginMeshUpload(jobId: jobId, shareToken: shareToken)
-                _ = try await api.uploadMesh(localURL: meshURL, begin: begin)
-                if let download = begin.downloadUrl {
-                    mesh = .init(format: "usdz", url: download, producedBy: "roomplan")
-                }
-            }
-            if !isShareMode {
-                let geo = try await api.openGeometrySession(
-                    lidarAvailable: roomPlan.lidarAvailable,
-                    label: "Field day \(pendingUpload?.workDate ?? Self.todayStamp())",
-                    videoRef: manifest?.videoRef
-                )
-                try await api.ingestGeometry(
-                    sessionId: geo.session.id,
-                    body: .init(
-                        source: "roomplan",
-                        rooms: rooms,
-                        mesh: mesh,
-                        videoRef: manifest?.videoRef,
-                        work: nil
-                    )
-                )
-                if var next = manifest {
-                    next.twinId = geo.twin.id
-                    next.geometrySessionId = geo.session.id
-                    manifest = next
-                }
-            }
-            twinRooms = rooms.map {
+    private func applyDoorDraft(jobId: String, filed: Bool) {
+        let jobName = (jobs + assignedJobs).first(where: { $0.id == jobId })?.name ?? shareJob?.job.title ?? jobId
+        doorChecks = [
+            DoorCheck(id: "1", label: "Filmed on site", detail: siteLabel, ok: true),
+            DoorCheck(id: "2", label: "Video + audio sealed", detail: "mic track present", ok: true),
+            DoorCheck(
+                id: "3",
+                label: filed ? "Filed to \(jobName)" : "Saved on this phone",
+                detail: filed ? "office evidence library" : "uploads when you’re online",
+                ok: true
+            ),
+            DoorCheck(
+                id: "4",
+                label: "Building measurements",
+                detail: MeasuredJobStore.contains(jobId)
+                    ? (twinRooms.first?.name ?? "On file")
+                    : (twinRooms.first?.name ?? "Not taken"),
+                ok: MeasuredJobStore.contains(jobId) || !twinRooms.isEmpty
+            ),
+        ]
+        if twinRooms.isEmpty && !MeasuredJobStore.contains(jobId) {
+            twinRooms = [
                 TwinRoomSummary(
-                    id: $0.name,
-                    name: $0.name,
-                    detail: $0.floorAreaSqFt.map { "\(Int($0)) SF" }
-                        ?? "\($0.lengthFt ?? 0)×\($0.widthFt ?? 0) ft"
-                )
-            }
-            finishToDoor()
-        } catch {
-            lastError = error.localizedDescription
-            applyTwinFallback(pending: false)
-            finishToDoor()
+                    id: "pending",
+                    name: "Measurements not taken",
+                    detail: "Offer again only if this job still has none"
+                ),
+            ]
+        }
+    }
+
+    private func refreshDoorTwin() {
+        guard let jobId = activeJobId ?? queuedUploads.last?.jobId else { return }
+        applyDoorDraft(jobId: jobId, filed: filmFiled)
+        if !twinRooms.contains(where: { $0.id == "pending" }) {
+            // keep measured rooms
         }
     }
 
@@ -401,41 +539,56 @@ final class FieldDaySession: ObservableObject {
             twinRooms = [
                 TwinRoomSummary(
                     id: "pending",
-                    name: "Twin pending measure",
-                    detail: "Video + audio filed · RoomPlan pass when available"
+                    name: "Measurements skipped",
+                    detail: "Day film is saved · measure later if this job still has none"
                 ),
             ]
         } else {
             twinRooms = [
                 TwinRoomSummary(
                     id: "skip",
-                    name: "Twin deferred",
-                    detail: "Day film is filed; twin measure can retry later"
+                    name: "Measurements deferred",
+                    detail: "Day film is saved; measure can retry later"
                 ),
             ]
         }
     }
 
-    private func finishToDoor() {
-        let jobId = pendingUpload?.jobId ?? activeJobId ?? ""
-        let jobName = (jobs + assignedJobs).first(where: { $0.id == jobId })?.name ?? shareJob?.job.title ?? jobId
-        doorChecks = [
-            DoorCheck(id: "1", label: "Filmed on site", detail: siteLabel, ok: true),
-            DoorCheck(id: "2", label: "Video + audio sealed", detail: "mic track present", ok: true),
-            DoorCheck(id: "3", label: "Filed to \(jobName)", detail: "office evidence library", ok: true),
-            DoorCheck(
-                id: "4",
-                label: "Twin session",
-                detail: manifest?.twinId ?? twinRooms.first?.name ?? "—",
-                ok: manifest?.twinId != nil || !(twinRooms.first?.id == "skip")
-            ),
-        ]
-        if let path = pendingUpload?.localPath {
-            try? FileManager.default.removeItem(atPath: path)
+    private func addAcceptedJob(_ job: ExpectedJob, shareToken: String?) {
+        if !jobs.contains(where: { $0.id == job.id }) {
+            jobs.insert(job, at: 0)
         }
-        PendingUploadStore.clear()
-        pendingUpload = nil
-        phase = .door
+        activeJobId = job.id
+        if let shareToken, !shareToken.isEmpty {
+            AcceptedInviteStore.upsert(AcceptedInviteJob(job: job, shareToken: shareToken))
+        } else {
+            let kept = AcceptedInviteStore.load().filter { $0.job.id != job.id }
+            AcceptedInviteStore.save(kept)
+        }
+    }
+
+    private func mergeInvites(_ server: [ExpectedJob]) -> [ExpectedJob] {
+        var merged = server
+        for invite in AcceptedInviteStore.load() {
+            if !merged.contains(where: { $0.id == invite.job.id }) {
+                merged.insert(invite.job, at: 0)
+            }
+        }
+        return merged
+    }
+
+    private func jobFromShare(token: String) -> ExpectedJob {
+        let view = shareJob
+        return ExpectedJob(
+            id: view.flatMap { _ in token } ?? token,
+            number: view?.job.jobNumber.map { "#\($0)" } ?? "",
+            name: view?.job.title ?? "Job",
+            address: view?.brief?.facts?["address"] ?? view?.you?.company ?? "Invite",
+            at: "Today",
+            placed: true,
+            assigned: true,
+            role: view?.you?.role
+        )
     }
 
     private func markFilmed(jobId: String) {
@@ -461,12 +614,6 @@ final class FieldDaySession: ObservableObject {
                 jobs[idx] = record
             }
         }
-    }
-
-    func backToToday() {
-        phase = .today
-        elapsedSeconds = 0
-        lastError = nil
     }
 
     private static func todayStamp() -> String {

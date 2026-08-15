@@ -647,18 +647,14 @@ h1 {
   border-radius: 11px;
   color: var(--pass);
 }
-.send-track {
-  margin-top: 18px;
-  height: 10px;
-  background: var(--line);
-  border-radius: 99px;
-  overflow: hidden;
-}
-.send-bar {
-  height: 100%;
-  width: 0;
-  background: var(--accent);
-  transition: width 0.16s linear;
+.queue-banner {
+  margin: 0 0 4px;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .done-card strong { display: block; font-size: 15px; }

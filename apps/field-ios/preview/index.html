@@ -34,7 +34,6 @@
         <button type="button" data-jump="office">Office link</button>
         <button type="button" data-jump="invite">Invite</button>
         <button type="button" data-jump="recording">Recording</button>
-        <button type="button" data-jump="sending">Sending</button>
         <button type="button" data-jump="measure">Measure</button>
         <button type="button" data-jump="door">Door</button>
       </nav>
@@ -62,6 +61,7 @@
             <div class="account-menu" id="account-menu" hidden>
               <p id="account-email"></p>
               <p id="account-office"></p>
+              <button type="button" id="account-invite">Accept a job invite</button>
               <button type="button" id="account-link">Link to office account</button>
               <button type="button" class="danger" id="account-disconnect">Disconnect this phone</button>
             </div>
@@ -92,7 +92,6 @@
                 <p class="notice" id="signin-notice" hidden></p>
                 <p class="err" id="signin-err" hidden></p>
                 <button type="button" class="primary" id="signin-btn" disabled>Sign in &amp; connect phone</button>
-                <button type="button" class="link-accent" id="goto-invite">Have an invite link?</button>
                 <button type="button" class="link-accent" id="goto-signup">New here? Create an account</button>
                 <p class="faint">After this, you won’t be asked again on this phone.</p>
               </div>
@@ -201,13 +200,14 @@
                 <p class="daterow" id="today-date"></p>
                 <h1 class="today-h">Start it and go to work</h1>
                 <p class="lede" id="today-lede"></p>
+                <div class="queue-banner" id="today-queue" hidden></div>
                 <div class="jobs">
                   <h3>Today's jobs</h3>
                   <div id="job-list"></div>
                 </div>
                 <div class="twin-card">
-                  <h3>Property twin · App Store</h3>
-                  <p>While you film, LiDAR / RoomPlan can measure rooms. The office gets a 3D twin of the property and the work — you still only press one button.</p>
+                  <h3>Building measurements</h3>
+                  <p>When you start recording we can measure the building so the office has the rooms with the film. We only ask if this job does not have measurements yet.</p>
                 </div>
                 <p class="err" id="today-err" hidden></p>
               </div>
@@ -238,6 +238,7 @@
               <div class="scroll today-scroll">
                 <h1 class="today-h">My jobs</h1>
                 <p class="lede">A historical record of every job this login has filmed. Search by name, address, job number, status, date, or role.</p>
+                <button type="button" class="link-accent" id="jobs-invite">Accept a job invite</button>
                 <label class="field search">
                   <input id="jobs-search" type="search" placeholder="Search name, address, job #…" autocomplete="off" />
                 </label>
@@ -288,9 +289,9 @@
                   </svg>
                   <span>Atmosphere</span>
                 </div>
-                <p class="kicker">Invite</p>
+                <p class="kicker">Accept a job</p>
                 <h1 id="invite-title">1847 Oak Ridge — kitchen water</h1>
-                <p class="lede" id="invite-lede">Coastal Drying sent this job. Review the do-not lines, accept the brief, then film. No office login required to start.</p>
+                <p class="lede" id="invite-lede">This job will be added to this login. You can accept more than one invite — each lands on Today for your account.</p>
                 <div class="twin-card">
                   <h3>Do not</h3>
                   <p>Do not pull cabinets. Do not enter the attic.</p>
@@ -301,13 +302,28 @@
                 </div>
                 <label class="field"><input id="invite-name" type="text" placeholder="Your name" /></label>
                 <p class="err" id="invite-err" hidden></p>
-                <button type="button" class="primary" id="invite-accept">Accept the brief</button>
+                <button type="button" class="primary" id="invite-accept">Accept this job</button>
                 <button type="button" class="link-muted" id="invite-cancel">Not now</button>
               </div>
             </section>
 
-            <!-- SENDING -->
-            <section class="screen" id="s-sending">
+            <!-- MEASURE -->
+            <section class="screen" id="s-measure">
+              <div class="scroll">
+                <h1 class="today-h">Measure the building</h1>
+                <p class="lede" id="measure-lede">Walk the rooms once. The office gets the rooms with the day film.</p>
+                <div class="twin-card">
+                  <h3>Walk the rooms</h3>
+                  <p>On a LiDAR iPhone this opens the system scan. This preview files a sample room list.</p>
+                </div>
+                <div class="rooms" id="measure-rooms"></div>
+                <button type="button" class="primary" id="measure-start">Start measuring</button>
+                <button type="button" class="link-muted" id="measure-skip">Skip for now</button>
+              </div>
+            </section>
+
+            <!-- MEASURE OFFER -->
+            <section class="screen" id="s-measure-offer">
               <div class="scroll">
                 <div class="wordmark">
                   <svg width="28" height="28" viewBox="0 0 22 22" aria-hidden="true">
@@ -319,25 +335,10 @@
                   </svg>
                   <span>Atmosphere</span>
                 </div>
-                <h1 class="today-h">Still sending</h1>
-                <p class="lede" id="sending-lede">Still sending your day film. You can lock the phone — the file stays here until Atmosphere has it.</p>
-                <div class="send-track"><div class="send-bar" id="send-bar"></div></div>
-                <p class="mono faint" id="send-pct">0%</p>
-              </div>
-            </section>
-
-            <!-- MEASURE -->
-            <section class="screen" id="s-measure">
-              <div class="scroll">
-                <h1 class="today-h">Measure the property</h1>
-                <p class="lede">Walk the rooms once. RoomPlan builds the twin the office opens — the day film is already filed.</p>
-                <div class="twin-card">
-                  <h3>RoomPlan</h3>
-                  <p>On a LiDAR iPhone this opens the system scan. This preview files a sample USDZ + room list.</p>
-                </div>
-                <div class="rooms" id="measure-rooms"></div>
-                <button type="button" class="primary" id="measure-start">Start RoomPlan</button>
-                <button type="button" class="link-muted" id="measure-skip">Skip for now</button>
+                <h1 class="today-h">Measure the building?</h1>
+                <p class="lede" id="offer-lede">This job does not have building measurements yet. Take them now, or skip and we will ask again when you finish.</p>
+                <button type="button" class="primary" id="offer-yes">Yes, measure now</button>
+                <button type="button" class="link-muted" id="offer-no">Not now</button>
               </div>
             </section>
 
@@ -362,7 +363,8 @@
             <section class="screen" id="s-door">
               <div class="scroll">
                 <h1 class="door-h">Checked at the door</h1>
-                <p class="lede">Before anyone watches it, your day is checked as evidence. Video and audio both sealed.</p>
+                <p class="lede">Before anyone watches it, your day is checked as evidence. Video and audio both sealed. If you were offline, the film stays on this phone until it can file.</p>
+                <div class="queue-banner" id="door-queue" hidden></div>
                 <div class="ledger" id="door-checks"></div>
                 <div class="twin-card">
                   <h3>Measured for the twin</h3>

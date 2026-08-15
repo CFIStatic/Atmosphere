@@ -8,6 +8,7 @@ import { createAdminClient } from '../lib/supabase.js';
 import { badRequest, HttpError, serviceUnavailable } from '../lib/errors.js';
 import { setSessionCookies } from '../lib/session.js';
 import {
+  fieldAcceptInviteSchema,
   fieldCreateJobSchema,
   fieldOfficePreviewSchema,
   fieldOfficeSchema,
@@ -503,6 +504,107 @@ fieldAppRouter.post('/jobs', async (req: Request, res: Response, next: NextFunct
         },
         addressById,
         new Map([[row.id, 'lead']]),
+        timeZone,
+      ),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/field-app/invites/accept
+ * A signed-in crew member accepts a job invite onto this login. The job
+ * lands on Today for this account — invites are not a substitute for sign-in.
+ */
+fieldAppRouter.post('/invites/accept', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { orgId, userId, supabase } = await requireOrgContext(req);
+    const input = fieldAcceptInviteSchema.parse(req.body);
+    const admin = await adminOrThrow();
+
+    const { data: party } = await admin
+      .from('job_parties')
+      .select('id, org_id, job_id, role, revoked_at')
+      .eq('access_token', input.token)
+      .maybeSingle();
+    if (!party) throw new HttpError(404, 'This invite is not valid.', 'bad_token');
+    if ((party as { revoked_at?: string | null }).revoked_at) {
+      throw new HttpError(403, 'Access to this job was withdrawn.', 'revoked');
+    }
+    if ((party as { org_id: string }).org_id !== orgId) {
+      throw new HttpError(
+        403,
+        'This invite belongs to another office. Sign in with that office account to accept it.',
+        'wrong_office',
+      );
+    }
+
+    const jobId = (party as { job_id: string }).job_id;
+    const { data: job, error: jobError } = await supabase
+      .from('crm_jobs')
+      .select('id, job_number, title, status, scheduled_start, property_id, work_type')
+      .eq('org_id', orgId)
+      .eq('id', jobId)
+      .maybeSingle();
+    if (jobError || !job) {
+      throw new HttpError(404, 'This job is no longer in your office.', 'job_not_found');
+    }
+
+    const { error: assignError } = await supabase.from('job_assignments').insert({
+      org_id: orgId,
+      job_id: jobId,
+      user_id: userId,
+      role_on_job: (party as { role?: string }).role || 'crew',
+      assigned_by: userId,
+    });
+    if (assignError && assignError.code !== '23505') {
+      throw new HttpError(400, assignError.message, 'assign_failed');
+    }
+
+    if (input.name) {
+      const { data: brief } = await admin
+        .from('job_briefs')
+        .select('revision')
+        .eq('job_id', jobId)
+        .order('revision', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const revision = (brief as { revision?: number } | null)?.revision;
+      if (revision) {
+        const { error: ackError } = await admin.from('job_acknowledgements').insert({
+          org_id: orgId,
+          job_id: jobId,
+          party_id: (party as { id: string }).id,
+          revision,
+          acknowledged_name: input.name,
+        });
+        if (ackError && ackError.code !== '23505') {
+          throw new HttpError(400, ackError.message, 'accept_failed');
+        }
+      }
+    }
+
+    const row = job as JobRow;
+    const timeZone = await orgTimezone(supabase, orgId);
+    const addressById = await addressByPropertyIds(
+      supabase,
+      row.property_id ? [row.property_id] : [],
+    );
+    res.json({
+      job: asFieldJob(
+        {
+          id: row.id,
+          jobNumber: row.job_number ?? null,
+          title: row.title ?? null,
+          status: row.status ?? null,
+          scheduledStart: row.scheduled_start ?? null,
+          propertyId: row.property_id ?? null,
+          workType: row.work_type ?? null,
+          filmed: false,
+        },
+        addressById,
+        new Map([[row.id, (party as { role?: string }).role || 'crew']]),
         timeZone,
       ),
     });

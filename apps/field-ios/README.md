@@ -121,7 +121,7 @@ AtmosphereFieldCapture/
 1. **First launch only:** Create an Atmosphere account or sign in (same as the website), then **Link to office account** with the office join code.
 2. Later launches open Today already connected.
 3. Confirm today’s assigned jobs (or **Add job**) → **Start the day**. **My jobs** is the filmed record — search by name, address, job number, status, date, or role.
-4. Hold **Finish the day** — proof upload into that job → optional RoomPlan twin. The job then lands on **My jobs**.
+4. **Start the day** offers building measurements if that job has none. Hold **Finish the day** — the film is saved on the phone and files to the dashboard when a signal is available. If measurements were skipped, the phone asks once more at the end. The job then lands on **My jobs**.
 
 AI dictation and twin review stay in the **office Verifier**.
 
@@ -159,4 +159,4 @@ The app follows the iPhone’s **Light / Dark** appearance — it does not lock 
 - App Store Connect listing, TestFlight, privacy nutrition labels
 - Associated Domains so `https://…/shared/{token}` opens the app without the custom scheme
 
-Invite links: `atmosphere-field://share?token=…` or a pasted `/shared/…` URL. Day films upload from a background `URLSession` (file on disk, retry on drop). After the film files, RoomPlan presents `RoomCaptureViewController` and ships rooms + USDZ.
+Each crew member signs in with their own Atmosphere account. Job invites (`atmosphere-field://share?token=…` or a pasted `/shared/…` URL) are accepted **inside the app** after sign-in — not on the login screen — and add that job to this login’s Today. Day films stay on the phone until there is a path, then a background `URLSession` files them to the dashboard. Building measurements (RoomPlan on a LiDAR iPhone) are offered at the start of a recording and again at the end only when that job still has none.

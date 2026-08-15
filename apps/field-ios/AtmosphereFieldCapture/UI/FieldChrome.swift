@@ -24,6 +24,9 @@ struct FieldHeader: View {
                 if let office = auth.orgName {
                     Text("Office: \(office)")
                 }
+                Button("Accept a job invite") {
+                    session.beginInvite()
+                }
                 Button("Link to office account") {
                     auth.beginOfficeLink()
                 }
@@ -32,6 +35,10 @@ struct FieldHeader: View {
                         await auth.disconnectAccount()
                         session.jobs = []
                         session.assignedJobs = []
+                        session.showInvite = false
+                        MeasuredJobStore.clear()
+                        AcceptedInviteStore.clear()
+                        PendingInviteStore.clear()
                     }
                 }
             } label: {
@@ -108,5 +115,29 @@ struct FieldShellView: View {
                 .tag(FieldTab.add)
         }
         .accentColor(FieldTheme.accent)
+    }
+}
+
+struct QueueBanner: View {
+    @EnvironmentObject private var session: FieldDaySession
+
+    var body: some View {
+        if let text = session.queueBanner {
+            HStack(alignment: .top, spacing: 10) {
+                if session.uploading {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                }
+                Text(text)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(FieldTheme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(FieldTheme.panel)
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
+            .cornerRadius(10)
+        }
     }
 }

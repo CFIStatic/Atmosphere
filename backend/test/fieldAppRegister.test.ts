@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   credentialsSchema,
+  fieldAcceptInviteSchema,
   fieldOfficePreviewSchema,
   fieldOfficeSchema,
   fieldRegisterSchema,
@@ -73,6 +74,19 @@ test('field register: reject supplying both a join code and a new office name', 
       orgName: 'Acme',
     }),
   );
+});
+
+test('field invite: accept a job onto this login', () => {
+  const parsed = fieldAcceptInviteSchema.parse({
+    token: '  share-token-abc  ',
+    name: 'Andre Boone',
+  });
+  assert.equal(parsed.token, 'share-token-abc');
+  assert.equal(parsed.name, 'Andre Boone');
+});
+
+test('field invite: reject a short token', () => {
+  assert.throws(() => fieldAcceptInviteSchema.parse({ token: 'ab' }));
 });
 
 test('field office: same office rules once the phone already has a session', () => {

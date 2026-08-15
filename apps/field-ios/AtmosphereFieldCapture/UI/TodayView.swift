@@ -20,10 +20,12 @@ struct TodayView: View {
                         .foregroundStyle(FieldTheme.ink)
 
                     Text(
-                        "One button, once a day. Tap when you get to your first job and hold when you are done. The film is video + audio — filed to \(auth.orgName ?? "your organization") so the office can open it in the evidence library."
+                        "One button, once a day. Tap when you get to your first job and hold when you are done. The film is video + audio — saved on this phone, then filed to \(auth.orgName ?? "your organization") when you have a signal."
                     )
                     .font(.system(size: 15))
                     .foregroundStyle(FieldTheme.muted)
+
+                    QueueBanner()
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Today's jobs")
@@ -53,12 +55,12 @@ struct TodayView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Property twin · App Store")
+                        Text("Building measurements")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(FieldTheme.faint)
                             .textCase(.uppercase)
                         Text(
-                            "While you film, LiDAR / RoomPlan can measure rooms. The office gets a 3D twin of the property and the work — you still only press one button."
+                            "When you start recording we can measure the building so the office has the rooms with the film. We only ask if this job does not have measurements yet."
                         )
                         .font(.system(size: 13.5))
                         .foregroundStyle(FieldTheme.muted)
@@ -87,7 +89,7 @@ struct TodayView: View {
             }
 
             Button {
-                Task { await session.startDay() }
+                session.requestStartDay()
             } label: {
                 Label("Start the day", systemImage: "video.fill")
                     .font(.system(size: 17, weight: .bold))
