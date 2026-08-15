@@ -44,7 +44,6 @@
     signupMode: 'join',
     officeMode: 'join',
     jobs: DEMO_JOBS.map(copyJob),
-    workType: 'mitigation',
     activeJobId: DEMO_JOBS[0].id,
     elapsed: 0,
     holdTimer: null,
@@ -62,7 +61,6 @@
       filmed: Boolean(job.filmed),
       assigned: job.assigned !== false,
       role: job.role || 'crew',
-      workType: job.workType || 'mitigation',
     };
   }
 
@@ -296,9 +294,6 @@
 
     renderJobs();
     renderAssigned();
-    document.querySelectorAll('[data-work-type]').forEach(function (btn) {
-      btn.classList.toggle('on', btn.getAttribute('data-work-type') === state.workType);
-    });
     syncButtons();
   }
 
@@ -422,7 +417,6 @@
       filmed: false,
       assigned: true,
       role: 'lead',
-      workType: state.workType,
     };
     state.jobs.unshift(job);
     state.activeJobId = job.id;
@@ -588,12 +582,6 @@
     if ($('jobs-account-btn')) $('jobs-account-btn').addEventListener('click', toggleAccount);
     if ($('add-account-btn')) $('add-account-btn').addEventListener('click', toggleAccount);
     $('add-submit').addEventListener('click', createJob);
-    document.querySelectorAll('[data-work-type]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        state.workType = btn.getAttribute('data-work-type');
-        render();
-      });
-    });
     document.querySelectorAll('.tabbar button').forEach(function (btn) {
       btn.addEventListener('click', function () {
         jump(btn.getAttribute('data-tab'));

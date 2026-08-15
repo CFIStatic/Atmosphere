@@ -8,7 +8,6 @@ struct AddJobView: View {
     @State private var address = ""
     @State private var city = ""
     @State private var notes = ""
-    @State private var workType = "mitigation"
 
     private var canSubmit: Bool {
         name.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2
@@ -34,16 +33,6 @@ struct AddJobView: View {
                     field("Job name", text: $name, placeholder: "Kitchen water — Oak Ridge")
                     field("Site address", text: $address, placeholder: "1847 Oak Ridge Dr")
                     field("City", text: $city, placeholder: "Charleston")
-
-                    Text("Work type")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(FieldTheme.faint)
-                        .textCase(.uppercase)
-                    HStack(spacing: 8) {
-                        mode("Mitigation", value: "mitigation")
-                        mode("Construction", value: "construction")
-                    }
-
                     field("Notes (optional)", text: $notes, placeholder: "What you are walking into")
 
                     if let err = session.lastError, session.tab == .add {
@@ -59,8 +48,7 @@ struct AddJobView: View {
                                 name: name.trimmingCharacters(in: .whitespacesAndNewlines),
                                 address: address.trimmingCharacters(in: .whitespacesAndNewlines),
                                 city: city.trimmingCharacters(in: .whitespacesAndNewlines),
-                                notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
-                                workType: workType
+                                notes: notes.trimmingCharacters(in: .whitespacesAndNewlines)
                             )
                             if ok {
                                 name = ""
@@ -105,21 +93,5 @@ struct AddJobView: View {
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
                 .cornerRadius(10)
         }
-    }
-
-    private func mode(_ title: String, value: String) -> some View {
-        Button {
-            workType = value
-        } label: {
-            Text(title)
-                .font(.system(size: 13, weight: .semibold))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(workType == value ? FieldTheme.ink : FieldTheme.panel)
-                .foregroundStyle(workType == value ? FieldTheme.bg : FieldTheme.ink)
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
-                .cornerRadius(10)
-        }
-        .buttonStyle(.plain)
     }
 }

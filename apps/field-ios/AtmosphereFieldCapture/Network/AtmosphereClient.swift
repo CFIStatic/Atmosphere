@@ -298,15 +298,14 @@ final class AtmosphereClient: ObservableObject {
         name: String,
         address: String,
         city: String?,
-        notes: String?,
-        workType: String
+        notes: String?
     ) async throws -> ExpectedJob {
         let body = FieldJobDraft(
             name: name,
             address: address,
             city: city,
             notes: notes,
-            workType: workType
+            workType: "mitigation"
         )
         if usesBFF {
             do {

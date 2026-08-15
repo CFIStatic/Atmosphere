@@ -49,8 +49,7 @@ final class FieldDaySession: ObservableObject {
         name: String,
         address: String,
         city: String,
-        notes: String,
-        workType: String
+        notes: String
     ) async -> Bool {
         creatingJob = true
         lastError = nil
@@ -60,8 +59,7 @@ final class FieldDaySession: ObservableObject {
                 name: name,
                 address: address,
                 city: city.isEmpty ? nil : city,
-                notes: notes.isEmpty ? nil : notes,
-                workType: workType
+                notes: notes.isEmpty ? nil : notes
             )
             if !assignedJobs.contains(where: { $0.id == job.id }) {
                 assignedJobs.insert(job, at: 0)

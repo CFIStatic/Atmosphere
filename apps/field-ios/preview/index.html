@@ -32,14 +32,12 @@
         <button type="button" data-jump="signin">Sign in</button>
         <button type="button" data-jump="signup">Sign up</button>
         <button type="button" data-jump="office">Office link</button>
-        <button type="button" data-jump="today">Today</button>
-        <button type="button" data-jump="jobs">My jobs</button>
-        <button type="button" data-jump="add">Add job</button>
         <button type="button" data-jump="recording">Recording</button>
         <button type="button" data-jump="door">Door</button>
       </nav>
       <p class="stage-hint">
-        Walk the phone, or jump a screen from here. Preview mode does not upload.
+        Today, My jobs, and Add job live in the tab bar at the bottom of the phone.
+        Preview mode does not upload.
         The live crew web app is still <a href="/fieldcapture/">/fieldcapture/</a>.
       </p>
     </aside>
@@ -262,11 +260,6 @@
                 <label class="field"><span class="lbl">Job name</span><input id="add-name" type="text" placeholder="Kitchen water — Oak Ridge" /></label>
                 <label class="field"><span class="lbl">Site address</span><input id="add-address" type="text" placeholder="1847 Oak Ridge Dr" /></label>
                 <label class="field"><span class="lbl">City</span><input id="add-city" type="text" placeholder="Charleston" /></label>
-                <p class="step">Work type</p>
-                <div class="mode-row">
-                  <button type="button" class="mode on" data-work-type="mitigation">Mitigation</button>
-                  <button type="button" class="mode" data-work-type="construction">Construction</button>
-                </div>
                 <label class="field"><span class="lbl">Notes (optional)</span><input id="add-notes" type="text" placeholder="What you are walking into" /></label>
                 <p class="err" id="add-err" hidden></p>
                 <button type="button" class="primary" id="add-submit" disabled>Add job &amp; assign to me</button>
@@ -310,22 +303,22 @@
                 <button type="button" class="primary" id="back-today">Back to today</button>
               </div>
             </section>
-          </div>
 
-          <nav class="tabbar" id="tabbar" hidden>
-            <button type="button" data-tab="today">
-              <span class="tab-ico" aria-hidden="true">☀</span>
-              Today
-            </button>
-            <button type="button" data-tab="jobs">
-              <span class="tab-ico" aria-hidden="true">☰</span>
-              My jobs
-            </button>
-            <button type="button" data-tab="add">
-              <span class="tab-ico" aria-hidden="true">＋</span>
-              Add job
-            </button>
-          </nav>
+            <nav class="tabbar" id="tabbar" hidden>
+              <button type="button" data-tab="today">
+                <span class="tab-ico" aria-hidden="true">☀</span>
+                Today
+              </button>
+              <button type="button" data-tab="jobs">
+                <span class="tab-ico" aria-hidden="true">☰</span>
+                My jobs
+              </button>
+              <button type="button" data-tab="add">
+                <span class="tab-ico" aria-hidden="true">＋</span>
+                Add job
+              </button>
+            </nav>
+          </div>
           <div class="home-indicator" aria-hidden="true"></div>
         </div>
       </div>

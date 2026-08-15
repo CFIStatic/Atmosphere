@@ -431,9 +431,11 @@ h1 {
   display: flex;
   align-items: stretch;
   justify-content: space-around;
-  padding: 6px 8px 22px;
+  margin-top: auto;
+  padding: 8px 8px 28px;
   background: var(--panel);
   border-top: 1px solid var(--line);
+  flex-shrink: 0;
 }
 .tabbar[hidden] { display: none !important; }
 .tabbar button {
