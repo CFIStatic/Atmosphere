@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Field Capture · iOS</title>
+  <meta name="description" content="Browser host of the Atmosphere Field Capture iPhone app." />
+  <meta name="theme-color" content="#1C1917" />
+  <link rel="stylesheet" href="./preview.css" />
+</head>
+<body>
+  <div class="stage">
+    <aside class="stage-rail">
+      <div class="stage-brand">
+        <svg class="bars" width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+          <rect y="0" width="22" height="2.8" fill="#A8A29E"/>
+          <rect y="4.8" width="22" height="2.8" fill="#78716C"/>
+          <rect y="9.6" width="22" height="2.8" fill="#57534E"/>
+          <rect y="14.4" width="22" height="2.8" fill="#292524"/>
+          <rect y="19.2" width="22" height="2.8" fill="#F2670C"/>
+        </svg>
+        <div>
+          <strong>Atmosphere</strong>
+          <span>iOS Field Capture</span>
+        </div>
+      </div>
+      <p class="stage-lede">
+        Browser host of the App Store Swift client. Same screens as
+        <code>apps/field-ios/</code> — sign in, link an office, film the day, check the door.
+      </p>
+      <nav class="stage-nav" aria-label="Preview screens">
+        <button type="button" data-jump="signin">Sign in</button>
+        <button type="button" data-jump="signup">Sign up</button>
+        <button type="button" data-jump="office">Office link</button>
+        <button type="button" data-jump="today">Today</button>
+        <button type="button" data-jump="recording">Recording</button>
+        <button type="button" data-jump="door">Door</button>
+      </nav>
+      <p class="stage-hint">
+        Walk the phone, or jump a screen from here. Preview mode does not upload.
+        The live crew web app is still <a href="/fieldcapture/">/fieldcapture/</a>.
+      </p>
+    </aside>
+
+    <div class="phone-wrap">
+      <div class="phone" id="phone">
+        <div class="phone-bezel">
+          <div class="dynamic-island" aria-hidden="true"></div>
+          <div class="status-bar" aria-hidden="true">
+            <span class="status-time" id="status-time">9:41</span>
+            <span class="status-icons">
+              <svg width="17" height="12" viewBox="0 0 17 12"><path fill="#1C1917" d="M1 8.5h1.4V11H1zM3.6 6.5h1.4V11H3.6zM6.2 4.5h1.4V11H6.2zM8.8 2h1.4v9H8.8z"/><path fill="none" stroke="#1C1917" stroke-width="1.1" d="M12.2 4.2a4 4 0 0 1 3.4 0M12.8 6.2a2.6 2.6 0 0 1 2.2 0"/><circle cx="14" cy="8.6" r=".7" fill="#1C1917"/></svg>
+              <svg width="25" height="12" viewBox="0 0 25 12"><rect x=".5" y="2.2" width="21" height="7.6" rx="2" fill="none" stroke="#1C1917" stroke-width="1"/><rect x="2" y="3.6" width="16" height="4.8" rx="1" fill="#1C1917"/><path d="M22.2 4.6v2.8a1.6 1.6 0 0 0 0-2.8z" fill="#1C1917"/></svg>
+            </span>
+          </div>
+
+          <div class="app" id="app">
+            <!-- SIGN IN -->
+            <section class="screen" id="s-signin" data-on="1">
+              <div class="scroll">
+                <div class="wordmark">
+                  <svg width="28" height="28" viewBox="0 0 22 22" aria-hidden="true">
+                    <rect y="0" width="22" height="2.8" fill="#A8A29E"/>
+                    <rect y="4.8" width="22" height="2.8" fill="#78716C"/>
+                    <rect y="9.6" width="22" height="2.8" fill="#57534E"/>
+                    <rect y="14.4" width="22" height="2.8" fill="#292524"/>
+                    <rect y="19.2" width="22" height="2.8" fill="#F2670C"/>
+                  </svg>
+                  <span>Atmosphere</span>
+                </div>
+                <p class="kicker">Field Capture</p>
+                <h1>Sign in with your website account</h1>
+                <p class="lede">
+                  Use the same email and password you use on the Atmosphere website. You only connect this phone once — after that it stays signed in.
+                </p>
+                <label class="field">
+                  <input id="signin-email" type="email" autocomplete="username" placeholder="Work email" />
+                </label>
+                <label class="field">
+                  <input id="signin-password" type="password" autocomplete="current-password" placeholder="Password" />
+                </label>
+                <p class="notice" id="signin-notice" hidden></p>
+                <p class="err" id="signin-err" hidden></p>
+                <button type="button" class="primary" id="signin-btn" disabled>Sign in &amp; connect phone</button>
+                <button type="button" class="link-accent" id="goto-signup">New here? Create an account</button>
+                <p class="faint">After this, you won’t be asked again on this phone.</p>
+              </div>
+            </section>
+
+            <!-- SIGN UP -->
+            <section class="screen" id="s-signup">
+              <div class="scroll">
+                <div class="wordmark">
+                  <svg width="28" height="28" viewBox="0 0 22 22" aria-hidden="true">
+                    <rect y="0" width="22" height="2.8" fill="#A8A29E"/>
+                    <rect y="4.8" width="22" height="2.8" fill="#78716C"/>
+                    <rect y="9.6" width="22" height="2.8" fill="#57534E"/>
+                    <rect y="14.4" width="22" height="2.8" fill="#292524"/>
+                    <rect y="19.2" width="22" height="2.8" fill="#F2670C"/>
+                  </svg>
+                  <span>Atmosphere</span>
+                </div>
+                <p class="kicker">Field Capture</p>
+                <h1 id="signup-title">Create your account</h1>
+                <p class="lede" id="signup-lede">
+                  This is the same login you will use on the Atmosphere website. Password must be at least 8 characters.
+                </p>
+                <p class="step" id="signup-step">Step 1 of 2</p>
+                <p class="notice" id="signup-notice" hidden></p>
+                <p class="err" id="signup-err" hidden></p>
+                <div id="signup-step1">
+                  <label class="field"><input id="signup-name" type="text" autocomplete="name" placeholder="First and last name" /></label>
+                  <label class="field"><input id="signup-email" type="email" autocomplete="username" placeholder="Work email" /></label>
+                  <label class="field"><input id="signup-password" type="password" autocomplete="new-password" placeholder="Password (min. 8 characters)" /></label>
+                </div>
+                <div id="signup-step2" hidden>
+                  <div class="mode-row">
+                    <button type="button" class="mode on" data-signup-mode="join">Join an office</button>
+                    <button type="button" class="mode" data-signup-mode="create">Start a new office</button>
+                  </div>
+                  <div id="signup-join">
+                    <label class="field"><input id="signup-code" type="text" autocomplete="off" placeholder="Office join code" /></label>
+                    <p class="faint">Ask the office for the 6–12 character code from Atmosphere Settings.</p>
+                  </div>
+                  <div id="signup-create" hidden>
+                    <label class="field"><input id="signup-org" type="text" autocomplete="organization" placeholder="Office name" /></label>
+                    <p class="faint">You can invite the rest of the crew from the website with a join code.</p>
+                  </div>
+                </div>
+                <button type="button" class="primary" id="signup-btn" disabled>Continue</button>
+                <button type="button" class="link-muted" id="signup-back" hidden>Back</button>
+                <button type="button" class="link-accent" id="goto-signin">Already have an account? Sign in</button>
+              </div>
+            </section>
+
+            <!-- OFFICE LINK -->
+            <section class="screen" id="s-office">
+              <div class="scroll">
+                <div class="wordmark">
+                  <svg width="28" height="28" viewBox="0 0 22 22" aria-hidden="true">
+                    <rect y="0" width="22" height="2.8" fill="#A8A29E"/>
+                    <rect y="4.8" width="22" height="2.8" fill="#78716C"/>
+                    <rect y="9.6" width="22" height="2.8" fill="#57534E"/>
+                    <rect y="14.4" width="22" height="2.8" fill="#292524"/>
+                    <rect y="19.2" width="22" height="2.8" fill="#F2670C"/>
+                  </svg>
+                  <span>Atmosphere</span>
+                </div>
+                <p class="kicker">Field Capture</p>
+                <h1>Link to office account</h1>
+                <p class="lede" id="office-lede">
+                  Enter the office join code from Atmosphere Settings so this login belongs to that company.
+                </p>
+                <p class="err" id="office-err" hidden></p>
+                <div class="mode-row">
+                  <button type="button" class="mode on" data-office-mode="join">Join an office</button>
+                  <button type="button" class="mode" data-office-mode="create">Start a new office</button>
+                </div>
+                <div id="office-join">
+                  <label class="field"><input id="office-code" type="text" autocomplete="off" placeholder="Office join code" /></label>
+                  <p class="pass" id="office-preview" hidden></p>
+                  <p class="faint" id="office-hint">Ask the office for the 6–12 character code in Atmosphere → Settings → Organization.</p>
+                </div>
+                <div id="office-create" hidden>
+                  <label class="field"><input id="office-org" type="text" autocomplete="organization" placeholder="Office name" /></label>
+                  <p class="faint">Only if this company does not have an Atmosphere office yet. You can invite the crew from the website with a join code.</p>
+                </div>
+                <button type="button" class="primary" id="office-btn" disabled>Link to office account</button>
+                <button type="button" class="link-muted" id="office-cancel">Cancel</button>
+              </div>
+            </section>
+
+            <!-- TODAY -->
+            <section class="screen" id="s-today">
+              <header class="app-header">
+                <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+                  <rect y="0" width="22" height="2.8" fill="#A8A29E"/>
+                  <rect y="4.8" width="22" height="2.8" fill="#78716C"/>
+                  <rect y="9.6" width="22" height="2.8" fill="#57534E"/>
+                  <rect y="14.4" width="22" height="2.8" fill="#292524"/>
+                  <rect y="19.2" width="22" height="2.8" fill="#F2670C"/>
+                </svg>
+                <div class="app-header-copy">
+                  <strong>Atmosphere</strong>
+                  <span id="today-org">Field Capture</span>
+                </div>
+                <button type="button" class="account-btn" id="account-btn">Account</button>
+              </header>
+              <div class="account-menu" id="account-menu" hidden>
+                <p id="account-email"></p>
+                <p id="account-office"></p>
+                <button type="button" id="account-link">Link to office account</button>
+                <button type="button" class="danger" id="account-disconnect">Disconnect this phone</button>
+              </div>
+              <div class="scroll today-scroll">
+                <p class="daterow" id="today-date"></p>
+                <h1 class="today-h">Start it and go to work</h1>
+                <p class="lede" id="today-lede"></p>
+                <div class="jobs">
+                  <h3>Today's jobs</h3>
+                  <div id="job-list"></div>
+                </div>
+                <div class="twin-card">
+                  <h3>Property twin · App Store</h3>
+                  <p>While you film, LiDAR / RoomPlan can measure rooms. The office gets a 3D twin of the property and the work — you still only press one button.</p>
+                </div>
+                <p class="err" id="today-err" hidden></p>
+              </div>
+              <div class="dock">
+                <button type="button" class="primary" id="start-day">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17 10.5V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3.5l5 4v-11z"/></svg>
+                  Start the day
+                </button>
+              </div>
+            </section>
+
+            <!-- RECORDING -->
+            <section class="screen rec-screen" id="s-recording">
+              <video id="rec-video" autoplay muted playsinline></video>
+              <div class="rec-fallback" id="rec-fallback" aria-hidden="true"></div>
+              <div class="rec-top">
+                <span class="rec-dot"></span>
+                <span>RECORDING THE DAY</span>
+                <span class="rec-clock-sm" id="rec-clock-sm">0:00</span>
+              </div>
+              <div class="rec-center">
+                <div class="rec-clock" id="rec-clock">0:00</div>
+                <div class="site-pill" id="site-label">Getting your bearings…</div>
+                <p class="on-record">ON THE RECORD · video + audio</p>
+              </div>
+              <button type="button" class="hold-btn" id="hold-finish">Hold to finish the day</button>
+            </section>
+
+            <!-- DOOR -->
+            <section class="screen" id="s-door">
+              <div class="scroll">
+                <h1 class="door-h">Checked at the door</h1>
+                <p class="lede">Before anyone watches it, your day is checked as evidence. Video and audio both sealed.</p>
+                <div class="ledger" id="door-checks"></div>
+                <div class="twin-card">
+                  <h3>Measured for the twin</h3>
+                  <div class="rooms" id="twin-rooms"></div>
+                </div>
+                <p class="mono faint" id="door-manifest"></p>
+                <div class="done-card">
+                  <strong>Your part is done.</strong>
+                  <span>The office opens the Verifier for video + audio with AI dictation, and the property twin built from measurements.</span>
+                </div>
+              </div>
+              <div class="dock">
+                <button type="button" class="primary" id="back-today">Back to today</button>
+              </div>
+            </section>
+          </div>
+
+          <div class="home-indicator" aria-hidden="true"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="./preview.js"></script>
+</body>
+</html>

@@ -9,6 +9,7 @@ const frontendDir = path.dirname(fileURLToPath(import.meta.url));
 const srcDir = path.resolve(frontendDir, 'src');
 const verifierDir = path.resolve(frontendDir, '../verifier');
 const fieldCaptureDir = path.resolve(frontendDir, '../fieldcapture');
+const iosPreviewDir = path.resolve(frontendDir, '../apps/field-ios/preview');
 const distDir = path.resolve(frontendDir, 'dist');
 
 // https://vite.dev/config/
@@ -16,6 +17,7 @@ export default defineConfig({
   plugins: [
     staticAppPlugin('/verifier', verifierDir, distDir),
     staticAppPlugin('/fieldcapture', fieldCaptureDir, distDir),
+    staticAppPlugin('/ios', iosPreviewDir, distDir),
     react(),
   ],
   resolve: {

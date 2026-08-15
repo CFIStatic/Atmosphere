@@ -37,4 +37,19 @@ describe('phone home-screen manifests', () => {
     expect(script).toContain('/fieldcapture/');
     expect(script).toContain('5174');
   });
+
+  it('hosts the iOS Field Capture screens in a browser preview', () => {
+    const script = readFileSync(resolve(repoRoot, 'scripts/host-ios-preview.sh'), 'utf8');
+    expect(script).toContain('5175');
+    expect(script).toContain('apps/field-ios/preview');
+    const html = readFileSync(resolve(repoRoot, 'apps/field-ios/preview/index.html'), 'utf8');
+    expect(html).toContain('id="s-signin"');
+    expect(html).toContain('id="s-signup"');
+    expect(html).toContain('id="s-office"');
+    expect(html).toContain('id="s-today"');
+    expect(html).toContain('id="s-recording"');
+    expect(html).toContain('id="s-door"');
+    expect(html).toContain('Start the day');
+    expect(html).toContain('Hold to finish the day');
+  });
 });

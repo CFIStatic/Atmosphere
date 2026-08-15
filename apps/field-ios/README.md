@@ -67,6 +67,17 @@ The phone signs in with the same email/password as the Atmosphere website.
 A physical iPhone never uses localhost; it talks to the hosted Atmosphere
 project. RoomPlan needs a LiDAR iPhone.
 
+**Browser host (no Xcode):** the Swift screens are also served as a phone-framed
+preview so you can walk Sign in → Today → Record → Door without a simulator.
+
+```bash
+bash scripts/host-ios-preview.sh
+```
+
+Open `http://localhost:5175/` (cloud-agent preview tab **ios**). The Vite app
+also mounts the same folder at `/ios`. This preview does not upload. The live
+crew web app is still `fieldcapture/`.
+
 To use the **web** Field Capture on the phone instead (no Xcode):
 
 ```bash
