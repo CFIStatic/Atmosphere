@@ -68,6 +68,64 @@ export function jobTitleForIntake(title: string | undefined, address: string): s
   return titleFromSiteAddress(address);
 }
 
+function addressOnlyProposal(address: string): IntakeProposal {
+  const site = address.slice(0, 200);
+  return {
+    title: titleFromSiteAddress(site),
+    workType: 'mitigation',
+    address: site,
+    city: '',
+    postalCode: '',
+    claimNumber: '',
+    briefNote:
+      'No work description yet. Field Capture can still film — AI will describe what happened from the video.',
+    facts: {
+      Site: site,
+      Source: 'Address only — work description optional',
+    },
+    scope: [],
+    party: {
+      company: 'Field Capture',
+      trade: 'field_capture',
+      contactName: '',
+    },
+    source: 'heuristic',
+    summary:
+      'Job drafted from the address. Approve to put it on the dashboard — AI will describe the day film.',
+  };
+}
+
+function descriptionProposal(address: string, description: string): IntakeProposal {
+  const site = address.slice(0, 200);
+  const note = description.trim().slice(0, 2000);
+  const scope: ProposedScopeLine[] =
+    note.length >= 2 ? [{ title: note.slice(0, 200), state: 'included' }] : [];
+  return {
+    title: titleFromSiteAddress(site),
+    workType: /mitigat|water|flood|mold|dry|extract/i.test(note) ? 'mitigation' : 'construction',
+    address: site,
+    city: '',
+    postalCode: '',
+    claimNumber: '',
+    briefNote: note || addressOnlyProposal(site).briefNote,
+    facts: {
+      Site: site,
+      ...(note ? { Work: note.slice(0, 500) } : {}),
+      Source: 'Address and work description',
+    },
+    scope,
+    party: {
+      company: 'Field Capture',
+      trade: 'field_capture',
+      contactName: '',
+    },
+    source: 'heuristic',
+    summary: note
+      ? 'Job drafted from the address and what needs to be done. Approve to put it on the dashboard.'
+      : addressOnlyProposal(site).summary,
+  };
+}
+
 /**
  * Pull a usable address-looking line when present.
  */
@@ -114,37 +172,33 @@ export function proposeIntakeFromText(
   const text = rawText.trim();
   const forcedAddress = (opts?.address ?? '').trim();
 
-  // Address alone is enough to start a job. Scope is optional — AI will
-  // describe the video when no lines are attached.
+  // Address is the only required field. A short "what needs to be done" note
+  // is optional — it becomes one scope line, not a claim-packet parse.
+  if (!text) {
+    if (!forcedAddress) {
+      throw new Error(
+        'Enter a site address, or paste more of the scope — a few lines is not enough to propose a job.',
+      );
+    }
+    return addressOnlyProposal(forcedAddress);
+  }
+
+  const looksLikePacket =
+    text.split(/\r?\n/).filter((line) => line.trim()).length >= 3 ||
+    /^\d+[.)]/.test(text) ||
+    /\b(do\s*not|scope of work|exclusions?)\b/i.test(text);
+
+  if (forcedAddress && !looksLikePacket) {
+    return descriptionProposal(forcedAddress, text);
+  }
+
   if (text.length < 20) {
     if (!forcedAddress) {
       throw new Error(
         'Enter a site address, or paste more of the scope — a few lines is not enough to propose a job.',
       );
     }
-    return {
-      title: titleFromSiteAddress(forcedAddress),
-      workType: 'mitigation',
-      address: forcedAddress.slice(0, 200),
-      city: '',
-      postalCode: '',
-      claimNumber: '',
-      briefNote:
-        'No scope attached yet. Field Capture can still film — AI will describe what happened from the video. Add scope later for line-by-line cross-checks.',
-      facts: {
-        Site: forcedAddress.slice(0, 200),
-        Source: 'Address only — scope optional',
-      },
-      scope: [],
-      party: {
-        company: 'Field Capture',
-        trade: 'field_capture',
-        contactName: '',
-      },
-      source: 'heuristic',
-      summary:
-        'No scope uploaded. Invite Field Capture anyway — AI will describe the video. Add scope later if you want line-by-line checks.',
-    };
+    return descriptionProposal(forcedAddress, text);
   }
 
   const meta = extractMeta(text);

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../components/AppShell';
 import { AddressAutocomplete } from '../components/AddressAutocomplete';
@@ -15,12 +15,11 @@ import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { useExperiment } from '../hooks/useExperiment';
 
 /**
- * Office intake — address + scope (upload or paste), review, approve.
+ * Office intake — address plus an optional note about what needs to be done.
  *
- * Creates the job file, scope lines, published brief, and capture invites
- * together. Invite your Field Capture team and/or subcontractors by email.
- * Outsiders get an email; if they already have an Atmosphere account the job
- * shows there, otherwise they are prompted to create one.
+ * Creates the job file (and optional scope line), publishes a brief, and can
+ * invite Field Capture. Org members can also open today's jobs from the app
+ * without a separate invite.
  */
 
 type Step = 'paste' | 'review' | 'done';
@@ -32,33 +31,29 @@ type ExternalInvite = {
   email: string;
 };
 
-const SAMPLE = `Property: 1842 Meridian Ave
-Austin, TX 78702
-
-Scope of work
-1. Extract standing water — living room and hallway
-2. Remove wet drywall to 24" on south wall
-3. Set air movers and dehumidifier; monitor 3 days
-4. Replace insulation in opened cavities
-DO NOT: demo kitchen cabinets
-DO NOT: open ceilings without written approval
-
-Mitigation — water loss`;
+const SAMPLE = 'Extract standing water in the living room and hallway. Set drying equipment.';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PLACEHOLDER_ADDRESS = /^address to confirm$/i;
 
+function looksLikePacket(text: string): boolean {
+  return (
+    text.split(/\n/).filter((line) => line.trim()).length >= 3 ||
+    /^\d+[.)]/.test(text) ||
+    /\b(do\s*not|scope of work|exclusions?)\b/i.test(text)
+  );
+}
+
 function buildProposeText(scopeText: string, siteAddress: string): string {
   const body = scopeText.trim();
   const address = siteAddress.trim();
-  if (!address) return body;
+  if (!address || !looksLikePacket(body)) return body;
   if (/(?:^|\n)\s*(?:property|address)\s*:/i.test(body)) return body;
   return `Property: ${address}\n\n${body}`;
 }
 
 export function JobIntakePage() {
   const navigate = useNavigate();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   useFeatureTimer('job_intake');
   // Paused by default in DB — assign returns null until status = running.
   const intakeCta = useExperiment('intake_cta_copy');
@@ -69,7 +64,6 @@ export function JobIntakePage() {
   const [step, setStep] = useState<Step>('paste');
   const [siteAddress, setSiteAddress] = useState('');
   const [text, setText] = useState('');
-  const [scopeFileName, setScopeFileName] = useState<string | null>(null);
   const [proposal, setProposal] = useState<IntakeProposal | null>(null);
   const [captureTeam, setCaptureTeam] = useState<CaptureTeamMember[]>([]);
   const [externals, setExternals] = useState<ExternalInvite[]>([]);
@@ -93,62 +87,19 @@ export function JobIntakePage() {
     () => captureTeam.filter((m) => m.selected).length,
     [captureTeam],
   );
-  const inviteTotal = selectedCount + externals.length;
 
-  async function onScopeFile(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    const lower = file.name.toLowerCase();
-    if (lower.endsWith('.pdf') || file.type === 'application/pdf') {
-      setError(
-        'PDF upload isn’t supported yet — save the scope as a .txt file, or paste the text below.',
-      );
-      return;
-    }
-    if (
-      !lower.endsWith('.txt') &&
-      !lower.endsWith('.md') &&
-      !lower.endsWith('.csv') &&
-      !lower.endsWith('.rtf') &&
-      file.type &&
-      !file.type.startsWith('text/')
-    ) {
-      setError('Upload a text scope file (.txt, .md, .csv), or paste the scope below.');
-      return;
-    }
-    try {
-      const content = await file.text();
-      if (content.trim().length < 20) {
-        setError('That file looks empty — paste the scope, or try another file.');
-        return;
-      }
-      setText(content);
-      setScopeFileName(file.name);
-      setError(null);
-    } catch {
-      setError('Could not read that file. Paste the scope instead.');
-    }
-  }
-
-  async function draftPackage(opts?: { skipScope?: boolean }) {
+  async function draftPackage() {
     if (!siteAddress.trim()) {
       setError('Enter the site address.');
-      return;
-    }
-    const skipScope = Boolean(opts?.skipScope) || text.trim().length < 20;
-    if (!skipScope && text.trim().length < 20) {
-      setError('Upload or paste the scope, or continue without scope.');
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const res = await api.proposeIntake(
-        skipScope
-          ? { text: '', address: siteAddress.trim() }
-          : { text: buildProposeText(text, siteAddress), address: siteAddress.trim() },
-      );
+      const res = await api.proposeIntake({
+        text: buildProposeText(text, siteAddress),
+        address: siteAddress.trim(),
+      });
       const drafted = res.proposal;
       setProposal({
         ...drafted,
@@ -170,7 +121,7 @@ export function JobIntakePage() {
 
   async function onPropose(e: FormEvent) {
     e.preventDefault();
-    await draftPackage({ skipScope: text.trim().length < 20 });
+    await draftPackage();
   }
 
   function addExternal() {
@@ -224,10 +175,6 @@ export function JobIntakePage() {
         external: true,
       })),
     ];
-    if (invitees.length < 1) {
-      setError('Invite at least one Field Capture teammate or subcontractor.');
-      return;
-    }
     setBusy(true);
     setError(null);
     try {
@@ -326,7 +273,7 @@ export function JobIntakePage() {
     <>
       <PageHeader
         title="Start a job"
-        description="Address, optional scope, then approve once to invite Field Capture."
+        description="Address is enough. Add a short note about what needs to be done if you have one."
       />
 
       <ol className="mb-6 flex flex-wrap gap-2 text-xs font-medium">
@@ -361,12 +308,10 @@ export function JobIntakePage() {
       {step === 'paste' && (
         <form onSubmit={onPropose} className="mx-auto max-w-3xl space-y-4 animate-fade-in-up">
           <div className="relative z-20 overflow-visible rounded-xl glass-card p-5">
-            <h2 className="text-base font-semibold text-ink-900">Enter address here</h2>
-            <p className="mt-1 text-sm text-ink-600">
-              Where the crew will work. You can fine-tune city and postal on the next step.
-            </p>
+            <h2 className="text-base font-semibold text-ink-900">Site address</h2>
+            <p className="mt-1 text-sm text-ink-600">Where the crew will work. This is the only required field.</p>
             <label className="mt-4 block text-xs font-medium text-ink-600">
-              Site address
+              Address
               <AddressAutocomplete
                 value={siteAddress}
                 onChange={setSiteAddress}
@@ -380,73 +325,28 @@ export function JobIntakePage() {
           </div>
 
           <div className="rounded-xl glass-card p-5">
-            <h2 className="text-base font-semibold text-ink-900">Upload scope here (optional)</h2>
+            <h2 className="text-base font-semibold text-ink-900">What needs to be done</h2>
             <p className="mt-1 text-sm text-ink-600">
-              Drop a text export of the carrier notes or estimate (.txt, .md, .csv) when you have
-              one. Not required — you can invite Field Capture with just the address.
-            </p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".txt,.md,.csv,.rtf,text/plain,text/markdown,text/csv"
-              className="sr-only"
-              onChange={(e) => void onScopeFile(e)}
-            />
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="rounded-lg border border-line bg-paper-0/70 px-4 py-2.5 text-sm font-semibold text-ink-900 hover:border-brand-300"
-              >
-                Choose scope file
-              </button>
-              {scopeFileName ? (
-                <p className="text-sm text-ink-600">
-                  Loaded <span className="font-medium text-ink-800">{scopeFileName}</span>
-                </p>
-              ) : (
-                <p className="text-sm text-ink-500">No file yet — paste below if you prefer.</p>
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-xl glass-card p-4">
-            <h2 className="text-base font-semibold text-ink-900">Or paste scope here (optional)</h2>
-            <p className="mt-1 text-sm text-ink-600">
-              Claim notes, estimate lines, and “do not” items — or leave blank.
+              Optional. A short note is enough — AI will describe the day film either way.
             </p>
             <textarea
               value={text}
-              onChange={(e) => {
-                setText(e.target.value);
-                if (scopeFileName) setScopeFileName(null);
-              }}
-              rows={5}
-              placeholder="Paste claim / scope text here…"
+              onChange={(e) => setText(e.target.value)}
+              rows={4}
+              placeholder="Extract standing water in the living room. Set drying equipment."
               className="glass-field mt-3 w-full resize-y rounded-lg px-3 py-2 text-sm text-ink-900 placeholder:text-ink-400"
             />
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  className="text-sm font-medium text-brand-600"
-                  onClick={() => {
-                    setText(SAMPLE);
-                    setSiteAddress('1842 Meridian Ave, Austin, TX 78702');
-                    setScopeFileName(null);
-                  }}
-                >
-                  Use a sample scope
-                </button>
-                <button
-                  type="button"
-                  disabled={busy || !siteAddress.trim()}
-                  className="text-sm font-medium text-ink-500 disabled:opacity-50"
-                  onClick={() => void draftPackage({ skipScope: true })}
-                >
-                  Skip scope
-                </button>
-              </div>
+              <button
+                type="button"
+                className="text-sm font-medium text-brand-600"
+                onClick={() => {
+                  setText(SAMPLE);
+                  if (!siteAddress.trim()) setSiteAddress('1842 Meridian Ave, Austin, TX 78702');
+                }}
+              >
+                Use a sample note
+              </button>
               <button
                 type="submit"
                 disabled={busy || !siteAddress.trim()}
@@ -521,11 +421,11 @@ export function JobIntakePage() {
 
           <div className="rounded-xl glass-card p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-base font-semibold text-ink-900">Scope lines (optional)</h2>
+              <h2 className="text-base font-semibold text-ink-900">What needs to be done (optional)</h2>
               <p className="text-xs text-ink-500">
                 {proposal.scope.length
                   ? `${included} in scope · ${excluded} do not`
-                  : 'None — AI will describe the video'}
+                  : 'None — AI will describe the day film'}
               </p>
             </div>
             {!proposal.scope.length && (
@@ -649,7 +549,9 @@ export function JobIntakePage() {
               </ul>
             )}
             <p className="mt-3 text-xs text-ink-500">
-              {selectedCount} selected · each gets their own capture link for this job
+              {selectedCount} selected · {externals.length} outside invite
+              {externals.length === 1 ? '' : 's'} · org members can also film from Field Capture
+              without an extra invite
             </p>
           </div>
 
@@ -754,7 +656,7 @@ export function JobIntakePage() {
             </button>
             <button
               type="submit"
-              disabled={busy || inviteTotal < 1}
+              disabled={busy}
               data-experiment="intake_cta_copy"
               data-variant={intakeCta.variantKey ?? 'control'}
               className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-ink-900 disabled:opacity-50"
@@ -878,7 +780,6 @@ export function JobIntakePage() {
                 setStep('paste');
                 setSiteAddress('');
                 setText('');
-                setScopeFileName(null);
                 setProposal(null);
                 setCaptureTeam([]);
                 setExternals([]);
