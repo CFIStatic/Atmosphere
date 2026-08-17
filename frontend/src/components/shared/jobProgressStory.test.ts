@@ -126,6 +126,24 @@ describe('buildJobProgressStory', () => {
     expect(story.trackedCount).toBe(2);
   });
 
+  it('treats a day film with analysis as work described, not waiting on an after', () => {
+    const film = day({
+      partyId: 'p3',
+      workDate: '2026-08-17',
+      hasBefore: false,
+      hasAfter: true,
+      aiSummary: 'Crew extracted standing water in the living room.',
+      aiFindings: { kind: 'day_film', workPerformed: ['Extracted standing water'] },
+    });
+    const story = buildJobProgressStory({
+      scope: [],
+      days: [film],
+      risks: [],
+    });
+    expect(story.happened.some((i) => i.badge === 'Work described')).toBe(true);
+    expect(story.happening.some((i) => i.kind === 'day')).toBe(false);
+  });
+
   it('surfaces proof-only scope when the record has no scope rows', () => {
     const story = buildJobProgressStory({
       scope: [],

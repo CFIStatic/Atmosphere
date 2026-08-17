@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseAnalysis, keepKnownScope } from '../src/shared/proofAnalyst.js';
+import { parseAnalysis, parseDayFilmAnalysis, keepKnownScope } from '../src/shared/proofAnalyst.js';
 
 /**
  * Reading the model's reply.
@@ -235,4 +235,26 @@ test('a missing or invented verdict word reads as unclear, never as a pass', () 
     JSON.stringify({ summary: 'Something happened.', materialChange: 'substantial-ish' }),
   );
   assert.equal(invented?.materialChange, 'unclear');
+});
+
+test('a day-film reply parses work performed without a before/after pair', () => {
+  const parsed = parseDayFilmAnalysis(
+    JSON.stringify({
+      summary: 'Crew cut wet drywall along the south wall and set two air movers.',
+      workPerformed: ['Cut drywall to 24 inches on the south wall', 'Set two air movers'],
+      cannotTell: ['Bathroom not in frame'],
+      concerns: [],
+      opening: 'not_exterior',
+    }),
+  );
+  assert.ok(parsed);
+  assert.match(parsed.summary, /wet drywall/);
+  assert.equal(parsed.workPerformed.length, 2);
+  assert.equal(parsed.opening, 'not_exterior');
+  assert.deepEqual(parsed.scopeVerdicts, []);
+});
+
+test('a day-film reply without a summary is not an analysis', () => {
+  assert.equal(parseDayFilmAnalysis(JSON.stringify({ workPerformed: ['something'] })), null);
+  assert.equal(parseDayFilmAnalysis('They hung some drywall today.'), null);
 });

@@ -335,7 +335,7 @@ export function verifyDay(input: {
 
   let summary: string;
   if (!before && !after) summary = 'Nothing filed for this day.';
-  else if (!before) summary = 'Only an after video — nothing to compare it against.';
+  else if (!before) summary = 'Day film on file. The assistant describes the work from this clip.';
   else if (!after) summary = 'Started but not finished: no after video yet.';
   else if (failed.length) summary = `${failed.length} check${failed.length === 1 ? '' : 's'} failed. Do not pay against this without asking.`;
   else if (unknown.length) summary = `Nothing contradicts it, but ${unknown.length} thing${unknown.length === 1 ? '' : 's'} could not be checked.`;
@@ -365,8 +365,28 @@ export function verifyDay(input: {
  * this feature was built to stop.
  */
 export function payable(day: DayVerdict): { ok: boolean; because: string } {
+  if (!day.hasAfter && !day.hasBefore) {
+    return { ok: false, because: 'Nothing has been filmed for this day.' };
+  }
+  if (!day.hasBefore && day.hasAfter) {
+    if (day.contradicted) {
+      const failed = day.checks.filter((c) => c.verdict === 'fail');
+      return { ok: false, because: failed[0]?.detail ?? 'A check failed on the day film.' };
+    }
+    const unknown = day.checks.filter((c) => c.verdict === 'unknown');
+    if (unknown.length) {
+      return {
+        ok: false,
+        because: `${unknown.length} thing${unknown.length === 1 ? '' : 's'} could not be checked — ${unknown[0].detail}`,
+      };
+    }
+    return {
+      ok: false,
+      because: 'Day film is on file. Review what the assistant saw, then accept if the work looks right.',
+    };
+  }
   if (!day.hasBefore || !day.hasAfter) {
-    return { ok: false, because: 'A day needs both a before and an after.' };
+    return { ok: false, because: 'A before/after pair is not complete yet.' };
   }
   if (day.contradicted) {
     const failed = day.checks.filter((c) => c.verdict === 'fail');

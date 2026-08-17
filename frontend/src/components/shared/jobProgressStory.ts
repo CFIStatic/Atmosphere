@@ -64,6 +64,7 @@ export function dayStatus(day: DayLike): { label: string; tone: StoryTone } {
   if (day.contradicted) return { label: 'Issue found', tone: 'danger' };
   if (day.rejected) return { label: 'Rejected', tone: 'danger' };
   if (day.accepted || day.payable) return { label: 'Verified', tone: 'success' };
+  if (day.aiSummary) return { label: 'Work described', tone: 'success' };
   if (dayIsOnSite(day)) return { label: 'On site now', tone: 'caution' };
   if (day.hasAfter) return { label: 'Being reviewed', tone: 'neutral' };
   return { label: 'Logged', tone: 'neutral' };

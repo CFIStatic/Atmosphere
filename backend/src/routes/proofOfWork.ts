@@ -10,6 +10,7 @@ import {
   type ProofUpload,
 } from '../shared/proofVerifier.js';
 import {
+  analyseDayFilm,
   analyseProofDay,
   answerFromProofs,
   type MaterialChange,
@@ -258,29 +259,14 @@ export async function recordProof(party: any, admin: any, body: unknown) {
     }
   }
 
-  // Two readings queue here, not one. The narration is per-video and exists
-  // the moment this clip lands — its report rides the clip. The comparison is
-  // per-day and waits for its pair. Neither is awaited: a vision call does not
-  // belong inside a phone's POST on a truck's signal.
+  // Two readings queue here, not one. The narration is per-video. The day
+  // reading describes what work the film shows — a single day film is enough;
+  // a before/after pair still gets the comparison when both exist.
   //
-  // Day-length recordings often arrive with zero device frames (the phone
-  // cannot honestly sample 24h into a JSON body). Those still queue: the
-  // worker sparsely extracts stills from storage with FFmpeg before reading.
-  const durationSeconds = input.durationSeconds ?? 0;
-  const longForm =
-    durationSeconds > config.verification.longFormSeconds ||
-    (input.byteSize ?? 0) > 80_000_000;
-  if (input.frames?.length || longForm) {
-    await queueNarration(admin, party, (proof as any).id, input.phase, input.workDate);
-  } else {
-    await admin
-      .from('job_proofs')
-      .update({
-        narration_status: 'skipped',
-        narration_error: 'The device uploaded no frames for this clip.',
-      })
-      .eq('id', (proof as any).id);
-  }
+  // Day-length recordings and the iOS app often arrive with zero device
+  // frames. Those still queue: the worker sparsely extracts stills from
+  // storage with FFmpeg before reading.
+  await queueNarration(admin, party, (proof as any).id, input.phase, input.workDate);
   const analysis = await queueDayAnalysis(admin, party, input.workDate);
 
   // The same upload, seen as an episode. Additive and non-blocking: it never
@@ -355,7 +341,7 @@ async function enqueueVerificationFromProof(admin: any, party: any, proof: any):
 }
 
 type DayAnalysisResult =
-  | { outcome: 'done'; materialChange: MaterialChange; summary: string }
+  | { outcome: 'done'; materialChange: MaterialChange | null; summary: string }
   | { outcome: 'skipped'; reason: string };
 
 /**
@@ -369,44 +355,51 @@ type DayAnalysisResult =
 async function runDayAnalysis(admin: any, party: any, workDate: string): Promise<DayAnalysisResult> {
   const { data: proofs } = await admin
     .from('job_proofs')
-    .select('id, phase')
+    .select('id, phase, duration_seconds, byte_size, storage_path')
     .eq('party_id', party.id)
     .eq('work_date', workDate);
 
   const rows = (proofs ?? []) as any[];
   const before = rows.find((r) => r.phase === 'before');
   const after = rows.find((r) => r.phase === 'after');
-  if (!before || !after) {
-    return { outcome: 'skipped', reason: 'The day does not have both videos yet.' };
+  const film = after ?? before;
+  if (!film) {
+    return { outcome: 'skipped', reason: 'No day film on file yet.' };
   }
   if (!isModelProviderConfigured()) {
     return { outcome: 'skipped', reason: 'Model access is not configured on this server.' };
   }
 
-  const framesFor = async (proofId: string): Promise<ProofFrame[]> => {
-    const { data } = await admin
-      .from('job_proof_frames')
-      .select('at_seconds, storage_path')
-      .eq('proof_id', proofId)
-      .order('at_seconds');
-    const out: ProofFrame[] = [];
-    for (const row of ((data ?? []) as any[]).slice(0, 8)) {
-      const file = await admin.storage.from(PROOF_BUCKET).download(row.storage_path);
-      if (!file.data) continue;
-      const buffer = Buffer.from(await file.data.arrayBuffer());
-      out.push({ atSeconds: Number(row.at_seconds), base64: buffer.toString('base64') });
-    }
-    return out;
+  const loadFrames = async (row: any): Promise<ProofFrame[]> => {
+    if (!row) return [];
+    let frames = await framesFor(admin, row.id);
+    if (frames.length) return frames.slice(0, 12);
+    const durationSeconds = Number(row.duration_seconds ?? 0);
+    await ensureSparseFramesFromStorage(
+      admin,
+      {
+        key: row.id,
+        proofId: row.id,
+        orgId: party.org_id,
+        jobId: party.job_id,
+        partyId: party.id,
+        phase: row.phase,
+        workDate,
+      },
+      durationSeconds || 60,
+    );
+    return (await framesFor(admin, row.id)).slice(0, 12);
   };
 
   const [beforeFrames, afterFrames] = await Promise.all([
-    framesFor(before.id),
-    framesFor(after.id),
+    loadFrames(before),
+    loadFrames(after),
   ]);
-  if (!beforeFrames.length || !afterFrames.length) {
+  const filmFrames = afterFrames.length ? afterFrames : beforeFrames;
+  if (!filmFrames.length) {
     return {
       outcome: 'skipped',
-      reason: `The ${!beforeFrames.length ? 'before' : 'after'} video carries no frames — the phone could not read the file when it uploaded.`,
+      reason: 'Could not extract frames from the day film for analysis.',
     };
   }
 
@@ -420,28 +413,30 @@ async function runDayAnalysis(admin: any, party: any, workDate: string): Promise
     .filter((s) => !s.party_id || s.party_id === party.id)
     .map((s) => s.title);
 
-  const analysis = await analyseProofDay({
-    beforeFrames,
-    afterFrames,
-    scopeTitles: titles,
-    workDate,
-    trade: party.trade,
-  });
-  // Configured but unusable: the model answered with something that failed
-  // validation. That is a flake worth retrying, not a gap worth recording.
-  if (!analysis) throw new Error('The model reply was not usable.');
+  const writeFindings = async (patch: Record<string, unknown>) => {
+    await admin.from('job_proofs').update(patch).eq('id', film.id);
+  };
 
-  // Written to the after row: it is the one that carries the day's outcome.
-  await admin
-    .from('job_proofs')
-    .update({
+  if (before && after && beforeFrames.length && afterFrames.length) {
+    const analysis = await analyseProofDay({
+      beforeFrames,
+      afterFrames,
+      scopeTitles: titles,
+      workDate,
+      trade: party.trade,
+    });
+    if (!analysis) throw new Error('The model reply was not usable.');
+
+    await writeFindings({
       state: 'analysed',
       ai_summary: analysis.summary,
       ai_material_change: analysis.materialChange,
       ai_findings: {
+        kind: 'before_after',
         scopeCrossRef: titles.length > 0,
         materialBecause: analysis.materialBecause,
         changes: analysis.changes,
+        workPerformed: analysis.changes,
         cannotTell: analysis.cannotTell,
         scopeTouched: analysis.scopeTouched,
         scopeVerdicts: analysis.scopeVerdicts,
@@ -449,14 +444,43 @@ async function runDayAnalysis(admin: any, party: any, workDate: string): Promise
         opening: analysis.opening,
       },
       ai_model: analysis.model,
-    })
-    .eq('id', after.id);
+    });
 
-  return { outcome: 'done', materialChange: analysis.materialChange, summary: analysis.summary };
+    return { outcome: 'done', materialChange: analysis.materialChange, summary: analysis.summary };
+  }
+
+  const analysis = await analyseDayFilm({
+    frames: filmFrames,
+    scopeTitles: titles,
+    workDate,
+    trade: party.trade,
+  });
+  if (!analysis) throw new Error('The model reply was not usable.');
+
+  await writeFindings({
+    state: 'analysed',
+    ai_summary: analysis.summary,
+    ai_material_change: null,
+    ai_findings: {
+      kind: 'day_film',
+      scopeCrossRef: titles.length > 0,
+      workPerformed: analysis.workPerformed,
+      changes: analysis.workPerformed,
+      cannotTell: analysis.cannotTell,
+      scopeTouched: analysis.scopeTouched,
+      scopeVerdicts: analysis.scopeVerdicts,
+      concerns: analysis.concerns,
+      opening: { before: 'unclear', after: analysis.opening },
+    },
+    ai_model: analysis.model,
+  });
+
+  return { outcome: 'done', materialChange: null, summary: analysis.summary };
 }
 
 /** The verdict, in the words the custody log keeps. */
-function materialChangeWords(change: MaterialChange): string {
+function materialChangeWords(change: MaterialChange | null): string {
+  if (!change) return 'work described from the day film';
   const words: Record<MaterialChange, string> = {
     significant: 'work materially changed',
     minor: 'a small visible change',
@@ -545,10 +569,11 @@ const analysisQueue = new RetryQueue<AnalysisJob>({
 });
 
 /**
- * Queue a day for analysis if its pair is complete.
+ * Queue a day for analysis as soon as a film exists.
  *
- * Returns what the upload response tells the sub: 'queued' when the model will
- * read the day, 'waiting' when the other half has not arrived yet.
+ * A single day film is enough. A before/after pair still gets the comparison
+ * when both are on file. Returns 'queued' when the model will read, 'waiting'
+ * only when nothing has been filed yet.
  */
 async function queueDayAnalysis(admin: any, party: any, workDate: string): Promise<'queued' | 'waiting'> {
   const { data } = await admin
@@ -558,10 +583,10 @@ async function queueDayAnalysis(admin: any, party: any, workDate: string): Promi
     .eq('work_date', workDate);
 
   const rows = (data ?? []) as any[];
-  const after = rows.find((r) => r.phase === 'after');
-  if (!after || !rows.some((r) => r.phase === 'before')) return 'waiting';
+  const film = rows.find((r) => r.phase === 'after') ?? rows[0];
+  if (!film) return 'waiting';
 
-  await admin.from('job_proofs').update({ analysis_status: 'queued' }).eq('id', after.id);
+  await admin.from('job_proofs').update({ analysis_status: 'queued' }).eq('id', film.id);
   analysisQueue.enqueue({
     key: `${party.id}|${workDate}`,
     orgId: party.org_id,
@@ -569,7 +594,7 @@ async function queueDayAnalysis(admin: any, party: any, workDate: string): Promi
     partyId: party.id,
     workDate,
     trade: party.trade ?? null,
-    afterId: after.id,
+    afterId: film.id,
   });
   return 'queued';
 }
@@ -726,13 +751,15 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
 
   const frames = await framesFor(admin, job.proofId);
   if (!frames.length) {
-    // Honest and terminal for short clips. Long clips already tried FFmpeg;
-    // if that produced nothing the binary or the file is the problem.
+    await ensureSparseFramesFromStorage(admin, job, durationSeconds || 60);
+  }
+
+  const ready = frames.length ? frames : await framesFor(admin, job.proofId);
+  if (!ready.length) {
+    // Honest and terminal after FFmpeg had a chance at the stored file.
     await write({
       narration_status: 'skipped',
-      narration_error: longForm
-        ? 'Could not extract frames from this long recording for analysis.'
-        : 'The device uploaded no frames for this clip.',
+      narration_error: 'Could not extract frames from this recording for analysis.',
     });
     return;
   }
@@ -744,8 +771,8 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
     await performLongFormAnalysis(
       admin,
       job,
-      frames,
-      durationSeconds || frames[frames.length - 1]?.atSeconds || 0,
+      ready,
+      durationSeconds || ready[ready.length - 1]?.atSeconds || 0,
     );
     return;
   }
@@ -763,21 +790,14 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
   if (!scopeTitles.length) {
     const dictation = await describeRecordingWithoutScope({
       proofId: job.proofId,
-      durationSeconds: durationSeconds || frames[frames.length - 1]?.atSeconds || 60,
-      frames,
+      durationSeconds: durationSeconds || ready[ready.length - 1]?.atSeconds || 60,
+      frames: ready,
       longForm: false,
       trade,
     });
     await write({
       ai_summary: (dictation.narrationSummary || dictation.narrationText).slice(0, 500),
-      ai_findings: {
-        scopeCrossRef: false,
-        summary: dictation.narrationText,
-        scopeVerdicts: [],
-        changes: [],
-        cannotTell: [],
-        concerns: [],
-      },
+      ai_findings: descriptionFindings(dictation),
       ai_model: dictation.model,
       analysis_status: 'done',
       narration: { entries: [], coverage: [], model: dictation.model },
@@ -804,7 +824,7 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
   }
 
   const narration = await narrateProofVideo({
-    frames,
+    frames: ready,
     steps,
     scopeTitles,
     phase: job.phase,
@@ -1178,6 +1198,12 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
       site,
     });
     const pay = payable(verdict);
+    const film = after ?? before;
+    const aiSummary =
+      (typeof film?.ai_summary === 'string' && film.ai_summary.trim()) ||
+      (typeof after?.narration_text === 'string' && after.narration_text.trim()) ||
+      (typeof before?.narration_text === 'string' && before.narration_text.trim()) ||
+      null;
 
     return {
       partyId,
@@ -1188,17 +1214,15 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
       checks: verdict.checks,
       contradicted: verdict.contradicted,
       summary: verdict.summary,
-      // Kept separate from the summary on purpose. "Looks fine" and "safe to
-      // pay against" are different claims and only one of them moves money.
       payable: pay.ok,
       payableBecause: pay.because,
       accepted: list.every((r) => r.state === 'accepted'),
       rejected: list.some((r) => r.state === 'rejected'),
-      aiSummary: after?.ai_summary ?? null,
-      aiFindings: after?.ai_findings ?? null,
-      materialChange: after?.ai_material_change ?? null,
-      analysisStatus: after?.analysis_status ?? null,
-      analysisError: after?.analysis_error ?? null,
+      aiSummary: aiSummary ? String(aiSummary).slice(0, 2000) : null,
+      aiFindings: after?.ai_findings ?? before?.ai_findings ?? null,
+      materialChange: after?.ai_material_change ?? before?.ai_material_change ?? null,
+      analysisStatus: after?.analysis_status ?? before?.analysis_status ?? null,
+      analysisError: after?.analysis_error ?? before?.analysis_error ?? null,
       reports: {
         before: proofReport(before),
         after: proofReport(after),
@@ -1215,6 +1239,9 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
       days: days.length,
       payable: days.filter((d) => d.payable && !d.accepted).length,
       contradicted: days.filter((d) => d.contradicted).length,
+      analysing: days.filter(
+        (d) => d.analysisStatus === 'queued' || d.analysisStatus === 'running',
+      ).length,
       awaitingAfter: days.filter((d) => d.hasBefore && !d.hasAfter).length,
     },
     siteKnown: Boolean(site),
@@ -1415,15 +1442,15 @@ export async function reanalyseProofDay(req: Request, res: Response, next: NextF
     const admin = createAdminClient();
     if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');
 
-    const { data: afterRow } = await admin
+    const { data: filmRows } = await admin
       .from('job_proofs')
-      .select('id')
+      .select('id, phase')
       .eq('party_id', input.partyId)
-      .eq('work_date', req.params.workDate)
-      .eq('phase', 'after')
-      .maybeSingle();
-    if (!afterRow) {
-      throw new HttpError(409, 'Nothing to compare yet — the after video has not been filed.', 'no_after');
+      .eq('work_date', req.params.workDate);
+    const film =
+      ((filmRows ?? []) as any[]).find((r) => r.phase === 'after') ?? ((filmRows ?? []) as any[])[0];
+    if (!film) {
+      throw new HttpError(409, 'Nothing to analyse yet — no day film has been filed.', 'no_film');
     }
 
     const job = {
@@ -1433,7 +1460,7 @@ export async function reanalyseProofDay(req: Request, res: Response, next: NextF
       partyId: input.partyId,
       workDate: req.params.workDate,
       trade: (party as any).trade ?? null,
-      afterId: (afterRow as any).id,
+      afterId: film.id,
     };
 
     // Synchronous through the same choreography the queue uses — the button is

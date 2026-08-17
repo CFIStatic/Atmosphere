@@ -73,9 +73,11 @@ export async function describeRecordingWithoutScope(input: {
 
 export function descriptionFindings(dictation: VideoDictationResult): Record<string, unknown> {
   return {
+    kind: 'day_film',
     longForm: true,
     scopeCrossRef: false,
     summary: dictation.narrationText,
+    workPerformed: [],
     materialChange: null,
     materialBecause: null,
     changes: [],

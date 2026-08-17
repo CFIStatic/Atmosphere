@@ -713,18 +713,21 @@ export interface ProofDay {
   rejected: boolean;
   aiSummary: string | null;
   /**
-   * Did the work area visibly change between the two videos. 'none' is an
-   * answer, not a failure — a claimed day with no visible change is exactly
-   * what this surfaces.
+   * Did the work area visibly change between the two videos. Null on a single
+   * day film — the summary describes what was performed instead.
    */
   materialChange?: 'significant' | 'minor' | 'none' | 'unclear' | null;
   /** Lifecycle of the model read: queued, running, done, skipped, failed. */
   analysisStatus?: string | null;
   analysisError?: string | null;
   aiFindings: {
+    /** 'day_film' = one clip of the day; 'before_after' = paired comparison. */
+    kind?: 'day_film' | 'before_after';
     /** True when AI cross-referenced agreed scope lines; false = description-only. */
     scopeCrossRef?: boolean;
     materialBecause?: string;
+    /** Visible work activities (day film) or differences (before/after). */
+    workPerformed?: string[];
     changes?: string[];
     cannotTell?: string[];
     scopeTouched?: string[];
@@ -783,7 +786,7 @@ export interface ScopeVerdict {
 
 export interface ProofResponse {
   days: ProofDay[];
-  counts: { days: number; payable: number; contradicted: number; awaitingAfter: number };
+  counts: { days: number; payable: number; contradicted: number; awaitingAfter: number; analysing?: number };
   /** False when the job has no coordinates, so the on-site check cannot run. */
   siteKnown: boolean;
 }

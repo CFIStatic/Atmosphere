@@ -178,6 +178,28 @@ test('a day with only a before says so plainly', () => {
   assert.match(day.summary, /no after video yet/);
 });
 
+test('a day film without a before is still a readable day', () => {
+  const day = verifyDay({
+    workDate: '2026-08-05',
+    before: null,
+    after: upload({
+      id: 'a',
+      phase: 'after',
+      contentHash: 'bbb',
+      capturedAt: '2026-08-05T20:00:00Z',
+      receivedAt: '2026-08-05T20:05:00Z',
+    }),
+    site: SITE,
+  });
+  assert.equal(day.hasAfter, true);
+  assert.equal(day.hasBefore, false);
+  assert.equal(day.contradicted, false);
+  assert.match(day.summary, /Day film on file/i);
+  const pay = payable(day);
+  assert.equal(pay.ok, false);
+  assert.match(pay.because, /Review what the assistant saw/i);
+});
+
 test('nothing filed is not the same as something wrong', () => {
   const day = verifyDay({ workDate: '2026-08-05', before: null, after: null, site: SITE });
   assert.equal(day.contradicted, false);
@@ -208,7 +230,7 @@ test('unproven and disproven read differently', () => {
 test('payment refuses an incomplete day, a contradicted day, and an unproven one', () => {
   const half = verifyDay({ workDate: '2026-08-05', before: upload(), after: null, site: SITE });
   assert.equal(payable(half).ok, false);
-  assert.match(payable(half).because, /both a before and an after/);
+  assert.match(payable(half).because, /before\/after pair is not complete/i);
 
   const bad = verifyDay({
     workDate: '2026-08-05',
