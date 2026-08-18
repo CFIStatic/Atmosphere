@@ -60,7 +60,7 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
-          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE }}
+          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere' }}
           NODE_ENV: production
           PORT: '4000'
           MEDIA_BACKEND: supabase
@@ -91,10 +91,8 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
-          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE }}
+          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere' }}
         run: |
-          if [ -n "$RAILWAY_SERVICE" ]; then
-            railway up --ci --service "$RAILWAY_SERVICE"
-          else
-            railway up --ci
-          fi
+          echo "Deploying Railway service: $RAILWAY_SERVICE"
+          railway status || true
+          railway up --ci --service "$RAILWAY_SERVICE"
