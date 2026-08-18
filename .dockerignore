@@ -1,13 +1,11 @@
-# Keep Railway's root Docker build small.
+# Shared Docker context (repo root). Do not exclude frontend, verifier,
+# fieldcapture, or backend — different Dockerfiles COPY those trees.
 .git
-frontend
-fieldcapture
 website
 apps
 agent
-verifier
 docs
-** /node_modules
+**/node_modules
 **/dist
 **/.env
 **/.env.*

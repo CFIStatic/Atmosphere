@@ -1,0 +1,91 @@
+# Deploy the office console (frontend + Field Capture + Verifier) to Railway.
+#
+# Same Keys environment as the BFF: needs RAILWAY_TOKEN. Optional:
+#   RAILWAY_PROJECT_ID
+#   RAILWAY_WEB_SERVICE   (default: Atmosphere-web)
+#   RAILWAY_SERVICE       (BFF service that receives FRONTEND_ORIGIN, default: Atmosphere)
+#   API_UPSTREAM          (default: https://atmosphere-production.up.railway.app)
+#
+# Run: Actions → Deploy Office Console → Run workflow
+
+name: Deploy Office Console
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - 'verifier/**'
+      - 'fieldcapture/**'
+      - '.github/workflows/deploy-office.yml'
+
+concurrency:
+  group: deploy-office
+  cancel-in-progress: true
+
+jobs:
+  office:
+    name: Build and deploy office console
+    runs-on: ubuntu-latest
+    environment: Keys
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+      RAILWAY_WEB_SERVICE: ${{ secrets.RAILWAY_WEB_SERVICE || vars.RAILWAY_WEB_SERVICE || 'Atmosphere-web' }}
+      RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere' }}
+      API_UPSTREAM: ${{ vars.API_UPSTREAM || 'https://atmosphere-production.up.railway.app' }}
+      EXISTING_FRONTEND_ORIGIN: ${{ vars.FRONTEND_ORIGIN || 'https://app.atmosphereteam.com' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require Railway token
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "Add RAILWAY_TOKEN to the GitHub environment Keys."
+            exit 1
+          fi
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Link Railway project
+        run: |
+          if [ -n "$RAILWAY_PROJECT_ID" ]; then
+            railway link --project "$RAILWAY_PROJECT_ID" || true
+          fi
+
+      - name: Create Atmosphere-web service if needed
+        run: |
+          railway add --service "$RAILWAY_WEB_SERVICE" || true
+          railway status --service "$RAILWAY_WEB_SERVICE" || railway status || true
+
+      - name: Point nginx at the live API
+        run: |
+          echo "API_UPSTREAM=$API_UPSTREAM"
+          printf '%s' "$API_UPSTREAM" | railway variable set API_UPSTREAM --stdin --skip-deploys --service "$RAILWAY_WEB_SERVICE"
+          printf '%s' 'frontend/Dockerfile' | railway variable set RAILWAY_DOCKERFILE_PATH --stdin --skip-deploys --service "$RAILWAY_WEB_SERVICE"
+
+      - name: Deploy office image
+        run: |
+          # Root railway.toml is the BFF. Use the office config for this upload.
+          cp frontend/railway.toml railway.toml
+          echo "Deploying Railway service: $RAILWAY_WEB_SERVICE"
+          railway up --ci --service "$RAILWAY_WEB_SERVICE"
+
+      - name: Generate domain and allow CORS on the BFF
+        run: |
+          set -euo pipefail
+          railway domain --service "$RAILWAY_WEB_SERVICE" || true
+          BUNDLE="$( { railway domain --service "$RAILWAY_WEB_SERVICE" || true; railway status --json --service "$RAILWAY_WEB_SERVICE" || true; railway status --json || true; } 2>&1 )"
+          echo "$BUNDLE"
+          DOMAIN="$(printf '%s' "$BUNDLE" | node frontend/scripts/officeDomain.mjs || true)"
+          if [ -z "${DOMAIN:-}" ]; then
+            echo "Could not read a Railway domain yet. Generate Domain on Atmosphere-web, then re-run this workflow."
+            exit 0
+          fi
+          echo "Office origin: $DOMAIN"
+          MERGED="$(printf '%s\n%s\n' "$DOMAIN" "$EXISTING_FRONTEND_ORIGIN" | tr ',' '\n' | sed '/^$/d' | awk '!seen[$0]++' | paste -sd, -)"
+          echo "FRONTEND_ORIGIN=$MERGED"
+          printf '%s' "$MERGED" | railway variable set FRONTEND_ORIGIN --stdin --service "$RAILWAY_SERVICE"
+          echo "Open $DOMAIN to sign in."

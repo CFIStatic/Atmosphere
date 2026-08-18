@@ -10,13 +10,30 @@ off or mocked until they are staffed and monitored.
 | Surface | Artifact | Notes |
 | --- | --- | --- |
 | Backend BFF | `backend/` (`Dockerfile` or `npm run build && npm start`) | Node 22, long-lived process; needs FFmpeg for proof sparse frames |
-| Office console | `frontend/` static build | Point `VITE_API_BASE_URL` at the BFF |
+| Office console | `frontend/` nginx image | Same-origin `/api` proxied to the BFF; see below |
 | Field Capture | `fieldcapture/` static | Served under the same origin as the console or with `?api=` |
 | Verifier | `verifier/` static | Embedded by the frontend build; also standalone |
 | Marketing site | `website/` | Already CD’d to GitHub Pages |
 | Native Field | `apps/field-ios/` | App Store path; uses the same BFF |
 
 Compose sketch: `docker compose up --build` (see root `docker-compose.yml`).
+
+## Hosted office console (Railway)
+
+The office UI is a second Railway service (`Atmosphere-web` by default). nginx
+serves the SPA and proxies `/api` to `https://atmosphere-production.up.railway.app`,
+so login cookies stay first-party.
+
+1. In the same Railway project as **Atmosphere**, create an empty service named
+   **Atmosphere-web** (Actions will try `railway add` if it is missing).
+2. GitHub → Actions → **Deploy Office Console** → Run workflow.
+3. Generate a public domain on **Atmosphere-web** if Actions did not already.
+4. Open that URL — you should see the Atmosphere sign-in screen, not JSON.
+5. Put the origin on the BFF CORS list (`FRONTEND_ORIGIN`, comma-separated). The
+   workflow writes it onto the **Atmosphere** service when it can see the domain.
+
+Until `app.atmosphereteam.com` points at this service, use the Railway URL as the
+office app.
 
 ## Supabase
 
