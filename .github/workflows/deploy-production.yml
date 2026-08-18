@@ -65,7 +65,7 @@ jobs:
       - name: Sync GitHub Keys onto Railway
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
           RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere' }}
           NODE_ENV: production
           MEDIA_BACKEND: supabase
@@ -119,9 +119,10 @@ jobs:
       - name: Deploy backend
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
           RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere' }}
+          RAILWAY_ENVIRONMENT: production
         run: |
           echo "Deploying Railway service: $RAILWAY_SERVICE"
-          railway status || true
-          railway up --ci --service "$RAILWAY_SERVICE"
+          chmod +x scripts/railwayUp.sh
+          scripts/railwayUp.sh
