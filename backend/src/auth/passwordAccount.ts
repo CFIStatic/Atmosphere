@@ -74,6 +74,31 @@ export function isUnconfirmedAuthUser(user: {
   return !user.email_confirmed_at && !user.confirmed_at;
 }
 
+export const EMAIL_TAKEN_MESSAGE =
+  'An account with this email already exists. Sign in instead.';
+
+export const INVALID_CREDENTIALS_MESSAGE =
+  'Invalid email or password. If you do not have an account yet, use Create an account.';
+
+export function emailTakenError(): HttpError {
+  return new HttpError(409, EMAIL_TAKEN_MESSAGE, 'email_taken');
+}
+
+/**
+ * A leftover confirmed Auth row must not look like "check your email".
+ * Matching password → sign in. Wrong password → already exists.
+ */
+export function signupDecisionForExistingUser(
+  user: {
+    email_confirmed_at?: string | null;
+    confirmed_at?: string | null;
+  } | null,
+  passwordMatched: boolean,
+): 'continue' | 'signin' | 'email_taken' {
+  if (!user || isUnconfirmedAuthUser(user)) return 'continue';
+  return passwordMatched ? 'signin' : 'email_taken';
+}
+
 async function signInWithPassword(
   email: string,
   password: string,
@@ -182,7 +207,7 @@ export async function signInPasswordAccount(
 
   return {
     kind: 'error',
-    error: unauthorized('Invalid email or password', 'invalid_credentials'),
+    error: unauthorized(INVALID_CREDENTIALS_MESSAGE, 'invalid_credentials'),
   };
 }
 
@@ -195,6 +220,15 @@ export async function createPasswordAccount(
   email: string,
   password: string,
 ): Promise<PasswordAccountResult> {
+  const existing = await findAuthUserByEmail(email);
+  if (existing && !isUnconfirmedAuthUser(existing)) {
+    const signedIn = await signInWithPassword(email, password);
+    if (signedIn) {
+      return { kind: 'session', status: 200, user: signedIn.user, session: signedIn.session };
+    }
+    return { kind: 'error', error: emailTakenError() };
+  }
+
   const viaAdmin = await signupViaAdmin(email, password);
   if (viaAdmin) return viaAdmin;
 
@@ -246,6 +280,11 @@ export async function createPasswordAccount(
   if (data.user?.id) {
     const claimed = await claimUnconfirmedAccount(email, password, 201);
     if (claimed) return claimed;
+
+    const listed = await findAuthUserByEmail(email);
+    if (signupDecisionForExistingUser(listed, false) === 'email_taken') {
+      return { kind: 'error', error: emailTakenError() };
+    }
   }
 
   return {
