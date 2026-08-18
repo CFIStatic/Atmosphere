@@ -33,7 +33,7 @@ RUN apt-get update \
   && useradd --system --uid 10001 --create-home atmosphere
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
-COPY package.json ./
+COPY --from=build /app/package.json ./
 USER atmosphere
 EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
