@@ -12,9 +12,12 @@
  *   4. Triggers verification (no-op until DNS exists)
  *
  * Never fails the deploy — missing key or API errors log and exit 0.
+ * Jack verified `invites.jettx.ai` in the Resend dashboard. App mail sends as
+ * hello@invites.jettx.ai. This script still tries to list/create the domain
+ * when the API key is not send-only.
  */
 const apiKey = process.env.RESEND_API_KEY?.trim();
-const TARGET = (process.env.RESEND_SENDING_DOMAIN ?? 'jettx.ai').trim().toLowerCase();
+const TARGET = (process.env.RESEND_SENDING_DOMAIN ?? 'invites.jettx.ai').trim().toLowerCase();
 
 if (!apiKey) {
   console.warn('RESEND_API_KEY unset — skip Resend domain ensure.');
