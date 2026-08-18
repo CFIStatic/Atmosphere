@@ -57,10 +57,26 @@ function printRecords(records) {
 
 const listed = await resend('/domains');
 if (!listed.ok) {
-  console.warn(
-    `Resend list domains failed (${listed.status}):`,
-    JSON.stringify(listed.json).slice(0, 400),
-  );
+  if (listed.status === 401 && /restricted/i.test(JSON.stringify(listed.json))) {
+    console.warn(
+      'Resend API key is send-only — it can send mail but cannot create domains.',
+    );
+    console.warn('Verify jettx.ai in the Resend dashboard: https://resend.com/domains');
+    console.warn(
+      'Add the DKIM + send.jettx.ai MX/TXT records at GoDaddy (ns07/ns08.domaincontrol.com).',
+    );
+    console.warn(
+      'Until that domain is verified, Resend only delivers to the account owner (onboarding@resend.dev).',
+    );
+    console.warn(
+      'Optional: put a full-access Resend key in GitHub Keys as RESEND_API_KEY so deploy can create the domain.',
+    );
+  } else {
+    console.warn(
+      `Resend list domains failed (${listed.status}):`,
+      JSON.stringify(listed.json).slice(0, 400),
+    );
+  }
   process.exit(0);
 }
 

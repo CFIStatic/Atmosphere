@@ -5,6 +5,11 @@
  *
  * Job invites go to crew inboxes, so production must prefer a verified domain
  * when Resend has one, and fall back to the onboarding sender otherwise.
+ *
+ * The Keys `RESEND_API_KEY` is send-only — listing/creating domains returns
+ * 401 restricted_api_key. In that case we cannot see verification status, so
+ * we try the configured From (works once Jack verifies jettx.ai in the
+ * dashboard) and retry onboarding if Resend rejects it.
  */
 
 export const RESEND_ONBOARDING_FROM = 'onboarding@resend.dev';
@@ -15,8 +20,14 @@ export type ResendDomain = {
   status: string;
 };
 
+export type ResendDomainList = {
+  ok: boolean;
+  restricted: boolean;
+  domains: ResendDomain[];
+};
+
 const DOMAIN_CACHE_MS = 60_000;
-let domainCache: { at: number; domains: ResendDomain[] } | null = null;
+let domainCache: ({ at: number } & ResendDomainList) | null = null;
 
 export function resetResendDomainCache(): void {
   domainCache = null;
@@ -63,6 +74,15 @@ export function pickResendFromAddress(
   return RESEND_ONBOARDING_FROM;
 }
 
+/** When the domains API is unusable, try the configured From then onboarding. */
+export function pickResendFromAddressForList(
+  configuredFrom: string,
+  listed: ResendDomainList,
+): string {
+  if (listed.ok) return pickResendFromAddress(configuredFrom, listed.domains);
+  return configuredFrom.trim() || RESEND_ONBOARDING_FROM;
+}
+
 export function isResendSenderRestriction(status: number, body: string): boolean {
   const text = body.toLowerCase();
   const looksLikeSender =
@@ -77,9 +97,9 @@ export function isResendSenderRestriction(status: number, body: string): boolean
   return looksLikeSender;
 }
 
-export async function fetchResendDomains(apiKey: string): Promise<ResendDomain[]> {
+export async function fetchResendDomains(apiKey: string): Promise<ResendDomainList> {
   if (domainCache && Date.now() - domainCache.at < DOMAIN_CACHE_MS) {
-    return domainCache.domains;
+    return domainCache;
   }
   try {
     const res = await fetch('https://api.resend.com/domains', {
@@ -88,15 +108,25 @@ export async function fetchResendDomains(apiKey: string): Promise<ResendDomain[]
     });
     if (!res.ok) {
       const errText = await res.text().catch(() => res.statusText);
-      console.error('[system-mail] Resend domains list failed:', errText.slice(0, 300));
-      return domainCache?.domains ?? [];
+      const restricted = res.status === 401 && /restricted/i.test(errText);
+      if (restricted) {
+        console.warn(
+          '[system-mail] Resend API key is send-only; cannot list domains. Trying CAREERS_FROM_EMAIL, then onboarding@resend.dev.',
+        );
+      } else {
+        console.error('[system-mail] Resend domains list failed:', errText.slice(0, 300));
+      }
+      const listed: ResendDomainList = { ok: false, restricted, domains: [] };
+      domainCache = { at: Date.now(), ...listed };
+      return listed;
     }
     const body = (await res.json()) as { data?: ResendDomain[] };
     const domains = Array.isArray(body.data) ? body.data : [];
-    domainCache = { at: Date.now(), domains };
-    return domains;
+    const listed: ResendDomainList = { ok: true, restricted: false, domains };
+    domainCache = { at: Date.now(), ...listed };
+    return listed;
   } catch (err) {
     console.error('[system-mail] Resend domains list failed:', (err as Error)?.message ?? err);
-    return domainCache?.domains ?? [];
+    return { ok: false, restricted: false, domains: [] };
   }
 }

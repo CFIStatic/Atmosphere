@@ -6,7 +6,7 @@ import {
   RESEND_ONBOARDING_FROM,
   fetchResendDomains,
   isResendSenderRestriction,
-  pickResendFromAddress,
+  pickResendFromAddressForList,
 } from './resendFrom.js';
 
 /**
@@ -158,8 +158,8 @@ async function sendViaResend(input: {
   if (!apiKey) {
     return { ok: false, why: 'Atmosphere mail is not configured on this server.' };
   }
-  const domains = await fetchResendDomains(apiKey);
-  const from = pickResendFromAddress(input.from, domains);
+  const listed = await fetchResendDomains(apiKey);
+  const from = pickResendFromAddressForList(input.from, listed);
   if (from !== input.from) {
     console.info(`[system-mail] Resend from ${input.from} → ${from}`);
   }

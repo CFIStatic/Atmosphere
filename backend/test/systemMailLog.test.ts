@@ -180,4 +180,45 @@ describe('systemMail Resend', () => {
     assert.equal(emailCalls.length, 2);
     assert.match(String((emailCalls[1]!.body as { from: string }).from), /onboarding@resend\.dev/);
   });
+
+  it('send-only API key tries jack@jettx.ai then onboarding', async () => {
+    const { resetResendDomainCache } = await import('../src/lib/resendFrom.js');
+    resetResendDomainCache();
+    let emailPosts = 0;
+    mockFetch(async (url) => {
+      if (url.includes('/domains')) {
+        return new Response(
+          JSON.stringify({
+            statusCode: 401,
+            message: 'This API key is restricted to only send emails',
+            name: 'restricted_api_key',
+          }),
+          { status: 401 },
+        );
+      }
+      emailPosts += 1;
+      if (emailPosts === 1) {
+        return new Response(
+          JSON.stringify({
+            statusCode: 403,
+            message: 'The jettx.ai domain is not verified. Please verify a domain',
+          }),
+          { status: 403 },
+        );
+      }
+      return new Response(JSON.stringify({ id: 'msg_4' }), { status: 200 });
+    });
+
+    const { sendSystemMail } = await import('../src/lib/systemMail.js');
+    const result = await sendSystemMail({
+      to: 'jack@jettx.ai',
+      subject: 'Capture invite',
+      text: 'Open the link',
+    });
+    assert.equal(result.ok, true);
+    const emailCalls = calls.filter((c) => c.url.includes('/emails'));
+    assert.equal(emailCalls.length, 2);
+    assert.match(String((emailCalls[0]!.body as { from: string }).from), /jack@jettx\.ai/);
+    assert.match(String((emailCalls[1]!.body as { from: string }).from), /onboarding@resend\.dev/);
+  });
 });

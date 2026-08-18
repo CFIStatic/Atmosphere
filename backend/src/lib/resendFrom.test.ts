@@ -5,6 +5,7 @@ import {
   emailDomain,
   isResendSenderRestriction,
   pickResendFromAddress,
+  pickResendFromAddressForList,
 } from './resendFrom.js';
 
 describe('pickResendFromAddress', () => {
@@ -67,5 +68,29 @@ describe('emailDomain / sender restriction', () => {
       true,
     );
     assert.equal(isResendSenderRestriction(500, 'internal error'), false);
+  });
+});
+
+describe('pickResendFromAddressForList', () => {
+  it('uses the configured From when the API key cannot list domains', () => {
+    assert.equal(
+      pickResendFromAddressForList('jack@jettx.ai', {
+        ok: false,
+        restricted: true,
+        domains: [],
+      }),
+      'jack@jettx.ai',
+    );
+  });
+
+  it('still uses onboarding when the list succeeds with no verified domain', () => {
+    assert.equal(
+      pickResendFromAddressForList('jack@jettx.ai', {
+        ok: true,
+        restricted: false,
+        domains: [],
+      }),
+      RESEND_ONBOARDING_FROM,
+    );
   });
 });
