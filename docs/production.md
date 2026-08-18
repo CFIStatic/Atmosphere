@@ -40,7 +40,7 @@ Fail-loud at boot when `NODE_ENV=production` (see `backend/src/lib/productionGua
 | `SUPABASE_SERVICE_ROLE_KEY` | PIN unlock, signed uploads, media catalog, schedulers |
 | `DEVICE_PEPPER` | PIN hashing (never store in the DB) |
 | `CONTACT_TO_EMAIL` / `CAREERS_TO_EMAIL` | Public site forms — defaults to `jack@jettx.ai` |
-| `SMTP_*` or `RESEND_API_KEY` + `CAREERS_FROM_EMAIL` | Atmosphere-sent invites and field OTPs. `CAREERS_FROM_EMAIL` defaults to `jack@jettx.ai`. Resend must have `jettx.ai` verified (DKIM + `send.jettx.ai` return-path) or it will only deliver to the Resend account owner via `onboarding@resend.dev`. |
+| `SMTP_*` or `RESEND_API_KEY` + `CAREERS_FROM_EMAIL` | Atmosphere-sent invites and field OTPs. Resend From is `hello@invites.jettx.ai` (verified subdomain). Reply-To stays `jack@jettx.ai`. |
 | `MEDIA_BACKEND=supabase` | Do not use `memory` or the `s3` stub in prod |
 
 Strongly recommended:

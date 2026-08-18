@@ -81,6 +81,7 @@ jobs:
           AI_CREDENTIALS_KEY: ${{ secrets.AI_CREDENTIALS_KEY || vars.AI_CREDENTIALS_KEY }}
           AGENT_TOKEN_SECRET: ${{ secrets.AGENT_TOKEN_SECRET || vars.AGENT_TOKEN_SECRET }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY || vars.RESEND_API_KEY }}
+          RESEND_FROM_EMAIL: ${{ vars.RESEND_FROM_EMAIL || secrets.RESEND_FROM_EMAIL || 'hello@invites.jettx.ai' }}
           CAREERS_FROM_EMAIL: ${{ vars.CAREERS_FROM_EMAIL || secrets.CAREERS_FROM_EMAIL }}
           CONTACT_TO_EMAIL: ${{ vars.CONTACT_TO_EMAIL || secrets.CONTACT_TO_EMAIL }}
           CAREERS_TO_EMAIL: ${{ vars.CAREERS_TO_EMAIL || secrets.CAREERS_TO_EMAIL }}
@@ -98,10 +99,10 @@ jobs:
           VERIFICATION_ESCALATION_MODEL: claude-sonnet-5
         run: node scripts/syncGithubEnvToRailway.mjs
 
-      - name: Ensure Resend can send as jack@jettx.ai
+      - name: Ensure Resend can send as hello@invites.jettx.ai
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY || vars.RESEND_API_KEY }}
-          RESEND_SENDING_DOMAIN: jettx.ai
+          RESEND_SENDING_DOMAIN: invites.jettx.ai
         run: node scripts/ensureResendSendingDomain.mjs
 
       - name: Repair memory_events job FK on Supabase

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
-  RESEND_ONBOARDING_FROM,
+  RESEND_VERIFIED_FROM,
   emailDomain,
   isResendSenderRestriction,
   pickResendFromAddress,
@@ -9,10 +9,19 @@ import {
 } from './resendFrom.js';
 
 describe('pickResendFromAddress', () => {
-  it('keeps jack@jettx.ai when that domain is verified', () => {
+  it('keeps jack@jettx.ai when that apex domain is verified', () => {
     assert.equal(
       pickResendFromAddress('jack@jettx.ai', [{ name: 'jettx.ai', status: 'verified' }]),
       'jack@jettx.ai',
+    );
+  });
+
+  it('sends as hello@invites.jettx.ai when that subdomain is verified', () => {
+    assert.equal(
+      pickResendFromAddress('jack@jettx.ai', [
+        { name: 'invites.jettx.ai', status: 'verified' },
+      ]),
+      RESEND_VERIFIED_FROM,
     );
   });
 
@@ -25,23 +34,23 @@ describe('pickResendFromAddress', () => {
     );
   });
 
-  it('falls back to Resend onboarding when nothing is verified', () => {
+  it('uses the verified invites subdomain when nothing is listed as verified', () => {
     assert.equal(
       pickResendFromAddress('jack@jettx.ai', [
         { name: 'jettx.ai', status: 'not_started' },
       ]),
-      RESEND_ONBOARDING_FROM,
+      RESEND_VERIFIED_FROM,
     );
-    assert.equal(pickResendFromAddress('jack@jettx.ai', []), RESEND_ONBOARDING_FROM);
+    assert.equal(pickResendFromAddress('jack@jettx.ai', []), RESEND_VERIFIED_FROM);
   });
 
-  it('prefers jettx.ai over an unrelated verified domain', () => {
+  it('prefers invites.jettx.ai over an unrelated verified domain', () => {
     assert.equal(
       pickResendFromAddress('office@other.test', [
         { name: 'unrelated.com', status: 'verified' },
-        { name: 'jettx.ai', status: 'verified' },
+        { name: 'invites.jettx.ai', status: 'verified' },
       ]),
-      'invites@jettx.ai',
+      RESEND_VERIFIED_FROM,
     );
   });
 });
@@ -49,6 +58,7 @@ describe('pickResendFromAddress', () => {
 describe('emailDomain / sender restriction', () => {
   it('reads the domain from an address', () => {
     assert.equal(emailDomain('Jack@JettX.ai'), 'jettx.ai');
+    assert.equal(emailDomain('hello@invites.jettx.ai'), 'invites.jettx.ai');
     assert.equal(emailDomain('not-an-email'), '');
   });
 
@@ -72,25 +82,25 @@ describe('emailDomain / sender restriction', () => {
 });
 
 describe('pickResendFromAddressForList', () => {
-  it('uses the configured From when the API key cannot list domains', () => {
+  it('uses hello@invites.jettx.ai when the API key cannot list domains', () => {
     assert.equal(
       pickResendFromAddressForList('jack@jettx.ai', {
         ok: false,
         restricted: true,
         domains: [],
       }),
-      'jack@jettx.ai',
+      RESEND_VERIFIED_FROM,
     );
   });
 
-  it('still uses onboarding when the list succeeds with no verified domain', () => {
+  it('uses hello@invites.jettx.ai when the list succeeds with no verified domain', () => {
     assert.equal(
       pickResendFromAddressForList('jack@jettx.ai', {
         ok: true,
         restricted: false,
         domains: [],
       }),
-      RESEND_ONBOARDING_FROM,
+      RESEND_VERIFIED_FROM,
     );
   });
 });

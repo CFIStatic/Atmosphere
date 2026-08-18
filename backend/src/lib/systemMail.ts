@@ -4,9 +4,11 @@ import { config } from '../config.js';
 import { getTransporter, smtpConfigured } from './careersMail.js';
 import {
   RESEND_ONBOARDING_FROM,
+  RESEND_VERIFIED_FROM,
   fetchResendDomains,
   isResendSenderRestriction,
   pickResendFromAddressForList,
+  uniqueResendFroms,
 } from './resendFrom.js';
 
 /**
@@ -19,8 +21,9 @@ import {
  *
  * Delivery order:
  *   1. SMTP (SMTP_HOST + SMTP_USER + SMTP_PASS + CAREERS_FROM_EMAIL)
- *   2. Resend API (RESEND_API_KEY). From-address is a verified Resend domain
- *      when one exists; otherwise Atmosphere <onboarding@resend.dev>.
+ *   2. Resend API (RESEND_API_KEY). From-address is hello@invites.jettx.ai
+ *      (verified subdomain). Reply-To stays jack@jettx.ai. Falls back to
+ *      onboarding@resend.dev only if Resend still rejects the From.
  *   3. File log sink in development (or SYSTEM_MAIL_DRIVER=log) so Approve &
  *      invite still delivers a readable invite when SMTP/Resend are unset
  */
@@ -159,38 +162,29 @@ async function sendViaResend(input: {
     return { ok: false, why: 'Atmosphere mail is not configured on this server.' };
   }
   const listed = await fetchResendDomains(apiKey);
-  const from = pickResendFromAddressForList(input.from, listed);
-  if (from !== input.from) {
-    console.info(`[system-mail] Resend from ${input.from} → ${from}`);
-  }
+  const picked = pickResendFromAddressForList(input.from, listed);
+  const froms = uniqueResendFroms(picked, RESEND_VERIFIED_FROM, RESEND_ONBOARDING_FROM);
 
-  const first = await postResend({ ...input, apiKey, from });
-  if (first.ok) return first;
-
-  if (
-    from !== RESEND_ONBOARDING_FROM &&
-    first.status != null &&
-    isResendSenderRestriction(first.status, first.body ?? '')
-  ) {
-    console.warn(
-      `[system-mail] ${from} was rejected; retrying as ${RESEND_ONBOARDING_FROM}`,
-    );
-    const retry = await postResend({ ...input, apiKey, from: RESEND_ONBOARDING_FROM });
-    if (retry.ok) return retry;
-    if (retry.body && isResendSenderRestriction(retry.status ?? 0, retry.body)) {
-      console.error(
-        '[system-mail] Resend is still in test mode. Verify jettx.ai at resend.com/domains (DNS records are printed on each deploy) so invites can leave the account owner inbox.',
-      );
+  let last: { ok: false; why: string; status?: number; body?: string } | null = null;
+  for (const from of froms) {
+    if (from !== input.from) {
+      console.info(`[system-mail] Resend from ${input.from} → ${from}`);
     }
-    return { ok: false, why: retry.why };
+    const result = await postResend({ ...input, apiKey, from });
+    if (result.ok) return result;
+    last = result;
+    if (!result.status || !isResendSenderRestriction(result.status, result.body ?? '')) {
+      break;
+    }
+    console.warn(`[system-mail] ${from} was rejected; trying the next sender`);
   }
 
-  if (first.body && isResendSenderRestriction(first.status ?? 0, first.body)) {
+  if (last?.body && isResendSenderRestriction(last.status ?? 0, last.body)) {
     console.error(
-      '[system-mail] Resend is still in test mode. Verify jettx.ai at resend.com/domains (DNS records are printed on each deploy) so invites can leave the account owner inbox.',
+      `[system-mail] Resend rejected ${froms.join(' → ')}. invites.jettx.ai is the verified sending domain.`,
     );
   }
-  return { ok: false, why: first.why };
+  return { ok: false, why: last?.why ?? 'The email could not be sent.' };
 }
 
 export async function sendSystemMail(input: {
