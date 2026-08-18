@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { isHealthProbePath } from '../bootFlags.js';
 import { config } from '../config.js';
 import { aggregateScore, clientIp, detectThreats, severityForScore } from './detector.js';
 import { blockIp, isIpBlocked, noteBlockedHit } from './blocker.js';
@@ -31,6 +32,10 @@ export interface InspectResult {
 
 export async function inspectRequest(req: Request, res: Response): Promise<InspectResult> {
   if (!config.cyber.enabled || !config.cyber.monitoring) {
+    return { handled: false, event: null };
+  }
+
+  if (isHealthProbePath(req.path || '/')) {
     return { handled: false, event: null };
   }
 

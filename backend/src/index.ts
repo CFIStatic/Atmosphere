@@ -1,4 +1,5 @@
 import { createApp } from './app.js';
+import { listenHost } from './bootFlags.js';
 import { config } from './config.js';
 import { connections } from './estimator/mitigation/xactimate/index.js';
 import { startScheduler, stopScheduler } from './pm/scheduler.js';
@@ -12,12 +13,21 @@ import { agentHub } from './computer/agentHub.js';
 import { assertProductionReady } from './lib/productionGuards.js';
 import { logger } from './lib/logger.js';
 
-assertProductionReady();
+try {
+  assertProductionReady();
+} catch (err) {
+  logger.error('boot_aborted', {
+    detail: err instanceof Error ? err.message : String(err),
+  });
+  throw err;
+}
 
 const app = createApp();
 
-const server = app.listen(config.port, () => {
+const host = listenHost();
+const server = app.listen(config.port, host, () => {
   logger.info('listening', {
+    host,
     port: config.port,
     supabaseUrl: config.supabase.url,
     origins: config.frontendOrigins,

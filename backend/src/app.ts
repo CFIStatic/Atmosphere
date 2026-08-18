@@ -105,6 +105,11 @@ export function createApp(): Express {
   // Structured access logs + request ids (before routers so every path is covered).
   app.use(requestLog);
 
+  // Liveness/readiness before CORS, parsers, and cyber so a platform probe
+  // cannot be failed by an Origin check or a blocked IP.
+  app.use(healthRouter);
+  app.use('/api', healthRouter);
+
   // CORS — allow the configured frontend origins with credentials (cookies).
   // In development, also accept Cloudflare quick-tunnel hosts so cloud-agent /
   // shareable preview URLs can sign in without editing FRONTEND_ORIGIN each time.
@@ -185,7 +190,6 @@ export function createApp(): Express {
   app.use(cyberMonitor);
 
   // Routes.
-  app.use('/api', healthRouter);
   app.use('/api/cyber', cyberRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);

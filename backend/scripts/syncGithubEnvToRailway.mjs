@@ -10,11 +10,11 @@ import { spawnSync } from 'node:child_process';
 
 const KEYS = [
   'NODE_ENV',
-  'PORT',
   'MEDIA_BACKEND',
   'COMPUTER_USE_ENABLED',
   'BACKUP_ENABLED',
   'ALLOW_MOCK_DRIVERS',
+  'HOST',
   'FRONTEND_ORIGIN',
   'SUPABASE_URL',
   'SUPABASE_ANON_KEY',
@@ -66,7 +66,7 @@ function railway(args, input) {
   }
 }
 
-const service = process.env.RAILWAY_SERVICE?.trim();
+const service = process.env.RAILWAY_SERVICE?.trim() || 'Atmosphere';
 
 for (const name of KEYS) {
   const value = process.env[name]?.trim();

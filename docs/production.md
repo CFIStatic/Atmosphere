@@ -98,8 +98,11 @@ A/B experiments live in `public.experiments` (see migration
 | Liveness | `GET /api/health` | Process up (no deps) |
 | Readiness | `GET /api/ready` | Supabase Auth reachable; admin/storage reported |
 
-Point the load balancer readiness check at `/api/ready`. Prefer draining on
-`SIGTERM` (schedulers and the HTTP server shut down cleanly).
+Point the **platform deploy probe** (Railway) at `/api/health` so a brief
+Supabase blip cannot roll back a good process. Point a load-balancer
+readiness check at `/api/ready` when you want to drain traffic that cannot
+reach Auth. Prefer draining on `SIGTERM` (schedulers and the HTTP server
+shut down cleanly).
 
 ## Observability
 

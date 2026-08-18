@@ -62,11 +62,11 @@ jobs:
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
           RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere' }}
           NODE_ENV: production
-          PORT: '4000'
           MEDIA_BACKEND: supabase
           COMPUTER_USE_ENABLED: 'false'
           BACKUP_ENABLED: 'false'
           ALLOW_MOCK_DRIVERS: 'true'
+          HOST: '0.0.0.0'
           FRONTEND_ORIGIN: ${{ vars.FRONTEND_ORIGIN || 'https://app.atmosphereteam.com' }}
           SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}

@@ -21,9 +21,21 @@ type CheckResult = { ok: boolean; detail?: string; skipped?: boolean };
 healthRouter.get('/ready', async (_req: Request, res: Response) => {
   const checks: Record<string, CheckResult> = {};
 
-  checks.supabaseAuth = await checkSupabaseAuth();
-  checks.supabaseAdmin = await checkSupabaseAdmin();
-  checks.storage = await checkStorage();
+  checks.supabaseAuth = await withTimeout(
+    checkSupabaseAuth(),
+    2_500,
+    { ok: false, detail: 'timeout reaching Supabase Auth' },
+  );
+  checks.supabaseAdmin = await withTimeout(
+    checkSupabaseAdmin(),
+    2_500,
+    { ok: false, detail: 'timeout reaching Supabase admin API' },
+  );
+  checks.storage = await withTimeout(
+    checkStorage(),
+    2_500,
+    { ok: false, detail: 'timeout reaching Storage' },
+  );
   checks.config = {
     ok: Boolean(config.frontendOrigins.length && config.device.pepper),
     detail: config.isProduction ? 'production' : 'development',
@@ -53,6 +65,24 @@ healthRouter.get('/ready', async (_req: Request, res: Response) => {
     checks,
   });
 });
+
+async function withTimeout(
+  promise: Promise<CheckResult>,
+  ms: number,
+  fallback: CheckResult,
+): Promise<CheckResult> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<CheckResult>((resolve) => {
+        timer = setTimeout(() => resolve(fallback), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 async function checkSupabaseAuth(): Promise<CheckResult> {
   try {
