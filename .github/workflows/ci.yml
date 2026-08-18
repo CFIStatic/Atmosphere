@@ -54,6 +54,8 @@ jobs:
         working-directory: frontend
       - run: npm test
         working-directory: frontend
+      - run: node --test scripts/officeDomain.test.mjs
+        working-directory: frontend
       # `npm run build` runs `tsc -b` first, so this covers the typecheck too.
       - run: npm run build
         working-directory: frontend
@@ -110,3 +112,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build backend image
         run: docker build -f backend/Dockerfile -t atmosphere-backend:ci ./backend
+
+  docker-frontend:
+    name: Frontend image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build office console image
+        run: docker build -f frontend/Dockerfile -t atmosphere-frontend:ci .
