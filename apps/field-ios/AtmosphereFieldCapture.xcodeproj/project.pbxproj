@@ -21,6 +21,17 @@
 		AFC00000000000000000020D /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000010D /* SignInView.swift */; };
 		AFC000000000000000000216 /* SignUpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000116 /* SignUpView.swift */; };
 		AFC000000000000000000217 /* OfficeLinkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000117 /* OfficeLinkView.swift */; };
+		AFC000000000000000000218 /* FieldChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000118 /* FieldChrome.swift */; };
+		AFC000000000000000000219 /* MyJobsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000119 /* MyJobsView.swift */; };
+		AFC00000000000000000021A /* AddJobView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000011A /* AddJobView.swift */; };
+		AFC00000000000000000021B /* ShareLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000011B /* ShareLink.swift */; };
+		AFC00000000000000000021C /* InviteJobView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000011C /* InviteJobView.swift */; };
+		AFC00000000000000000021E /* MeasureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000011E /* MeasureView.swift */; };
+		AFC00000000000000000021F /* RoomCaptureHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000011F /* RoomCaptureHost.swift */; };
+		AFC000000000000000000220 /* PendingUploadStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000120 /* PendingUploadStore.swift */; };
+		AFC000000000000000000221 /* FieldLocalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000121 /* FieldLocalStore.swift */; };
+		AFC000000000000000000222 /* UploadReachability.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000122 /* UploadReachability.swift */; };
+		AFC000000000000000000223 /* MeasureOfferView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000123 /* MeasureOfferView.swift */; };
 		AFC00000000000000000020E /* RecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000010E /* RecordingView.swift */; };
 		AFC00000000000000000020F /* DoorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000010F /* DoorView.swift */; };
 		AFC000000000000000000210 /* FieldTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000110 /* FieldTheme.swift */; };
@@ -47,6 +58,17 @@
 		AFC00000000000000000010D /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
 		AFC000000000000000000116 /* SignUpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignUpView.swift; sourceTree = "<group>"; };
 		AFC000000000000000000117 /* OfficeLinkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficeLinkView.swift; sourceTree = "<group>"; };
+		AFC000000000000000000118 /* FieldChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldChrome.swift; sourceTree = "<group>"; };
+		AFC000000000000000000119 /* MyJobsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyJobsView.swift; sourceTree = "<group>"; };
+		AFC00000000000000000011A /* AddJobView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddJobView.swift; sourceTree = "<group>"; };
+		AFC00000000000000000011B /* ShareLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareLink.swift; sourceTree = "<group>"; };
+		AFC00000000000000000011C /* InviteJobView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteJobView.swift; sourceTree = "<group>"; };
+		AFC00000000000000000011E /* MeasureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasureView.swift; sourceTree = "<group>"; };
+		AFC00000000000000000011F /* RoomCaptureHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCaptureHost.swift; sourceTree = "<group>"; };
+		AFC000000000000000000120 /* PendingUploadStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingUploadStore.swift; sourceTree = "<group>"; };
+		AFC000000000000000000121 /* FieldLocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldLocalStore.swift; sourceTree = "<group>"; };
+		AFC000000000000000000122 /* UploadReachability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadReachability.swift; sourceTree = "<group>"; };
+		AFC000000000000000000123 /* MeasureOfferView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasureOfferView.swift; sourceTree = "<group>"; };
 		AFC00000000000000000010E /* RecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingView.swift; sourceTree = "<group>"; };
 		AFC00000000000000000010F /* DoorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoorView.swift; sourceTree = "<group>"; };
 		AFC000000000000000000110 /* FieldTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldTheme.swift; sourceTree = "<group>"; };
@@ -124,6 +146,7 @@
 			isa = PBXGroup;
 			children = (
 				AFC000000000000000000105 /* RoomPlanBridge.swift */,
+				AFC00000000000000000011F /* RoomCaptureHost.swift */,
 			);
 			path = Geometry;
 			sourceTree = "<group>";
@@ -136,6 +159,9 @@
 				AFC000000000000000000108 /* AuthSession.swift */,
 				AFC000000000000000000109 /* ApiConfig.swift */,
 				AFC00000000000000000010A /* KeychainStore.swift */,
+				AFC000000000000000000120 /* PendingUploadStore.swift */,
+				AFC000000000000000000121 /* FieldLocalStore.swift */,
+				AFC000000000000000000122 /* UploadReachability.swift */,
 			);
 			path = Network;
 			sourceTree = "<group>";
@@ -152,11 +178,17 @@
 			isa = PBXGroup;
 			children = (
 				AFC00000000000000000010C /* TodayView.swift */,
+				AFC000000000000000000118 /* FieldChrome.swift */,
+				AFC000000000000000000119 /* MyJobsView.swift */,
+				AFC00000000000000000011A /* AddJobView.swift */,
 				AFC00000000000000000010D /* SignInView.swift */,
 				AFC000000000000000000116 /* SignUpView.swift */,
 				AFC000000000000000000117 /* OfficeLinkView.swift */,
 				AFC00000000000000000010E /* RecordingView.swift */,
 				AFC00000000000000000010F /* DoorView.swift */,
+				AFC00000000000000000011C /* InviteJobView.swift */,
+				AFC000000000000000000123 /* MeasureOfferView.swift */,
+				AFC00000000000000000011E /* MeasureView.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -174,6 +206,7 @@
 			isa = PBXGroup;
 			children = (
 				AFC000000000000000000112 /* FieldModels.swift */,
+				AFC00000000000000000011B /* ShareLink.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -259,6 +292,9 @@
 				AFC00000000000000000020A /* KeychainStore.swift in Sources */,
 				AFC00000000000000000020B /* FieldDaySession.swift in Sources */,
 				AFC00000000000000000020C /* TodayView.swift in Sources */,
+				AFC000000000000000000218 /* FieldChrome.swift in Sources */,
+				AFC000000000000000000219 /* MyJobsView.swift in Sources */,
+				AFC00000000000000000021A /* AddJobView.swift in Sources */,
 				AFC00000000000000000020D /* SignInView.swift in Sources */,
 				AFC000000000000000000216 /* SignUpView.swift in Sources */,
 				AFC000000000000000000217 /* OfficeLinkView.swift in Sources */,
@@ -267,6 +303,14 @@
 				AFC000000000000000000210 /* FieldTheme.swift in Sources */,
 				AFC000000000000000000211 /* AtmosphereBarsMark.swift in Sources */,
 				AFC000000000000000000212 /* FieldModels.swift in Sources */,
+				AFC00000000000000000021B /* ShareLink.swift in Sources */,
+				AFC00000000000000000021C /* InviteJobView.swift in Sources */,
+				AFC000000000000000000223 /* MeasureOfferView.swift in Sources */,
+				AFC00000000000000000021E /* MeasureView.swift in Sources */,
+				AFC00000000000000000021F /* RoomCaptureHost.swift in Sources */,
+				AFC000000000000000000220 /* PendingUploadStore.swift in Sources */,
+				AFC000000000000000000221 /* FieldLocalStore.swift in Sources */,
+				AFC000000000000000000222 /* UploadReachability.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

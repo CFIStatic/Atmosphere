@@ -58,9 +58,10 @@ are prompted to create one with that exact address.
 
 ### Field Capture (crew)
 
-- **Web:** `fieldcapture/?token=<job-share-token>` — one-button video + mic
+- **Web:** `fieldcapture/` — own login, accept job invites in-app, save the day film on the phone and file when online
 - **My jobs** (`/my-jobs`) — after claiming a link with email/phone OTP
-- **iOS (App Store path):** `apps/field-ios/` — same upload contract; RoomPlan twin later
+- **iOS (App Store path):** `apps/field-ios/` — same upload contract; measure walk on a LiDAR iPhone when a job has none
+- **iOS browser host:** `apps/field-ios/preview/` on `:5175` or `/ios` — phone-framed Swift screens (no upload)
 
 ## Architecture
 
@@ -200,6 +201,8 @@ That prints two HTTPS URLs. Open **Field Capture** to film the day; open
 
 The native iPhone app is `apps/field-ios/` — Xcode → your Personal Team → Run
 on the device. It talks to the Atmosphere project directly (not localhost).
+To walk those same Swift screens in a browser (no Xcode): `bash scripts/host-ios-preview.sh`
+then open `:5175` or `/ios`.
 
 ### Verifier
 

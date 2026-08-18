@@ -31,10 +31,69 @@ describe('phone home-screen manifests', () => {
     expect(manifest.icons.some((icon) => icon.src.includes('atmosphere-192.png'))).toBe(true);
   });
 
+  it('keeps the live Field Capture app on the same send / measure / invite rules', () => {
+    const html = readFileSync(resolve(repoRoot, 'fieldcapture/index.html'), 'utf8');
+    const app = readFileSync(resolve(repoRoot, 'fieldcapture/js/app.js'), 'utf8');
+    const core = readFileSync(resolve(repoRoot, 'fieldcapture/js/capture-core.js'), 'utf8');
+    expect(html).toContain('Accept a job invite');
+    expect(html).toContain('Accept this job');
+    expect(html).toContain('Saved on this phone');
+    expect(html).toContain('Each person uses their own login');
+    expect(html).not.toContain('Job share links still work without signing in');
+    expect(html).not.toMatch(/RoomPlan/);
+    expect(app).toContain('consumePendingInvite');
+    expect(app).toContain('savePendingFilm');
+    expect(app).toContain('if (state.account) finishLiveDay()');
+    expect(app).not.toContain('no office login');
+    expect(core).toContain('acceptFieldInvite');
+    expect(core).toContain('savePendingFilm');
+  });
+
   it('tunnels the Vite app so a phone can open HTTPS', () => {
     const script = readFileSync(resolve(repoRoot, 'scripts/host-phone.sh'), 'utf8');
     expect(script).toContain('trycloudflare.com');
     expect(script).toContain('/fieldcapture/');
     expect(script).toContain('5174');
+  });
+
+  it('hosts the iOS Field Capture screens in a browser preview', () => {
+    const script = readFileSync(resolve(repoRoot, 'scripts/host-ios-preview.sh'), 'utf8');
+    expect(script).toContain('5175');
+    expect(script).toContain('apps/field-ios/preview');
+    const html = readFileSync(resolve(repoRoot, 'apps/field-ios/preview/index.html'), 'utf8');
+    expect(html).toContain('id="s-signin"');
+    expect(html).toContain('id="s-signup"');
+    expect(html).toContain('id="s-office"');
+    expect(html).toContain('id="s-today"');
+    expect(html).toContain('id="s-jobs"');
+    expect(html).toContain('id="s-add"');
+    expect(html).toContain('id="s-recording"');
+    expect(html).toContain('id="s-door"');
+    expect(html).toContain('Start the day');
+    expect(html).toContain('Hold to finish the day');
+    expect(html).toContain('Add job &amp; assign to me');
+    expect(html).toContain('A historical record of every job this login has filmed');
+    expect(html).toContain('id="jobs-search"');
+    expect(html).toContain('class="tabbar"');
+    expect(html).toContain('id="s-invite"');
+    expect(html).toContain('id="s-measure"');
+    expect(html).toContain('id="s-measure-offer"');
+    expect(html).toContain('Accept a job invite');
+    expect(html).toContain('Accept this job');
+    expect(html).toContain('Measure the building?');
+    expect(html).toContain('Start measuring');
+    expect(html).toContain('Saved on this phone');
+    expect(html).not.toContain('id="s-sending"');
+    expect(html).not.toContain('Have an invite link?');
+    expect(html).not.toContain('Start RoomPlan');
+    expect(html).not.toMatch(/RoomPlan/);
+    expect(html).not.toMatch(/Mitigation|Construction/);
+    const css = readFileSync(resolve(repoRoot, 'apps/field-ios/preview/preview.css'), 'utf8');
+    expect(css).toContain('prefers-color-scheme: dark');
+    const app = readFileSync(
+      resolve(repoRoot, 'apps/field-ios/AtmosphereFieldCapture/AtmosphereFieldCaptureApp.swift'),
+      'utf8',
+    );
+    expect(app).not.toContain('preferredColorScheme(.light)');
   });
 });

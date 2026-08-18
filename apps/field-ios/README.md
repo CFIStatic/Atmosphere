@@ -6,9 +6,9 @@ Native iPhone client: **one button to film the day (video + microphone)**, plus
 Branch focus: `cursor/field-capture-app-build-out-2764` (“Field Capture App Build out”).
 
 The web `fieldcapture/` app is production with **dashboard email/password**
-(same as the office console) or `?token=` (job-share link). This Swift app is
-what ships on the App Store with RoomPlan + the same audiovisual day film
-contract.
+(same as the office console). Job invites are accepted after sign-in. This
+Swift app is what ships on the App Store with the same audiovisual day film
+contract, plus a short measure walk on a LiDAR iPhone when a job has none.
 
 ## Audiovisual day film (required)
 
@@ -67,6 +67,17 @@ The phone signs in with the same email/password as the Atmosphere website.
 A physical iPhone never uses localhost; it talks to the hosted Atmosphere
 project. RoomPlan needs a LiDAR iPhone.
 
+**Browser host (no Xcode):** the Swift screens are also served as a phone-framed
+preview so you can walk Sign in → Today → Record → Door without a simulator.
+
+```bash
+bash scripts/host-ios-preview.sh
+```
+
+Open `http://localhost:5175/` (cloud-agent preview tab **ios**). The Vite app
+also mounts the same folder at `/ios`. This preview does not upload. The live
+crew web app is still `fieldcapture/`.
+
 To use the **web** Field Capture on the phone instead (no Xcode):
 
 ```bash
@@ -98,7 +109,8 @@ AtmosphereFieldCapture/
   Network/AtmosphereClient.swift    # /api/media/catalog + /api/geometry
   Network/MediaUploadClient.swift   # signed PUT / multipart
   Session/FieldDaySession.swift     # today → record → door → upload
-  UI/TodayView.swift · SignInView.swift · SignUpView.swift · OfficeLinkView.swift
+  UI/TodayView.swift · MyJobsView.swift · AddJobView.swift · FieldChrome.swift
+  UI/SignInView.swift · SignUpView.swift · OfficeLinkView.swift
   UI/RecordingView.swift · DoorView.swift
   Theme/FieldTheme.swift
   Info.plist
@@ -108,8 +120,8 @@ AtmosphereFieldCapture/
 
 1. **First launch only:** Create an Atmosphere account or sign in (same as the website), then **Link to office account** with the office join code.
 2. Later launches open Today already connected.
-3. Confirm today’s jobs (tap one if several) → **Start the day**.
-4. Hold **Finish the day** — proof upload into that job → optional RoomPlan twin.
+3. Confirm today’s assigned jobs (or **Add job**) → **Start the day**. **My jobs** is the filmed record — search by name, address, job number, status, date, or role.
+4. **Start the day** offers building measurements if that job has none. Hold **Finish the day** — the film is saved on the phone and files to the dashboard when a signal is available. If measurements were skipped, the phone asks once more at the end. The job then lands on **My jobs**.
 
 AI dictation and twin review stay in the **office Verifier**.
 
@@ -120,9 +132,10 @@ On a physical iPhone the app talks to the Atmosphere Supabase project
 
 1. Create account: BFF `POST /api/field-app/register` (email + password + join code or new office name), or Supabase `POST /auth/v1/signup` plus `create_org` / `join_org`
 2. Sign-in: `POST /auth/v1/token?grant_type=password` (or BFF `POST /api/auth/login`)
-3. Profile + today’s jobs: `my_org_membership` + `crm_jobs` / `job_proofs` (or BFF `/api/field-app/*`)
-4. Day film: upload into the `job-proofs` bucket, then insert `job_proofs`
-5. Optional RoomPlan twin still uses the BFF geometry routes when one is running
+3. Today’s assigned jobs: BFF `GET /api/field-app/today`. Filmed history: `GET /api/field-app/jobs?q=` (name, address, job number, status, date, role)
+4. Add a job from the phone: BFF `POST /api/field-app/jobs` (creates the property, job, and assigns this login — it shows on Today until filmed)
+5. Day film: upload into the `job-proofs` bucket, then insert `job_proofs`
+6. Optional RoomPlan twin still uses the BFF geometry routes when one is running
 
 See also `docs/media-storage.md` and `backend/src/geometry/`.
 
@@ -139,9 +152,11 @@ See also `docs/media-storage.md` and `backend/src/geometry/`.
 Home-screen / App Store icon is the Atmosphere **five bars** mark
 (`Assets.xcassets/AppIcon.appiconset`) — same bars as the web logo, orange base.
 In-app header uses `AtmosphereBarsMark`.
+The app follows the iPhone’s **Light / Dark** appearance — it does not lock to light mode.
 
 ## Still to wire in Xcode
 
-- UIKit host for `RoomCaptureViewController` → real room list + USDZ
-- Background `URLSession` for multi‑GB day uploads on poor signal
 - App Store Connect listing, TestFlight, privacy nutrition labels
+- Associated Domains so `https://…/shared/{token}` opens the app without the custom scheme
+
+Each crew member signs in with their own Atmosphere account. Job invites (`atmosphere-field://share?token=…` or a pasted `/shared/…` URL) are accepted **inside the app** after sign-in — not on the login screen — and add that job to this login’s Today. Day films stay on the phone until there is a path, then a background `URLSession` files them to the dashboard. Building measurements (RoomPlan on a LiDAR iPhone) are offered at the start of a recording and again at the end only when that job still has none.

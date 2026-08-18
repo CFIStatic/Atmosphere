@@ -553,6 +553,38 @@ const optionalDate = z
   .optional()
   .nullable();
 
+/** Crew opens a job from Field Capture and is assigned to it. */
+export const fieldCreateJobSchema = z.object({
+  name: z
+    .string({ required_error: 'Enter a job name' })
+    .trim()
+    .min(2, 'Enter a job name')
+    .max(200, 'Job name is too long'),
+  address: z
+    .string({ required_error: 'Enter the site address' })
+    .trim()
+    .min(3, 'Enter the site address')
+    .max(200, 'Address is too long'),
+  city: optionalText(120),
+  notes: optionalText(4000),
+  workType: z.enum(WORK_TYPES).optional().default('mitigation'),
+  scheduledStart: optionalDate,
+});
+
+export type FieldCreateJobInput = z.infer<typeof fieldCreateJobSchema>;
+
+/** Signed-in Field Capture user accepts a job invite onto this login. */
+export const fieldAcceptInviteSchema = z.object({
+  token: z
+    .string({ required_error: 'Paste the invite link' })
+    .trim()
+    .min(6, 'That invite link is not valid.')
+    .max(200, 'That invite link is not valid.'),
+  name: z.string().trim().min(1).max(160).optional(),
+});
+
+export type FieldAcceptInviteInput = z.infer<typeof fieldAcceptInviteSchema>;
+
 /**
  * Opening a job writes to `crm_jobs`. This is the field-facing subset — the
  * fuller CRUD, with financials and the links to accounts, contacts and

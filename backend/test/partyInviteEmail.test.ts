@@ -37,6 +37,7 @@ test('Atmosphere sends the invite; the org is named, not the From party', () => 
   assert.equal(subject, 'Ortiz Restoration invited you to capture: 1842 Meridian Ave — water loss');
   assert.ok(html.includes('Open job on phone'));
   assert.ok(html.includes('Ortiz Restoration'));
+  assert.ok(text.includes('atmosphere-field://share?token=tok123'));
 });
 
 test('an existing account gets sign-in; a missing one gets create-with-this-address', () => {

@@ -306,6 +306,29 @@
   .donebtn.on { opacity: 1; transition: opacity .4s; }
 
   .foot { padding: 10px 18px 20px; font-size: 11px; color: var(--faint); line-height: 1.6; }
+  .queue-banner {
+    margin: 12px 0 4px; padding: 12px 14px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+    font-size: 13px; font-weight: 650; color: var(--ink);
+  }
+  .invite-link {
+    display: block; width: 100%; margin: 12px 0 0; padding: 8px 0;
+    border: 0; background: none; color: var(--accent);
+    font-size: 15px; font-weight: 650; text-align: left;
+  }
+  .kicker { font-size: 15px; font-weight: 650; color: var(--muted); margin-bottom: 6px; }
+  .field-plain { display: block; margin-top: 14px; font-size: 13px; font-weight: 650; color: var(--ink-2); }
+  .field-plain input {
+    display: block; width: 100%; margin-top: 6px; padding: 12px 14px;
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--panel); color: var(--ink); font: inherit;
+  }
+  .scope-card {
+    margin-top: 12px; padding: 12px 14px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+  }
+  .scope-card h3 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); margin-bottom: 6px; }
+  .scope-card p { font-size: 14px; color: var(--ink); }
 
   /* Property twin — App Store Field measures while filming; office gets the 3D model. */
   .twin {
@@ -360,14 +383,18 @@
       <h1 class="h1">Start it and go to work</h1>
       <p class="lede">
         One button, once a day. Tap it when you get to your first job and hold it when you are
-        done. You never pick a job, tag a video, or say what you filmed — the footage carries
-        where it was and when, and the office works it out from that.
+        done. The film is video + audio — saved on this phone, then filed to the dashboard when
+        you have a signal. Location rides along while you record. Building measurements are a
+        short walk on the iPhone app when a job has none — they do not run in the background.
       </p>
+
+      <div class="queue-banner" id="home-queue" hidden></div>
 
       <div class="expect">
         <h3>Today's jobs</h3>
         <div id="expect"></div>
       </div>
+      <button type="button" class="invite-link" id="home-invite">Accept a job invite</button>
 
       <div class="week" id="week-wrap" hidden>
         <h3>This week — what your days became</h3>
@@ -385,18 +412,19 @@
         <span class="lbl">Start the day</span>
       </button>
       <p class="rechint" id="btnhint">
-        Your location, clock, video, and microphone ride along with the footage and are checked at
-        the door — that is what makes it proof instead of silent video.
+        Your location, clock, video, and microphone ride along while you film. That is what makes
+        it proof instead of silent video. Measuring the building is a separate, short walk — not
+        an always-on scan.
       </p>
     </div>
   </div>
 
-  <!-- ================= SIGN IN: dashboard credentials, or a job link ================= -->
+  <!-- ================= SIGN IN: each person uses their own dashboard login ================= -->
   <div class="screen" id="s-blocked">
     <div class="pad" style="padding-top:36px">
       <h1 class="h1">Sign in to Field Capture</h1>
       <p class="lede" id="blocked-msg">
-        Use the same email and password as the Atmosphere dashboard. Job share links still work without signing in.
+        Use the same email and password as the Atmosphere dashboard. Each person uses their own login. Accept job invites after you sign in — not here.
       </p>
       <form class="auth-form" id="login-form" novalidate>
         <label for="login-email">Email
@@ -444,11 +472,36 @@
     </div>
   </div>
 
+  <!-- ================= ACCEPT A JOB (after sign-in) ================= -->
+  <div class="screen" id="s-invite">
+    <div class="pad" style="padding-top:28px">
+      <p class="kicker">Accept a job</p>
+      <h1 class="h1" id="invite-title">Paste a job invite</h1>
+      <p class="lede" id="invite-lede">The office sent a link for a job. Paste it here to add that job to this login. You can accept more than one.</p>
+      <div id="invite-detail" hidden></div>
+      <label class="field-plain" id="invite-paste-wrap">Invite link
+        <input id="invite-paste" type="text" autocomplete="off" placeholder="Invite link or token" />
+      </label>
+      <label class="field-plain" id="invite-name-wrap" hidden>Your name
+        <input id="invite-name" type="text" autocomplete="name" placeholder="Your name" />
+      </label>
+      <p class="auth-err" id="invite-err" hidden></p>
+      <button class="daybtn" type="button" id="invite-open">
+        <span class="lbl">Open invite</span>
+      </button>
+      <button class="daybtn" type="button" id="invite-accept" hidden>
+        <span class="lbl">Accept this job</span>
+      </button>
+      <button type="button" class="invite-link" id="invite-cancel">Not now</button>
+    </div>
+  </div>
+
   <!-- ================= THE DOOR: end of day ================= -->
   <div class="screen" id="s-door">
     <div class="door">
       <h2>Checked at the door</h2>
-      <p class="sub">Before anyone watches it, your day is checked as evidence. You see the same checks the office sees.</p>
+      <p class="sub">Before anyone watches it, your day is checked as evidence. Saved on this phone if you were offline — it files when you have a signal.</p>
+      <div class="queue-banner" id="door-queue" hidden></div>
       <div class="ledger" id="ledger">
         <div class="lrow" id="l1"><span>Filmed on site</span><em id="l1-d"></em><span class="ok">✓</span></div>
         <div class="lrow" id="l2"><span>Filmed live — not from your gallery</span><span class="ok">✓</span></div>
@@ -470,8 +523,8 @@
   </div>
 
   <div class="foot">
-    Uploading finishes itself when signal returns — never delete anything to "help". A day that
-    fails a check is still filed and still counts; it is just marked for a person to look at.
+    The film stays on this phone until the dashboard has it. Never delete app data to “help”.
+    A day that fails a check is still filed and still counts; it is just marked for a person to look at.
   </div>
 </div>
 

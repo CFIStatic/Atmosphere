@@ -1,3 +1,5 @@
+import { nativeShareURL, tokenFromSharePath } from '../field/shareLink.js';
+
 /**
  * Field Capture / subcontractor job invitation.
  *
@@ -54,6 +56,15 @@ export function partyInviteEmail(input: {
     `  ${link}`,
     '',
   );
+  const appToken = tokenFromSharePath(input.path);
+  if (appToken) {
+    textLines.push(
+      'If you have the Field Capture app, this opens the same job on the phone:',
+      '',
+      `  ${nativeShareURL(appToken)}`,
+      '',
+    );
+  }
 
   if (input.recipientHasAccount) {
     textLines.push(

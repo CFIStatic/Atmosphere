@@ -27,13 +27,14 @@ struct AtmosphereFieldCaptureApp: App {
                 .environmentObject(session)
                 .environmentObject(api)
                 .environmentObject(auth)
-                .preferredColorScheme(.light)
                 .task {
                     auth.bindAPIRefresh()
                     await auth.restore()
                     if auth.isLinked, !auth.needsOfficeLink {
                         await session.loadToday(api: api)
+                        await session.consumePendingInvite(api: api)
                     }
+                    await session.restorePendingUpload(api: api)
                 }
         }
     }
@@ -58,28 +59,49 @@ struct RootView: View {
             } else {
                 switch session.phase {
                 case .today:
-                    TodayView()
+                    FieldShellView()
                 case .recording:
                     RecordingView()
+                case .measuring:
+                    MeasureView()
                 case .door:
                     DoorView()
                 }
             }
         }
         .background(FieldTheme.bg.ignoresSafeArea())
+        .sheet(isPresented: $session.showInvite) {
+            InviteJobView(onDismiss: { session.showInvite = false })
+        }
+        .sheet(item: $session.measureOffer) { _ in
+            MeasureOfferView()
+        }
         // iOS 16-compatible: the two-parameter / `initial:` onChange APIs are iOS 17+.
         .onReceive(auth.$isLinked.dropFirst()) { linked in
             if linked, !auth.needsOfficeLink {
-                Task { await session.loadToday(api: api) }
+                Task {
+                    await session.loadToday(api: api)
+                    await session.consumePendingInvite(api: api)
+                }
             }
         }
         .onReceive(auth.$needsOfficeLink.dropFirst()) { needsOffice in
             if auth.isLinked, !needsOffice, !auth.showOfficeLink {
-                Task { await session.loadToday(api: api) }
+                Task {
+                    await session.loadToday(api: api)
+                    await session.consumePendingInvite(api: api)
+                }
             }
         }
         .onOpenURL { url in
-            auth.handleOpenURL(url)
+            if let token = ShareLink.token(from: url) {
+                PendingInviteStore.save(token)
+                if auth.isLinked, !auth.needsOfficeLink {
+                    Task { await session.openInvite(api: api, raw: url.absoluteString) }
+                }
+            } else {
+                auth.handleOpenURL(url)
+            }
         }
     }
 }

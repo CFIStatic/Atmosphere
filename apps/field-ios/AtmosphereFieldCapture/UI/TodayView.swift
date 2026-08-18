@@ -7,7 +7,7 @@ struct TodayView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
+            FieldHeader()
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     Text(Date.now, format: .dateTime.weekday(.wide).month(.abbreviated).day())
@@ -20,10 +20,12 @@ struct TodayView: View {
                         .foregroundStyle(FieldTheme.ink)
 
                     Text(
-                        "One button, once a day. Tap when you get to your first job and hold when you are done. The film is video + audio — filed to \(auth.orgName ?? "your organization") so the office can open it in the evidence library."
+                        "One button, once a day. Tap when you get to your first job and hold when you are done. The film is video + audio — saved on this phone, then filed to \(auth.orgName ?? "your organization") when you have a signal."
                     )
                     .font(.system(size: 15))
                     .foregroundStyle(FieldTheme.muted)
+
+                    QueueBanner()
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Today's jobs")
@@ -35,51 +37,30 @@ struct TodayView: View {
                                 .font(.system(size: 13))
                                 .foregroundStyle(FieldTheme.muted)
                         } else if session.jobs.isEmpty {
-                            Text("Nothing on the schedule for today. Create or schedule a job in the Atmosphere dashboard, then pull to refresh.")
+                            Text("Nothing assigned to you today. Add a job from this phone, or ask the office to put you on one. My jobs is the record of days you have already filmed.")
                                 .font(.system(size: 13))
                                 .foregroundStyle(FieldTheme.muted)
+                            HStack(spacing: 16) {
+                                Button("My jobs") { session.tab = .jobs }
+                                Button("Add a job") { session.tab = .add }
+                            }
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(FieldTheme.accent)
                         }
                         ForEach(session.jobs) { job in
-                            Button {
+                            FieldJobCard(job: job, selected: session.activeJobId == job.id) {
                                 session.activeJobId = job.id
-                            } label: {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(job.name).font(.system(size: 14, weight: .semibold))
-                                        Text(job.address)
-                                            .font(.system(size: 12))
-                                            .foregroundStyle(FieldTheme.muted)
-                                    }
-                                    Spacer()
-                                    Text(job.filmed == true ? "Filmed" : job.at)
-                                        .font(FieldTheme.mono)
-                                        .foregroundStyle(job.filmed == true ? FieldTheme.pass : FieldTheme.faint)
-                                    if session.activeJobId == job.id {
-                                        Text("●")
-                                            .foregroundStyle(FieldTheme.accent)
-                                            .font(.system(size: 10))
-                                    }
-                                }
-                                .padding(12)
-                                .background(FieldTheme.panel)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .stroke(session.activeJobId == job.id ? FieldTheme.accent : FieldTheme.line)
-                                )
-                                .cornerRadius(10)
                             }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(FieldTheme.ink)
                         }
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Property twin · App Store")
+                        Text("Building measurements")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(FieldTheme.faint)
                             .textCase(.uppercase)
                         Text(
-                            "While you film, LiDAR / RoomPlan can measure rooms. The office gets a 3D twin of the property and the work — you still only press one button."
+                            "When you start recording we can measure the building so the office has the rooms with the film. We only ask if this job does not have measurements yet."
                         )
                         .font(.system(size: 13.5))
                         .foregroundStyle(FieldTheme.muted)
@@ -108,7 +89,7 @@ struct TodayView: View {
             }
 
             Button {
-                Task { await session.startDay() }
+                session.requestStartDay()
             } label: {
                 Label("Start the day", systemImage: "video.fill")
                     .font(.system(size: 17, weight: .bold))
@@ -120,46 +101,6 @@ struct TodayView: View {
             }
             .padding(18)
         }
-    }
-
-    private var header: some View {
-        HStack(spacing: 10) {
-            AtmosphereBarsMark(size: 22)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Atmosphere")
-                    .font(.system(size: 16, weight: .heavy))
-                    .foregroundStyle(FieldTheme.ink)
-                Text(auth.orgName ?? "Field Capture")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(FieldTheme.muted)
-                    .lineLimit(1)
-            }
-            Spacer()
-            Menu {
-                if let email = auth.email {
-                    Text(email)
-                }
-                if let office = auth.orgName {
-                    Text("Office: \(office)")
-                }
-                Button("Link to office account") {
-                    auth.beginOfficeLink()
-                }
-                Button("Disconnect this phone", role: .destructive) {
-                    Task {
-                        await auth.disconnectAccount()
-                        session.jobs = []
-                    }
-                }
-            } label: {
-                Text("Account")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(FieldTheme.muted)
-            }
-        }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
-        .background(FieldTheme.panel)
-        .overlay(alignment: .bottom) { FieldTheme.line.frame(height: 1) }
+        .background(FieldTheme.bg)
     }
 }

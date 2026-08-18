@@ -9,9 +9,11 @@ struct DoorView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Checked at the door")
                         .font(.system(size: 26, weight: .bold))
-                    Text("Before anyone watches it, your day is checked as evidence. Video and audio both sealed.")
+                    Text("Before anyone watches it, your day is checked as evidence. Video and audio both sealed. Saved on this phone if you were offline — it files when you have a signal.")
                         .font(.system(size: 14))
                         .foregroundStyle(FieldTheme.muted)
+
+                    QueueBanner()
 
                     VStack(spacing: 0) {
                         ForEach(session.doorChecks) { row in
@@ -64,10 +66,6 @@ struct DoorView: View {
                             .foregroundStyle(FieldTheme.faint)
                     }
 
-                    if session.uploading {
-                        ProgressView("Uploading day film…")
-                    }
-
                     if let err = session.lastError {
                         Text(err).foregroundStyle(FieldTheme.rec).font(.system(size: 13))
                     }
@@ -84,7 +82,7 @@ struct DoorView: View {
                     }
                     .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(red: 0.941, green: 0.969, blue: 0.945))
+                    .background(FieldTheme.passWash)
                     .cornerRadius(11)
                 }
                 .padding(18)

@@ -7,6 +7,8 @@
   var ok = window.FieldCaptureCore
     && typeof FieldCaptureCore.recordDayFilm === 'function'
     && typeof FieldCaptureCore.uploadDayFilm === 'function'
+    && typeof FieldCaptureCore.acceptFieldInvite === 'function'
+    && typeof FieldCaptureCore.savePendingFilm === 'function'
     && typeof FieldCaptureCore.todayISO === 'function';
   document.body.textContent = ok ? 'capture-core OK' : 'capture-core MISSING';
 </script>

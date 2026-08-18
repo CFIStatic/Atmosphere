@@ -7,11 +7,17 @@ import { requireOrgContext } from '../lib/orgContext.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { badRequest, HttpError, serviceUnavailable } from '../lib/errors.js';
 import { setSessionCookies } from '../lib/session.js';
-import { fieldOfficePreviewSchema, fieldOfficeSchema, fieldRegisterSchema } from '../lib/validation.js';
+import {
+  fieldAcceptInviteSchema,
+  fieldCreateJobSchema,
+  fieldOfficePreviewSchema,
+  fieldOfficeSchema,
+  fieldRegisterSchema,
+} from '../lib/validation.js';
 import { createPasswordAccount, publicUser, sessionTokens } from '../auth/passwordAccount.js';
 import { linkFieldOffice, previewOfficeByJoinCode } from '../field/officeLink.js';
 import { authLimiter } from './auth.js';
-import { createUploadUrl, recordProof } from './proofOfWork.js';
+import { createMeshUploadUrl, createUploadUrl, recordProof } from './proofOfWork.js';
 import {
   DEFAULT_FIELD_TIMEZONE,
   formatTodayAt,
@@ -19,6 +25,7 @@ import {
   todayKey,
   type TodayJobInput,
 } from '../field/todayJobs.js';
+import { lastFilmedByJob, mergeAssignedJobs, restrictToAssigned, searchFieldJobs } from '../field/assignedJobs.js';
 
 /**
  * Field Capture (App Store) ↔ platform account bridge.
@@ -195,21 +202,119 @@ async function orgTimezone(
   return zone || DEFAULT_FIELD_TIMEZONE;
 }
 
+type JobRow = {
+  id: string;
+  job_number: number | null;
+  title: string | null;
+  status: string | null;
+  scheduled_start: string | null;
+  property_id: string | null;
+  work_type?: string | null;
+};
+
+async function loadAssigned(
+  supabase: Awaited<ReturnType<typeof requireOrgContext>>['supabase'],
+  orgId: string,
+  userId: string,
+) {
+  const [{ data: crew }, { data: owned }] = await Promise.all([
+    supabase
+      .from('job_assignments')
+      .select('job_id, role_on_job')
+      .eq('org_id', orgId)
+      .eq('user_id', userId)
+      .is('released_at', null),
+    supabase.from('crm_jobs').select('id').eq('org_id', orgId).eq('owner_id', userId),
+  ]);
+  return mergeAssignedJobs(
+    ((crew ?? []) as { job_id?: string; role_on_job?: string }[]).map((row) => ({
+      jobId: row.job_id ?? '',
+      role: row.role_on_job,
+    })),
+    ((owned ?? []) as { id?: string }[]).map((row) => row.id ?? ''),
+  );
+}
+
+async function addressByPropertyIds(
+  supabase: Awaited<ReturnType<typeof requireOrgContext>>['supabase'],
+  propertyIds: string[],
+): Promise<Map<string, string>> {
+  const addressById = new Map<string, string>();
+  if (!propertyIds.length) return addressById;
+  const { data: props } = await supabase
+    .from('crm_properties')
+    .select('id, address_line1, city')
+    .in('id', propertyIds);
+  for (const p of (props ?? []) as { id: string; address_line1?: string; city?: string }[]) {
+    const line = [p.address_line1, p.city].filter(Boolean).join(', ');
+    if (line) addressById.set(p.id, line);
+  }
+  return addressById;
+}
+
+function asFieldJob(
+  job: {
+    id: string;
+    jobNumber: number | null;
+    title: string | null;
+    status: string | null;
+    scheduledStart: string | null;
+    propertyId: string | null;
+    workType?: string | null;
+    filmed?: boolean;
+    filmedOn?: string | null;
+  },
+  addressById: Map<string, string>,
+  roleById: Map<string, string>,
+  timeZone: string,
+) {
+  const filmed = Boolean(job.filmed);
+  return {
+    id: job.id,
+    number: job.jobNumber != null ? `#${job.jobNumber}` : '',
+    name: job.title || 'Job',
+    address: (job.propertyId && addressById.get(job.propertyId)) || 'Address on file',
+    at: job.filmedOn
+      ? formatHistoryAt(job.filmedOn, timeZone)
+      : formatTodayAt(job.scheduledStart, filmed, timeZone),
+    status: job.status ?? null,
+    placed: Boolean(job.scheduledStart) || filmed,
+    filmed,
+    filmedOn: job.filmedOn ?? null,
+    assigned: true,
+    role: roleById.get(job.id) ?? 'crew',
+    workType: job.workType ?? null,
+  };
+}
+
+function formatHistoryAt(day: string, timeZone: string): string {
+  try {
+    return new Date(`${day}T12:00:00`).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: timeZone || DEFAULT_FIELD_TIMEZONE,
+    });
+  } catch {
+    return day;
+  }
+}
+
 /**
  * GET /api/field-app/today
- * The job(s) for this calendar day: scheduled today, already filmed today,
- * or currently in progress. Opening the app has to show the work we are on.
+ * The jobs assigned to this login that belong on today's screen.
  */
 fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { orgId, supabase } = await requireOrgContext(req);
+    const { orgId, userId, supabase } = await requireOrgContext(req);
     const timeZone = await orgTimezone(supabase, orgId);
     const day = todayKey(new Date(), timeZone);
+    const assigned = await loadAssigned(supabase, orgId, userId);
 
     const [{ data: jobs, error }, proofsResult] = await Promise.all([
       supabase
         .from('crm_jobs')
-        .select('id, job_number, title, status, scheduled_start, property_id')
+        .select('id, job_number, title, status, scheduled_start, property_id, work_type')
         .eq('org_id', orgId)
         .order('scheduled_start', { ascending: true, nullsFirst: false })
         .limit(200),
@@ -226,42 +331,283 @@ fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunct
       ),
     ] as string[];
 
-    const inputs: TodayJobInput[] = ((jobs ?? []) as any[]).map((j) => ({
-      id: j.id as string,
-      jobNumber: (j.job_number as number | null) ?? null,
-      title: (j.title as string | null) ?? null,
-      status: (j.status as string | null) ?? null,
-      scheduledStart: (j.scheduled_start as string | null) ?? null,
-      propertyId: (j.property_id as string | null) ?? null,
-    }));
+    const inputs: TodayJobInput[] = restrictToAssigned(
+      ((jobs ?? []) as JobRow[]).map((j) => ({
+        id: j.id,
+        jobNumber: j.job_number ?? null,
+        title: j.title ?? null,
+        status: j.status ?? null,
+        scheduledStart: j.scheduled_start ?? null,
+        propertyId: j.property_id ?? null,
+        workType: j.work_type ?? null,
+      })),
+      assigned.ids,
+    );
 
     const picked = pickTodayJobs(inputs, filmedIds, day, timeZone);
-    const propertyIds = [...new Set(picked.map((j) => j.propertyId).filter(Boolean))] as string[];
-    const addressById = new Map<string, string>();
-    if (propertyIds.length) {
-      const { data: props } = await supabase
-        .from('crm_properties')
-        .select('id, address_line1, city')
-        .in('id', propertyIds);
-      for (const p of (props ?? []) as any[]) {
-        const line = [p.address_line1, p.city].filter(Boolean).join(', ');
-        if (line) addressById.set(p.id, line);
+    const addressById = await addressByPropertyIds(
+      supabase,
+      [...new Set(picked.map((j) => j.propertyId).filter(Boolean))] as string[],
+    );
+
+    const out = picked.map((j) =>
+      asFieldJob(
+        { ...j, workType: (j as TodayJobInput & { workType?: string }).workType },
+        addressById,
+        assigned.roleById,
+        timeZone,
+      ),
+    );
+
+    res.json({ jobs: out, today: day });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/field-app/jobs
+ * Historical record of day films this login has already recorded.
+ * `?q=` searches name, address, job number, status, or filmed date.
+ */
+fieldAppRouter.get('/jobs', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { orgId, userId, supabase } = await requireOrgContext(req);
+    const timeZone = await orgTimezone(supabase, orgId);
+    const assigned = await loadAssigned(supabase, orgId, userId);
+    if (!assigned.ids.size) {
+      res.json({ jobs: [] });
+      return;
+    }
+
+    const ids = [...assigned.ids];
+    const [{ data: jobs, error }, proofsResult] = await Promise.all([
+      supabase
+        .from('crm_jobs')
+        .select('id, job_number, title, status, scheduled_start, property_id, work_type')
+        .eq('org_id', orgId)
+        .in('id', ids)
+        .limit(200),
+      supabase.from('job_proofs').select('job_id, work_date').eq('org_id', orgId).in('job_id', ids),
+    ]);
+    if (error) throw new HttpError(500, error.message, 'field_jobs_failed');
+
+    const lastFilmed = lastFilmedByJob(
+      ((proofsResult.data ?? []) as { job_id?: string; work_date?: string }[]).map((row) => ({
+        jobId: row.job_id,
+        workDate: row.work_date,
+      })),
+    );
+    const rows = ((jobs ?? []) as JobRow[]).filter((j) => lastFilmed.has(j.id));
+    rows.sort((a, b) => (lastFilmed.get(b.id) ?? '').localeCompare(lastFilmed.get(a.id) ?? ''));
+    const addressById = await addressByPropertyIds(
+      supabase,
+      [...new Set(rows.map((j) => j.property_id).filter(Boolean))] as string[],
+    );
+
+    const mapped = rows.map((j) =>
+      asFieldJob(
+        {
+          id: j.id,
+          jobNumber: j.job_number ?? null,
+          title: j.title ?? null,
+          status: j.status ?? null,
+          scheduledStart: j.scheduled_start ?? null,
+          propertyId: j.property_id ?? null,
+          workType: j.work_type ?? null,
+          filmed: true,
+          filmedOn: lastFilmed.get(j.id) ?? null,
+        },
+        addressById,
+        assigned.roleById,
+        timeZone,
+      ),
+    );
+    const q = typeof req.query.q === 'string' ? req.query.q : '';
+    res.json({ jobs: searchFieldJobs(mapped, q) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/field-app/jobs
+ * Open a job from the phone and assign it to this login so it appears on
+ * Today. After a day film is filed, it lands in My jobs.
+ */
+fieldAppRouter.post('/jobs', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { orgId, userId, supabase } = await requireOrgContext(req);
+    const input = fieldCreateJobSchema.parse(req.body);
+    const timeZone = await orgTimezone(supabase, orgId);
+    const scheduledStart = input.scheduledStart ?? new Date().toISOString();
+
+    const { data: property, error: propertyError } = await supabase
+      .from('crm_properties')
+      .insert({
+        org_id: orgId,
+        address_line1: input.address,
+        city: input.city ?? null,
+        created_by: userId,
+      })
+      .select('id')
+      .single();
+    if (propertyError || !property) {
+      throw new HttpError(400, propertyError?.message ?? 'Could not save the address.', 'property_failed');
+    }
+
+    const { data: job, error: jobError } = await supabase
+      .from('crm_jobs')
+      .insert({
+        org_id: orgId,
+        title: input.name,
+        description: input.notes ?? null,
+        work_type: input.workType,
+        status: 'scheduled',
+        property_id: (property as { id: string }).id,
+        owner_id: userId,
+        scheduled_start: scheduledStart,
+        created_by: userId,
+      })
+      .select('id, job_number, title, status, scheduled_start, property_id, work_type')
+      .single();
+    if (jobError || !job) {
+      throw new HttpError(400, jobError?.message ?? 'Could not open that job.', 'job_failed');
+    }
+
+    const { error: assignError } = await supabase.from('job_assignments').insert({
+      org_id: orgId,
+      job_id: (job as JobRow).id,
+      user_id: userId,
+      role_on_job: 'lead',
+      assigned_by: userId,
+    });
+    if (assignError && assignError.code !== '23505') {
+      throw new HttpError(400, assignError.message, 'assign_failed');
+    }
+
+    const row = job as JobRow;
+    const addressById = new Map<string, string>([
+      [row.property_id ?? '', [input.address, input.city].filter(Boolean).join(', ')],
+    ]);
+    res.status(201).json({
+      job: asFieldJob(
+        {
+          id: row.id,
+          jobNumber: row.job_number ?? null,
+          title: row.title ?? null,
+          status: row.status ?? null,
+          scheduledStart: row.scheduled_start ?? scheduledStart,
+          propertyId: row.property_id ?? null,
+          workType: row.work_type ?? input.workType,
+          filmed: false,
+        },
+        addressById,
+        new Map([[row.id, 'lead']]),
+        timeZone,
+      ),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/field-app/invites/accept
+ * A signed-in crew member accepts a job invite onto this login. The job
+ * lands on Today for this account — invites are not a substitute for sign-in.
+ */
+fieldAppRouter.post('/invites/accept', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { orgId, userId, supabase } = await requireOrgContext(req);
+    const input = fieldAcceptInviteSchema.parse(req.body);
+    const admin = await adminOrThrow();
+
+    const { data: party } = await admin
+      .from('job_parties')
+      .select('id, org_id, job_id, role, revoked_at')
+      .eq('access_token', input.token)
+      .maybeSingle();
+    if (!party) throw new HttpError(404, 'This invite is not valid.', 'bad_token');
+    if ((party as { revoked_at?: string | null }).revoked_at) {
+      throw new HttpError(403, 'Access to this job was withdrawn.', 'revoked');
+    }
+    if ((party as { org_id: string }).org_id !== orgId) {
+      throw new HttpError(
+        403,
+        'This invite belongs to another office. Sign in with that office account to accept it.',
+        'wrong_office',
+      );
+    }
+
+    const jobId = (party as { job_id: string }).job_id;
+    const { data: job, error: jobError } = await supabase
+      .from('crm_jobs')
+      .select('id, job_number, title, status, scheduled_start, property_id, work_type')
+      .eq('org_id', orgId)
+      .eq('id', jobId)
+      .maybeSingle();
+    if (jobError || !job) {
+      throw new HttpError(404, 'This job is no longer in your office.', 'job_not_found');
+    }
+
+    const { error: assignError } = await supabase.from('job_assignments').insert({
+      org_id: orgId,
+      job_id: jobId,
+      user_id: userId,
+      role_on_job: (party as { role?: string }).role || 'crew',
+      assigned_by: userId,
+    });
+    if (assignError && assignError.code !== '23505') {
+      throw new HttpError(400, assignError.message, 'assign_failed');
+    }
+
+    if (input.name) {
+      const { data: brief } = await admin
+        .from('job_briefs')
+        .select('revision')
+        .eq('job_id', jobId)
+        .order('revision', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const revision = (brief as { revision?: number } | null)?.revision;
+      if (revision) {
+        const { error: ackError } = await admin.from('job_acknowledgements').insert({
+          org_id: orgId,
+          job_id: jobId,
+          party_id: (party as { id: string }).id,
+          revision,
+          acknowledged_name: input.name,
+        });
+        if (ackError && ackError.code !== '23505') {
+          throw new HttpError(400, ackError.message, 'accept_failed');
+        }
       }
     }
 
-    const out = picked.map((j) => ({
-      id: j.id,
-      number: j.jobNumber != null ? `#${j.jobNumber}` : '',
-      name: j.title || 'Job',
-      address: (j.propertyId && addressById.get(j.propertyId)) || 'Address on file',
-      at: formatTodayAt(j.scheduledStart, j.filmed, timeZone),
-      status: j.status ?? null,
-      placed: Boolean(j.scheduledStart) || j.filmed,
-      filmed: j.filmed,
-      reason: j.reason,
-    }));
-
-    res.json({ jobs: out, today: day });
+    const row = job as JobRow;
+    const timeZone = await orgTimezone(supabase, orgId);
+    const addressById = await addressByPropertyIds(
+      supabase,
+      row.property_id ? [row.property_id] : [],
+    );
+    res.json({
+      job: asFieldJob(
+        {
+          id: row.id,
+          jobNumber: row.job_number ?? null,
+          title: row.title ?? null,
+          status: row.status ?? null,
+          scheduledStart: row.scheduled_start ?? null,
+          propertyId: row.property_id ?? null,
+          workType: row.work_type ?? null,
+          filmed: false,
+        },
+        addressById,
+        new Map([[row.id, (party as { role?: string }).role || 'crew']]),
+        timeZone,
+      ),
+    });
   } catch (err) {
     next(err);
   }
@@ -362,6 +708,40 @@ fieldAppRouter.post(
     } catch (err) {
       if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid request'));
       else next(err);
+    }
+  },
+);
+
+/** POST /api/field-app/jobs/:jobId/mesh/upload-url — RoomPlan USDZ into the same job folder. */
+fieldAppRouter.post(
+  '/jobs/:jobId/mesh/upload-url',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { orgId, userId, supabase } = await requireOrgContext(req);
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', userId)
+        .maybeSingle();
+      const party = await ensureFieldParty(
+        supabase,
+        orgId,
+        req.params.jobId,
+        userId,
+        req.user?.email,
+        (profile as { full_name?: string } | null)?.full_name,
+      );
+      const admin = await adminOrThrow();
+      const partyRow = {
+        id: party.id,
+        org_id: orgId,
+        job_id: req.params.jobId,
+        company: party.company,
+        access_token: party.access_token,
+      };
+      res.json(await createMeshUploadUrl(partyRow, admin));
+    } catch (err) {
+      next(err);
     }
   },
 );

@@ -144,6 +144,30 @@ export async function createUploadUrl(
   return { path, token: signed.token, uploadUrl: signed.signedUrl };
 }
 
+/**
+ * Signed PUT for a RoomPlan USDZ so the twin can store a reachable mesh URL.
+ */
+export async function createMeshUploadUrl(
+  party: any,
+  admin: any,
+): Promise<{ path: string; token: string; uploadUrl: string; downloadUrl: string | null }> {
+  const path = `${party.org_id}/${party.job_id}/${party.id}/twin.usdz`;
+  const { data, error } = await admin.storage.from(PROOF_BUCKET).createSignedUploadUrl(path, {
+    upsert: true,
+  });
+  if (error || !(data as { signedUrl?: string } | null)?.signedUrl) {
+    throw new HttpError(500, error?.message ?? 'Could not mint mesh upload URL', 'mesh_upload_url_failed');
+  }
+  const signed = data as { signedUrl: string; token: string };
+  const download = await admin.storage.from(PROOF_BUCKET).createSignedUrl(path, 60 * 60 * 24 * 365);
+  return {
+    path,
+    token: signed.token,
+    uploadUrl: signed.signedUrl,
+    downloadUrl: (download.data as { signedUrl?: string } | null)?.signedUrl ?? null,
+  };
+}
+
 const recordSchema = z.object({
   workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   phase: z.enum(['before', 'after']),
