@@ -8,7 +8,7 @@
 #   RAILWAY_TOKEN
 # Optional:
 #   RAILWAY_PROJECT_ID   (Project settings → General)
-#   RAILWAY_SERVICE      (service name, default: backend)
+#   RAILWAY_SERVICE      (service name, default: Atmosphere)
 #
 # Put GOOGLE_API_KEY / GOOGLE_MAPS_API_KEY / ANTHROPIC_API_KEY in `Keys`
 # as well (not only the "Google API keys" environment) so this job can see them.
