@@ -199,9 +199,12 @@ reset role;
 create table if not exists public.legacy_jobs (id uuid primary key);
 
 alter table public.memory_events drop constraint if exists memory_events_job_id_fkey;
+-- NOT VALID: production already has job-backed memory rows, so a new FK
+-- cannot be validated against an empty stand-in table. New inserts are still
+-- checked — that is the failure Start a job hits.
 alter table public.memory_events
   add constraint memory_events_job_id_fkey
-  foreign key (job_id) references public.legacy_jobs (id);
+  foreign key (job_id) references public.legacy_jobs (id) not valid;
 
 set role authenticated;
 set request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
