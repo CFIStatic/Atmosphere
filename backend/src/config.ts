@@ -22,6 +22,7 @@ function required(name: string, fallback?: string): string {
 }
 
 const isProduction = (process.env.NODE_ENV ?? 'development') === 'production';
+const computerUseEnabled = (process.env.COMPUTER_USE_ENABLED ?? 'true') !== 'false';
 
 // Development-only convenience defaults. In production these are withheld so a
 // deploy that forgets to set env vars FAILS FAST at boot instead of silently
@@ -665,7 +666,7 @@ export const config = {
     // Feature flag. Computer use hands an AI model the mouse and keyboard of a
     // real machine, so a deployment that does not want it can switch the whole
     // surface off rather than relying on nobody finding the page.
-    enabled: (process.env.COMPUTER_USE_ENABLED ?? 'true') !== 'false',
+    enabled: computerUseEnabled,
 
     // Optional server-wide Anthropic key. When set, the product works with no
     // setup at all; the per-organisation key entered in the UI takes priority.
@@ -673,19 +674,23 @@ export const config = {
 
     // Encrypts organisation Anthropic keys at rest. Server-only, and rotating
     // it invalidates every stored key (organisations simply re-enter theirs).
-    credentialKey: required(
-      'AI_CREDENTIALS_KEY',
-      devOnly('atmosphere-dev-credentials-key-do-not-use-in-production'),
-    ),
+    credentialKey: computerUseEnabled
+      ? required(
+          'AI_CREDENTIALS_KEY',
+          devOnly('atmosphere-dev-credentials-key-do-not-use-in-production'),
+        )
+      : (process.env.AI_CREDENTIALS_KEY ?? ''),
     // Where those encrypted keys live. Ciphertext only — never plaintext.
     credentialStorePath: process.env.AI_CREDENTIALS_PATH ?? '.data/ai-credentials.json',
 
     // Signs the long-lived tokens agents reconnect with. Rotating it unpairs
     // every computer, which is the correct response to a leaked secret.
-    agentTokenSecret: required(
-      'AGENT_TOKEN_SECRET',
-      devOnly('atmosphere-dev-agent-token-secret-do-not-use-in-production'),
-    ),
+    agentTokenSecret: computerUseEnabled
+      ? required(
+          'AGENT_TOKEN_SECRET',
+          devOnly('atmosphere-dev-agent-token-secret-do-not-use-in-production'),
+        )
+      : (process.env.AGENT_TOKEN_SECRET ?? ''),
 
     defaultModel: process.env.COMPUTER_USE_MODEL ?? 'claude-opus-5',
     defaultQuality: (process.env.COMPUTER_USE_QUALITY ?? 'balanced') as

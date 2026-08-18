@@ -64,21 +64,24 @@ jobs:
           NODE_ENV: production
           PORT: '4000'
           MEDIA_BACKEND: supabase
+          COMPUTER_USE_ENABLED: 'false'
+          BACKUP_ENABLED: 'false'
+          ALLOW_MOCK_DRIVERS: 'true'
           FRONTEND_ORIGIN: ${{ vars.FRONTEND_ORIGIN || 'https://app.atmosphereteam.com' }}
-          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          DEVICE_PEPPER: ${{ secrets.DEVICE_PEPPER }}
-          AI_CREDENTIALS_KEY: ${{ secrets.AI_CREDENTIALS_KEY }}
-          AGENT_TOKEN_SECRET: ${{ secrets.AGENT_TOKEN_SECRET }}
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          CAREERS_FROM_EMAIL: ${{ vars.CAREERS_FROM_EMAIL }}
-          CONTACT_TO_EMAIL: ${{ vars.CONTACT_TO_EMAIL }}
-          CAREERS_TO_EMAIL: ${{ vars.CAREERS_TO_EMAIL }}
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || vars.SUPABASE_SERVICE_ROLE_KEY }}
+          DEVICE_PEPPER: ${{ secrets.DEVICE_PEPPER || vars.DEVICE_PEPPER }}
+          AI_CREDENTIALS_KEY: ${{ secrets.AI_CREDENTIALS_KEY || vars.AI_CREDENTIALS_KEY }}
+          AGENT_TOKEN_SECRET: ${{ secrets.AGENT_TOKEN_SECRET || vars.AGENT_TOKEN_SECRET }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY || vars.RESEND_API_KEY }}
+          CAREERS_FROM_EMAIL: ${{ vars.CAREERS_FROM_EMAIL || secrets.CAREERS_FROM_EMAIL }}
+          CONTACT_TO_EMAIL: ${{ vars.CONTACT_TO_EMAIL || secrets.CONTACT_TO_EMAIL }}
+          CAREERS_TO_EMAIL: ${{ vars.CAREERS_TO_EMAIL || secrets.CAREERS_TO_EMAIL }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY || vars.GOOGLE_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || vars.GEMINI_API_KEY }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY || vars.GOOGLE_MAPS_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || vars.ANTHROPIC_API_KEY }}
           ANTHROPIC_MODEL: claude-sonnet-5
           VERIFICATION_PRIMARY_MODEL: gemini-2.5-flash
           VERIFICATION_ESCALATION_MODEL: claude-sonnet-5
