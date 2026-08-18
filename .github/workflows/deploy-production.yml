@@ -1,28 +1,32 @@
-# Deploy the Work Verification backend to Railway using the GitHub
-# environment named `Keys` (secrets + variables you already added).
-#
-# Railway does not read GitHub Environments on its own. This workflow is the
-# bridge: it copies Keys → Railway, then deploys `backend/`.
-#
-# One extra secret in Keys (from Railway → Account → Tokens):
-#   RAILWAY_TOKEN
-# Optional:
-#   RAILWAY_PROJECT_ID   (Project settings → General)
-#   RAILWAY_SERVICE      (service name, default: backend)
-#
-# Put GOOGLE_API_KEY / GOOGLE_MAPS_API_KEY / ANTHROPIC_API_KEY in `Keys`
-# as well (not only the "Google API keys" environment) so this job can see them.
+# Deploy Work Verification to Railway from GitHub Keys.
 #
 # Run: Actions → Deploy Work Verification → Run workflow
+#   Branch: cursor/host-office-frontend-51c8 (until this is on main)
+#   deploy: office   ← the sign-in app (Atmosphere-web)
+#   deploy: backend  ← the JSON API (Atmosphere)
+#
+# The office app is a different URL than atmosphere-production.up.railway.app.
 
 name: Deploy Work Verification
 
 on:
   workflow_dispatch:
+    inputs:
+      deploy:
+        description: What to deploy
+        type: choice
+        options:
+          - office
+          - backend
+          - both
+        default: office
   push:
     branches: [main]
     paths:
       - 'backend/**'
+      - 'frontend/**'
+      - 'verifier/**'
+      - 'fieldcapture/**'
       - '.github/workflows/deploy-production.yml'
 
 concurrency:
@@ -32,6 +36,7 @@ concurrency:
 jobs:
   backend:
     name: Sync Keys → Railway and deploy backend
+    if: github.event_name == 'push' || github.event.inputs.deploy == 'backend' || github.event.inputs.deploy == 'both'
     runs-on: ubuntu-latest
     environment: Keys
     defaults:
@@ -95,3 +100,68 @@ jobs:
           else
             railway up --ci
           fi
+
+  office:
+    name: Deploy office console
+    if: github.event_name == 'push' || github.event.inputs.deploy != 'backend'
+    runs-on: ubuntu-latest
+    environment: Keys
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+      RAILWAY_WEB_SERVICE: ${{ secrets.RAILWAY_WEB_SERVICE || vars.RAILWAY_WEB_SERVICE || 'Atmosphere-web' }}
+      RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere' }}
+      API_UPSTREAM: ${{ vars.API_UPSTREAM || 'https://atmosphere-production.up.railway.app' }}
+      EXISTING_FRONTEND_ORIGIN: ${{ vars.FRONTEND_ORIGIN || 'https://app.atmosphereteam.com' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require Railway token
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "Add RAILWAY_TOKEN to the GitHub environment Keys."
+            exit 1
+          fi
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Link Railway project
+        run: |
+          if [ -n "$RAILWAY_PROJECT_ID" ]; then
+            railway link --project "$RAILWAY_PROJECT_ID" || true
+          fi
+
+      - name: Create Atmosphere-web service if needed
+        run: |
+          railway add --service "$RAILWAY_WEB_SERVICE" || true
+          railway status --service "$RAILWAY_WEB_SERVICE" || railway status || true
+
+      - name: Point nginx at the live API
+        run: |
+          echo "API_UPSTREAM=$API_UPSTREAM"
+          printf '%s' "$API_UPSTREAM" | railway variable set API_UPSTREAM --stdin --skip-deploys --service "$RAILWAY_WEB_SERVICE"
+          printf '%s' 'frontend/Dockerfile' | railway variable set RAILWAY_DOCKERFILE_PATH --stdin --skip-deploys --service "$RAILWAY_WEB_SERVICE"
+
+      - name: Deploy office image
+        run: |
+          cp frontend/railway.toml railway.toml
+          echo "Deploying Railway service: $RAILWAY_WEB_SERVICE"
+          railway up --ci --service "$RAILWAY_WEB_SERVICE"
+
+      - name: Generate domain and allow CORS on the BFF
+        run: |
+          set -euo pipefail
+          railway domain --service "$RAILWAY_WEB_SERVICE" || true
+          BUNDLE="$( { railway domain --service "$RAILWAY_WEB_SERVICE" || true; railway status --json --service "$RAILWAY_WEB_SERVICE" || true; railway status --json || true; } 2>&1 )"
+          echo "$BUNDLE"
+          DOMAIN="$(printf '%s' "$BUNDLE" | node frontend/scripts/officeDomain.mjs || true)"
+          if [ -z "${DOMAIN:-}" ]; then
+            echo "Could not read a Railway domain yet. Generate Domain on Atmosphere-web, then re-run this workflow."
+            exit 0
+          fi
+          echo "Office origin: $DOMAIN"
+          MERGED="$(printf '%s\n%s\n' "$DOMAIN" "$EXISTING_FRONTEND_ORIGIN" | tr ',' '\n' | sed '/^$/d' | awk '!seen[$0]++' | paste -sd, -)"
+          echo "FRONTEND_ORIGIN=$MERGED"
+          printf '%s' "$MERGED" | railway variable set FRONTEND_ORIGIN --stdin --service "$RAILWAY_SERVICE"
+          echo "Open $DOMAIN to sign in. That is not atmosphere-production.up.railway.app."

@@ -26,7 +26,8 @@ so login cookies stay first-party.
 
 1. In the same Railway project as **Atmosphere**, create an empty service named
    **Atmosphere-web** (Actions will try `railway add` if it is missing).
-2. GitHub → Actions → **Deploy Office Console** → Run workflow.
+2. GitHub → Actions → **Deploy Work Verification** → Run workflow
+   on branch `cursor/host-office-frontend-51c8`, with **deploy: office**.
 3. Generate a public domain on **Atmosphere-web** if Actions did not already.
 4. Open that URL — you should see the Atmosphere sign-in screen, not JSON.
 5. Put the origin on the BFF CORS list (`FRONTEND_ORIGIN`, comma-separated). The
