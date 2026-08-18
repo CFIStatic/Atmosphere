@@ -1,7 +1,6 @@
 import type { Session, User } from '@supabase/supabase-js';
-import { config } from '../config.js';
 import { createAdminClient, createAnonClient } from '../lib/supabase.js';
-import { HttpError, serviceUnavailable } from '../lib/errors.js';
+import { HttpError, serviceUnavailable, unauthorized } from '../lib/errors.js';
 import { isTransient } from '../lib/upstream.js';
 
 /**
@@ -52,6 +51,29 @@ export type PasswordAccountFail = {
 
 export type PasswordAccountResult = PasswordAccountOk | PasswordAccountConfirm | PasswordAccountFail;
 
+export function isAlreadyRegisteredMessage(message: string): boolean {
+  return /already|registered|exists/i.test(message);
+}
+
+export function isEmailUnconfirmedError(error: { message?: string; code?: string } | null | undefined): boolean {
+  if (!error) return false;
+  const code = (error.code ?? '').toLowerCase();
+  const message = (error.message ?? '').toLowerCase();
+  return (
+    code === 'email_not_confirmed' ||
+    message.includes('email not confirmed') ||
+    message.includes('email_not_confirmed') ||
+    /not confirmed/.test(message)
+  );
+}
+
+export function isUnconfirmedAuthUser(user: {
+  email_confirmed_at?: string | null;
+  confirmed_at?: string | null;
+}): boolean {
+  return !user.email_confirmed_at && !user.confirmed_at;
+}
+
 async function signInWithPassword(
   email: string,
   password: string,
@@ -60,22 +82,61 @@ async function signInWithPassword(
   const signedIn = await supabase.auth.signInWithPassword({ email, password });
   if (signedIn.error || !signedIn.data.session || !signedIn.data.user) {
     if (signedIn.error) {
-      console.warn('[signup] password sign-in failed:', signedIn.error.message);
+      console.warn('[auth] password sign-in failed:', signedIn.error.message);
     }
     return null;
   }
   return { user: signedIn.data.user, session: signedIn.data.session };
 }
 
+async function findAuthUserByEmail(email: string): Promise<User | null> {
+  const admin = createAdminClient();
+  if (!admin) return null;
+  const needle = email.trim().toLowerCase();
+  for (let page = 1; page <= 10; page += 1) {
+    const listed = await admin.auth.admin.listUsers({ page, perPage: 200 });
+    if (listed.error || !listed.data?.users?.length) return null;
+    const match = listed.data.users.find((user) => (user.email ?? '').toLowerCase() === needle);
+    if (match) return match;
+    if (listed.data.users.length < 200) return null;
+  }
+  return null;
+}
+
 /**
- * Non-production path: create any email via the admin API with email already
- * confirmed. Avoids Supabase's built-in SMTP rate limit (~2 confirmation emails
- * / hour), which otherwise blocks "new user" signup during local/preview work.
+ * Unconfirmed Auth users never completed signup (Supabase "Confirm email" is
+ * on, and the confirmation mail often never arrives). The first password
+ * submitted on login or signup claims that row so the office console works.
  */
-async function signupViaAdmin(
+async function claimUnconfirmedAccount(
   email: string,
   password: string,
+  status: 200 | 201,
 ): Promise<PasswordAccountOk | null> {
+  const admin = createAdminClient();
+  if (!admin) return null;
+  const user = await findAuthUserByEmail(email);
+  if (!user || !isUnconfirmedAuthUser(user)) return null;
+
+  const updated = await admin.auth.admin.updateUserById(user.id, {
+    password,
+    email_confirm: true,
+  });
+  if (updated.error) {
+    console.warn('[auth] confirm user:', updated.error.message);
+    return null;
+  }
+
+  const signedIn = await signInWithPassword(email, password);
+  if (!signedIn) return null;
+  return { kind: 'session', status, user: signedIn.user, session: signedIn.session };
+}
+
+/**
+ * Create a confirmed user via the service role so signup does not depend on
+ * Supabase's built-in confirmation SMTP (~2 mails / hour, often unset).
+ */
+async function signupViaAdmin(email: string, password: string): Promise<PasswordAccountOk | null> {
   const admin = createAdminClient();
   if (!admin) return null;
 
@@ -87,10 +148,12 @@ async function signupViaAdmin(
 
   if (created.error) {
     console.warn('[signup] admin.createUser:', created.error.message);
-    if (/already|registered|exists/i.test(created.error.message)) {
+    if (isAlreadyRegisteredMessage(created.error.message)) {
       const existing = await signInWithPassword(email, password);
-      if (!existing) return null;
-      return { kind: 'session', status: 200, user: existing.user, session: existing.session };
+      if (existing) {
+        return { kind: 'session', status: 200, user: existing.user, session: existing.session };
+      }
+      return claimUnconfirmedAccount(email, password, 200);
     }
     return null;
   }
@@ -98,6 +161,29 @@ async function signupViaAdmin(
   const signedIn = await signInWithPassword(email, password);
   if (!signedIn) return null;
   return { kind: 'session', status: 201, user: signedIn.user, session: signedIn.session };
+}
+
+/**
+ * Password sign-in for the dashboard. Unconfirmed rows are claimed with the
+ * password just entered so "Invalid email or password" is not what you get
+ * after Create account with Confirm email still on in Supabase.
+ */
+export async function signInPasswordAccount(
+  email: string,
+  password: string,
+): Promise<PasswordAccountOk | PasswordAccountFail> {
+  const existing = await signInWithPassword(email, password);
+  if (existing) {
+    return { kind: 'session', status: 200, user: existing.user, session: existing.session };
+  }
+
+  const claimed = await claimUnconfirmedAccount(email, password, 200);
+  if (claimed) return claimed;
+
+  return {
+    kind: 'error',
+    error: unauthorized('Invalid email or password', 'invalid_credentials'),
+  };
 }
 
 /**
@@ -109,15 +195,13 @@ export async function createPasswordAccount(
   email: string,
   password: string,
 ): Promise<PasswordAccountResult> {
-  if (!config.isProduction) {
-    const viaAdmin = await signupViaAdmin(email, password);
-    if (viaAdmin) return viaAdmin;
+  const viaAdmin = await signupViaAdmin(email, password);
+  if (viaAdmin) return viaAdmin;
 
-    if (!createAdminClient()) {
-      console.warn(
-        '[signup] SUPABASE_SERVICE_ROLE_KEY is unset — public Auth signup will hit email rate limits. Set the service role key in backend/.env for unrestricted local signups.',
-      );
-    }
+  if (!createAdminClient()) {
+    console.warn(
+      '[signup] SUPABASE_SERVICE_ROLE_KEY is unset — public Auth signup will hit email confirmation. Set the service role key so office sign-in works without a confirmation mail.',
+    );
   }
 
   const supabase = createAnonClient();
@@ -132,17 +216,18 @@ export async function createPasswordAccount(
     console.warn('[signup] supabase error:', error.status, error.message);
 
     if (error.status === 429) {
-      const viaAdmin = await signupViaAdmin(email, password);
-      if (viaAdmin) return viaAdmin;
       return {
         kind: 'error',
         error: new HttpError(
           429,
-          'Too many sign-up attempts right now. Set SUPABASE_SERVICE_ROLE_KEY on the BFF for unrestricted local signups, or wait a few minutes and try again.',
+          'Too many sign-up attempts right now. Wait a few minutes and try again.',
           'rate_limited',
         ),
       };
     }
+
+    const claimed = await claimUnconfirmedAccount(email, password, 200);
+    if (claimed) return claimed;
 
     return {
       kind: 'error',
@@ -158,15 +243,9 @@ export async function createPasswordAccount(
     return { kind: 'session', status: 201, user: data.user, session: data.session };
   }
 
-  if (!config.isProduction && data.user?.id) {
-    const admin = createAdminClient();
-    if (admin) {
-      await admin.auth.admin.updateUserById(data.user.id, { email_confirm: true });
-      const signedIn = await signInWithPassword(email, password);
-      if (signedIn) {
-        return { kind: 'session', status: 201, user: signedIn.user, session: signedIn.session };
-      }
-    }
+  if (data.user?.id) {
+    const claimed = await claimUnconfirmedAccount(email, password, 201);
+    if (claimed) return claimed;
   }
 
   return {

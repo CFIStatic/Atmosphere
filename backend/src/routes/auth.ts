@@ -16,8 +16,7 @@ import {
   pinSchema,
   pinUnlockSchema,
 } from '../lib/validation.js';
-import { badRequest, unauthorized, serviceUnavailable, HttpError } from '../lib/errors.js';
-import { isTransient } from '../lib/upstream.js';
+import { badRequest, unauthorized, HttpError } from '../lib/errors.js';
 import {
   newDeviceSecret,
   newPinSalt,
@@ -28,7 +27,7 @@ import {
 } from '../lib/deviceCrypto.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { recordEvent } from '../lib/memory.js';
-import { createPasswordAccount, publicUser, sessionTokens } from '../auth/passwordAccount.js';
+import { createPasswordAccount, publicUser, sessionTokens, signInPasswordAccount } from '../auth/passwordAccount.js';
 
 export const authRouter = Router();
 
@@ -58,9 +57,9 @@ export const authLimiter = rateLimit({
  * Returns session tokens in the JSON body for native clients (Field Capture
  * stores them in Keychain). The dashboard also receives httpOnly cookies.
  *
- * Development / preview: prefers admin.createUser (service role) so signup
- * works for arbitrary emails without burning Supabase's built-in email quota.
- * Production: uses the public Auth signup path (confirmation emails as configured).
+ * Development / preview / production: prefers admin.createUser (service role)
+ * so the office console gets a session without waiting on a confirmation email.
+ * Public Auth signup is the fallback when the service role key is unset.
  */
 authRouter.post('/signup', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -96,36 +95,24 @@ authRouter.post('/signup', authLimiter, async (req: Request, res: Response, next
 authRouter.post('/login', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email, password } = credentialsSchema.parse(req.body);
-    const supabase = createAnonClient();
+    const result = await signInPasswordAccount(email, password);
 
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (result.kind === 'error') throw result.error;
 
-    // An unreachable or failing auth service is NOT a credential problem. Saying
-    // "invalid email or password" during an outage sends users off resetting a
-    // password that was never wrong, and buries the real incident.
-    if (error && isTransient(error)) {
-      console.warn('[login] upstream failure:', error.status, error.message);
-      throw serviceUnavailable();
-    }
-
-    if (error || !data.session || !data.user) {
-      // Genuine rejection. Do not reveal whether the email exists.
-      throw unauthorized('Invalid email or password', 'invalid_credentials');
-    }
-
-    setSessionCookies(res, data.session);
+    const { user, session } = result;
+    setSessionCookies(res, session);
 
     // Signing in is a real event with no row behind it, so the trigger that
     // records everything else cannot see it. Recorded here instead — and
     // deliberately awaited before responding, so a sign-in never lands in the
     // memory after the work that followed it.
-    await recordEvent(createUserClient(data.session.access_token), {
+    await recordEvent(createUserClient(session.access_token), {
       type: 'auth.signed_in',
       summary: 'signed in with a password',
-      entityId: data.user.id,
+      entityId: user.id,
     });
 
-    res.json({ user: publicUser(data.user), session: sessionTokens(data.session) });
+    res.json({ user: publicUser(user), session: sessionTokens(session) });
   } catch (err) {
     next(err);
   }
