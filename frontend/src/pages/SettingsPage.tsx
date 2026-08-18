@@ -896,8 +896,7 @@ function PreferencesSection() {
           <div>
             <p className="text-sm font-medium text-ink-900">Appearance</p>
             <p className="mt-0.5 text-sm text-ink-600">
-              Applies across every screen in this browser — dark, light, or match
-              the device.
+              Light or dark — applies across every screen in this browser.
             </p>
           </div>
           <div className="flex rounded-lg glass-card p-1">
@@ -905,7 +904,6 @@ function PreferencesSection() {
               [
                 { mode: 'dark', label: 'Dark' },
                 { mode: 'light', label: 'Light' },
-                { mode: 'system', label: 'System' },
               ] as const
             ).map(({ mode, label }) => (
               <button
