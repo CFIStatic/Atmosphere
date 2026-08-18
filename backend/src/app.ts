@@ -64,15 +64,22 @@ import { requestLog } from './middleware/requestLog.js';
 import { cyberMonitor } from './cyber/index.js';
 import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
 import { verificationHook, pumpVerificationQueue } from './lib/verifierRunner.js';
-import { isCloudflareQuickTunnelOrigin } from './lib/previewOrigins.js';
+import { forbidden } from './lib/errors.js';
+import {
+  isAtmosphereRailwayWebOrigin,
+  isCloudflareQuickTunnelOrigin,
+} from './lib/previewOrigins.js';
 
 /**
  * Match a browser Origin against FRONTEND_ORIGIN.
  * In development, treat localhost and 127.0.0.1 as interchangeable — Cursor's
  * preview and some OS stacks use one while .env lists the other.
+ * Production also allows the Atmosphere-web Railway hostname so the office
+ * console can call /api before app.atmosphereteam.com DNS is wired.
  */
 function isAllowedFrontendOrigin(origin: string): boolean {
   if (config.frontendOrigins.includes(origin)) return true;
+  if (isAtmosphereRailwayWebOrigin(origin)) return true;
   if (config.isProduction) return false;
 
   let alt: string | null = null;
@@ -125,7 +132,9 @@ export function createApp(): Express {
           callback(null, true);
           return;
         }
-        callback(new Error(`Origin not allowed by CORS: ${origin}`));
+        // Reject the request (do not callback(null, false) — cors would still
+        // run the handler). Use HttpError so this is a 403, not a 500.
+        callback(forbidden('Origin not allowed', 'cors_origin_denied'));
       },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

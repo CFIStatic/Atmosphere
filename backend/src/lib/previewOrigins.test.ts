@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { isCloudflareQuickTunnelOrigin } from './previewOrigins.js';
+import {
+  isAtmosphereRailwayWebOrigin,
+  isCloudflareQuickTunnelOrigin,
+} from './previewOrigins.js';
 
 describe('isCloudflareQuickTunnelOrigin', () => {
   it('accepts a Cloudflare quick-tunnel HTTPS origin', () => {
@@ -18,5 +21,42 @@ describe('isCloudflareQuickTunnelOrigin', () => {
       false,
     );
     assert.equal(isCloudflareQuickTunnelOrigin('https://app.atmosphere.dev'), false);
+  });
+});
+
+describe('isAtmosphereRailwayWebOrigin', () => {
+  it('accepts the production Atmosphere-web Railway hostname', () => {
+    assert.equal(
+      isAtmosphereRailwayWebOrigin('https://atmosphere-web-production.up.railway.app'),
+      true,
+    );
+  });
+
+  it('accepts the unsuffixed service hostname and other Railway environments', () => {
+    assert.equal(isAtmosphereRailwayWebOrigin('https://atmosphere-web.up.railway.app'), true);
+    assert.equal(
+      isAtmosphereRailwayWebOrigin('https://atmosphere-web-staging.up.railway.app'),
+      true,
+    );
+  });
+
+  it('rejects lookalikes and other Railway services', () => {
+    assert.equal(
+      isAtmosphereRailwayWebOrigin('http://atmosphere-web-production.up.railway.app'),
+      false,
+    );
+    assert.equal(
+      isAtmosphereRailwayWebOrigin('https://atmosphere-production.up.railway.app'),
+      false,
+    );
+    assert.equal(
+      isAtmosphereRailwayWebOrigin('https://atmosphere-web-production.up.railway.app.evil.com'),
+      false,
+    );
+    assert.equal(
+      isAtmosphereRailwayWebOrigin('https://evil-atmosphere-web.up.railway.app'),
+      false,
+    );
+    assert.equal(isAtmosphereRailwayWebOrigin('https://app.atmosphereteam.com'), false);
   });
 });
