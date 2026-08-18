@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import {
+  coerceThemePreference,
   initTheme,
-  isThemePreference,
   persistThemePreference,
   readThemePreference,
   subscribeTheme,
@@ -23,8 +23,7 @@ export interface Preferences {
   /** Ask for confirmation before signing out. */
   confirmSignOut: boolean;
   /**
-   * Appearance: explicit light/dark, or follow the device (`system`).
-   * The resolved palette is applied as `data-theme` on <html>.
+   * Appearance: light or dark. Applied as `data-theme` on <html>.
    */
   theme: ThemePreference;
 }
@@ -32,7 +31,7 @@ export interface Preferences {
 export const DEFAULT_PREFERENCES: Preferences = {
   reduceMotion: false,
   confirmSignOut: false,
-  theme: 'system',
+  theme: 'dark',
 };
 
 const STORAGE_KEY = 'atmosphere.preferences';
@@ -42,11 +41,10 @@ const listeners = new Set<() => void>();
 
 function normalize(parsed: Partial<Preferences>, opts?: { hadStoredBlob?: boolean }): Preferences {
   let theme: ThemePreference;
-  if (isThemePreference(parsed.theme)) {
-    theme = parsed.theme;
+  if (parsed.theme != null) {
+    theme = coerceThemePreference(parsed.theme);
   } else if (opts?.hadStoredBlob) {
-    // Pre-system installs defaulted to dark when theme was absent from the blob.
-    // Keep that continuity unless a newer atmosphere.theme / atm-theme key exists.
+    // Pre-theme-key installs defaulted to dark when theme was absent from the blob.
     const migrated = readThemePreference();
     const hasExplicitThemeKey =
       typeof window !== 'undefined' &&
@@ -85,15 +83,12 @@ function read(): Preferences {
 function applyDocumentPreferences(prefs: Preferences) {
   if (typeof document === 'undefined') return;
   document.documentElement.classList.toggle('reduce-motion', prefs.reduceMotion);
-  // Theme tokens key off data-theme; preference mode is also stamped so the
-  // header control can show System vs an explicit choice. syncThemeRuntime
-  // keeps the OS media-query watcher attached while preference === 'system'.
   syncThemeRuntime(prefs.theme);
 }
 
 /** Called once at startup, before React renders, to avoid a flash of animation. */
 export function initPreferences(): void {
-  // initTheme wires the OS media-query watcher and cross-tab sync; then we
+  // initTheme applies the stored light/dark choice and cross-tab sync; then we
   // load the full preferences blob (which may refine theme from the same keys).
   initTheme();
   current = read();

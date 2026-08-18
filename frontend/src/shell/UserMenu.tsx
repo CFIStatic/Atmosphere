@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Check, Eye, LogOut, Monitor, Moon, Sun, User } from 'lucide-react';
+import { Check, Eye, LogOut, Moon, Sun, User } from 'lucide-react';
 import { Badge, Button, Popover, cn } from '../design';
 import { useAuth } from '../context/AuthContext';
 import { labelForRole } from '../domain/approvals';
@@ -24,7 +24,7 @@ export function UserMenu() {
   const navigate = useNavigate();
 
   const initials = (user?.email ?? '?').slice(0, 2).toUpperCase();
-  const ThemeIcon = preference === 'system' ? Monitor : theme === 'dark' ? Moon : Sun;
+  const ThemeIcon = theme === 'dark' ? Moon : Sun;
 
   return (
     <Popover

@@ -6,7 +6,6 @@ import { displayName, initials, nameFromMetadata } from '../lib/display';
 import { setPreference, usePreferences } from '../lib/preferences';
 import {
   cycleThemePreference,
-  resolveTheme,
   themeLabel,
 } from '../lib/theme';
 import { PLATFORMS, VISIBLE_PLATFORM_IDS, platformOfPath } from '../lib/platforms';
@@ -20,7 +19,6 @@ import {
   LogOutIcon,
   MenuIcon,
   MicIcon,
-  MonitorIcon,
   MoonIcon,
   SearchIcon,
   SettingsIcon,
@@ -212,25 +210,22 @@ export function AppShell({
 }
 
 /**
- * Cycles System → Light → Dark. The icon shows the *current* preference so a
- * dark choice stays dark on every route until the user changes it — including
- * when the OS would have preferred light.
+ * One click between light and dark. The icon is the destination: moon in
+ * light (switch to dark), sun in dark (switch to light).
  */
 function ThemeToggle() {
   const { theme } = usePreferences();
   const next = cycleThemePreference(theme);
-  const resolved = resolveTheme(theme);
   const label = themeLabel(theme);
   return (
     <button
+      type="button"
       onClick={() => setPreference('theme', next)}
-      aria-label={`Appearance: ${label}. Click for ${themeLabel(next)}.`}
-      title={`Appearance: ${label} (click for ${themeLabel(next).toLowerCase()})`}
+      aria-label={`Switch to ${themeLabel(next).toLowerCase()} mode`}
+      title={`${label} mode. Click for ${themeLabel(next).toLowerCase()}.`}
       className="grid h-8 w-8 place-items-center rounded-full border border-line text-ink-600 transition hover:border-line-strong hover:text-ink-900"
     >
-      {theme === 'system' ? (
-        <MonitorIcon width={15} height={15} />
-      ) : resolved === 'dark' ? (
+      {next === 'dark' ? (
         <MoonIcon width={15} height={15} />
       ) : (
         <SunIcon width={15} height={15} />

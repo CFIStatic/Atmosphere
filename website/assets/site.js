@@ -71,97 +71,85 @@
     }, { rootMargin: '-25% 0px -65% 0px' });
     Object.keys(byId).forEach(function (id) { io.observe(document.getElementById(id)); });
   });
-  // Appearance: System → Light → Dark. Same keys as the React console so a
+  // Appearance: Light ↔ Dark. Same keys as the React console so a
   // choice made in either place sticks everywhere on this origin.
   var THEME_KEY = 'atmosphere.theme';
   var PREFS_KEY = 'atmosphere.preferences';
   var LEGACY_THEME_KEY = 'atm-theme';
-  var THEME_CYCLE = ['system', 'light', 'dark'];
+
+  function osTheme() {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  function coerceTheme(p) {
+    if (p === 'light' || p === 'dark') return p;
+    return osTheme();
+  }
 
   function readThemePref() {
     try {
       var p = localStorage.getItem(THEME_KEY);
-      if (p === 'light' || p === 'dark' || p === 'system') return p;
+      if (p === 'light' || p === 'dark' || p === 'system') return coerceTheme(p);
       try {
         var prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
         if (prefs.theme === 'light' || prefs.theme === 'dark' || prefs.theme === 'system') {
-          return prefs.theme;
+          return coerceTheme(prefs.theme);
         }
       } catch (e) { /* ignore */ }
       p = localStorage.getItem(LEGACY_THEME_KEY);
       if (p === 'light' || p === 'dark') return p;
     } catch (e) { /* private mode */ }
-    return 'system';
-  }
-
-  function resolveTheme(pref) {
-    if (pref === 'light' || pref === 'dark') return pref;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    return osTheme();
   }
 
   function persistThemePref(pref) {
+    pref = coerceTheme(pref);
     try {
       localStorage.setItem(THEME_KEY, pref);
       var prefs = {};
       try { prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}') || {}; } catch (e) { prefs = {}; }
       prefs.theme = pref;
       localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
-      if (pref === 'system') localStorage.removeItem(LEGACY_THEME_KEY);
-      else localStorage.setItem(LEGACY_THEME_KEY, pref);
+      localStorage.setItem(LEGACY_THEME_KEY, pref);
     } catch (e) { /* private mode */ }
   }
 
   function applyThemePref(pref) {
+    pref = coerceTheme(pref);
     var root = document.documentElement;
-    var resolved = resolveTheme(pref);
-    root.setAttribute('data-theme', resolved);
+    root.setAttribute('data-theme', pref);
     root.setAttribute('data-theme-preference', pref);
-    return resolved;
+    return pref;
   }
 
   function themeLabel(pref) {
-    return pref === 'system' ? 'System' : pref === 'light' ? 'Light' : 'Dark';
+    return pref === 'light' ? 'Light' : 'Dark';
+  }
+
+  function labelToggle(toggle, pref) {
+    var next = pref === 'dark' ? 'light' : 'dark';
+    toggle.setAttribute('aria-label', 'Switch to ' + next + ' mode');
+    toggle.setAttribute('title', themeLabel(pref) + ' mode. Click for ' + next + '.');
   }
 
   var toggle = document.getElementById('theme-toggle');
   if (toggle) {
-    // Ensure a monitor glyph exists for the System state without editing every HTML file.
-    if (!toggle.querySelector('.icon-system')) {
-      toggle.insertAdjacentHTML(
-        'beforeend',
-        '<svg class="icon-system" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">' +
-          '<rect x="1.5" y="2.5" width="13" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/>' +
-          '<path d="M5.5 14h5M8 11.5V14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>' +
-        '</svg>'
-      );
-    }
+    var leftover = toggle.querySelector('.icon-system');
+    if (leftover) leftover.remove();
 
-    var media = window.matchMedia('(prefers-color-scheme: dark)');
     function paintFromStore() {
       var pref = readThemePref();
+      persistThemePref(pref);
       applyThemePref(pref);
-      toggle.setAttribute(
-        'aria-label',
-        'Appearance: ' + themeLabel(pref) + '. Click to change.'
-      );
-      toggle.setAttribute('title', 'Appearance: ' + themeLabel(pref));
+      labelToggle(toggle, pref);
     }
     paintFromStore();
-    media.addEventListener('change', function () {
-      if (readThemePref() === 'system') applyThemePref('system');
-    });
 
     toggle.addEventListener('click', function () {
-      var current = readThemePref();
-      var idx = THEME_CYCLE.indexOf(current);
-      var next = THEME_CYCLE[(idx + 1) % THEME_CYCLE.length];
+      var next = readThemePref() === 'dark' ? 'light' : 'dark';
       persistThemePref(next);
       applyThemePref(next);
-      toggle.setAttribute(
-        'aria-label',
-        'Appearance: ' + themeLabel(next) + '. Click to change.'
-      );
-      toggle.setAttribute('title', 'Appearance: ' + themeLabel(next));
+      labelToggle(toggle, next);
     });
   }
   // Replay restarts the receipt animation — the audit trail's replay, embodied.

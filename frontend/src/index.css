@@ -8,9 +8,9 @@
  * Every color in tailwind.config.js resolves to one of these variables, stored
  * as `R G B` triplets so Tailwind's opacity modifiers keep working.
  *
- * `data-theme` is always the *resolved* palette (`dark` | `light`), applied
- * from the user's light / dark / system preference (see lib/theme.ts). The
- * preference itself is also stamped as `data-theme-preference`. Semantics are
+ * `data-theme` is always the palette (`dark` | `light`), applied from the
+ * user's light or dark preference (see lib/theme.ts). The same value is
+ * stamped as `data-theme-preference`. Semantics are
  * identical in both sets — paper is surfaces page-to-card, ink is text
  * strongest-first, tint steps (50/100/200) are backgrounds and 600+ reads on
  * top of them — so screens never branch on the theme.

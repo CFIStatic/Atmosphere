@@ -15,27 +15,17 @@
   (function () {
     try {
       var p = localStorage.getItem('atmosphere.theme');
-      if (p !== 'light' && p !== 'dark' && p !== 'system') {
+      if (p !== 'light' && p !== 'dark') {
         try { p = JSON.parse(localStorage.getItem('atmosphere.preferences') || '{}').theme; } catch (e) {}
       }
-      if (p !== 'light' && p !== 'dark' && p !== 'system') p = localStorage.getItem('atm-theme');
-      if (p !== 'light' && p !== 'dark' && p !== 'system') p = 'system';
-      var r = p === 'system'
-        ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-        : p;
-      document.documentElement.setAttribute('data-theme', r);
+      if (p !== 'light' && p !== 'dark') p = localStorage.getItem('atm-theme');
+      if (p !== 'light' && p !== 'dark') {
+        p = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      document.documentElement.setAttribute('data-theme', p);
       document.documentElement.setAttribute('data-theme-preference', p);
     } catch (e) {}
   })();
-  try {
-    if (document.documentElement.getAttribute('data-theme-preference') === 'system') {
-      matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
-        if (document.documentElement.getAttribute('data-theme-preference') !== 'system') return;
-        var r = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-        document.documentElement.setAttribute('data-theme', r);
-      });
-    }
-  } catch (e) {}
 </script>
 <style>
   /* ---------------------------------------------------------------------

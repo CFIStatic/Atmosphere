@@ -249,7 +249,7 @@ a { color: inherit; }
 }
 .nav-links a.btn-quiet:hover { border-color: var(--ink-faint); }
 
-/* Theme toggle — icon reflects the stored preference (system / light / dark). */
+/* Theme toggle — moon in light (switch to dark), sun in dark (switch to light). */
 .theme-toggle {
   width: 34px; height: 34px; flex: none;
   display: inline-flex; align-items: center; justify-content: center;
@@ -259,18 +259,9 @@ a { color: inherit; }
 }
 .theme-toggle:hover { color: var(--ink); border-color: var(--ink-faint); }
 .theme-toggle svg { display: none; }
-/* Default before preference is stamped: follow resolved palette. */
+.theme-toggle .icon-system { display: none !important; }
 :root[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
 :root[data-theme="light"] .theme-toggle .icon-moon { display: block; }
-:root[data-theme-preference="system"] .theme-toggle .icon-moon,
-:root[data-theme-preference="system"] .theme-toggle .icon-sun { display: none; }
-:root[data-theme-preference="system"] .theme-toggle .icon-system { display: block; }
-:root[data-theme-preference="light"] .theme-toggle .icon-moon { display: block; }
-:root[data-theme-preference="light"] .theme-toggle .icon-sun,
-:root[data-theme-preference="light"] .theme-toggle .icon-system { display: none; }
-:root[data-theme-preference="dark"] .theme-toggle .icon-sun { display: block; }
-:root[data-theme-preference="dark"] .theme-toggle .icon-moon,
-:root[data-theme-preference="dark"] .theme-toggle .icon-system { display: none; }
 
 /* ---------- Buttons & links ---------- */
 .btn {
