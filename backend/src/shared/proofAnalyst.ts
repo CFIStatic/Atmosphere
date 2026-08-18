@@ -256,6 +256,142 @@ export function keepKnownScope(
  * is unusable. A day with no analysis reads as "not analysed", which is honest;
  * a day with a fabricated analysis reads as evidence.
  */
+export interface DayFilmAnalysis {
+  summary: string;
+  workPerformed: string[];
+  cannotTell: string[];
+  scopeTouched: string[];
+  scopeVerdicts: ScopeVerdict[];
+  concerns: string[];
+  opening: OpeningWord;
+  model: string | null;
+}
+
+const DAY_FILM_SYSTEM = `You are looking at frames from one video of a work day on a construction or restoration job (the crew films the day — there is not always a separate before clip).
+
+The office dashboard will show your answer as "what work was performed." Accuracy matters more than usefulness. Follow these rules exactly:
+
+1. Describe only what is visible in the frames. Never infer what was probably done off-camera, what a trade normally does next, or what the scope implies should have happened.
+2. Under workPerformed, list concrete activities you can see (materials, tools, rooms, trades). An empty list is fine if the frames do not show work.
+3. If lighting, angle, or framing make the work unclear, say that in cannotTell rather than guessing.
+4. Only list a scope line under scopeTouched if the frames actually show work on it.
+5. Give a verdict for every scope line you are shown, using its exact title. Use "appears_complete" only when the frames show the finished state of that line. Use "in_progress" when work on it is visible but unfinished. Use "not_visible" when the frames simply do not cover it. Never invent scope lines.
+6. Under concerns, note anything visible that looks like damage, a hazard, or work outside the listed scope. Nothing else.
+7. Never mention money, hours, or whether the work seems worth paying for.
+8. Judge only the FIRST frame: does it open at the exterior of the property? Use "exterior", "not_exterior", or "unclear". Prefer "unclear".
+
+Reply with JSON only, no prose around it:
+{"summary": string, "workPerformed": string[], "cannotTell": string[], "scopeTouched": string[], "scopeVerdicts": [{"title": string, "verdict": "appears_complete" | "in_progress" | "not_visible", "because": string}], "concerns": string[], "opening": "exterior" | "not_exterior" | "unclear"}`;
+
+export function parseDayFilmAnalysis(text: string): Omit<DayFilmAnalysis, 'model'> | null {
+  const cleaned = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  let raw: any;
+  try {
+    raw = JSON.parse(cleaned);
+  } catch {
+    return null;
+  }
+  if (!raw || typeof raw !== 'object') return null;
+  if (typeof raw.summary !== 'string' || !raw.summary.trim()) return null;
+
+  const list = (value: unknown): string[] =>
+    Array.isArray(value)
+      ? value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0).slice(0, 12)
+      : [];
+
+  const allowed = new Set(['appears_complete', 'in_progress', 'not_visible']);
+  const scopeVerdicts: ScopeVerdict[] = Array.isArray(raw.scopeVerdicts)
+    ? raw.scopeVerdicts
+        .filter(
+          (v: any) =>
+            v &&
+            typeof v.title === 'string' &&
+            v.title.trim() &&
+            typeof v.verdict === 'string' &&
+            allowed.has(v.verdict),
+        )
+        .map((v: any) => ({
+          title: String(v.title).trim().slice(0, 200),
+          verdict: v.verdict as ScopeVerdict['verdict'],
+          because: typeof v.because === 'string' ? v.because.trim().slice(0, 500) : '',
+        }))
+        .slice(0, 20)
+    : [];
+
+  const openingWords = new Set<OpeningWord>(['exterior', 'not_exterior', 'unclear']);
+  const opening: OpeningWord =
+    typeof raw.opening === 'string' && openingWords.has(raw.opening as OpeningWord)
+      ? (raw.opening as OpeningWord)
+      : 'unclear';
+
+  const workPerformed = list(raw.workPerformed);
+  return {
+    summary: raw.summary.trim().slice(0, 2000),
+    workPerformed,
+    cannotTell: list(raw.cannotTell),
+    scopeTouched: list(raw.scopeTouched),
+    scopeVerdicts,
+    concerns: list(raw.concerns),
+    opening,
+  };
+}
+
+/**
+ * What the day film shows — used when Field Capture files one clip for the day
+ * instead of a before/after pair.
+ */
+export async function analyseDayFilm(input: {
+  frames: ProofFrame[];
+  scopeTitles: string[];
+  workDate: string;
+  trade?: string | null;
+}): Promise<DayFilmAnalysis | null> {
+  if (!isModelProviderConfigured()) return null;
+  if (!input.frames.length) return null;
+
+  const scopeBlock = input.scopeTitles.length
+    ? `Agreed work to look for — give a verdict for every line using its exact title:\n${input.scopeTitles.map((t) => `- ${t}`).join('\n')}`
+    : [
+        'No written work description is attached.',
+        'Describe what the worker is doing from the frames.',
+        'Leave scopeTouched and scopeVerdicts empty — do not invent scope lines.',
+      ].join(' ');
+
+  const response = await anthropicClient().messages.create({
+    model: config.technician.assistant.model,
+    max_tokens: 1200,
+    system: DAY_FILM_SYSTEM,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text:
+              `Work date: ${input.workDate}\n` +
+              (input.trade ? `Trade: ${input.trade}\n` : '') +
+              `\n${scopeBlock}\n`,
+          },
+          ...imageBlocks(input.frames, 'DAY FILM'),
+        ],
+      },
+    ],
+  });
+
+  const text = response.content
+    .filter((block: any) => block.type === 'text')
+    .map((block: any) => block.text)
+    .join('\n');
+
+  const parsed = parseDayFilmAnalysis(text);
+  if (!parsed) return null;
+  return {
+    ...parsed,
+    scopeVerdicts: keepKnownScope(parsed.scopeVerdicts, input.scopeTitles),
+    model: response.model,
+  };
+}
+
 export async function analyseProofDay(input: {
   beforeFrames: ProofFrame[];
   afterFrames: ProofFrame[];

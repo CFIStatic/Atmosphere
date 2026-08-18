@@ -5,30 +5,11 @@ import { SpinnerIcon } from '../icons';
 /**
  * Proof of work.
  *
- * The sub films the site before they start and again when they finish, every
- * day. This is where the general contractor reads it — and, because money moves
- * against it, where the page has to be careful about what it claims.
+ * Crews film the day (video + mic). This is where the office reads it —
+ * integrity checks first, then what the assistant saw in the footage.
  *
- * Three states, and keeping them apart is the whole design:
- *
- *   Contradicted   Something is provably wrong. Filmed two miles away, filed
- *                  against the wrong day, byte-identical to an earlier upload.
- *                  Red, and it stops a payment.
- *
- *   Unproven       Nothing is wrong; something could not be checked. No
- *                  location on the file, no capture time. Amber. It also stops
- *                  a payment, and saying so plainly is the point — calling this
- *                  "verified" would be the single most damaging thing this
- *                  feature could do.
- *
- *   Checks out     Both videos, everything checked, nothing failed. Only this
- *                  gets a green light, and even then a person still presses
- *                  Accept. The software's job is to tell them what is true,
- *                  not to release the money.
- *
- * The AI summary sits below the checks rather than above them on purpose. It
- * says what the footage shows; the checks say whether the footage is of this
- * job on this day. A beautiful summary of the wrong house is worse than none.
+ * A single day film is enough to analyse. A before/after pair still gets a
+ * comparison when both exist. Unknown is never a pass.
  */
 
 /**
@@ -112,7 +93,7 @@ export function ProofOfWork({
       setQuestions(qs.questions);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load the proof record.');
-      setData({ days: [], counts: { days: 0, payable: 0, contradicted: 0, awaitingAfter: 0 }, siteKnown: false });
+      setData({ days: [], counts: { days: 0, payable: 0, contradicted: 0, awaitingAfter: 0, analysing: 0 }, siteKnown: false });
     }
   }
 
@@ -175,15 +156,15 @@ export function ProofOfWork({
             {data.counts.contradicted > 0 && (
               <span className="text-danger-600">{data.counts.contradicted} failed a check</span>
             )}
-            {data.counts.awaitingAfter > 0 && (
-              <span className="text-caution-600">{data.counts.awaitingAfter} missing an after</span>
+            {(data.counts.analysing ?? 0) > 0 && (
+              <span className="text-ink-500">{data.counts.analysing} being read</span>
             )}
           </span>
         )}
       </div>
       <p className="mt-1 text-xs text-ink-500">
-        Each crew films the site before they start and again when they finish. The checks below say
-        whether the footage is of this job on this day; the summary says what it shows.
+        Crews film the day. The checks say whether the footage is of this job; the analysis says
+        what work the video shows.
       </p>
 
       {/* Stated up front, not buried. Without a site location the strongest
@@ -205,8 +186,8 @@ export function ProofOfWork({
         <p className="mt-3 text-sm text-ink-600">Loading…</p>
       ) : data.days.length === 0 ? (
         <p className="mt-3 rounded-lg border border-line px-4 py-3 text-sm text-ink-600">
-          Nothing filed yet. Subs upload from the Atmosphere app using their job link — a video
-          before they start and one when they finish, each day they are on site.
+          Nothing filed yet. Crews upload from Field Capture — one day film (video + mic) is
+          enough. The assistant will describe what work was performed.
         </p>
       ) : (
         <ul className="mt-3 space-y-2">
@@ -250,14 +231,16 @@ export function ProofOfWork({
                         className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                           day.hasBefore && day.hasAfter
                             ? 'bg-paper-200/60 text-ink-600'
-                            : 'bg-caution-50 text-caution-600'
+                            : 'bg-paper-200/60 text-ink-600'
                         }`}
                       >
                         {day.hasBefore && day.hasAfter
                           ? 'before + after'
-                          : day.hasBefore
-                            ? 'before only'
-                            : 'after only'}
+                          : day.hasAfter
+                            ? 'day film'
+                            : day.hasBefore
+                              ? 'morning clip'
+                              : 'no film'}
                       </span>
                       {day.accepted ? (
                         <span className="rounded-full bg-success-50 px-2 py-0.5 text-[10px] font-semibold text-success-600">
@@ -267,13 +250,21 @@ export function ProofOfWork({
                         <span className="rounded-full bg-danger-50 px-2 py-0.5 text-[10px] font-semibold text-danger-600">
                           rejected
                         </span>
-                      ) : day.payable ? (
+                      ) : day.contradicted ? (
+                        <span className="rounded-full bg-caution-50 px-2 py-0.5 text-[10px] font-semibold text-caution-600">
+                          failed a check
+                        </span>
+                      ) : day.aiSummary ? (
                         <span className="rounded-full bg-success-50 px-2 py-0.5 text-[10px] font-semibold text-success-600">
-                          ready to pay
+                          work described
+                        </span>
+                      ) : day.analysisStatus === 'queued' || day.analysisStatus === 'running' ? (
+                        <span className="rounded-full bg-paper-200/60 px-2 py-0.5 text-[10px] font-semibold text-ink-600">
+                          reading
                         </span>
                       ) : (
-                        <span className="rounded-full bg-caution-50 px-2 py-0.5 text-[10px] font-semibold text-caution-600">
-                          {day.contradicted ? 'failed a check' : 'not proven'}
+                        <span className="rounded-full bg-paper-200/60 px-2 py-0.5 text-[10px] font-semibold text-ink-500">
+                          {day.payable ? 'ready to pay' : 'on file'}
                         </span>
                       )}
                     </span>
@@ -325,25 +316,36 @@ export function ProofOfWork({
                     {day.aiSummary && (
                       <div className="mt-3 rounded-lg border border-line bg-paper-50/60 p-3">
                         <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">
-                          What the footage shows
+                          What work was performed
                         </p>
-                        {day.aiFindings?.scopeCrossRef === false && (
+                        {day.aiFindings?.kind === 'day_film' && (
                           <p className="mt-1 text-[11px] text-ink-500">
-                            No scope on file — AI described what happened from the frames.
+                            Read from the day film — not a before/after comparison.
+                          </p>
+                        )}
+                        {day.aiFindings?.scopeCrossRef === false && day.aiFindings?.kind !== 'day_film' && (
+                          <p className="mt-1 text-[11px] text-ink-500">
+                            No work description on file — AI described what happened from the frames.
                           </p>
                         )}
                         {day.aiFindings?.scopeCrossRef === true && (
                           <p className="mt-1 text-[11px] text-ink-500">
-                            Cross-referenced against the agreed scope lines.
+                            Cross-referenced against the agreed work lines.
                           </p>
                         )}
                         <p className="mt-1 text-xs text-ink-800">{day.aiSummary}</p>
-                        {day.aiFindings?.materialBecause && (
-                          <p className="mt-1 text-[11px] text-ink-600">
-                            <span className="text-ink-500">Why: </span>
-                            {day.aiFindings.materialBecause}
-                          </p>
-                        )}
+                        {(day.aiFindings?.workPerformed?.length || day.aiFindings?.changes?.length) ? (
+                          <ul className="mt-1.5 space-y-0.5">
+                            {(day.aiFindings.workPerformed?.length
+                              ? day.aiFindings.workPerformed
+                              : day.aiFindings.changes ?? []
+                            ).map((c) => (
+                              <li key={c} className="text-[11px] text-ink-600">
+                                • {c}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
                         {(day.reports?.before || day.reports?.after) && (
                           <div className="mt-2 space-y-2">
                             {(['before', 'after'] as const).map((half) => {
@@ -390,21 +392,17 @@ export function ProofOfWork({
                             })}
                           </div>
                         )}
-                        {day.aiFindings?.opening && (
+                        {day.aiFindings?.opening && day.aiFindings.kind !== 'day_film' && (
                           <p className="mt-1 text-[11px] text-ink-500">
                             Opening shots — before: {OPENING_WORDS[day.aiFindings.opening.before]}
                             {' · '}after: {OPENING_WORDS[day.aiFindings.opening.after]}
                           </p>
                         )}
-                        {day.aiFindings?.changes?.length ? (
-                          <ul className="mt-1.5 space-y-0.5">
-                            {day.aiFindings.changes.map((c) => (
-                              <li key={c} className="text-[11px] text-ink-600">
-                                • {c}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
+                        {day.aiFindings?.opening && day.aiFindings.kind === 'day_film' && (
+                          <p className="mt-1 text-[11px] text-ink-500">
+                            Opening shot: {OPENING_WORDS[day.aiFindings.opening.after]}
+                          </p>
+                        )}
                         {/* Per scope line. "Not visible" is given the same
                             weight as the other two on purpose: the camera not
                             covering the bathroom says nothing about the
@@ -468,7 +466,13 @@ export function ProofOfWork({
                         <ProofVideo
                           key={id}
                           proofId={id}
-                          label={i === 0 ? 'Before' : 'After'}
+                          label={
+                            day.proofIds.length === 1
+                              ? 'Day film'
+                              : i === 0
+                                ? 'Before'
+                                : 'After'
+                          }
                           videoFetcher={videoFetcher}
                         />
                       ))}
@@ -478,8 +482,12 @@ export function ProofOfWork({
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button
                         onClick={() => void reanalyse(day)}
-                        disabled={busy === `${day.partyId}|${day.workDate}` || !day.hasAfter}
-                        title={day.hasAfter ? undefined : 'Nothing to compare against until the after video is filed.'}
+                        disabled={busy === `${day.partyId}|${day.workDate}` || !(day.hasAfter || day.hasBefore)}
+                        title={
+                          day.hasAfter || day.hasBefore
+                            ? undefined
+                            : 'Nothing to read until a day film is filed.'
+                        }
                         className="flex items-center gap-1.5 rounded-lg glass-card px-2.5 py-1 text-[11px] font-medium text-ink-700 disabled:opacity-40"
                       >
                         {busy === `${day.partyId}|${day.workDate}` && (
@@ -489,7 +497,7 @@ export function ProofOfWork({
                           ? 'Try the AI again'
                           : day.aiSummary
                             ? 'Watch it again'
-                            : 'Have the AI watch it'}
+                            : 'Read the day film'}
                       </button>
                       {!day.accepted && (
                         <>
@@ -498,8 +506,18 @@ export function ProofOfWork({
                             // Disabled rather than hidden: somebody should be
                             // able to see that accepting is possible and why it
                             // is not available yet.
-                            disabled={!day.payable}
-                            title={day.payable ? undefined : day.payableBecause}
+                            disabled={
+                              day.hasAfter && !day.hasBefore ? day.contradicted : !day.payable
+                            }
+                            title={
+                              day.hasAfter && !day.hasBefore
+                                ? day.contradicted
+                                  ? day.payableBecause
+                                  : 'Mark this day as reviewed after you have read the analysis.'
+                                : day.payable
+                                  ? undefined
+                                  : day.payableBecause
+                            }
                             className="rounded-lg bg-success-600 px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-40"
                           >
                             Accept the day

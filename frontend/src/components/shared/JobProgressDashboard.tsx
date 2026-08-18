@@ -190,7 +190,7 @@ export function JobProgressDashboard({
 
   const daysLoggedComputed = proof?.counts.days ?? 0;
   const verifiedDaysComputed = proof?.days.filter((d) => d.payable || d.accepted).length ?? 0;
-  const inProgressComputed = proof?.days.filter((d) => d.hasBefore && !d.hasAfter).length ?? 0;
+  const inProgressComputed = proof?.days.filter((d) => !d.hasAfter && d.hasBefore).length ?? 0;
 
   const daysLogged = metricsOverride?.daysLogged ?? daysLoggedComputed;
   const verifiedDays = metricsOverride?.verifiedDays ?? verifiedDaysComputed;

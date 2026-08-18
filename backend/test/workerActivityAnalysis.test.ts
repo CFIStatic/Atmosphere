@@ -42,6 +42,7 @@ test('descriptionFindings marks analysis as description-only (no scope cross-ref
     frameCount: 8,
   });
   assert.equal(findings.scopeCrossRef, false);
+  assert.equal(findings.kind, 'day_film');
   assert.deepEqual(findings.scopeVerdicts, []);
   assert.equal(findings.summary, 'Worker removed wet drywall along the south wall.');
 });

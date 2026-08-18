@@ -1,0 +1,14 @@
+# Keep Railway's root Docker build small.
+.git
+frontend
+fieldcapture
+website
+apps
+agent
+verifier
+docs
+** /node_modules
+**/dist
+**/.env
+**/.env.*
+!.env.example

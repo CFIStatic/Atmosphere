@@ -1,32 +1,31 @@
-# Atmosphere BFF — production image for the Work Verification path.
-# Build from repo root:
-#   docker build -f backend/Dockerfile -t atmosphere-backend ./backend
+# Railway default: build context is the repo root (Railpack cannot detect
+# a Node app here — there is no package.json at ./). This file builds the
+# Work Verification BFF from backend/.
 #
-# Required at runtime: NODE_ENV=production, FRONTEND_ORIGIN, SUPABASE_*,
-# DEVICE_PEPPER, CONTACT_TO_EMAIL, CAREERS_TO_EMAIL, and usually SMTP_*.
-# See docs/production.md and backend/.env.example.
+#   docker build -t atmosphere-backend .
+#
+# Local compose still uses backend/Dockerfile with context ./backend.
 
 FROM node:22-bookworm-slim AS deps
 WORKDIR /app
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates \
   && rm -rf /var/lib/apt/lists/*
-COPY package.json package-lock.json ./
+COPY backend/package.json backend/package-lock.json ./
 RUN npm ci --omit=dev
 
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
-COPY package.json package-lock.json ./
+COPY backend/package.json backend/package-lock.json ./
 RUN npm ci
-COPY tsconfig.json ./
-COPY src ./src
+COPY backend/tsconfig.json ./
+COPY backend/src ./src
 RUN npm run build
 
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=4000
-# ffmpeg is optional but required for proof sparse-frame extraction.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates ffmpeg \
   && rm -rf /var/lib/apt/lists/* \

@@ -266,11 +266,11 @@ const proposeSchema = z
     address: z.string().trim().max(200).optional(),
   })
   .superRefine((value, ctx) => {
-    if ((value.text?.trim().length ?? 0) < 20 && !(value.address?.trim())) {
+    if (!(value.address?.trim()) && (value.text?.trim().length ?? 0) < 20) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Enter a site address, or paste at least a few lines of scope.',
-        path: ['text'],
+        message: 'Enter the site address.',
+        path: ['address'],
       });
     }
   });
@@ -385,8 +385,8 @@ const approveSchema = z.object({
     )
     .max(60)
     .default([]),
-  /** Field Capture teammates and/or external subcontractors invited to film. */
-  invitees: z.array(inviteeSchema).min(1).max(20),
+  /** Optional — org members can still film from Field Capture once the job exists. */
+  invitees: z.array(inviteeSchema).max(20).default([]),
 });
 
 async function actorLabelFor(supabase: any, userId: string): Promise<string> {
@@ -558,19 +558,22 @@ async function createJobFile(
     external: Boolean(person.external || !person.userId),
   }));
 
-  const rpc = await supabase.rpc('intake_create_job_file', {
-    p_org_id: orgId,
-    p_title: jobTitle,
-    p_work_type: input.workType,
-    p_address: input.address,
-    p_city: input.city ?? null,
-    p_postal_code: input.postalCode ?? null,
-    p_claim_number: input.claimNumber ?? null,
-    p_brief_note: input.briefNote ?? null,
-    p_facts: input.facts ?? {},
-    p_scope: scopeLines,
-    p_invitees: invitees,
-  });
+  const rpc =
+    invitees.length > 0
+      ? await supabase.rpc('intake_create_job_file', {
+          p_org_id: orgId,
+          p_title: jobTitle,
+          p_work_type: input.workType,
+          p_address: input.address,
+          p_city: input.city ?? null,
+          p_postal_code: input.postalCode ?? null,
+          p_claim_number: input.claimNumber ?? null,
+          p_brief_note: input.briefNote ?? null,
+          p_facts: input.facts ?? {},
+          p_scope: scopeLines,
+          p_invitees: invitees,
+        })
+      : { error: null, data: null };
 
   if (!rpc.error && rpc.data) {
     const payload = rpc.data as any;

@@ -1,0 +1,97 @@
+# Deploy the Work Verification backend to Railway using the GitHub
+# environment named `Keys` (secrets + variables you already added).
+#
+# Railway does not read GitHub Environments on its own. This workflow is the
+# bridge: it copies Keys → Railway, then deploys `backend/`.
+#
+# One extra secret in Keys (from Railway → Account → Tokens):
+#   RAILWAY_TOKEN
+# Optional:
+#   RAILWAY_PROJECT_ID   (Project settings → General)
+#   RAILWAY_SERVICE      (service name, default: backend)
+#
+# Put GOOGLE_API_KEY / GOOGLE_MAPS_API_KEY / ANTHROPIC_API_KEY in `Keys`
+# as well (not only the "Google API keys" environment) so this job can see them.
+#
+# Run: Actions → Deploy Work Verification → Run workflow
+
+name: Deploy Work Verification
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-production.yml'
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Sync Keys → Railway and deploy backend
+    runs-on: ubuntu-latest
+    environment: Keys
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Require Railway token
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "Add RAILWAY_TOKEN to the GitHub environment Keys (Railway → Account → Tokens)."
+            exit 1
+          fi
+
+      - name: Sync GitHub Keys onto Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE }}
+          NODE_ENV: production
+          PORT: '4000'
+          MEDIA_BACKEND: supabase
+          FRONTEND_ORIGIN: ${{ vars.FRONTEND_ORIGIN || 'https://app.atmosphereteam.com' }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DEVICE_PEPPER: ${{ secrets.DEVICE_PEPPER }}
+          AI_CREDENTIALS_KEY: ${{ secrets.AI_CREDENTIALS_KEY }}
+          AGENT_TOKEN_SECRET: ${{ secrets.AGENT_TOKEN_SECRET }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          CAREERS_FROM_EMAIL: ${{ vars.CAREERS_FROM_EMAIL }}
+          CONTACT_TO_EMAIL: ${{ vars.CONTACT_TO_EMAIL }}
+          CAREERS_TO_EMAIL: ${{ vars.CAREERS_TO_EMAIL }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: claude-sonnet-5
+          VERIFICATION_PRIMARY_MODEL: gemini-2.5-flash
+          VERIFICATION_ESCALATION_MODEL: claude-sonnet-5
+        run: node scripts/syncGithubEnvToRailway.mjs
+
+      - name: Deploy backend
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE }}
+        run: |
+          if [ -n "$RAILWAY_SERVICE" ]; then
+            railway up --ci --service "$RAILWAY_SERVICE"
+          else
+            railway up --ci
+          fi

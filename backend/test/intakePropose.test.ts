@@ -34,7 +34,18 @@ test('proposeIntakeFromText allows address-only with empty scope', () => {
   assert.equal(p.address, '1842 Meridian Ave, Austin, TX');
   assert.equal(p.title, '1842 Meridian Ave');
   assert.deepEqual(p.scope, []);
-  assert.match(p.summary, /No scope/i);
+  assert.match(p.summary, /address/i);
+});
+
+test('a short work note with an address becomes one included line', () => {
+  const p = proposeIntakeFromText('Extract standing water', {
+    address: '1842 Meridian Ave, Austin, TX',
+  });
+  assert.equal(p.address, '1842 Meridian Ave, Austin, TX');
+  assert.equal(p.scope.length, 1);
+  assert.equal(p.scope[0]?.state, 'included');
+  assert.match(p.scope[0]?.title ?? '', /Extract standing water/);
+  assert.match(p.briefNote, /Extract standing water/);
 });
 
 test('jobTitleForIntake replaces a numbered scope line with the street', () => {
