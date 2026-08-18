@@ -1,8 +1,8 @@
 name: Deploy website
 
 # Two hosts for website/:
-#   Railway service `website` → https://website-production.up.railway.app
-#     (this is the live corporate site; healthcheck is GET /health)
+#   Railway service `Atmosphere-website` (outstanding-kindness)
+#     healthcheck GET /health — not /api/health
 #   GitHub Pages — optional; skipped until Settings → Pages → GitHub Actions
 on:
   push:
@@ -100,8 +100,8 @@ jobs:
     environment: Keys
     env:
       RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-      RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
-      RAILWAY_WEBSITE_SERVICE: ${{ secrets.RAILWAY_WEBSITE_SERVICE || vars.RAILWAY_WEBSITE_SERVICE || 'website' }}
+      RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || vars.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
+      RAILWAY_WEBSITE_SERVICE: ${{ secrets.RAILWAY_WEBSITE_SERVICE || vars.RAILWAY_WEBSITE_SERVICE || 'Atmosphere-website' }}
       API_UPSTREAM: ${{ vars.API_UPSTREAM || 'https://atmosphere-production.up.railway.app' }}
     steps:
       - uses: actions/checkout@v4
@@ -117,10 +117,7 @@ jobs:
         run: npm install -g @railway/cli
 
       - name: Link Railway project
-        run: |
-          if [ -n "$RAILWAY_PROJECT_ID" ]; then
-            railway link --project "$RAILWAY_PROJECT_ID" || true
-          fi
+        run: railway link --project "$RAILWAY_PROJECT_ID" --environment production || railway link --project "$RAILWAY_PROJECT_ID" || true
 
       - name: Point the website service at nginx, not the API
         run: |
@@ -130,17 +127,33 @@ jobs:
 
       - name: Smoke the nginx image
         run: |
+          set -euo pipefail
           docker build -f website/Dockerfile -t atmosphere-website:ci .
           docker run -d --name atmosphere-website-ci -e PORT=8080 -p 18080:8080 atmosphere-website:ci
+          cleanup() { docker rm -f atmosphere-website-ci >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
           sleep 2
           curl -fsS http://127.0.0.1:18080/health
           curl -fsS http://127.0.0.1:18080/ | grep -q 'Atmosphere'
-          docker stop atmosphere-website-ci
-          docker rm atmosphere-website-ci
 
       - name: Deploy corporate site
         run: |
           cp website/railway.toml railway.toml
           echo "Deploying Railway service: $RAILWAY_WEBSITE_SERVICE"
           railway up --ci --service "$RAILWAY_WEBSITE_SERVICE"
+
+      - name: Generate a public domain
+        id: domain
+        run: |
+          set -euo pipefail
+          railway domain --service "$RAILWAY_WEBSITE_SERVICE" || true
+          BUNDLE="$( { railway domain --service "$RAILWAY_WEBSITE_SERVICE" || true; railway status --json --service "$RAILWAY_WEBSITE_SERVICE" || true; } 2>&1 )"
+          echo "$BUNDLE"
+          DOMAIN="$(printf '%s' "$BUNDLE" | node website/scripts/railwayDomain.mjs || true)"
+          if [ -z "${DOMAIN:-}" ]; then
+            echo "Deployed the nginx image. Generate Domain on Atmosphere-website in Railway if the URL is missing."
+            exit 0
+          fi
+          echo "Corporate site: $DOMAIN"
+          echo "domain=$DOMAIN" >> "$GITHUB_OUTPUT"
 
