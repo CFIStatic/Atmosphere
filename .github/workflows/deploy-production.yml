@@ -13,14 +13,18 @@
 # Put GOOGLE_API_KEY / GOOGLE_MAPS_API_KEY / ANTHROPIC_API_KEY in `Keys`
 # as well (not only the "Google API keys" environment) so this job can see them.
 #
-# Run: Actions → Deploy Work Verification → Run workflow
+# Auto-deploys on push to main, and on push to this branch while it is the
+# live Atmosphere API (healthcheck + CORS fixes not yet on main). Manual
+# run still works: Actions → Deploy Work Verification → Run workflow.
 
 name: Deploy Work Verification
 
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
+      - cursor/fix-railway-keys-deploy-51c8
     paths:
       - 'backend/**'
       - '.github/workflows/deploy-production.yml'
