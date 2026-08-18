@@ -14,32 +14,27 @@
     <title>Atmosphere · Sign in</title>
     <script>
       // Resolve appearance before first paint so routes never flash the wrong
-      // palette. Preference is light | dark | system (default); data-theme is
-      // always the resolved light/dark tokens CSS expects.
+      // palette. Preference is light or dark only.
       (function () {
         try {
           var pref = localStorage.getItem('atmosphere.theme');
-          if (pref !== 'light' && pref !== 'dark' && pref !== 'system') {
+          if (pref !== 'light' && pref !== 'dark') {
             try {
               var prefs = JSON.parse(localStorage.getItem('atmosphere.preferences') || '{}');
               pref = prefs.theme;
             } catch (e) {}
           }
-          if (pref !== 'light' && pref !== 'dark' && pref !== 'system') {
+          if (pref !== 'light' && pref !== 'dark') {
             pref = localStorage.getItem('atm-theme');
           }
-          if (pref !== 'light' && pref !== 'dark' && pref !== 'system') pref = 'system';
-          var resolved =
-            pref === 'system'
-              ? matchMedia('(prefers-color-scheme: dark)').matches
-                ? 'dark'
-                : 'light'
-              : pref;
-          document.documentElement.setAttribute('data-theme', resolved);
+          if (pref !== 'light' && pref !== 'dark') {
+            pref = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          }
+          document.documentElement.setAttribute('data-theme', pref);
           document.documentElement.setAttribute('data-theme-preference', pref);
         } catch (e) {
           document.documentElement.setAttribute('data-theme', 'dark');
-          document.documentElement.setAttribute('data-theme-preference', 'system');
+          document.documentElement.setAttribute('data-theme-preference', 'dark');
         }
       })();
     </script>

@@ -2,13 +2,12 @@
  * Appearance preference for the Atmosphere console (and sibling surfaces that
  * share the same origin).
  *
- * `data-theme` on <html> is always the *resolved* palette (`light` | `dark`) so
- * CSS tokens stay simple. The user's choice — including `system` — lives in
- * `data-theme-preference` and in localStorage under a single key so the
- * marketing site, FOUC bootstrap, and React preferences stay aligned.
+ * Light and dark only. A leftover `system` value from older builds is resolved
+ * once to the current OS palette and then stored as an explicit choice, so the
+ * header control is a single click between the two.
  */
 
-export type ThemePreference = 'light' | 'dark' | 'system';
+export type ThemePreference = 'light' | 'dark';
 export type ResolvedTheme = 'light' | 'dark';
 
 /** Canonical key — read by index.html FOUC, preferences, and the website. */
@@ -18,14 +17,11 @@ const PREFERENCES_STORAGE_KEY = 'atmosphere.preferences';
 /** Pre-unification website key; still read for migration, written for light/dark. */
 const LEGACY_WEB_THEME_KEY = 'atm-theme';
 
-const CYCLE: ThemePreference[] = ['system', 'light', 'dark'];
-
 const themeListeners = new Set<() => void>();
-let mediaCleanup: (() => void) | null = null;
 let storageListening = false;
 
 export function isThemePreference(value: unknown): value is ThemePreference {
-  return value === 'light' || value === 'dark' || value === 'system';
+  return value === 'light' || value === 'dark';
 }
 
 export function systemResolvedTheme(): ResolvedTheme {
@@ -37,35 +33,40 @@ export function systemResolvedTheme(): ResolvedTheme {
   }
 }
 
-export function resolveTheme(preference: ThemePreference): ResolvedTheme {
-  return preference === 'system' ? systemResolvedTheme() : preference;
+/** Stored `system` (older builds) becomes the OS palette at that moment. */
+export function coerceThemePreference(value: unknown): ThemePreference {
+  if (isThemePreference(value)) return value;
+  if (value === 'system') return systemResolvedTheme();
+  return systemResolvedTheme();
 }
 
+export function resolveTheme(preference: ThemePreference): ResolvedTheme {
+  return preference;
+}
+
+/** One click: light ↔ dark. */
 export function cycleThemePreference(current: ThemePreference): ThemePreference {
-  const index = CYCLE.indexOf(current);
-  return CYCLE[(index + 1) % CYCLE.length];
+  return current === 'dark' ? 'light' : 'dark';
 }
 
 export function themeLabel(preference: ThemePreference): string {
-  if (preference === 'system') return 'System';
-  if (preference === 'light') return 'Light';
-  return 'Dark';
+  return preference === 'light' ? 'Light' : 'Dark';
 }
 
 /**
  * Read the stored preference, migrating older keys when needed.
- * Default is `system` so a fresh browser follows the device.
+ * A first visit (or leftover `system`) becomes an explicit light or dark.
  */
 export function readThemePreference(): ThemePreference {
-  if (typeof window === 'undefined') return 'system';
+  if (typeof window === 'undefined') return 'dark';
   try {
     const direct = window.localStorage.getItem(THEME_STORAGE_KEY);
-    if (isThemePreference(direct)) return direct;
+    if (direct != null) return coerceThemePreference(direct);
 
     const prefsRaw = window.localStorage.getItem(PREFERENCES_STORAGE_KEY);
     if (prefsRaw) {
       const parsed = JSON.parse(prefsRaw) as { theme?: unknown };
-      if (isThemePreference(parsed.theme)) return parsed.theme;
+      if (parsed.theme != null) return coerceThemePreference(parsed.theme);
     }
 
     const legacy = window.localStorage.getItem(LEGACY_WEB_THEME_KEY);
@@ -73,15 +74,15 @@ export function readThemePreference(): ThemePreference {
   } catch {
     /* private mode / corrupt JSON */
   }
-  return 'system';
+  return systemResolvedTheme();
 }
 
-/** Paint the resolved palette onto <html> without touching storage. */
+/** Paint the palette onto <html> without touching storage. */
 export function applyResolvedTheme(preference: ThemePreference): ResolvedTheme {
   const resolved = resolveTheme(preference);
   if (typeof document !== 'undefined') {
     document.documentElement.setAttribute('data-theme', resolved);
-    document.documentElement.setAttribute('data-theme-preference', preference);
+    document.documentElement.setAttribute('data-theme-preference', resolved);
   }
   return resolved;
 }
@@ -93,8 +94,9 @@ export function applyResolvedTheme(preference: ThemePreference): ResolvedTheme {
  */
 export function persistThemePreference(preference: ThemePreference): void {
   if (typeof window === 'undefined') return;
+  const stored = coerceThemePreference(preference);
   try {
-    window.localStorage.setItem(THEME_STORAGE_KEY, preference);
+    window.localStorage.setItem(THEME_STORAGE_KEY, stored);
 
     let prefs: Record<string, unknown> = {};
     try {
@@ -105,36 +107,13 @@ export function persistThemePreference(preference: ThemePreference): void {
     }
     window.localStorage.setItem(
       PREFERENCES_STORAGE_KEY,
-      JSON.stringify({ ...prefs, theme: preference }),
+      JSON.stringify({ ...prefs, theme: stored }),
     );
 
-    if (preference === 'system') {
-      window.localStorage.removeItem(LEGACY_WEB_THEME_KEY);
-    } else {
-      window.localStorage.setItem(LEGACY_WEB_THEME_KEY, preference);
-    }
+    window.localStorage.setItem(LEGACY_WEB_THEME_KEY, stored);
   } catch {
     /* storage unavailable — in-memory apply still works for this session */
   }
-}
-
-function ensureSystemWatcher(preference: ThemePreference): void {
-  if (typeof window === 'undefined') return;
-
-  if (mediaCleanup) {
-    mediaCleanup();
-    mediaCleanup = null;
-  }
-
-  if (preference !== 'system') return;
-
-  const mql = window.matchMedia('(prefers-color-scheme: dark)');
-  const onChange = () => {
-    applyResolvedTheme('system');
-    themeListeners.forEach((listener) => listener());
-  };
-  mql.addEventListener('change', onChange);
-  mediaCleanup = () => mql.removeEventListener('change', onChange);
 }
 
 function ensureStorageWatcher(): void {
@@ -150,22 +129,21 @@ function ensureStorageWatcher(): void {
     }
     const preference = readThemePreference();
     applyResolvedTheme(preference);
-    ensureSystemWatcher(preference);
     themeListeners.forEach((listener) => listener());
   });
 }
 
-/** Apply the preference and keep OS / cross-tab watchers in sync (no storage write). */
+/** Apply the preference and keep cross-tab watchers in sync (no storage write). */
 export function syncThemeRuntime(preference: ThemePreference): void {
   applyResolvedTheme(preference);
-  ensureSystemWatcher(preference);
   ensureStorageWatcher();
 }
 
-/** Apply + persist + watch OS / other tabs. */
+/** Apply + persist + notify listeners. */
 export function setThemePreference(preference: ThemePreference): void {
-  syncThemeRuntime(preference);
-  persistThemePreference(preference);
+  const stored = coerceThemePreference(preference);
+  syncThemeRuntime(stored);
+  persistThemePreference(stored);
   themeListeners.forEach((listener) => listener());
 }
 
