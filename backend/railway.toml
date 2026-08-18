@@ -1,0 +1,15 @@
+# Railway service config for the Work Verification BFF.
+# Root directory in Railway must be `backend` (this folder).
+#
+# Variables are NOT stored here. GitHub Actions copies them from the
+# `Keys` environment — see .github/workflows/deploy-production.yml
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/api/ready"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
