@@ -39,8 +39,11 @@ export function listenHost(env: NodeJS.Dict<string> = process.env): string {
 
 export function isHealthProbePath(path: string): boolean {
   return (
+    path === '/' ||
     path === '/health' ||
     path === '/ready' ||
+    path === '/api' ||
+    path === '/api/' ||
     path === '/api/health' ||
     path === '/api/ready'
   );

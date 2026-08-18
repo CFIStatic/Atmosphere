@@ -5,6 +5,20 @@ import { logger } from '../lib/logger.js';
 
 export const healthRouter = Router();
 
+/**
+ * Railway's "open domain" button hits `/`. This API has no website — answer
+ * with the probe paths so that click does not look like a failed deploy.
+ */
+healthRouter.get('/', (_req: Request, res: Response) => {
+  res.json({
+    status: 'ok',
+    service: 'atmosphere-backend',
+    health: '/api/health',
+    ready: '/api/ready',
+    time: new Date().toISOString(),
+  });
+});
+
 /** Liveness probe — no auth, no dependencies. */
 healthRouter.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', service: 'atmosphere-backend', time: new Date().toISOString() });

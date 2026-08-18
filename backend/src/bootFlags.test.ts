@@ -80,6 +80,7 @@ describe('listenHost', () => {
 
 describe('isHealthProbePath', () => {
   it('recognises liveness and readiness probes', () => {
+    assert.equal(isHealthProbePath('/'), true);
     assert.equal(isHealthProbePath('/api/health'), true);
     assert.equal(isHealthProbePath('/api/ready'), true);
     assert.equal(isHealthProbePath('/api/auth/login'), false);
