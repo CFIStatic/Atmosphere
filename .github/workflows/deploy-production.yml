@@ -13,9 +13,9 @@
 # Put GOOGLE_API_KEY / GOOGLE_MAPS_API_KEY / ANTHROPIC_API_KEY in `Keys`
 # as well (not only the "Google API keys" environment) so this job can see them.
 #
-# Auto-deploys on push to main, and on push to this branch while it is the
-# live Atmosphere API (healthcheck + CORS fixes not yet on main). Manual
-# run still works: Actions → Deploy Work Verification → Run workflow.
+# Auto-deploys on push to main, the live Atmosphere API branch, and the
+# job-create memory FK fix branch. Manual run still works:
+# Actions → Deploy Work Verification → Run workflow.
 
 name: Deploy Work Verification
 
@@ -25,8 +25,10 @@ on:
     branches:
       - main
       - cursor/fix-railway-keys-deploy-51c8
+      - cursor/fix-job-create-memory-fk-51c8
     paths:
       - 'backend/**'
+      - 'supabase/migrations/**'
       - '.github/workflows/deploy-production.yml'
 
 concurrency:
@@ -90,6 +92,15 @@ jobs:
           VERIFICATION_PRIMARY_MODEL: gemini-2.5-flash
           VERIFICATION_ESCALATION_MODEL: claude-sonnet-5
         run: node scripts/syncGithubEnvToRailway.mjs
+
+      - name: Repair memory_events job FK on Supabase
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || secrets.SUPABASE_PROJECT_REF }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: node scripts/applyMemoryCaptureRepair.mjs
 
       - name: Deploy backend
         env:

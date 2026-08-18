@@ -10,6 +10,11 @@ import { sendSystemMail } from '../lib/systemMail.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { config } from '../config.js';
 import { recordAccess } from './proofOfWork.js';
+import {
+  intakeWriteError,
+  isMemoryLedgerError,
+  repairMemoryJobFk,
+} from '../lib/memoryLedger.js';
 
 /**
  * How a job gets here, and what that costs.
@@ -28,6 +33,22 @@ import { recordAccess } from './proofOfWork.js';
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+type CrmJobRow = { id: string; title: string; job_number: number | null };
+
+async function insertCrmJob(writer: any, row: Record<string, unknown>): Promise<CrmJobRow> {
+  await repairMemoryJobFk();
+  const attempt = () => writer.from('crm_jobs').insert(row).select('id, title, job_number').single();
+  const first = await attempt();
+  if (!first.error && first.data) return first.data as CrmJobRow;
+  if (isMemoryLedgerError(first.error?.message)) {
+    await repairMemoryJobFk();
+    const retry = await attempt();
+    if (!retry.error && retry.data) return retry.data as CrmJobRow;
+    throw intakeWriteError(retry.error ?? first.error, 'Could not create the job.', 'job_failed');
+  }
+  throw intakeWriteError(first.error, 'Could not create the job.', 'job_failed');
+}
 
 export const jobIntakeRouter = Router();
 jobIntakeRouter.use(requireAuth);
@@ -158,21 +179,15 @@ jobIntakeRouter.post('/jobs/quick-start', async (req: Request, res: Response, ne
       throw new HttpError(500, 'Could not save the address.', 'property_failed');
     }
 
-    const { data: job, error: jobError } = await supabase
-      .from('crm_jobs')
-      .insert({
-        org_id: orgId,
-        title: jobTitle,
-        work_type: input.workType,
-        property_id: (property as any).id,
-        scheduled_start: input.scheduledStart ?? null,
-        created_by: userId,
-      })
-      .select('id, title, job_number')
-      .single();
-    if (jobError || !job) throw new HttpError(500, 'Could not create the job.', 'job_failed');
-
-    const jobId = (job as any).id;
+    const job = await insertCrmJob(supabase, {
+      org_id: orgId,
+      title: jobTitle,
+      work_type: input.workType,
+      property_id: (property as any).id,
+      scheduled_start: input.scheduledStart ?? null,
+      created_by: userId,
+    });
+    const jobId = job.id;
 
     // Provenance, written in the same breath as the job. A job whose intake
     // row is missing reads as "source unknown" forever, and there is no later
@@ -558,22 +573,30 @@ async function createJobFile(
     external: Boolean(person.external || !person.userId),
   }));
 
-  const rpc =
+  const rpcArgs = {
+    p_org_id: orgId,
+    p_title: jobTitle,
+    p_work_type: input.workType,
+    p_address: input.address,
+    p_city: input.city ?? null,
+    p_postal_code: input.postalCode ?? null,
+    p_claim_number: input.claimNumber ?? null,
+    p_brief_note: input.briefNote ?? null,
+    p_facts: input.facts ?? {},
+    p_scope: scopeLines,
+    p_invitees: invitees,
+  };
+
+  await repairMemoryJobFk();
+  let rpc =
     invitees.length > 0
-      ? await supabase.rpc('intake_create_job_file', {
-          p_org_id: orgId,
-          p_title: jobTitle,
-          p_work_type: input.workType,
-          p_address: input.address,
-          p_city: input.city ?? null,
-          p_postal_code: input.postalCode ?? null,
-          p_claim_number: input.claimNumber ?? null,
-          p_brief_note: input.briefNote ?? null,
-          p_facts: input.facts ?? {},
-          p_scope: scopeLines,
-          p_invitees: invitees,
-        })
+      ? await supabase.rpc('intake_create_job_file', rpcArgs)
       : { error: null, data: null };
+
+  if (rpc.error && isMemoryLedgerError(rpc.error.message) && invitees.length > 0) {
+    await repairMemoryJobFk();
+    rpc = await supabase.rpc('intake_create_job_file', rpcArgs);
+  }
 
   if (!rpc.error && rpc.data) {
     const payload = rpc.data as any;
@@ -661,30 +684,19 @@ async function createJobFileStepwise(
     .select('id')
     .single();
   if (propertyError || !property) {
-    throw new HttpError(
-      500,
-      propertyError?.message || 'Could not save the address.',
-      'property_failed',
-    );
+    throw intakeWriteError(propertyError, 'Could not save the address.', 'property_failed');
   }
 
-  const { data: job, error: jobError } = await writer
-    .from('crm_jobs')
-    .insert({
-      org_id: orgId,
-      title: jobTitle,
-      work_type: input.workType,
-      property_id: (property as any).id,
-      claim_number: input.claimNumber || null,
-      status: 'scheduled',
-      created_by: userId,
-    })
-    .select('id, title, job_number')
-    .single();
-  if (jobError || !job) {
-    throw new HttpError(500, jobError?.message || 'Could not create the job.', 'job_failed');
-  }
-  const jobId = (job as any).id as string;
+  const job = await insertCrmJob(writer, {
+    org_id: orgId,
+    title: jobTitle,
+    work_type: input.workType,
+    property_id: (property as any).id,
+    claim_number: input.claimNumber || null,
+    status: 'scheduled',
+    created_by: userId,
+  });
+  const jobId = job.id;
 
   const { error: intakeError } = await writer.from('job_intake').insert({
     job_id: jobId,
@@ -714,11 +726,7 @@ async function createJobFileStepwise(
     .select('id, revision')
     .single();
   if (briefError || !brief) {
-    throw new HttpError(
-      500,
-      briefError?.message || 'Could not publish the brief.',
-      'brief_failed',
-    );
+    throw intakeWriteError(briefError, 'Could not publish the brief.', 'brief_failed');
   }
   const revision = (brief as any).revision ?? 1;
 
@@ -738,7 +746,7 @@ async function createJobFileStepwise(
       )
       .select('id');
     if (inserted.error) {
-      throw new HttpError(500, inserted.error.message || 'Could not save scope lines.', 'scope_failed');
+      throw intakeWriteError(inserted.error, 'Could not save scope lines.', 'scope_failed');
     }
   }
 
@@ -761,9 +769,9 @@ async function createJobFileStepwise(
       .select('id, company, access_token, email')
       .single();
     if (partyError || !party) {
-      throw new HttpError(
-        500,
-        partyError?.message || `Could not invite ${person.fullName}.`,
+      throw intakeWriteError(
+        partyError,
+        `Could not invite ${person.fullName}.`,
         'party_failed',
       );
     }

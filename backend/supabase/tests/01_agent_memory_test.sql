@@ -192,3 +192,74 @@ begin
   raise notice 'All Agent Memory guarantees hold (% events recorded).', v_events;
 end;
 $$;
+
+\echo '=== 14. A stray memory_events.job_id FK must not block opening a job ==='
+reset role;
+
+create table if not exists public.legacy_jobs (id uuid primary key);
+
+alter table public.memory_events drop constraint if exists memory_events_job_id_fkey;
+alter table public.memory_events
+  add constraint memory_events_job_id_fkey
+  foreign key (job_id) references public.legacy_jobs (id);
+
+set role authenticated;
+set request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+
+insert into public.crm_jobs (org_id, title, work_type)
+values (
+  'aaaaaaaa-0000-0000-0000-000000000001',
+  'FK should not block this job',
+  'mitigation'
+);
+
+reset role;
+do $$
+begin
+  if not exists (
+    select 1 from public.crm_jobs where title = 'FK should not block this job'
+  ) then
+    raise exception 'crm_jobs insert failed under a stray memory_events.job_id FK';
+  end if;
+end;
+$$;
+
+select public.repair_memory_job_fk() as dropped_stray_fk;
+
+do $$
+begin
+  if exists (
+    select 1 from pg_constraint where conname = 'memory_events_job_id_fkey'
+  ) then
+    raise exception 'repair_memory_job_fk did not drop memory_events_job_id_fkey';
+  end if;
+end;
+$$;
+
+set role authenticated;
+set request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+
+insert into public.crm_jobs (org_id, title, work_type)
+values (
+  'aaaaaaaa-0000-0000-0000-000000000001',
+  'Memory keeps the job id',
+  'construction'
+);
+
+reset role;
+do $$
+begin
+  if not exists (
+    select 1
+    from public.memory_events e
+    join public.crm_jobs j on j.id = e.entity_id
+    where j.title = 'Memory keeps the job id'
+      and e.event_type = 'job.created'
+      and e.job_id is not null
+  ) then
+    raise exception 'memory.capture did not record job_id after the stray FK was dropped';
+  end if;
+end;
+$$;
+
+drop table if exists public.legacy_jobs;

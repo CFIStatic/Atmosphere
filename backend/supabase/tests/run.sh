@@ -37,6 +37,9 @@ run "$MIGRATIONS/20260726000001_crm_core.sql"
 echo "==> Agent Memory"
 run "$MIGRATIONS/20260727000000_agent_memory.sql"
 
+echo "==> Memory capture must never block opening a job"
+run "$MIGRATIONS/20260818193000_memory_capture_never_blocks_jobs.sql"
+
 echo "==> Assertions"
 "${PSQL[@]}" -d "$DB" -f "$HERE/01_agent_memory_test.sql"
 

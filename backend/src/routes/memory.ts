@@ -37,9 +37,12 @@ async function attachJobs(supabase: any, events: any[]) {
   const ids = [...new Set(events.map((e) => e.jobId).filter(Boolean))];
   if (ids.length === 0) return events;
 
-  const { data } = await supabase.from('jobs').select('id, job_number, name').in('id', ids);
+  const { data } = await supabase.from('crm_jobs').select('id, job_number, title').in('id', ids);
   const jobs = new Map(
-    (data ?? []).map((j: any) => [j.id, { id: j.id, jobNumber: j.job_number, name: j.name }]),
+    (data ?? []).map((j: any) => [
+      j.id,
+      { id: j.id, jobNumber: j.job_number, name: j.title, title: j.title },
+    ]),
   );
   return events.map((e) => ({ ...e, job: e.jobId ? (jobs.get(e.jobId) ?? null) : null }));
 }
