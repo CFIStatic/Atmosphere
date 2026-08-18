@@ -314,7 +314,8 @@ export const config = {
     toEmail: process.env.CAREERS_TO_EMAIL ?? 'jack@jettx.ai',
     // Envelope sender for the application emails. Many SMTP providers require
     // this to be an address the account is allowed to send as.
-    fromEmail: process.env.CAREERS_FROM_EMAIL ?? process.env.SMTP_USER ?? '',
+    fromEmail:
+      process.env.CAREERS_FROM_EMAIL ?? process.env.SMTP_USER ?? 'jack@jettx.ai',
     // SMTP transport. Leave unset and /api/careers/apply still accepts and
     // logs applications in development, but refuses in production so a deploy
     // that forgot to configure mail fails loudly instead of eating applicants.

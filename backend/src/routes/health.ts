@@ -2,6 +2,8 @@ import { Router, type Request, type Response } from 'express';
 import { config } from '../config.js';
 import { createAnonClient, createAdminClient } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
+import { smtpConfigured } from '../lib/careersMail.js';
+import { systemMailConfigured } from '../lib/systemMail.js';
 
 export const healthRouter = Router();
 
@@ -54,6 +56,14 @@ healthRouter.get('/ready', async (_req: Request, res: Response) => {
     ok: Boolean(config.frontendOrigins.length && config.device.pepper),
     detail: config.isProduction ? 'production' : 'development',
   };
+  checks.mail = {
+    ok: systemMailConfigured(),
+    detail: smtpConfigured()
+      ? 'smtp'
+      : process.env.RESEND_API_KEY?.trim()
+        ? 'resend'
+        : 'unconfigured',
+  };
 
   const required = ['supabaseAuth', 'config'] as const;
   const ready = required.every((key) => checks[key]?.ok);
@@ -63,7 +73,7 @@ healthRouter.get('/ready', async (_req: Request, res: Response) => {
   const degraded =
     ready &&
     config.isProduction &&
-    (!checks.supabaseAdmin.ok || !checks.storage.ok);
+    (!checks.supabaseAdmin.ok || !checks.storage.ok || !checks.mail.ok);
 
   const status = ready ? (degraded ? 'degraded' : 'ready') : 'not_ready';
   const httpStatus = ready ? 200 : 503;

@@ -7,8 +7,8 @@ import { assessReadiness, type IntakeSource, type JobFacts } from '../verifier/r
 import { jobTitleForIntake, proposeIntakeFromText } from '../verifier/intakePropose.js';
 import { partyInviteEmail } from '../verifier/partyInviteEmail.js';
 import { sendSystemMail } from '../lib/systemMail.js';
+import { publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { createAdminClient } from '../lib/supabase.js';
-import { config } from '../config.js';
 import { recordAccess } from './proofOfWork.js';
 import {
   intakeWriteError,
@@ -417,16 +417,6 @@ async function actorLabelFor(supabase: any, userId: string): Promise<string> {
  * Best-effort: email the capture invite, and if this inbox already owns a
  * field identity, attach the job so it shows under My jobs without a second trip.
  */
-/** Prefer a real public app URL in invite links (not localhost). */
-function publicAppOrigin(): string | null {
-  const origins = config.frontendOrigins ?? [];
-  const httpsPublic = origins.find(
-    (o) => /^https:\/\//i.test(o) && !/localhost|127\.0\.0\.1/i.test(o),
-  );
-  if (httpsPublic) return httpsPublic;
-  const nonLocal = origins.find((o) => !/localhost|127\.0\.0\.1/i.test(o));
-  return nonLocal ?? origins[0] ?? null;
-}
 
 async function deliverPartyInvite(input: {
   supabase: any;

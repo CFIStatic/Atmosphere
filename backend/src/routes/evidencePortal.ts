@@ -17,6 +17,7 @@ import { shareEmail } from '../verifier/shareEmail.js';
 import { progressShareEmail } from '../verifier/progressShareEmail.js';
 import { buildMailSender } from '../campaigns/mail/index.js';
 import { config } from '../config.js';
+import { publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { sortJobsForOpen, todayKey } from '../field/todayJobs.js';
 
 /**
@@ -508,7 +509,7 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
                   sharerName,
                   jobTitle: (job as any)?.title ?? null,
                   recipientEmail,
-                  origin: config.frontendOrigins?.[0] ?? null,
+                  origin: publicAppOrigin(),
                   path: sharePath,
                   expiresAt,
                 })
@@ -518,7 +519,7 @@ evidencePortalRouter.post('/shares', async (req: Request, res: Response, next: N
                   jobTitle: (job as any)?.title ?? null,
                   recipientEmail,
                   recipientHasAccount,
-                  origin: config.frontendOrigins?.[0] ?? null,
+                  origin: publicAppOrigin(),
                   path: sharePath,
                   expiresAt,
                 });
