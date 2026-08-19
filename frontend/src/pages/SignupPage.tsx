@@ -1,11 +1,7 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import {
-  api,
-  ApiError,
-  type Org,
-} from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { loginHref, parseSignupIntent, resolveAuthRedirect } from '../lib/authRedirect';
 import { PLATFORM_HOME } from '../lib/platforms';
 import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
@@ -17,19 +13,21 @@ import { withTourQuery } from '../lib/productTour';
 import {
   SETUP_DEFAULTS,
   initialSetupStep,
+  workspaceNameFrom,
   type SetupWizardStep,
 } from '../components/setup/setupWizard';
 import { resolveVerifierSetup } from '../components/setup/verifierSetupOptions';
 import { EyeIcon, EyeOffIcon, SpinnerIcon, CheckIcon } from '../components/icons';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const JOIN_CODE_RE = /^[A-Za-z0-9]{6,12}$/;
 
 type OrgMode = 'create' | 'join';
 
 export function SignupPage() {
   const { user, loading, membership, signup, refreshMembership, logout } = useAuth();
   const location = useLocation();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queueRedirect = usePendingAuthRedirect();
   const redirectTo = resolveAuthRedirect(
     searchParams.get('next'),
@@ -46,7 +44,6 @@ export function SignupPage() {
   );
   const orgIntent = parseSignupIntent(searchParams.get('intent'));
 
-  // Step 1 — account
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState(() => searchParams.get('email') ?? '');
   const [password, setPassword] = useState('');
@@ -54,14 +51,9 @@ export function SignupPage() {
   const [accountSubmitting, setAccountSubmitting] = useState(false);
   const [accountNotice, setAccountNotice] = useState<string | null>(null);
 
-  // Step 2 — organization
   const [mode, setMode] = useState<OrgMode>(orgIntent === 'join' ? 'join' : 'create');
   const [orgName, setOrgName] = useState('');
   const [joinCode, setJoinCode] = useState('');
-
-  // Step 3 — invite / join result
-  const [createdOrg, setCreatedOrg] = useState<Org | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -71,25 +63,44 @@ export function SignupPage() {
   const checkoutParam =
     checkoutOutcome === 'success' || checkoutOutcome === 'cancelled' ? checkoutOutcome : null;
 
+  const goToStep = useCallback(
+    (next: SetupWizardStep) => {
+      setStep(next);
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev);
+          params.set('step', String(next));
+          return params;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
   useEffect(() => {
-    document.title =
-      orgIntent === 'join'
-        ? 'Link to the office account · Atmosphere'
-        : 'Create your organization · Atmosphere';
+    document.title = 'Create an account · Atmosphere';
     return () => {
       document.title = 'Atmosphere';
     };
-  }, [orgIntent]);
+  }, []);
 
   useEffect(() => {
     if (orgIntent === 'join') setMode('join');
   }, [orgIntent]);
 
   useEffect(() => {
+    if (accountSubmitting) return;
     if (!loading && user && !membership && step === 1) {
-      setStep(2);
+      goToStep(2);
     }
-  }, [loading, user, membership, step]);
+  }, [loading, user, membership, step, accountSubmitting, goToStep]);
+
+  useEffect(() => {
+    if (step !== 2 || mode !== 'create' || orgName.trim()) return;
+    const suggested = workspaceNameFrom(fullName, email);
+    if (suggested) setOrgName(suggested);
+  }, [step, mode, fullName, email, orgName]);
 
   useEffect(() => {
     if (loading || !user || !membership) {
@@ -105,8 +116,8 @@ export function SignupPage() {
         const needsBilling = status.required && !status.complete;
         setBillingGate(needsBilling ? 'pending' : 'complete');
         const stepParam = searchParams.get('step');
-        if (needsBilling && (stepParam === '4' || stepParam === '5' || checkoutParam)) {
-          setStep(4);
+        if (needsBilling && (stepParam === '3' || stepParam === '4' || stepParam === '5' || checkoutParam)) {
+          setStep(3);
         }
       } catch {
         if (!cancelled) setBillingGate('complete');
@@ -118,15 +129,17 @@ export function SignupPage() {
     };
   }, [loading, user, membership, searchParams, checkoutParam]);
 
-  if (loading || (user && membership && billingGate === 'loading')) {
+  if (loading || (user && membership && billingGate === 'loading' && step === 1)) {
     return (
-      <div className="cx-aurora grid min-h-screen place-items-center bg-paper-100 text-brand-600">
+      <div className="grid min-h-screen place-items-center bg-paper-100 text-brand-600">
         <SpinnerIcon className="animate-spin" width={28} height={28} />
       </div>
     );
   }
 
-  if (user && membership && billingGate === 'complete' && step !== 4) {
+  // Returning visitors who already finished setup should not restart it.
+  // Stay on steps 2–3 while this session is still walking the wizard.
+  if (user && membership && billingGate === 'complete' && step === 1 && !accountSubmitting) {
     return <Navigate to={redirectTo} replace />;
   }
 
@@ -134,8 +147,66 @@ export function SignupPage() {
   const nameValid = fullName.trim().length >= 2;
   const emailValid = EMAIL_RE.test(email.trim());
   const passwordValid = password.length >= 8;
-  const orgStepValid =
-    mode === 'create' ? orgName.trim().length >= 2 : /^[A-Za-z0-9]{6,12}$/.test(joinCode.trim());
+  const joinCodeValid = JOIN_CODE_RE.test(joinCode.trim());
+  const orgStepValid = mode === 'join' ? joinCodeValid : orgName.trim().length >= 2;
+
+  function enterApp() {
+    scheduleWorkVerificationTour();
+    queueRedirect(withTourQuery(redirectTo));
+  }
+
+  async function continueAfterWorkspace() {
+    try {
+      const status = await api.getBillingOnboarding();
+      const needsBilling = status.required && !status.complete;
+      setBillingGate(needsBilling ? 'pending' : 'complete');
+      if (needsBilling) {
+        goToStep(3);
+        return;
+      }
+      enterApp();
+    } catch {
+      goToStep(3);
+    }
+  }
+
+  async function completeWorkspace() {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const already = await refreshMembership();
+      if (already?.org) {
+        await continueAfterWorkspace();
+        return;
+      }
+
+      const { role: finalRole, workType, contractorType, usageIntents } = resolveVerifierSetup(
+        SETUP_DEFAULTS.role,
+        SETUP_DEFAULTS.trade,
+        true,
+      );
+
+      if (mode === 'join') {
+        await api.joinOrg(joinCode.trim().toUpperCase(), finalRole, workType, usageIntents);
+      } else {
+        await api.createOrg(
+          orgName.trim(),
+          finalRole,
+          workType,
+          contractorType,
+          usageIntents,
+        );
+      }
+
+      await refreshMembership();
+      await continueAfterWorkspace();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      goToStep(2);
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   async function handleAccountSubmit(e: FormEvent) {
     e.preventDefault();
@@ -161,7 +232,11 @@ export function SignupPage() {
         await api.updateProfile(fullName.trim());
         await refreshMembership();
       }
-      setStep(2);
+      if (res.membership?.org) {
+        await continueAfterWorkspace();
+        return;
+      }
+      goToStep(2);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {
@@ -169,70 +244,14 @@ export function SignupPage() {
     }
   }
 
-  async function completeSetup() {
-    setSubmitting(true);
-    setError(null);
-    try {
-      const { role: finalRole, workType, contractorType, usageIntents } = resolveVerifierSetup(
-        SETUP_DEFAULTS.role,
-        SETUP_DEFAULTS.trade,
-        true,
-      );
-
-      let org: Org;
-      if (mode === 'create') {
-        const res = await api.createOrg(
-          orgName.trim(),
-          finalRole,
-          workType,
-          contractorType,
-          usageIntents,
-        );
-        org = res.org;
-      } else {
-        const res = await api.joinOrg(
-          joinCode.trim().toUpperCase(),
-          finalRole,
-          workType,
-          usageIntents,
-        );
-        org = res.org;
-      }
-
-      await refreshMembership();
-      setCreatedOrg(org);
-      setStep(3);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
-      if (err instanceof ApiError && err.code === 'join_org_failed') setStep(2);
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  function enterApp() {
-    scheduleWorkVerificationTour();
-    queueRedirect(withTourQuery(redirectTo));
-  }
-
-  async function copyJoinCode() {
-    if (!createdOrg?.joinCode) return;
-    try {
-      await navigator.clipboard.writeText(createdOrg.joinCode);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* clipboard denied — user can still select manually */
-    }
-  }
-
   return (
     <SetupWizardShell
       step={step}
       intent={orgIntent}
-      signInHref={step === 1 ? signInHref : undefined}
+      onStepSelect={goToStep}
+      signInHref={!user ? signInHref : undefined}
       headerAction={
-        step > 1 ? (
+        user && step > 1 ? (
           <button
             type="button"
             onClick={() => logout()}
@@ -243,16 +262,12 @@ export function SignupPage() {
         ) : undefined
       }
     >
-      {step === 1 && !user && (
+      {step === 1 && (!user || accountSubmitting) && (
         <SetupStepCard
           step={1}
           intent={orgIntent}
-          title="Your login details"
-          subtitle={
-            orgIntent === 'join'
-              ? 'Then you will enter the office join code — about two minutes total.'
-              : 'Organization setup starts on the next screen — about two minutes total.'
-          }
+          title="Create your account"
+          subtitle="Name, email, and a password — then the workspace on the next screen."
         >
           {accountNotice && (
             <div
@@ -265,12 +280,21 @@ export function SignupPage() {
                 <Link to={signInHref} className="font-semibold underline underline-offset-2">
                   Sign in
                 </Link>{' '}
-                once your email is confirmed to continue setup.
+                once your email is confirmed.
               </span>
             </div>
           )}
 
-          {error && <Alert>{error}</Alert>}
+          {error && (
+            <Alert>
+              {error}{' '}
+              {looksLikeExistingAccount(error) ? (
+                <Link to={signInHref} className="font-semibold underline underline-offset-2">
+                  Sign in
+                </Link>
+              ) : null}
+            </Alert>
+          )}
 
           <form onSubmit={handleAccountSubmit} noValidate className="mt-6 space-y-4">
             <Field label="Your name" htmlFor="signup-name">
@@ -300,11 +324,7 @@ export function SignupPage() {
               />
             </Field>
 
-            <Field
-              label="Password"
-              htmlFor="signup-password"
-              hint="Min. 8 characters"
-            >
+            <Field label="Password" htmlFor="signup-password" hint="Min. 8 characters">
               <div className="relative">
                 <input
                   id="signup-password"
@@ -333,39 +353,20 @@ export function SignupPage() {
               disabled={!nameValid || !emailValid || !passwordValid || accountSubmitting}
               loading={accountSubmitting}
             >
-              {accountSubmitting ? 'Creating account…' : 'Continue to step 2'}
+              {accountSubmitting ? 'Creating account…' : 'Continue to workspace'}
             </PrimaryButton>
           </form>
-
-          <p className="mt-5 rounded-lg bg-paper-50 px-3.5 py-3 text-xs leading-relaxed text-ink-500">
-            {orgIntent === 'join' ? (
-              <>
-                After this login is created, enter the office join code to link your account to
-                that organization.
-              </>
-            ) : (
-              <>
-                Linking to an office that already uses Atmosphere? Create your account here, then
-                choose <strong className="font-medium text-ink-700">Link to office account</strong>{' '}
-                on step 2.
-              </>
-            )}
-          </p>
         </SetupStepCard>
       )}
 
-      {step === 1 && user && (
+      {step === 1 && user && !accountSubmitting && (
         <SetupStepCard
           step={1}
           intent={orgIntent}
           title="Account ready"
-          subtitle={
-            orgIntent === 'join'
-              ? 'Your login is set. Continue to link this account to the office organization.'
-              : 'Your login is set. Continue to name your organization or link to an office account.'
-          }
+          subtitle="Next you will name the workspace, or enter a join code if you were invited."
         >
-          <PrimaryButton onClick={() => setStep(2)}>Continue to step 2</PrimaryButton>
+          <PrimaryButton onClick={() => goToStep(2)}>Continue to workspace</PrimaryButton>
         </SetupStepCard>
       )}
 
@@ -373,26 +374,17 @@ export function SignupPage() {
         <SetupStepCard
           step={2}
           intent={orgIntent}
-          title={mode === 'join' ? 'Link to the office account' : 'Your organization'}
+          title={mode === 'join' ? 'Enter your join code' : 'Your workspace'}
           subtitle={
             mode === 'join'
-              ? 'Enter the join code from your office so this login belongs to that organization.'
-              : 'Create a new workspace for your company, or link to an office account that already exists.'
+              ? 'The code from your invite links this login to the team workspace.'
+              : 'Name the company workspace, or enter a join code if you were invited.'
           }
         >
           {error && <Alert>{error}</Alert>}
 
-          <div className="mt-5 grid grid-cols-2 gap-2 rounded-lg glass-card p-1">
-            <ModeTab active={mode === 'create'} onClick={() => setMode('create')}>
-              Create organization
-            </ModeTab>
-            <ModeTab active={mode === 'join'} onClick={() => setMode('join')}>
-              Link to office
-            </ModeTab>
-          </div>
-
           {mode === 'create' ? (
-            <Field label="Organization name" htmlFor="org-name" className="mt-5">
+            <Field label="Company name" htmlFor="org-name" className="mt-5">
               <input
                 id="org-name"
                 value={orgName}
@@ -402,11 +394,18 @@ export function SignupPage() {
                 className={inputClass}
               />
               <p className="mt-2 text-xs text-ink-500">
-                You will get a join code on the next step so teammates can link their accounts.
+                Were you invited?{' '}
+                <button
+                  type="button"
+                  onClick={() => setMode('join')}
+                  className="font-medium text-brand-600 hover:text-brand-700"
+                >
+                  Enter a join code
+                </button>
               </p>
             </Field>
           ) : (
-            <Field label="Office join code" htmlFor="join-code" className="mt-5">
+            <Field label="Join code" htmlFor="join-code" className="mt-5">
               <input
                 id="join-code"
                 value={joinCode}
@@ -417,7 +416,14 @@ export function SignupPage() {
                 className={`${inputClass} font-mono tracking-widest`}
               />
               <p className="mt-2 text-xs text-ink-500">
-                Ask someone in the office for the organization join code.
+                Starting a new company?{' '}
+                <button
+                  type="button"
+                  onClick={() => setMode('create')}
+                  className="font-medium text-brand-600 hover:text-brand-700"
+                >
+                  Name a workspace
+                </button>
               </p>
             </Field>
           )}
@@ -426,7 +432,7 @@ export function SignupPage() {
             {user ? (
               <button
                 type="button"
-                onClick={() => setStep(1)}
+                onClick={() => goToStep(1)}
                 className="text-sm font-medium text-ink-600 hover:text-ink-900"
               >
                 Back
@@ -439,7 +445,7 @@ export function SignupPage() {
               loading={submitting}
               onClick={() => {
                 setError(null);
-                void completeSetup();
+                void completeWorkspace();
               }}
             >
               {submitting ? 'Setting up…' : 'Continue'}
@@ -448,63 +454,34 @@ export function SignupPage() {
         </SetupStepCard>
       )}
 
-      {step === 3 && createdOrg && (
-        <SetupStepCard
-          step={3}
-          intent={orgIntent}
-          title={mode === 'create' ? 'Invite your crew' : 'You are connected'}
-          subtitle={
-            mode === 'create'
-              ? 'Share this join code so teammates can link their accounts to this office.'
-              : `Your account is linked to ${createdOrg.name}. You can invite others from Settings later.`
-          }
-        >
-          {mode === 'create' && (
-            <div className="mt-6 rounded-xl border border-line bg-paper-50 p-5 text-center">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-500">
-                Your organization join code
-              </p>
-              <p className="mt-3 font-mono text-3xl font-bold tracking-[0.2em] text-ink-900">
-                {createdOrg.joinCode}
-              </p>
-              <button
-                type="button"
-                onClick={copyJoinCode}
-                className="mt-4 rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
-              >
-                {copied ? 'Copied!' : 'Copy join code'}
-              </button>
-              <p className="mt-4 text-xs text-ink-500">
-                Teammates choose <strong>Link to office account</strong> when they sign up.
-              </p>
-            </div>
-          )}
-
-          <div className="mt-7 flex flex-wrap items-center justify-between gap-3">
-            <span className="text-xs text-ink-500">You can update your profile anytime in Settings.</span>
-            <PrimaryButton onClick={() => setStep(4)}>
-              {mode === 'create' ? 'Continue to billing' : 'Continue'}
-            </PrimaryButton>
-          </div>
-        </SetupStepCard>
-      )}
-
-      {step === 4 && membership && (
+      {step === 3 && membership && (
         <SetupBillingStep
           redirectTo={redirectTo}
           checkoutOutcome={checkoutParam}
+          nextLabel="Enter Atmosphere"
           onComplete={enterApp}
         />
       )}
 
-      {step === 4 && !membership && (
+      {step === 3 && !membership && (
         <SetupStepCard
-          step={4}
+          step={3}
           intent={orgIntent}
           title="Set up billing"
-          subtitle="Finish organization setup on step 2 first."
+          subtitle="Add a payment method to activate the workspace."
         >
-          <PrimaryButton onClick={() => setStep(2)}>Back to organization setup</PrimaryButton>
+          <div className="mt-6 rounded-xl border border-line bg-paper-50 p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-500">
+              Work Verification
+            </p>
+            <p className="mt-2 text-3xl font-bold tracking-tight text-ink-900">
+              $599
+              <span className="text-base font-medium text-ink-500"> / month</span>
+            </p>
+          </div>
+          <div className="mt-7 flex justify-end">
+            <PrimaryButton onClick={() => goToStep(2)}>Continue to workspace</PrimaryButton>
+          </div>
         </SetupStepCard>
       )}
 
@@ -515,8 +492,12 @@ export function SignupPage() {
   );
 }
 
+function looksLikeExistingAccount(message: string): boolean {
+  return /already exist/i.test(message);
+}
+
 const inputClass =
-  'w-full rounded-lg glass-card px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200';
+  'w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200';
 
 function Alert({ children }: { children: ReactNode }) {
   return (
@@ -580,27 +561,3 @@ function PrimaryButton({
     </button>
   );
 }
-
-function ModeTab({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`rounded-md px-3 py-2 text-sm font-medium transition ${
-        active ? 'bg-brand-500 text-ink-900 shadow' : 'text-ink-600 hover:text-ink-900'
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-

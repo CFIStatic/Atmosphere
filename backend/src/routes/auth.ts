@@ -27,7 +27,12 @@ import {
 } from '../lib/deviceCrypto.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { recordEvent } from '../lib/memory.js';
-import { createPasswordAccount, publicUser, sessionTokens, signInPasswordAccount } from '../auth/passwordAccount.js';
+import {
+  createPasswordAccount,
+  publicUser,
+  sessionTokens,
+  signInPasswordAccount,
+} from '../auth/passwordAccount.js';
 
 export const authRouter = Router();
 
@@ -57,9 +62,9 @@ export const authLimiter = rateLimit({
  * Returns session tokens in the JSON body for native clients (Field Capture
  * stores them in Keychain). The dashboard also receives httpOnly cookies.
  *
- * Development / preview / production: prefers admin.createUser (service role)
- * so the office console gets a session without waiting on a confirmation email.
- * Public Auth signup is the fallback when the service role key is unset.
+ * Development / preview: prefers admin.createUser (service role) so signup
+ * works for arbitrary emails without burning Supabase's built-in email quota.
+ * Production: uses the public Auth signup path (confirmation emails as configured).
  */
 authRouter.post('/signup', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -96,23 +101,21 @@ authRouter.post('/login', authLimiter, async (req: Request, res: Response, next:
   try {
     const { email, password } = credentialsSchema.parse(req.body);
     const result = await signInPasswordAccount(email, password);
-
     if (result.kind === 'error') throw result.error;
 
-    const { user, session } = result;
-    setSessionCookies(res, session);
+    setSessionCookies(res, result.session);
 
     // Signing in is a real event with no row behind it, so the trigger that
     // records everything else cannot see it. Recorded here instead — and
     // deliberately awaited before responding, so a sign-in never lands in the
     // memory after the work that followed it.
-    await recordEvent(createUserClient(session.access_token), {
+    await recordEvent(createUserClient(result.session.access_token), {
       type: 'auth.signed_in',
       summary: 'signed in with a password',
-      entityId: user.id,
+      entityId: result.user.id,
     });
 
-    res.json({ user: publicUser(user), session: sessionTokens(session) });
+    res.json({ user: publicUser(result.user), session: sessionTokens(result.session) });
   } catch (err) {
     next(err);
   }

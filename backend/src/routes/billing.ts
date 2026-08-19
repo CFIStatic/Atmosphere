@@ -7,6 +7,10 @@ import { HttpError, badRequest } from '../lib/errors.js';
 import { toNanos } from '../lib/money.js';
 import { ensureCustomer, stripeClient } from '../lib/stripe.js';
 import {
+  billingOnboardingGate,
+  signupCheckoutReturnUrl,
+} from '../lib/signupOnboarding.js';
+import {
   billingError,
   serializeBalance,
   serializeOverview,
@@ -516,9 +520,12 @@ async function loadBillingOnboardingStatus(
   ]);
 
   const isCreator = org?.created_by === userId;
-  const hasSubscription =
-    Boolean(billing?.stripe_subscription_id) &&
-    ['active', 'trialing'].includes(String(billing?.status ?? ''));
+  const { required, complete, hasSubscription } = billingOnboardingGate({
+    paymentProvider,
+    isCreator,
+    subscriptionId: billing?.stripe_subscription_id,
+    subscriptionStatus: billing?.status,
+  });
 
   let planName = 'Work Verification';
   let baseMonthlyFeeCents = 59900;
@@ -546,9 +553,6 @@ async function loadBillingOnboardingStatus(
       : version.metering_plans;
     if (plan?.name) planName = plan.name;
   }
-
-  const required = paymentProvider === 'stripe' && isCreator;
-  const complete = !required || hasSubscription;
 
   return {
     paymentProvider,
@@ -584,9 +588,11 @@ async function resolveOnboardingPriceId(
 }
 
 function onboardingReturnUrl(kind: 'success' | 'cancelled', returnPath?: string) {
-  const params = new URLSearchParams({ step: '4', checkout: kind });
-  if (returnPath) params.set('next', returnPath);
-  return `${config.stripe.onboardingReturnBase}?${params.toString()}`;
+  return signupCheckoutReturnUrl({
+    base: config.stripe.onboardingReturnBase,
+    kind,
+    returnPath,
+  });
 }
 
 /** Organization name, for the Stripe customer record. */

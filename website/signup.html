@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Create your Atmosphere organization — or join an existing one with a code. Pick your role, choose your kind of work, and bring the whole team in." />
+  <meta name="description" content="Create an Atmosphere account — email and password, then you are in. Join a team later with a code if you have one." />
   <meta name="theme-color" content="#FBFAF7" />
-  <title>Create your organization · Atmosphere</title>
-  <meta property="og:title" content="Create your organization · Atmosphere" />
-  <meta property="og:description" content="Create your Atmosphere organization — or join an existing one with a code. Pick your role, choose your kind of work, and bring the whole team in." />
+  <title>Create an account · Atmosphere</title>
+  <meta property="og:title" content="Create an account · Atmosphere" />
+  <meta property="og:description" content="Create an Atmosphere account — email and password, then you are in. Join a team later with a code if you have one." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Atmosphere" />
   <meta property="og:image" content="/assets/og.png" />
@@ -83,7 +83,7 @@
     <a class="sub" href="investors.html">Investors</a>
     <a class="sub" href="contact.html">Contact</a>
     <a href="signin.html">Sign in</a>
-    <a href="signup.html">Create your organization</a>
+    <a href="signup.html">Create an account</a>
   </div>
 </nav>
 
@@ -93,10 +93,10 @@
 <header class="page-hero">
   <div class="wrap">
     <div class="eyebrow mono">Get started</div>
-    <h1>Create your organization</h1>
+    <h1>Create an account</h1>
     <p class="lede">
-      One account, one organization, one join code — and everyone from the office to
-      the truck works on the same verified record.
+      Email and password — then you are in. If your team already uses Atmosphere,
+      enter their join code when you sign up.
     </p>
   </div>
 </header>
@@ -109,8 +109,8 @@
         <p>Email and password. Your password goes straight to our authentication provider — we never see or store it.</p>
       </div>
       <div class="contact-block">
-        <h3>2 · Name your organization</h3>
-        <p>Or skip this — if the office already exists, the join code links your login to that account.</p>
+        <h3>2 · Name your company</h3>
+        <p>Optional. If your team already has a workspace, enter their join code instead.</p>
       </div>
       <div class="contact-block">
         <h3>3 · Pick your role and trade</h3>
@@ -124,10 +124,6 @@
 
     <div>
       <form class="form" id="signup-form" novalidate>
-        <div class="seg" role="tablist" aria-label="Create or join">
-          <button type="button" class="on" role="tab" aria-selected="true">Create a new organization</button>
-          <button type="button" role="tab" aria-selected="false">Link to office account</button>
-        </div>
         <div class="form-row">
           <div class="field">
             <label for="su-name">Your name</label>
@@ -143,60 +139,19 @@
           <input id="su-password" name="password" type="password" autocomplete="new-password" required />
         </div>
         <div class="field">
-          <label for="su-org">Organization name</label>
-          <input id="su-org" name="org" type="text" autocomplete="organization" placeholder="e.g. Meridian Services" required />
-        </div>
-        <div class="form-row">
-          <div class="field">
-            <label for="su-role">Your role</label>
-            <select id="su-role" name="role">
-              <option>Crew Lead</option>
-              <option>Field Technician</option>
-              <option>Project Manager</option>
-              <option>Reviewer</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="su-work">Kind of work</label>
-            <select id="su-work" name="work">
-              <option>HVAC</option>
-              <option>Plumbing</option>
-              <option>Electrical</option>
-              <option>Drywall</option>
-              <option>Painting</option>
-              <option>Roofing</option>
-              <option>Flooring</option>
-              <option>Carpentry</option>
-              <option>Masonry &amp; concrete</option>
-              <option>Insulation</option>
-              <option>Siding &amp; exterior</option>
-              <option>Windows &amp; doors</option>
-              <option>Landscaping</option>
-              <option>Cleaning &amp; janitorial</option>
-              <option>Facilities maintenance</option>
-              <option>Fire &amp; life safety</option>
-              <option>Security &amp; access control</option>
-              <option>Low voltage / AV / data</option>
-              <option>Pool &amp; spa</option>
-              <option>Pest control</option>
-              <option>Appliance repair</option>
-              <option>Restoration (water / fire / mold)</option>
-              <option>General contractor</option>
-              <option>Other service trade</option>
-            </select>
-          </div>
+          <label for="su-org">Company name</label>
+          <input id="su-org" name="org" type="text" autocomplete="organization" placeholder="Optional" />
         </div>
         <div class="form-foot">
-          <button class="btn btn-lg" type="submit">Create organization</button>
-          <span class="fine">Already set up? <a href="signin.html" style="color: inherit;">Sign in</a></span>
+          <button class="btn btn-lg" type="submit">Create account</button>
+          <span class="fine">Already have an account? <a href="signin.html" style="color: inherit;">Sign in</a></span>
           <span class="form-status" id="signup-status" role="status" aria-live="polite"></span>
         </div>
       </form>
 
       <div class="join-card" style="margin-top: 20px;">
-        <div class="lbl mono">Joining instead?</div>
-        <div class="join-code mono">ATM-7X4K</div>
-        <p>Switch to "Link to office account," enter your team's join code, and skip naming an organization — everything else stays the same.</p>
+        <div class="lbl mono">Joining a team?</div>
+        <p>Create your account, then enter the join code from your invite. You can also add it later in Settings.</p>
       </div>
     </div>
   </div>

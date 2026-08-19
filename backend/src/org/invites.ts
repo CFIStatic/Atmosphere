@@ -63,7 +63,7 @@ export function inviteEmail(input: {
     lines.push(`"${input.note.trim()}"`, '');
   }
 
-  lines.push('To link your account to this office:', '');
+  lines.push('To join this office:', '');
   if (input.origin) {
     lines.push(
       `  1. Open ${input.origin}/signup?intent=join and create an account with this email address.`,
@@ -71,11 +71,11 @@ export function inviteEmail(input: {
   } else {
     lines.push('  1. Open Atmosphere and create an account with this email address.');
   }
-  lines.push('  2. Choose "Link to office account" and enter this code:', '');
+  lines.push('  2. Enter this join code:', '');
   lines.push(`      ${input.joinCode}`, '');
   lines.push(
     'On the Field Capture iPhone app, sign in (or create the account there),',
-    'then choose "Link to office account" and enter the same code.',
+    'then enter the same join code when asked to connect to the office.',
     '',
   );
   lines.push(

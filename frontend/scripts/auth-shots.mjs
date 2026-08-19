@@ -38,7 +38,7 @@ for (const theme of ['dark', 'light']) {
   await shot('signin');
 
   // 2 — Create account
-  await page.getByRole('button', { name: 'Create one' }).click();
+  await page.getByRole('link', { name: 'Create an account' }).click();
   await page.fill('#email', 'marcus@lonestar-restoration.com');
   await page.fill('#password', 'correct-horse-battery');
   await shot('signup');

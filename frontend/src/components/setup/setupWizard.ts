@@ -2,7 +2,7 @@ import type { SignupIntent } from '../../lib/authRedirect';
 import type { ContractorType, MemberRole, UsageIntent, WorkType } from '../../lib/api';
 import type { ServiceTrade } from './verifierSetupOptions';
 
-export type SetupWizardStep = 1 | 2 | 3 | 4;
+export type SetupWizardStep = 1 | 2 | 3;
 export type OrgSetupIntent = SignupIntent;
 
 export interface SetupWizardCopy {
@@ -19,22 +19,17 @@ export const SETUP_WIZARD_STEPS = [
   {
     step: 1 as const,
     title: 'Create your account',
-    detail: 'Work email and a password. We never store your password in plain text.',
+    detail: 'Name, email, and a password. We never store your password in plain text.',
   },
   {
     step: 2 as const,
-    title: 'Name your organization',
-    detail: 'Start a new workspace — or link to the office account with a join code.',
+    title: 'Your workspace',
+    detail: 'Name the company workspace, or enter a join code if you were invited.',
   },
   {
     step: 3 as const,
-    title: 'Invite your crew',
-    detail: 'Every organization gets one join code. Hand it to a teammate and they are in.',
-  },
-  {
-    step: 4 as const,
     title: 'Set up billing',
-    detail: 'Add your payment method in Stripe — $599/mo platform fee, then you are in.',
+    detail: 'Add your payment method in Stripe — $599/mo platform fee.',
   },
 ] as const;
 
@@ -42,20 +37,15 @@ const JOIN_WIZARD_STEPS = [
   {
     step: 1 as const,
     title: 'Create your account',
-    detail: 'Work email and a password. We never store your password in plain text.',
+    detail: 'Name, email, and a password. We never store your password in plain text.',
   },
   {
     step: 2 as const,
-    title: 'Link to the office account',
-    detail: 'Enter the join code from your office so this login belongs to that organization.',
+    title: 'Enter your join code',
+    detail: 'The code from your invite email links this login to the team workspace.',
   },
   {
     step: 3 as const,
-    title: 'You are connected',
-    detail: 'Your account is linked. You can invite others from Settings later.',
-  },
-  {
-    step: 4 as const,
     title: 'Set up billing',
     detail: 'Joiners usually skip this — the office already has a plan.',
   },
@@ -64,14 +54,14 @@ const JOIN_WIZARD_STEPS = [
 export function setupWizardCopy(intent: OrgSetupIntent): SetupWizardCopy {
   if (intent === 'join') {
     return {
-      heading: 'Link to the office account',
-      lede: 'Create your login, then enter the office join code so you work in the same organization.',
+      heading: 'Create an account',
+      lede: 'Three steps — your login, the office join code, then you are on the team.',
       steps: JOIN_WIZARD_STEPS,
     };
   }
   return {
-    heading: 'Create your organization',
-    lede: 'Four quick steps — about two minutes from account to your first job.',
+    heading: 'Create an account',
+    lede: 'Three steps — account, workspace, then billing.',
     steps: SETUP_WIZARD_STEPS,
   };
 }
@@ -90,9 +80,21 @@ export function initialSetupStep(options: {
   stepParam: string | null;
 }): SetupWizardStep {
   const parsed = options.stepParam ? Number.parseInt(options.stepParam, 10) : NaN;
-  // Accept legacy ?step=5 (old billing step number) as billing.
-  if (parsed === 5) return 4;
-  if (parsed >= 1 && parsed <= 4) return parsed as SetupWizardStep;
+  // Legacy ?step=4 (old invite) and ?step=5 (old billing) both land on billing.
+  if (parsed === 4 || parsed === 5) return 3;
+  if (parsed >= 1 && parsed <= 3) return parsed as SetupWizardStep;
   if (options.user && !options.membership) return 2;
   return 1;
+}
+
+/** Company name when the user skips it — still gives the workspace a real label. */
+export function workspaceNameFrom(fullName: string, email: string): string {
+  const name = fullName.trim();
+  if (name.length >= 2) return name;
+  const local = email.split('@')[0]?.trim().replace(/[._]+/g, ' ');
+  if (local) {
+    const labelled = local.replace(/\b\w/g, (ch) => ch.toUpperCase());
+    return `${labelled}'s workspace`;
+  }
+  return 'My workspace';
 }

@@ -83,7 +83,7 @@ export function LoginPage() {
 
   if (loading) {
     return (
-      <div className="cx-aurora grid min-h-screen place-items-center bg-paper-100 text-brand-600">
+      <div className="grid min-h-screen place-items-center bg-paper-100 text-brand-600">
         <SpinnerIcon className="animate-spin" width={28} height={28} />
       </div>
     );
@@ -143,22 +143,17 @@ export function LoginPage() {
   }
 
   const createAccountHref = signupHref({ next: redirectTo, email: email.trim() || undefined });
-  const linkOfficeHref = signupHref({
-    next: redirectTo,
-    email: email.trim() || undefined,
-    intent: 'join',
-  });
   const returningToUsage = redirectTo === '/usage' || redirectTo.startsWith('/usage?');
 
   return (
-    <div className="cx-aurora relative flex min-h-screen flex-col bg-paper-100">
+    <div className="relative flex min-h-screen flex-col bg-paper-100">
       <header className="px-6 py-6 sm:px-10">
         <Logo />
       </header>
 
       <main className="flex flex-1 items-center justify-center px-4 pb-16">
         <div className="w-full max-w-md animate-fade-in-up">
-          <div className="rounded-2xl border border-line bg-paper-0 shadow-lift p-8 shadow-2xl shadow-lift-xl sm:p-10">
+          <div className="rounded-2xl border border-line bg-paper-0 p-8 shadow-lift sm:p-10">
             {showPin ? (
               <>
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-500">
@@ -234,7 +229,19 @@ export function LoginPage() {
                     role="alert"
                     className="mt-6 rounded-lg border border-danger-200 bg-danger-50 px-3.5 py-3 text-sm text-danger-700"
                   >
-                    {error}
+                    <p>{error}</p>
+                    {/password|not confirmed|already exist/i.test(error) && (
+                      <p className="mt-2 text-ink-600">
+                        Forgot it?{' '}
+                        <Link
+                          to="/forgot-password"
+                          className="font-semibold text-brand-600 hover:text-brand-700"
+                        >
+                          Reset your password
+                        </Link>
+                        .
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -253,7 +260,7 @@ export function LoginPage() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="you@company.com"
-                      className="w-full rounded-lg glass-card px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
+                      className="w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
                     />
                   </div>
 
@@ -280,7 +287,7 @@ export function LoginPage() {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="••••••••"
-                        className="w-full rounded-lg glass-card px-3.5 py-2.5 pr-11 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
+                        className="w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 pr-11 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
                       />
                       <button
                         type="button"
@@ -310,38 +317,20 @@ export function LoginPage() {
                       setShowPin(true);
                       setPinError(null);
                     }}
-                    className="mt-3 w-full rounded-lg glass-card px-4 py-2.5 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
+                    className="mt-3 w-full rounded-lg border border-line bg-paper-0 px-4 py-2.5 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
                   >
                     Use your PIN instead
                   </button>
                 )}
 
-                <div className="mt-6 border-t border-line pt-6">
-                  <p className="text-center text-sm font-medium text-ink-700">Need an account?</p>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    <Link
-                      to={createAccountHref}
-                      className="rounded-lg border border-line bg-paper-50 px-3.5 py-3 text-left transition hover:border-brand-300 hover:bg-brand-50/70"
-                    >
-                      <span className="block text-sm font-semibold text-ink-900">
-                        Create an account
-                      </span>
-                      <span className="mt-1 block text-xs leading-relaxed text-ink-500">
-                        Start a new organization for your company.
-                      </span>
-                    </Link>
-                    <Link
-                      to={linkOfficeHref}
-                      className="rounded-lg border border-line bg-paper-50 px-3.5 py-3 text-left transition hover:border-brand-300 hover:bg-brand-50/70"
-                    >
-                      <span className="block text-sm font-semibold text-ink-900">
-                        Link to office account
-                      </span>
-                      <span className="mt-1 block text-xs leading-relaxed text-ink-500">
-                        Join your company&apos;s existing workspace with a join code.
-                      </span>
-                    </Link>
-                  </div>
+                <div className="mt-6 border-t border-line pt-6 text-center text-sm text-ink-600">
+                  Don&apos;t have an account?{' '}
+                  <Link
+                    to={createAccountHref}
+                    className="font-semibold text-brand-600 transition hover:text-brand-700"
+                  >
+                    Create an account
+                  </Link>
                 </div>
               </>
             )}
