@@ -1,5 +1,5 @@
 # Office console + Field Capture + Verifier.
-# ${PORT} and ${API_UPSTREAM} are substituted at container start
+# PORT and API_UPSTREAM are substituted at container start
 # (NGINX_ENVSUBST_FILTER). Every other $var is nginx's own.
 
 server {
