@@ -143,7 +143,10 @@
         var num = (payload.job && payload.job.jobNumber) || '';
         var company = (payload.you && payload.you.company) || 'Crew';
         var who = document.querySelector('.who');
-        if (who) who.innerHTML = '<b>' + escapeHtml(company) + '</b>Field Capture';
+        if (who) {
+          who.hidden = false;
+          who.innerHTML = '<b>' + escapeHtml(company) + '</b>Field Capture';
+        }
         renderExpect([
           {
             name: (num ? num + ' · ' : '') + title,
@@ -165,6 +168,11 @@
 
   function bootBlocked() {
     show('s-blocked');
+    var who = document.querySelector('.who');
+    if (who) {
+      who.hidden = true;
+      who.innerHTML = '';
+    }
     $('#blocked-msg').textContent =
       'Type your name and the office invite code from Atmosphere Settings.';
   }
@@ -200,6 +208,7 @@
     if (who) {
       var name = (me.user && (me.user.fullName || me.user.email)) || 'You';
       var org = (me.org && me.org.name) || 'Office';
+      who.hidden = false;
       who.innerHTML = '<b>' + escapeHtml(name) + '</b>' + escapeHtml(org);
     }
     renderExpect(state.jobs);
