@@ -162,12 +162,23 @@ const usageIntentsSchema = z
     message: 'Remove duplicate selections',
   });
 
+/**
+ * Website signup wizard only asks for a company name (or a join code).
+ * These fill the questionnaire fields so create_org / join_org still succeed.
+ */
+export const WEBSITE_SIGNUP_ONBOARDING = {
+  role: 'field_technician',
+  workType: 'construction',
+  contractorType: 'other',
+  usageIntents: ['field_work', 'exploring'],
+} as const;
+
 export const createOrgSchema = z.object({
   name: z.string({ required_error: 'Organization name is required' }).trim().min(2, 'Organization name is too short').max(80, 'Organization name is too long'),
-  role: roleSchema,
-  workType: workTypeSchema,
-  contractorType: contractorTypeSchema,
-  usageIntents: usageIntentsSchema,
+  role: roleSchema.default(WEBSITE_SIGNUP_ONBOARDING.role),
+  workType: workTypeSchema.default(WEBSITE_SIGNUP_ONBOARDING.workType),
+  contractorType: contractorTypeSchema.default(WEBSITE_SIGNUP_ONBOARDING.contractorType),
+  usageIntents: usageIntentsSchema.default([...WEBSITE_SIGNUP_ONBOARDING.usageIntents]),
 });
 
 /** Body of a membership update — a member editing their own role / work type / usage. */
@@ -188,9 +199,9 @@ export const joinOrgSchema = z.object({
     .trim()
     .toUpperCase()
     .regex(/^[A-Z0-9]{6,12}$/, 'Enter a valid join code'),
-  role: roleSchema,
-  workType: workTypeSchema,
-  usageIntents: usageIntentsSchema,
+  role: roleSchema.default(WEBSITE_SIGNUP_ONBOARDING.role),
+  workType: workTypeSchema.default(WEBSITE_SIGNUP_ONBOARDING.workType),
+  usageIntents: usageIntentsSchema.default([...WEBSITE_SIGNUP_ONBOARDING.usageIntents]),
 });
 
 export type CreateOrgInput = z.infer<typeof createOrgSchema>;

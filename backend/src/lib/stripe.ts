@@ -209,8 +209,21 @@ export async function syncMeteringSubscription(
   if (opts.periodStart) patch.period_start = opts.periodStart;
   if (opts.periodEnd) patch.period_end = opts.periodEnd;
 
-  const { error } = await admin.from('org_billing').update(patch).eq('org_id', orgId);
+  const { data, error } = await admin
+    .from('org_billing')
+    .update(patch)
+    .eq('org_id', orgId)
+    .select('org_id');
   if (error) throw new Error(`metering subscription sync failed: ${error.message}`);
+  if (data && data.length > 0) return;
+
+  // Checkout normally creates the row via link_stripe_customer. If the webhook
+  // wins the race, still mark the org paid so signup can finish.
+  const { error: insertError } = await admin.from('org_billing').insert({
+    org_id: orgId,
+    ...patch,
+  });
+  if (insertError) throw new Error(`metering subscription sync failed: ${insertError.message}`);
 }
 
 /** Seconds-since-epoch → ISO, for Stripe's period boundaries. */

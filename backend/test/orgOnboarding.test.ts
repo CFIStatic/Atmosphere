@@ -3,10 +3,9 @@ import assert from 'node:assert/strict';
 import { createOrgSchema, joinOrgSchema } from '../src/lib/validation.js';
 
 // The create-organization and join-with-a-code flows share their contract with
-// the frontend onboarding page (OnboardingPage.tsx) and the create_org /
-// join_org database functions. These tests pin that contract down: if the
-// accepted join-code shape or the required onboarding answers change, one of
-// these fails before a customer does.
+// the frontend signup wizard and the create_org / join_org database functions.
+// These tests pin that contract down: if the accepted join-code shape or the
+// required onboarding answers change, one of these fails before a customer does.
 
 const answers = {
   role: 'project_manager',
