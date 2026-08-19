@@ -1,5 +1,5 @@
-# Railway / compose: office console from the repo root so Vite can copy
-# sibling verifier/ and fieldcapture/ into dist.
+# Alternate office-console image (cross-origin API). Railway and Compose use
+# `frontend/Dockerfile` instead — same-origin `/api` via nginx.
 #
 #   docker build -f Dockerfile.frontend \
 #     --build-arg VITE_API_BASE_URL=https://api.example.com \

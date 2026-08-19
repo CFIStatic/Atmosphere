@@ -1,8 +1,7 @@
-# Keep Railway's root Docker build small (backend image).
-# frontend/, verifier/, and fieldcapture/ stay in the context so
-# `docker build -f frontend/Dockerfile .` can copy them.
+# Shared repo-root Docker context (backend, office app, and website images).
+# Do not exclude frontend/, verifier/, fieldcapture/, or website/ — those
+# Dockerfiles COPY them from this context.
 .git
-website
 apps
 agent
 docs
