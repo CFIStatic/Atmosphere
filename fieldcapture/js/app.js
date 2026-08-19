@@ -58,10 +58,10 @@
       void el.offsetWidth;
       el.classList.add('play');
       /* CSS already flattens the choreography when the OS asks for reduced
-         motion. Four-second lockup, then the mark dissolves while the
-         paper/night veil stays put so Today does not ghost through. */
+         motion. Four-second lockup, then the mark and veil crossfade so
+         Today shows through. */
       var hold = 4000;
-      var fade = 1800;
+      var fade = 1500;
       window.setTimeout(function () {
         document.documentElement.removeAttribute('data-elevate-preview');
         el.classList.add('out');

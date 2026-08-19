@@ -366,11 +366,13 @@
     position: absolute; inset: 0; background: var(--bg); pointer-events: none;
   }
   .elevate.play.out, .elevate.out {
-    background: var(--bg);
-    animation: elevate-veil-out .8s 1s cubic-bezier(.33, 0, .2, 1) both;
+    background: transparent;
+  }
+  .elevate.play.out .elevate-sky {
+    animation: elevate-veil-out 1.5s cubic-bezier(.33, 0, .2, 1) both;
   }
   .elevate.play.out .elevate-lockup {
-    animation: elevate-lockup-out 1.8s cubic-bezier(.45, 0, .12, 1) both;
+    animation: elevate-lockup-out 1.5s cubic-bezier(.45, 0, .12, 1) both;
   }
   .elevate.play.out .elevate-bloom,
   .elevate.play.out .elevate-whoosh {
@@ -468,9 +470,8 @@
   }
   @keyframes elevate-lockup-out {
     0% { opacity: 1; transform: translateY(-18px) scale(1); filter: blur(0); }
-    22% { opacity: .82; transform: translateY(-24px) scale(.985); filter: blur(2px); }
-    58% { opacity: .08; transform: translateY(-36px) scale(.95); filter: blur(10px); }
-    100% { opacity: 0; transform: translateY(-48px) scale(.92); filter: blur(18px); }
+    45% { opacity: .42; transform: translateY(-28px) scale(.97); filter: blur(6px); }
+    100% { opacity: 0; transform: translateY(-40px) scale(.94); filter: blur(14px); }
   }
   @keyframes elevate-veil-out {
     from { opacity: 1; }
@@ -483,8 +484,8 @@
       box-shadow: none;
     }
     .elevate.play .elevate-whoosh, .elevate.play .elevate-bloom { display: none; }
-    .elevate.play.out, .elevate.out { animation: none; }
-    .elevate.play.out .elevate-lockup { animation: none; filter: none; }
+    .elevate.play.out, .elevate.out { background: var(--bg); animation: none; }
+    .elevate.play.out .elevate-sky, .elevate.play.out .elevate-lockup { animation: none; filter: none; }
     .elevate-sub { color: var(--faint); }
   }
 
@@ -645,6 +646,6 @@
 </div>
 
 <script src="js/capture-core.js"></script>
-<script src="js/app.js?v=elevate10"></script>
+<script src="js/app.js?v=elevate11"></script>
 </body>
 </html>
