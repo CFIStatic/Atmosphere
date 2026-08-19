@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { api, ApiError, type Org } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { loginHref, parseSignupIntent, resolveAuthRedirect } from '../lib/authRedirect';
 import { PLATFORM_HOME } from '../lib/platforms';
 import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
 import { getPlatform } from '../lib/usePlatform';
 import { SetupStepCard, SetupWizardShell } from '../components/setup/SetupWizardShell';
 import { SetupBillingStep } from '../components/setup/SetupBillingStep';
-import { SetupInviteStep } from '../components/setup/SetupInviteStep';
 import { scheduleWorkVerificationTour } from '../components/tour/ProductTourHost';
 import { withTourQuery } from '../lib/productTour';
 import {
@@ -55,7 +54,6 @@ export function SignupPage() {
   const [mode, setMode] = useState<OrgMode>(orgIntent === 'join' ? 'join' : 'create');
   const [orgName, setOrgName] = useState('');
   const [joinCode, setJoinCode] = useState('');
-  const [createdOrg, setCreatedOrg] = useState<Org | null>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -140,7 +138,7 @@ export function SignupPage() {
   }
 
   // Returning visitors who already finished setup should not restart it.
-  // Stay on steps 2–4 (billing, then invites) while this session is still walking the wizard.
+  // Stay on steps 2–3 while this session is still walking the wizard.
   if (user && membership && billingGate === 'complete' && step === 1 && !accountSubmitting) {
     return <Navigate to={redirectTo} replace />;
   }
@@ -151,14 +149,13 @@ export function SignupPage() {
   const passwordValid = password.length >= 8;
   const joinCodeValid = JOIN_CODE_RE.test(joinCode.trim());
   const orgStepValid = mode === 'join' ? joinCodeValid : orgName.trim().length >= 2;
-  const inviteOrg = createdOrg ?? membership?.org ?? null;
 
   function enterApp() {
     scheduleWorkVerificationTour();
     queueRedirect(withTourQuery(redirectTo));
   }
 
-  async function continueAfterWorkspace(joinedExisting: boolean) {
+  async function continueAfterWorkspace() {
     try {
       const status = await api.getBillingOnboarding();
       const needsBilling = status.required && !status.complete;
@@ -167,11 +164,7 @@ export function SignupPage() {
         goToStep(3);
         return;
       }
-      if (joinedExisting) {
-        enterApp();
-        return;
-      }
-      goToStep(4);
+      enterApp();
     } catch {
       goToStep(3);
     }
@@ -183,8 +176,7 @@ export function SignupPage() {
     try {
       const already = await refreshMembership();
       if (already?.org) {
-        setCreatedOrg(already.org);
-        await continueAfterWorkspace(mode === 'join');
+        await continueAfterWorkspace();
         return;
       }
 
@@ -194,20 +186,20 @@ export function SignupPage() {
         true,
       );
 
-      const res =
-        mode === 'join'
-          ? await api.joinOrg(joinCode.trim().toUpperCase(), finalRole, workType, usageIntents)
-          : await api.createOrg(
-              orgName.trim(),
-              finalRole,
-              workType,
-              contractorType,
-              usageIntents,
-            );
+      if (mode === 'join') {
+        await api.joinOrg(joinCode.trim().toUpperCase(), finalRole, workType, usageIntents);
+      } else {
+        await api.createOrg(
+          orgName.trim(),
+          finalRole,
+          workType,
+          contractorType,
+          usageIntents,
+        );
+      }
 
       await refreshMembership();
-      setCreatedOrg(res.org);
-      await continueAfterWorkspace(mode === 'join');
+      await continueAfterWorkspace();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
       goToStep(2);
@@ -237,8 +229,7 @@ export function SignupPage() {
         await refreshMembership();
       }
       if (res.membership?.org) {
-        setCreatedOrg(res.membership.org);
-        await continueAfterWorkspace(false);
+        await continueAfterWorkspace();
         return;
       }
       goToStep(2);
@@ -463,14 +454,8 @@ export function SignupPage() {
         <SetupBillingStep
           redirectTo={redirectTo}
           checkoutOutcome={checkoutParam}
-          nextLabel={mode === 'join' ? 'Enter Atmosphere' : 'Invite teammates'}
-          onComplete={() => {
-            if (mode === 'join') {
-              enterApp();
-              return;
-            }
-            goToStep(4);
-          }}
+          nextLabel="Enter Atmosphere"
+          onComplete={enterApp}
         />
       )}
 
@@ -492,27 +477,6 @@ export function SignupPage() {
           </div>
           <div className="mt-7 flex justify-end">
             <PrimaryButton onClick={() => goToStep(2)}>Continue to workspace</PrimaryButton>
-          </div>
-        </SetupStepCard>
-      )}
-
-      {step === 4 && mode === 'create' && (
-        <SetupInviteStep
-          orgName={inviteOrg?.name}
-          locked={!membership}
-          onComplete={membership ? enterApp : () => goToStep(2)}
-        />
-      )}
-
-      {step === 4 && mode === 'join' && (
-        <SetupStepCard
-          step={4}
-          intent={orgIntent}
-          title="You are connected"
-          subtitle={`Your account is on ${inviteOrg?.name ?? 'the team'}.`}
-        >
-          <div className="mt-7 flex justify-end">
-            <PrimaryButton onClick={enterApp}>Enter Atmosphere</PrimaryButton>
           </div>
         </SetupStepCard>
       )}

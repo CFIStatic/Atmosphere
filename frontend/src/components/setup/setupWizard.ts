@@ -2,7 +2,7 @@ import type { SignupIntent } from '../../lib/authRedirect';
 import type { ContractorType, MemberRole, UsageIntent, WorkType } from '../../lib/api';
 import type { ServiceTrade } from './verifierSetupOptions';
 
-export type SetupWizardStep = 1 | 2 | 3 | 4;
+export type SetupWizardStep = 1 | 2 | 3;
 export type OrgSetupIntent = SignupIntent;
 
 export interface SetupWizardCopy {
@@ -31,11 +31,6 @@ export const SETUP_WIZARD_STEPS = [
     title: 'Set up billing',
     detail: 'Add your payment method in Stripe — $599/mo platform fee.',
   },
-  {
-    step: 4 as const,
-    title: 'Invite teammates',
-    detail: 'Email teammates after billing is on file. They get a link to join.',
-  },
 ] as const;
 
 const JOIN_WIZARD_STEPS = [
@@ -54,24 +49,19 @@ const JOIN_WIZARD_STEPS = [
     title: 'Set up billing',
     detail: 'Joiners usually skip this — the office already has a plan.',
   },
-  {
-    step: 4 as const,
-    title: 'You are connected',
-    detail: 'Your account is on the team. You can invite others from Settings later.',
-  },
 ] as const;
 
 export function setupWizardCopy(intent: OrgSetupIntent): SetupWizardCopy {
   if (intent === 'join') {
     return {
       heading: 'Create an account',
-      lede: 'Four steps — your login, the office join code, then you are on the team.',
+      lede: 'Three steps — your login, the office join code, then you are on the team.',
       steps: JOIN_WIZARD_STEPS,
     };
   }
   return {
     heading: 'Create an account',
-    lede: 'Four steps — account, workspace, billing, then email invites.',
+    lede: 'Three steps — account, workspace, then billing.',
     steps: SETUP_WIZARD_STEPS,
   };
 }
@@ -90,9 +80,9 @@ export function initialSetupStep(options: {
   stepParam: string | null;
 }): SetupWizardStep {
   const parsed = options.stepParam ? Number.parseInt(options.stepParam, 10) : NaN;
-  // Accept legacy ?step=5 (old billing step number) as billing.
-  if (parsed === 5) return 3;
-  if (parsed >= 1 && parsed <= 4) return parsed as SetupWizardStep;
+  // Legacy ?step=4 (old invite) and ?step=5 (old billing) both land on billing.
+  if (parsed === 4 || parsed === 5) return 3;
+  if (parsed >= 1 && parsed <= 3) return parsed as SetupWizardStep;
   if (options.user && !options.membership) return 2;
   return 1;
 }
