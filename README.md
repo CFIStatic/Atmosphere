@@ -277,13 +277,15 @@ cd backend && npm run smoke:synthetic
 ```
 
 CI runs backend/frontend **tests**, builds, Agent typecheck, migration SQL
-suites, migration inventory, and a backend Docker image build on every push.
+suites, migration inventory, and Docker image builds (backend + office app)
+on every push.
 
 ## Production
 
 See **[`docs/production.md`](docs/production.md)** for the Work Verification
-go-live checklist, required env vars, health probes (`/api/health`,
-`/api/ready`), migration apply order, and Docker Compose sketch.
+go-live checklist, Railway hosting for the office app, required env vars,
+health probes (`/api/health`, `/api/ready`, `/healthz`), migration apply
+order, and Docker Compose sketch.
 
 ```bash
 # Production-shaped local stack (needs a filled backend/.env)

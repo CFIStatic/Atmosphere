@@ -9,14 +9,77 @@ off or mocked until they are staffed and monitored.
 
 | Surface | Artifact | Notes |
 | --- | --- | --- |
-| Backend BFF | `backend/` (`Dockerfile` or `npm run build && npm start`) | Node 22, long-lived process; needs FFmpeg for proof sparse frames |
-| Office console | `frontend/` static build | Point `VITE_API_BASE_URL` at the BFF |
-| Field Capture | `fieldcapture/` static | Served under the same origin as the console or with `?api=` |
-| Verifier | `verifier/` static | Embedded by the frontend build; also standalone |
+| Backend BFF | `backend/` (`Dockerfile` or `npm run build && npm start`) | Node 22, long-lived process; needs FFmpeg for proof sparse frames. **Railway service `backend`.** |
+| Office app | `frontend/` + `verifier/` + `fieldcapture/` | One nginx image; `/api` proxied to the BFF. **Railway service `app`.** |
 | Marketing site | `website/` | Already CD’d to GitHub Pages |
 | Native Field | `apps/field-ios/` | App Store path; uses the same BFF |
 
-Compose sketch: `docker compose up --build` (see root `docker-compose.yml`).
+Compose sketch: `docker compose up --build` (see root `docker-compose.yml`). Same shape as Railway: browser hits `:8080`, nginx proxies `/api` to the BFF.
+
+## Host the office app on Railway
+
+The marketing site stays on GitHub Pages. The **product** (office console, Verifier, Field Capture) is a second Railway service next to the BFF, same project.
+
+Same-origin `/api` is the point: session cookies stay `SameSite=Lax`, Field Capture does not need `?api=`, and `VITE_API_BASE_URL` stays empty.
+
+### 1. Empty service in the existing project
+
+In the Railway project that already runs `backend`:
+
+1. **+ Create** → **Empty service**. Name it `app` (or set GitHub secret `RAILWAY_APP_SERVICE` to whatever you named it).
+2. Settings → **Config File**: `/frontend/railway.toml`  
+   Without this, deploys from the repo root apply `/railway.toml` and build the **backend** image into the app service.
+3. Settings → **Root Directory**: `/` (repo root). The Dockerfile copies `verifier/` and `fieldcapture/` as siblings of `frontend/`.
+4. Variables:
+
+   | Variable | Value |
+   | --- | --- |
+   | `API_UPSTREAM` | `http://${{backend.RAILWAY_PRIVATE_DOMAIN}}:${{backend.PORT}}` |
+
+   Replace `backend` with the BFF service name if it is not `backend`.
+
+### 2. Public origin
+
+On the **app** service: Settings → Networking → **Generate domain**, then attach `app.atmosphereteam.com` (or your real app host).
+
+On the **backend** service, `FRONTEND_ORIGIN` must include that https origin (comma-separated if you also keep the `*.up.railway.app` URL):
+
+```text
+FRONTEND_ORIGIN=https://app.atmosphereteam.com,https://${{app.RAILWAY_PUBLIC_DOMAIN}}
+```
+
+The deploy workflow already defaults `FRONTEND_ORIGIN` to `https://app.atmosphereteam.com` from GitHub Keys. Add the Railway domain in the dashboard if you sign in before the custom domain is live.
+
+### 3. Ship it
+
+`.github/workflows/deploy-production.yml` deploys **both** services (`railway up --service backend` and `--service app`). Needs `RAILWAY_TOKEN` in the `Keys` environment. Optional: `RAILWAY_APP_SERVICE` if the app service is not named `app`.
+
+```bash
+# Or from a laptop, after `railway link` (repo root, not frontend/):
+railway up --service app
+```
+
+Health probe: `GET https://<app-host>/healthz` → `ok`. The SPA is `/`; Field Capture is `/fieldcapture/`; Verifier is `/verifier/`.
+
+### 4. Point the rest of the product at that origin
+
+| Where | What |
+| --- | --- |
+| GitHub Actions variable `WEBSITE_APP_ORIGIN` | `https://app.atmosphereteam.com` — marketing Sign in / Get started CTAs (see `website/README.md`) |
+| GitHub Actions variable `WEBSITE_API_ORIGIN` | Backend’s public https origin — careers/contact forms on Pages |
+| GitHub Actions variable `FRONTEND_ORIGIN` | Same as backend `FRONTEND_ORIGIN` (synced onto Railway by the deploy job) |
+| Supabase → Auth → URL configuration | Add the app origin; password-reset redirect `{origin}/reset-password` |
+| Stripe webhooks | Still `POST https://<backend-public-host>/api/webhooks/stripe` (not the app host) |
+
+Invite emails use the first origin in `FRONTEND_ORIGIN`, so put the public `https://` app URL first.
+
+Local stand-in for this topology:
+
+```bash
+docker compose up --build
+# app:  http://localhost:8080
+# api:  http://localhost:4000  (also reachable as http://localhost:8080/api/…)
+```
 
 ## Supabase
 
@@ -97,8 +160,9 @@ A/B experiments live in `public.experiments` (see migration
 | --- | --- | --- |
 | Liveness | `GET /api/health` | Process up (no deps) |
 | Readiness | `GET /api/ready` | Supabase Auth reachable; admin/storage reported |
+| App | `GET /healthz` | nginx on the office-app service is serving |
 
-Point the load balancer readiness check at `/api/ready`. Prefer draining on
+Point the load balancer readiness check at `/api/ready` for the BFF and `/healthz` for the office app. Prefer draining on
 `SIGTERM` (schedulers and the HTTP server shut down cleanly).
 
 ## Observability

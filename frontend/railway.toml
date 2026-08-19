@@ -1,0 +1,22 @@
+# Railway service config for the office app (console + Verifier + Field Capture).
+#
+# One-time on this service (Settings):
+#   Config File  = /frontend/railway.toml
+#   Root Directory = /   (repo root — the Dockerfile copies verifier/ and fieldcapture/)
+#
+# Runtime variable (Variables tab, not GitHub Keys):
+#   API_UPSTREAM=http://${{backend.RAILWAY_PRIVATE_DOMAIN}}:${{backend.PORT}}
+#
+# Then generate a domain (or attach app.atmosphereteam.com) and put that origin
+# on the backend as FRONTEND_ORIGIN. See docs/production.md.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "frontend/Dockerfile"
+watchPatterns = ["frontend/**", "verifier/**", "fieldcapture/**"]
+
+[deploy]
+healthcheckPath = "/healthz"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
