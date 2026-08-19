@@ -58,8 +58,8 @@
       el.classList.add('play');
       /* CSS already flattens the choreography when the OS asks for reduced
          motion. Always hold the lockup long enough for the slam + whoosh. */
-      var hold = 2800;
-      var fade = 550;
+      var hold = 4500;
+      var fade = 1100;
       window.setTimeout(function () {
         document.documentElement.removeAttribute('data-elevate-preview');
         el.classList.add('out');
