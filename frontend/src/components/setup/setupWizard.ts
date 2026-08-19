@@ -19,7 +19,7 @@ export const SETUP_WIZARD_STEPS = [
   {
     step: 1 as const,
     title: 'Create your account',
-    detail: 'Name, email, and a password. You can add a company name or a join code if you have one.',
+    detail: 'Name, email, and a password. We never store your password in plain text.',
   },
   {
     step: 2 as const,
@@ -29,7 +29,7 @@ export const SETUP_WIZARD_STEPS = [
   {
     step: 3 as const,
     title: 'You are in',
-    detail: 'Invite teammates later from Settings with a join code.',
+    detail: 'Share this join code so teammates can create an account and join.',
   },
   {
     step: 4 as const,
@@ -42,12 +42,12 @@ const JOIN_WIZARD_STEPS = [
   {
     step: 1 as const,
     title: 'Create your account',
-    detail: 'Name, email, and a password. Then enter the join code from your team.',
+    detail: 'Name, email, and a password. We never store your password in plain text.',
   },
   {
     step: 2 as const,
     title: 'Enter your join code',
-    detail: 'The code from your invite email links this login to the office workspace.',
+    detail: 'The code from your invite email links this login to the team workspace.',
   },
   {
     step: 3 as const,
@@ -65,13 +65,13 @@ export function setupWizardCopy(intent: OrgSetupIntent): SetupWizardCopy {
   if (intent === 'join') {
     return {
       heading: 'Create an account',
-      lede: 'A couple of details, then the join code from your team — about a minute.',
+      lede: 'Four steps — your login, the office join code, then you are on the team.',
       steps: JOIN_WIZARD_STEPS,
     };
   }
   return {
     heading: 'Create an account',
-    lede: 'Name, email, and a password — then you are in. About a minute.',
+    lede: 'Four steps — account, workspace, invite your crew, then billing.',
     steps: SETUP_WIZARD_STEPS,
   };
 }

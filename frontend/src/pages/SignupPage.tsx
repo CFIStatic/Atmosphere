@@ -1,10 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import {
-  api,
-  ApiError,
-} from '../lib/api';
+import { api, ApiError, type Org } from '../lib/api';
 import { loginHref, parseSignupIntent, resolveAuthRedirect } from '../lib/authRedirect';
 import { PLATFORM_HOME } from '../lib/platforms';
 import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
@@ -57,6 +54,8 @@ export function SignupPage() {
   const [mode, setMode] = useState<OrgMode>(orgIntent === 'join' ? 'join' : 'create');
   const [orgName, setOrgName] = useState('');
   const [joinCode, setJoinCode] = useState('');
+  const [createdOrg, setCreatedOrg] = useState<Org | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -78,11 +77,17 @@ export function SignupPage() {
   }, [orgIntent]);
 
   useEffect(() => {
-    if (accountSubmitting || submitting) return;
+    if (accountSubmitting) return;
     if (!loading && user && !membership && step === 1) {
       setStep(2);
     }
-  }, [loading, user, membership, step, accountSubmitting, submitting]);
+  }, [loading, user, membership, step, accountSubmitting]);
+
+  useEffect(() => {
+    if (step !== 2 || mode !== 'create' || orgName.trim()) return;
+    const suggested = workspaceNameFrom(fullName, email);
+    if (suggested) setOrgName(suggested);
+  }, [step, mode, fullName, email, orgName]);
 
   useEffect(() => {
     if (loading || !user || !membership) {
@@ -111,7 +116,7 @@ export function SignupPage() {
     };
   }, [loading, user, membership, searchParams, checkoutParam]);
 
-  if (loading || (user && membership && billingGate === 'loading')) {
+  if (loading || (user && membership && billingGate === 'loading' && step === 1)) {
     return (
       <div className="grid min-h-screen place-items-center bg-paper-100 text-brand-600">
         <SpinnerIcon className="animate-spin" width={28} height={28} />
@@ -119,7 +124,9 @@ export function SignupPage() {
     );
   }
 
-  if (user && membership && billingGate === 'complete' && step !== 4) {
+  // Returning visitors who already finished setup should not restart it.
+  // Stay on steps 2–4 while this session is still walking the wizard.
+  if (user && membership && billingGate === 'complete' && step === 1 && !accountSubmitting) {
     return <Navigate to={redirectTo} replace />;
   }
 
@@ -128,31 +135,22 @@ export function SignupPage() {
   const emailValid = EMAIL_RE.test(email.trim());
   const passwordValid = password.length >= 8;
   const joinCodeValid = JOIN_CODE_RE.test(joinCode.trim());
-  const orgStepValid = mode === 'join' ? joinCodeValid : true;
+  const orgStepValid = mode === 'join' ? joinCodeValid : orgName.trim().length >= 2;
+  const inviteOrg = createdOrg ?? membership?.org ?? null;
 
   function enterApp() {
     scheduleWorkVerificationTour();
     queueRedirect(withTourQuery(redirectTo));
   }
 
-  async function finishAfterOrg() {
-    const status = await api.getBillingOnboarding().catch(() => null);
-    if (status?.required && !status.complete) {
-      setBillingGate('pending');
-      setStep(4);
-      return;
-    }
-    setBillingGate('complete');
-    enterApp();
-  }
-
-  async function completeSetup() {
+  async function completeWorkspace() {
     setSubmitting(true);
     setError(null);
     try {
       const already = await refreshMembership();
       if (already?.org) {
-        await finishAfterOrg();
+        setCreatedOrg(already.org);
+        setStep(3);
         return;
       }
 
@@ -162,25 +160,20 @@ export function SignupPage() {
         true,
       );
 
-      if (mode === 'join') {
-        await api.joinOrg(
-          joinCode.trim().toUpperCase(),
-          finalRole,
-          workType,
-          usageIntents,
-        );
-      } else {
-        await api.createOrg(
-          orgName.trim() || workspaceNameFrom(fullName, email),
-          finalRole,
-          workType,
-          contractorType,
-          usageIntents,
-        );
-      }
+      const res =
+        mode === 'join'
+          ? await api.joinOrg(joinCode.trim().toUpperCase(), finalRole, workType, usageIntents)
+          : await api.createOrg(
+              orgName.trim(),
+              finalRole,
+              workType,
+              contractorType,
+              usageIntents,
+            );
 
       await refreshMembership();
-      await finishAfterOrg();
+      setCreatedOrg(res.org);
+      setStep(3);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
       setStep(2);
@@ -193,7 +186,7 @@ export function SignupPage() {
     e.preventDefault();
     setError(null);
     setAccountNotice(null);
-    if (!nameValid || !emailValid || !passwordValid || !orgStepValid || accountSubmitting) return;
+    if (!nameValid || !emailValid || !passwordValid || accountSubmitting) return;
 
     setAccountSubmitting(true);
     try {
@@ -209,11 +202,27 @@ export function SignupPage() {
         await api.updateProfile(fullName.trim());
         await refreshMembership();
       }
-      await completeSetup();
+      if (res.membership?.org) {
+        setCreatedOrg(res.membership.org);
+        setStep(3);
+        return;
+      }
+      setStep(2);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setAccountSubmitting(false);
+    }
+  }
+
+  async function copyJoinCode() {
+    if (!inviteOrg?.joinCode) return;
+    try {
+      await navigator.clipboard.writeText(inviteOrg.joinCode);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard denied — user can still select manually */
     }
   }
 
@@ -238,8 +247,8 @@ export function SignupPage() {
         <SetupStepCard
           step={1}
           intent={orgIntent}
-          title="Create an account"
-          subtitle="A few details and you can sign in from any device."
+          title="Create your account"
+          subtitle="Name, email, and a password — then the workspace on the next screen."
         >
           {accountNotice && (
             <div
@@ -296,11 +305,7 @@ export function SignupPage() {
               />
             </Field>
 
-            <Field
-              label="Password"
-              htmlFor="signup-password"
-              hint="Min. 8 characters"
-            >
+            <Field label="Password" htmlFor="signup-password" hint="Min. 8 characters">
               <div className="relative">
                 <input
                   id="signup-password"
@@ -324,55 +329,12 @@ export function SignupPage() {
               </div>
             </Field>
 
-            {mode === 'join' ? (
-              <Field label="Join code" htmlFor="join-code">
-                <input
-                  id="join-code"
-                  value={joinCode}
-                  onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                  placeholder="e.g. 8F3A9C2B"
-                  autoCapitalize="characters"
-                  className={`${inputClass} font-mono tracking-widest`}
-                />
-                <p className="mt-2 text-xs text-ink-500">
-                  Starting a new company instead?{' '}
-                  <button
-                    type="button"
-                    onClick={() => setMode('create')}
-                    className="font-medium text-brand-600 hover:text-brand-700"
-                  >
-                    Skip the join code
-                  </button>
-                </p>
-              </Field>
-            ) : (
-              <Field label="Company name" htmlFor="org-name" hint="Optional">
-                <input
-                  id="org-name"
-                  value={orgName}
-                  onChange={(e) => setOrgName(e.target.value)}
-                  placeholder="Your company"
-                  className={inputClass}
-                />
-                <p className="mt-2 text-xs text-ink-500">
-                  Have a join code from your team?{' '}
-                  <button
-                    type="button"
-                    onClick={() => setMode('join')}
-                    className="font-medium text-brand-600 hover:text-brand-700"
-                  >
-                    Enter it here
-                  </button>
-                </p>
-              </Field>
-            )}
-
             <PrimaryButton
               type="submit"
-              disabled={!nameValid || !emailValid || !passwordValid || !orgStepValid || accountSubmitting}
-              loading={accountSubmitting || submitting}
+              disabled={!nameValid || !emailValid || !passwordValid || accountSubmitting}
+              loading={accountSubmitting}
             >
-              {accountSubmitting || submitting ? 'Creating account…' : 'Create account'}
+              {accountSubmitting ? 'Creating account…' : 'Continue to workspace'}
             </PrimaryButton>
           </form>
         </SetupStepCard>
@@ -383,9 +345,9 @@ export function SignupPage() {
           step={1}
           intent={orgIntent}
           title="Account ready"
-          subtitle="Finish naming the workspace — or enter a join code if you were invited."
+          subtitle="Next you will name the workspace, or enter a join code if you were invited."
         >
-          <PrimaryButton onClick={() => setStep(2)}>Continue</PrimaryButton>
+          <PrimaryButton onClick={() => setStep(2)}>Continue to workspace</PrimaryButton>
         </SetupStepCard>
       )}
 
@@ -397,15 +359,15 @@ export function SignupPage() {
           subtitle={
             mode === 'join'
               ? 'The code from your invite links this login to the team workspace.'
-              : 'Name the company, or enter a join code if someone already set this up.'
+              : 'Name the company workspace, or enter a join code if you were invited.'
           }
         >
           {error && <Alert>{error}</Alert>}
 
           {mode === 'create' ? (
-            <Field label="Company name" htmlFor="org-name-step2" className="mt-5">
+            <Field label="Company name" htmlFor="org-name" className="mt-5">
               <input
-                id="org-name-step2"
+                id="org-name"
                 value={orgName}
                 onChange={(e) => setOrgName(e.target.value)}
                 placeholder="e.g. Meridian Services"
@@ -413,20 +375,20 @@ export function SignupPage() {
                 className={inputClass}
               />
               <p className="mt-2 text-xs text-ink-500">
-                Have a join code?{' '}
+                Were you invited?{' '}
                 <button
                   type="button"
                   onClick={() => setMode('join')}
                   className="font-medium text-brand-600 hover:text-brand-700"
                 >
-                  Enter it instead
+                  Enter a join code
                 </button>
               </p>
             </Field>
           ) : (
-            <Field label="Join code" htmlFor="join-code-step2" className="mt-5">
+            <Field label="Join code" htmlFor="join-code" className="mt-5">
               <input
-                id="join-code-step2"
+                id="join-code"
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
                 placeholder="e.g. 8F3A9C2B"
@@ -464,7 +426,7 @@ export function SignupPage() {
               loading={submitting}
               onClick={() => {
                 setError(null);
-                void completeSetup();
+                void completeWorkspace();
               }}
             >
               {submitting ? 'Setting up…' : 'Continue'}
@@ -477,10 +439,38 @@ export function SignupPage() {
         <SetupStepCard
           step={3}
           intent={orgIntent}
-          title="Account ready"
-          subtitle="You can invite teammates from Settings any time."
+          title={mode === 'create' ? 'You are in' : 'You are connected'}
+          subtitle={
+            mode === 'create'
+              ? 'Share this join code so teammates can create an account and join.'
+              : `Your account is on ${inviteOrg?.name ?? 'the team'}. Invite others from Settings later.`
+          }
         >
-          <PrimaryButton onClick={() => setStep(4)}>Continue</PrimaryButton>
+          {mode === 'create' && inviteOrg?.joinCode && (
+            <div className="mt-6 rounded-xl border border-line bg-paper-50 p-5 text-center">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-500">
+                Your workspace join code
+              </p>
+              <p className="mt-3 font-mono text-3xl font-bold tracking-[0.2em] text-ink-900">
+                {inviteOrg.joinCode}
+              </p>
+              <button
+                type="button"
+                onClick={() => void copyJoinCode()}
+                className="mt-4 rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
+              >
+                {copied ? 'Copied!' : 'Copy join code'}
+              </button>
+              <p className="mt-4 text-xs text-ink-500">
+                Teammates create an account, then enter this code on the workspace step.
+              </p>
+            </div>
+          )}
+
+          <div className="mt-7 flex flex-wrap items-center justify-between gap-3">
+            <span className="text-xs text-ink-500">You can find this code later in Settings.</span>
+            <PrimaryButton onClick={() => setStep(4)}>Continue to billing</PrimaryButton>
+          </div>
         </SetupStepCard>
       )}
 
@@ -497,9 +487,9 @@ export function SignupPage() {
           step={4}
           intent={orgIntent}
           title="Set up billing"
-          subtitle="Finish creating your account first."
+          subtitle="Finish the workspace step first."
         >
-          <PrimaryButton onClick={() => setStep(user ? 2 : 1)}>Back</PrimaryButton>
+          <PrimaryButton onClick={() => setStep(2)}>Back to workspace</PrimaryButton>
         </SetupStepCard>
       )}
 

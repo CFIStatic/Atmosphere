@@ -5,8 +5,15 @@ describe('setupWizardCopy', () => {
   it('uses ordinary create-an-account copy', () => {
     const copy = setupWizardCopy('create');
     expect(copy.heading).toBe('Create an account');
-    expect(copy.steps[0]?.title).toBe('Create your account');
-    expect(copy.steps[1]?.title).toBe('Your workspace');
+    expect(copy.steps.map((s) => s.title)).toEqual([
+      'Create your account',
+      'Your workspace',
+      'You are in',
+      'Set up billing',
+    ]);
+    expect(copy.steps[0]?.detail).toMatch(/name, email, and a password/i);
+    expect(copy.steps[0]?.detail).not.toMatch(/join code/i);
+    expect(copy.steps[1]?.detail).toMatch(/join code/i);
   });
 
   it('keeps a join-code path without the two-card office wording', () => {
