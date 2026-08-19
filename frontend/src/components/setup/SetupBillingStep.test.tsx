@@ -38,12 +38,11 @@ describe('SetupBillingStep', () => {
       <SetupBillingStep redirectTo="/jobs" checkoutOutcome={null} onComplete={() => undefined} />,
     );
 
-    expect(await screen.findByRole('button', { name: 'Continue to Stripe' })).toBeInTheDocument();
-    expect(screen.getByText('Work Verification')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Continue' })).toBeInTheDocument();
     expect(screen.getByText(/\/ month/)).toBeInTheDocument();
     expect(screen.queryByText(/processed jobs/i)).toBeNull();
     expect(screen.queryByText(/Card details never touch/i)).toBeNull();
     expect(screen.queryByText(/Cancel anytime/i)).toBeNull();
-    expect(screen.queryByText(/Field Capture \+ Evidence Platform/i)).toBeNull();
+    expect(screen.queryByText(/Work Verification/i)).toBeNull();
   });
 });

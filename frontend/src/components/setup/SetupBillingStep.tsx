@@ -2,12 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError, type BillingOnboardingStatus } from '../../lib/api';
 import { formatCents } from '../../lib/money';
 import { SetupStepCard } from './SetupWizardShell';
-import { SpinnerIcon, CheckIcon } from '../icons';
+import { SpinnerIcon } from '../icons';
 
 export function SetupBillingStep({
   redirectTo,
   checkoutOutcome,
-  nextLabel = 'Continue',
   onComplete,
 }: {
   redirectTo: string;
@@ -35,13 +34,13 @@ export function SetupBillingStep({
         const next = await refresh();
         if (cancelled) return;
         if (checkoutOutcome === 'success' && next.required && !next.complete) {
-          setNotice('Payment received — confirming your subscription…');
+          setNotice('Confirming payment…');
         } else if (checkoutOutcome === 'cancelled') {
-          setNotice('Checkout cancelled. Add a payment method when you are ready.');
+          setNotice('Checkout cancelled.');
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof ApiError ? err.message : 'Could not load billing status.');
+          setError(err instanceof ApiError ? err.message : 'Could not load billing.');
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -61,13 +60,10 @@ export function SetupBillingStep({
       try {
         const next = await refresh();
         if (next.complete) {
-          setNotice('Payment confirmed.');
           window.clearInterval(timer);
         } else if (attempts >= 12) {
           window.clearInterval(timer);
-          setNotice(
-            'Still confirming with Stripe. This usually takes a few seconds — refresh or try again shortly.',
-          );
+          setNotice('Still confirming — try again in a moment.');
         }
       } catch {
         /* keep polling */
@@ -78,10 +74,11 @@ export function SetupBillingStep({
   }, [checkoutOutcome, refresh, status?.complete, status?.required]);
 
   useEffect(() => {
-    if (checkoutOutcome !== 'success' || !status?.complete || autoEnteredRef.current) return;
+    if (!status || autoEnteredRef.current) return;
+    if (status.required && !status.complete) return;
     autoEnteredRef.current = true;
     onComplete();
-  }, [checkoutOutcome, onComplete, status?.complete]);
+  }, [onComplete, status]);
 
   async function startCheckout() {
     setBusy(true);
@@ -93,51 +90,19 @@ export function SetupBillingStep({
         window.location.assign(checkoutUrl);
         return;
       }
-      setError('Stripe did not return a checkout link. Try again in a moment.');
+      setError('Could not open checkout. Try again.');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not open Stripe checkout.');
+      setError(err instanceof ApiError ? err.message : 'Could not open checkout.');
     } finally {
       setBusy(false);
     }
   }
 
-  if (loading || !status) {
+  if (loading || !status || !status.required || status.complete) {
     return (
-      <SetupStepCard step={3} title="Set up billing" subtitle="Loading your plan details…">
+      <SetupStepCard title="Payment">
         <div className="mt-10 grid place-items-center text-brand-600">
           <SpinnerIcon className="animate-spin" width={28} height={28} />
-        </div>
-      </SetupStepCard>
-    );
-  }
-
-  if (!status.required || status.complete) {
-    return (
-      <SetupStepCard
-        step={3}
-        title="Billing ready"
-        subtitle={
-          status.complete
-            ? 'Your payment method is on file.'
-            : 'Your organization handles billing separately.'
-        }
-      >
-        <div className="mt-6 flex items-start gap-2 rounded-lg border border-success-200 bg-success-50 px-3.5 py-3 text-sm text-success-600">
-          <CheckIcon className="mt-0.5 shrink-0" width={18} height={18} />
-          <span>
-            {status.complete
-              ? 'Subscription active.'
-              : 'No payment setup needed for your account.'}
-          </span>
-        </div>
-        <div className="mt-7 flex justify-end">
-          <button
-            type="button"
-            onClick={onComplete}
-            className="flex min-w-[200px] items-center justify-center rounded-lg bg-brand-500 px-4 py-3 font-semibold text-ink-900 shadow-lg shadow-card transition hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
-          >
-            {nextLabel}
-          </button>
         </div>
       </SetupStepCard>
     );
@@ -146,7 +111,7 @@ export function SetupBillingStep({
   const plan = status.plan;
 
   return (
-    <SetupStepCard step={3} title="Set up billing" subtitle="Add a payment method to activate the workspace.">
+    <SetupStepCard title="Payment">
       {error && (
         <div
           role="alert"
@@ -156,49 +121,32 @@ export function SetupBillingStep({
         </div>
       )}
       {notice && (
-        <div
-          role="status"
-          className="mt-6 flex items-start gap-2 rounded-lg border border-success-200 bg-success-50 px-3.5 py-3 text-sm text-success-600"
-        >
-          <CheckIcon className="mt-0.5 shrink-0" width={18} height={18} />
-          <span>{notice}</span>
-        </div>
+        <p role="status" className="mt-6 text-sm text-ink-600">
+          {notice}
+        </p>
       )}
 
-      <div className="mt-6 rounded-xl border border-line bg-paper-50 p-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-500">{plan.name}</p>
-        <p className="mt-2 text-3xl font-bold tracking-tight text-ink-900">
-          {formatCents(plan.baseMonthlyFeeCents)}
-          <span className="text-base font-medium text-ink-500"> / month</span>
-        </p>
-      </div>
+      <p className="mt-8 text-3xl font-bold tracking-tight text-ink-900">
+        {formatCents(plan.baseMonthlyFeeCents)}
+        <span className="text-base font-medium text-ink-500"> / month</span>
+      </p>
 
-      <div className="mt-7 flex justify-end">
-        {status.complete ? (
-          <button
-            type="button"
-            onClick={onComplete}
-            className="flex min-w-[180px] items-center justify-center rounded-lg bg-brand-500 px-4 py-3 font-semibold text-ink-900 shadow-lg shadow-card transition hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
-          >
-            {nextLabel}
-          </button>
-        ) : (
-          <button
-            type="button"
-            disabled={busy || Boolean(notice?.includes('confirming'))}
-            onClick={() => void startCheckout()}
-            className="flex min-w-[200px] items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 font-semibold text-ink-900 shadow-lg shadow-card transition hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {busy ? (
-              <>
-                <SpinnerIcon className="animate-spin" width={18} height={18} />
-                Opening Stripe…
-              </>
-            ) : (
-              'Continue to Stripe'
-            )}
-          </button>
-        )}
+      <div className="mt-8 flex justify-end">
+        <button
+          type="button"
+          disabled={busy || Boolean(notice?.includes('Confirming'))}
+          onClick={() => void startCheckout()}
+          className="flex min-w-[160px] items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 font-semibold text-ink-900 shadow-lg shadow-card transition hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {busy ? (
+            <>
+              <SpinnerIcon className="animate-spin" width={18} height={18} />
+              Opening…
+            </>
+          ) : (
+            'Continue'
+          )}
+        </button>
       </div>
     </SetupStepCard>
   );

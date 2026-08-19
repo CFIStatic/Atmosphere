@@ -42,22 +42,21 @@ describe('SetupInviteStep', () => {
   it('sends an email invite instead of showing a join code', async () => {
     const user = userEvent.setup();
     const onComplete = vi.fn();
-    render(<SetupInviteStep orgName="Meridian Services" onComplete={onComplete} />);
+    render(<SetupInviteStep onComplete={onComplete} />);
 
-    expect(screen.getByLabelText('Work email')).toBeInTheDocument();
+    expect(screen.getByLabelText('Email')).toBeInTheDocument();
     expect(screen.queryByText(/join code/i)).toBeNull();
+    expect(screen.queryByLabelText('Role')).toBeNull();
 
-    await user.type(screen.getByLabelText('Work email'), 'sam@shop.example');
-    await user.click(screen.getByRole('button', { name: 'Send invite' }));
+    await user.type(screen.getByLabelText('Email'), 'sam@shop.example');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
 
     expect(createOrgInvite).toHaveBeenCalledWith({
       email: 'sam@shop.example',
-      role: 'field_technician',
     });
-    expect(await screen.findByText('Invite sent to sam@shop.example.')).toBeInTheDocument();
-    expect(screen.getByText('sam@shop.example')).toBeInTheDocument();
+    expect(await screen.findByText('sam@shop.example')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Enter Atmosphere' }));
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
     expect(onComplete).toHaveBeenCalled();
   });
 
@@ -66,7 +65,7 @@ describe('SetupInviteStep', () => {
     const onComplete = vi.fn();
     render(<SetupInviteStep onComplete={onComplete} />);
 
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
     expect(onComplete).toHaveBeenCalled();
     expect(createOrgInvite).not.toHaveBeenCalled();
   });

@@ -41,47 +41,32 @@ export function SetupWizardShell({
         <div className="w-full max-w-4xl animate-fade-in-up">
           <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)] lg:items-start lg:gap-14">
             <div className="hidden lg:block">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-600">
-                Get started
-              </p>
-              <h1 className="mt-3 text-3xl font-bold tracking-tight text-ink-900">
-                {copy.heading}
-              </h1>
-              <p className="mt-3 max-w-md text-base text-ink-600">{copy.lede}</p>
+              <h1 className="text-3xl font-bold tracking-tight text-ink-900">{copy.heading}</h1>
+              <p className="mt-2 max-w-sm text-base text-ink-600">{copy.lede}</p>
 
-              <ol className="mt-10 space-y-5">
+              <ol className="mt-10 space-y-3">
                 {copy.steps.map((item) => {
                   const done = item.step < step;
                   const active = item.step === step;
                   return (
-                    <li
-                      key={item.step}
-                      className={`flex gap-4 rounded-xl border px-4 py-4 transition ${
-                        active
-                          ? 'border-brand-300 bg-brand-50 shadow-sm'
-                          : 'border-line bg-paper-0'
-                      }`}
-                    >
+                    <li key={item.step} className="flex items-center gap-3">
                       <span
-                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                          done
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                          done || active
                             ? 'bg-brand-500 text-ink-900'
-                            : active
-                              ? 'bg-brand-500 text-ink-900'
-                              : 'bg-paper-100 text-ink-500'
+                            : 'bg-paper-0 text-ink-500 ring-1 ring-line'
                         }`}
                         aria-hidden="true"
                       >
-                        {done ? <CheckIcon width={16} height={16} /> : item.step}
+                        {done ? <CheckIcon width={14} height={14} /> : item.step}
                       </span>
-                      <div>
-                        <p className={`font-semibold ${active || done ? 'text-ink-900' : 'text-ink-700'}`}>
-                          {item.title}
-                        </p>
-                        <p className={`mt-1 text-sm ${active || done ? 'text-ink-600' : 'text-ink-500'}`}>
-                          {item.detail}
-                        </p>
-                      </div>
+                      <p
+                        className={`text-sm ${
+                          active ? 'font-semibold text-ink-900' : done ? 'text-ink-700' : 'text-ink-500'
+                        }`}
+                      >
+                        {item.title}
+                      </p>
                     </li>
                   );
                 })}
@@ -97,26 +82,20 @@ export function SetupWizardShell({
 }
 
 export function SetupStepCard({
-  step,
   title,
   subtitle,
   children,
-  intent = 'create',
 }: {
-  step: SetupWizardStep;
+  step?: SetupWizardStep;
   title: string;
-  subtitle: string;
+  subtitle?: string;
   children: ReactNode;
   intent?: OrgSetupIntent;
 }) {
-  const label = setupWizardCopy(intent).steps[step - 1]?.title ?? title;
   return (
     <div className="rounded-2xl border border-line bg-paper-0 p-8 shadow-lift sm:p-10">
-      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-600">
-        Step {step} · {label}
-      </p>
-      <h2 className="mt-2 text-xl font-bold tracking-tight text-ink-900">{title}</h2>
-      <p className="mt-1.5 text-sm text-ink-600">{subtitle}</p>
+      <h2 className="text-xl font-bold tracking-tight text-ink-900">{title}</h2>
+      {subtitle ? <p className="mt-1.5 text-sm text-ink-600">{subtitle}</p> : null}
       {children}
     </div>
   );

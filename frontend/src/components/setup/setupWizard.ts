@@ -11,67 +11,32 @@ export interface SetupWizardCopy {
   steps: readonly {
     step: SetupWizardStep;
     title: string;
-    detail: string;
   }[];
 }
 
 export const SETUP_WIZARD_STEPS = [
-  {
-    step: 1 as const,
-    title: 'Create your account',
-    detail: 'Name, email, and a password. We never store your password in plain text.',
-  },
-  {
-    step: 2 as const,
-    title: 'Your workspace',
-    detail: 'Name the company workspace, or enter a join code if you were invited.',
-  },
-  {
-    step: 3 as const,
-    title: 'Set up billing',
-    detail: 'Add your payment method in Stripe — $599/mo platform fee.',
-  },
-  {
-    step: 4 as const,
-    title: 'Invite teammates',
-    detail: 'Email teammates after billing is on file. They get a link to join.',
-  },
+  { step: 1 as const, title: 'Account' },
+  { step: 2 as const, title: 'Company' },
+  { step: 3 as const, title: 'Payment' },
+  { step: 4 as const, title: 'Invite team' },
 ] as const;
 
 const JOIN_WIZARD_STEPS = [
-  {
-    step: 1 as const,
-    title: 'Create your account',
-    detail: 'Name, email, and a password. We never store your password in plain text.',
-  },
-  {
-    step: 2 as const,
-    title: 'Enter your join code',
-    detail: 'The code from your invite email links this login to the team workspace.',
-  },
-  {
-    step: 3 as const,
-    title: 'Set up billing',
-    detail: 'Joiners usually skip this — the office already has a plan.',
-  },
-  {
-    step: 4 as const,
-    title: 'You are connected',
-    detail: 'Your account is on the team. You can invite others from Settings later.',
-  },
+  { step: 1 as const, title: 'Account' },
+  { step: 2 as const, title: 'Join team' },
 ] as const;
 
 export function setupWizardCopy(intent: OrgSetupIntent): SetupWizardCopy {
   if (intent === 'join') {
     return {
-      heading: 'Create an account',
-      lede: 'Four steps — your login, the office join code, then you are on the team.',
+      heading: 'Join your team',
+      lede: 'Create a login, then enter the invite from your email.',
       steps: JOIN_WIZARD_STEPS,
     };
   }
   return {
     heading: 'Create an account',
-    lede: 'Four steps — account, workspace, billing, then email invites.',
+    lede: 'Account, company, payment, then invite your team.',
     steps: SETUP_WIZARD_STEPS,
   };
 }
