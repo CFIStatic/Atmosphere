@@ -107,6 +107,7 @@
   /* One column, phone-width, centered on any screen. The app is a phone
      app; pretending otherwise on a desktop would just stretch the truth. */
   .app {
+    position: relative;
     max-width: 480px; margin: 0 auto; min-height: 100vh;
     display: flex; flex-direction: column;
     background: var(--bg);
@@ -339,6 +340,77 @@
   .auth-err { color: var(--fail); font-size: 13px; min-height: 1.2em; }
   .erow[data-selected="1"] { background: var(--accent-soft); margin: 0 -8px; padding-left: 10px; padding-right: 10px; border-radius: 8px; }
 
+  /* Elevate: connect → Today. Orange ground first, then the four ink bars
+     stack upward like atmosphere, a short whoosh lifts the mark, and the
+     veil dissolves into the day. */
+  .elevate {
+    position: absolute; inset: 0; z-index: 50;
+    display: none; align-items: center; justify-content: center;
+    background: var(--bg); overflow: hidden;
+  }
+  .elevate[data-on="1"] { display: flex; }
+  .elevate.out { animation: elevate-veil-out .42s ease both; }
+  .elevate-lockup {
+    position: relative; display: flex; flex-direction: column; align-items: center; gap: 16px;
+  }
+  .elevate.play .elevate-lockup { animation: elevate-lift 1.15s .55s cubic-bezier(.16, 1, .3, 1) both; }
+  .elevate-whoosh {
+    position: absolute; left: 50%; top: 50%;
+    width: 10px; height: 140px; margin: -20px 0 0 -5px;
+    background: linear-gradient(to top, transparent, #F2670C 45%, transparent);
+    filter: blur(6px); opacity: 0; pointer-events: none;
+  }
+  .elevate.play .elevate-whoosh { animation: elevate-whoosh .7s .28s ease-out both; }
+  .elevate-bars {
+    width: 64px; height: 64px;
+    display: flex; flex-direction: column; gap: calc(64px * 2 / 22);
+  }
+  .elevate-bars .eb {
+    display: block; height: calc(64px * 2.8 / 22); border-radius: 1px;
+    transform-origin: 50% 100%; opacity: 0;
+  }
+  .elevate-bars .e1 { background: #A8A29E; }
+  .elevate-bars .e2 { background: #78716C; }
+  .elevate-bars .e3 { background: #57534E; }
+  .elevate-bars .e4 { background: var(--ink); }
+  .elevate-bars .ea { background: #F2670C; }
+  .elevate.play .eb { animation: elevate-bar .52s cubic-bezier(.16, 1, .3, 1) both; }
+  .elevate.play .ea { animation-delay: 0s; }
+  .elevate.play .e4 { animation-delay: .09s; }
+  .elevate.play .e3 { animation-delay: .18s; }
+  .elevate.play .e2 { animation-delay: .27s; }
+  .elevate.play .e1 { animation-delay: .36s; }
+  .elevate-word {
+    font-size: 22px; font-weight: 750; letter-spacing: -0.02em; color: var(--ink); opacity: 0;
+  }
+  .elevate.play .elevate-word { animation: elevate-word .5s .52s ease both; }
+  @keyframes elevate-bar {
+    from { transform: translateY(16px) scaleX(.22); opacity: 0; }
+    to { transform: translateY(0) scaleX(1); opacity: 1; }
+  }
+  @keyframes elevate-lift {
+    from { transform: translateY(8px); }
+    to { transform: translateY(-10px); }
+  }
+  @keyframes elevate-word {
+    from { opacity: 0; transform: translateY(8px); letter-spacing: .12em; }
+    to { opacity: 1; transform: translateY(0); letter-spacing: -0.02em; }
+  }
+  @keyframes elevate-whoosh {
+    from { transform: translateY(36px); opacity: 0; }
+    38% { opacity: .5; }
+    to { transform: translateY(-88px); opacity: 0; }
+  }
+  @keyframes elevate-veil-out {
+    to { opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .elevate.play .eb, .elevate.play .elevate-word, .elevate.play .elevate-lockup {
+      animation: none; opacity: 1; transform: none; letter-spacing: -0.02em;
+    }
+    .elevate.play .elevate-whoosh { display: none; }
+  }
+
 </style>
 </head>
 <body>
@@ -466,6 +538,21 @@
         <small>You just record. The office opens the Verifier to watch and hear the day film with an AI dictation against the scope. Anything the model could not see shows up there as a named gap, never as a guess on your phone.</small>
       </div>
       <button class="donebtn" id="donebtn">Back to today</button>
+    </div>
+  </div>
+
+  <!-- Connect → Today: bars stack up from the orange ground, then lift. -->
+  <div class="elevate" id="s-elevate" data-on="0" role="status" aria-live="polite" aria-hidden="true">
+    <span class="elevate-whoosh" aria-hidden="true"></span>
+    <div class="elevate-lockup">
+      <span class="elevate-bars" aria-hidden="true">
+        <span class="eb e1"></span>
+        <span class="eb e2"></span>
+        <span class="eb e3"></span>
+        <span class="eb e4"></span>
+        <span class="eb ea"></span>
+      </span>
+      <p class="elevate-word">Atmosphere</p>
     </div>
   </div>
 

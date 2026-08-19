@@ -21,6 +21,7 @@
 		AFC00000000000000000020D /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000010D /* SignInView.swift */; };
 		AFC000000000000000000216 /* SignUpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000116 /* SignUpView.swift */; };
 		AFC000000000000000000218 /* JoinCrewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000118 /* JoinCrewView.swift */; };
+		AFC000000000000000000219 /* ElevateSplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000119 /* ElevateSplashView.swift */; };
 		AFC000000000000000000217 /* OfficeLinkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000117 /* OfficeLinkView.swift */; };
 		AFC00000000000000000020E /* RecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000010E /* RecordingView.swift */; };
 		AFC00000000000000000020F /* DoorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000010F /* DoorView.swift */; };
@@ -48,6 +49,7 @@
 		AFC00000000000000000010D /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
 		AFC000000000000000000116 /* SignUpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignUpView.swift; sourceTree = "<group>"; };
 		AFC000000000000000000118 /* JoinCrewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JoinCrewView.swift; sourceTree = "<group>"; };
+		AFC000000000000000000119 /* ElevateSplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ElevateSplashView.swift; sourceTree = "<group>"; };
 		AFC000000000000000000117 /* OfficeLinkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficeLinkView.swift; sourceTree = "<group>"; };
 		AFC00000000000000000010E /* RecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingView.swift; sourceTree = "<group>"; };
 		AFC00000000000000000010F /* DoorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoorView.swift; sourceTree = "<group>"; };
@@ -156,6 +158,7 @@
 				AFC00000000000000000010C /* TodayView.swift */,
 				AFC00000000000000000010D /* SignInView.swift */,
 				AFC000000000000000000118 /* JoinCrewView.swift */,
+				AFC000000000000000000119 /* ElevateSplashView.swift */,
 				AFC000000000000000000116 /* SignUpView.swift */,
 				AFC000000000000000000117 /* OfficeLinkView.swift */,
 				AFC00000000000000000010E /* RecordingView.swift */,
@@ -264,6 +267,7 @@
 				AFC00000000000000000020C /* TodayView.swift in Sources */,
 				AFC00000000000000000020D /* SignInView.swift in Sources */,
 				AFC000000000000000000218 /* JoinCrewView.swift in Sources */,
+				AFC000000000000000000219 /* ElevateSplashView.swift in Sources */,
 				AFC000000000000000000216 /* SignUpView.swift in Sources */,
 				AFC000000000000000000217 /* OfficeLinkView.swift in Sources */,
 				AFC00000000000000000020E /* RecordingView.swift in Sources */,

@@ -38,6 +38,40 @@
     window.scrollTo(0, 0);
   }
 
+  /**
+   * Bars rise from the orange ground, the mark lifts, then the veil
+   * drops so Today is waiting underneath. Plays only after a successful
+   * connect — not on later launches.
+   */
+  function playElevate() {
+    return new Promise(function (resolve) {
+      var el = $('#s-elevate');
+      if (!el) {
+        resolve();
+        return;
+      }
+      var reduce =
+        window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      el.setAttribute('aria-hidden', 'false');
+      el.setAttribute('aria-label', 'Connected');
+      el.setAttribute('data-on', '1');
+      el.classList.remove('play', 'out');
+      void el.offsetWidth;
+      el.classList.add('play');
+      var hold = reduce ? 280 : 1480;
+      var fade = reduce ? 200 : 420;
+      window.setTimeout(function () {
+        el.classList.add('out');
+        window.setTimeout(function () {
+          el.setAttribute('data-on', '0');
+          el.setAttribute('aria-hidden', 'true');
+          el.classList.remove('play', 'out');
+          resolve();
+        }, fade);
+      }, hold);
+    });
+  }
+
   var state = {
     recorder: null,
     stopWatch: null,
@@ -250,7 +284,7 @@
               throw new Error('Connected, but no session came back. Try again in a moment.');
             }
             writeStoredSession(session.accessToken, session.refreshToken);
-            return bootAccountSession();
+            return Promise.all([bootAccountSession(), playElevate()]);
           })
           .catch(function (err) {
             writeStoredSession(null, null);
@@ -547,5 +581,10 @@
     bootDemo();
   } else {
     bootAccount();
+  }
+
+  if (params.get('elevate') === '1') {
+    show('s-home');
+    playElevate();
   }
 })();

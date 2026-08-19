@@ -45,6 +45,8 @@ struct RootView: View {
     @EnvironmentObject private var auth: AuthSession
     @EnvironmentObject private var api: AtmosphereClient
     @State private var showDashboardLogin = false
+    @State private var showElevate = false
+    @State private var cameFromConnect = false
 
     var body: some View {
         Group {
@@ -68,19 +70,37 @@ struct RootView: View {
             }
         }
         .background(FieldTheme.bg.ignoresSafeArea())
+        .overlay {
+            if showElevate {
+                ElevateSplashView {
+                    showElevate = false
+                }
+            }
+        }
+        .onAppear {
+            cameFromConnect = !auth.isLinked || auth.needsOfficeLink
+        }
         // iOS 16-compatible: the two-parameter / `initial:` onChange APIs are iOS 17+.
         .onReceive(auth.$isLinked.dropFirst()) { linked in
             if linked, !auth.needsOfficeLink {
+                playElevateIfComingFromConnect()
                 Task { await session.loadToday(api: api) }
             }
         }
         .onReceive(auth.$needsOfficeLink.dropFirst()) { needsOffice in
             if auth.isLinked, !needsOffice, !auth.showOfficeLink {
+                playElevateIfComingFromConnect()
                 Task { await session.loadToday(api: api) }
             }
         }
         .onOpenURL { url in
             auth.handleOpenURL(url)
         }
+    }
+
+    private func playElevateIfComingFromConnect() {
+        guard cameFromConnect else { return }
+        cameFromConnect = false
+        showElevate = true
     }
 }
