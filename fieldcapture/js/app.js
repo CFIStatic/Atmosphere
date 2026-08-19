@@ -40,8 +40,9 @@
 
   /**
    * Bars rise from the orange ground, the mark lifts, then the veil
-   * drops so Today is waiting underneath. Plays only after a successful
-   * connect — not on later launches.
+   * eases off so Today is waiting underneath. Paper on light, night on
+   * dark — same tokens as the rest of the phone. Plays only after a
+   * successful connect — not on later launches.
    */
   function playElevate() {
     return new Promise(function (resolve) {
@@ -57,9 +58,10 @@
       void el.offsetWidth;
       el.classList.add('play');
       /* CSS already flattens the choreography when the OS asks for reduced
-         motion. Always hold the lockup long enough for the slam + whoosh. */
-      var hold = 6500;
-      var fade = 1100;
+         motion. Always sit on the assembled lockup for four seconds, then
+         ease into Today. */
+      var hold = 5000;
+      var fade = 1200;
       window.setTimeout(function () {
         document.documentElement.removeAttribute('data-elevate-preview');
         el.classList.add('out');

@@ -4,8 +4,8 @@ import UIKit
 #endif
 
 /**
- * Connect → Today. Come up through the atmosphere into the day:
- * dark ground, orange ember, bars slam up, whoosh, sky warms to paper.
+ * Connect → Today. Bars slam up from the orange ground, sit four seconds
+ * on paper or night (system light / dark), then ease into Today.
  * Same motion as Field Capture on the web.
  */
 struct ElevateSplashView: View {
@@ -16,44 +16,50 @@ struct ElevateSplashView: View {
     @State private var wordOn = false
     @State private var subOn = false
     @State private var lift = false
-    @State private var sky: Double = 0
     @State private var bloom: Double = 0
     @State private var bloomScale: CGFloat = 0.15
     @State private var whooshY: CGFloat = 70
     @State private var whooshOpacity: Double = 0
     @State private var veil: Double = 1
-    @State private var wordInk: Double = 0
     @State private var groundGlow: Double = 0
 
-    private let night = Color(red: 0.078, green: 0.075, blue: 0.067) // #141311
-    private let warm = Color(red: 0.165, green: 0.086, blue: 0.047) // #2A160C
-    private let paper = Color(red: 0.984, green: 0.980, blue: 0.969)
     private let ember = Color(red: 0.949, green: 0.404, blue: 0.047)
+    private let paper = Color(red: 0.984, green: 0.980, blue: 0.969) // #FBFAF7
+    private let night = Color(red: 0.078, green: 0.075, blue: 0.067) // #141311
+    private let paperInk = Color(red: 0.110, green: 0.098, blue: 0.090)
+    private let nightInk = Color(red: 0.945, green: 0.937, blue: 0.922)
+    private let paperFaint = Color(red: 0.659, green: 0.635, blue: 0.620)
+    private let nightFaint = Color(red: 0.420, green: 0.404, blue: 0.373)
 
-    private var skyColor: Color {
-        if sky < 0.5 {
-            return night.interpolate(to: warm, amount: sky * 2)
+    /// System appearance, not the app’s forced light scheme.
+    private var isDark: Bool {
+        #if canImport(UIKit)
+        if UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark" {
+            return true
         }
-        return warm.interpolate(to: paper, amount: (sky - 0.5) * 2)
+        return UIScreen.main.traitCollection.userInterfaceStyle == .dark
+        #else
+        return false
+        #endif
     }
 
+    private var ground: Color { isDark ? night : paper }
+    private var wordColor: Color { isDark ? nightInk : paperInk }
+    private var subColor: Color { isDark ? nightFaint : paperFaint }
+
     private var barColors: [Color] {
-        let topInk = Color(red: 0.945, green: 0.937, blue: 0.922).interpolate(
-            to: Color(red: 0.110, green: 0.098, blue: 0.090),
-            amount: wordInk
-        )
-        return [
+        [
             Color(red: 0.769, green: 0.749, blue: 0.718),
             Color(red: 0.612, green: 0.584, blue: 0.549),
             Color(red: 0.435, green: 0.412, blue: 0.384),
-            topInk,
+            wordColor,
             ember,
         ]
     }
 
     var body: some View {
         ZStack {
-            skyColor.ignoresSafeArea()
+            ground.ignoresSafeArea()
 
             Circle()
                 .fill(
@@ -96,17 +102,14 @@ struct ElevateSplashView: View {
                 Text("Atmosphere")
                     .font(.system(size: 30, weight: .bold))
                     .tracking(wordOn ? -0.4 : 6)
-                    .foregroundStyle(
-                        Color(red: 0.945, green: 0.937, blue: 0.922)
-                            .interpolate(to: FieldTheme.ink, amount: wordInk)
-                    )
+                    .foregroundStyle(wordColor)
                     .opacity(wordOn ? 1 : 0)
                     .offset(y: wordOn ? 0 : 14)
 
                 Text("FIELD CAPTURE")
                     .font(.system(size: 12, weight: .semibold))
                     .tracking(3.2)
-                    .foregroundStyle(FieldTheme.faint)
+                    .foregroundStyle(subColor)
                     .opacity(subOn ? 1 : 0)
                     .offset(y: subOn ? 0 : 8)
             }
@@ -121,7 +124,7 @@ struct ElevateSplashView: View {
 
     private func whooshStreak(width: CGFloat, height: CGFloat, blur: CGFloat, x: CGFloat) -> some View {
         LinearGradient(
-            colors: [.clear, ember, Color(red: 0.945, green: 0.937, blue: 0.922), .clear],
+            colors: [.clear, ember, wordColor, .clear],
             startPoint: .bottom,
             endPoint: .top
         )
@@ -139,11 +142,11 @@ struct ElevateSplashView: View {
                 wordOn = true
                 subOn = true
                 lift = true
-                sky = 1
-                wordInk = 1
-                try? await Task.sleep(nanoseconds: 280_000_000)
-                veil = 0
-                try? await Task.sleep(nanoseconds: 200_000_000)
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                withAnimation(.easeInOut(duration: 0.8)) {
+                    veil = 0
+                }
+                try? await Task.sleep(nanoseconds: 800_000_000)
                 onFinished()
                 return
             }
@@ -176,16 +179,12 @@ struct ElevateSplashView: View {
             withAnimation(.timingCurve(0.16, 1.15, 0.3, 1, duration: 1.4)) {
                 lift = true
             }
-            withAnimation(.easeInOut(duration: 3.6).delay(3.6)) {
-                sky = 1
-            }
 
             try? await Task.sleep(nanoseconds: 220_000_000)
             withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.7)) {
                 wordOn = true
             }
-            withAnimation(.easeInOut(duration: 1.4)) {
-                wordInk = 1
+            withAnimation(.easeInOut(duration: 0.6)) {
                 groundGlow = 0.25
             }
             try? await Task.sleep(nanoseconds: 260_000_000)
@@ -193,38 +192,12 @@ struct ElevateSplashView: View {
                 subOn = true
             }
 
-            try? await Task.sleep(nanoseconds: 4_400_000_000)
-            withAnimation(.easeInOut(duration: 1.1)) {
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            withAnimation(.easeInOut(duration: 1.2)) {
                 veil = 0
             }
-            try? await Task.sleep(nanoseconds: 1_100_000_000)
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
             onFinished()
         }
-    }
-}
-
-private extension Color {
-    func interpolate(to other: Color, amount: Double) -> Color {
-        let t = min(max(amount, 0), 1)
-        let a = components
-        let b = other.components
-        return Color(
-            red: a.r + (b.r - a.r) * t,
-            green: a.g + (b.g - a.g) * t,
-            blue: a.b + (b.b - a.b) * t
-        )
-    }
-
-    var components: (r: Double, g: Double, b: Double) {
-        #if canImport(UIKit)
-        var r: CGFloat = 0
-        var g: CGFloat = 0
-        var b: CGFloat = 0
-        var a: CGFloat = 0
-        UIColor(self).getRed(&r, green: &g, blue: &b, alpha: &a)
-        return (Double(r), Double(g), Double(b))
-        #else
-        return (0, 0, 0)
-        #endif
     }
 }
