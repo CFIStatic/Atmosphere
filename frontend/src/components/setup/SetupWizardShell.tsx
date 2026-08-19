@@ -23,7 +23,7 @@ export function SetupWizardShell({
 }) {
   const copy = setupWizardCopy(intent);
   return (
-    <div className="cx-aurora relative flex min-h-screen flex-col bg-paper-100">
+    <div className="relative flex min-h-screen flex-col bg-paper-100">
       <header className="flex items-center justify-between gap-4 px-6 py-6 sm:px-10">
         <Logo />
         {headerAction ??
@@ -58,10 +58,8 @@ export function SetupWizardShell({
                       key={item.step}
                       className={`flex gap-4 rounded-xl border px-4 py-4 transition ${
                         active
-                          ? 'border-brand-200 bg-brand-50/80 shadow-sm'
-                          : done
-                            ? 'border-brand-100 bg-paper-0/80'
-                            : 'border-line bg-paper-0/60 opacity-80'
+                          ? 'border-brand-300 bg-brand-50 shadow-sm'
+                          : 'border-line bg-paper-0'
                       }`}
                     >
                       <span
@@ -77,8 +75,12 @@ export function SetupWizardShell({
                         {done ? <CheckIcon width={16} height={16} /> : item.step}
                       </span>
                       <div>
-                        <p className="font-semibold text-ink-900">{item.title}</p>
-                        <p className="mt-1 text-sm text-ink-600">{item.detail}</p>
+                        <p className={`font-semibold ${active || done ? 'text-ink-900' : 'text-ink-700'}`}>
+                          {item.title}
+                        </p>
+                        <p className={`mt-1 text-sm ${active || done ? 'text-ink-600' : 'text-ink-500'}`}>
+                          {item.detail}
+                        </p>
                       </div>
                     </li>
                   );
@@ -109,7 +111,7 @@ export function SetupStepCard({
 }) {
   const label = setupWizardCopy(intent).steps[step - 1]?.title ?? title;
   return (
-    <div className="rounded-2xl border border-brand-200 bg-paper-0 p-8 shadow-lift shadow-2xl shadow-lift-xl sm:p-10">
+    <div className="rounded-2xl border border-line bg-paper-0 p-8 shadow-lift sm:p-10">
       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-600">
         Step {step} · {label}
       </p>

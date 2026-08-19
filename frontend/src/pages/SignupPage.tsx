@@ -113,7 +113,7 @@ export function SignupPage() {
 
   if (loading || (user && membership && billingGate === 'loading')) {
     return (
-      <div className="cx-aurora grid min-h-screen place-items-center bg-paper-100 text-brand-600">
+      <div className="grid min-h-screen place-items-center bg-paper-100 text-brand-600">
         <SpinnerIcon className="animate-spin" width={28} height={28} />
       </div>
     );
@@ -515,7 +515,7 @@ function looksLikeExistingAccount(message: string): boolean {
 }
 
 const inputClass =
-  'w-full rounded-lg glass-card px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200';
+  'w-full rounded-lg border border-line bg-paper-0 px-3.5 py-2.5 text-ink-900 placeholder-ink-400 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200';
 
 function Alert({ children }: { children: ReactNode }) {
   return (
