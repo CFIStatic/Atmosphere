@@ -177,6 +177,9 @@ struct OfficeLinkView: View {
     }
 
     private var lede: String {
+        if let name = auth.fullName, auth.needsOfficeLink {
+            return "You’re signed in as \(name). Enter the office join code so this phone files day films to that company."
+        }
         if let email = auth.email, auth.needsOfficeLink {
             return "You’re signed in as \(email). Enter the office join code so this phone files day films to that company."
         }

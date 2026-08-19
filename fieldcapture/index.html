@@ -27,6 +27,13 @@
     } catch (e) {}
   })();
 </script>
+<script>
+  try {
+    if (/(?:^|[?&])elevate=1(?:&|$)/.test(location.search)) {
+      document.documentElement.setAttribute('data-elevate-preview', '1');
+    }
+  } catch (e) {}
+</script>
 <style>
   /* ---------------------------------------------------------------------
      The Verifier's design tokens, on a phone.
@@ -85,6 +92,7 @@
 
   * { box-sizing: border-box; margin: 0; }
   [hidden] { display: none !important; }
+  html { color-scheme: light dark; }
   html, body { height: 100%; }
   body {
     background: var(--bg); color: var(--ink);
@@ -97,6 +105,7 @@
   /* One column, phone-width, centered on any screen. The app is a phone
      app; pretending otherwise on a desktop would just stretch the truth. */
   .app {
+    position: relative;
     max-width: 480px; margin: 0 auto; min-height: 100vh;
     display: flex; flex-direction: column;
     background: var(--bg);
@@ -329,6 +338,149 @@
   .auth-err { color: var(--fail); font-size: 13px; min-height: 1.2em; }
   .erow[data-selected="1"] { background: var(--accent-soft); margin: 0 -8px; padding-left: 10px; padding-right: 10px; border-radius: 8px; }
 
+  /* Elevate: bars slam up from the orange ground, then sit on paper or
+     night — whichever the phone is already using — and ease into Today. */
+  .elevate {
+    position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 50;
+    display: none; align-items: center; justify-content: center;
+    background: var(--bg); overflow: hidden;
+  }
+  .elevate[data-on="1"] { display: flex; }
+  html[data-elevate-preview="1"],
+  html[data-elevate-preview="1"] body,
+  html[data-elevate-preview="1"] .app { background: var(--bg); }
+  html[data-elevate-preview="1"] .top,
+  html[data-elevate-preview="1"] .screen,
+  html[data-elevate-preview="1"] .foot { visibility: hidden; }
+  .elevate-sky {
+    position: absolute; inset: 0; background: var(--bg); pointer-events: none;
+  }
+  .elevate.play.out, .elevate.out {
+    background: var(--bg);
+    animation: elevate-veil-out 1.2s 1.5s cubic-bezier(.4, 0, .2, 1) both;
+  }
+  .elevate.play.out .elevate-sky {
+    background: var(--bg);
+    animation: none;
+  }
+  .elevate.play.out .elevate-lockup {
+    animation: elevate-lockup-out 1.6s cubic-bezier(.4, 0, .2, 1) both;
+  }
+  .elevate.play.out .elevate-bloom,
+  .elevate.play.out .elevate-whoosh {
+    animation: none; opacity: 0;
+  }
+  .elevate.play.out .ea { box-shadow: none; }
+  .elevate-bloom {
+    position: absolute; left: 50%; top: 52%;
+    width: 320px; height: 320px; margin: -160px 0 0 -160px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(242,103,12,.7) 0%, rgba(188,69,8,.25) 38%, transparent 70%);
+    filter: blur(18px); opacity: 0; pointer-events: none;
+  }
+  .elevate.play .elevate-bloom { animation: elevate-bloom 1.55s .04s ease-out both; }
+  .elevate-lockup {
+    position: relative; z-index: 2;
+    display: flex; flex-direction: column; align-items: center; gap: 18px;
+    will-change: opacity;
+  }
+  .elevate.play .elevate-lockup { animation: elevate-lift 2.1s .15s cubic-bezier(.16, 1.15, .3, 1) both; }
+  .elevate-whoosh {
+    position: absolute; left: 50%; top: 58%;
+    width: 14px; height: 280px; margin: -40px 0 0 -7px;
+    background: linear-gradient(to top, transparent, #F2670C 42%, var(--ink) 78%, transparent);
+    filter: blur(7px); opacity: 0; pointer-events: none;
+  }
+  .elevate-whoosh.b { width: 28px; margin-left: -14px; filter: blur(14px); height: 340px; }
+  .elevate-whoosh.c { width: 8px; margin-left: 10px; height: 220px; filter: blur(5px); }
+  .elevate.play .elevate-whoosh.a { animation: elevate-whoosh .95s .12s ease-out both; }
+  .elevate.play .elevate-whoosh.b { animation: elevate-whoosh 1.15s .18s ease-out both; }
+  .elevate.play .elevate-whoosh.c { animation: elevate-whoosh .8s .28s ease-out both; }
+  .elevate-bars {
+    width: 120px; height: 120px;
+    display: flex; flex-direction: column; gap: calc(120px * 2 / 22);
+    filter: drop-shadow(0 12px 28px rgba(242,103,12,.28));
+  }
+  .elevate-bars .eb {
+    display: block; height: calc(120px * 2.8 / 22); border-radius: 2px;
+    transform-origin: 50% 100%; opacity: 0; will-change: transform, opacity;
+  }
+  .elevate-bars .e1 { background: #C4BFB7; }
+  .elevate-bars .e2 { background: #9C958C; }
+  .elevate-bars .e3 { background: #6F6962; }
+  .elevate-bars .e4 { background: var(--ink); }
+  .elevate-bars .ea { background: #F2670C; }
+  .elevate.play .ea {
+    animation:
+      elevate-bar .72s 0s cubic-bezier(.16, 1.35, .3, 1) both,
+      elevate-glow 1.5s .04s ease-out both;
+  }
+  .elevate.play .e4 { animation: elevate-bar .72s .16s cubic-bezier(.16, 1.35, .3, 1) both; }
+  .elevate.play .e3 { animation: elevate-bar .72s .32s cubic-bezier(.16, 1.35, .3, 1) both; }
+  .elevate.play .e2 { animation: elevate-bar .72s .48s cubic-bezier(.16, 1.35, .3, 1) both; }
+  .elevate.play .e1 { animation: elevate-bar .72s .64s cubic-bezier(.16, 1.35, .3, 1) both; }
+  .elevate-word {
+    font-size: 30px; font-weight: 750; letter-spacing: .22em; color: var(--ink); opacity: 0;
+  }
+  .elevate.play .elevate-word { animation: elevate-word .7s .92s cubic-bezier(.16, 1, .3, 1) both; }
+  .elevate-sub {
+    margin-top: -10px; font-size: 12px; font-weight: 650; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--faint); opacity: 0;
+  }
+  .elevate.play .elevate-sub { animation: elevate-sub .55s 1.18s ease both; }
+  @keyframes elevate-bloom {
+    0% { transform: scale(.15); opacity: 0; }
+    32% { opacity: .9; }
+    100% { transform: scale(1.85); opacity: 0; }
+  }
+  @keyframes elevate-bar {
+    from { transform: translateY(56px) scaleX(.06); opacity: 0; }
+    62% { transform: translateY(-7px) scaleX(1.06); opacity: 1; }
+    to { transform: translateY(0) scaleX(1); opacity: 1; }
+  }
+  @keyframes elevate-glow {
+    0%, 18% { box-shadow: 0 0 0 0 rgba(242,103,12,0); }
+    48% { box-shadow: 0 0 36px 10px rgba(242,103,12,.65); }
+    100% { box-shadow: 0 8px 22px 2px rgba(242,103,12,.28); }
+  }
+  @keyframes elevate-lift {
+    0% { transform: translateY(28px) scale(.84); }
+    58% { transform: translateY(-6px) scale(1.05); }
+    100% { transform: translateY(-18px) scale(1); }
+  }
+  @keyframes elevate-word {
+    from { opacity: 0; transform: translateY(14px); letter-spacing: .22em; }
+    to { opacity: 1; transform: translateY(0); letter-spacing: -0.02em; }
+  }
+  @keyframes elevate-sub {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes elevate-whoosh {
+    from { transform: translateY(70px) scaleY(.6); opacity: 0; }
+    36% { opacity: .85; }
+    to { transform: translateY(-160px) scaleY(1.2); opacity: 0; }
+  }
+  @keyframes elevate-lockup-out {
+    from { opacity: 1; transform: translateY(-18px) scale(1); }
+    to { opacity: 0; transform: translateY(-18px) scale(1); }
+  }
+  @keyframes elevate-veil-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .elevate, .elevate.play, .elevate-sky { background: var(--bg); animation: none; }
+    .elevate.play .eb, .elevate.play .elevate-word, .elevate.play .elevate-sub, .elevate.play .elevate-lockup {
+      animation: none; opacity: 1; transform: none; letter-spacing: -0.02em; color: var(--ink);
+      box-shadow: none;
+    }
+    .elevate.play .elevate-whoosh, .elevate.play .elevate-bloom { display: none; }
+    .elevate.play.out, .elevate.out { background: var(--bg); animation: none; }
+    .elevate.play.out .elevate-sky, .elevate.play.out .elevate-lockup { animation: none; }
+    .elevate-sub { color: var(--faint); }
+  }
+
 </style>
 </head>
 <body>
@@ -340,7 +492,7 @@
       <svg width="18" height="18" viewBox="0 0 22 22" aria-hidden="true"><rect y="0" width="22" height="2.8" fill="#A8A29E"/><rect y="4.8" width="22" height="2.8" fill="#78716C"/><rect y="9.6" width="22" height="2.8" fill="#57534E"/><rect y="14.4" width="22" height="2.8" fill="currentColor"/><rect y="19.2" width="22" height="2.8" fill="#F2670C"/></svg>
       Atmosphere <span class="sub">Field Capture</span>
     </span>
-    <span class="who"><b>Andre Boone</b>Coastal Drying LLC</span>
+    <span class="who" id="who-line" hidden></span>
   </div>
 
   <!-- ================= HOME: before the day starts ================= -->
@@ -384,20 +536,20 @@
   <!-- ================= SIGN IN: dashboard credentials, or a job link ================= -->
   <div class="screen" id="s-blocked">
     <div class="pad" style="padding-top:36px">
-      <h1 class="h1">Sign in to Field Capture</h1>
+      <h1 class="h1">Connect Field Capture</h1>
       <p class="lede" id="blocked-msg">
-        Use the same email and password as the Atmosphere dashboard. Job share links still work without signing in.
+        Type your name and the office invite code from Atmosphere Settings. Job share links still work without signing in.
       </p>
       <form class="auth-form" id="login-form" novalidate>
-        <label for="login-email">Email
-          <input id="login-email" name="email" type="email" autocomplete="username" inputmode="email" required />
+        <label for="login-name">First and last name
+          <input id="login-name" name="fullName" type="text" autocomplete="name" autocapitalize="words" required />
         </label>
-        <label for="login-password">Password
-          <input id="login-password" name="password" type="password" autocomplete="current-password" required minlength="8" />
+        <label for="login-code">Office invite code
+          <input id="login-code" name="joinCode" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" required minlength="6" maxlength="12" />
         </label>
         <p class="auth-err" id="login-err" hidden></p>
         <button class="daybtn" type="submit" id="login-btn">
-          <span class="lbl">Sign in</span>
+          <span class="lbl">Connect this phone</span>
         </button>
       </form>
     </div>
@@ -459,6 +611,26 @@
     </div>
   </div>
 
+  <!-- Connect → Today: slam the mark, sit four seconds, dissolve into the day. -->
+  <div class="elevate" id="s-elevate" data-on="0" role="status" aria-live="polite" aria-hidden="true">
+    <span class="elevate-sky" aria-hidden="true"></span>
+    <span class="elevate-bloom" aria-hidden="true"></span>
+    <span class="elevate-whoosh a" aria-hidden="true"></span>
+    <span class="elevate-whoosh b" aria-hidden="true"></span>
+    <span class="elevate-whoosh c" aria-hidden="true"></span>
+    <div class="elevate-lockup">
+      <span class="elevate-bars" aria-hidden="true">
+        <span class="eb e1"></span>
+        <span class="eb e2"></span>
+        <span class="eb e3"></span>
+        <span class="eb e4"></span>
+        <span class="eb ea"></span>
+      </span>
+      <p class="elevate-word">Atmosphere</p>
+      <p class="elevate-sub">Field Capture</p>
+    </div>
+  </div>
+
   <div class="foot">
     Uploading finishes itself when signal returns — never delete anything to "help". A day that
     fails a check is still filed and still counts; it is just marked for a person to look at.
@@ -466,6 +638,6 @@
 </div>
 
 <script src="js/capture-core.js"></script>
-<script src="js/app.js"></script>
+<script src="js/app.js?v=elevate13"></script>
 </body>
 </html>

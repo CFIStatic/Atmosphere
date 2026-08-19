@@ -351,6 +351,14 @@
     return (apiBase || '').replace(/\/$/, '');
   }
 
+  /** Name + office invite code. No email or password. */
+  function joinCrew(fullName, joinCode, apiBase) {
+    return apiJson(origin(apiBase) + '/api/field-app/join', {
+      method: 'POST',
+      body: { fullName: fullName, joinCode: joinCode },
+    });
+  }
+
   /** Same email + password as the Atmosphere dashboard. */
   function loginWithPassword(email, password, apiBase) {
     return apiJson(origin(apiBase) + '/api/auth/login', {
@@ -488,6 +496,7 @@
     readCapture: readCapture,
     recordDayFilm: recordDayFilm,
     uploadDayFilm: uploadDayFilm,
+    joinCrew: joinCrew,
     loginWithPassword: loginWithPassword,
     loadFieldMe: loadFieldMe,
     loadTodayJobs: loadTodayJobs,

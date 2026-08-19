@@ -208,6 +208,26 @@ export type CreateOrgInput = z.infer<typeof createOrgSchema>;
 export type JoinOrgInput = z.infer<typeof joinOrgSchema>;
 export type UpdateOrgProfileInput = z.infer<typeof updateOrgProfileSchema>;
 
+const crewFullNameField = z
+  .string({ required_error: 'Enter your first and last name' })
+  .trim()
+  .transform((value) => value.replace(/\s+/g, ' '))
+  .pipe(
+    z
+      .string()
+      .min(2, 'Enter your first and last name')
+      .max(80, 'Name must be at most 80 characters')
+      .refine((value) => value.split(/\s+/).filter(Boolean).length >= 2, {
+        message: 'Enter your first and last name',
+      }),
+  );
+
+const officeJoinCodeField = z
+  .string({ required_error: 'Join code is required' })
+  .trim()
+  .toUpperCase()
+  .regex(/^[A-Z0-9]{6,12}$/, 'Enter a valid join code');
+
 /**
  * Field Capture (iOS) account creation. Same email/password rules as website
  * signup, plus either an office join code or a new office name so the phone
@@ -224,18 +244,8 @@ export const fieldRegisterSchema = z
   .object({
     email: emailField,
     password: passwordField,
-    fullName: z
-      .string()
-      .trim()
-      .min(2, 'Enter your first and last name')
-      .max(80, 'Name must be at most 80 characters')
-      .optional(),
-    joinCode: z
-      .string()
-      .trim()
-      .toUpperCase()
-      .regex(/^[A-Z0-9]{6,12}$/, 'Enter a valid join code')
-      .optional(),
+    fullName: crewFullNameField.optional(),
+    joinCode: officeJoinCodeField.optional(),
     orgName: z
       .string()
       .trim()
@@ -257,18 +267,8 @@ export type FieldRegisterInput = z.infer<typeof fieldRegisterSchema>;
 /** Signed-in Field Capture user linking this phone to an office. */
 export const fieldOfficeSchema = z
   .object({
-    fullName: z
-      .string()
-      .trim()
-      .min(2, 'Enter your first and last name')
-      .max(80, 'Name must be at most 80 characters')
-      .optional(),
-    joinCode: z
-      .string()
-      .trim()
-      .toUpperCase()
-      .regex(/^[A-Z0-9]{6,12}$/, 'Enter a valid join code')
-      .optional(),
+    fullName: crewFullNameField.optional(),
+    joinCode: officeJoinCodeField.optional(),
     orgName: z
       .string()
       .trim()
@@ -289,14 +289,21 @@ export type FieldOfficeInput = z.infer<typeof fieldOfficeSchema>;
 
 /** Confirm an office join code before attaching the Field Capture login. */
 export const fieldOfficePreviewSchema = z.object({
-  joinCode: z
-    .string({ required_error: 'Join code is required' })
-    .trim()
-    .toUpperCase()
-    .regex(/^[A-Z0-9]{6,12}$/, 'Enter a valid join code'),
+  joinCode: officeJoinCodeField,
 });
 
 export type FieldOfficePreviewInput = z.infer<typeof fieldOfficePreviewSchema>;
+
+/**
+ * Field Capture crew connect: first and last name plus the office join code.
+ * No email or password — the office assigns work to that name.
+ */
+export const fieldJoinSchema = z.object({
+  fullName: crewFullNameField,
+  joinCode: officeJoinCodeField,
+});
+
+export type FieldJoinInput = z.infer<typeof fieldJoinSchema>;
 
 /* ---------------------------------------------------------------------------
  * Growth analytics

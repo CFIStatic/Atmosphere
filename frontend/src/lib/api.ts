@@ -2408,6 +2408,13 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
 
+  /** Field Capture iOS — name + office join code (no email). */
+  fieldJoin: (input: { fullName: string; joinCode: string }) =>
+    request<AuthResponse>('/api/field-app/join', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
   /** Field Capture iOS — create the website account and join or start an office. */
   fieldRegister: (input: {
     email: string;

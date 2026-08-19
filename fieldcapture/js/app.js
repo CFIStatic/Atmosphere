@@ -3,7 +3,7 @@
  *
  * Modes:
  *   ?token=<job-share>  → live MediaRecorder + proof upload (no office login)
- *   signed in           → same dashboard email/password, jobs from the office account
+ *   signed in           → name + office invite code, jobs from that office
  *   ?demo=1             → scripted demo only (explicit)
  */
 (function () {
@@ -36,6 +36,43 @@
       if (el) el.setAttribute('data-on', s === id ? '1' : '0');
     });
     window.scrollTo(0, 0);
+  }
+
+  /**
+   * Bars rise from the orange ground, the mark lifts, then the veil
+   * eases off so Today is waiting underneath. Paper on light, night on
+   * dark — same tokens as the rest of the phone. Plays only after a
+   * successful connect — not on later launches.
+   */
+  function playElevate() {
+    return new Promise(function (resolve) {
+      var el = $('#s-elevate');
+      if (!el) {
+        resolve();
+        return;
+      }
+      el.setAttribute('aria-hidden', 'false');
+      el.setAttribute('aria-label', 'Connected');
+      el.setAttribute('data-on', '1');
+      el.classList.remove('play', 'out');
+      void el.offsetWidth;
+      el.classList.add('play');
+      /* CSS already flattens the choreography when the OS asks for reduced
+         motion. Four-second lockup, then the mark melts into the same
+         paper or night Today is already using. */
+      var hold = 4000;
+      var fade = 2700;
+      window.setTimeout(function () {
+        document.documentElement.removeAttribute('data-elevate-preview');
+        el.classList.add('out');
+        window.setTimeout(function () {
+          el.setAttribute('data-on', '0');
+          el.setAttribute('aria-hidden', 'true');
+          el.classList.remove('play', 'out');
+          resolve();
+        }, fade);
+      }, hold);
+    });
   }
 
   var state = {
@@ -82,7 +119,7 @@
     if (!root) return;
     if (!jobs.length) {
       root.innerHTML =
-        '<div class="erow"><span class="t"><b>Nothing on the schedule for today</b><span>Ask the office to start or schedule a job, then refresh.</span></span></div>';
+        '<div class="erow"><span class="t"><b>Nothing assigned yet</b><span>Ask the office to put you on a job, then refresh.</span></span></div>';
       return;
     }
     root.innerHTML = jobs
@@ -143,7 +180,10 @@
         var num = (payload.job && payload.job.jobNumber) || '';
         var company = (payload.you && payload.you.company) || 'Crew';
         var who = document.querySelector('.who');
-        if (who) who.innerHTML = '<b>' + escapeHtml(company) + '</b>Field Capture';
+        if (who) {
+          who.hidden = false;
+          who.innerHTML = '<b>' + escapeHtml(company) + '</b>Field Capture';
+        }
         renderExpect([
           {
             name: (num ? num + ' · ' : '') + title,
@@ -165,8 +205,13 @@
 
   function bootBlocked() {
     show('s-blocked');
+    var who = document.querySelector('.who');
+    if (who) {
+      who.hidden = true;
+      who.innerHTML = '';
+    }
     $('#blocked-msg').textContent =
-      'Use the same email and password as the Atmosphere dashboard.';
+      'Type your name and the office invite code from Atmosphere Settings.';
   }
 
   function showLoginError(message) {
@@ -200,6 +245,7 @@
     if (who) {
       var name = (me.user && (me.user.fullName || me.user.email)) || 'You';
       var org = (me.org && me.org.name) || 'Office';
+      who.hidden = false;
       who.innerHTML = '<b>' + escapeHtml(name) + '</b>' + escapeHtml(org);
     }
     renderExpect(state.jobs);
@@ -229,23 +275,23 @@
     if (form) {
       form.addEventListener('submit', function (event) {
         event.preventDefault();
-        var email = ($('#login-email').value || '').trim();
-        var password = $('#login-password').value || '';
+        var fullName = ($('#login-name') && $('#login-name').value || '').trim();
+        var joinCode = ($('#login-code') && $('#login-code').value || '').trim().toUpperCase();
         var btn = $('#login-btn');
         showLoginError('');
         btn.disabled = true;
-        Core.loginWithPassword(email, password, API_BASE)
+        Core.joinCrew(fullName, joinCode, API_BASE)
           .then(function (res) {
             var session = res.session || {};
             if (!session.accessToken) {
-              throw new Error('Signed in, but no session came back. Confirm your email if Atmosphere asked you to.');
+              throw new Error('Connected, but no session came back. Try again in a moment.');
             }
             writeStoredSession(session.accessToken, session.refreshToken);
-            return bootAccountSession();
+            return Promise.all([bootAccountSession(), playElevate()]);
           })
           .catch(function (err) {
             writeStoredSession(null, null);
-            showLoginError(err.message || 'Could not sign in. Use your dashboard email and password.');
+            showLoginError(err.message || 'Could not connect. Check your name and the office invite code.');
           })
           .then(function () {
             btn.disabled = false;
@@ -536,6 +582,10 @@
     bootLive();
   } else if (DEMO) {
     bootDemo();
+  } else if (params.get('elevate') === '1') {
+    /* Preview the connect → Today motion without a live session. */
+    show('s-home');
+    playElevate();
   } else {
     bootAccount();
   }

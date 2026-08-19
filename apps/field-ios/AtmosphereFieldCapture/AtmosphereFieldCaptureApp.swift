@@ -4,8 +4,9 @@ import SwiftUI
 /**
  * Atmosphere Field Capture — App Store entry.
  *
- * Connect the platform account once on first install. Later launches open
- * straight to Today; day films land in that org’s evidence library.
+ * Connect the crew once on first install with their name and the office
+ * invite code. Later launches open straight to Today; day films land in
+ * that org’s evidence library.
  */
 @main
 struct AtmosphereFieldCaptureApp: App {
@@ -43,15 +44,17 @@ struct RootView: View {
     @EnvironmentObject private var session: FieldDaySession
     @EnvironmentObject private var auth: AuthSession
     @EnvironmentObject private var api: AtmosphereClient
-    @State private var showSignUp = false
+    @State private var showDashboardLogin = false
+    @State private var showElevate = false
+    @State private var cameFromConnect = false
 
     var body: some View {
         Group {
             if !auth.isLinked {
-                if showSignUp {
-                    SignUpView(onSignIn: { showSignUp = false })
+                if showDashboardLogin {
+                    SignInView(onCreateAccount: { showDashboardLogin = false })
                 } else {
-                    SignInView(onCreateAccount: { showSignUp = true })
+                    JoinCrewView(onDashboardLogin: { showDashboardLogin = true })
                 }
             } else if auth.needsOfficeLink || auth.showOfficeLink {
                 OfficeLinkView()
@@ -67,19 +70,37 @@ struct RootView: View {
             }
         }
         .background(FieldTheme.bg.ignoresSafeArea())
+        .overlay {
+            if showElevate {
+                ElevateSplashView {
+                    showElevate = false
+                }
+            }
+        }
+        .onAppear {
+            cameFromConnect = !auth.isLinked || auth.needsOfficeLink
+        }
         // iOS 16-compatible: the two-parameter / `initial:` onChange APIs are iOS 17+.
         .onReceive(auth.$isLinked.dropFirst()) { linked in
             if linked, !auth.needsOfficeLink {
+                playElevateIfComingFromConnect()
                 Task { await session.loadToday(api: api) }
             }
         }
         .onReceive(auth.$needsOfficeLink.dropFirst()) { needsOffice in
             if auth.isLinked, !needsOffice, !auth.showOfficeLink {
+                playElevateIfComingFromConnect()
                 Task { await session.loadToday(api: api) }
             }
         }
         .onOpenURL { url in
             auth.handleOpenURL(url)
         }
+    }
+
+    private func playElevateIfComingFromConnect() {
+        guard cameFromConnect else { return }
+        cameFromConnect = false
+        showElevate = true
     }
 }

@@ -4,8 +4,8 @@ import Foundation
  * One-time platform account link for Field Capture.
  *
  * Connect when the app is first installed; tokens live in Keychain and the
- * phone stays signed in across launches. Crew should not sign in every day —
- * only again if they explicitly disconnect or the org revokes the session.
+ * phone stays signed in across launches. Crew connect with name + office
+ * invite code — only again if they explicitly disconnect.
  */
 @MainActor
 final class AuthSession: ObservableObject {
@@ -83,7 +83,7 @@ final class AuthSession: ObservableObject {
                     } else if isUnauthorized(error) {
                         // Session truly dead — only then ask to connect again.
                         clearLink()
-                        lastError = "This phone was disconnected. Connect your Atmosphere account once to continue."
+        lastError = "This phone was disconnected. Connect with your name and the office invite code to continue."
                     } else {
                         restoreWarning = "Couldn’t refresh jobs right now. You’re still connected — try again when you have signal."
                     }
@@ -91,6 +91,46 @@ final class AuthSession: ObservableObject {
             } else {
                 restoreWarning = "Couldn’t refresh jobs right now. You’re still connected — try again when you have signal."
             }
+        }
+    }
+
+    /// First-install crew connect — name + office invite code.
+    func joinCrew(fullName: String, joinCode: String) async {
+        lastError = nil
+        confirmationNotice = nil
+        do {
+            let result = try await api.joinCrew(fullName: fullName, joinCode: joinCode)
+            guard let session = result.session else {
+                throw APIError.http(
+                    status: 0,
+                    body: "Connected, but no session came back. Try again in a moment."
+                )
+            }
+            persist(session: session, email: result.user?.email ?? "")
+            UserDefaults.standard.set(true, forKey: linkedFlagKey)
+            isLinked = true
+            let trimmedName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedName.isEmpty {
+                self.fullName = trimmedName
+                UserDefaults.standard.set(trimmedName, forKey: nameAccount)
+            }
+            if let org = result.org {
+                self.orgName = org.name
+                UserDefaults.standard.set(org.name, forKey: orgAccount)
+                needsOfficeLink = false
+                showOfficeLink = false
+                pendingJoinCode = nil
+                officePreviewName = nil
+                lastError = nil
+            } else if let orgError = result.orgError, !orgError.isEmpty {
+                needsOfficeLink = true
+                lastError = orgError
+            } else {
+                await refreshProfileOrMarkOffice()
+            }
+        } catch {
+            lastError = Self.friendlyCreateError(error)
+            isLinked = KeychainStore.get(account: refreshAccount) != nil
         }
     }
 

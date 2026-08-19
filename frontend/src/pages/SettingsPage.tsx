@@ -800,7 +800,7 @@ function FieldCaptureAppSection() {
   return (
     <Card
       title="Field Capture app"
-      description="Link a phone login to this office so day films land in your evidence library — even if the crew created the account on the iPhone."
+      description="Crew open the app, type their name and this office code, and they show up on the team — ready to be put on jobs."
     >
       <div className="rounded-lg border border-line bg-paper-50 px-4 py-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Office join code</p>
@@ -826,27 +826,27 @@ function FieldCaptureAppSection() {
         </div>
       </div>
       <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm text-ink-700">
-        <li>Install Field Capture and create an account or sign in on the phone.</li>
+        <li>Install Field Capture on the phone.</li>
         <li>
-          Tap <strong className="font-semibold text-ink-900">Link to office account</strong> and enter the
-          code above
+          They type their <strong className="font-semibold text-ink-900">first and last name</strong>{' '}
+          (so the office can assign work to them) and this code
           {joinCode ? (
             <>
               {' '}
-              (or open <code className="font-mono text-xs">atmosphere-field://join?code={joinCode}</code> on
-              the phone)
+              (or open <code className="font-mono text-xs">atmosphere-field://join?code={joinCode}</code>)
             </>
           ) : null}
           .
         </li>
         <li>
-          Or sign in with <strong className="font-semibold text-ink-900">the same email and password</strong>{' '}
-          already linked to this office — the phone connects automatically.
+          They appear under Team as a field technician. Put them on a job from the job’s Crew tab —
+          that job then shows in the app.
         </li>
       </ol>
       <p className="mt-4 text-sm text-ink-600">
-        After that, jobs filmed on the phone appear in Verifier / evidence for {membership?.org?.name ?? 'this office'}.
-        Disconnect only from the app’s Account menu if you hand the phone to someone else.
+        After that, day films from the phone land in Verifier / evidence for{' '}
+        {membership?.org?.name ?? 'this office'}. Disconnect only from the app’s Account menu if you
+        hand the phone to someone else.
       </p>
     </Card>
   );
