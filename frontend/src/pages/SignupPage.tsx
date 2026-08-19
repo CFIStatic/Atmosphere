@@ -79,13 +79,6 @@ export function SignupPage() {
   );
 
   useEffect(() => {
-    document.title = 'Create an account · Atmosphere';
-    return () => {
-      document.title = 'Atmosphere';
-    };
-  }, []);
-
-  useEffect(() => {
     if (orgIntent === 'join') setMode('join');
   }, [orgIntent]);
 

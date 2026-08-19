@@ -42,13 +42,6 @@ export function LoginPage() {
   const shakeTimer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
-    document.title = 'Sign in · Atmosphere';
-    return () => {
-      document.title = 'Atmosphere';
-    };
-  }, []);
-
-  useEffect(() => {
     let cancelled = false;
     api
       .pinStatus()
