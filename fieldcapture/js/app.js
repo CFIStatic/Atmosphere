@@ -58,10 +58,10 @@
       void el.offsetWidth;
       el.classList.add('play');
       /* CSS already flattens the choreography when the OS asks for reduced
-         motion. Always sit on the assembled lockup for four seconds, then
-         ease into Today. */
-      var hold = 5000;
-      var fade = 1200;
+         motion. Four-second lockup, then the mark dissolves while the
+         paper/night veil stays put so Today does not ghost through. */
+      var hold = 4000;
+      var fade = 1800;
       window.setTimeout(function () {
         document.documentElement.removeAttribute('data-elevate-preview');
         el.classList.add('out');

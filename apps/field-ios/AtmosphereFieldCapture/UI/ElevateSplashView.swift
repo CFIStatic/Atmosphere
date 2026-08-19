@@ -22,6 +22,7 @@ struct ElevateSplashView: View {
     @State private var whooshOpacity: Double = 0
     @State private var veil: Double = 1
     @State private var groundGlow: Double = 0
+    @State private var lockupOut: Double = 0
 
     private let ember = Color(red: 0.949, green: 0.404, blue: 0.047)
     private let paper = Color(red: 0.984, green: 0.980, blue: 0.969) // #FBFAF7
@@ -113,8 +114,10 @@ struct ElevateSplashView: View {
                     .opacity(subOn ? 1 : 0)
                     .offset(y: subOn ? 0 : 8)
             }
-            .scaleEffect(lift ? 1 : 0.84)
-            .offset(y: lift ? -18 : 28)
+            .scaleEffect((lift ? 1 : 0.84) * (1 - 0.07 * lockupOut))
+            .offset(y: (lift ? -18 : 28) - 26 * lockupOut)
+            .opacity(1 - lockupOut)
+            .blur(radius: 16 * lockupOut)
         }
         .opacity(veil)
         .accessibilityElement(children: .ignore)
@@ -143,13 +146,16 @@ struct ElevateSplashView: View {
                 subOn = true
                 lift = true
                 try? await Task.sleep(nanoseconds: 4_000_000_000)
-                withAnimation(.easeInOut(duration: 0.8)) {
-                    veil = 0
+                withAnimation(.easeInOut(duration: 0.7)) {
+                    lockupOut = 1
                 }
-                try? await Task.sleep(nanoseconds: 800_000_000)
+                try? await Task.sleep(nanoseconds: 700_000_000)
+                veil = 0
                 onFinished()
                 return
             }
+
+            let started = Date()
 
             withAnimation(.easeOut(duration: 0.45)) {
                 bloom = 0.9
@@ -192,11 +198,17 @@ struct ElevateSplashView: View {
                 subOn = true
             }
 
-            try? await Task.sleep(nanoseconds: 4_000_000_000)
-            withAnimation(.easeInOut(duration: 1.2)) {
+            let remaining = max(0, 4.0 - Date().timeIntervalSince(started))
+            try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
+            withAnimation(.timingCurve(0.45, 0, 0.12, 1, duration: 1.8)) {
+                lockupOut = 1
+                groundGlow = 0
+            }
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            withAnimation(.timingCurve(0.33, 0, 0.2, 1, duration: 0.8)) {
                 veil = 0
             }
-            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            try? await Task.sleep(nanoseconds: 800_000_000)
             onFinished()
         }
     }

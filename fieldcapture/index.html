@@ -367,7 +367,14 @@
   }
   .elevate.play.out, .elevate.out {
     background: var(--bg);
-    animation: elevate-veil-out 1.2s cubic-bezier(.4, 0, .2, 1) both;
+    animation: elevate-veil-out .8s 1s cubic-bezier(.33, 0, .2, 1) both;
+  }
+  .elevate.play.out .elevate-lockup {
+    animation: elevate-lockup-out 1.8s cubic-bezier(.45, 0, .12, 1) both;
+  }
+  .elevate.play.out .elevate-bloom,
+  .elevate.play.out .elevate-whoosh {
+    animation: none; opacity: 0;
   }
   .elevate-bloom {
     position: absolute; left: 50%; top: 52%;
@@ -380,6 +387,7 @@
   .elevate-lockup {
     position: relative; z-index: 2;
     display: flex; flex-direction: column; align-items: center; gap: 18px;
+    will-change: opacity, transform, filter;
   }
   .elevate.play .elevate-lockup { animation: elevate-lift 2.1s .15s cubic-bezier(.16, 1.15, .3, 1) both; }
   .elevate-whoosh {
@@ -457,6 +465,12 @@
     from { transform: translateY(70px) scaleY(.6); opacity: 0; }
     36% { opacity: .85; }
     to { transform: translateY(-160px) scaleY(1.2); opacity: 0; }
+  }
+  @keyframes elevate-lockup-out {
+    0% { opacity: 1; transform: translateY(-18px) scale(1); filter: blur(0); }
+    22% { opacity: .82; transform: translateY(-24px) scale(.985); filter: blur(2px); }
+    58% { opacity: .08; transform: translateY(-36px) scale(.95); filter: blur(10px); }
+    100% { opacity: 0; transform: translateY(-48px) scale(.92); filter: blur(18px); }
   }
   @keyframes elevate-veil-out {
     from { opacity: 1; }
@@ -602,7 +616,7 @@
     </div>
   </div>
 
-  <!-- Connect → Today: slam the mark, sit four seconds, ease into the day. -->
+  <!-- Connect → Today: slam the mark, sit four seconds, dissolve into the day. -->
   <div class="elevate" id="s-elevate" data-on="0" role="status" aria-live="polite" aria-hidden="true">
     <span class="elevate-sky" aria-hidden="true"></span>
     <span class="elevate-bloom" aria-hidden="true"></span>
@@ -629,6 +643,6 @@
 </div>
 
 <script src="js/capture-core.js"></script>
-<script src="js/app.js?v=elevate9"></script>
+<script src="js/app.js?v=elevate10"></script>
 </body>
 </html>
