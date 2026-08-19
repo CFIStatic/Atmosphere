@@ -373,7 +373,7 @@ export const config = {
     portalReturnUrl: process.env.STRIPE_PORTAL_RETURN_URL ?? `${frontendOrigins[0]}/billing`,
     /** Fallback Stripe price when metering_plan_versions.stripe_price_id is unset. */
     onboardingPriceId: process.env.STRIPE_ONBOARDING_PRICE_ID ?? '',
-    /** Base path for signup billing step return URLs (step + checkout query params appended). */
+    /** Base path for signup billing return URLs (step 3 + checkout query params appended). */
     onboardingReturnBase:
       process.env.STRIPE_ONBOARDING_RETURN_URL ?? `${frontendOrigins[0]}/signup`,
   },

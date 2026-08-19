@@ -16,6 +16,8 @@ vi.mock('../context/AuthContext', () => ({
 vi.mock('../lib/api', () => ({
   api: {
     getBillingOnboarding: () => Promise.resolve({ required: false, complete: true }),
+    startOnboardingCheckout: vi.fn(),
+    createOrgInvite: vi.fn(),
     updateProfile: vi.fn(),
     createOrg: vi.fn(),
     joinOrg: vi.fn(),
@@ -23,6 +25,13 @@ vi.mock('../lib/api', () => ({
   ApiError: class ApiError extends Error {
     status = 400;
     code = 'signup_failed';
+  },
+  ROLE_LABELS: {
+    project_manager: 'Project Manager',
+    field_technician: 'Field Technician',
+    accountant: 'Accountant',
+    office_manager: 'Office Manager',
+    sales: 'Sales',
   },
 }));
 
@@ -51,7 +60,8 @@ describe('SignupPage', () => {
     expect(screen.queryByLabelText('Company name')).toBeNull();
     expect(screen.queryByLabelText('Join code')).toBeNull();
     expect(screen.getByText('Your workspace')).toBeInTheDocument();
-    expect(screen.getByText('You are in')).toBeInTheDocument();
     expect(screen.getByText('Set up billing')).toBeInTheDocument();
+    expect(screen.getByText('Invite teammates')).toBeInTheDocument();
+    expect(screen.queryByText('You are in')).toBeNull();
   });
 });

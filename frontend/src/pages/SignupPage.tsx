@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, ApiError, type Org } from '../lib/api';
@@ -8,6 +8,7 @@ import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
 import { getPlatform } from '../lib/usePlatform';
 import { SetupStepCard, SetupWizardShell } from '../components/setup/SetupWizardShell';
 import { SetupBillingStep } from '../components/setup/SetupBillingStep';
+import { SetupInviteStep } from '../components/setup/SetupInviteStep';
 import { scheduleWorkVerificationTour } from '../components/tour/ProductTourHost';
 import { withTourQuery } from '../lib/productTour';
 import {
@@ -27,7 +28,7 @@ type OrgMode = 'create' | 'join';
 export function SignupPage() {
   const { user, loading, membership, signup, refreshMembership, logout } = useAuth();
   const location = useLocation();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queueRedirect = usePendingAuthRedirect();
   const redirectTo = resolveAuthRedirect(
     searchParams.get('next'),
@@ -55,7 +56,6 @@ export function SignupPage() {
   const [orgName, setOrgName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [createdOrg, setCreatedOrg] = useState<Org | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -64,6 +64,21 @@ export function SignupPage() {
   const checkoutOutcome = searchParams.get('checkout');
   const checkoutParam =
     checkoutOutcome === 'success' || checkoutOutcome === 'cancelled' ? checkoutOutcome : null;
+
+  const goToStep = useCallback(
+    (next: SetupWizardStep) => {
+      setStep(next);
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev);
+          params.set('step', String(next));
+          return params;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   useEffect(() => {
     document.title = 'Create an account · Atmosphere';
@@ -79,9 +94,9 @@ export function SignupPage() {
   useEffect(() => {
     if (accountSubmitting) return;
     if (!loading && user && !membership && step === 1) {
-      setStep(2);
+      goToStep(2);
     }
-  }, [loading, user, membership, step, accountSubmitting]);
+  }, [loading, user, membership, step, accountSubmitting, goToStep]);
 
   useEffect(() => {
     if (step !== 2 || mode !== 'create' || orgName.trim()) return;
@@ -103,8 +118,8 @@ export function SignupPage() {
         const needsBilling = status.required && !status.complete;
         setBillingGate(needsBilling ? 'pending' : 'complete');
         const stepParam = searchParams.get('step');
-        if (needsBilling && (stepParam === '4' || stepParam === '5' || checkoutParam)) {
-          setStep(4);
+        if (needsBilling && (stepParam === '3' || stepParam === '4' || stepParam === '5' || checkoutParam)) {
+          setStep(3);
         }
       } catch {
         if (!cancelled) setBillingGate('complete');
@@ -125,7 +140,7 @@ export function SignupPage() {
   }
 
   // Returning visitors who already finished setup should not restart it.
-  // Stay on steps 2–4 while this session is still walking the wizard.
+  // Stay on steps 2–4 (billing, then invites) while this session is still walking the wizard.
   if (user && membership && billingGate === 'complete' && step === 1 && !accountSubmitting) {
     return <Navigate to={redirectTo} replace />;
   }
@@ -143,6 +158,25 @@ export function SignupPage() {
     queueRedirect(withTourQuery(redirectTo));
   }
 
+  async function continueAfterWorkspace(joinedExisting: boolean) {
+    try {
+      const status = await api.getBillingOnboarding();
+      const needsBilling = status.required && !status.complete;
+      setBillingGate(needsBilling ? 'pending' : 'complete');
+      if (needsBilling) {
+        goToStep(3);
+        return;
+      }
+      if (joinedExisting) {
+        enterApp();
+        return;
+      }
+      goToStep(4);
+    } catch {
+      goToStep(3);
+    }
+  }
+
   async function completeWorkspace() {
     setSubmitting(true);
     setError(null);
@@ -150,7 +184,7 @@ export function SignupPage() {
       const already = await refreshMembership();
       if (already?.org) {
         setCreatedOrg(already.org);
-        setStep(3);
+        await continueAfterWorkspace(mode === 'join');
         return;
       }
 
@@ -173,10 +207,10 @@ export function SignupPage() {
 
       await refreshMembership();
       setCreatedOrg(res.org);
-      setStep(3);
+      await continueAfterWorkspace(mode === 'join');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
-      setStep(2);
+      goToStep(2);
     } finally {
       setSubmitting(false);
     }
@@ -204,25 +238,14 @@ export function SignupPage() {
       }
       if (res.membership?.org) {
         setCreatedOrg(res.membership.org);
-        setStep(3);
+        await continueAfterWorkspace(false);
         return;
       }
-      setStep(2);
+      goToStep(2);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setAccountSubmitting(false);
-    }
-  }
-
-  async function copyJoinCode() {
-    if (!inviteOrg?.joinCode) return;
-    try {
-      await navigator.clipboard.writeText(inviteOrg.joinCode);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* clipboard denied — user can still select manually */
     }
   }
 
@@ -347,7 +370,7 @@ export function SignupPage() {
           title="Account ready"
           subtitle="Next you will name the workspace, or enter a join code if you were invited."
         >
-          <PrimaryButton onClick={() => setStep(2)}>Continue to workspace</PrimaryButton>
+          <PrimaryButton onClick={() => goToStep(2)}>Continue to workspace</PrimaryButton>
         </SetupStepCard>
       )}
 
@@ -413,7 +436,7 @@ export function SignupPage() {
             {user ? (
               <button
                 type="button"
-                onClick={() => setStep(1)}
+                onClick={() => goToStep(1)}
                 className="text-sm font-medium text-ink-600 hover:text-ink-900"
               >
                 Back
@@ -435,61 +458,57 @@ export function SignupPage() {
         </SetupStepCard>
       )}
 
-      {step === 3 && (
-        <SetupStepCard
-          step={3}
-          intent={orgIntent}
-          title={mode === 'create' ? 'You are in' : 'You are connected'}
-          subtitle={
-            mode === 'create'
-              ? 'Share this join code so teammates can create an account and join.'
-              : `Your account is on ${inviteOrg?.name ?? 'the team'}. Invite others from Settings later.`
-          }
-        >
-          {mode === 'create' && inviteOrg?.joinCode && (
-            <div className="mt-6 rounded-xl border border-line bg-paper-50 p-5 text-center">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-500">
-                Your workspace join code
-              </p>
-              <p className="mt-3 font-mono text-3xl font-bold tracking-[0.2em] text-ink-900">
-                {inviteOrg.joinCode}
-              </p>
-              <button
-                type="button"
-                onClick={() => void copyJoinCode()}
-                className="mt-4 rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
-              >
-                {copied ? 'Copied!' : 'Copy join code'}
-              </button>
-              <p className="mt-4 text-xs text-ink-500">
-                Teammates create an account, then enter this code on the workspace step.
-              </p>
-            </div>
-          )}
-
-          <div className="mt-7 flex flex-wrap items-center justify-between gap-3">
-            <span className="text-xs text-ink-500">You can find this code later in Settings.</span>
-            <PrimaryButton onClick={() => setStep(4)}>Continue to billing</PrimaryButton>
-          </div>
-        </SetupStepCard>
-      )}
-
-      {step === 4 && membership && (
+      {step === 3 && membership && (
         <SetupBillingStep
           redirectTo={redirectTo}
           checkoutOutcome={checkoutParam}
-          onComplete={enterApp}
+          nextLabel={mode === 'join' ? 'Enter Atmosphere' : 'Invite teammates'}
+          onComplete={() => {
+            if (mode === 'join') {
+              enterApp();
+              return;
+            }
+            goToStep(4);
+          }}
         />
       )}
 
-      {step === 4 && !membership && (
+      {step === 3 && !membership && (
         <SetupStepCard
-          step={4}
+          step={3}
           intent={orgIntent}
           title="Set up billing"
           subtitle="Finish the workspace step first."
         >
-          <PrimaryButton onClick={() => setStep(2)}>Back to workspace</PrimaryButton>
+          <PrimaryButton onClick={() => goToStep(2)}>Back to workspace</PrimaryButton>
+        </SetupStepCard>
+      )}
+
+      {step === 4 && mode === 'create' && membership && (
+        <SetupInviteStep orgName={inviteOrg?.name} onComplete={enterApp} />
+      )}
+
+      {step === 4 && mode === 'create' && !membership && (
+        <SetupStepCard
+          step={4}
+          intent={orgIntent}
+          title="Invite teammates"
+          subtitle="Finish the workspace step first."
+        >
+          <PrimaryButton onClick={() => goToStep(2)}>Back to workspace</PrimaryButton>
+        </SetupStepCard>
+      )}
+
+      {step === 4 && mode === 'join' && (
+        <SetupStepCard
+          step={4}
+          intent={orgIntent}
+          title="You are connected"
+          subtitle={`Your account is on ${inviteOrg?.name ?? 'the team'}.`}
+        >
+          <div className="mt-7 flex justify-end">
+            <PrimaryButton onClick={enterApp}>Enter Atmosphere</PrimaryButton>
+          </div>
         </SetupStepCard>
       )}
 

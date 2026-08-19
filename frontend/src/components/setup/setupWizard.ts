@@ -28,13 +28,13 @@ export const SETUP_WIZARD_STEPS = [
   },
   {
     step: 3 as const,
-    title: 'You are in',
-    detail: 'Share this join code so teammates can create an account and join.',
+    title: 'Set up billing',
+    detail: 'Add your payment method in Stripe — $599/mo platform fee.',
   },
   {
     step: 4 as const,
-    title: 'Set up billing',
-    detail: 'Add your payment method in Stripe — $599/mo platform fee, then you are in.',
+    title: 'Invite teammates',
+    detail: 'Email teammates after billing is on file. They get a link to join.',
   },
 ] as const;
 
@@ -51,13 +51,13 @@ const JOIN_WIZARD_STEPS = [
   },
   {
     step: 3 as const,
-    title: 'You are connected',
-    detail: 'Your account is on the team. You can invite others from Settings later.',
+    title: 'Set up billing',
+    detail: 'Joiners usually skip this — the office already has a plan.',
   },
   {
     step: 4 as const,
-    title: 'Set up billing',
-    detail: 'Joiners usually skip this — the office already has a plan.',
+    title: 'You are connected',
+    detail: 'Your account is on the team. You can invite others from Settings later.',
   },
 ] as const;
 
@@ -71,7 +71,7 @@ export function setupWizardCopy(intent: OrgSetupIntent): SetupWizardCopy {
   }
   return {
     heading: 'Create an account',
-    lede: 'Four steps — account, workspace, invite your crew, then billing.',
+    lede: 'Four steps — account, workspace, billing, then email invites.',
     steps: SETUP_WIZARD_STEPS,
   };
 }
@@ -91,7 +91,7 @@ export function initialSetupStep(options: {
 }): SetupWizardStep {
   const parsed = options.stepParam ? Number.parseInt(options.stepParam, 10) : NaN;
   // Accept legacy ?step=5 (old billing step number) as billing.
-  if (parsed === 5) return 4;
+  if (parsed === 5) return 3;
   if (parsed >= 1 && parsed <= 4) return parsed as SetupWizardStep;
   if (options.user && !options.membership) return 2;
   return 1;

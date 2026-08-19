@@ -8,12 +8,14 @@ describe('setupWizardCopy', () => {
     expect(copy.steps.map((s) => s.title)).toEqual([
       'Create your account',
       'Your workspace',
-      'You are in',
       'Set up billing',
+      'Invite teammates',
     ]);
+    expect(copy.lede).toMatch(/billing, then email invites/i);
     expect(copy.steps[0]?.detail).toMatch(/name, email, and a password/i);
     expect(copy.steps[0]?.detail).not.toMatch(/join code/i);
     expect(copy.steps[1]?.detail).toMatch(/join code/i);
+    expect(copy.steps[3]?.detail).toMatch(/email/i);
   });
 
   it('keeps a join-code path without the two-card office wording', () => {
@@ -21,6 +23,8 @@ describe('setupWizardCopy', () => {
     expect(copy.heading).toBe('Create an account');
     expect(copy.steps[1]?.title).toBe('Enter your join code');
     expect(copy.steps[1]?.detail).toMatch(/invite/i);
+    expect(copy.steps[2]?.title).toBe('Set up billing');
+    expect(copy.steps[3]?.title).toBe('You are connected');
     expect(copy.heading).not.toMatch(/office account/i);
   });
 });
@@ -32,6 +36,12 @@ describe('initialSetupStep', () => {
 
   it('skips to workspace setup when the login already exists', () => {
     expect(initialSetupStep({ user: true, membership: false, stepParam: null })).toBe(2);
+  });
+
+  it('maps the legacy billing step number to billing', () => {
+    expect(initialSetupStep({ user: true, membership: true, stepParam: '5' })).toBe(3);
+    expect(initialSetupStep({ user: true, membership: true, stepParam: '3' })).toBe(3);
+    expect(initialSetupStep({ user: true, membership: true, stepParam: '4' })).toBe(4);
   });
 });
 
