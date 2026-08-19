@@ -114,10 +114,9 @@ struct ElevateSplashView: View {
                     .opacity(subOn ? 1 : 0)
                     .offset(y: subOn ? 0 : 8)
             }
-            .scaleEffect((lift ? 1 : 0.84) * (1 - 0.07 * lockupOut))
-            .offset(y: (lift ? -18 : 28) - 26 * lockupOut)
+            .scaleEffect(lift ? 1 : 0.84)
+            .offset(y: lift ? -18 : 28)
             .opacity(1 - lockupOut)
-            .blur(radius: 16 * lockupOut)
         }
         .opacity(veil)
         .accessibilityElement(children: .ignore)
@@ -200,12 +199,15 @@ struct ElevateSplashView: View {
 
             let remaining = max(0, 4.0 - Date().timeIntervalSince(started))
             try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
-            withAnimation(.timingCurve(0.45, 0, 0.12, 1, duration: 1.5)) {
+            withAnimation(.timingCurve(0.4, 0, 0.2, 1, duration: 1.8)) {
                 lockupOut = 1
                 groundGlow = 0
+            }
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            withAnimation(.timingCurve(0.4, 0, 0.2, 1, duration: 1.4)) {
                 veil = 0
             }
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
             onFinished()
         }
     }

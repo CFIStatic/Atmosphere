@@ -366,18 +366,21 @@
     position: absolute; inset: 0; background: var(--bg); pointer-events: none;
   }
   .elevate.play.out, .elevate.out {
-    background: transparent;
+    background: var(--bg);
+    animation: elevate-veil-out 1.4s .7s cubic-bezier(.4, 0, .2, 1) both;
   }
   .elevate.play.out .elevate-sky {
-    animation: elevate-veil-out 1.5s cubic-bezier(.33, 0, .2, 1) both;
+    background: var(--bg);
+    animation: none;
   }
   .elevate.play.out .elevate-lockup {
-    animation: elevate-lockup-out 1.5s cubic-bezier(.45, 0, .12, 1) both;
+    animation: elevate-lockup-out 1.8s cubic-bezier(.4, 0, .2, 1) both;
   }
   .elevate.play.out .elevate-bloom,
   .elevate.play.out .elevate-whoosh {
     animation: none; opacity: 0;
   }
+  .elevate.play.out .ea { box-shadow: none; }
   .elevate-bloom {
     position: absolute; left: 50%; top: 52%;
     width: 320px; height: 320px; margin: -160px 0 0 -160px;
@@ -389,7 +392,7 @@
   .elevate-lockup {
     position: relative; z-index: 2;
     display: flex; flex-direction: column; align-items: center; gap: 18px;
-    will-change: opacity, transform, filter;
+    will-change: opacity;
   }
   .elevate.play .elevate-lockup { animation: elevate-lift 2.1s .15s cubic-bezier(.16, 1.15, .3, 1) both; }
   .elevate-whoosh {
@@ -469,9 +472,8 @@
     to { transform: translateY(-160px) scaleY(1.2); opacity: 0; }
   }
   @keyframes elevate-lockup-out {
-    0% { opacity: 1; transform: translateY(-18px) scale(1); filter: blur(0); }
-    45% { opacity: .42; transform: translateY(-28px) scale(.97); filter: blur(6px); }
-    100% { opacity: 0; transform: translateY(-40px) scale(.94); filter: blur(14px); }
+    from { opacity: 1; transform: translateY(-18px) scale(1); }
+    to { opacity: 0; transform: translateY(-18px) scale(1); }
   }
   @keyframes elevate-veil-out {
     from { opacity: 1; }
@@ -485,7 +487,7 @@
     }
     .elevate.play .elevate-whoosh, .elevate.play .elevate-bloom { display: none; }
     .elevate.play.out, .elevate.out { background: var(--bg); animation: none; }
-    .elevate.play.out .elevate-sky, .elevate.play.out .elevate-lockup { animation: none; filter: none; }
+    .elevate.play.out .elevate-sky, .elevate.play.out .elevate-lockup { animation: none; }
     .elevate-sub { color: var(--faint); }
   }
 
@@ -646,6 +648,6 @@
 </div>
 
 <script src="js/capture-core.js"></script>
-<script src="js/app.js?v=elevate11"></script>
+<script src="js/app.js?v=elevate12"></script>
 </body>
 </html>
