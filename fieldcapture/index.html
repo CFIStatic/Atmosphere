@@ -364,7 +364,7 @@
   .elevate-sky {
     position: absolute; inset: 0; background: #141311; pointer-events: none;
   }
-  .elevate.play .elevate-sky { animation: elevate-sky 3.8s linear both; }
+  .elevate.play .elevate-sky { animation: elevate-sky 5.8s linear both; }
   .elevate.play.out .elevate-sky, .elevate.out {
     background: var(--bg);
     animation: none;
@@ -419,7 +419,7 @@
   .elevate.play .e4 {
     animation:
       elevate-bar .72s .16s cubic-bezier(.16, 1.35, .3, 1) both,
-      elevate-e4-ink 3.8s .16s ease both;
+      elevate-e4-ink 5.8s .16s ease both;
   }
   .elevate.play .e3 { animation: elevate-bar .72s .32s cubic-bezier(.16, 1.35, .3, 1) both; }
   .elevate.play .e2 { animation: elevate-bar .72s .48s cubic-bezier(.16, 1.35, .3, 1) both; }
@@ -434,8 +434,8 @@
   }
   .elevate.play .elevate-sub { animation: elevate-sub .55s 1.18s ease both; }
   @keyframes elevate-sky {
-    0%, 42% { background: #141311; }
-    58% { background: #31180C; }
+    0%, 62% { background: #141311; }
+    72% { background: #31180C; }
     100% { background: var(--bg); }
   }
   @keyframes elevate-bloom {
@@ -650,6 +650,6 @@
 </div>
 
 <script src="js/capture-core.js"></script>
-<script src="js/app.js?v=elevate7"></script>
+<script src="js/app.js?v=elevate8"></script>
 </body>
 </html>
