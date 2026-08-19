@@ -5,6 +5,83 @@ evidence share**. This document is the checklist to run that path safely.
 Sales, PM, estimator, and computer-use modules may stay in the tree; keep them
 off or mocked until they are staffed and monitored.
 
+## Railway auto-deploy
+
+The backend on Railway is **not** driven by “any git branch”. Two different
+mechanisms exist; using both on `main` double-deploys production.
+
+### What happens today
+
+`.github/workflows/deploy-production.yml` is the production path:
+
+1. Push (or merge) to **`main`** that touches `backend/**` (or the workflow file).
+2. GitHub Actions reads the `Keys` environment, copies those values onto the
+   Railway service, then runs `railway up`.
+3. Feature branches and PRs **do not** deploy. Pointing this workflow at every
+   branch would overwrite production.
+
+Manual fallback: **Actions → Deploy Work Verification → Run workflow**.
+
+### Branch / PR previews (the missing piece)
+
+Railway will spin up an isolated copy of the stack for each pull request if
+**PR Environments** are on. That is how a branch update gets a live URL without
+touching production.
+
+1. In Railway, open the project → **Settings → Environments**.
+2. Enable **PR Environments**.
+3. For this monorepo, also enable **Focused PR Environments** so a frontend-only
+   PR does not rebuild the BFF. Watch paths already live in `railway.toml`
+   (`backend/**` plus the root Dockerfile).
+4. Confirm the GitHub repo is linked on the backend service
+   (**Settings → Source**) and that Autodeploy is **Enable**d for PRs.
+5. Open a PR from a workspace member whose GitHub account is connected to
+   Railway. The Railway GitHub bot comments with the preview URL. Closing or
+   merging the PR deletes the environment.
+
+Railway will **not** deploy a PR from someone outside the workspace unless they
+are invited with that GitHub account connected.
+
+Optional: **Enable Bot PR Environments** if Dependabot (or similar) PRs should
+get previews too. Leave it off to avoid paying for bot stacks.
+
+### Production on every `main` update (GitHub Autodeploy)
+
+If you want Railway itself to deploy `main` instead of (or in addition to)
+`railway up` from Actions:
+
+1. Backend service → **Settings → Source**.
+2. Connect this GitHub repository. Set the trigger branch to **`main`**.
+3. Set **Root Directory** to `/` (root `Dockerfile` builds `backend/`) **or**
+   to `backend` and point **Config as Code** at `/backend/railway.toml`.
+4. Click **Enable** on Autodeploy.
+5. Turn on **Wait for CI** so a red `.github/workflows/ci.yml` run skips the
+   deploy. CI already runs on every branch, including `main`.
+6. **Pick one producer for production deploys.** Either:
+   - keep the Actions `railway up` (it is what syncs GitHub `Keys`) and
+     **Disable** Autodeploy on the service, or
+   - enable Autodeploy + Wait for CI and remove the `railway up` step from
+     `deploy-production.yml`, leaving the workflow as Keys → Railway variables
+     only (`--skip-deploys` is already used during the sync).
+
+Healthcheck is already `/api/ready` in `railway.toml`. Railway holds the old
+deployment until that returns 200, then cuts over.
+
+### If a push did not deploy
+
+- **Wrong branch.** Only `main` is production. Other branches need a PR + PR
+  Environments (or a manual Actions run, which still deploys **production**).
+- **Path filter.** Actions skips `main` pushes that did not touch `backend/**`.
+  GitHub Autodeploy skips commits that miss `watchPatterns` in `railway.toml`.
+- **GitHub App.** At least one Railway project member needs a connected GitHub
+  account with contributor access. Re-accept pending Railway GitHub App
+  permissions if Autodeploy is greyed out.
+- **Skipped deployments.** In the service’s Deployments tab, show skipped
+  deploys. “Wait for CI” skips when CI fails.
+
+Official references: [GitHub Autodeploys](https://docs.railway.com/deployments/github-autodeploys),
+[PR Environments](https://docs.railway.com/guides/preview-deployments-with-pr-environments).
+
 ## Surfaces to deploy
 
 | Surface | Artifact | Notes |

@@ -7,6 +7,8 @@
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
+# Patterns are matched from the repo root even when the service root is `backend`.
+watchPatterns = ["backend/**"]
 
 [deploy]
 healthcheckPath = "/api/ready"

@@ -4,6 +4,16 @@
 # Railway does not read GitHub Environments on its own. This workflow is the
 # bridge: it copies Keys → Railway, then deploys `backend/`.
 #
+# Production only. It runs on push to `main` (and manual dispatch). Feature
+# branches must not `railway up` here — that would overwrite production.
+# For branch / PR previews, enable Railway PR Environments on the project
+# (see docs/production.md → Railway auto-deploy).
+#
+# If the Railway service is also linked to GitHub with Autodeploy on `main`,
+# you will get two production deploys per push. Pick one: keep this workflow
+# (needed to sync Keys) and Disable Autodeploy on the service, or turn on
+# GitHub Autodeploy + Wait for CI and drop the `railway up` step below.
+#
 # One extra secret in Keys (from Railway → Account → Tokens):
 #   RAILWAY_TOKEN
 # Optional:
