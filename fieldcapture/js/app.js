@@ -58,8 +58,8 @@
       el.classList.remove('play', 'out');
       void el.offsetWidth;
       el.classList.add('play');
-      var hold = reduce ? 400 : 2000;
-      var fade = reduce ? 200 : 420;
+      var hold = reduce ? 400 : 2550;
+      var fade = reduce ? 200 : 550;
       window.setTimeout(function () {
         el.classList.add('out');
         window.setTimeout(function () {

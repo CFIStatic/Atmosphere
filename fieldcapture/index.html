@@ -340,75 +340,137 @@
   .auth-err { color: var(--fail); font-size: 13px; min-height: 1.2em; }
   .erow[data-selected="1"] { background: var(--accent-soft); margin: 0 -8px; padding-left: 10px; padding-right: 10px; border-radius: 8px; }
 
-  /* Elevate: connect → Today. Orange ground first, then the four ink bars
-     stack upward like atmosphere, a short whoosh lifts the mark, and the
-     veil dissolves into the day. */
+  /* Elevate: come up through the atmosphere into the day.
+     Dark ground, orange ember, bars slam up, whoosh, sky warms to paper. */
   .elevate {
     position: absolute; inset: 0; z-index: 50;
     display: none; align-items: center; justify-content: center;
-    background: var(--bg); overflow: hidden;
+    background: #141311; overflow: hidden;
   }
   .elevate[data-on="1"] { display: flex; }
-  .elevate.out { animation: elevate-veil-out .42s ease both; }
+  .elevate.play { animation: elevate-sky 2.55s ease both; }
+  .elevate.play.out, .elevate.out {
+    background: var(--bg);
+    animation: elevate-veil-out .55s ease both;
+  }
+  .elevate-bloom {
+    position: absolute; left: 50%; top: 52%;
+    width: 320px; height: 320px; margin: -160px 0 0 -160px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(242,103,12,.7) 0%, rgba(188,69,8,.25) 38%, transparent 70%);
+    filter: blur(18px); opacity: 0; pointer-events: none;
+  }
+  .elevate.play .elevate-bloom { animation: elevate-bloom 1.55s .04s ease-out both; }
   .elevate-lockup {
-    position: relative; display: flex; flex-direction: column; align-items: center; gap: 20px;
+    position: relative; z-index: 2;
+    display: flex; flex-direction: column; align-items: center; gap: 18px;
   }
-  .elevate.play .elevate-lockup { animation: elevate-lift 1.35s .7s cubic-bezier(.16, 1, .3, 1) both; }
+  .elevate.play .elevate-lockup { animation: elevate-lift 2.1s .15s cubic-bezier(.16, 1.15, .3, 1) both; }
   .elevate-whoosh {
-    position: absolute; left: 50%; top: 50%;
-    width: 18px; height: 220px; margin: -40px 0 0 -9px;
-    background: linear-gradient(to top, transparent, #F2670C 45%, transparent);
-    filter: blur(8px); opacity: 0; pointer-events: none;
+    position: absolute; left: 50%; top: 58%;
+    width: 14px; height: 280px; margin: -40px 0 0 -7px;
+    background: linear-gradient(to top, transparent, #F2670C 42%, #F1EFEB 78%, transparent);
+    filter: blur(7px); opacity: 0; pointer-events: none;
   }
-  .elevate.play .elevate-whoosh { animation: elevate-whoosh .85s .32s ease-out both; }
+  .elevate-whoosh.b { width: 28px; margin-left: -14px; filter: blur(14px); height: 340px; }
+  .elevate-whoosh.c { width: 8px; margin-left: 10px; height: 220px; filter: blur(5px); }
+  .elevate.play .elevate-whoosh.a { animation: elevate-whoosh .95s .12s ease-out both; }
+  .elevate.play .elevate-whoosh.b { animation: elevate-whoosh 1.15s .18s ease-out both; }
+  .elevate.play .elevate-whoosh.c { animation: elevate-whoosh .8s .28s ease-out both; }
   .elevate-bars {
-    width: 96px; height: 96px;
-    display: flex; flex-direction: column; gap: calc(96px * 2 / 22);
+    width: 120px; height: 120px;
+    display: flex; flex-direction: column; gap: calc(120px * 2 / 22);
+    filter: drop-shadow(0 12px 28px rgba(242,103,12,.28));
   }
   .elevate-bars .eb {
-    display: block; height: calc(96px * 2.8 / 22); border-radius: 1.5px;
-    transform-origin: 50% 100%; opacity: 0;
+    display: block; height: calc(120px * 2.8 / 22); border-radius: 2px;
+    transform-origin: 50% 100%; opacity: 0; will-change: transform, opacity;
   }
-  .elevate-bars .e1 { background: #A8A29E; }
-  .elevate-bars .e2 { background: #78716C; }
-  .elevate-bars .e3 { background: #57534E; }
-  .elevate-bars .e4 { background: var(--ink); }
+  .elevate-bars .e1 { background: #C4BFB7; }
+  .elevate-bars .e2 { background: #9C958C; }
+  .elevate-bars .e3 { background: #6F6962; }
+  .elevate-bars .e4 { background: #F1EFEB; }
   .elevate-bars .ea { background: #F2670C; }
-  .elevate.play .eb { animation: elevate-bar .7s cubic-bezier(.16, 1, .3, 1) both; }
-  .elevate.play .ea { animation: elevate-bar .7s 0s cubic-bezier(.16, 1, .3, 1) both; }
-  .elevate.play .e4 { animation: elevate-bar .7s .2s cubic-bezier(.16, 1, .3, 1) both; }
-  .elevate.play .e3 { animation: elevate-bar .7s .4s cubic-bezier(.16, 1, .3, 1) both; }
-  .elevate.play .e2 { animation: elevate-bar .7s .6s cubic-bezier(.16, 1, .3, 1) both; }
-  .elevate.play .e1 { animation: elevate-bar .7s .8s cubic-bezier(.16, 1, .3, 1) both; }
-  .elevate-word {
-    font-size: 28px; font-weight: 750; letter-spacing: -0.02em; color: var(--ink); opacity: 0;
+  .elevate.play .ea {
+    animation:
+      elevate-bar .72s 0s cubic-bezier(.16, 1.35, .3, 1) both,
+      elevate-glow 1.5s .04s ease-out both;
   }
-  .elevate.play .elevate-word { animation: elevate-word .55s 1.05s ease both; }
+  .elevate.play .e4 {
+    animation:
+      elevate-bar .72s .16s cubic-bezier(.16, 1.35, .3, 1) both,
+      elevate-e4-ink 2.55s .16s ease both;
+  }
+  .elevate.play .e3 { animation: elevate-bar .72s .32s cubic-bezier(.16, 1.35, .3, 1) both; }
+  .elevate.play .e2 { animation: elevate-bar .72s .48s cubic-bezier(.16, 1.35, .3, 1) both; }
+  .elevate.play .e1 { animation: elevate-bar .72s .64s cubic-bezier(.16, 1.35, .3, 1) both; }
+  .elevate-word {
+    font-size: 30px; font-weight: 750; letter-spacing: .22em; color: #F1EFEB; opacity: 0;
+  }
+  .elevate.play .elevate-word { animation: elevate-word .7s .92s cubic-bezier(.16, 1, .3, 1) both; }
+  .elevate-sub {
+    margin-top: -10px; font-size: 12px; font-weight: 650; letter-spacing: .18em;
+    text-transform: uppercase; color: #A8A29E; opacity: 0;
+  }
+  .elevate.play .elevate-sub { animation: elevate-sub .55s 1.18s ease both; }
+  @keyframes elevate-sky {
+    0%, 22% { background: #141311; }
+    55% { background: #2A160C; }
+    100% { background: var(--bg); }
+  }
+  @keyframes elevate-bloom {
+    0% { transform: scale(.15); opacity: 0; }
+    32% { opacity: .9; }
+    100% { transform: scale(1.85); opacity: 0; }
+  }
   @keyframes elevate-bar {
-    from { transform: translateY(22px) scaleX(.18); opacity: 0; }
+    from { transform: translateY(56px) scaleX(.06); opacity: 0; }
+    62% { transform: translateY(-7px) scaleX(1.06); opacity: 1; }
     to { transform: translateY(0) scaleX(1); opacity: 1; }
   }
+  @keyframes elevate-e4-ink {
+    0%, 42% { background: #F1EFEB; }
+    100% { background: #1C1917; }
+  }
+  @keyframes elevate-glow {
+    0%, 18% { box-shadow: 0 0 0 0 rgba(242,103,12,0); }
+    48% { box-shadow: 0 0 36px 10px rgba(242,103,12,.65); }
+    100% { box-shadow: 0 8px 22px 2px rgba(242,103,12,.28); }
+  }
   @keyframes elevate-lift {
-    from { transform: translateY(8px); }
-    to { transform: translateY(-10px); }
+    0% { transform: translateY(28px) scale(.84); }
+    58% { transform: translateY(-6px) scale(1.05); }
+    100% { transform: translateY(-18px) scale(1); }
   }
   @keyframes elevate-word {
-    from { opacity: 0; transform: translateY(8px); letter-spacing: .12em; }
-    to { opacity: 1; transform: translateY(0); letter-spacing: -0.02em; }
+    from { opacity: 0; transform: translateY(14px); letter-spacing: .22em; color: #F1EFEB; }
+    55% { opacity: 1; color: #F1EFEB; }
+    to { opacity: 1; transform: translateY(0); letter-spacing: -0.02em; color: var(--ink); }
+  }
+  @keyframes elevate-sub {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
   }
   @keyframes elevate-whoosh {
-    from { transform: translateY(36px); opacity: 0; }
-    38% { opacity: .5; }
-    to { transform: translateY(-88px); opacity: 0; }
+    from { transform: translateY(70px) scaleY(.6); opacity: 0; }
+    36% { opacity: .85; }
+    to { transform: translateY(-160px) scaleY(1.2); opacity: 0; }
   }
   @keyframes elevate-veil-out {
+    from { opacity: 1; }
     to { opacity: 0; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .elevate.play .eb, .elevate.play .elevate-word, .elevate.play .elevate-lockup {
-      animation: none; opacity: 1; transform: none; letter-spacing: -0.02em;
+    .elevate, .elevate.play { background: var(--bg); animation: none; }
+    .elevate.play .eb, .elevate.play .elevate-word, .elevate.play .elevate-sub, .elevate.play .elevate-lockup {
+      animation: none; opacity: 1; transform: none; letter-spacing: -0.02em; color: var(--ink);
+      box-shadow: none;
     }
-    .elevate.play .elevate-whoosh { display: none; }
+    .elevate.play .elevate-whoosh, .elevate.play .elevate-bloom { display: none; }
+    .elevate-bars .e4 { background: var(--ink); }
+    .elevate-bars .e1 { background: #A8A29E; }
+    .elevate-bars .e2 { background: #78716C; }
+    .elevate-bars .e3 { background: #57534E; }
   }
 
 </style>
@@ -541,9 +603,12 @@
     </div>
   </div>
 
-  <!-- Connect → Today: bars stack up from the orange ground, then lift. -->
+  <!-- Connect → Today: come up through the atmosphere into the day. -->
   <div class="elevate" id="s-elevate" data-on="0" role="status" aria-live="polite" aria-hidden="true">
-    <span class="elevate-whoosh" aria-hidden="true"></span>
+    <span class="elevate-bloom" aria-hidden="true"></span>
+    <span class="elevate-whoosh a" aria-hidden="true"></span>
+    <span class="elevate-whoosh b" aria-hidden="true"></span>
+    <span class="elevate-whoosh c" aria-hidden="true"></span>
     <div class="elevate-lockup">
       <span class="elevate-bars" aria-hidden="true">
         <span class="eb e1"></span>
@@ -553,6 +618,7 @@
         <span class="eb ea"></span>
       </span>
       <p class="elevate-word">Atmosphere</p>
+      <p class="elevate-sub">Field Capture</p>
     </div>
   </div>
 
