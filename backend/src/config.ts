@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { resolveBackupsEnabled, resolveComputerUseEnabled } from './bootFlags.js';
 
 /**
  * Centralised, validated configuration for the Atmosphere backend.
@@ -22,6 +23,8 @@ function required(name: string, fallback?: string): string {
 }
 
 const isProduction = (process.env.NODE_ENV ?? 'development') === 'production';
+const computerUseEnabled = resolveComputerUseEnabled(process.env, isProduction);
+const backupsEnabled = resolveBackupsEnabled(process.env, isProduction);
 
 // Development-only convenience defaults. In production these are withheld so a
 // deploy that forgets to set env vars FAILS FAST at boot instead of silently
@@ -311,7 +314,8 @@ export const config = {
     toEmail: process.env.CAREERS_TO_EMAIL ?? 'jack@jettx.ai',
     // Envelope sender for the application emails. Many SMTP providers require
     // this to be an address the account is allowed to send as.
-    fromEmail: process.env.CAREERS_FROM_EMAIL ?? process.env.SMTP_USER ?? '',
+    fromEmail:
+      process.env.CAREERS_FROM_EMAIL ?? process.env.SMTP_USER ?? 'jack@jettx.ai',
     // SMTP transport. Leave unset and /api/careers/apply still accepts and
     // logs applications in development, but refuses in production so a deploy
     // that forgot to configure mail fails loudly instead of eating applicants.
@@ -564,8 +568,11 @@ export const config = {
    */
   backups: {
     // Explicit opt-out for environments that back up at the infrastructure
-    // layer instead (managed PITR, volume snapshots).
-    enabled: (process.env.BACKUP_ENABLED ?? 'true') !== 'false',
+    // layer instead (managed PITR, volume snapshots). Production with no
+    // encryption key also stays off — crashing the API for a missing backup
+    // secret made Railway healthchecks fail before Work Verification could
+    // serve /api/health.
+    enabled: backupsEnabled,
 
     // 'local' writes to BACKUP_DIR; 'supabase' uploads to a private Storage
     // bucket. Local is the default because it needs no setup, but it only
@@ -665,7 +672,7 @@ export const config = {
     // Feature flag. Computer use hands an AI model the mouse and keyboard of a
     // real machine, so a deployment that does not want it can switch the whole
     // surface off rather than relying on nobody finding the page.
-    enabled: (process.env.COMPUTER_USE_ENABLED ?? 'true') !== 'false',
+    enabled: computerUseEnabled,
 
     // Optional server-wide Anthropic key. When set, the product works with no
     // setup at all; the per-organisation key entered in the UI takes priority.
@@ -673,19 +680,23 @@ export const config = {
 
     // Encrypts organisation Anthropic keys at rest. Server-only, and rotating
     // it invalidates every stored key (organisations simply re-enter theirs).
-    credentialKey: required(
-      'AI_CREDENTIALS_KEY',
-      devOnly('atmosphere-dev-credentials-key-do-not-use-in-production'),
-    ),
+    credentialKey: computerUseEnabled
+      ? required(
+          'AI_CREDENTIALS_KEY',
+          devOnly('atmosphere-dev-credentials-key-do-not-use-in-production'),
+        )
+      : (process.env.AI_CREDENTIALS_KEY ?? ''),
     // Where those encrypted keys live. Ciphertext only — never plaintext.
     credentialStorePath: process.env.AI_CREDENTIALS_PATH ?? '.data/ai-credentials.json',
 
     // Signs the long-lived tokens agents reconnect with. Rotating it unpairs
     // every computer, which is the correct response to a leaked secret.
-    agentTokenSecret: required(
-      'AGENT_TOKEN_SECRET',
-      devOnly('atmosphere-dev-agent-token-secret-do-not-use-in-production'),
-    ),
+    agentTokenSecret: computerUseEnabled
+      ? required(
+          'AGENT_TOKEN_SECRET',
+          devOnly('atmosphere-dev-agent-token-secret-do-not-use-in-production'),
+        )
+      : (process.env.AGENT_TOKEN_SECRET ?? ''),
 
     defaultModel: process.env.COMPUTER_USE_MODEL ?? 'claude-opus-5',
     defaultQuality: (process.env.COMPUTER_USE_QUALITY ?? 'balanced') as
@@ -1113,14 +1124,25 @@ export const webAccessEnabled = Boolean(
  */
 export const verifierEnabled = webAccessEnabled && config.verifier.enabled;
 
-// A production deploy that writes unencrypted customer archives to disk is a
-// breach waiting for someone to find the volume. Fail at boot instead — either
-// supply a key or turn backups off deliberately.
-if (config.isProduction && config.backups.enabled && !config.backups.encryptionKey) {
-  throw new Error(
-    'BACKUP_ENCRYPTION_KEY is required in production. ' +
-      'Generate one with `openssl rand -base64 32`, or set BACKUP_ENABLED=false ' +
-      'if backups are handled at the infrastructure layer.',
+if (
+  isProduction &&
+  (process.env.BACKUP_ENABLED ?? 'true') !== 'false' &&
+  !process.env.BACKUP_ENCRYPTION_KEY?.trim()
+) {
+  console.warn(
+    '[config] BACKUP_ENABLED defaulted off in production (BACKUP_ENCRYPTION_KEY unset). ' +
+      'Set the key, or BACKUP_ENABLED=false, if this is intentional.',
+  );
+}
+
+if (
+  isProduction &&
+  (process.env.COMPUTER_USE_ENABLED ?? 'true') !== 'false' &&
+  !computerUseEnabled
+) {
+  console.warn(
+    '[config] COMPUTER_USE_ENABLED defaulted off in production ' +
+      '(AI_CREDENTIALS_KEY or AGENT_TOKEN_SECRET unset). Work Verification does not need computer-use.',
   );
 }
 

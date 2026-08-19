@@ -1,12 +1,16 @@
 # Force Dockerfile (not Railpack) when Railway deploys the repo root.
 # Variables still come from GitHub Keys via Actions, or Railway Variables.
+#
+# Deploy probe is liveness (/api/health), not readiness (/api/ready).
+# /api/ready talks to Supabase; a paused project or egress blip would
+# fail the Railway replica even when Node is serving.
 
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-healthcheckPath = "/api/ready"
+healthcheckPath = "/api/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5

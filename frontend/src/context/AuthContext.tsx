@@ -14,6 +14,7 @@ interface SignupResult {
   needsEmailConfirmation: boolean;
   message?: string;
   membership: Membership | null;
+  user: AuthUser | null;
 }
 
 interface AuthContextValue {
@@ -120,6 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         needsEmailConfirmation: Boolean(res.needsEmailConfirmation),
         message: res.message,
         membership,
+        user: res.user ?? null,
       };
     },
     [loadMembership],

@@ -147,6 +147,10 @@ export function SignupPage() {
     try {
       const res = await signup(email.trim(), password);
       if (res.needsEmailConfirmation) {
+        if (res.user?.emailConfirmed) {
+          setError('An account with this email already exists. Sign in instead.');
+          return;
+        }
         setAccountNotice(
           res.message ?? 'Account created. Check your email to confirm before continuing.',
         );

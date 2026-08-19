@@ -40,4 +40,17 @@ describe('apiFailureMessage', () => {
       code: 'error',
     });
   });
+
+  it('surfaces email_taken from Create account', () => {
+    expect(
+      apiFailureMessage(
+        409,
+        { error: 'An account with this email already exists. Sign in instead.', code: 'email_taken' },
+        '',
+      ),
+    ).toEqual({
+      message: 'An account with this email already exists. Sign in instead.',
+      code: 'email_taken',
+    });
+  });
 });

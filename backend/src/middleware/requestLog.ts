@@ -26,6 +26,9 @@ export function requestLog(req: Request, res: Response, next: NextFunction): voi
     // Health/ready probes are high-volume and low-signal — keep them out of
     // info logs so real traffic is not drowned out. Debug still captures them.
     const quiet =
+      req.path === '/' ||
+      req.path === '/api' ||
+      req.path === '/api/' ||
       req.path === '/api/health' ||
       req.path === '/api/ready' ||
       req.path === '/health' ||

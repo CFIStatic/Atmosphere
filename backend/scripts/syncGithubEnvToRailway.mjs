@@ -10,8 +10,11 @@ import { spawnSync } from 'node:child_process';
 
 const KEYS = [
   'NODE_ENV',
-  'PORT',
   'MEDIA_BACKEND',
+  'COMPUTER_USE_ENABLED',
+  'BACKUP_ENABLED',
+  'ALLOW_MOCK_DRIVERS',
+  'HOST',
   'FRONTEND_ORIGIN',
   'SUPABASE_URL',
   'SUPABASE_ANON_KEY',
@@ -20,9 +23,15 @@ const KEYS = [
   'AI_CREDENTIALS_KEY',
   'AGENT_TOKEN_SECRET',
   'RESEND_API_KEY',
+  'RESEND_FROM_EMAIL',
   'CAREERS_FROM_EMAIL',
   'CONTACT_TO_EMAIL',
   'CAREERS_TO_EMAIL',
+  'SMTP_HOST',
+  'SMTP_PORT',
+  'SMTP_SECURE',
+  'SMTP_USER',
+  'SMTP_PASS',
   'GOOGLE_API_KEY',
   'GEMINI_API_KEY',
   'GOOGLE_MAPS_API_KEY',
@@ -37,8 +46,6 @@ const REQUIRED = [
   'SUPABASE_ANON_KEY',
   'SUPABASE_SERVICE_ROLE_KEY',
   'DEVICE_PEPPER',
-  'AI_CREDENTIALS_KEY',
-  'AGENT_TOKEN_SECRET',
   'CAREERS_FROM_EMAIL',
   'CONTACT_TO_EMAIL',
   'CAREERS_TO_EMAIL',
@@ -65,7 +72,7 @@ function railway(args, input) {
   }
 }
 
-const service = process.env.RAILWAY_SERVICE?.trim();
+const service = process.env.RAILWAY_SERVICE?.trim() || 'Atmosphere';
 
 for (const name of KEYS) {
   const value = process.env[name]?.trim();

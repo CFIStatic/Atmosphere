@@ -2,9 +2,9 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { z } from 'zod';
-import { config } from '../config.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { sendSystemMail } from '../lib/systemMail.js';
+import { publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { invitesAnsweredBy, inviteEmail } from '../org/invites.js';
 import { MEMBER_ROLES } from '../lib/validation.js';
 import {
@@ -513,7 +513,7 @@ orgRouter.post('/invites', async (req: Request, res: Response, next: NextFunctio
         orgName: name,
         inviterName: (profile as any)?.full_name ?? (profile as any)?.email ?? null,
         joinCode,
-        origin: config.frontendOrigins?.[0] ?? null,
+        origin: publicAppOrigin(),
         note: input.note ?? null,
       });
       // Atmosphere sends — not the org's connected Gmail/Microsoft.

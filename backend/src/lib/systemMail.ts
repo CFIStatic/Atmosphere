@@ -2,6 +2,14 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { config } from '../config.js';
 import { getTransporter, smtpConfigured } from './careersMail.js';
+import {
+  RESEND_ONBOARDING_FROM,
+  RESEND_VERIFIED_FROM,
+  fetchResendDomains,
+  isResendSenderRestriction,
+  pickResendFromAddressForList,
+  uniqueResendFroms,
+} from './resendFrom.js';
 
 /**
  * Platform mail — Atmosphere sends it.
@@ -13,22 +21,30 @@ import { getTransporter, smtpConfigured } from './careersMail.js';
  *
  * Delivery order:
  *   1. SMTP (SMTP_HOST + SMTP_USER + SMTP_PASS + CAREERS_FROM_EMAIL)
- *   2. Resend API (RESEND_API_KEY + CAREERS_FROM_EMAIL / EMAIL_MARKETING_FROM)
+ *   2. Resend API (RESEND_API_KEY). From-address is hello@invites.jettx.ai
+ *      (verified subdomain). Reply-To stays jack@jettx.ai. Falls back to
+ *      onboarding@resend.dev only if Resend still rejects the From.
  *   3. File log sink in development (or SYSTEM_MAIL_DRIVER=log) so Approve &
  *      invite still delivers a readable invite when SMTP/Resend are unset
  */
 
 function fromAddress(): string {
   return (
-    config.careers.fromEmail ||
+    process.env.CAREERS_FROM_EMAIL ||
     process.env.EMAIL_MARKETING_FROM ||
     process.env.SMTP_USER ||
-    ''
+    config.careers.fromEmail ||
+    'jack@jettx.ai'
   ).trim();
 }
 
 function driverOverride(): string {
   return (process.env.SYSTEM_MAIL_DRIVER ?? '').trim().toLowerCase();
+}
+
+function defaultReplyTo(): string | null {
+  const reply = (config.careers.toEmail || 'jack@jettx.ai').trim();
+  return reply || null;
 }
 
 /**
@@ -45,14 +61,12 @@ export function logMailEnabled(): boolean {
 
 export function systemMailConfigured(): boolean {
   if (logMailEnabled()) return true;
-  const from = fromAddress();
-  if (!from) return false;
   if (smtpConfigured()) return true;
   return Boolean(process.env.RESEND_API_KEY?.trim());
 }
 
 function mailFrom(): string {
-  return fromAddress() || 'noreply@atmosphere.local';
+  return fromAddress() || 'jack@jettx.ai';
 }
 
 async function sendViaLog(input: {
@@ -78,9 +92,8 @@ async function sendViaLog(input: {
       'MIME-Version: 1.0',
       '',
     ]
-      .filter((line): line is string => line !== null)
+      .filter((line): line is string => Boolean(line))
       .join('\n');
-
     await writeFile(`${base}.txt`, `${header}${input.text}\n`, 'utf8');
     if (input.html) {
       await writeFile(`${base}.html`, input.html, 'utf8');
@@ -93,23 +106,20 @@ async function sendViaLog(input: {
   }
 }
 
-async function sendViaResend(input: {
+async function postResend(input: {
+  apiKey: string;
   to: string;
   subject: string;
   text: string;
   html?: string | null;
   replyTo?: string | null;
   from: string;
-}): Promise<{ ok: true } | { ok: false; why: string }> {
-  const apiKey = process.env.RESEND_API_KEY?.trim();
-  if (!apiKey) {
-    return { ok: false, why: 'Atmosphere mail is not configured on this server.' };
-  }
+}): Promise<{ ok: true } | { ok: false; why: string; status?: number; body?: string }> {
   try {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${input.apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -125,13 +135,56 @@ async function sendViaResend(input: {
     if (!res.ok) {
       const errText = await res.text().catch(() => res.statusText);
       console.error('[system-mail] Resend failed:', errText.slice(0, 500));
-      return { ok: false, why: 'The email could not be sent.' };
+      return {
+        ok: false,
+        why: 'The email could not be sent.',
+        status: res.status,
+        body: errText,
+      };
     }
     return { ok: true };
   } catch (err) {
     console.error('[system-mail] Resend send failed:', (err as Error)?.message ?? err);
     return { ok: false, why: 'The email could not be sent.' };
   }
+}
+
+async function sendViaResend(input: {
+  to: string;
+  subject: string;
+  text: string;
+  html?: string | null;
+  replyTo?: string | null;
+  from: string;
+}): Promise<{ ok: true } | { ok: false; why: string }> {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  if (!apiKey) {
+    return { ok: false, why: 'Atmosphere mail is not configured on this server.' };
+  }
+  const listed = await fetchResendDomains(apiKey);
+  const picked = pickResendFromAddressForList(input.from, listed);
+  const froms = uniqueResendFroms(picked, RESEND_VERIFIED_FROM, RESEND_ONBOARDING_FROM);
+
+  let last: { ok: false; why: string; status?: number; body?: string } | null = null;
+  for (const from of froms) {
+    if (from !== input.from) {
+      console.info(`[system-mail] Resend from ${input.from} → ${from}`);
+    }
+    const result = await postResend({ ...input, apiKey, from });
+    if (result.ok) return result;
+    last = result;
+    if (!result.status || !isResendSenderRestriction(result.status, result.body ?? '')) {
+      break;
+    }
+    console.warn(`[system-mail] ${from} was rejected; trying the next sender`);
+  }
+
+  if (last?.body && isResendSenderRestriction(last.status ?? 0, last.body)) {
+    console.error(
+      `[system-mail] Resend rejected ${froms.join(' → ')}. invites.jettx.ai is the verified sending domain.`,
+    );
+  }
+  return { ok: false, why: last?.why ?? 'The email could not be sent.' };
 }
 
 export async function sendSystemMail(input: {
@@ -145,15 +198,18 @@ export async function sendSystemMail(input: {
 }): Promise<{ ok: true } | { ok: false; why: string }> {
   const from = mailFrom();
   const driver = driverOverride();
+  const replyTo = input.replyTo?.trim() || defaultReplyTo();
+  const payload = { ...input, replyTo, from };
 
   if (driver === 'log' || (logMailEnabled() && driver !== 'smtp' && driver !== 'resend')) {
     // Prefer real transports when present, even if log is the auto fallback.
     if (!smtpConfigured() && !process.env.RESEND_API_KEY?.trim()) {
-      return sendViaLog({ ...input, from });
+      return sendViaLog(payload);
     }
   }
 
-  if (!fromAddress() && !logMailEnabled()) {
+  if (!smtpConfigured() && !process.env.RESEND_API_KEY?.trim()) {
+    if (logMailEnabled()) return sendViaLog(payload);
     return { ok: false, why: 'Atmosphere mail is not configured on this server.' };
   }
 
@@ -165,28 +221,28 @@ export async function sendSystemMail(input: {
         subject: input.subject,
         text: input.text,
         ...(input.html ? { html: input.html } : {}),
-        ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+        ...(replyTo ? { replyTo } : {}),
       });
       return { ok: true };
     } catch (err) {
       console.error('[system-mail] SMTP send failed:', (err as Error)?.message ?? err);
       // Fall through to Resend when SMTP is misconfigured but Resend is available.
       if (!process.env.RESEND_API_KEY?.trim()) {
-        if (logMailEnabled()) return sendViaLog({ ...input, from });
+        if (logMailEnabled()) return sendViaLog(payload);
         return { ok: false, why: 'The email could not be sent.' };
       }
     }
   }
 
   if (process.env.RESEND_API_KEY?.trim() && driver !== 'log') {
-    const result = await sendViaResend({ ...input, from });
+    const result = await sendViaResend(payload);
     if (result.ok) return result;
-    if (logMailEnabled()) return sendViaLog({ ...input, from });
+    if (logMailEnabled()) return sendViaLog(payload);
     return result;
   }
 
   if (logMailEnabled()) {
-    return sendViaLog({ ...input, from });
+    return sendViaLog(payload);
   }
 
   return { ok: false, why: 'Atmosphere mail is not configured on this server.' };

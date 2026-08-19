@@ -2,8 +2,24 @@ import { Router, type Request, type Response } from 'express';
 import { config } from '../config.js';
 import { createAnonClient, createAdminClient } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
+import { smtpConfigured } from '../lib/careersMail.js';
+import { systemMailConfigured } from '../lib/systemMail.js';
 
 export const healthRouter = Router();
+
+/**
+ * Railway's "open domain" button hits `/`. This API has no website — answer
+ * with the probe paths so that click does not look like a failed deploy.
+ */
+healthRouter.get('/', (_req: Request, res: Response) => {
+  res.json({
+    status: 'ok',
+    service: 'atmosphere-backend',
+    health: '/api/health',
+    ready: '/api/ready',
+    time: new Date().toISOString(),
+  });
+});
 
 /** Liveness probe — no auth, no dependencies. */
 healthRouter.get('/health', (_req: Request, res: Response) => {
@@ -21,12 +37,32 @@ type CheckResult = { ok: boolean; detail?: string; skipped?: boolean };
 healthRouter.get('/ready', async (_req: Request, res: Response) => {
   const checks: Record<string, CheckResult> = {};
 
-  checks.supabaseAuth = await checkSupabaseAuth();
-  checks.supabaseAdmin = await checkSupabaseAdmin();
-  checks.storage = await checkStorage();
+  checks.supabaseAuth = await withTimeout(
+    checkSupabaseAuth(),
+    2_500,
+    { ok: false, detail: 'timeout reaching Supabase Auth' },
+  );
+  checks.supabaseAdmin = await withTimeout(
+    checkSupabaseAdmin(),
+    2_500,
+    { ok: false, detail: 'timeout reaching Supabase admin API' },
+  );
+  checks.storage = await withTimeout(
+    checkStorage(),
+    2_500,
+    { ok: false, detail: 'timeout reaching Storage' },
+  );
   checks.config = {
     ok: Boolean(config.frontendOrigins.length && config.device.pepper),
     detail: config.isProduction ? 'production' : 'development',
+  };
+  checks.mail = {
+    ok: systemMailConfigured(),
+    detail: smtpConfigured()
+      ? 'smtp'
+      : process.env.RESEND_API_KEY?.trim()
+        ? 'resend'
+        : 'unconfigured',
   };
 
   const required = ['supabaseAuth', 'config'] as const;
@@ -37,7 +73,7 @@ healthRouter.get('/ready', async (_req: Request, res: Response) => {
   const degraded =
     ready &&
     config.isProduction &&
-    (!checks.supabaseAdmin.ok || !checks.storage.ok);
+    (!checks.supabaseAdmin.ok || !checks.storage.ok || !checks.mail.ok);
 
   const status = ready ? (degraded ? 'degraded' : 'ready') : 'not_ready';
   const httpStatus = ready ? 200 : 503;
@@ -53,6 +89,24 @@ healthRouter.get('/ready', async (_req: Request, res: Response) => {
     checks,
   });
 });
+
+async function withTimeout(
+  promise: Promise<CheckResult>,
+  ms: number,
+  fallback: CheckResult,
+): Promise<CheckResult> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<CheckResult>((resolve) => {
+        timer = setTimeout(() => resolve(fallback), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 async function checkSupabaseAuth(): Promise<CheckResult> {
   try {

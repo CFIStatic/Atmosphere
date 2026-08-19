@@ -40,7 +40,7 @@ Fail-loud at boot when `NODE_ENV=production` (see `backend/src/lib/productionGua
 | `SUPABASE_SERVICE_ROLE_KEY` | PIN unlock, signed uploads, media catalog, schedulers |
 | `DEVICE_PEPPER` | PIN hashing (never store in the DB) |
 | `CONTACT_TO_EMAIL` / `CAREERS_TO_EMAIL` | Public site forms — defaults to `jack@jettx.ai` |
-| `SMTP_*` or `RESEND_API_KEY` + `CAREERS_FROM_EMAIL` | Atmosphere-sent invites and field OTPs |
+| `SMTP_*` or `RESEND_API_KEY` + `CAREERS_FROM_EMAIL` | Atmosphere-sent invites and field OTPs. Resend From is `hello@invites.jettx.ai` (verified subdomain). Reply-To stays `jack@jettx.ai`. |
 | `MEDIA_BACKEND=supabase` | Do not use `memory` or the `s3` stub in prod |
 
 Strongly recommended:
@@ -98,8 +98,11 @@ A/B experiments live in `public.experiments` (see migration
 | Liveness | `GET /api/health` | Process up (no deps) |
 | Readiness | `GET /api/ready` | Supabase Auth reachable; admin/storage reported |
 
-Point the load balancer readiness check at `/api/ready`. Prefer draining on
-`SIGTERM` (schedulers and the HTTP server shut down cleanly).
+Point the **platform deploy probe** (Railway) at `/api/health` so a brief
+Supabase blip cannot roll back a good process. Point a load-balancer
+readiness check at `/api/ready` when you want to drain traffic that cannot
+reach Auth. Prefer draining on `SIGTERM` (schedulers and the HTTP server
+shut down cleanly).
 
 ## Observability
 

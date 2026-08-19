@@ -8,21 +8,27 @@
 #   RAILWAY_TOKEN
 # Optional:
 #   RAILWAY_PROJECT_ID   (Project settings → General)
-#   RAILWAY_SERVICE      (service name, default: backend)
+#   RAILWAY_SERVICE      (service name, default: Atmosphere)
 #
 # Put GOOGLE_API_KEY / GOOGLE_MAPS_API_KEY / ANTHROPIC_API_KEY in `Keys`
 # as well (not only the "Google API keys" environment) so this job can see them.
 #
-# Run: Actions → Deploy Work Verification → Run workflow
+# Auto-deploys on push to main, the live Atmosphere API branch, and the
+# job-create memory FK fix branch. Manual run still works:
+# Actions → Deploy Work Verification → Run workflow.
 
 name: Deploy Work Verification
 
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
+      - cursor/fix-railway-keys-deploy-51c8
+      - cursor/fix-job-create-memory-fk-51c8
     paths:
       - 'backend/**'
+      - 'supabase/migrations/**'
       - '.github/workflows/deploy-production.yml'
 
 concurrency:
@@ -59,39 +65,64 @@ jobs:
       - name: Sync GitHub Keys onto Railway
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
-          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
+          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere' }}
           NODE_ENV: production
-          PORT: '4000'
           MEDIA_BACKEND: supabase
-          FRONTEND_ORIGIN: ${{ vars.FRONTEND_ORIGIN || 'https://app.atmosphereteam.com' }}
-          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          DEVICE_PEPPER: ${{ secrets.DEVICE_PEPPER }}
-          AI_CREDENTIALS_KEY: ${{ secrets.AI_CREDENTIALS_KEY }}
-          AGENT_TOKEN_SECRET: ${{ secrets.AGENT_TOKEN_SECRET }}
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          CAREERS_FROM_EMAIL: ${{ vars.CAREERS_FROM_EMAIL }}
-          CONTACT_TO_EMAIL: ${{ vars.CONTACT_TO_EMAIL }}
-          CAREERS_TO_EMAIL: ${{ vars.CAREERS_TO_EMAIL }}
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          COMPUTER_USE_ENABLED: 'false'
+          BACKUP_ENABLED: 'false'
+          ALLOW_MOCK_DRIVERS: 'true'
+          HOST: '0.0.0.0'
+          FRONTEND_ORIGIN: ${{ vars.FRONTEND_ORIGIN || 'https://atmosphere-web-production.up.railway.app,https://app.atmosphereteam.com' }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || vars.SUPABASE_SERVICE_ROLE_KEY }}
+          DEVICE_PEPPER: ${{ secrets.DEVICE_PEPPER || vars.DEVICE_PEPPER }}
+          AI_CREDENTIALS_KEY: ${{ secrets.AI_CREDENTIALS_KEY || vars.AI_CREDENTIALS_KEY }}
+          AGENT_TOKEN_SECRET: ${{ secrets.AGENT_TOKEN_SECRET || vars.AGENT_TOKEN_SECRET }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY || vars.RESEND_API_KEY }}
+          RESEND_FROM_EMAIL: ${{ vars.RESEND_FROM_EMAIL || secrets.RESEND_FROM_EMAIL || 'hello@invites.jettx.ai' }}
+          CAREERS_FROM_EMAIL: ${{ vars.CAREERS_FROM_EMAIL || secrets.CAREERS_FROM_EMAIL }}
+          CONTACT_TO_EMAIL: ${{ vars.CONTACT_TO_EMAIL || secrets.CONTACT_TO_EMAIL }}
+          CAREERS_TO_EMAIL: ${{ vars.CAREERS_TO_EMAIL || secrets.CAREERS_TO_EMAIL }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST || vars.SMTP_HOST }}
+          SMTP_PORT: ${{ vars.SMTP_PORT || secrets.SMTP_PORT }}
+          SMTP_SECURE: ${{ vars.SMTP_SECURE || secrets.SMTP_SECURE }}
+          SMTP_USER: ${{ secrets.SMTP_USER || vars.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS || vars.SMTP_PASS }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY || vars.GOOGLE_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || vars.GEMINI_API_KEY }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY || vars.GOOGLE_MAPS_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || vars.ANTHROPIC_API_KEY }}
           ANTHROPIC_MODEL: claude-sonnet-5
           VERIFICATION_PRIMARY_MODEL: gemini-2.5-flash
           VERIFICATION_ESCALATION_MODEL: claude-sonnet-5
         run: node scripts/syncGithubEnvToRailway.mjs
 
+      - name: Ensure Resend can send as hello@invites.jettx.ai
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY || vars.RESEND_API_KEY }}
+          RESEND_SENDING_DOMAIN: invites.jettx.ai
+        run: node scripts/ensureResendSendingDomain.mjs
+
+      - name: Repair memory_events job FK on Supabase
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || vars.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || secrets.SUPABASE_PROJECT_REF }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD || secrets.POSTGRES_PASSWORD }}
+        run: node scripts/applyMemoryCaptureRepair.mjs
+
       - name: Deploy backend
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
-          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
+          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere' }}
+          RAILWAY_ENVIRONMENT: production
         run: |
-          if [ -n "$RAILWAY_SERVICE" ]; then
-            railway up --ci --service "$RAILWAY_SERVICE"
-          else
-            railway up --ci
-          fi
+          echo "Deploying Railway service: $RAILWAY_SERVICE"
+          chmod +x scripts/railwayUp.sh
+          scripts/railwayUp.sh
