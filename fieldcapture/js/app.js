@@ -61,6 +61,7 @@
       var hold = 2800;
       var fade = 550;
       window.setTimeout(function () {
+        document.documentElement.removeAttribute('data-elevate-preview');
         el.classList.add('out');
         window.setTimeout(function () {
           el.setAttribute('data-on', '0');

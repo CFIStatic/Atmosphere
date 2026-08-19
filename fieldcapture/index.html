@@ -37,6 +37,13 @@
     }
   } catch (e) {}
 </script>
+<script>
+  try {
+    if (/(?:^|[?&])elevate=1(?:&|$)/.test(location.search)) {
+      document.documentElement.setAttribute('data-elevate-preview', '1');
+    }
+  } catch (e) {}
+</script>
 <style>
   /* ---------------------------------------------------------------------
      The Verifier's design tokens, on a phone.
@@ -348,6 +355,12 @@
     background: #141311; overflow: hidden;
   }
   .elevate[data-on="1"] { display: flex; }
+  html[data-elevate-preview="1"],
+  html[data-elevate-preview="1"] body,
+  html[data-elevate-preview="1"] .app { background: #141311; }
+  html[data-elevate-preview="1"] .top,
+  html[data-elevate-preview="1"] .screen,
+  html[data-elevate-preview="1"] .foot { visibility: hidden; }
   .elevate-sky {
     position: absolute; inset: 0; background: #141311; pointer-events: none;
   }
@@ -637,6 +650,6 @@
 </div>
 
 <script src="js/capture-core.js"></script>
-<script src="js/app.js?v=elevate4"></script>
+<script src="js/app.js?v=elevate6"></script>
 </body>
 </html>
