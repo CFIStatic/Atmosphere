@@ -50,15 +50,12 @@
         resolve();
         return;
       }
-      var reduce =
-        window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       el.setAttribute('aria-hidden', 'false');
       el.setAttribute('aria-label', 'Connected');
       el.setAttribute('data-on', '1');
       el.classList.remove('play', 'out');
       void el.offsetWidth;
       el.classList.add('play');
-      document.documentElement.classList.add('elevating');
       /* CSS already flattens the choreography when the OS asks for reduced
          motion. Always hold the lockup long enough for the slam + whoosh. */
       var hold = 2800;
@@ -69,7 +66,6 @@
           el.setAttribute('data-on', '0');
           el.setAttribute('aria-hidden', 'true');
           el.classList.remove('play', 'out');
-          document.documentElement.classList.remove('elevating');
           resolve();
         }, fade);
       }, hold);
