@@ -143,11 +143,6 @@ export function LoginPage() {
   }
 
   const createAccountHref = signupHref({ next: redirectTo, email: email.trim() || undefined });
-  const linkOfficeHref = signupHref({
-    next: redirectTo,
-    email: email.trim() || undefined,
-    intent: 'join',
-  });
   const returningToUsage = redirectTo === '/usage' || redirectTo.startsWith('/usage?');
 
   return (
@@ -234,7 +229,19 @@ export function LoginPage() {
                     role="alert"
                     className="mt-6 rounded-lg border border-danger-200 bg-danger-50 px-3.5 py-3 text-sm text-danger-700"
                   >
-                    {error}
+                    <p>{error}</p>
+                    {/password|not confirmed|already exist/i.test(error) && (
+                      <p className="mt-2 text-ink-600">
+                        Forgot it?{' '}
+                        <Link
+                          to="/forgot-password"
+                          className="font-semibold text-brand-600 hover:text-brand-700"
+                        >
+                          Reset your password
+                        </Link>
+                        .
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -316,32 +323,14 @@ export function LoginPage() {
                   </button>
                 )}
 
-                <div className="mt-6 border-t border-line pt-6">
-                  <p className="text-center text-sm font-medium text-ink-700">Need an account?</p>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    <Link
-                      to={createAccountHref}
-                      className="rounded-lg border border-line bg-paper-50 px-3.5 py-3 text-left transition hover:border-brand-300 hover:bg-brand-50/70"
-                    >
-                      <span className="block text-sm font-semibold text-ink-900">
-                        Create an account
-                      </span>
-                      <span className="mt-1 block text-xs leading-relaxed text-ink-500">
-                        Start a new organization for your company.
-                      </span>
-                    </Link>
-                    <Link
-                      to={linkOfficeHref}
-                      className="rounded-lg border border-line bg-paper-50 px-3.5 py-3 text-left transition hover:border-brand-300 hover:bg-brand-50/70"
-                    >
-                      <span className="block text-sm font-semibold text-ink-900">
-                        Link to office account
-                      </span>
-                      <span className="mt-1 block text-xs leading-relaxed text-ink-500">
-                        Join your company&apos;s existing workspace with a join code.
-                      </span>
-                    </Link>
-                  </div>
+                <div className="mt-6 border-t border-line pt-6 text-center text-sm text-ink-600">
+                  Don&apos;t have an account?{' '}
+                  <Link
+                    to={createAccountHref}
+                    className="font-semibold text-brand-600 transition hover:text-brand-700"
+                  >
+                    Create an account
+                  </Link>
                 </div>
               </>
             )}

@@ -19,17 +19,17 @@ export const SETUP_WIZARD_STEPS = [
   {
     step: 1 as const,
     title: 'Create your account',
-    detail: 'Work email and a password. We never store your password in plain text.',
+    detail: 'Name, email, and a password. You can add a company name or a join code if you have one.',
   },
   {
     step: 2 as const,
-    title: 'Name your organization',
-    detail: 'Start a new workspace — or link to the office account with a join code.',
+    title: 'Your workspace',
+    detail: 'Name the company workspace, or enter a join code if you were invited.',
   },
   {
     step: 3 as const,
-    title: 'Invite your crew',
-    detail: 'Every organization gets one join code. Hand it to a teammate and they are in.',
+    title: 'You are in',
+    detail: 'Invite teammates later from Settings with a join code.',
   },
   {
     step: 4 as const,
@@ -42,17 +42,17 @@ const JOIN_WIZARD_STEPS = [
   {
     step: 1 as const,
     title: 'Create your account',
-    detail: 'Work email and a password. We never store your password in plain text.',
+    detail: 'Name, email, and a password. Then enter the join code from your team.',
   },
   {
     step: 2 as const,
-    title: 'Link to the office account',
-    detail: 'Enter the join code from your office so this login belongs to that organization.',
+    title: 'Enter your join code',
+    detail: 'The code from your invite email links this login to the office workspace.',
   },
   {
     step: 3 as const,
     title: 'You are connected',
-    detail: 'Your account is linked. You can invite others from Settings later.',
+    detail: 'Your account is on the team. You can invite others from Settings later.',
   },
   {
     step: 4 as const,
@@ -64,14 +64,14 @@ const JOIN_WIZARD_STEPS = [
 export function setupWizardCopy(intent: OrgSetupIntent): SetupWizardCopy {
   if (intent === 'join') {
     return {
-      heading: 'Link to the office account',
-      lede: 'Create your login, then enter the office join code so you work in the same organization.',
+      heading: 'Create an account',
+      lede: 'A couple of details, then the join code from your team — about a minute.',
       steps: JOIN_WIZARD_STEPS,
     };
   }
   return {
-    heading: 'Create your organization',
-    lede: 'Four quick steps — about two minutes from account to your first job.',
+    heading: 'Create an account',
+    lede: 'Name, email, and a password — then you are in. About a minute.',
     steps: SETUP_WIZARD_STEPS,
   };
 }
@@ -95,4 +95,16 @@ export function initialSetupStep(options: {
   if (parsed >= 1 && parsed <= 4) return parsed as SetupWizardStep;
   if (options.user && !options.membership) return 2;
   return 1;
+}
+
+/** Company name when the user skips it — still gives the workspace a real label. */
+export function workspaceNameFrom(fullName: string, email: string): string {
+  const name = fullName.trim();
+  if (name.length >= 2) return name;
+  const local = email.split('@')[0]?.trim().replace(/[._]+/g, ' ');
+  if (local) {
+    const labelled = local.replace(/\b\w/g, (ch) => ch.toUpperCase());
+    return `${labelled}'s workspace`;
+  }
+  return 'My workspace';
 }

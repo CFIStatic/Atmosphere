@@ -16,8 +16,7 @@ import {
   pinSchema,
   pinUnlockSchema,
 } from '../lib/validation.js';
-import { badRequest, unauthorized, serviceUnavailable, HttpError } from '../lib/errors.js';
-import { isTransient } from '../lib/upstream.js';
+import { badRequest, unauthorized, HttpError } from '../lib/errors.js';
 import {
   newDeviceSecret,
   newPinSalt,
@@ -28,7 +27,12 @@ import {
 } from '../lib/deviceCrypto.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { recordEvent } from '../lib/memory.js';
-import { createPasswordAccount, publicUser, sessionTokens } from '../auth/passwordAccount.js';
+import {
+  createPasswordAccount,
+  publicUser,
+  sessionTokens,
+  signInPasswordAccount,
+} from '../auth/passwordAccount.js';
 
 export const authRouter = Router();
 
@@ -96,36 +100,22 @@ authRouter.post('/signup', authLimiter, async (req: Request, res: Response, next
 authRouter.post('/login', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email, password } = credentialsSchema.parse(req.body);
-    const supabase = createAnonClient();
+    const result = await signInPasswordAccount(email, password);
+    if (result.kind === 'error') throw result.error;
 
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-
-    // An unreachable or failing auth service is NOT a credential problem. Saying
-    // "invalid email or password" during an outage sends users off resetting a
-    // password that was never wrong, and buries the real incident.
-    if (error && isTransient(error)) {
-      console.warn('[login] upstream failure:', error.status, error.message);
-      throw serviceUnavailable();
-    }
-
-    if (error || !data.session || !data.user) {
-      // Genuine rejection. Do not reveal whether the email exists.
-      throw unauthorized('Invalid email or password', 'invalid_credentials');
-    }
-
-    setSessionCookies(res, data.session);
+    setSessionCookies(res, result.session);
 
     // Signing in is a real event with no row behind it, so the trigger that
     // records everything else cannot see it. Recorded here instead — and
     // deliberately awaited before responding, so a sign-in never lands in the
     // memory after the work that followed it.
-    await recordEvent(createUserClient(data.session.access_token), {
+    await recordEvent(createUserClient(result.session.access_token), {
       type: 'auth.signed_in',
       summary: 'signed in with a password',
-      entityId: data.user.id,
+      entityId: result.user.id,
     });
 
-    res.json({ user: publicUser(data.user), session: sessionTokens(data.session) });
+    res.json({ user: publicUser(result.user), session: sessionTokens(result.session) });
   } catch (err) {
     next(err);
   }

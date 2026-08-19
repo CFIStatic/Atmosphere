@@ -1,8 +1,15 @@
 import type { Session, User } from '@supabase/supabase-js';
 import { config } from '../config.js';
 import { createAdminClient, createAnonClient } from '../lib/supabase.js';
-import { HttpError, serviceUnavailable } from '../lib/errors.js';
+import { HttpError, serviceUnavailable, unauthorized } from '../lib/errors.js';
 import { isTransient } from '../lib/upstream.js';
+import {
+  classifyPasswordSignIn,
+  EMAIL_UNCONFIRMED_MESSAGE,
+  EXISTING_ACCOUNT_MESSAGE,
+  isObfuscatedExistingUser,
+  isUserAlreadyRegistered,
+} from './passwordErrors.js';
 
 /**
  * Shared password-account creation for the website signup page and the
@@ -52,19 +59,107 @@ export type PasswordAccountFail = {
 
 export type PasswordAccountResult = PasswordAccountOk | PasswordAccountConfirm | PasswordAccountFail;
 
-async function signInWithPassword(
+async function rawSignIn(
+  email: string,
+  password: string,
+): Promise<{
+  user: User | null;
+  session: Session | null;
+  error: { message?: string; code?: string; status?: number; name?: string } | null;
+}> {
+  const supabase = createAnonClient();
+  const signedIn = await supabase.auth.signInWithPassword({ email, password });
+  return {
+    user: signedIn.data.user ?? null,
+    session: signedIn.data.session ?? null,
+    error: signedIn.error,
+  };
+}
+
+/**
+ * Look up an auth user by email without sending mail. Admin generateLink
+ * returns the user row and does not deliver the link.
+ */
+async function lookupUserIdByEmail(email: string): Promise<string | null> {
+  const admin = createAdminClient();
+  if (!admin) return null;
+
+  for (const type of ['magiclink', 'recovery'] as const) {
+    const generated = await admin.auth.admin.generateLink({ type, email });
+    const id = generated.data?.user?.id;
+    if (id) return id;
+  }
+  return null;
+}
+
+async function confirmEmail(email: string, userId?: string | null): Promise<boolean> {
+  const admin = createAdminClient();
+  if (!admin) return false;
+  const id = userId || (await lookupUserIdByEmail(email));
+  if (!id) return false;
+  const updated = await admin.auth.admin.updateUserById(id, { email_confirm: true });
+  if (updated.error) {
+    console.warn('[auth] confirmEmail failed:', updated.error.message);
+    return false;
+  }
+  return true;
+}
+
+async function sessionAfterSignIn(
   email: string,
   password: string,
 ): Promise<{ user: User; session: Session } | null> {
-  const supabase = createAnonClient();
-  const signedIn = await supabase.auth.signInWithPassword({ email, password });
-  if (signedIn.error || !signedIn.data.session || !signedIn.data.user) {
-    if (signedIn.error) {
-      console.warn('[signup] password sign-in failed:', signedIn.error.message);
-    }
-    return null;
+  const signedIn = await rawSignIn(email, password);
+  if (signedIn.session && signedIn.user) {
+    return { user: signedIn.user, session: signedIn.session };
   }
-  return { user: signedIn.data.user, session: signedIn.data.session };
+  return null;
+}
+
+/**
+ * Sign in with email + password. If the password is correct but the address
+ * was never confirmed, confirm it (service role) and retry — that is the
+ * "account exists, login says wrong password" trap.
+ */
+export async function signInPasswordAccount(
+  email: string,
+  password: string,
+): Promise<PasswordAccountOk | PasswordAccountFail> {
+  const first = await rawSignIn(email, password);
+  const kind = classifyPasswordSignIn({
+    error: first.error,
+    hasSession: Boolean(first.session),
+    hasUser: Boolean(first.user),
+    transient: Boolean(first.error && isTransient(first.error)),
+  });
+
+  if (kind === 'session' && first.session && first.user) {
+    return { kind: 'session', status: 200, user: first.user, session: first.session };
+  }
+
+  if (kind === 'transient') {
+    console.warn('[login] upstream failure:', first.error?.status, first.error?.message);
+    return { kind: 'error', error: serviceUnavailable() };
+  }
+
+  if (kind === 'email_not_confirmed') {
+    const confirmed = await confirmEmail(email, first.user?.id);
+    if (confirmed) {
+      const retried = await sessionAfterSignIn(email, password);
+      if (retried) {
+        return { kind: 'session', status: 200, user: retried.user, session: retried.session };
+      }
+    }
+    return {
+      kind: 'error',
+      error: unauthorized(EMAIL_UNCONFIRMED_MESSAGE, 'email_not_confirmed'),
+    };
+  }
+
+  return {
+    kind: 'error',
+    error: unauthorized('Invalid email or password', 'invalid_credentials'),
+  };
 }
 
 /**
@@ -88,16 +183,29 @@ async function signupViaAdmin(
   if (created.error) {
     console.warn('[signup] admin.createUser:', created.error.message);
     if (/already|registered|exists/i.test(created.error.message)) {
-      const existing = await signInWithPassword(email, password);
-      if (!existing) return null;
-      return { kind: 'session', status: 200, user: existing.user, session: existing.session };
+      const existing = await signInPasswordAccount(email, password);
+      if (existing.kind !== 'session') return null;
+      return existing;
     }
     return null;
   }
 
-  const signedIn = await signInWithPassword(email, password);
+  const signedIn = await sessionAfterSignIn(email, password);
   if (!signedIn) return null;
   return { kind: 'session', status: 201, user: signedIn.user, session: signedIn.session };
+}
+
+async function signInExistingAccount(
+  email: string,
+  password: string,
+): Promise<PasswordAccountResult> {
+  const signedIn = await signInPasswordAccount(email, password);
+  if (signedIn.kind === 'session') return signedIn;
+  if (signedIn.error.code === 'email_not_confirmed') return signedIn;
+  return {
+    kind: 'error',
+    error: new HttpError(400, EXISTING_ACCOUNT_MESSAGE, 'account_exists'),
+  };
 }
 
 /**
@@ -144,6 +252,10 @@ export async function createPasswordAccount(
       };
     }
 
+    if (isUserAlreadyRegistered(error)) {
+      return signInExistingAccount(email, password);
+    }
+
     return {
       kind: 'error',
       error: new HttpError(
@@ -154,15 +266,18 @@ export async function createPasswordAccount(
     };
   }
 
+  if (isObfuscatedExistingUser(data.user, data.session)) {
+    return signInExistingAccount(email, password);
+  }
+
   if (data.session && data.user) {
     return { kind: 'session', status: 201, user: data.user, session: data.session };
   }
 
-  if (!config.isProduction && data.user?.id) {
-    const admin = createAdminClient();
-    if (admin) {
-      await admin.auth.admin.updateUserById(data.user.id, { email_confirm: true });
-      const signedIn = await signInWithPassword(email, password);
+  if (data.user?.id) {
+    const confirmed = await confirmEmail(email, data.user.id);
+    if (confirmed) {
+      const signedIn = await sessionAfterSignIn(email, password);
       if (signedIn) {
         return { kind: 'session', status: 201, user: signedIn.user, session: signedIn.session };
       }
