@@ -59,8 +59,10 @@
       void el.offsetWidth;
       el.classList.add('play');
       document.documentElement.classList.add('elevating');
-      var hold = reduce ? 400 : 2800;
-      var fade = reduce ? 200 : 550;
+      /* CSS already flattens the choreography when the OS asks for reduced
+         motion. Always hold the lockup long enough for the slam + whoosh. */
+      var hold = 2800;
+      var fade = 550;
       window.setTimeout(function () {
         el.classList.add('out');
         window.setTimeout(function () {
