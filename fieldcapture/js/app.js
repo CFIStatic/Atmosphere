@@ -58,7 +58,7 @@
       el.classList.remove('play', 'out');
       void el.offsetWidth;
       el.classList.add('play');
-      var hold = reduce ? 280 : 1480;
+      var hold = reduce ? 400 : 2000;
       var fade = reduce ? 200 : 420;
       window.setTimeout(function () {
         el.classList.add('out');
@@ -579,12 +579,11 @@
     bootLive();
   } else if (DEMO) {
     bootDemo();
-  } else {
-    bootAccount();
-  }
-
-  if (params.get('elevate') === '1') {
+  } else if (params.get('elevate') === '1') {
+    /* Preview the connect → Today motion without a live session. */
     show('s-home');
     playElevate();
+  } else {
+    bootAccount();
   }
 })();

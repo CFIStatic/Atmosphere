@@ -44,20 +44,20 @@ struct ElevateSplashView: View {
             .allowsHitTesting(false)
 
             VStack(spacing: 16) {
-                VStack(spacing: 64 * 2 / 22) {
+                VStack(spacing: 96 * 2 / 22) {
                     ForEach(0 ..< 5, id: \.self) { index in
-                        RoundedRectangle(cornerRadius: 1)
+                        RoundedRectangle(cornerRadius: 1.5)
                             .fill(colors[index])
-                            .frame(width: 64, height: 64 * 2.8 / 22)
+                            .frame(width: 96, height: 96 * 2.8 / 22)
                             .scaleEffect(x: barOn[index] ? 1 : 0.22, y: 1, anchor: .bottom)
                             .opacity(barOn[index] ? 1 : 0)
                             .offset(y: barOn[index] ? 0 : 16)
                     }
                 }
-                .frame(width: 64, height: 64)
+                .frame(width: 96, height: 96)
 
                 Text("Atmosphere")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(.system(size: 28, weight: .bold))
                     .tracking(-0.4)
                     .foregroundStyle(FieldTheme.ink)
                     .opacity(wordOn ? 1 : 0)
@@ -84,10 +84,10 @@ struct ElevateSplashView: View {
                 return
             }
 
-            let spring = Animation.timingCurve(0.16, 1, 0.3, 1, duration: 0.52)
+            let spring = Animation.timingCurve(0.16, 1, 0.3, 1, duration: 0.7)
             // Orange ground first (index 4), then up the stack.
             for (step, index) in [4, 3, 2, 1, 0].enumerated() {
-                try? await Task.sleep(nanoseconds: UInt64(step == 0 ? 40_000_000 : 90_000_000))
+                try? await Task.sleep(nanoseconds: UInt64(step == 0 ? 40_000_000 : 200_000_000))
                 withAnimation(spring) {
                     barOn[index] = true
                 }
@@ -108,7 +108,7 @@ struct ElevateSplashView: View {
                 lift = true
             }
 
-            try? await Task.sleep(nanoseconds: 900_000_000)
+            try? await Task.sleep(nanoseconds: 1_150_000_000)
             withAnimation(.easeInOut(duration: 0.42)) {
                 veil = 0
             }
