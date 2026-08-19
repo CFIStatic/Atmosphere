@@ -287,7 +287,8 @@ on every push.
 See **[`docs/production.md`](docs/production.md)** for the Work Verification
 go-live checklist, Railway hosting for the office app, required env vars,
 health probes (`/api/health`, `/api/ready`, `/healthz`), migration apply
-order, and Docker Compose sketch.
+order, Docker Compose sketch, and **Railway auto-deploy** so backend, office
+app, and any other git-backed Railway service ship on push to `main`.
 
 ```bash
 # Production-shaped local stack (needs a filled backend/.env)

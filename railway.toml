@@ -10,6 +10,8 @@
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
+# GitHub autodeploy / PR environments skip this service unless these paths change.
+watchPatterns = ["backend/**", "Dockerfile", "railway.toml"]
 
 [deploy]
 healthcheckPath = "/api/health"

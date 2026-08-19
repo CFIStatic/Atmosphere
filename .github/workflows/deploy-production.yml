@@ -4,6 +4,15 @@
 # bridge: it copies Keys → the backend service, then `railway up`s backend and
 # the office app.
 #
+# Production only. Feature branches must not `railway up` here — that would
+# overwrite production. For branch / PR previews, enable Railway PR
+# Environments (see docs/production.md → Railway auto-deploy).
+#
+# This workflow ships the backend (Keys sync + railway up) and the office app.
+# If a service also has GitHub Autodeploy on `main`, you will get two deploys
+# per push — Disable Autodeploy on that service, or drop the matching
+# `railway up` step here (see docs/production.md).
+#
 # One extra secret in Keys (from Railway → Account → Tokens):
 #   RAILWAY_TOKEN
 # Optional:

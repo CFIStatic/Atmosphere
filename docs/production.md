@@ -5,6 +5,143 @@ evidence share**. This document is the checklist to run that path safely.
 Sales, PM, estimator, and computer-use modules may stay in the tree; keep them
 off or mocked until they are staffed and monitored.
 
+## Railway auto-deploy
+
+Do this once in the Railway dashboard. GitHub Actions currently deploys **only
+the backend**, and only on `main`. Every other Railway service stays stale
+until it is linked to this repo with Autodeploy on.
+
+Databases, Redis, and volumes are not git apps — skip them. The marketing site
+is GitHub Pages (`website/`), not Railway. iOS is App Store.
+
+| Railway service | Config as Code | Dockerfile | Rebuilds when these paths change |
+| --- | --- | --- | --- |
+| Backend BFF | `/railway.toml` | `Dockerfile` (repo root) | `backend/**`, `Dockerfile`, `railway.toml` |
+| Office console | `/frontend/railway.toml` | `frontend/Dockerfile` | `frontend/**`, `verifier/**`, `fieldcapture/**`, `frontend/Dockerfile` |
+
+Both services use **Root Directory `/`**. The console must not use `/frontend`
+as root — Vite copies sibling `verifier/` and `fieldcapture/` into the build.
+
+### Step 0 — GitHub App (once)
+
+1. Railway dashboard → your account → **GitHub**.
+2. Install / authorize the Railway GitHub App on **CFIStatic/Atmosphere**.
+3. If Autodeploy is greyed out later, GitHub → **Settings → Applications →
+   Railway** → accept pending permission updates, wait a few minutes, then
+   disconnect and reconnect the repo on the service.
+
+At least one Railway project member must have that GitHub account connected
+and **contributor** access to the repo.
+
+### Step 1 — Repeat for every git-backed service
+
+Open the project canvas. For **backend**, then again for **frontend**, then
+again for any other service that builds from this repo:
+
+1. Click the service → **Settings**.
+2. **Source** → connect **CFIStatic/Atmosphere** (same repo for all of them).
+3. **Trigger branch** = `main`.
+4. **Root Directory** = `/`.
+5. **Config as Code** = the path in the table above (required on the console so
+   it does not pick up the backend `railway.toml` at the repo root).
+6. **Autodeploy** → **Enable**.
+7. **Wait for CI** → on. Railway holds the deploy until
+   `.github/workflows/ci.yml` is green on that commit. If CI is red, the
+   deploy is skipped and the previous version keeps serving.
+8. **Networking** → **Generate Domain** if the service should be public.
+9. Click **Deploy** (or wait for the next push to `main`).
+
+#### Backend variables
+
+Leave these on the backend service (Actions can still sync them from GitHub
+`Keys` — see Step 3). Required set is in [Required environment (BFF)](#required-environment-bff).
+
+Healthcheck is `/api/health` via `railway.toml`.
+
+#### Frontend variables
+
+The office image reverse-proxies `/api` at runtime. Set this on the office
+service **before** the first Autodeploy:
+
+```text
+API_UPSTREAM=http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}
+```
+
+Leave `VITE_API_BASE_URL` empty so the SPA uses same-origin `/api` and
+httpOnly cookies just work. `FRONTEND_ORIGIN` on the backend must include
+the office app’s public origin or cookies/CORS fail.
+
+Healthcheck is `/healthz`. nginx listens on Railway’s `PORT`.
+
+#### Any extra service you added later
+
+Same loop: Source = this repo, branch `main`, Root `/` or the folder that
+owns the app, Config as Code pointing at **that** service’s `railway.toml`,
+Autodeploy Enable, Wait for CI on, watch paths so a backend-only commit does
+not rebuild it.
+
+### Step 2 — PR / branch previews (once per project)
+
+This is how a **feature branch** gets a live URL without touching production.
+
+1. Project → **Settings → Environments**.
+2. Enable **PR Environments**.
+3. Enable **Focused PR Environments** (monorepo: only services whose watch
+   paths changed are copied).
+4. Leave **Bot PR Environments** off unless you want Dependabot stacks.
+5. Open a PR from a workspace member whose GitHub is connected to Railway.
+   The Railway bot comments when the preview URL is ready. Merging or closing
+   the PR deletes that environment.
+
+Railway will not deploy a PR from someone outside the workspace unless they
+are invited with that GitHub account connected.
+
+### Step 3 — Stop double-deploying production
+
+`.github/workflows/deploy-production.yml` still runs `railway up` for the
+**backend** on every `main` push that touches `backend/**`. If Step 1 enabled
+Autodeploy on the backend, you get two production deploys per push.
+
+Pick one:
+
+- **Recommended for multiple services:** Autodeploy + Wait for CI on every
+  git-backed service. Keep the Actions job only to copy GitHub `Keys` onto
+  the backend (`--skip-deploys` is already used during the sync) and delete
+  or skip the final `railway up` step.
+- **Actions remains the backend ship path:** Disable Autodeploy on the
+  backend only. Frontend and any other services still use Autodeploy.
+
+Do **not** point the Actions workflow at every branch. That `railway up`
+always deploys production.
+
+Manual backend fallback: **Actions → Deploy Work Verification → Run workflow**.
+
+### Step 4 — Prove it
+
+1. Merge a no-op or real change to `backend/` on `main` → backend service
+   **Deployments** shows a new deploy (or a skip if CI failed). Frontend
+   should **not** rebuild (watch paths).
+2. Merge a change under `frontend/`, `verifier/`, or `fieldcapture/` →
+   frontend rebuilds; backend does not.
+3. Open a PR that touches `backend/` → a PR environment appears with the
+   backend (and skipped frontend if Focused is on).
+
+### If a push did not deploy
+
+- **Wrong branch.** Production is `main` only. Other branches need a PR
+  (Step 2).
+- **Watch paths.** Autodeploy skips commits that miss that service’s
+  `watchPatterns`. In Deployments, turn on **Show skipped**.
+- **Wait for CI.** A failing GitHub Actions run skips the Railway deploy.
+- **GitHub App.** Re-accept permissions; reconnect the repo on the service.
+- **Config as Code.** Frontend still using `/railway.toml` will try to start
+  `node dist/index.js` and healthcheck `/api/health`. Point it at
+  `/frontend/railway.toml`.
+
+Official references: [GitHub Autodeploys](https://docs.railway.com/deployments/github-autodeploys),
+[PR Environments](https://docs.railway.com/guides/preview-deployments-with-pr-environments),
+[Monorepos](https://docs.railway.com/deployments/monorepo).
+
 ## Surfaces to deploy
 
 | Surface | Artifact | Notes |
