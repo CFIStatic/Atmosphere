@@ -72,16 +72,6 @@ export function SignupPage() {
     checkoutOutcome === 'success' || checkoutOutcome === 'cancelled' ? checkoutOutcome : null;
 
   useEffect(() => {
-    document.title =
-      orgIntent === 'join'
-        ? 'Link to the office account · Atmosphere'
-        : 'Create your organization · Atmosphere';
-    return () => {
-      document.title = 'Atmosphere';
-    };
-  }, [orgIntent]);
-
-  useEffect(() => {
     if (orgIntent === 'join') setMode('join');
   }, [orgIntent]);
 
