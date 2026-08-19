@@ -4,8 +4,9 @@
 #   cp backend/.env.example backend/.env   # fill production values
 #   docker compose up --build
 #
-# Frontend: http://localhost:8080
-# Backend:  http://localhost:4000  (GET /api/health, /api/ready)
+# App (console + Verifier + Field Capture): http://localhost:8080
+#   nginx reverse-proxies /api to the backend, same as Railway.
+# Backend: http://localhost:4000  (GET /api/health, /api/ready)
 
 services:
   backend:
@@ -34,11 +35,11 @@ services:
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:4000}
-        VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:4000}
+      context: .
+      dockerfile: frontend/Dockerfile
+    environment:
+      PORT: '80'
+      API_UPSTREAM: http://backend:4000
     ports:
       - '8080:80'
     depends_on:

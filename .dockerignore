@@ -1,11 +1,10 @@
-# Keep Railway's root Docker build small.
+# Keep Railway's root Docker build small (backend image).
+# frontend/, verifier/, and fieldcapture/ stay in the context so
+# `docker build -f frontend/Dockerfile .` can copy them.
 .git
-frontend
-fieldcapture
 website
 apps
 agent
-verifier
 docs
 **/node_modules
 **/dist

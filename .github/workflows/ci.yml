@@ -110,3 +110,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build backend image
         run: docker build -f backend/Dockerfile -t atmosphere-backend:ci ./backend
+
+  docker-app:
+    name: Office app image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build office app image
+        run: docker build -f frontend/Dockerfile -t atmosphere-app:ci .

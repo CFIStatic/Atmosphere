@@ -1,5 +1,14 @@
+# Used when the build context is ./frontend (not the Railway / compose path).
+# Repo-root builds (`docker build -f frontend/Dockerfile .`) use
+# frontend/Dockerfile.dockerignore instead.
 node_modules
 dist
+.env
+.env.*
+!.env.example
+coverage
+.git
+*.md
 .env
 .env.*
 !.env.example

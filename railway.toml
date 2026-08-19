@@ -1,4 +1,6 @@
-# Force Dockerfile (not Railpack) when Railway deploys the repo root.
+# Backend service only — used when Railway deploys the repo root with the
+# default Config File (/railway.toml). The office app is a second service
+# whose Config File must be /frontend/railway.toml (see docs/production.md).
 # Variables still come from GitHub Keys via Actions, or Railway Variables.
 #
 # Deploy probe is liveness (/api/health), not readiness (/api/ready).

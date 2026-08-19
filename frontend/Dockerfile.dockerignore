@@ -1,0 +1,17 @@
+# Used when building `docker build -f frontend/Dockerfile .` from repo root.
+.git
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+!.env.example
+website
+apps
+agent
+docs
+backend
+.github
+**/*.md
+**/*.test.ts
+**/*.test.tsx
+coverage

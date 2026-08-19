@@ -1,14 +1,20 @@
-# Deploy the Work Verification backend to Railway using the GitHub
-# environment named `Keys` (secrets + variables you already added).
+# Deploy Work Verification to Railway using the GitHub environment `Keys`.
 #
 # Railway does not read GitHub Environments on its own. This workflow is the
-# bridge: it copies Keys → Railway, then deploys `backend/`.
+# bridge: it copies Keys → the backend service, then `railway up`s backend and
+# the office app.
 #
 # One extra secret in Keys (from Railway → Account → Tokens):
 #   RAILWAY_TOKEN
 # Optional:
-#   RAILWAY_PROJECT_ID   (Project settings → General)
-#   RAILWAY_SERVICE      (service name, default: Atmosphere)
+#   RAILWAY_PROJECT_ID     (Project settings → General)
+#   RAILWAY_SERVICE        (backend service name, default: Atmosphere)
+#   RAILWAY_APP_SERVICE    (office app service name, default: app)
+#
+# One-time on the Railway **app** service (Settings → Config-as-code):
+#   Config File = /frontend/railway.toml
+# Without that, `railway up` from the repo root applies /railway.toml and
+# builds the backend image instead. See docs/production.md.
 #
 # Put GOOGLE_API_KEY / GOOGLE_MAPS_API_KEY / ANTHROPIC_API_KEY in `Keys`
 # as well (not only the "Google API keys" environment) so this job can see them.
@@ -29,6 +35,10 @@ on:
     paths:
       - 'backend/**'
       - 'supabase/migrations/**'
+      - 'frontend/**'
+      - 'verifier/**'
+      - 'fieldcapture/**'
+      - 'Dockerfile'
       - '.github/workflows/deploy-production.yml'
 
 concurrency:
@@ -126,3 +136,37 @@ jobs:
           echo "Deploying Railway service: $RAILWAY_SERVICE"
           chmod +x scripts/railwayUp.sh
           scripts/railwayUp.sh
+
+  app:
+    name: Deploy office app
+    runs-on: ubuntu-latest
+    environment: Keys
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Require Railway token
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "Add RAILWAY_TOKEN to the GitHub environment Keys (Railway → Account → Tokens)."
+            exit 1
+          fi
+
+      - name: Deploy office app
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+          RAILWAY_APP_SERVICE: ${{ secrets.RAILWAY_APP_SERVICE }}
+        run: |
+          service="${RAILWAY_APP_SERVICE:-app}"
+          echo "Deploying office app to Railway service '$service'."
+          echo "That service's Config File must be /frontend/railway.toml (see docs/production.md)."
+          railway up --ci --service "$service"
