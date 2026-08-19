@@ -284,8 +284,9 @@ suites, migration inventory, and a backend Docker image build on every push.
 See **[`docs/production.md`](docs/production.md)** for the Work Verification
 go-live checklist, required env vars, health probes (`/api/health`,
 `/api/ready`), migration apply order, Docker Compose sketch, and **Railway
-auto-deploy** (production on `main` via Actions; branch previews via Railway
-PR Environments).
+auto-deploy** — a per-service checklist so backend, frontend, and any other
+git-backed Railway service all ship on push to `main` (PR Environments for
+other branches).
 
 ```bash
 # Production-shaped local stack (needs a filled backend/.env)

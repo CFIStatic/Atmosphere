@@ -1,0 +1,29 @@
+# Railway service config for the office console (Verifier + Field Capture
+# are copied into the Vite dist by frontend/vite.verifier.ts).
+#
+# In the Railway dashboard this service MUST use:
+#   Root Directory        = /
+#   Config as Code path   = /frontend/railway.toml
+#
+# Root stays `/` so Docker can COPY verifier/ and fieldcapture/ next to
+# frontend/. Do not set Root Directory to `/frontend`.
+#
+# Variables: VITE_API_BASE_URL (and optional VITE_BACKEND_URL) are Docker
+# build args — set them on this service, e.g.
+#   VITE_API_BASE_URL=https://${{backend.RAILWAY_PUBLIC_DOMAIN}}
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.frontend"
+watchPatterns = [
+  "frontend/**",
+  "verifier/**",
+  "fieldcapture/**",
+  "Dockerfile.frontend",
+]
+
+[deploy]
+healthcheckPath = "/"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5

@@ -7,80 +7,142 @@ off or mocked until they are staffed and monitored.
 
 ## Railway auto-deploy
 
-The backend on Railway is **not** driven by “any git branch”. Two different
-mechanisms exist; using both on `main` double-deploys production.
+Do this once in the Railway dashboard. GitHub Actions currently deploys **only
+the backend**, and only on `main`. Every other Railway service stays stale
+until it is linked to this repo with Autodeploy on.
 
-### What happens today
+Databases, Redis, and volumes are not git apps — skip them. The marketing site
+is GitHub Pages (`website/`), not Railway. iOS is App Store.
 
-`.github/workflows/deploy-production.yml` is the production path:
+| Railway service | Config as Code | Dockerfile | Rebuilds when these paths change |
+| --- | --- | --- | --- |
+| Backend BFF | `/railway.toml` | `Dockerfile` (repo root) | `backend/**`, `Dockerfile`, `railway.toml` |
+| Office console | `/frontend/railway.toml` | `Dockerfile.frontend` | `frontend/**`, `verifier/**`, `fieldcapture/**`, `Dockerfile.frontend` |
 
-1. Push (or merge) to **`main`** that touches `backend/**` (or the workflow file).
-2. GitHub Actions reads the `Keys` environment, copies those values onto the
-   Railway service, then runs `railway up`.
-3. Feature branches and PRs **do not** deploy. Pointing this workflow at every
-   branch would overwrite production.
+Both services use **Root Directory `/`**. The console must not use `/frontend`
+as root — Vite copies sibling `verifier/` and `fieldcapture/` into the build.
 
-Manual fallback: **Actions → Deploy Work Verification → Run workflow**.
+### Step 0 — GitHub App (once)
 
-### Branch / PR previews (the missing piece)
+1. Railway dashboard → your account → **GitHub**.
+2. Install / authorize the Railway GitHub App on **CFIStatic/Atmosphere**.
+3. If Autodeploy is greyed out later, GitHub → **Settings → Applications →
+   Railway** → accept pending permission updates, wait a few minutes, then
+   disconnect and reconnect the repo on the service.
 
-Railway will spin up an isolated copy of the stack for each pull request if
-**PR Environments** are on. That is how a branch update gets a live URL without
-touching production.
+At least one Railway project member must have that GitHub account connected
+and **contributor** access to the repo.
 
-1. In Railway, open the project → **Settings → Environments**.
+### Step 1 — Repeat for every git-backed service
+
+Open the project canvas. For **backend**, then again for **frontend**, then
+again for any other service that builds from this repo:
+
+1. Click the service → **Settings**.
+2. **Source** → connect **CFIStatic/Atmosphere** (same repo for all of them).
+3. **Trigger branch** = `main`.
+4. **Root Directory** = `/`.
+5. **Config as Code** = the path in the table above (required on the console so
+   it does not pick up the backend `railway.toml` at the repo root).
+6. **Autodeploy** → **Enable**.
+7. **Wait for CI** → on. Railway holds the deploy until
+   `.github/workflows/ci.yml` is green on that commit. If CI is red, the
+   deploy is skipped and the previous version keeps serving.
+8. **Networking** → **Generate Domain** if the service should be public.
+9. Click **Deploy** (or wait for the next push to `main`).
+
+#### Backend variables
+
+Leave these on the backend service (Actions can still sync them from GitHub
+`Keys` — see Step 3). Required set is in [Required environment (BFF)](#required-environment-bff).
+
+Healthcheck is `/api/ready` via `railway.toml`.
+
+#### Frontend variables
+
+These are Docker **build args**. Set them on the frontend service **before**
+the first Autodeploy, then redeploy after changing them (a variable-only
+change does not always rebuild the Vite bundle).
+
+```text
+VITE_API_BASE_URL=https://${{backend.RAILWAY_PUBLIC_DOMAIN}}
+```
+
+Use your real backend public URL or custom domain instead of the reference
+if you already have one (for example `https://api.atmosphereteam.com`).
+`FRONTEND_ORIGIN` on the backend must include the frontend’s public origin
+or cookies/CORS fail.
+
+Healthcheck is `/`. nginx listens on Railway’s `PORT`.
+
+#### Any extra service you added later
+
+Same loop: Source = this repo, branch `main`, Root `/` or the folder that
+owns the app, Config as Code pointing at **that** service’s `railway.toml`,
+Autodeploy Enable, Wait for CI on, watch paths so a backend-only commit does
+not rebuild it.
+
+### Step 2 — PR / branch previews (once per project)
+
+This is how a **feature branch** gets a live URL without touching production.
+
+1. Project → **Settings → Environments**.
 2. Enable **PR Environments**.
-3. For this monorepo, also enable **Focused PR Environments** so a frontend-only
-   PR does not rebuild the BFF. Watch paths already live in `railway.toml`
-   (`backend/**` plus the root Dockerfile).
-4. Confirm the GitHub repo is linked on the backend service
-   (**Settings → Source**) and that Autodeploy is **Enable**d for PRs.
-5. Open a PR from a workspace member whose GitHub account is connected to
-   Railway. The Railway GitHub bot comments with the preview URL. Closing or
-   merging the PR deletes the environment.
+3. Enable **Focused PR Environments** (monorepo: only services whose watch
+   paths changed are copied).
+4. Leave **Bot PR Environments** off unless you want Dependabot stacks.
+5. Open a PR from a workspace member whose GitHub is connected to Railway.
+   The Railway bot comments when the preview URL is ready. Merging or closing
+   the PR deletes that environment.
 
-Railway will **not** deploy a PR from someone outside the workspace unless they
+Railway will not deploy a PR from someone outside the workspace unless they
 are invited with that GitHub account connected.
 
-Optional: **Enable Bot PR Environments** if Dependabot (or similar) PRs should
-get previews too. Leave it off to avoid paying for bot stacks.
+### Step 3 — Stop double-deploying production
 
-### Production on every `main` update (GitHub Autodeploy)
+`.github/workflows/deploy-production.yml` still runs `railway up` for the
+**backend** on every `main` push that touches `backend/**`. If Step 1 enabled
+Autodeploy on the backend, you get two production deploys per push.
 
-If you want Railway itself to deploy `main` instead of (or in addition to)
-`railway up` from Actions:
+Pick one:
 
-1. Backend service → **Settings → Source**.
-2. Connect this GitHub repository. Set the trigger branch to **`main`**.
-3. Set **Root Directory** to `/` (root `Dockerfile` builds `backend/`) **or**
-   to `backend` and point **Config as Code** at `/backend/railway.toml`.
-4. Click **Enable** on Autodeploy.
-5. Turn on **Wait for CI** so a red `.github/workflows/ci.yml` run skips the
-   deploy. CI already runs on every branch, including `main`.
-6. **Pick one producer for production deploys.** Either:
-   - keep the Actions `railway up` (it is what syncs GitHub `Keys`) and
-     **Disable** Autodeploy on the service, or
-   - enable Autodeploy + Wait for CI and remove the `railway up` step from
-     `deploy-production.yml`, leaving the workflow as Keys → Railway variables
-     only (`--skip-deploys` is already used during the sync).
+- **Recommended for multiple services:** Autodeploy + Wait for CI on every
+  git-backed service. Keep the Actions job only to copy GitHub `Keys` onto
+  the backend (`--skip-deploys` is already used during the sync) and delete
+  or skip the final `railway up` step.
+- **Actions remains the backend ship path:** Disable Autodeploy on the
+  backend only. Frontend and any other services still use Autodeploy.
 
-Healthcheck is already `/api/ready` in `railway.toml`. Railway holds the old
-deployment until that returns 200, then cuts over.
+Do **not** point the Actions workflow at every branch. That `railway up`
+always deploys production.
+
+Manual backend fallback: **Actions → Deploy Work Verification → Run workflow**.
+
+### Step 4 — Prove it
+
+1. Merge a no-op or real change to `backend/` on `main` → backend service
+   **Deployments** shows a new deploy (or a skip if CI failed). Frontend
+   should **not** rebuild (watch paths).
+2. Merge a change under `frontend/`, `verifier/`, or `fieldcapture/` →
+   frontend rebuilds; backend does not.
+3. Open a PR that touches `backend/` → a PR environment appears with the
+   backend (and skipped frontend if Focused is on).
 
 ### If a push did not deploy
 
-- **Wrong branch.** Only `main` is production. Other branches need a PR + PR
-  Environments (or a manual Actions run, which still deploys **production**).
-- **Path filter.** Actions skips `main` pushes that did not touch `backend/**`.
-  GitHub Autodeploy skips commits that miss `watchPatterns` in `railway.toml`.
-- **GitHub App.** At least one Railway project member needs a connected GitHub
-  account with contributor access. Re-accept pending Railway GitHub App
-  permissions if Autodeploy is greyed out.
-- **Skipped deployments.** In the service’s Deployments tab, show skipped
-  deploys. “Wait for CI” skips when CI fails.
+- **Wrong branch.** Production is `main` only. Other branches need a PR
+  (Step 2).
+- **Watch paths.** Autodeploy skips commits that miss that service’s
+  `watchPatterns`. In Deployments, turn on **Show skipped**.
+- **Wait for CI.** A failing GitHub Actions run skips the Railway deploy.
+- **GitHub App.** Re-accept permissions; reconnect the repo on the service.
+- **Config as Code.** Frontend still using `/railway.toml` will try to start
+  `node dist/index.js` and healthcheck `/api/ready`. Point it at
+  `/frontend/railway.toml`.
 
 Official references: [GitHub Autodeploys](https://docs.railway.com/deployments/github-autodeploys),
-[PR Environments](https://docs.railway.com/guides/preview-deployments-with-pr-environments).
+[PR Environments](https://docs.railway.com/guides/preview-deployments-with-pr-environments),
+[Monorepos](https://docs.railway.com/deployments/monorepo).
 
 ## Surfaces to deploy
 

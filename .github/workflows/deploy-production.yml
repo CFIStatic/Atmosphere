@@ -9,9 +9,14 @@
 # For branch / PR previews, enable Railway PR Environments on the project
 # (see docs/production.md → Railway auto-deploy).
 #
-# If the Railway service is also linked to GitHub with Autodeploy on `main`,
+# This job deploys the BACKEND service only. Other Railway services (frontend,
+# etc.) autodeploy from GitHub — wire each one with the per-service checklist
+# in docs/production.md. Do not add more `railway up` targets here unless you
+# are deliberately not using GitHub Autodeploy on that service.
+#
+# If the backend service is also linked to GitHub with Autodeploy on `main`,
 # you will get two production deploys per push. Pick one: keep this workflow
-# (needed to sync Keys) and Disable Autodeploy on the service, or turn on
+# (needed to sync Keys) and Disable Autodeploy on the backend, or turn on
 # GitHub Autodeploy + Wait for CI and drop the `railway up` step below.
 #
 # One extra secret in Keys (from Railway → Account → Tokens):

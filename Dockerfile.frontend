@@ -1,0 +1,51 @@
+# Railway / compose: office console from the repo root so Vite can copy
+# sibling verifier/ and fieldcapture/ into dist.
+#
+#   docker build -f Dockerfile.frontend \
+#     --build-arg VITE_API_BASE_URL=https://api.example.com \
+#     -t atmosphere-frontend .
+#
+# Local compose uses this file with context `.`.
+
+FROM node:22-bookworm-slim AS build
+WORKDIR /app
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+COPY verifier /verifier
+COPY fieldcapture /fieldcapture
+ARG VITE_API_BASE_URL=
+ARG VITE_BACKEND_URL=
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ENV VITE_BACKEND_URL=$VITE_BACKEND_URL
+RUN npm run build
+
+FROM nginx:1.27-alpine AS runtime
+COPY --from=build /app/dist /usr/share/nginx/html
+# SPA fallback + cache static assets; API is cross-origin to the BFF.
+# Railway injects PORT; default 80 for local compose.
+RUN printf '%s\n' \
+  'server {' \
+  '  listen 80;' \
+  '  server_name _;' \
+  '  root /usr/share/nginx/html;' \
+  '  index index.html;' \
+  '  location /assets/ {' \
+  '    add_header Cache-Control "public, max-age=31536000, immutable";' \
+  '    try_files $uri =404;' \
+  '  }' \
+  '  location / {' \
+  '    try_files $uri $uri/ /index.html;' \
+  '  }' \
+  '}' > /etc/nginx/conf.d/default.conf \
+  && printf '%s\n' \
+  '#!/bin/sh' \
+  'set -eu' \
+  'port="${PORT:-80}"' \
+  'sed -i "s/listen 80;/listen ${port};/" /etc/nginx/conf.d/default.conf' \
+  > /docker-entrypoint.d/99-listen-port.sh \
+  && chmod +x /docker-entrypoint.d/99-listen-port.sh
+EXPOSE 80
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+  CMD sh -c 'wget -qO- "http://127.0.0.1:${PORT:-80}/" >/dev/null || exit 1'
+CMD ["nginx", "-g", "daemon off;"]

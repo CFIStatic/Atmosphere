@@ -1,5 +1,8 @@
 # Force Dockerfile (not Railpack) when Railway deploys the repo root.
 # Variables still come from GitHub Keys via Actions, or Railway Variables.
+#
+# This file is the BACKEND service config. The office-console service must set
+# Config as Code to `/frontend/railway.toml` or it will inherit this file.
 
 [build]
 builder = "DOCKERFILE"
