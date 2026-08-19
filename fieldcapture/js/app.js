@@ -61,7 +61,7 @@
          motion. Four-second lockup, then the mark melts into the same
          paper or night Today is already using. */
       var hold = 4000;
-      var fade = 2100;
+      var fade = 2700;
       window.setTimeout(function () {
         document.documentElement.removeAttribute('data-elevate-preview');
         el.classList.add('out');

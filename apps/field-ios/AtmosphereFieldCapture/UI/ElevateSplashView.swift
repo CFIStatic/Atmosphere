@@ -199,15 +199,15 @@ struct ElevateSplashView: View {
 
             let remaining = max(0, 4.0 - Date().timeIntervalSince(started))
             try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
-            withAnimation(.timingCurve(0.4, 0, 0.2, 1, duration: 1.8)) {
+            withAnimation(.timingCurve(0.4, 0, 0.2, 1, duration: 1.6)) {
                 lockupOut = 1
                 groundGlow = 0
             }
-            try? await Task.sleep(nanoseconds: 700_000_000)
-            withAnimation(.timingCurve(0.4, 0, 0.2, 1, duration: 1.4)) {
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            withAnimation(.timingCurve(0.4, 0, 0.2, 1, duration: 1.2)) {
                 veil = 0
             }
-            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
             onFinished()
         }
     }
