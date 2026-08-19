@@ -104,7 +104,7 @@ test('field onboarding defaults match a crew login, not an office admin', () => 
   assert.deepEqual([...FIELD_APP_ONBOARDING.usageIntents], ['field_work']);
 });
 
-test('POST /api/field-app/office/preview requires a signed-in Field Capture session', async () => {
+test('POST /api/field-app/office/preview is public and rejects a missing code', async () => {
   const { createApp } = await import('../src/app.js');
   const app = createApp();
   const server = app.listen(0);
@@ -115,11 +115,11 @@ test('POST /api/field-app/office/preview requires a signed-in Field Capture sess
     const res = await fetch(`http://127.0.0.1:${address.port}/api/field-app/office/preview`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ joinCode: '8F3A9C2B' }),
+      body: JSON.stringify({}),
     });
-    assert.equal(res.status, 401);
+    assert.equal(res.status, 400);
     const body = (await res.json()) as { code?: string };
-    assert.equal(body.code, 'unauthorized');
+    assert.equal(body.code, 'validation_error');
   } finally {
     await new Promise<void>((resolve, reject) =>
       server.close((err) => (err ? reject(err) : resolve())),

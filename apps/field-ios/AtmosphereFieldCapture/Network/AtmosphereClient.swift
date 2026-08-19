@@ -3,9 +3,10 @@ import Foundation
 /**
  * REST client for Atmosphere Field Capture.
  *
- * Sign-in uses the same Atmosphere account as the website (Supabase Auth).
- * Today’s jobs are loaded from that project. A local Express BFF is used
- * when one is actually reachable (Xcode simulator + `npm run dev`).
+ * Crew connect with name + office invite code (`/api/field-app/join`).
+ * A dashboard email/password login still works. Today’s jobs are loaded
+ * from that office. A local Express BFF is used when one is actually
+ * reachable (Xcode simulator + `npm run dev`).
  */
 @MainActor
 final class AtmosphereClient: ObservableObject {
@@ -157,13 +158,28 @@ final class AtmosphereClient: ObservableObject {
         struct Res: Decodable { let org: OfficePreview }
         if usesBFF {
             do {
-                let res: Res = try await post(path: "/api/field-app/office/preview", body: Body(joinCode: joinCode))
+                let res: Res = try await post(
+                    path: "/api/field-app/office/preview",
+                    body: Body(joinCode: joinCode),
+                    authed: false
+                )
                 return res.org
             } catch {
                 if !Self.isUnreachable(error) { throw error }
             }
         }
         return try await previewOfficeViaSupabase(joinCode: joinCode)
+    }
+
+    private struct JoinCrewBody: Encodable {
+        let fullName: String
+        let joinCode: String
+    }
+
+    /// Crew connect: name + office invite code. No email or password.
+    func joinCrew(fullName: String, joinCode: String) async throws -> AuthResponse {
+        let body = JoinCrewBody(fullName: fullName, joinCode: joinCode)
+        return try await post(path: "/api/field-app/join", body: body, authed: false)
     }
 
     func linkOffice(joinCode: String?, orgName: String?, fullName: String? = nil) async throws -> FieldOrg {

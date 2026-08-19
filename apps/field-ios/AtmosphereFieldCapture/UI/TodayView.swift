@@ -35,7 +35,7 @@ struct TodayView: View {
                                 .font(.system(size: 13))
                                 .foregroundStyle(FieldTheme.muted)
                         } else if session.jobs.isEmpty {
-                            Text("Nothing on the schedule for today. Create or schedule a job in the Atmosphere dashboard, then pull to refresh.")
+                            Text("Nothing assigned to you yet. Ask the office to put you on a job, then pull to refresh.")
                                 .font(.system(size: 13))
                                 .foregroundStyle(FieldTheme.muted)
                         }
@@ -136,7 +136,9 @@ struct TodayView: View {
             }
             Spacer()
             Menu {
-                if let email = auth.email {
+                if let name = auth.fullName, !name.isEmpty {
+                    Text(name)
+                } else if let email = auth.email, !email.hasSuffix("@field.atmosphere.app") {
                     Text(email)
                 }
                 if let office = auth.orgName {

@@ -4,8 +4,9 @@ import SwiftUI
 /**
  * Atmosphere Field Capture — App Store entry.
  *
- * Connect the platform account once on first install. Later launches open
- * straight to Today; day films land in that org’s evidence library.
+ * Connect the crew once on first install with their name and the office
+ * invite code. Later launches open straight to Today; day films land in
+ * that org’s evidence library.
  */
 @main
 struct AtmosphereFieldCaptureApp: App {
@@ -43,15 +44,15 @@ struct RootView: View {
     @EnvironmentObject private var session: FieldDaySession
     @EnvironmentObject private var auth: AuthSession
     @EnvironmentObject private var api: AtmosphereClient
-    @State private var showSignUp = false
+    @State private var showDashboardLogin = false
 
     var body: some View {
         Group {
             if !auth.isLinked {
-                if showSignUp {
-                    SignUpView(onSignIn: { showSignUp = false })
+                if showDashboardLogin {
+                    SignInView(onCreateAccount: { showDashboardLogin = false })
                 } else {
-                    SignInView(onCreateAccount: { showSignUp = true })
+                    JoinCrewView(onDashboardLogin: { showDashboardLogin = true })
                 }
             } else if auth.needsOfficeLink || auth.showOfficeLink {
                 OfficeLinkView()

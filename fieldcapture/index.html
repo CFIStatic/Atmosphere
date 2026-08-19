@@ -394,20 +394,20 @@
   <!-- ================= SIGN IN: dashboard credentials, or a job link ================= -->
   <div class="screen" id="s-blocked">
     <div class="pad" style="padding-top:36px">
-      <h1 class="h1">Sign in to Field Capture</h1>
+      <h1 class="h1">Connect Field Capture</h1>
       <p class="lede" id="blocked-msg">
-        Use the same email and password as the Atmosphere dashboard. Job share links still work without signing in.
+        Type your name and the office invite code from Atmosphere Settings. Job share links still work without signing in.
       </p>
       <form class="auth-form" id="login-form" novalidate>
-        <label for="login-email">Email
-          <input id="login-email" name="email" type="email" autocomplete="username" inputmode="email" required />
+        <label for="login-name">First and last name
+          <input id="login-name" name="fullName" type="text" autocomplete="name" autocapitalize="words" required />
         </label>
-        <label for="login-password">Password
-          <input id="login-password" name="password" type="password" autocomplete="current-password" required minlength="8" />
+        <label for="login-code">Office invite code
+          <input id="login-code" name="joinCode" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" required minlength="6" maxlength="12" />
         </label>
         <p class="auth-err" id="login-err" hidden></p>
         <button class="daybtn" type="submit" id="login-btn">
-          <span class="lbl">Sign in</span>
+          <span class="lbl">Connect this phone</span>
         </button>
       </form>
     </div>

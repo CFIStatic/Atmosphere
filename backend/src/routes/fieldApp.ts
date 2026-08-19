@@ -7,9 +7,15 @@ import { requireOrgContext } from '../lib/orgContext.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { badRequest, HttpError, serviceUnavailable } from '../lib/errors.js';
 import { setSessionCookies } from '../lib/session.js';
-import { fieldOfficePreviewSchema, fieldOfficeSchema, fieldRegisterSchema } from '../lib/validation.js';
+import {
+  fieldJoinSchema,
+  fieldOfficePreviewSchema,
+  fieldOfficeSchema,
+  fieldRegisterSchema,
+} from '../lib/validation.js';
 import { createPasswordAccount, publicUser, sessionTokens } from '../auth/passwordAccount.js';
-import { linkFieldOffice, previewOfficeByJoinCode } from '../field/officeLink.js';
+import { linkFieldOffice } from '../field/officeLink.js';
+import { joinCrewByName, previewOfficePublic } from '../field/crewJoin.js';
 import { authLimiter } from './auth.js';
 import { createUploadUrl, recordProof } from './proofOfWork.js';
 import {
@@ -23,9 +29,10 @@ import {
 /**
  * Field Capture (App Store) ↔ platform account bridge.
  *
- * Same Supabase user / org membership as the dashboard. The phone signs in
- * with email+password, then uploads day films into `job_proofs` so the office
- * evidence library and job record see them — not a parallel catalog-only path.
+ * Crew connect is name + office join code. That creates (or reopens) a
+ * field-technician membership so the dashboard can assign jobs to that name.
+ * Day films land in `job_proofs` on the office record. A dashboard
+ * email/password login still works for people who already have one.
  */
 export const fieldAppRouter = Router();
 
@@ -101,6 +108,47 @@ fieldAppRouter.post(
   },
 );
 
+/**
+ * POST /api/field-app/join
+ *
+ * Crew connect: first and last name plus the office join code from Settings.
+ * Public — there is no session yet. The same name + code on another phone
+ * reopens this person so assignments stay on Nick Smith.
+ */
+fieldAppRouter.post(
+  '/join',
+  authLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const input = fieldJoinSchema.parse(req.body);
+      const joined = await joinCrewByName(input);
+      writeFieldSession(res, joined.created ? 201 : 200, joined.user, joined.session, {
+        org: joined.org,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/field-app/office/preview
+ * Confirm a join code on the connect screen (no session yet).
+ */
+fieldAppRouter.post(
+  '/office/preview',
+  authLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { joinCode } = fieldOfficePreviewSchema.parse(req.body);
+      const org = await previewOfficePublic(joinCode);
+      res.json({ org });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 fieldAppRouter.use(requireAuth);
 
 const limiter = rateLimit({
@@ -128,23 +176,6 @@ fieldAppRouter.post('/office', async (req: Request, res: Response, next: NextFun
     const input = fieldOfficeSchema.parse(req.body);
     const org = await linkFieldOffice(req.accessToken, req.user, input);
     res.status(201).json({ org });
-  } catch (err) {
-    next(err);
-  }
-});
-
-/**
- * POST /api/field-app/office/preview
- * Confirm a join code before the phone attaches this login to that office.
- */
-fieldAppRouter.post('/office/preview', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    if (!req.accessToken) {
-      throw new HttpError(401, 'Not authenticated', 'unauthorized');
-    }
-    const { joinCode } = fieldOfficePreviewSchema.parse(req.body);
-    const org = await previewOfficeByJoinCode(req.accessToken, joinCode);
-    res.json({ org });
   } catch (err) {
     next(err);
   }
@@ -197,16 +228,18 @@ async function orgTimezone(
 
 /**
  * GET /api/field-app/today
- * The job(s) for this calendar day: scheduled today, already filmed today,
- * or currently in progress. Opening the app has to show the work we are on.
+ * The job(s) for this calendar day. If the office has put this person on a
+ * crew, only those jobs (plus anything they already filmed today) show.
+ * Until then, today's org schedule still appears so the first day of filming
+ * is not blocked on an assignment.
  */
 fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { orgId, supabase } = await requireOrgContext(req);
+    const { orgId, userId, supabase } = await requireOrgContext(req);
     const timeZone = await orgTimezone(supabase, orgId);
     const day = todayKey(new Date(), timeZone);
 
-    const [{ data: jobs, error }, proofsResult] = await Promise.all([
+    const [{ data: jobs, error }, proofsResult, assignedResult] = await Promise.all([
       supabase
         .from('crm_jobs')
         .select('id, job_number, title, status, scheduled_start, property_id')
@@ -214,6 +247,12 @@ fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunct
         .order('scheduled_start', { ascending: true, nullsFirst: false })
         .limit(200),
       supabase.from('job_proofs').select('job_id').eq('org_id', orgId).eq('work_date', day),
+      supabase
+        .from('job_assignments')
+        .select('job_id')
+        .eq('org_id', orgId)
+        .eq('user_id', userId)
+        .is('released_at', null),
     ]);
 
     if (error) throw new HttpError(500, error.message, 'field_jobs_failed');
@@ -226,14 +265,27 @@ fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunct
       ),
     ] as string[];
 
-    const inputs: TodayJobInput[] = ((jobs ?? []) as any[]).map((j) => ({
-      id: j.id as string,
-      jobNumber: (j.job_number as number | null) ?? null,
-      title: (j.title as string | null) ?? null,
-      status: (j.status as string | null) ?? null,
-      scheduledStart: (j.scheduled_start as string | null) ?? null,
-      propertyId: (j.property_id as string | null) ?? null,
-    }));
+    const assignedIds = new Set(
+      ((assignedResult.data ?? []) as { job_id?: string }[])
+        .map((row) => row.job_id)
+        .filter(Boolean) as string[],
+    );
+
+    const inputs: TodayJobInput[] = ((jobs ?? []) as any[])
+      .filter(
+        (j) =>
+          assignedIds.size === 0 ||
+          assignedIds.has(j.id as string) ||
+          filmedIds.includes(j.id as string),
+      )
+      .map((j) => ({
+        id: j.id as string,
+        jobNumber: (j.job_number as number | null) ?? null,
+        title: (j.title as string | null) ?? null,
+        status: (j.status as string | null) ?? null,
+        scheduledStart: (j.scheduled_start as string | null) ?? null,
+        propertyId: (j.property_id as string | null) ?? null,
+      }));
 
     const picked = pickTodayJobs(inputs, filmedIds, day, timeZone);
     const propertyIds = [...new Set(picked.map((j) => j.propertyId).filter(Boolean))] as string[];

@@ -1,22 +1,34 @@
 import SwiftUI
 
 /**
- * Dashboard email + password connect.
+ * First-install crew connect.
  *
- * Secondary path for people who already have an Atmosphere website login.
- * Crew connect with name + invite code on JoinCrewView.
+ * Name + the office join code from Atmosphere Settings. No email, no
+ * password — the office assigns jobs to that name.
  */
-struct SignInView: View {
+struct JoinCrewView: View {
     @EnvironmentObject private var auth: AuthSession
-    var onCreateAccount: () -> Void = {}
-    @State private var email = ""
-    @State private var password = ""
+    var onDashboardLogin: () -> Void = {}
+
+    @State private var fullName = ""
+    @State private var joinCode = ""
+    @State private var previewTask: Task<Void, Never>?
     @State private var busy = false
+
+    private var nameValid: Bool {
+        fullName.trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(whereSeparator: { $0.isWhitespace })
+            .count >= 2
+    }
+
+    private var codeValid: Bool {
+        let code = joinCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (6 ... 12).contains(code.count) && code.allSatisfy { $0.isLetter || $0.isNumber }
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                // Same as the website: bars mark beside the Atmosphere wordmark.
                 HStack(alignment: .center, spacing: 10) {
                     AtmosphereBarsMark(size: 28)
                     Text("Atmosphere")
@@ -29,30 +41,40 @@ struct SignInView: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(FieldTheme.muted)
 
-                Text("Sign in with a dashboard account")
+                Text("Connect this phone")
                     .font(.system(size: 22, weight: .bold))
                     .foregroundStyle(FieldTheme.ink)
                     .padding(.top, 10)
 
                 Text(
-                    "Use this only if you already have an Atmosphere website login. Crew usually connect with their name and the office invite code."
+                    "Type your name and the office invite code. The office puts you on jobs; those jobs show up here."
                 )
                 .font(.system(size: 14))
                 .foregroundStyle(FieldTheme.muted)
 
                 VStack(spacing: 10) {
-                    TextField("Work email", text: $email)
-                        .textContentType(.username)
-                        .keyboardType(.emailAddress)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                    TextField("First and last name", text: $fullName)
+                        .textContentType(.name)
+                        .textInputAutocapitalization(.words)
                         .padding(12)
                         .background(FieldTheme.panel)
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
                         .cornerRadius(10)
 
-                    SecureField("Password", text: $password)
-                        .textContentType(.password)
+                    TextField("Office invite code", text: Binding(
+                        get: { joinCode },
+                        set: { value in
+                            joinCode = value
+                            previewTask?.cancel()
+                            previewTask = Task {
+                                try? await Task.sleep(nanoseconds: 350_000_000)
+                                guard !Task.isCancelled else { return }
+                                await auth.previewOffice(joinCode: value)
+                            }
+                        }
+                    ))
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
                         .padding(12)
                         .background(FieldTheme.panel)
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
@@ -60,10 +82,14 @@ struct SignInView: View {
                 }
                 .padding(.top, 4)
 
-                if let notice = auth.confirmationNotice {
-                    Text(notice)
-                        .font(.system(size: 13))
+                if let name = auth.officePreviewName {
+                    Text("This code belongs to \(name).")
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(FieldTheme.pass)
+                } else {
+                    Text("Ask the office for the 6–12 character code in Atmosphere → Settings.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(FieldTheme.faint)
                 }
 
                 if let err = auth.lastError {
@@ -75,9 +101,9 @@ struct SignInView: View {
                 Button {
                     busy = true
                     Task {
-                        await auth.connectAccount(
-                            email: email.trimmingCharacters(in: .whitespacesAndNewlines),
-                            password: password
+                        await auth.joinCrew(
+                            fullName: fullName.trimmingCharacters(in: .whitespacesAndNewlines),
+                            joinCode: joinCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
                         )
                         busy = false
                     }
@@ -86,7 +112,7 @@ struct SignInView: View {
                         if busy {
                             ProgressView().tint(FieldTheme.bg)
                         } else {
-                            Text("Sign in & connect phone")
+                            Text("Connect this phone")
                                 .font(.system(size: 16, weight: .bold))
                         }
                     }
@@ -96,11 +122,11 @@ struct SignInView: View {
                     .foregroundStyle(FieldTheme.bg)
                     .cornerRadius(12)
                 }
-                .disabled(busy || email.isEmpty || password.isEmpty)
+                .disabled(busy || !nameValid || !codeValid)
                 .padding(.top, 6)
 
-                Button(action: onCreateAccount) {
-                    Text("Connect with name and office code")
+                Button(action: onDashboardLogin) {
+                    Text("I already have a dashboard login")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(FieldTheme.accent)
                         .frame(maxWidth: .infinity)
@@ -116,5 +142,16 @@ struct SignInView: View {
             .padding(22)
         }
         .background(FieldTheme.bg.ignoresSafeArea())
+        .onAppear {
+            if let pending = auth.pendingJoinCode, !pending.isEmpty {
+                joinCode = pending
+                Task { await auth.previewOffice(joinCode: pending) }
+            }
+        }
+        .onReceive(auth.$pendingJoinCode) { pending in
+            guard let pending, !pending.isEmpty else { return }
+            joinCode = pending
+            Task { await auth.previewOffice(joinCode: pending) }
+        }
     }
 }

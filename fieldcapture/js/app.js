@@ -3,7 +3,7 @@
  *
  * Modes:
  *   ?token=<job-share>  → live MediaRecorder + proof upload (no office login)
- *   signed in           → same dashboard email/password, jobs from the office account
+ *   signed in           → name + office invite code, jobs from that office
  *   ?demo=1             → scripted demo only (explicit)
  */
 (function () {
@@ -82,7 +82,7 @@
     if (!root) return;
     if (!jobs.length) {
       root.innerHTML =
-        '<div class="erow"><span class="t"><b>Nothing on the schedule for today</b><span>Ask the office to start or schedule a job, then refresh.</span></span></div>';
+        '<div class="erow"><span class="t"><b>Nothing assigned yet</b><span>Ask the office to put you on a job, then refresh.</span></span></div>';
       return;
     }
     root.innerHTML = jobs
@@ -166,7 +166,7 @@
   function bootBlocked() {
     show('s-blocked');
     $('#blocked-msg').textContent =
-      'Use the same email and password as the Atmosphere dashboard.';
+      'Type your name and the office invite code from Atmosphere Settings.';
   }
 
   function showLoginError(message) {
@@ -229,23 +229,23 @@
     if (form) {
       form.addEventListener('submit', function (event) {
         event.preventDefault();
-        var email = ($('#login-email').value || '').trim();
-        var password = $('#login-password').value || '';
+        var fullName = ($('#login-name') && $('#login-name').value || '').trim();
+        var joinCode = ($('#login-code') && $('#login-code').value || '').trim().toUpperCase();
         var btn = $('#login-btn');
         showLoginError('');
         btn.disabled = true;
-        Core.loginWithPassword(email, password, API_BASE)
+        Core.joinCrew(fullName, joinCode, API_BASE)
           .then(function (res) {
             var session = res.session || {};
             if (!session.accessToken) {
-              throw new Error('Signed in, but no session came back. Confirm your email if Atmosphere asked you to.');
+              throw new Error('Connected, but no session came back. Try again in a moment.');
             }
             writeStoredSession(session.accessToken, session.refreshToken);
             return bootAccountSession();
           })
           .catch(function (err) {
             writeStoredSession(null, null);
-            showLoginError(err.message || 'Could not sign in. Use your dashboard email and password.');
+            showLoginError(err.message || 'Could not connect. Check your name and the office invite code.');
           })
           .then(function () {
             btn.disabled = false;
