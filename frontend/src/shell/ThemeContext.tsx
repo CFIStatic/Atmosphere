@@ -15,7 +15,7 @@ import {
 } from '../lib/theme';
 
 /**
- * Light / dark / system theming.
+ * Light / dark theming.
  *
  * The live console stores appearance in preferences (see lib/preferences.ts)
  * and applies it through lib/theme.ts. This provider is a thin React wrapper
@@ -24,10 +24,9 @@ import {
  */
 
 interface ThemeValue {
-  /** Stored preference, including `system`. */
   preference: ThemePreference;
-  /** @deprecated Use `preference` — kept for older callers that expect light|dark only. */
-  theme: 'light' | 'dark';
+  /** @deprecated Use `preference` — kept for older callers that expect light|dark. */
+  theme: ThemePreference;
   setTheme: (theme: ThemePreference) => void;
   toggle: () => void;
 }
@@ -39,17 +38,11 @@ function getSnapshot(): ThemePreference {
 }
 
 function getServerSnapshot(): ThemePreference {
-  return 'system';
+  return 'dark';
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const preference = useSyncExternalStore(subscribeTheme, getSnapshot, getServerSnapshot);
-  const resolved = preference === 'system'
-    ? (typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'dark'
-        : 'light')
-    : preference;
 
   const setTheme = useCallback((next: ThemePreference) => {
     setThemePreference(next);
@@ -58,11 +51,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const value = useMemo<ThemeValue>(
     () => ({
       preference,
-      theme: resolved,
+      theme: preference,
       setTheme,
       toggle: () => setTheme(cycleThemePreference(preference)),
     }),
-    [preference, resolved, setTheme],
+    [preference, setTheme],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
