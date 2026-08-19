@@ -343,12 +343,22 @@
   /* Elevate: come up through the atmosphere into the day.
      Dark ground, orange ember, bars slam up, whoosh, sky warms to paper. */
   .elevate {
-    position: absolute; inset: 0; z-index: 50;
+    position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 50;
     display: none; align-items: center; justify-content: center;
     background: #141311; overflow: hidden;
   }
   .elevate[data-on="1"] { display: flex; }
-  .elevate.play { animation: elevate-sky 2.55s ease both; }
+  html.elevating .top,
+  html.elevating .screen,
+  html.elevating .foot { visibility: hidden; }
+  .elevate-sky {
+    position: absolute; inset: 0; background: #141311; pointer-events: none;
+  }
+  .elevate.play .elevate-sky { animation: elevate-sky 2.8s linear both; }
+  .elevate.play.out .elevate-sky, .elevate.out {
+    background: var(--bg);
+    animation: none;
+  }
   .elevate.play.out, .elevate.out {
     background: var(--bg);
     animation: elevate-veil-out .55s ease both;
@@ -414,8 +424,8 @@
   }
   .elevate.play .elevate-sub { animation: elevate-sub .55s 1.18s ease both; }
   @keyframes elevate-sky {
-    0%, 22% { background: #141311; }
-    55% { background: #2A160C; }
+    0%, 58% { background: #141311; }
+    78% { background: #31180C; }
     100% { background: var(--bg); }
   }
   @keyframes elevate-bloom {
@@ -461,7 +471,7 @@
     to { opacity: 0; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .elevate, .elevate.play { background: var(--bg); animation: none; }
+    .elevate, .elevate.play, .elevate-sky, .elevate.play .elevate-sky { background: var(--bg); animation: none; }
     .elevate.play .eb, .elevate.play .elevate-word, .elevate.play .elevate-sub, .elevate.play .elevate-lockup {
       animation: none; opacity: 1; transform: none; letter-spacing: -0.02em; color: var(--ink);
       box-shadow: none;
@@ -605,6 +615,7 @@
 
   <!-- Connect → Today: come up through the atmosphere into the day. -->
   <div class="elevate" id="s-elevate" data-on="0" role="status" aria-live="polite" aria-hidden="true">
+    <span class="elevate-sky" aria-hidden="true"></span>
     <span class="elevate-bloom" aria-hidden="true"></span>
     <span class="elevate-whoosh a" aria-hidden="true"></span>
     <span class="elevate-whoosh b" aria-hidden="true"></span>

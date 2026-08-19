@@ -176,7 +176,7 @@ struct ElevateSplashView: View {
             withAnimation(.timingCurve(0.16, 1.15, 0.3, 1, duration: 1.4)) {
                 lift = true
             }
-            withAnimation(.easeInOut(duration: 2.2)) {
+            withAnimation(.easeInOut(duration: 2.8).delay(1.4)) {
                 sky = 1
             }
 
@@ -193,7 +193,7 @@ struct ElevateSplashView: View {
                 subOn = true
             }
 
-            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            try? await Task.sleep(nanoseconds: 1_650_000_000)
             withAnimation(.easeInOut(duration: 0.55)) {
                 veil = 0
             }

@@ -58,7 +58,8 @@
       el.classList.remove('play', 'out');
       void el.offsetWidth;
       el.classList.add('play');
-      var hold = reduce ? 400 : 2550;
+      document.documentElement.classList.add('elevating');
+      var hold = reduce ? 400 : 2800;
       var fade = reduce ? 200 : 550;
       window.setTimeout(function () {
         el.classList.add('out');
@@ -66,6 +67,7 @@
           el.setAttribute('data-on', '0');
           el.setAttribute('aria-hidden', 'true');
           el.classList.remove('play', 'out');
+          document.documentElement.classList.remove('elevating');
           resolve();
         }, fade);
       }, hold);
