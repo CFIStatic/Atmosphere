@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, type Org } from '../lib/api';
 import { loginHref, parseSignupIntent, resolveAuthRedirect } from '../lib/authRedirect';
 import { PLATFORM_HOME } from '../lib/platforms';
 import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
@@ -55,6 +55,7 @@ export function SignupPage() {
   const [mode, setMode] = useState<OrgMode>(orgIntent === 'join' ? 'join' : 'create');
   const [orgName, setOrgName] = useState('');
   const [joinCode, setJoinCode] = useState('');
+  const [createdOrg, setCreatedOrg] = useState<Org | null>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -150,6 +151,7 @@ export function SignupPage() {
   const passwordValid = password.length >= 8;
   const joinCodeValid = JOIN_CODE_RE.test(joinCode.trim());
   const orgStepValid = mode === 'join' ? joinCodeValid : orgName.trim().length >= 2;
+  const inviteOrg = createdOrg ?? membership?.org ?? null;
 
   function enterApp() {
     scheduleWorkVerificationTour();
@@ -181,6 +183,7 @@ export function SignupPage() {
     try {
       const already = await refreshMembership();
       if (already?.org) {
+        setCreatedOrg(already.org);
         await continueAfterWorkspace(mode === 'join');
         return;
       }
@@ -191,19 +194,19 @@ export function SignupPage() {
         true,
       );
 
-      if (mode === 'join') {
-        await api.joinOrg(joinCode.trim().toUpperCase(), finalRole, workType, usageIntents);
-      } else {
-        await api.createOrg(
-          orgName.trim(),
-          finalRole,
-          workType,
-          contractorType,
-          usageIntents,
-        );
-      }
+      const res =
+        mode === 'join'
+          ? await api.joinOrg(joinCode.trim().toUpperCase(), finalRole, workType, usageIntents)
+          : await api.createOrg(
+              orgName.trim(),
+              finalRole,
+              workType,
+              contractorType,
+              usageIntents,
+            );
 
       await refreshMembership();
+      setCreatedOrg(res.org);
       await continueAfterWorkspace(mode === 'join');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
@@ -234,6 +237,7 @@ export function SignupPage() {
         await refreshMembership();
       }
       if (res.membership?.org) {
+        setCreatedOrg(res.membership.org);
         await continueAfterWorkspace(false);
         return;
       }
@@ -267,6 +271,7 @@ export function SignupPage() {
           step={1}
           intent={orgIntent}
           title="Create your account"
+          subtitle="Name, email, and a password — then the workspace on the next screen."
         >
           {accountNotice && (
             <div
@@ -352,7 +357,7 @@ export function SignupPage() {
               disabled={!nameValid || !emailValid || !passwordValid || accountSubmitting}
               loading={accountSubmitting}
             >
-              {accountSubmitting ? 'Creating account…' : 'Continue'}
+              {accountSubmitting ? 'Creating account…' : 'Continue to workspace'}
             </PrimaryButton>
           </form>
         </SetupStepCard>
@@ -362,9 +367,10 @@ export function SignupPage() {
         <SetupStepCard
           step={1}
           intent={orgIntent}
-          title="You're signed in"
+          title="Account ready"
+          subtitle="Next you will name the workspace, or enter a join code if you were invited."
         >
-          <PrimaryButton onClick={() => goToStep(2)}>Continue</PrimaryButton>
+          <PrimaryButton onClick={() => goToStep(2)}>Continue to workspace</PrimaryButton>
         </SetupStepCard>
       )}
 
@@ -372,7 +378,12 @@ export function SignupPage() {
         <SetupStepCard
           step={2}
           intent={orgIntent}
-          title={mode === 'join' ? 'Join your team' : 'Your company'}
+          title={mode === 'join' ? 'Enter your join code' : 'Your workspace'}
+          subtitle={
+            mode === 'join'
+              ? 'The code from your invite links this login to the team workspace.'
+              : 'Name the company workspace, or enter a join code if you were invited.'
+          }
         >
           {error && <Alert>{error}</Alert>}
 
@@ -387,13 +398,13 @@ export function SignupPage() {
                 className={inputClass}
               />
               <p className="mt-2 text-xs text-ink-500">
-                Have an invite?{' '}
+                Were you invited?{' '}
                 <button
                   type="button"
                   onClick={() => setMode('join')}
                   className="font-medium text-brand-600 hover:text-brand-700"
                 >
-                  Enter it here
+                  Enter a join code
                 </button>
               </p>
             </Field>
@@ -409,13 +420,13 @@ export function SignupPage() {
                 className={`${inputClass} font-mono tracking-widest`}
               />
               <p className="mt-2 text-xs text-ink-500">
-                Starting a company?{' '}
+                Starting a new company?{' '}
                 <button
                   type="button"
                   onClick={() => setMode('create')}
                   className="font-medium text-brand-600 hover:text-brand-700"
                 >
-                  Name it here
+                  Name a workspace
                 </button>
               </p>
             </Field>
@@ -451,6 +462,7 @@ export function SignupPage() {
         <SetupBillingStep
           redirectTo={redirectTo}
           checkoutOutcome={checkoutParam}
+          nextLabel={mode === 'join' ? 'Enter Atmosphere' : 'Invite teammates'}
           onComplete={() => {
             if (mode === 'join') {
               enterApp();
@@ -465,23 +477,25 @@ export function SignupPage() {
         <SetupStepCard
           step={3}
           intent={orgIntent}
-          title="Payment"
+          title="Set up billing"
+          subtitle="Finish the workspace step first."
         >
-          <PrimaryButton onClick={() => goToStep(2)}>Back</PrimaryButton>
+          <PrimaryButton onClick={() => goToStep(2)}>Back to workspace</PrimaryButton>
         </SetupStepCard>
       )}
 
       {step === 4 && mode === 'create' && membership && (
-        <SetupInviteStep onComplete={enterApp} />
+        <SetupInviteStep orgName={inviteOrg?.name} onComplete={enterApp} />
       )}
 
       {step === 4 && mode === 'create' && !membership && (
         <SetupStepCard
           step={4}
           intent={orgIntent}
-          title="Invite your team"
+          title="Invite teammates"
+          subtitle="Finish the workspace step first."
         >
-          <PrimaryButton onClick={() => goToStep(2)}>Back</PrimaryButton>
+          <PrimaryButton onClick={() => goToStep(2)}>Back to workspace</PrimaryButton>
         </SetupStepCard>
       )}
 
@@ -489,19 +503,18 @@ export function SignupPage() {
         <SetupStepCard
           step={4}
           intent={orgIntent}
-          title="You're in"
+          title="You are connected"
+          subtitle={`Your account is on ${inviteOrg?.name ?? 'the team'}.`}
         >
           <div className="mt-7 flex justify-end">
-            <PrimaryButton onClick={enterApp}>Continue</PrimaryButton>
+            <PrimaryButton onClick={enterApp}>Enter Atmosphere</PrimaryButton>
           </div>
         </SetupStepCard>
       )}
 
-      {step === 1 && (
-        <p className="mt-6 text-center text-xs text-ink-400">
-          Your password is encrypted and never shown to this page.
-        </p>
-      )}
+      <p className="mt-6 text-center text-xs text-ink-400">
+        Passwords are encrypted, never stored in plain text, and never seen by this page.
+      </p>
     </SetupWizardShell>
   );
 }

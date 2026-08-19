@@ -56,12 +56,12 @@ describe('SignupPage', () => {
     expect(screen.getByLabelText('Your name')).toBeInTheDocument();
     expect(screen.getByLabelText('Work email')).toBeInTheDocument();
     expect(screen.getByLabelText('Password')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue to workspace' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Company name')).toBeNull();
     expect(screen.queryByLabelText('Join code')).toBeNull();
-    expect(screen.getByText('Company')).toBeInTheDocument();
-    expect(screen.getByText('Payment')).toBeInTheDocument();
-    expect(screen.getByText('Invite team')).toBeInTheDocument();
+    expect(screen.getByText('Your workspace')).toBeInTheDocument();
+    expect(screen.getByText('Set up billing')).toBeInTheDocument();
+    expect(screen.getByText('Invite teammates')).toBeInTheDocument();
     expect(screen.queryByText('You are in')).toBeNull();
   });
 });
