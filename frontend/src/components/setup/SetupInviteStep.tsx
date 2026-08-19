@@ -16,9 +16,11 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function SetupInviteStep({
   orgName,
   onComplete,
+  locked = false,
 }: {
   orgName?: string | null;
   onComplete: () => void;
+  locked?: boolean;
 }) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<MemberRole>('field_technician');
@@ -31,7 +33,7 @@ export function SetupInviteStep({
 
   async function sendInvite(event: FormEvent) {
     event.preventDefault();
-    if (!emailValid || busy) return;
+    if (!emailValid || busy || locked) return;
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -114,7 +116,7 @@ export function SetupInviteStep({
         </div>
         <button
           type="submit"
-          disabled={!emailValid || busy}
+          disabled={!emailValid || busy || locked}
           className="flex w-full items-center justify-center gap-2 rounded-lg border border-line bg-paper-0 px-4 py-3 font-semibold text-ink-800 transition hover:bg-paper-100 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:min-w-[180px]"
         >
           {busy && <SpinnerIcon className="animate-spin" width={18} height={18} />}

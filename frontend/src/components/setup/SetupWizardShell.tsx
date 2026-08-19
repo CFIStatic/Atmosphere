@@ -13,12 +13,14 @@ export function SetupWizardShell({
   intent = 'create',
   signInHref,
   headerAction,
+  onStepSelect,
   children,
 }: {
   step: SetupWizardStep;
   intent?: OrgSetupIntent;
   signInHref?: string;
   headerAction?: ReactNode;
+  onStepSelect?: (step: SetupWizardStep) => void;
   children: ReactNode;
 }) {
   const copy = setupWizardCopy(intent);
@@ -54,34 +56,37 @@ export function SetupWizardShell({
                   const done = item.step < step;
                   const active = item.step === step;
                   return (
-                    <li
-                      key={item.step}
-                      className={`flex gap-4 rounded-xl border px-4 py-4 transition ${
-                        active
-                          ? 'border-brand-300 bg-brand-50 shadow-sm'
-                          : 'border-line bg-paper-0'
-                      }`}
-                    >
-                      <span
-                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                          done
-                            ? 'bg-brand-500 text-ink-900'
-                            : active
+                    <li key={item.step}>
+                      <button
+                        type="button"
+                        aria-current={active ? 'step' : undefined}
+                        aria-label={item.title}
+                        onClick={() => onStepSelect?.(item.step)}
+                        className={`flex w-full gap-4 rounded-xl border px-4 py-4 text-left transition ${
+                          active
+                            ? 'border-brand-300 bg-brand-50 shadow-sm'
+                            : 'border-line bg-paper-0 hover:border-brand-200 hover:bg-brand-50/70'
+                        }`}
+                      >
+                        <span
+                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                            done || active
                               ? 'bg-brand-500 text-ink-900'
                               : 'bg-paper-100 text-ink-500'
-                        }`}
-                        aria-hidden="true"
-                      >
-                        {done ? <CheckIcon width={16} height={16} /> : item.step}
-                      </span>
-                      <div>
-                        <p className={`font-semibold ${active || done ? 'text-ink-900' : 'text-ink-700'}`}>
-                          {item.title}
-                        </p>
-                        <p className={`mt-1 text-sm ${active || done ? 'text-ink-600' : 'text-ink-500'}`}>
-                          {item.detail}
-                        </p>
-                      </div>
+                          }`}
+                          aria-hidden="true"
+                        >
+                          {done ? <CheckIcon width={16} height={16} /> : item.step}
+                        </span>
+                        <div>
+                          <p className={`font-semibold ${active || done ? 'text-ink-900' : 'text-ink-700'}`}>
+                            {item.title}
+                          </p>
+                          <p className={`mt-1 text-sm ${active || done ? 'text-ink-600' : 'text-ink-500'}`}>
+                            {item.detail}
+                          </p>
+                        </div>
+                      </button>
                     </li>
                   );
                 })}

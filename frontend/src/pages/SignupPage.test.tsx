@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../context/AuthContext', () => ({
@@ -63,5 +64,28 @@ describe('SignupPage', () => {
     expect(screen.getByText('Set up billing')).toBeInTheDocument();
     expect(screen.getByText('Invite teammates')).toBeInTheDocument();
     expect(screen.queryByText('You are in')).toBeNull();
+  });
+
+  it('switches the right-hand card when a left-rail step is clicked', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <SignupPage />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Your workspace' }));
+    expect(screen.getByRole('heading', { name: 'Your workspace' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Company name')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Your name')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Set up billing' }));
+    expect(screen.getByRole('heading', { name: 'Set up billing' })).toBeInTheDocument();
+    expect(screen.getByText(/\/ month/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Company name')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Invite teammates' }));
+    expect(screen.getByRole('heading', { name: 'Invite teammates' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Work email')).toBeInTheDocument();
   });
 });

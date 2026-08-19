@@ -253,9 +253,10 @@ export function SignupPage() {
     <SetupWizardShell
       step={step}
       intent={orgIntent}
-      signInHref={step === 1 ? signInHref : undefined}
+      onStepSelect={goToStep}
+      signInHref={!user ? signInHref : undefined}
       headerAction={
-        step > 1 ? (
+        user && step > 1 ? (
           <button
             type="button"
             onClick={() => logout()}
@@ -478,25 +479,29 @@ export function SignupPage() {
           step={3}
           intent={orgIntent}
           title="Set up billing"
-          subtitle="Finish the workspace step first."
+          subtitle="Add a payment method to activate the workspace."
         >
-          <PrimaryButton onClick={() => goToStep(2)}>Back to workspace</PrimaryButton>
+          <div className="mt-6 rounded-xl border border-line bg-paper-50 p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-500">
+              Work Verification
+            </p>
+            <p className="mt-2 text-3xl font-bold tracking-tight text-ink-900">
+              $599
+              <span className="text-base font-medium text-ink-500"> / month</span>
+            </p>
+          </div>
+          <div className="mt-7 flex justify-end">
+            <PrimaryButton onClick={() => goToStep(2)}>Continue to workspace</PrimaryButton>
+          </div>
         </SetupStepCard>
       )}
 
-      {step === 4 && mode === 'create' && membership && (
-        <SetupInviteStep orgName={inviteOrg?.name} onComplete={enterApp} />
-      )}
-
-      {step === 4 && mode === 'create' && !membership && (
-        <SetupStepCard
-          step={4}
-          intent={orgIntent}
-          title="Invite teammates"
-          subtitle="Finish the workspace step first."
-        >
-          <PrimaryButton onClick={() => goToStep(2)}>Back to workspace</PrimaryButton>
-        </SetupStepCard>
+      {step === 4 && mode === 'create' && (
+        <SetupInviteStep
+          orgName={inviteOrg?.name}
+          locked={!membership}
+          onComplete={membership ? enterApp : () => goToStep(2)}
+        />
       )}
 
       {step === 4 && mode === 'join' && (
