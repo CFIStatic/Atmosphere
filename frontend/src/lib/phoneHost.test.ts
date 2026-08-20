@@ -60,4 +60,14 @@ describe('phone home-screen manifests', () => {
     expect(script).toContain('/fieldcapture/');
     expect(script).toContain('5174');
   });
+
+  it('points native Field Capture at the production BFF so day films are read internally', () => {
+    const swift = readFileSync(
+      resolve(repoRoot, 'apps/field-ios/AtmosphereFieldCapture/Network/ApiConfig.swift'),
+      'utf8',
+    );
+    expect(swift).toContain('https://atmosphere-web-production.up.railway.app');
+    expect(swift).toContain('productionBffURL');
+    expect(swift).toContain('isLoopback(host), !isSimulator { return productionBffURL }');
+  });
 });
