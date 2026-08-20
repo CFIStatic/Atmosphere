@@ -47,7 +47,7 @@ export const WORK_VERIFICATION_TOUR: ProductTourDefinition = {
     {
       id: 'start-job',
       title: 'Start a job',
-      body: 'Before anyone films, set the job — address, optional scope, then invite Field Capture.',
+      body: 'Before anyone films, name the job, add the site, then invite Field Capture.',
       route: '/intake',
       target: 'nav-start-job',
       simulation: 'job-intake',

@@ -45,6 +45,8 @@ export function AddressAutocomplete({
   const sessionRef = useRef(newSessionToken());
   const blurTimer = useRef<number | null>(null);
   const pickGen = useRef(0);
+  /** Lookups only after the user types — a filled value must not reopen the list. */
+  const typedRef = useRef(false);
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
@@ -69,7 +71,7 @@ export function AddressAutocomplete({
   }, []);
 
   useEffect(() => {
-    if (chosen) {
+    if (chosen || !typedRef.current) {
       setOpen(false);
       setSuggestions([]);
       return;
@@ -119,6 +121,7 @@ export function AddressAutocomplete({
 
   async function pick(s: Suggestion) {
     pickGen.current += 1;
+    typedRef.current = false;
     setChosen(true);
     setOpen(false);
     setSuggestions([]);
@@ -176,11 +179,12 @@ export function AddressAutocomplete({
         autoComplete="street-address"
         placeholder={placeholder ?? 'Start typing a street address…'}
         onChange={(e) => {
+          typedRef.current = true;
           setChosen(false);
           onChange(e.target.value);
         }}
         onFocus={() => {
-          if (!chosen && suggestions.length) setOpen(true);
+          if (!chosen && typedRef.current && suggestions.length) setOpen(true);
         }}
         onBlur={() => {
           blurTimer.current = window.setTimeout(() => setOpen(false), 160);
