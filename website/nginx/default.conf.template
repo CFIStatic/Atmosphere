@@ -18,6 +18,7 @@ server {
 
   # site.js / site.css are not content-hashed. `immutable` for a year pinned
   # browsers to the old System/Light/Dark toggle after moon/sun landed.
+  # Re-upload after VVL3A03V so ?v=20260820-moon reaches the origin.
   location /assets/ {
     add_header Cache-Control "public, max-age=0, must-revalidate";
     try_files $uri =404;
