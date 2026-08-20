@@ -22,6 +22,7 @@ import {
   extractSparseFramesFromUrl,
   type CommandRunner,
 } from './sparseExtract.js';
+import { parseVisionActions, type VisionAction } from './proofActions.js';
 
 export type VideoSourceKind =
   | 'proof_of_work'
@@ -65,6 +66,7 @@ export type VideoDictationResult = {
   narrationSummary: string | null;
   model: string;
   frameCount: number;
+  actions: VisionAction[];
 };
 
 export function isLongFormVideo(durationSeconds: number): boolean {
@@ -162,7 +164,11 @@ export async function dictatePreparedFrames(
     'Cover: work performed, materials/tools visible, progression over time, safety/site conditions, and notable changes.',
     'Be concrete and chronological. Do not invent invoice amounts or people identities.',
     'If the clip is long, summarize the day in clear paragraphs with time cues when timestamps are given.',
-    'Reply with JSON only: {"narration":"...","summary":"..."} where summary is 2–4 sentences.',
+    'Also list every distinct work action visible in the stills.',
+    'action MUST be one of: locate, measure, mark, pick_up, carry, position, align, cut, drill, fasten, apply, connect, test, inspect, remove, clean, protect, correct, wait, other.',
+    'atSeconds MUST match a provided frame timestamp. Never invent off-camera work.',
+    'Reply with JSON only: {"narration":"...","summary":"...","actions":[{"atSeconds":number,"action":"remove","description":"...","object":"...","tool":"...","material":"...","objects":["..."],"confidence":0.0}]}',
+    'summary is 2–4 sentences. actions may be an empty array when nothing is being performed.',
   ].join(' ');
 
   const response = await anthropicClient().messages.create({
@@ -207,7 +213,11 @@ export async function dictatePreparedFrames(
     .filter((b: { type: string }) => b.type === 'text')
     .map((b: { type: string; text?: string }) => b.text ?? '')
     .join('\n');
-  const parsed = parseDictationJson(text);
+  const parsed = parseDictationPayload(
+    text,
+    frames.map((frame) => frame.atSeconds),
+    response.model,
+  );
   if (!parsed.narration) {
     throw new HttpError(502, 'Dictation model returned empty narration', 'empty_dictation');
   }
@@ -217,6 +227,7 @@ export async function dictatePreparedFrames(
     narrationSummary: parsed.summary,
     model: response.model,
     frameCount: frames.length,
+    actions: parsed.actions,
   };
 }
 
@@ -251,23 +262,30 @@ export function pickEvenlySpaced<T>(items: T[], max: number): T[] {
   return out;
 }
 
-function parseDictationJson(text: string): { narration: string; summary: string | null } {
+/** Exported for tests — dictation JSON must stay parseable without a live model. */
+export function parseDictationPayload(
+  text: string,
+  frames?: number[],
+  model?: string | null,
+): { narration: string; summary: string | null; actions: VisionAction[] } {
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
   if (start < 0 || end <= start) {
     const trimmed = text.trim();
-    return { narration: trimmed, summary: null };
+    return { narration: trimmed, summary: null, actions: [] };
   }
   try {
     const data = JSON.parse(text.slice(start, end + 1)) as {
       narration?: unknown;
       summary?: unknown;
+      actions?: unknown;
     };
     return {
       narration: String(data.narration ?? '').trim(),
       summary: String(data.summary ?? '').trim() || null,
+      actions: parseVisionActions(data.actions, { frames, model: model ?? null }),
     };
   } catch {
-    return { narration: text.trim(), summary: null };
+    return { narration: text.trim(), summary: null, actions: [] };
   }
 }

@@ -68,6 +68,7 @@ test('a grounded narration parses, and coverage is computed rather than trusted'
     parsed.coverage.map((c) => c.seen),
     [true, true, false, false],
   );
+  assert.ok(parsed.actions.some((a) => a.action === 'remove'));
 });
 
 test('entries pointing at frames that do not exist are dropped, and an ungrounded report is refused', () => {

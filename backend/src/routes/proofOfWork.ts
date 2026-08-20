@@ -35,6 +35,12 @@ import {
   describeRecordingWithoutScope,
   descriptionFindings,
 } from '../shared/workerActivityAnalysis.js';
+import {
+  actionLabels,
+  actionsFromLongWindows,
+  persistProofActions,
+  type VisionAction,
+} from '../shared/proofActions.js';
 
 /**
  * Proof of work: the endpoints.
@@ -58,7 +64,7 @@ const PROOF_SELECT =
   'id, party_id, work_date, phase, storage_path, byte_size, duration_seconds, content_hash, ' +
   'captured_at, received_at, lat, lon, accuracy_m, state, checks, ai_summary, ai_findings, ' +
   'ai_model, ai_material_change, analysis_status, analysis_error, analysed_at, ' +
-  'narration, narration_text, narration_status, narration_error, ' +
+  'narration, narration_text, narration_status, narration_error, actions, ' +
   'decided_at, decided_note, created_at';
 
 /** The row shape the verifier wants. */
@@ -724,6 +730,20 @@ async function ensureSparseFramesFromStorage(
   return prepared.frames.length;
 }
 
+async function finishProofActions(
+  admin: any,
+  job: NarrationJob,
+  actions: VisionAction[],
+  model?: string | null,
+): Promise<void> {
+  await persistProofActions(admin, {
+    orgId: job.orgId,
+    proofId: job.proofId,
+    actions,
+    model: model ?? null,
+  });
+}
+
 async function performNarration(admin: any, job: NarrationJob): Promise<void> {
   await admin.from('job_proofs').update({ narration_status: 'running' }).eq('id', job.proofId);
 
@@ -810,8 +830,10 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
         trade,
         narration: { coverage: [] },
         stageKinds: [],
+        actions: dictation.actions,
       }),
     });
+    await finishProofActions(admin, job, dictation.actions, dictation.model);
     await recordAccess(admin, {
       orgId: job.orgId,
       jobId: job.jobId,
@@ -844,14 +866,17 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
     ai_findings: {
       scopeCrossRef: true,
       scopeTitles,
+      actions: narration.actions,
     },
     labels: labelsForProof({
       phase: job.phase,
       trade,
       narration: { coverage: narration.coverage },
       stageKinds: steps.map((s) => s.kind),
+      actions: narration.actions,
     }),
   });
+  await finishProofActions(admin, job, narration.actions, narration.model);
 
   await recordAccess(admin, {
     orgId: job.orgId,
@@ -914,8 +939,11 @@ async function performLongFormAnalysis(
       narration_status: 'done',
       narration_error: null,
       narrated_at: new Date().toISOString(),
-      labels: [job.phase, trade || null, 'workday', 'no_scope'].filter(Boolean).slice(0, 24),
+      labels: [job.phase, trade || null, 'workday', 'no_scope', ...actionLabels(dictation.actions)]
+        .filter(Boolean)
+        .slice(0, 24),
     });
+    await finishProofActions(admin, job, dictation.actions, dictation.model);
     await recordAccess(admin, {
       orgId: job.orgId,
       jobId: job.jobId,
@@ -957,6 +985,8 @@ async function performLongFormAnalysis(
     ...new Set(result.windows.flatMap((w) => w.reading?.activity ?? [])),
   ].slice(0, 12);
 
+  const actions = actionsFromLongWindows(result.windows, { model: result.report.model });
+
   await write({
     ai_summary: result.report.narrative.slice(0, 500),
     ai_findings: {
@@ -977,6 +1007,7 @@ async function performLongFormAnalysis(
       timeline,
       windowsTotal: result.windows.length,
       windowsRead: result.windows.filter((w) => w.reading).length,
+      actions,
     },
     ai_model: result.report.model,
     analysis_status: 'done',
@@ -985,8 +1016,11 @@ async function performLongFormAnalysis(
     narration_status: 'done',
     narration_error: null,
     narrated_at: new Date().toISOString(),
-    labels: [job.phase, trade || null, 'workday', ...activities].filter(Boolean).slice(0, 24),
+    labels: [job.phase, trade || null, 'workday', ...activities, ...actionLabels(actions)]
+      .filter(Boolean)
+      .slice(0, 24),
   });
+  await finishProofActions(admin, job, actions, result.report.model);
 
   await recordAccess(admin, {
     orgId: job.orgId,
