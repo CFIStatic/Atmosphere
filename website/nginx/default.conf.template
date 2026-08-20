@@ -16,8 +16,15 @@ server {
     return 200 'ok\n';
   }
 
+  # site.js / site.css are not content-hashed. `immutable` for a year pinned
+  # browsers to the old System/Light/Dark toggle after moon/sun landed.
   location /assets/ {
-    add_header Cache-Control "public, max-age=31536000, immutable";
+    add_header Cache-Control "public, max-age=0, must-revalidate";
+    try_files $uri =404;
+  }
+
+  location ~* \.html$ {
+    add_header Cache-Control "no-store";
     try_files $uri =404;
   }
 
@@ -37,6 +44,7 @@ server {
   }
 
   location / {
+    add_header Cache-Control "no-store";
     try_files $uri $uri/ =404;
   }
 }
