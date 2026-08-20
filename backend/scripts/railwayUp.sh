@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Upload backend/ to the Atmosphere Railway service and wait until the
+# Upload the current directory to a Railway service and wait until the
 # replica is live. `--ci` exits after ~8 minutes while the Metal builder is
 # still queued, which is what produced "Deployment failed to build" with no
 # Docker layers. Wait for the full deploy instead, and retry a stuck builder.
+# RAILWAY_SERVICE selects the target (Atmosphere, Atmosphere-web, …).
 set -u
 
 service="${RAILWAY_SERVICE:-Atmosphere}"
