@@ -57,7 +57,6 @@ export function SignupPage() {
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [billingGate, setBillingGate] = useState<'loading' | 'pending' | 'complete'>('loading');
 
   const checkoutOutcome = searchParams.get('checkout');
   const checkoutParam =
@@ -96,10 +95,7 @@ export function SignupPage() {
   }, [step, mode, fullName, email, orgName]);
 
   useEffect(() => {
-    if (loading || !user || !membership) {
-      if (!membership) setBillingGate('complete');
-      return;
-    }
+    if (loading || !user || !membership) return;
 
     let cancelled = false;
     (async () => {
@@ -107,13 +103,12 @@ export function SignupPage() {
         const status = await api.getBillingOnboarding();
         if (cancelled) return;
         const needsBilling = status.required && !status.complete;
-        setBillingGate(needsBilling ? 'pending' : 'complete');
         const stepParam = searchParams.get('step');
         if (needsBilling && (stepParam === '3' || stepParam === '4' || stepParam === '5' || checkoutParam)) {
           setStep(3);
         }
       } catch {
-        if (!cancelled) setBillingGate('complete');
+        /* stay on the current step */
       }
     })();
 
@@ -146,7 +141,6 @@ export function SignupPage() {
     try {
       const status = await api.getBillingOnboarding();
       const needsBilling = status.required && !status.complete;
-      setBillingGate(needsBilling ? 'pending' : 'complete');
       if (needsBilling) {
         goToStep(3);
         return;
