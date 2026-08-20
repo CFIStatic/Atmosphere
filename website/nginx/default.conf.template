@@ -16,11 +16,9 @@ server {
     return 200 'ok\n';
   }
 
-  # site.js / site.css are not content-hashed. `immutable` for a year pinned
-  # browsers to the old System/Light/Dark toggle after moon/sun landed.
-  # Re-upload after VVL3A03V so ?v=20260820-moon reaches the origin.
+  # Query-string cache-bust (?v=…) on HTML means these can be immutable again.
   location /assets/ {
-    add_header Cache-Control "public, max-age=0, must-revalidate";
+    add_header Cache-Control "public, max-age=31536000, immutable";
     try_files $uri =404;
   }
 
