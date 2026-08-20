@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, ApiError } from '../lib/api';
 import { loginHref, parseSignupIntent, resolveAuthRedirect } from '../lib/authRedirect';
@@ -122,18 +122,12 @@ export function SignupPage() {
     };
   }, [loading, user, membership, searchParams, checkoutParam]);
 
-  if (loading || (user && membership && billingGate === 'loading' && step === 1)) {
+  if (loading) {
     return (
       <div className="grid min-h-screen place-items-center bg-paper-100 text-brand-600">
         <SpinnerIcon className="animate-spin" width={28} height={28} />
       </div>
     );
-  }
-
-  // Returning visitors who already finished setup should not restart it.
-  // Stay on steps 2–3 while this session is still walking the wizard.
-  if (user && membership && billingGate === 'complete' && step === 1 && !accountSubmitting) {
-    return <Navigate to={redirectTo} replace />;
   }
 
   const signInHref = loginHref(redirectTo);
@@ -209,6 +203,9 @@ export function SignupPage() {
 
     setAccountSubmitting(true);
     try {
+      if (user) {
+        await logout();
+      }
       const res = await signup(email.trim(), password);
       if (res.needsEmailConfirmation) {
         if (res.user?.emailConfirmed) {
@@ -244,7 +241,7 @@ export function SignupPage() {
       onStepSelect={goToStep}
       signInHref={!user ? signInHref : undefined}
       headerAction={
-        user && step > 1 ? (
+        user ? (
           <button
             type="button"
             onClick={() => logout()}
@@ -255,13 +252,27 @@ export function SignupPage() {
         ) : undefined
       }
     >
-      {step === 1 && (!user || accountSubmitting) && (
+      {step === 1 && (
         <SetupStepCard
           step={1}
           intent={orgIntent}
           title="Create your account"
           subtitle="Name, email, and a password — then the workspace on the next screen."
         >
+          {user?.email && !accountSubmitting && (
+            <p className="mt-6 text-sm text-ink-600">
+              You&apos;re signed in as <span className="font-medium text-ink-900">{user.email}</span>.
+              Creating a new account will switch you to that login, or{' '}
+              <button
+                type="button"
+                onClick={() => logout()}
+                className="font-semibold text-brand-600 underline underline-offset-2 hover:text-brand-700"
+              >
+                sign out
+              </button>{' '}
+              first.
+            </p>
+          )}
           {accountNotice && (
             <div
               role="status"
@@ -349,17 +360,6 @@ export function SignupPage() {
               {accountSubmitting ? 'Creating account…' : 'Continue to workspace'}
             </PrimaryButton>
           </form>
-        </SetupStepCard>
-      )}
-
-      {step === 1 && user && !accountSubmitting && (
-        <SetupStepCard
-          step={1}
-          intent={orgIntent}
-          title="Account ready"
-          subtitle="Next you will name the workspace, or enter a join code if you were invited."
-        >
-          <PrimaryButton onClick={() => goToStep(2)}>Continue to workspace</PrimaryButton>
         </SetupStepCard>
       )}
 

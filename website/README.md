@@ -166,8 +166,10 @@ the office app is hosted on Railway (see `docs/production.md`). Set the
 stamps it onto every page as `<html data-app-origin>`; `site.js` then:
 
 - rewrites every **Sign in** CTA to `{origin}/login` and every **Get
-  started / Create your organization** CTA to `{origin}/login?mode=signup`
-  (the app's login page opens the create-account form for that deep link);
+  started / Create your organization** CTA to `{origin}/signup`
+  (the app's create-account wizard). A signed-in visitor still lands on
+  that form instead of their dashboard, so the link can create a new
+  account from the marketing site;
 - turns the sign-in and sign-up pages' forms into a handoff — submitting
   forwards to the app with the typed email prefilled (never the password).
 
