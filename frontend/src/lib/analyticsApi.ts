@@ -7,6 +7,8 @@
  * the totals in the spreadsheet.
  */
 
+import { backendUnreachableMessage } from './api';
+
 export type AnalyticsScope = 'investor' | 'internal';
 
 export interface AnalyticsAccess {
@@ -224,11 +226,7 @@ async function request<T>(path: string): Promise<T> {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch {
-    throw new AnalyticsError(
-      0,
-      'Atmosphere API is not running. Start it with `cd backend && npm run dev` (port 4000), then try again.',
-      'network_error',
-    );
+    throw new AnalyticsError(0, backendUnreachableMessage(), 'network_error');
   }
 
   const text = await res.text();
@@ -252,9 +250,7 @@ async function request<T>(path: string): Promise<T> {
     throw new AnalyticsError(
       res.status,
       explicit ||
-        (unreachable
-          ? 'Atmosphere API is not running. Start it with `cd backend && npm run dev` (port 4000), then try again.'
-          : `Request failed (${res.status})`),
+        (unreachable ? backendUnreachableMessage() : `Request failed (${res.status})`),
       (typeof body.code === 'string' && body.code) ||
         (unreachable ? 'backend_unreachable' : 'error'),
     );
