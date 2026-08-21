@@ -51,9 +51,8 @@ describe('Railway internal-site image', () => {
     expect(health).toBeGreaterThan(-1);
     expect(apiHealth).toBeGreaterThan(-1);
     expect(apiProxy).toBeGreaterThan(apiHealth);
-    expect(nginx).toContain('proxy_pass $api_upstream');
-    expect(nginx).toMatch(/resolver \$\{NGINX_RESOLVER\} valid=30s ipv6=on;/);
-    expect(nginx).not.toMatch(/resolver[^\n]*ipv4=/);
+    expect(nginx).toContain('proxy_pass ${API_UPSTREAM}');
+    expect(nginx).not.toContain('resolver');
     expect(nginx).toContain('return 200 \'ok\'');
     expect(nginx).toContain('proxy_set_header Origin');
     expect(nginx).toContain('error_page 502 503 504 = @api_down');
@@ -79,8 +78,8 @@ describe('Railway internal-site image', () => {
     expect(script).toContain('API_UPSTREAM');
     expect(script).toContain('127.0.0.1');
     expect(script).toContain('https://');
-    expect(script).toContain('NGINX_RESOLVER');
     expect(script).not.toContain('wget');
+    expect(script).not.toContain('NGINX_RESOLVER');
     expect(dockerfile).not.toMatch(/API_UPSTREAM=http:\/\/127\.0\.0\.1/);
   });
 
