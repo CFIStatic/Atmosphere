@@ -44,19 +44,11 @@ try {
   await page.getByRole('heading', { name: 'Start a job' }).waitFor({ timeout: 15_000 });
   await page.screenshot({ path: `${OUT}/01-intake.png` });
 
-  // Address + sample scope → review
+  await page.getByLabel('Name').fill(uniqueTitle);
   const address = page.getByPlaceholder(/Start typing a street address|Meridian Ave/i).first();
   await address.fill('1842 Meridian Ave, Austin, TX 78702');
-  await page.getByRole('button', { name: /Use a sample scope/i }).click();
-  await page.getByRole('button', { name: /^Next$/i }).click();
-
-  await page.getByRole('heading', { name: /Review before anyone sees it/i }).waitFor({
-    timeout: 15_000,
-  });
-  // Make the job title unique so we can assert it later.
-  const titleInput = page.locator('label:has-text("Job title") input').first();
-  await titleInput.fill(uniqueTitle);
-  await page.screenshot({ path: `${OUT}/02-review.png` });
+  await page.getByRole('button', { name: /Use a sample note/i }).click();
+  await page.screenshot({ path: `${OUT}/02-intake-filled.png` });
 
   const approve = page.getByRole('button', { name: /Approve & invite|Publish brief/i });
   await approve.click();
@@ -85,7 +77,7 @@ try {
   }
 
   console.log('PASS: Approve & invite opened the job record with', uniqueTitle);
-  console.log('screenshots:', `${OUT}/01-intake.png`, `${OUT}/02-review.png`, `${OUT}/03-job-progress.png`);
+  console.log('screenshots:', `${OUT}/01-intake.png`, `${OUT}/02-intake-filled.png`, `${OUT}/03-job-progress.png`);
   if (errors.length) {
     console.log('console noise (non-fatal):', errors.slice(0, 5));
   }
