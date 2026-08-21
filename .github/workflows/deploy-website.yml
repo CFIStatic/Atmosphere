@@ -10,8 +10,10 @@ name: Deploy website
 #   Config File = /website/railway.toml
 # This job copies that file over the upload root for `railway up`, but GitHub
 # autodeploys on the service read the real repo — without the setting they
-# resolve the backend's /railway.toml and fail the healthcheck
-# (see docs/production.md → "If the website service fails its healthcheck").
+# resolve the backend's /railway.toml (which used to crash-loop nginx on
+# `node dist/index.js` and fail the healthcheck; the root file no longer sets
+# a startCommand, so that misresolution now boots nginx and survives).
+# See docs/production.md → "If the website service fails its healthcheck".
 on:
   push:
     branches:

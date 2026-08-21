@@ -23,8 +23,17 @@ The marketing site (`website/`) deploys to the Railway service `website`
 | Office console | `/frontend/railway.toml` | `frontend/Dockerfile` | `frontend/**`, `verifier/**`, `fieldcapture/**`, `frontend/Dockerfile` |
 | Marketing site (`website`) | `/website/railway.toml` | `website/Dockerfile` | `website/**`, `.dockerignore`, `.github/workflows/deploy-website.yml` |
 
-Both services use **Root Directory `/`**. The console must not use `/frontend`
-as root — Vite copies sibling `verifier/` and `fieldcapture/` into the build.
+All three services use **Root Directory `/`**. The console must not use
+`/frontend` as root — Vite copies sibling `verifier/` and `fieldcapture/`
+into the build — and `website/Dockerfile` also copies from the repo root.
+
+> **Heads-up:** Railway has deprecated config-as-code files. Existing
+> (legacy) services keep reading their `railway.toml` until the hard cutoff
+> on **2026-12-01**; new services cannot opt in at all. Before the cutoff,
+> mirror each service's settings above (start command, healthcheck path,
+> watch paths, Dockerfile path) into its dashboard Settings, or migrate to
+> Railway's Infrastructure as Code (`.railway/railway.ts`). See
+> https://docs.railway.com/infrastructure-as-code.
 
 ### Step 0 — GitHub App (once)
 
@@ -186,7 +195,7 @@ Compose sketch: `docker compose up --build` (see root `docker-compose.yml`). Sam
 
 ## Host the office app on Railway
 
-The marketing site stays on GitHub Pages. The **product** (office console, Verifier, Field Capture) is a second Railway service next to the BFF, same project.
+The marketing site ships separately to the Railway `website` service (see `.github/workflows/deploy-website.yml`). The **product** (office console, Verifier, Field Capture) is a second Railway service next to the BFF, same project.
 
 Same-origin `/api` is the point: session cookies stay `SameSite=Lax`, Field Capture does not need `?api=`, and `VITE_API_BASE_URL` stays empty.
 
