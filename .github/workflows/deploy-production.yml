@@ -97,6 +97,7 @@ jobs:
           BACKUP_ENABLED: 'false'
           ALLOW_MOCK_DRIVERS: 'true'
           HOST: '0.0.0.0'
+          PORT: '4000'
           FRONTEND_ORIGIN: ${{ vars.FRONTEND_ORIGIN || 'https://atmosphere-web-production.up.railway.app,https://app.atmosphereteam.com,https://melodious-inspiration-production-5ad9.up.railway.app' }}
           SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
