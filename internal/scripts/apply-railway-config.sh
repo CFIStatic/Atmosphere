@@ -7,7 +7,9 @@
 # Safe to re-run. Does not deploy.
 set -uo pipefail
 
-service="${RAILWAY_INTERNAL_SERVICE:-Internal Growth Metrics}"
+here="$(cd "$(dirname "$0")/.." && pwd)"
+repo="$(cd "$here/.." && pwd)"
+service="${RAILWAY_INTERNAL_SERVICE:-${RAILWAY_SERVICE:-Internal Growth Metrics}}"
 project="${RAILWAY_PROJECT_ID:-d0af58bd-0eec-431d-bad3-4da4b4a2e2ae}"
 environment="${RAILWAY_ENVIRONMENT:-production}"
 dockerfile_path="internal/Dockerfile"
@@ -21,6 +23,11 @@ message="Apply Internal Growth Metrics config from internal/railway.json"
 case "$service" in
   Atmosphere-internal|Atmosphere-Internal) service="Internal Growth Metrics" ;;
 esac
+
+if resolved="$(node "$repo/backend/scripts/resolveRailwayService.mjs" "$service")"; then
+  echo "Resolved Railway service '$service' to $resolved"
+  service="$resolved"
+fi
 
 echo "Applying internal site config to service='$service' project='$project' environment='$environment'"
 
@@ -51,7 +58,6 @@ printf '%s' "$dockerfile_path" | railway variable set RAILWAY_DOCKERFILE_PATH \
   --project "$project" --environment "$environment" \
   || echo "warn: could not set RAILWAY_DOCKERFILE_PATH"
 
-here="$(cd "$(dirname "$0")/.." && pwd)"
 if [ -f "$here/api.upstream" ]; then
   tr -d '\n' < "$here/api.upstream" | railway variable set API_UPSTREAM \
     --stdin --skip-deploys --service "$service" \

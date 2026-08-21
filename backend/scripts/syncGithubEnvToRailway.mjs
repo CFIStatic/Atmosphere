@@ -7,6 +7,7 @@
  * stdin is used so JWT / base64 secrets that contain `=` are not split.
  */
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const KEYS = [
   'NODE_ENV',
@@ -78,10 +79,23 @@ function resolveRailwayService(name) {
     'Atmosphere-internal': 'Internal Growth Metrics',
     'Atmosphere-web': 'Login & Dashboard',
   };
-  return aliases[name] ?? name;
+  const wanted = aliases[name] ?? name;
+  const resolved = spawnSync(
+    process.execPath,
+    [fileURLToPath(new URL('./resolveRailwayService.mjs', import.meta.url)), wanted],
+    {
+      encoding: 'utf8',
+      env: process.env,
+    },
+  );
+  if (resolved.status === 0 && resolved.stdout?.trim()) {
+    return resolved.stdout.trim();
+  }
+  return wanted;
 }
 
 const service = resolveRailwayService(process.env.RAILWAY_SERVICE?.trim() || 'Atmosphere APIs');
+console.log(`Railway: targeting service ${service}`);
 
 for (const name of KEYS) {
   const value = process.env[name]?.trim();

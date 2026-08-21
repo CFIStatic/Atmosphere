@@ -7,8 +7,9 @@
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
-# Patterns are matched from the repo root even when the service root is `backend`.
-watchPatterns = ["backend/**"]
+# Patterns are matched from the GitHub repo root on Autodeploy, and from the
+# upload root on `railway up`. Include both so a backend/ cwd upload still builds.
+watchPatterns = ["backend/**", "src/**", "package.json", "package-lock.json", "Dockerfile", "tsconfig.json", "railway.toml"]
 
 [deploy]
 healthcheckPath = "/api/health"

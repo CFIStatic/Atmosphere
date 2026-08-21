@@ -10,6 +10,7 @@
 # Treat that as retryable instead of failing the GitHub job on the first pause.
 set -u
 
+here="$(cd "$(dirname "$0")" && pwd)"
 service="${RAILWAY_SERVICE:-Atmosphere APIs}"
 project="${RAILWAY_PROJECT_ID:-d0af58bd-0eec-431d-bad3-4da4b4a2e2ae}"
 environment="${RAILWAY_ENVIRONMENT:-production}"
@@ -22,9 +23,14 @@ case "$service" in
   Atmosphere-web) service="Login & Dashboard" ;;
 esac
 
+if resolved="$(node "$here/resolveRailwayService.mjs" "$service")"; then
+  echo "Resolved Railway service '$service' to $resolved"
+  service="$resolved"
+fi
+
 echo "Deploying Railway service=$service project=$project environment=$environment"
 
-railway status --project "$project" --environment "$environment" --service "$service" || true
+railway status --project "$project" --environment "$environment" || true
 
 dump_build_logs() {
   echo "---- railway build logs (latest) ----"

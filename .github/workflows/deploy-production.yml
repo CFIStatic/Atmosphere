@@ -67,9 +67,6 @@ jobs:
     name: Sync Keys → Railway and deploy backend
     runs-on: ubuntu-latest
     environment: Keys
-    defaults:
-      run:
-        working-directory: backend
     steps:
       - uses: actions/checkout@v4
 
@@ -124,12 +121,14 @@ jobs:
           ANTHROPIC_MODEL: claude-sonnet-5
           VERIFICATION_PRIMARY_MODEL: gemini-2.5-flash
           VERIFICATION_ESCALATION_MODEL: claude-sonnet-5
+        working-directory: backend
         run: node scripts/syncGithubEnvToRailway.mjs
 
       - name: Ensure Resend can send as hello@invites.jettx.ai
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY || vars.RESEND_API_KEY }}
           RESEND_SENDING_DOMAIN: invites.jettx.ai
+        working-directory: backend
         run: node scripts/ensureResendSendingDomain.mjs
 
       - name: Repair memory_events job FK on Supabase
@@ -141,6 +140,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.SUPABASE_DB_URL }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD || secrets.POSTGRES_PASSWORD }}
+        working-directory: backend
         run: node scripts/applyMemoryCaptureRepair.mjs
 
       - name: Deploy backend
@@ -150,9 +150,20 @@ jobs:
           RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere APIs' }}
           RAILWAY_ENVIRONMENT: production
         run: |
-          echo "Deploying Railway service: $RAILWAY_SERVICE"
-          chmod +x scripts/railwayUp.sh
-          scripts/railwayUp.sh
+          # Upload the repo root so root railway.toml watchPatterns (backend/**)
+          # match. `railway up` from backend/ previously skipped the Docker
+          # build ("no changes detected in watch paths") and left production
+          # on an image without /api/auth/internal-challenge.
+          echo "Deploying Railway service: $RAILWAY_SERVICE from repo root"
+          chmod +x backend/scripts/railwayUp.sh
+          if service_id="$(node backend/scripts/resolveRailwayService.mjs "$RAILWAY_SERVICE")"; then
+            echo "Resolved '$RAILWAY_SERVICE' to $service_id"
+            printf '%s' 'Dockerfile' | railway variable set RAILWAY_DOCKERFILE_PATH \
+              --stdin --skip-deploys --service "$service_id" \
+              --project "$RAILWAY_PROJECT_ID" --environment production || true
+            export RAILWAY_SERVICE="$service_id"
+          fi
+          backend/scripts/railwayUp.sh
 
   app:
     name: Deploy office app
@@ -247,20 +258,22 @@ jobs:
           case "$service" in
             Atmosphere-internal|Atmosphere-Internal) service="Internal Growth Metrics" ;;
           esac
-          export RAILWAY_INTERNAL_SERVICE="$service"
           export RAILWAY_PROJECT_ID="$project"
           export RAILWAY_ENVIRONMENT=production
-          railway link --project "$project" --environment production --service "$service" \
+          railway status --project "$project" --environment production || railway status || true
+          service_id="$(node backend/scripts/resolveRailwayService.mjs "$service")"
+          echo "Resolved '$service' to $service_id"
+          export RAILWAY_INTERNAL_SERVICE="$service_id"
+          export RAILWAY_SERVICE="$service_id"
+          railway link --project "$project" --environment production --service "$service_id" \
             || railway link --project "$project" --environment production \
             || railway link --project "$project" \
             || true
-          railway status --project "$project" --environment production || railway status || true
-          chmod +x internal/scripts/apply-railway-config.sh
+          chmod +x internal/scripts/apply-railway-config.sh backend/scripts/railwayUp.sh
           internal/scripts/apply-railway-config.sh
-          tr -d '\n' < internal/api.upstream | railway variable set API_UPSTREAM --stdin --skip-deploys --service "$service"
+          tr -d '\n' < internal/api.upstream | railway variable set API_UPSTREAM \
+            --stdin --skip-deploys --service "$service_id" \
+            --project "$project" --environment production
           cp internal/railway.toml railway.toml
           cp internal/railway.json railway.json
-          export RAILWAY_SERVICE="$service"
-          export RAILWAY_PROJECT_ID="$project"
-          chmod +x backend/scripts/railwayUp.sh
           backend/scripts/railwayUp.sh
