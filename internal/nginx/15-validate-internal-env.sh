@@ -12,23 +12,24 @@ fi
 
 if [ -z "${API_UPSTREAM:-}" ]; then
   log "API_UPSTREAM is required."
-  log "set API_UPSTREAM=http://atmosphere.railway.internal:4000"
+  log "set API_UPSTREAM=https://atmosphere-production.up.railway.app"
   exit 1
 fi
 
 case "${API_UPSTREAM}" in
   http://127.0.0.1:*|http://localhost:*|http://[::1]:*)
     log "API_UPSTREAM=${API_UPSTREAM} is loopback inside this container."
-    log "set API_UPSTREAM=http://atmosphere.railway.internal:4000"
+    log "set API_UPSTREAM=https://atmosphere-production.up.railway.app"
     exit 1
     ;;
+  https://atmosphere-production.up.railway.app|https://atmosphere-production.up.railway.app/)
+    ;;
   https://*)
-    log "API_UPSTREAM must be private HTTP, not ${API_UPSTREAM}."
-    log "the public https BFF URL hairpins and 502s /api."
+    log "API_UPSTREAM must be the Atmosphere APIs public https host or private HTTP, not ${API_UPSTREAM}."
     exit 1
     ;;
   *'${{'*|http://:*)
-    API_UPSTREAM="http://atmosphere.railway.internal:4000"
+    API_UPSTREAM="https://atmosphere-production.up.railway.app"
     log "replaced unusable API_UPSTREAM template with ${API_UPSTREAM}"
     ;;
 esac

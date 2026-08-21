@@ -272,7 +272,7 @@ jobs:
             || true
           chmod +x internal/scripts/apply-railway-config.sh backend/scripts/railwayUp.sh
           internal/scripts/apply-railway-config.sh
-          upstream="$(node backend/scripts/resolveApiUpstream.mjs 'Atmosphere APIs')"
+          upstream="https://atmosphere-production.up.railway.app"
           echo "API_UPSTREAM=$upstream"
           printf '%s' "$upstream" | railway variable set API_UPSTREAM \
             --stdin --skip-deploys --service "$service_id" \

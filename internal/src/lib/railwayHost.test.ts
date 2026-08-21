@@ -59,12 +59,11 @@ describe('Railway internal-site image', () => {
     expect(nginx).toContain('backend_unreachable');
   });
 
-  it('points API_UPSTREAM at the Atmosphere private domain, not the public URL', () => {
+  it('points API_UPSTREAM at Atmosphere APIs, not loopback', () => {
     const upstream = read('api.upstream').trim();
-    expect(upstream).toMatch(/^http:\/\/atmosphere\.railway\.internal:\d+$/);
-    expect(upstream).not.toContain('https://');
-    expect(upstream).not.toContain('up.railway.app');
+    expect(upstream).toBe('https://atmosphere-production.up.railway.app');
     expect(upstream).not.toContain('127.0.0.1');
+    expect(upstream).not.toContain('localhost');
   });
 
   it('validates PORT and API_UPSTREAM before nginx binds', () => {
