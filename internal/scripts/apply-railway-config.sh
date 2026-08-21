@@ -58,8 +58,15 @@ printf '%s' "$dockerfile_path" | railway variable set RAILWAY_DOCKERFILE_PATH \
   --project "$project" --environment "$environment" \
   || echo "warn: could not set RAILWAY_DOCKERFILE_PATH"
 
-if [ -f "$here/api.upstream" ]; then
-  tr -d '\n' < "$here/api.upstream" | railway variable set API_UPSTREAM \
+upstream=""
+if resolved_up="$(node "$repo/backend/scripts/resolveApiUpstream.mjs" "Atmosphere APIs")"; then
+  upstream="$resolved_up"
+fi
+if [ -z "$upstream" ] && [ -f "$here/api.upstream" ]; then
+  upstream="$(tr -d '\n' < "$here/api.upstream")"
+fi
+if [ -n "$upstream" ]; then
+  printf '%s' "$upstream" | railway variable set API_UPSTREAM \
     --stdin --skip-deploys --service "$service" \
     --project "$project" --environment "$environment" \
     || echo "warn: could not set API_UPSTREAM"

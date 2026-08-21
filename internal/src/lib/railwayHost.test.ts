@@ -51,7 +51,8 @@ describe('Railway internal-site image', () => {
     expect(health).toBeGreaterThan(-1);
     expect(apiHealth).toBeGreaterThan(-1);
     expect(apiProxy).toBeGreaterThan(apiHealth);
-    expect(nginx).toContain('proxy_pass ${API_UPSTREAM}');
+    expect(nginx).toContain('proxy_pass $api_upstream');
+    expect(nginx).toContain('resolver ${NGINX_RESOLVER}');
     expect(nginx).toContain('return 200 \'ok\'');
     expect(nginx).toContain('proxy_set_header Origin');
     expect(nginx).toContain('error_page 502 503 504 = @api_down');
@@ -60,9 +61,10 @@ describe('Railway internal-site image', () => {
 
   it('points API_UPSTREAM at the Atmosphere private domain, not the public URL', () => {
     const upstream = read('api.upstream').trim();
-    expect(upstream).toBe(
-      'http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}',
-    );
+    expect(upstream).toMatch(/^http:\/\/atmosphere-apis\.railway\.internal:\d+$/);
+    expect(upstream).not.toContain('https://');
+    expect(upstream).not.toContain('up.railway.app');
+    expect(upstream).not.toContain('127.0.0.1');
   });
 
   it('validates PORT and API_UPSTREAM before nginx binds', () => {
@@ -76,6 +78,8 @@ describe('Railway internal-site image', () => {
     expect(script).toContain('API_UPSTREAM');
     expect(script).toContain('127.0.0.1');
     expect(script).toContain('https://');
+    expect(script).toContain('NGINX_RESOLVER');
+    expect(script).not.toContain('wget');
     expect(dockerfile).not.toMatch(/API_UPSTREAM=http:\/\/127\.0\.0\.1/);
   });
 

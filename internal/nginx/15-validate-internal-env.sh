@@ -1,6 +1,7 @@
 #!/bin/sh
 # Runs before 20-envsubst-on-templates.sh in the nginx image.
-# Fail immediately with a readable log instead of hanging on Railway's probe.
+# Keep this fast: Railway probes /healthz only after nginx binds. Do not DNS
+# probe the BFF here — that hung Autodeploy for minutes and failed the replica.
 set -eu
 
 log() { echo "internal: $*" >&2; }
@@ -16,9 +17,6 @@ if [ -z "${API_UPSTREAM:-}" ]; then
   exit 1
 fi
 
-# Dockerfile used to default this to loopback, which starts nginx and 502s every
-# /api call (the SPA still loads). The public https BFF URL hairpins across
-# Railway edges and also 502s. Require the private mesh URL.
 case "${API_UPSTREAM}" in
   http://127.0.0.1:*|http://localhost:*|http://[::1]:*)
     log "API_UPSTREAM=${API_UPSTREAM} is loopback inside this container."
@@ -32,70 +30,26 @@ case "${API_UPSTREAM}" in
     ;;
 esac
 
-# ${{ service.PORT }} is a user variable, not Railway's runtime PORT, so CLI-set
-# templates often become http://host: with an empty port. Uninterpolated
-# ${{ ... }} strings also get injected as-is. Probe private DNS names the BFF
-# actually listens on (runtime mesh, not build).
-probe() {
-  wget -qO- -T 3 "$1/api/health" >/dev/null 2>&1
-}
-
-usable() {
-  case "$1" in
-    ''|*'${{'*|http://:*|http://:*) return 1 ;;
-  esac
-  return 0
-}
-
-pick=""
-for candidate in \
-  "$API_UPSTREAM" \
-  "http://atmosphere-apis.railway.internal:4000" \
-  "http://atmosphere.railway.internal:4000" \
-  "http://atmosphere-apis.railway.internal:8080" \
-  "http://atmosphere.railway.internal:8080"
-do
-  usable "$candidate" || continue
-  log "probing $candidate"
-  if probe "$candidate"; then
-    pick="$candidate"
-    log "BFF reachable at $candidate"
-    break
-  fi
-done
-
-if [ -n "$pick" ]; then
-  API_UPSTREAM="$pick"
-else
-  log "no private upstream answered /api/health (mesh DNS, port, or IPv6)."
-  if ! usable "$API_UPSTREAM"; then
+# CLI-set ${{ service.PORT }} is a user variable, not Railway's runtime PORT,
+# so the injected value can be http://host: or the raw template.
+case "${API_UPSTREAM}" in
+  *'${{'*|http://:*)
     API_UPSTREAM="http://atmosphere-apis.railway.internal:4000"
-    log "replaced unusable template with $API_UPSTREAM"
-  fi
-fi
-
-# nginx proxy_pass with a hostname can miss IPv6-only Railway mesh records.
-# Prefer a literal address so envsubst bakes an IP into default.conf.
-hostport="${API_UPSTREAM#http://}"
-host="${hostport%:*}"
-port="${hostport##*:}"
-case "$host" in
-  \[*\]|*[0-9].[0-9]*)
-    ;;
-  *)
-    ip=""
-    if command -v getent >/dev/null 2>&1; then
-      ip="$(getent hosts "$host" 2>/dev/null | awk '{ print $1; exit }' || true)"
-    fi
-    if [ -n "${ip:-}" ]; then
-      case "$ip" in
-        *:*) API_UPSTREAM="http://[${ip}]:${port}" ;;
-        *) API_UPSTREAM="http://${ip}:${port}" ;;
-      esac
-      log "resolved $host to $API_UPSTREAM"
-    fi
+    log "replaced unusable API_UPSTREAM template with ${API_UPSTREAM}"
     ;;
 esac
 
+if [ -z "${NGINX_RESOLVER:-}" ]; then
+  NGINX_RESOLVER="$(awk '/^nameserver/ { print $2; exit }' /etc/resolv.conf 2>/dev/null || true)"
+fi
+if [ -z "${NGINX_RESOLVER:-}" ]; then
+  NGINX_RESOLVER="fd12::10"
+fi
+case "${NGINX_RESOLVER}" in
+  \[*\]|[0-9]*.[0-9]*.[0-9]*.[0-9]*) ;;
+  *:*) NGINX_RESOLVER="[${NGINX_RESOLVER}]" ;;
+esac
+
 export API_UPSTREAM
-log "proxying /api to ${API_UPSTREAM}"
+export NGINX_RESOLVER
+log "proxying /api to ${API_UPSTREAM} (resolver ${NGINX_RESOLVER})"

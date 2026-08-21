@@ -271,7 +271,9 @@ jobs:
             || true
           chmod +x internal/scripts/apply-railway-config.sh backend/scripts/railwayUp.sh
           internal/scripts/apply-railway-config.sh
-          tr -d '\n' < internal/api.upstream | railway variable set API_UPSTREAM \
+          upstream="$(node backend/scripts/resolveApiUpstream.mjs 'Atmosphere APIs')"
+          echo "API_UPSTREAM=$upstream"
+          printf '%s' "$upstream" | railway variable set API_UPSTREAM \
             --stdin --skip-deploys --service "$service_id" \
             --project "$project" --environment production
           # Autodeploy of this SHA may already have uploaded the same
