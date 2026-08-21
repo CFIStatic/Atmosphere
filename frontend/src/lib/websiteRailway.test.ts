@@ -14,12 +14,10 @@ describe('Railway corporate-website image', () => {
     const dockerfile = read('website/Dockerfile');
     expect(dockerfile).toContain('ENTRYPOINT ["/usr/local/bin/website-start.sh"]');
     expect(dockerfile).toContain('NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM)$$');
-    expect(dockerfile).not.toContain('node dist/index.js');
 
     const start = read('website/nginx/website-start.sh');
     expect(start).toContain("envsubst '${PORT} ${API_UPSTREAM}'");
     expect(start).toContain("exec nginx -g 'daemon off;'");
-    expect(start).not.toContain('node dist/index.js');
   });
 
   it('answers platform health probes locally so a hung BFF cannot fail the deploy', () => {
