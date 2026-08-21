@@ -221,10 +221,9 @@ const recoveryLimiter = rateLimit({
 
 /**
  * POST /api/auth/forgot-password
- * Emails a recovery link. Atmosphere mints a token_hash and sends the mail
- * itself so the click opens the live office /reset-password page — not
- * Supabase Site URL (which defaults to localhost:3000). Falls back to
- * resetPasswordForEmail with the same public redirect if admin/mail is down.
+ * Emails an Atmosphere-branded recovery link (platform SMTP / Resend).
+ * Atmosphere mints a token_hash so the click opens the live office
+ * /reset-password page — not Supabase Auth and not Site URL (localhost:3000).
  * Always answers with the same body whether or not the address is registered.
  */
 authRouter.post(

@@ -228,8 +228,9 @@ docker compose up --build
 2. Apply migrations — see [Migration apply order](#migration-apply-order).
 3. Auth → URL configuration: set Site URL to the live office origin (not
    `http://localhost:3000`) and allow `{origin}/reset-password`. Atmosphere
-   mails recovery links itself (`token_hash` on `/reset-password`); the
-   dashboard values are still the fallback if Atmosphere mail is down.
+   mails recovery links itself (`token_hash` on `/reset-password`) as
+   Atmosphere, never as Supabase Auth. The dashboard values are unused for
+   this flow.
 4. Storage: ensure `job-proofs` exists (migration
    `20260815180000_job_proofs_storage_bucket.sql`) with an appropriate size cap.
 5. Store `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` only

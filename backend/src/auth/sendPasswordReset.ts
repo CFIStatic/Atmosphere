@@ -1,4 +1,4 @@
-import { createAdminClient, createAnonClient } from '../lib/supabase.js';
+import { createAdminClient } from '../lib/supabase.js';
 import { sendSystemMail } from '../lib/systemMail.js';
 import {
   passwordResetRedirectUrl,
@@ -12,29 +12,23 @@ function isUnknownUserMessage(message: string | undefined): boolean {
 }
 
 /**
- * Email a recovery link that opens the live office app.
+ * Email a recovery link from Atmosphere — never Supabase Auth.
  *
- * Prefer minting a token_hash and sending it ourselves: that URL never goes
- * through GoTrue's redirect, so a leftover Site URL of localhost:3000 cannot
- * hijack the click. Fall back to Supabase's mailer with the same public
- * redirect when the admin client or Atmosphere mail is unavailable.
+ * Mint a token_hash and send it with our SMTP/Resend so the From line, the
+ * template, and the click target are all Atmosphere. There is no fallback to
+ * resetPasswordForEmail: that is the "Supabase Auth / Reset your password"
+ * mail that was landing in the inbox (and redirecting to localhost:3000).
  */
 export async function sendPasswordReset(email: string): Promise<void> {
-  const redirectTo = passwordResetRedirectUrl();
-  const sentDirectly = await sendDirectRecoveryEmail(email, redirectTo);
-  if (sentDirectly) return;
-
-  const supabase = createAnonClient();
-  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
-  if (error) {
-    console.warn('[forgot-password] supabase error:', error.status, error.message);
-  }
-}
-
-async function sendDirectRecoveryEmail(email: string, redirectTo: string): Promise<boolean> {
   const admin = createAdminClient();
-  if (!admin) return false;
+  if (!admin) {
+    console.warn(
+      '[forgot-password] SUPABASE_SERVICE_ROLE_KEY is unset — Atmosphere cannot mint a reset link. No email sent.',
+    );
+    return;
+  }
 
+  const redirectTo = passwordResetRedirectUrl();
   const generated = await admin.auth.admin.generateLink({
     type: 'recovery',
     email,
@@ -46,7 +40,7 @@ async function sendDirectRecoveryEmail(email: string, redirectTo: string): Promi
     if (generated.error && !isUnknownUserMessage(generated.error.message)) {
       console.warn('[forgot-password] generateLink:', generated.error.message);
     }
-    return false;
+    return;
   }
 
   const mail = passwordResetEmail({ url: recoveryPageUrl(redirectTo, tokenHash) });
@@ -57,8 +51,6 @@ async function sendDirectRecoveryEmail(email: string, redirectTo: string): Promi
     html: mail.html,
   });
   if (!result.ok) {
-    console.warn('[forgot-password] system-mail failed, falling back to supabase mailer:', result.why);
-    return false;
+    console.warn('[forgot-password] Atmosphere mail failed:', result.why);
   }
-  return true;
 }
