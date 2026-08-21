@@ -36,6 +36,8 @@ describe('Railway internal-site image', () => {
     expect(script).toContain('deploy.healthcheckPath');
     expect(script).toContain('/healthz');
     expect(script).toContain('internal/Dockerfile');
+    expect(script).toContain('API_UPSTREAM');
+    expect(script).toContain('api.upstream');
   });
 
   it('answers platform probes locally so a down BFF cannot fail the replica', () => {
@@ -50,6 +52,9 @@ describe('Railway internal-site image', () => {
     expect(apiProxy).toBeGreaterThan(apiHealth);
     expect(nginx).toContain('proxy_pass ${API_UPSTREAM}');
     expect(nginx).toContain('return 200 \'ok\'');
+    expect(nginx).toContain('proxy_set_header Origin');
+    expect(nginx).toContain('error_page 502 503 504 = @api_down');
+    expect(nginx).toContain('backend_unreachable');
   });
 
   it('points API_UPSTREAM at the Atmosphere private domain, not the public URL', () => {
@@ -68,6 +73,9 @@ describe('Railway internal-site image', () => {
     const script = read('nginx/15-validate-internal-env.sh');
     expect(script).toContain('PORT');
     expect(script).toContain('API_UPSTREAM');
+    expect(script).toContain('127.0.0.1');
+    expect(script).toContain('https://');
+    expect(dockerfile).not.toMatch(/API_UPSTREAM=http:\/\/127\.0\.0\.1/);
   });
 
   it('does not exclude internal sources from the repo-root Docker context', () => {

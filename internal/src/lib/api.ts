@@ -53,10 +53,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const explicit = typeof body.error === 'string' ? body.error.trim() : '';
+    const gateway = res.status === 502 || res.status === 503 || res.status === 504;
     throw new ApiError(
       res.status,
-      explicit || `Request failed (${res.status})`,
-      typeof body.code === 'string' ? body.code : 'error',
+      explicit ||
+        (gateway
+          ? 'Atmosphere API is not reachable. Set API_UPSTREAM on Atmosphere-internal to the BFF private HTTP URL.'
+          : `Request failed (${res.status})`),
+      typeof body.code === 'string' ? body.code : gateway ? 'backend_unreachable' : 'error',
     );
   }
   return body as T;

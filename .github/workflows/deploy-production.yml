@@ -33,7 +33,8 @@
 # as well (not only the "Google API keys" environment) so this job can see them.
 #
 # Auto-deploys on push to main, the live Atmosphere API branch, the
-# job-create memory FK fix branch, and the office-service-name fix branch.
+# job-create memory FK fix branch, the office-service-name fix branch, and
+# the internal staff site branch (backend + internal only — not the office app).
 # Manual run still works: Actions → Deploy Work Verification → Run workflow.
 
 name: Deploy Work Verification
@@ -46,6 +47,7 @@ on:
       - cursor/fix-railway-keys-deploy-51c8
       - cursor/fix-job-create-memory-fk-51c8
       - cursor/fix-railway-office-deploy-157d
+      - cursor/internal-data-platform-e19d
     paths:
       - 'backend/**'
       - 'supabase/migrations/**'
@@ -154,6 +156,7 @@ jobs:
 
   app:
     name: Deploy office app
+    if: github.ref_name != 'cursor/internal-data-platform-e19d'
     runs-on: ubuntu-latest
     environment: Keys
     steps:

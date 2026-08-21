@@ -47,4 +47,12 @@ printf '%s' "$dockerfile_path" | railway variable set RAILWAY_DOCKERFILE_PATH \
   --project "$project" --environment "$environment" \
   || echo "warn: could not set RAILWAY_DOCKERFILE_PATH"
 
+here="$(cd "$(dirname "$0")/.." && pwd)"
+if [ -f "$here/api.upstream" ]; then
+  tr -d '\n' < "$here/api.upstream" | railway variable set API_UPSTREAM \
+    --stdin --skip-deploys --service "$service" \
+    --project "$project" --environment "$environment" \
+    || echo "warn: could not set API_UPSTREAM"
+fi
+
 echo "Service $service now uses nginx + GET /healthz (not node dist/index.js / /api/health)."

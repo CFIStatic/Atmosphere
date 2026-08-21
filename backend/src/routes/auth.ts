@@ -214,7 +214,15 @@ authRouter.post('/internal-login', authLimiter, async (req: Request, res: Respon
       throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
     }
 
-    await saveEnrolledTotp(challenge.email, secret, verified.counter);
+    try {
+      await saveEnrolledTotp(challenge.email, secret, verified.counter);
+    } catch {
+      throw new HttpError(
+        503,
+        'Staff authenticator is not configured on this server.',
+        'internal_totp_unavailable',
+      );
+    }
 
     const { user, session } = await openInternalStaffSession({
       email: challenge.email,

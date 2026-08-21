@@ -1,4 +1,5 @@
 # Internal staff site. PORT and API_UPSTREAM are substituted at container start.
+# NGINX_ENVSUBST_FILTER only expands those two; other $vars are nginx's own.
 
 server {
   listen ${PORT};
@@ -48,9 +49,22 @@ server {
     proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
     proxy_set_header X-Forwarded-Host $host;
     proxy_set_header Connection "";
-    proxy_connect_timeout 5s;
+    # Same-origin browser calls still send Origin. The BFF CORS allowlist may
+    # not include this generated host; an empty Origin is treated as server-to-server.
+    proxy_set_header Origin "";
+    proxy_set_header Referer "";
+    proxy_connect_timeout 10s;
     proxy_read_timeout 60s;
     proxy_send_timeout 60s;
+    proxy_intercept_errors on;
+    error_page 502 503 504 = @api_down;
+  }
+
+  location @api_down {
+    default_type application/json;
+    add_header Cache-Control "no-store" always;
+    add_header Content-Type "application/json; charset=utf-8" always;
+    return 503 '{"error":"Atmosphere API is not reachable. On Atmosphere-internal set API_UPSTREAM to the Atmosphere private HTTP URL, not the public https host.","code":"backend_unreachable"}';
   }
 
   location /assets/ {

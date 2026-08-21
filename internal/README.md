@@ -145,6 +145,21 @@ That timeout is the **backend** probe: `/api/health` with
 Then **Deploy** again. A passing probe is `GET /healthz` → `ok` in a few
 seconds, not five minutes.
 
+### If Continue returns 502
+
+`/healthz` is local nginx. A 502 on **Continue** means `/api` cannot reach
+the BFF.
+
+| Check | Must be |
+| --- | --- |
+| `API_UPSTREAM` on Atmosphere-internal | `http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}` |
+| Not | `http://127.0.0.1:4000` or `https://atmosphere-production.up.railway.app` |
+| Atmosphere BFF | deployed with `POST /api/auth/internal-challenge` |
+| Supabase | `20260821210000_internal_staff_totp.sql` applied |
+
+The public https BFF URL hairpins across Railway edges and 502s. Loopback
+is inside the nginx container, where nothing is listening.
+
 ## Develop against the real backend
 
 ```bash
