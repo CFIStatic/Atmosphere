@@ -17,6 +17,25 @@ describe('Railway internal-site image', () => {
     expect(toml).toContain('startCommand = "/docker-entrypoint.sh nginx -g \'daemon off;\'"');
     expect(toml).not.toMatch(/^startCommand = "node /m);
     expect(toml).toMatch(/healthcheckTimeout = 1\d{2}/);
+
+    const json = JSON.parse(read('railway.json')) as {
+      build: { builder: string; dockerfilePath: string };
+      deploy: { healthcheckPath: string; startCommand: string; healthcheckTimeout: number };
+    };
+    expect(json.build.builder).toBe('DOCKERFILE');
+    expect(json.build.dockerfilePath).toBe('internal/Dockerfile');
+    expect(json.deploy.healthcheckPath).toBe('/healthz');
+    expect(json.deploy.startCommand).toBe("/docker-entrypoint.sh nginx -g 'daemon off;'");
+    expect(json.deploy.healthcheckTimeout).toBe(120);
+  });
+
+  it('applies the json config onto the Railway service from CI', () => {
+    const script = read('scripts/apply-railway-config.sh');
+    expect(script).toContain('build.dockerfilePath');
+    expect(script).toContain('deploy.startCommand');
+    expect(script).toContain('deploy.healthcheckPath');
+    expect(script).toContain('/healthz');
+    expect(script).toContain('internal/Dockerfile');
   });
 
   it('answers platform probes locally so a down BFF cannot fail the replica', () => {

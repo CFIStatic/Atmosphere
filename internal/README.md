@@ -43,9 +43,11 @@ Railway project.
 2. Name it **`Atmosphere-internal`**.
 3. Settings → **Source** → `CFIStatic/Atmosphere`.
 4. Settings → **Root Directory** = `/`.
-5. Settings → **Config File** = `/internal/railway.toml`. This is required.
-   Without it, Railway loads `/railway.toml`, starts `node dist/index.js`,
-   probes `/api/health` for 300s, and **Network → Healthcheck** fails.
+5. Settings → **Config File** = `/internal/railway.json` (same values as
+   `internal/railway.toml`). New Railway services often cannot set this field;
+   the deploy job runs `internal/scripts/apply-railway-config.sh` so the
+   service still gets nginx + `GET /healthz` instead of `node dist/index.js`
+   and `/api/health`.
 6. Trigger branch: a commit that contains `internal/` (this folder). Until
    that is on `main`, point the service at `cursor/internal-data-platform-e19d`.
    A GitHub deploy of today's `main` cannot use this config file — it is not
@@ -115,10 +117,10 @@ That timeout is the **backend** probe: `/api/health` with
 
 | Check | Must be |
 | --- | --- |
-| Config File | `/internal/railway.toml` (not `/railway.toml`) |
+| Config File | `/internal/railway.json` (or `/internal/railway.toml`) |
 | Root Directory | `/` |
 | Branch | a commit that has `internal/Dockerfile` |
-| Start command | `/docker-entrypoint.sh nginx -g 'daemon off;'` (from that toml) |
+| Start command | `/docker-entrypoint.sh nginx -g 'daemon off;'` |
 | `API_UPSTREAM` | `http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}` |
 | Project | same canvas as the `Atmosphere` BFF |
 

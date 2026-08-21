@@ -1,15 +1,14 @@
-# Staff data platform (internal/). Do not reuse the API railway.toml —
-# that probes /api/health for 300s and starts `node dist/index.js`.
+# Staff data platform (internal/). Same settings as railway.json.
 #
-# One-time on this service (Settings):
-#   Config File    = /internal/railway.toml
+# Point the Railway service Config File at this file or at
+# /internal/railway.json. New services that cannot set Config File should
+# run internal/scripts/apply-railway-config.sh (the deploy job does this).
+#
+# One-time:
 #   Root Directory = /
-#   Branch         = a commit that contains internal/ (this file).
-#                     Deploying `main` before this lands uses /railway.toml
-#                     and fails Network → Healthcheck after ~5 minutes.
-#
-# Runtime variable (Variables tab, not GitHub Keys):
-#   API_UPSTREAM=http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}
+#   Config File    = /internal/railway.json
+#   Branch         = a commit that contains internal/
+#   API_UPSTREAM   = http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}
 
 [build]
 builder = "DOCKERFILE"
