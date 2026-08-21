@@ -58,7 +58,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       res.status,
       explicit ||
         (gateway
-          ? 'Atmosphere API is not reachable. Set API_UPSTREAM on Atmosphere-internal to the BFF private HTTP URL.'
+          ? 'Atmosphere API is not reachable. Set API_UPSTREAM on Internal Growth Metrics to the Atmosphere APIs private HTTP URL.'
           : `Request failed (${res.status})`),
       typeof body.code === 'string' ? body.code : gateway ? 'backend_unreachable' : 'error',
     );

@@ -310,7 +310,7 @@ A/B experiments: seed/manage rows in `public.experiments`, set `status` to
 internal analytics dashboard under **A/B tests**.
 
 The same data is also a separately hosted staff site at **`internal/`**
-(Railway service `Atmosphere-internal`). Sign in with first name, last name,
+(Railway service `Internal Growth Metrics`). Sign in with first name, last name,
 email, and a 6-digit Microsoft Authenticator code. See
 [`internal/README.md`](internal/README.md).
 

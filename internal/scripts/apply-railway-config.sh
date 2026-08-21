@@ -7,7 +7,7 @@
 # Safe to re-run. Does not deploy.
 set -uo pipefail
 
-service="${RAILWAY_INTERNAL_SERVICE:-Atmosphere-internal}"
+service="${RAILWAY_INTERNAL_SERVICE:-Internal Growth Metrics}"
 project="${RAILWAY_PROJECT_ID:-d0af58bd-0eec-431d-bad3-4da4b4a2e2ae}"
 environment="${RAILWAY_ENVIRONMENT:-production}"
 dockerfile_path="internal/Dockerfile"
@@ -16,7 +16,11 @@ healthcheck_path="/healthz"
 healthcheck_timeout="120"
 restart_policy="ON_FAILURE"
 restart_retries="10"
-message="Apply Atmosphere-internal config from internal/railway.json"
+message="Apply Internal Growth Metrics config from internal/railway.json"
+
+case "$service" in
+  Atmosphere-internal|Atmosphere-Internal) service="Internal Growth Metrics" ;;
+esac
 
 echo "Applying internal site config to service='$service' project='$project' environment='$environment'"
 

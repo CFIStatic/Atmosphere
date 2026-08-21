@@ -10,11 +10,17 @@
 # Treat that as retryable instead of failing the GitHub job on the first pause.
 set -u
 
-service="${RAILWAY_SERVICE:-Atmosphere}"
+service="${RAILWAY_SERVICE:-Atmosphere APIs}"
 project="${RAILWAY_PROJECT_ID:-d0af58bd-0eec-431d-bad3-4da4b4a2e2ae}"
 environment="${RAILWAY_ENVIRONMENT:-production}"
 max_attempts="${RAILWAY_UP_ATTEMPTS:-8}"
 wait_secs="${RAILWAY_UP_TIMEOUT:-900}"
+
+case "$service" in
+  Atmosphere) service="Atmosphere APIs" ;;
+  Atmosphere-internal) service="Internal Growth Metrics" ;;
+  Atmosphere-web) service="Login & Dashboard" ;;
+esac
 
 echo "Deploying Railway service=$service project=$project environment=$environment"
 

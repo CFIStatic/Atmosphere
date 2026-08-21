@@ -17,10 +17,10 @@
 #   RAILWAY_TOKEN
 # Optional:
 #   RAILWAY_PROJECT_ID     (Project settings → General)
-#   RAILWAY_SERVICE        (backend service name, default: Atmosphere)
-#   RAILWAY_APP_SERVICE    (office app service name, default: Atmosphere-web)
+#   RAILWAY_SERVICE        (backend service name, default: Atmosphere APIs)
+#   RAILWAY_APP_SERVICE    (office app service name, default: Atmosphere-web / Login & Dashboard)
 #   RAILWAY_WEB_SERVICE    (alias of RAILWAY_APP_SERVICE)
-#   RAILWAY_INTERNAL_SERVICE (staff site, default: Atmosphere-internal)
+#   RAILWAY_INTERNAL_SERVICE (staff site, default: Internal Growth Metrics)
 #
 # One-time on the Railway **Atmosphere-web** service (Settings → Config-as-code):
 #   Config File = /frontend/railway.toml
@@ -93,14 +93,14 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
-          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere' }}
+          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere APIs' }}
           NODE_ENV: production
           MEDIA_BACKEND: supabase
           COMPUTER_USE_ENABLED: 'false'
           BACKUP_ENABLED: 'false'
           ALLOW_MOCK_DRIVERS: 'true'
           HOST: '0.0.0.0'
-          FRONTEND_ORIGIN: ${{ vars.FRONTEND_ORIGIN || 'https://atmosphere-web-production.up.railway.app,https://app.atmosphereteam.com,https://atmosphere-internal-production.up.railway.app' }}
+          FRONTEND_ORIGIN: ${{ vars.FRONTEND_ORIGIN || 'https://atmosphere-web-production.up.railway.app,https://app.atmosphereteam.com,https://melodious-inspiration-production-5ad9.up.railway.app' }}
           SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || vars.SUPABASE_SERVICE_ROLE_KEY }}
@@ -147,7 +147,7 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
-          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere' }}
+          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere APIs' }}
           RAILWAY_ENVIRONMENT: production
         run: |
           echo "Deploying Railway service: $RAILWAY_SERVICE"
@@ -241,9 +241,12 @@ jobs:
         run: |
           set -euo pipefail
           project="${RAILWAY_PROJECT_ID}"
-          service="${RAILWAY_INTERNAL_SERVICE:-Atmosphere-internal}"
+          service="${RAILWAY_INTERNAL_SERVICE:-Internal Growth Metrics}"
           echo "Deploying internal site to Railway service '$service' in project $project."
           echo "Writing internal/railway.json onto the service (nginx + /healthz)."
+          case "$service" in
+            Atmosphere-internal|Atmosphere-Internal) service="Internal Growth Metrics" ;;
+          esac
           export RAILWAY_INTERNAL_SERVICE="$service"
           export RAILWAY_PROJECT_ID="$project"
           export RAILWAY_ENVIRONMENT=production

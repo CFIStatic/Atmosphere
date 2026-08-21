@@ -18,6 +18,8 @@ const ATMOSPHERE_RAILWAY_WEB =
   /^https:\/\/atmosphere-web(?:-[a-z0-9]+)*\.up\.railway\.app$/i;
 const ATMOSPHERE_RAILWAY_INTERNAL =
   /^https:\/\/atmosphere-internal(?:-[a-z0-9]+)*\.up\.railway\.app$/i;
+const ATMOSPHERE_RAILWAY_INTERNAL_GROWTH =
+  /^https:\/\/melodious-inspiration(?:-[a-z0-9]+)*\.up\.railway\.app$/i;
 
 export function isCloudflareQuickTunnelOrigin(origin: string): boolean {
   return QUICK_TUNNEL.test(origin);
@@ -28,5 +30,5 @@ export function isAtmosphereRailwayWebOrigin(origin: string): boolean {
 }
 
 export function isAtmosphereRailwayInternalOrigin(origin: string): boolean {
-  return ATMOSPHERE_RAILWAY_INTERNAL.test(origin);
+  return ATMOSPHERE_RAILWAY_INTERNAL.test(origin) || ATMOSPHERE_RAILWAY_INTERNAL_GROWTH.test(origin);
 }

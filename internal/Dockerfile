@@ -3,7 +3,7 @@
 #   docker build -f internal/Dockerfile -t atmosphere-internal .
 #
 # Railway: Config File = /internal/railway.json (same settings as railway.toml)
-#   API_UPSTREAM=http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}
+#   API_UPSTREAM=http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}
 # Never start `node dist/index.js` on this image (no Node in the runtime stage).
 
 FROM node:22-bookworm-slim AS build

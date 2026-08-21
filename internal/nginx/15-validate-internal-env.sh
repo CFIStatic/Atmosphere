@@ -10,7 +10,7 @@ fi
 
 if [ -z "${API_UPSTREAM:-}" ]; then
   echo "internal: API_UPSTREAM is required." >&2
-  echo "internal: set API_UPSTREAM=http://\${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:\${{Atmosphere.PORT}}" >&2
+  echo "internal: set API_UPSTREAM=http://\${{ \"Atmosphere APIs\".RAILWAY_PRIVATE_DOMAIN }}:\${{ \"Atmosphere APIs\".PORT }}" >&2
   exit 1
 fi
 
@@ -20,13 +20,13 @@ fi
 case "${API_UPSTREAM}" in
   http://127.0.0.1:*|http://localhost:*|http://[::1]:*)
     echo "internal: API_UPSTREAM=${API_UPSTREAM} is loopback inside this container." >&2
-    echo "internal: set API_UPSTREAM=http://\${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:\${{Atmosphere.PORT}}" >&2
+    echo "internal: set API_UPSTREAM=http://\${{ \"Atmosphere APIs\".RAILWAY_PRIVATE_DOMAIN }}:\${{ \"Atmosphere APIs\".PORT }}" >&2
     exit 1
     ;;
   https://*)
     echo "internal: API_UPSTREAM must be private HTTP, not ${API_UPSTREAM}." >&2
     echo "internal: the public https BFF URL hairpins and 502s /api." >&2
-    echo "internal: set API_UPSTREAM=http://\${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:\${{Atmosphere.PORT}}" >&2
+    echo "internal: set API_UPSTREAM=http://\${{ \"Atmosphere APIs\".RAILWAY_PRIVATE_DOMAIN }}:\${{ \"Atmosphere APIs\".PORT }}" >&2
     exit 1
     ;;
 esac

@@ -8,7 +8,7 @@
 #   Root Directory = /
 #   Config File    = /internal/railway.json
 #   Branch         = a commit that contains internal/
-#   API_UPSTREAM   = http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}
+#   API_UPSTREAM   = http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}
 
 [build]
 builder = "DOCKERFILE"

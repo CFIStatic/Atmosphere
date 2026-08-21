@@ -63,9 +63,11 @@ describe('isAtmosphereRailwayWebOrigin', () => {
 });
 
 describe('isAtmosphereRailwayInternalOrigin', () => {
-  it('accepts the production Atmosphere-internal Railway hostname', () => {
+  it('accepts the production Internal Growth Metrics hostname', () => {
     assert.equal(
-      isAtmosphereRailwayInternalOrigin('https://atmosphere-internal-production.up.railway.app'),
+      isAtmosphereRailwayInternalOrigin(
+        'https://melodious-inspiration-production-5ad9.up.railway.app',
+      ),
       true,
     );
   });

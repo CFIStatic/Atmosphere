@@ -29,7 +29,7 @@ export function SystemPage() {
       <h1 className="text-2xl font-semibold tracking-tight">System</h1>
       <p className="mt-1 text-sm text-ink-500">
         Backend readiness from the same BFF this site proxies. Hosting: Railway service
-        Atmosphere-internal, /api reverse-proxied to Atmosphere.
+        Internal Growth Metrics, /api reverse-proxied to Atmosphere APIs.
       </p>
       {error && <p className="mt-4 text-sm text-danger-600">{error}</p>}
 

@@ -72,7 +72,16 @@ function railway(args, input) {
   }
 }
 
-const service = process.env.RAILWAY_SERVICE?.trim() || 'Atmosphere';
+function resolveRailwayService(name) {
+  const aliases = {
+    Atmosphere: 'Atmosphere APIs',
+    'Atmosphere-internal': 'Internal Growth Metrics',
+    'Atmosphere-web': 'Login & Dashboard',
+  };
+  return aliases[name] ?? name;
+}
+
+const service = resolveRailwayService(process.env.RAILWAY_SERVICE?.trim() || 'Atmosphere APIs');
 
 for (const name of KEYS) {
   const value = process.env[name]?.trim();

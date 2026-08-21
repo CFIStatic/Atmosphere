@@ -45,7 +45,7 @@ already has `Atmosphere` and `Atmosphere-web`). Do not create a second
 Railway project.
 
 1. Railway project canvas → **+ Create → Empty service**.
-2. Name it **`Atmosphere-internal`**.
+2. Name it **`Internal Growth Metrics`** (override with `RAILWAY_INTERNAL_SERVICE`).
 3. Settings → **Source** → `CFIStatic/Atmosphere`.
 4. Settings → **Root Directory** = `/`.
 5. Settings → **Config File** = `/internal/railway.json` (same values as
@@ -61,10 +61,10 @@ Railway project.
 
 ### 3. Point `/api` at the live BFF
 
-Variables on **Atmosphere-internal** (not GitHub Keys):
+Variables on **Internal Growth Metrics** (not GitHub Keys):
 
 ```text
-API_UPSTREAM=http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}
+API_UPSTREAM=http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}
 ```
 
 Leave `VITE_API_BASE_URL` unset. The image is built with an empty API base so
@@ -73,7 +73,8 @@ Cookies stay `SameSite=Lax`. That is the real connection.
 
 ### 4. Public URL + CORS
 
-On **Atmosphere-internal** → Networking → **Generate domain**.
+On **Internal Growth Metrics** → Networking → **Generate domain**.
+The live host is `https://melodious-inspiration-production-5ad9.up.railway.app`.
 
 On the **Atmosphere** (backend) service, add that https origin to
 `FRONTEND_ORIGIN` (comma-separated with the office app). Example:
@@ -89,7 +90,7 @@ syncs Keys → Railway on `main`; the default now includes the internal host.
 ### 5. Ship it
 
 After this branch is on `main`, GitHub Actions **Deploy Work Verification**
-runs `railway up` for service `Atmosphere-internal` whenever `internal/`
+runs `railway up` for service `Internal Growth Metrics` whenever `internal/`
 changes. Override the name with `RAILWAY_INTERNAL_SERVICE`.
 
 Or click **Deploy** on the service after Autodeploy is on.
@@ -139,7 +140,7 @@ That timeout is the **backend** probe: `/api/health` with
 | Root Directory | `/` |
 | Branch | a commit that has `internal/Dockerfile` |
 | Start command | `/docker-entrypoint.sh nginx -g 'daemon off;'` |
-| `API_UPSTREAM` | `http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}` |
+| `API_UPSTREAM` | `http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}` |
 | Project | same canvas as the `Atmosphere` BFF |
 
 Then **Deploy** again. A passing probe is `GET /healthz` → `ok` in a few
@@ -152,7 +153,7 @@ the BFF.
 
 | Check | Must be |
 | --- | --- |
-| `API_UPSTREAM` on Atmosphere-internal | `http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}` |
+| `API_UPSTREAM` on Internal Growth Metrics | `http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}` |
 | Not | `http://127.0.0.1:4000` or `https://atmosphere-production.up.railway.app` |
 | Atmosphere BFF | deployed with `POST /api/auth/internal-challenge` |
 | Supabase | `20260821210000_internal_staff_totp.sql` applied |

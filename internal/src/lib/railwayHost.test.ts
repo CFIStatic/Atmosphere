@@ -36,6 +36,7 @@ describe('Railway internal-site image', () => {
     expect(script).toContain('deploy.healthcheckPath');
     expect(script).toContain('/healthz');
     expect(script).toContain('internal/Dockerfile');
+    expect(script).toContain('Internal Growth Metrics');
     expect(script).toContain('API_UPSTREAM');
     expect(script).toContain('api.upstream');
   });
@@ -60,7 +61,7 @@ describe('Railway internal-site image', () => {
   it('points API_UPSTREAM at the Atmosphere private domain, not the public URL', () => {
     const upstream = read('api.upstream').trim();
     expect(upstream).toBe(
-      'http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}',
+      'http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}',
     );
   });
 

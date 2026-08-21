@@ -154,9 +154,9 @@ Official references: [GitHub Autodeploys](https://docs.railway.com/deployments/g
 
 | Surface | Artifact | Notes |
 | --- | --- | --- |
-| Backend BFF | `backend/` (`Dockerfile` or `npm run build && npm start`) | Node 22, long-lived process; needs FFmpeg for proof sparse frames. **Railway service `Atmosphere` (override with `RAILWAY_SERVICE`).** |
+| Backend BFF | `backend/` (`Dockerfile` or `npm run build && npm start`) | Node 22, long-lived process; needs FFmpeg for proof sparse frames. **Railway service `Atmosphere APIs` (override with `RAILWAY_SERVICE`).** |
 | Office app | `frontend/` + `verifier/` + `fieldcapture/` | One nginx image; `/api` proxied to the BFF. **Railway service `Atmosphere-web` (override with `RAILWAY_APP_SERVICE`).** |
-| Internal staff site | `internal/` | Accounts, analytics, system health. **Railway service `Atmosphere-internal` (override with `RAILWAY_INTERNAL_SERVICE`).** Staff-only; `noindex`. |
+| Internal staff site | `internal/` | Accounts, analytics, system health. **Railway service `Internal Growth Metrics` (override with `RAILWAY_INTERNAL_SERVICE`).** Staff-only; `noindex`. |
 | Marketing site | `website/` | Already CD’d to GitHub Pages |
 | Native Field | `apps/field-ios/` | App Store path; uses the same BFF |
 
@@ -223,12 +223,12 @@ Invite emails use the first origin in `FRONTEND_ORIGIN`, so put the public `http
 
 Atmosphere Internal (`internal/`) is a third Railway service next to the BFF and office app. Same-origin `/api` again: staff sign in with the same Atmosphere account; `analytics_staff` gates named accounts.
 
-1. **+ Create → Empty service** in the **existing** Atmosphere project. Name it `Atmosphere-internal` (or set `RAILWAY_INTERNAL_SERVICE`). Do not create a second Railway project.
+1. **+ Create → Empty service** in the **existing** Atmosphere project. Name it `Internal Growth Metrics` (or set `RAILWAY_INTERNAL_SERVICE`). Do not create a second Railway project.
 2. Settings → **Config File**: `/internal/railway.json` (same settings as `internal/railway.toml`). New services that cannot set Config File still get those values from `internal/scripts/apply-railway-config.sh` on deploy.
 3. Settings → **Root Directory**: `/`
 4. Trigger branch must contain `internal/` (until this is on `main`, use the branch that added it). Deploying `main` before that merge cannot see `/internal/railway.json`.
-5. Variable `API_UPSTREAM=http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}`
-6. Networking → **Generate domain**. Add that https origin to backend `FRONTEND_ORIGIN`. Production CORS already allows `https://atmosphere-internal*.up.railway.app`.
+5. Variable `API_UPSTREAM=http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}`
+6. Networking → **Generate domain**. Add that https origin to backend `FRONTEND_ORIGIN`. Production CORS already allows the live staff host `https://melodious-inspiration-production-5ad9.up.railway.app`.
 7. Health probe: `GET /healthz` → `ok` (also `/health` and `/api/health`). nginx starts with `startCommand` from `internal/railway.json`, not `node dist/index.js`.
 
 Do not point customers here. The site sends `X-Robots-Tag: noindex`. The
