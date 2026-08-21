@@ -2,11 +2,10 @@ import { useState, type FormEvent } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ApiError } from '../lib/api';
-import { enableSessionDemo } from '../lib/demoMode';
 import { landingPath } from '../lib/access';
 
 export function LoginPage() {
-  const { user, access, loading, login, enterDemo } = useAuth();
+  const { user, access, loading, login } = useAuth();
   const [searchParams] = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -45,8 +44,8 @@ export function LoginPage() {
         <p className="text-[11px] uppercase tracking-[0.18em] text-brand-600">Atmosphere staff</p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">Internal</h1>
         <p className="mt-2 text-sm text-ink-500">
-          Accounts, product analytics, and system health. Same Atmosphere login as the office
-          app — gated to analytics staff.
+          Accounts, product analytics, and system health. Sign in with your Atmosphere account —
+          the same login as the office app, gated to analytics staff.
         </p>
         <form className="mt-6 space-y-4" onSubmit={(event) => void onSubmit(event)}>
           <label className="block text-sm">
@@ -80,16 +79,6 @@ export function LoginPage() {
             {submitting ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
-        <button
-          type="button"
-          onClick={() => {
-            enableSessionDemo();
-            enterDemo();
-          }}
-          className="mt-4 w-full rounded-lg border border-line-strong px-4 py-2 text-sm text-ink-600 hover:bg-paper-200"
-        >
-          Preview with demo data
-        </button>
       </div>
     </div>
   );

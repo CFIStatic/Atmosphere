@@ -12,6 +12,7 @@ RUN npm ci
 COPY internal/ ./
 ARG VITE_API_BASE_URL=
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+# Never bake demo fixtures into the hosted image. The SPA always calls /api.
 RUN npm run build
 
 FROM nginx:1.27-alpine AS runtime

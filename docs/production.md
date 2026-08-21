@@ -227,7 +227,9 @@ Atmosphere Internal (`internal/`) is a third Railway service next to the BFF and
 5. Networking → **Generate domain**. Add that https origin to backend `FRONTEND_ORIGIN`. Production CORS already allows `https://atmosphere-internal*.up.railway.app`.
 6. Health probe: `GET /healthz` → `ok`.
 
-Do not point customers here. The site sends `X-Robots-Tag: noindex`. Grant access with `ANALYTICS_INTERNAL_EMAILS` or `npm run analytics:grant --prefix backend -- someone@company.com internal`.
+Do not point customers here. The site sends `X-Robots-Tag: noindex`. The
+hosted image has no demo-data path — sign-in and every report hit the live
+BFF. Grant access with `ANALYTICS_INTERNAL_EMAILS` or `npm run analytics:grant --prefix backend -- someone@company.com internal`.
 
 See [`internal/README.md`](../internal/README.md).
 

@@ -1,5 +1,3 @@
-import { demoAccountDetail, demoExperiments, demoMetering, demoOverview, demoReady } from './demo';
-import { isDemoMode } from './demoMode';
 import type {
   AccountDetail,
   AnalyticsAccess,
@@ -35,7 +33,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   } catch {
     throw new ApiError(
       0,
-      'Atmosphere API is not running. Start it with `cd backend && npm run dev`.',
+      'Atmosphere API is not reachable. Confirm the BFF is up and API_UPSTREAM points at it.',
       'network_error',
     );
   }
@@ -67,12 +65,6 @@ function rangeQuery({ from, to, months }: RangeParams): string {
   )}&months=${months}`;
 }
 
-export const DEMO_USER: AuthUser = {
-  id: '00000000-0000-4000-8000-000000000001',
-  email: 'jack@jettx.ai',
-  createdAt: '2024-01-01T00:00:00.000Z',
-};
-
 export const api = {
   login: (email: string, password: string) =>
     request<{ user: AuthUser }>('/api/auth/login', {
@@ -87,34 +79,20 @@ export const api = {
   access: () => request<AnalyticsAccess>('/api/analytics/access'),
 
   overview: (range: RangeParams) =>
-    isDemoMode()
-      ? Promise.resolve(demoOverview)
-      : request<OverviewPayload>(`/api/analytics/overview?${rangeQuery(range)}`),
+    request<OverviewPayload>(`/api/analytics/overview?${rangeQuery(range)}`),
 
   experiments: (range: RangeParams) =>
-    isDemoMode()
-      ? Promise.resolve({ experiments: demoExperiments })
-      : request<{ experiments: ExperimentStats[] }>(
-          `/api/analytics/experiments?${rangeQuery(range)}`,
-        ),
+    request<{ experiments: ExperimentStats[] }>(
+      `/api/analytics/experiments?${rangeQuery(range)}`,
+    ),
 
   metering: (range: RangeParams) =>
-    isDemoMode()
-      ? Promise.resolve(demoMetering)
-      : request<MeteringPayload>(`/api/analytics/metering?${rangeQuery(range)}`),
+    request<MeteringPayload>(`/api/analytics/metering?${rangeQuery(range)}`),
 
   account: (orgId: string, range: RangeParams) =>
-    isDemoMode()
-      ? Promise.resolve(demoAccountDetail(orgId)).then((detail) => {
-          if (!detail) throw new ApiError(404, 'Organization not found', 'org_not_found');
-          return detail;
-        })
-      : request<AccountDetail>(`/api/analytics/accounts/${orgId}?${rangeQuery(range)}`),
+    request<AccountDetail>(`/api/analytics/accounts/${orgId}?${rangeQuery(range)}`),
 
-  ready: () =>
-    isDemoMode()
-      ? Promise.resolve(demoReady)
-      : request<ReadyPayload>('/api/ready'),
+  ready: () => request<ReadyPayload>('/api/ready'),
 
   exportUrl: (range: RangeParams, dataset = 'all') =>
     `${API_BASE}/api/analytics/export?${rangeQuery(range)}&dataset=${dataset}`,

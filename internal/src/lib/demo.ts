@@ -1,3 +1,7 @@
+/**
+ * Test fixtures only. Not imported by the hosted SPA — production always
+ * calls the live BFF.
+ */
 import type {
   AccountDetail,
   AccountRow,

@@ -1,6 +1,5 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { isDemoMode } from '../lib/demoMode';
 import { canSeeAccounts } from '../lib/access';
 
 const NAV = [
@@ -52,11 +51,6 @@ export function Shell() {
             ))}
           </nav>
           <div className="flex items-center gap-3 text-sm text-ink-600">
-            {isDemoMode() && (
-              <span className="rounded-full border border-caution-600/40 px-2 py-0.5 text-[11px] uppercase tracking-wide text-caution-600">
-                Demo data
-              </span>
-            )}
             <span className="hidden sm:inline">{access?.displayName ?? user?.email}</span>
             <button
               type="button"

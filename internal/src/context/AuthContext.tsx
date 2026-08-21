@@ -8,8 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { api, ApiError, DEMO_USER } from '../lib/api';
-import { disableSessionDemo, isDemoMode } from '../lib/demoMode';
+import { api, ApiError } from '../lib/api';
 import type { AnalyticsAccess, AuthUser } from '../lib/types';
 
 interface AuthValue {
@@ -17,7 +16,6 @@ interface AuthValue {
   access: AnalyticsAccess | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  enterDemo: () => void;
   logout: () => Promise<void>;
 }
 
@@ -29,10 +27,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const loadAccess = useCallback(async () => {
-    if (isDemoMode()) {
-      setAccess({ scope: 'internal', displayName: 'Jack Cyganiak' });
-      return;
-    }
     const next = await api.access();
     setAccess(next);
   }, []);
@@ -41,13 +35,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
-        if (isDemoMode()) {
-          if (!cancelled) {
-            setUser(DEMO_USER);
-            setAccess({ scope: 'internal', displayName: 'Jack Cyganiak' });
-          }
-          return;
-        }
         const { user: next } = await api.me();
         if (cancelled) return;
         setUser(next);
@@ -78,27 +65,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [loadAccess],
   );
 
-  const enterDemo = useCallback(() => {
-    setUser(DEMO_USER);
-    setAccess({ scope: 'internal', displayName: 'Jack Cyganiak' });
-  }, []);
-
   const logout = useCallback(async () => {
-    disableSessionDemo();
-    if (!isDemoMode()) {
-      try {
-        await api.logout();
-      } catch {
-        /* cookies already gone */
-      }
+    try {
+      await api.logout();
+    } catch {
+      /* cookies already gone */
     }
     setUser(null);
     setAccess(null);
   }, []);
 
   const value = useMemo(
-    () => ({ user, access, loading, login, enterDemo, logout }),
-    [user, access, loading, login, enterDemo, logout],
+    () => ({ user, access, loading, login, logout }),
+    [user, access, loading, login, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
