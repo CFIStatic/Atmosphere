@@ -240,7 +240,7 @@ jobs:
           project="${RAILWAY_PROJECT_ID}"
           service="${RAILWAY_INTERNAL_SERVICE:-Atmosphere-internal}"
           echo "Deploying internal site to Railway service '$service' in project $project."
-          echo "That service's Config File must be /internal/railway.toml (see docs/production.md)."
+          echo "That service's Config File must be /internal/railway.toml (nginx startCommand + /healthz)."
           railway link --project "$project" --environment production --service "$service" \
             || railway link --project "$project" --environment production \
             || railway link --project "$project" \

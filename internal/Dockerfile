@@ -4,6 +4,7 @@
 #
 # Railway: Config File = /internal/railway.toml
 #   API_UPSTREAM=http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}
+# Never start `node dist/index.js` on this image (no Node in the runtime stage).
 
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
@@ -18,9 +19,13 @@ RUN npm run build
 FROM nginx:1.27-alpine AS runtime
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY internal/nginx/default.conf.template /etc/nginx/templates/default.conf.template
+COPY internal/nginx/15-validate-internal-env.sh /docker-entrypoint.d/15-validate-internal-env.sh
+RUN chmod +x /docker-entrypoint.d/15-validate-internal-env.sh
 ENV NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM)$$
 ENV PORT=80
 ENV API_UPSTREAM=http://127.0.0.1:4000
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
   CMD wget -qO- http://127.0.0.1:${PORT}/healthz >/dev/null || exit 1
+# Use the nginx image entrypoint so ${PORT} is substituted. Do not start Node.
+CMD ["nginx", "-g", "daemon off;"]

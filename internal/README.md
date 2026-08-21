@@ -35,12 +35,22 @@ opening one org (`/accounts/:id`) returns an error until this function exists.
 
 ### 2. Create the service
 
+Add a service in the **existing** Atmosphere Railway project (the one that
+already has `Atmosphere` and `Atmosphere-web`). Do not create a second
+Railway project.
+
 1. Railway project canvas → **+ Create → Empty service**.
 2. Name it **`Atmosphere-internal`**.
-3. Settings → **Source** → `CFIStatic/Atmosphere`, trigger branch **`main`**.
+3. Settings → **Source** → `CFIStatic/Atmosphere`.
 4. Settings → **Root Directory** = `/`.
-5. Settings → **Config File** = `/internal/railway.toml`.
-6. **Autodeploy** on, **Wait for CI** on.
+5. Settings → **Config File** = `/internal/railway.toml`. This is required.
+   Without it, Railway loads `/railway.toml`, starts `node dist/index.js`,
+   probes `/api/health` for 300s, and **Network → Healthcheck** fails.
+6. Trigger branch: a commit that contains `internal/` (this folder). Until
+   that is on `main`, point the service at `cursor/internal-data-platform-e19d`.
+   A GitHub deploy of today's `main` cannot use this config file — it is not
+   on `main` yet — so it builds the BFF image instead.
+7. **Autodeploy** on, **Wait for CI** on.
 
 ### 3. Point `/api` at the live BFF
 
@@ -77,7 +87,9 @@ changes. Override the name with `RAILWAY_INTERNAL_SERVICE`.
 
 Or click **Deploy** on the service after Autodeploy is on.
 
-Health: `GET https://<internal-host>/healthz` → `ok`.
+Health: `GET https://<internal-host>/healthz` → `ok`. nginx also answers
+`/health` and `/api/health` with `ok` so a leftover backend probe cannot
+take the replica down.
 
 ### 6. Sign in with a real Atmosphere account
 
@@ -95,6 +107,23 @@ You will see **live** orgs, MRR, usage, jobs, and `/api/ready` from
 production — empty tiles mean there is no production data yet, not demo data.
 
 Do not send this URL to customers. The site sends `X-Robots-Tag: noindex`.
+
+### If Network → Healthcheck fails (~5 minutes)
+
+That timeout is the **backend** probe: `/api/health` with
+`healthcheckTimeout = 300` from `/railway.toml`. The internal site is nginx.
+
+| Check | Must be |
+| --- | --- |
+| Config File | `/internal/railway.toml` (not `/railway.toml`) |
+| Root Directory | `/` |
+| Branch | a commit that has `internal/Dockerfile` |
+| Start command | `/docker-entrypoint.sh nginx -g 'daemon off;'` (from that toml) |
+| `API_UPSTREAM` | `http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}` |
+| Project | same canvas as the `Atmosphere` BFF |
+
+Then **Deploy** again. A passing probe is `GET /healthz` → `ok` in a few
+seconds, not five minutes.
 
 ## Develop against the real backend
 

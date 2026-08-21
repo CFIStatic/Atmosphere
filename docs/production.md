@@ -141,7 +141,9 @@ Manual backend fallback: **Actions → Deploy Work Verification → Run workflow
 - **GitHub App.** Re-accept permissions; reconnect the repo on the service.
 - **Config as Code.** Frontend still using `/railway.toml` will try to start
   `node dist/index.js` and healthcheck `/api/health`. Point it at
-  `/frontend/railway.toml`.
+  `/frontend/railway.toml`. The internal site is the same trap: Config File
+  must be `/internal/railway.toml`. A ~5 minute Network healthcheck is the
+  backend 300s `/api/health` probe, not nginx.
 
 Official references: [GitHub Autodeploys](https://docs.railway.com/deployments/github-autodeploys),
 [PR Environments](https://docs.railway.com/guides/preview-deployments-with-pr-environments),
@@ -220,12 +222,13 @@ Invite emails use the first origin in `FRONTEND_ORIGIN`, so put the public `http
 
 Atmosphere Internal (`internal/`) is a third Railway service next to the BFF and office app. Same-origin `/api` again: staff sign in with the same Atmosphere account; `analytics_staff` gates named accounts.
 
-1. **+ Create → Empty service.** Name it `Atmosphere-internal` (or set `RAILWAY_INTERNAL_SERVICE`).
-2. Settings → **Config File**: `/internal/railway.toml`
+1. **+ Create → Empty service** in the **existing** Atmosphere project. Name it `Atmosphere-internal` (or set `RAILWAY_INTERNAL_SERVICE`). Do not create a second Railway project.
+2. Settings → **Config File**: `/internal/railway.toml`. Without this, GitHub autodeploy uses `/railway.toml`, starts `node dist/index.js`, and **Network → Healthcheck** fails after ~5 minutes (`/api/health`).
 3. Settings → **Root Directory**: `/`
-4. Variable `API_UPSTREAM=http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}`
-5. Networking → **Generate domain**. Add that https origin to backend `FRONTEND_ORIGIN`. Production CORS already allows `https://atmosphere-internal*.up.railway.app`.
-6. Health probe: `GET /healthz` → `ok`.
+4. Trigger branch must contain `internal/` (until this is on `main`, use the branch that added it). Deploying `main` before that merge cannot see `/internal/railway.toml`.
+5. Variable `API_UPSTREAM=http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}`
+6. Networking → **Generate domain**. Add that https origin to backend `FRONTEND_ORIGIN`. Production CORS already allows `https://atmosphere-internal*.up.railway.app`.
+7. Health probe: `GET /healthz` → `ok` (also `/health` and `/api/health`). nginx starts with `startCommand` from `internal/railway.toml`, not `node dist/index.js`.
 
 Do not point customers here. The site sends `X-Robots-Tag: noindex`. The
 hosted image has no demo-data path — sign-in and every report hit the live

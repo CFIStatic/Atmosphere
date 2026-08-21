@@ -15,9 +15,26 @@ server {
   add_header X-Frame-Options DENY always;
   add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
 
+  # Liveness for this replica only. Do not proxy these to the BFF — a cold
+  # or unreachable API_UPSTREAM must not fail Railway's Network healthcheck.
   location = /healthz {
     access_log off;
     default_type text/plain;
+    add_header Cache-Control "no-store";
+    return 200 'ok';
+  }
+
+  location = /health {
+    access_log off;
+    default_type text/plain;
+    add_header Cache-Control "no-store";
+    return 200 'ok';
+  }
+
+  location = /api/health {
+    access_log off;
+    default_type text/plain;
+    add_header Cache-Control "no-store";
     return 200 'ok';
   }
 
