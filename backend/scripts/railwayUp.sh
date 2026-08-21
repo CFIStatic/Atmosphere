@@ -41,6 +41,9 @@ dump_build_logs() {
 
 attempt=1
 while [ "$attempt" -le "$max_attempts" ]; do
+  if [ -n "${RAILWAY_UP_STAMP_FILE:-}" ] && [ -f "${RAILWAY_UP_STAMP_FILE}" ]; then
+    printf '\n# railway-up-retry %s %s\n' "$attempt" "$(date -u +%s)" >> "$RAILWAY_UP_STAMP_FILE"
+  fi
   echo "railway up attempt $attempt/$max_attempts (wait ${wait_secs}s)"
   log="$(mktemp)"
   timeout "$wait_secs" railway up \
@@ -50,34 +53,17 @@ while [ "$attempt" -le "$max_attempts" ]; do
     --verbose >"$log" 2>&1
   status=$?
   cat "$log"
+  if grep -qi 'failed with service unavailable' "$log"; then
+    echo "railway up reached a failed healthcheck."
+    status=1
+  fi
   if [ "$status" -eq 0 ]; then
     if grep -qi 'no changes detected in watch paths' "$log"; then
-      echo "railway up skipped the image build (watch paths). Redeploying so current variables apply."
-      rm -f "$log"
-      log="$(mktemp)"
-      timeout "$wait_secs" railway redeploy \
-        --service "$service" \
-        --project "$project" \
-        --environment "$environment" \
-        --yes >"$log" 2>&1 \
-        || timeout "$wait_secs" railway redeploy --service "$service" --yes >"$log" 2>&1
-      status=$?
-      cat "$log"
-      if [ "$status" -eq 0 ]; then
-        rm -f "$log"
-        echo "Railway redeploy succeeded"
-        exit 0
-      fi
-      echo "railway redeploy exited $status"
-      dump_build_logs
-      rm -f "$log"
-      if [ "$attempt" -eq "$max_attempts" ]; then
-        exit 1
-      fi
-      attempt=$((attempt + 1))
-      sleep $((attempt * 30))
-      continue
+      echo "railway up skipped the image build (watch paths). Retrying with a new stamp instead of redeploying the previous replica."
+      status=1
     fi
+  fi
+  if [ "$status" -eq 0 ]; then
     rm -f "$log"
     echo "Railway deploy succeeded"
     exit 0

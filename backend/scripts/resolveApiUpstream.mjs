@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const project = process.env.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae';
 const environment = process.env.RAILWAY_ENVIRONMENT || 'production';
 const want = process.argv[2] || 'Atmosphere APIs';
-const fallback = 'http://atmosphere-apis.railway.internal:4000';
+const fallback = 'http://atmosphere.railway.internal:4000';
 
 const resolver = fileURLToPath(new URL('./resolveRailwayService.mjs', import.meta.url));
 const idResult = spawnSync(process.execPath, [resolver, want], {

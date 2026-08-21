@@ -13,14 +13,14 @@ fi
 
 if [ -z "${API_UPSTREAM:-}" ]; then
   log "API_UPSTREAM is required."
-  log "set API_UPSTREAM=http://atmosphere-apis.railway.internal:4000"
+  log "set API_UPSTREAM=http://atmosphere.railway.internal:4000"
   exit 1
 fi
 
 case "${API_UPSTREAM}" in
   http://127.0.0.1:*|http://localhost:*|http://[::1]:*)
     log "API_UPSTREAM=${API_UPSTREAM} is loopback inside this container."
-    log "set API_UPSTREAM=http://atmosphere-apis.railway.internal:4000"
+    log "set API_UPSTREAM=http://atmosphere.railway.internal:4000"
     exit 1
     ;;
   https://*)
@@ -34,7 +34,7 @@ esac
 # so the injected value can be http://host: or the raw template.
 case "${API_UPSTREAM}" in
   *'${{'*|http://:*)
-    API_UPSTREAM="http://atmosphere-apis.railway.internal:4000"
+    API_UPSTREAM="http://atmosphere.railway.internal:4000"
     log "replaced unusable API_UPSTREAM template with ${API_UPSTREAM}"
     ;;
 esac

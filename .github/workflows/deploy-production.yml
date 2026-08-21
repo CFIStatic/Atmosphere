@@ -281,6 +281,7 @@ jobs:
           # then skips watch paths and leaves the old replica. Dirty a
           # watched file so this CLI upload is a new image with the var set.
           printf '\n# gha %s %s\n' "${GITHUB_SHA}" "$(date -u +%Y%m%dT%H%M%SZ)" >> internal/nginx/default.conf.template
+          export RAILWAY_UP_STAMP_FILE="$PWD/internal/nginx/default.conf.template"
           cp internal/railway.toml railway.toml
           cp internal/railway.json railway.json
           backend/scripts/railwayUp.sh

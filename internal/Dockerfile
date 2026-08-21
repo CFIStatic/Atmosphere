@@ -22,6 +22,7 @@ COPY internal/nginx/default.conf.template /etc/nginx/templates/default.conf.temp
 COPY internal/nginx/15-validate-internal-env.sh /docker-entrypoint.d/15-validate-internal-env.sh
 RUN chmod +x /docker-entrypoint.d/15-validate-internal-env.sh
 ENV NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM|NGINX_RESOLVER)$$
+ENV NGINX_RESOLVER=fd12::10
 ENV PORT=80
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 \

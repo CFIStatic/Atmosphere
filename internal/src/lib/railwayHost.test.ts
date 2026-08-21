@@ -52,7 +52,8 @@ describe('Railway internal-site image', () => {
     expect(apiHealth).toBeGreaterThan(-1);
     expect(apiProxy).toBeGreaterThan(apiHealth);
     expect(nginx).toContain('proxy_pass $api_upstream');
-    expect(nginx).toContain('resolver ${NGINX_RESOLVER}');
+    expect(nginx).toMatch(/resolver \$\{NGINX_RESOLVER\} valid=30s ipv6=on;/);
+    expect(nginx).not.toMatch(/resolver[^\n]*ipv4=/);
     expect(nginx).toContain('return 200 \'ok\'');
     expect(nginx).toContain('proxy_set_header Origin');
     expect(nginx).toContain('error_page 502 503 504 = @api_down');
@@ -61,7 +62,7 @@ describe('Railway internal-site image', () => {
 
   it('points API_UPSTREAM at the Atmosphere private domain, not the public URL', () => {
     const upstream = read('api.upstream').trim();
-    expect(upstream).toMatch(/^http:\/\/atmosphere-apis\.railway\.internal:\d+$/);
+    expect(upstream).toMatch(/^http:\/\/atmosphere\.railway\.internal:\d+$/);
     expect(upstream).not.toContain('https://');
     expect(upstream).not.toContain('up.railway.app');
     expect(upstream).not.toContain('127.0.0.1');
