@@ -9,6 +9,11 @@ function read(rel: string) {
   return readFileSync(resolve(repoRoot, rel), 'utf8');
 }
 
+/** Files above frontend/ — the upstream is shared by every front door. */
+function readRoot(rel: string) {
+  return read(`../${rel}`);
+}
+
 describe('Railway office-app image', () => {
   it('builds from the repo root so Verifier and Field Capture are in the image', () => {
     const dockerfile = read('Dockerfile');
@@ -30,7 +35,7 @@ describe('Railway office-app image', () => {
   });
 
   it('points API_UPSTREAM at the Atmosphere private domain, not the public URL', () => {
-    const upstream = read('api.upstream').trim();
+    const upstream = readRoot('api.upstream').trim();
     expect(upstream).toBe(
       'http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}',
     );
@@ -54,5 +59,49 @@ describe('Railway office-app image', () => {
     const compose = readFileSync(resolve(repoRoot, '../docker-compose.yml'), 'utf8');
     expect(compose).toContain('dockerfile: frontend/Dockerfile');
     expect(compose).toContain('API_UPSTREAM: http://backend:4000');
+  });
+});
+
+/**
+ * Office console, marketing site, and staff console are three nginx front
+ * doors onto one BFF. Any of them pointed at the public https host sends /api
+ * back out of the mesh and in through the edge, which 502s — the screen that
+ * reports the Atmosphere API as unreachable. api.upstream is the one value
+ * they all take, so it lives at the repo root rather than under frontend/.
+ */
+describe('every front door proxies /api over the private mesh', () => {
+  const office = readRoot('.github/workflows/deploy-production.yml');
+  const site = readRoot('.github/workflows/deploy-website.yml');
+  const publicHost = /API_UPSTREAM.*https:\/\/[a-z0-9-]+\.up\.railway\.app/;
+
+  it('takes the office upstream from the shared root file', () => {
+    expect(office).toContain("tr -d '\\n' < api.upstream");
+    expect(office).not.toMatch(publicHost);
+  });
+
+  it('takes the marketing-site upstream from that same file', () => {
+    expect(site).toContain("tr -d '\\n' < api.upstream");
+    expect(site).not.toMatch(publicHost);
+  });
+
+  it('syncs the staff console, which this repo does not build', () => {
+    expect(office).toContain('scripts/railwayPrivateUpstream.sh "$RAILWAY_INTERNAL_SERVICE"');
+
+    const sync = readRoot('scripts/railwayPrivateUpstream.sh');
+    expect(sync).toContain('api.upstream');
+    // Writing the variable redeploys that service, so a correct one is left be.
+    expect(sync).toContain('http://*.railway.internal:*');
+  });
+
+  it('never bakes a public https upstream into the website image', () => {
+    const dockerfile = readRoot('website/Dockerfile');
+    expect(dockerfile).toContain('ENV API_UPSTREAM=http://127.0.0.1:4000');
+    expect(dockerfile).not.toMatch(/API_UPSTREAM=https:\/\//);
+  });
+
+  it('keeps the website proxy addressing its upstream by host', () => {
+    const nginx = readRoot('website/nginx/default.conf.template');
+    expect(nginx).toContain('proxy_pass ${API_UPSTREAM}');
+    expect(nginx).toContain('proxy_set_header Host $proxy_host');
   });
 });
