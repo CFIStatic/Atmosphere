@@ -15,6 +15,7 @@ import {
   resetPasswordSchema,
   pinSchema,
   pinUnlockSchema,
+  internalStaffLoginSchema,
 } from '../lib/validation.js';
 import { badRequest, unauthorized, HttpError } from '../lib/errors.js';
 import {
@@ -33,6 +34,9 @@ import {
   sessionTokens,
   signInPasswordAccount,
 } from '../auth/passwordAccount.js';
+import { evaluateInternalStaffGate, STAFF_LOGIN_DENIED } from '../lib/internalStaffGate.js';
+import { allowlistedAnalyticsScope, ensureAllowlistedAnalyticsAccess } from '../lib/analyticsAccess.js';
+import { openInternalStaffSession } from '../auth/internalStaffSession.js';
 
 export const authRouter = Router();
 
@@ -116,6 +120,56 @@ authRouter.post('/login', authLimiter, async (req: Request, res: Response, next:
     });
 
     res.json({ user: publicUser(result.user), session: sessionTokens(result.session) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/auth/internal-login
+ * Internal staff site: first name, last name, allowlisted email, access code.
+ * Mints a real session without the office-app password.
+ */
+authRouter.post('/internal-login', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const body = internalStaffLoginSchema.parse(req.body);
+    const expected = config.analytics.internalAccessCode;
+    if (!expected) {
+      throw new HttpError(
+        503,
+        'Staff access code is not configured on this server.',
+        'internal_login_unavailable',
+      );
+    }
+
+    const gate = evaluateInternalStaffGate({
+      firstName: body.firstName,
+      lastName: body.lastName,
+      email: body.email,
+      accessCode: body.accessCode,
+      expectedAccessCode: expected,
+      allowlisted: allowlistedAnalyticsScope(body.email) !== null,
+    });
+    if (!gate.ok) {
+      throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
+    }
+
+    const { user, session } = await openInternalStaffSession({
+      email: body.email,
+      firstName: body.firstName,
+      lastName: body.lastName,
+      fullName: gate.fullName,
+    });
+
+    setSessionCookies(res, session);
+    await ensureAllowlistedAnalyticsAccess(user, gate.fullName);
+    await recordEvent(createUserClient(session.access_token), {
+      type: 'auth.signed_in',
+      summary: 'signed in to the internal site with an access code',
+      entityId: user.id,
+    });
+
+    res.json({ user: publicUser(user), session: sessionTokens(session) });
   } catch (err) {
     next(err);
   }

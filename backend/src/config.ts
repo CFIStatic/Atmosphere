@@ -1046,6 +1046,13 @@ export const config = {
       ['jack@jettx.ai'],
     ),
     investorEmails: parseEmailList(process.env.ANALYTICS_INVESTOR_EMAILS, []),
+    /**
+     * Shared staff access code for the internal site login (name + email + code).
+     * Required in production. Development falls back so local sign-in works.
+     */
+    internalAccessCode:
+      process.env.INTERNAL_ACCESS_CODE?.trim() ||
+      (isProduction ? '' : 'atmosphere-internal'),
   },
 } as const;
 

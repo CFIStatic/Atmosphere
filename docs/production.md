@@ -275,6 +275,7 @@ Strongly recommended:
 
 - `ANTHROPIC_API_KEY` and/or `GOOGLE_API_KEY` for Verifier dictation
 - `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` (+ `STRIPE_ONBOARDING_PRICE_ID`) — see [`docs/stripe.md`](./stripe.md)
+- `INTERNAL_ACCESS_CODE` — staff access code for the internal site login
 - `COOKIE_SECURE=true` (default when `NODE_ENV=production`)
 - `BACKUP_ENCRYPTION_KEY` if `BACKUP_ENABLED` is on
 - `LOG_LEVEL=info` (structured JSON logs)
@@ -307,6 +308,10 @@ npm run check:migrations --prefix backend
 `ANALYTICS_INTERNAL_EMAILS` (default: `jack@jettx.ai`) are **auto-granted** on
 the next `/api/analytics/access` probe when `SUPABASE_SERVICE_ROLE_KEY` is set —
 no SQL step in preview.
+
+The internal staff site (`internal/`) signs in with first name, last name,
+email, and `INTERNAL_ACCESS_CODE` (`POST /api/auth/internal-login`). Set that
+variable on the **Atmosphere** BFF. Development default is `atmosphere-internal`.
 
 Optional manual grant for others:
 

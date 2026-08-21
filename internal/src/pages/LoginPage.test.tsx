@@ -13,15 +13,19 @@ vi.mock('../context/AuthContext', () => ({
 }));
 
 describe('LoginPage', () => {
-  it('is a staff sign-in against the live backend, not a public signup or demo', () => {
+  it('asks for first name, last name, email, and access code — not a password', () => {
     render(
       <MemoryRouter>
         <LoginPage />
       </MemoryRouter>,
     );
     expect(screen.getByRole('heading', { name: 'Internal' })).toBeInTheDocument();
+    expect(screen.getByLabelText('First name')).toBeInTheDocument();
+    expect(screen.getByLabelText('Last name')).toBeInTheDocument();
+    expect(screen.getByLabelText('Email')).toBeInTheDocument();
+    expect(screen.getByLabelText('Access code')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Password')).toBeNull();
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /demo/i })).toBeNull();
-    expect(screen.queryByRole('link', { name: /create/i })).toBeNull();
   });
 });

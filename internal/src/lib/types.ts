@@ -5,6 +5,13 @@ export interface AnalyticsAccess {
   displayName: string | null;
 }
 
+export interface StaffLogin {
+  firstName: string;
+  lastName: string;
+  email: string;
+  accessCode: string;
+}
+
 export interface AuthUser {
   id: string;
   email: string | null;

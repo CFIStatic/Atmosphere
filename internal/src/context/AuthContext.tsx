@@ -9,13 +9,13 @@ import {
   type ReactNode,
 } from 'react';
 import { api, ApiError } from '../lib/api';
-import type { AnalyticsAccess, AuthUser } from '../lib/types';
+import type { AnalyticsAccess, AuthUser, StaffLogin } from '../lib/types';
 
 interface AuthValue {
   user: AuthUser | null;
   access: AnalyticsAccess | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (input: StaffLogin) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -57,8 +57,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadAccess]);
 
   const login = useCallback(
-    async (email: string, password: string) => {
-      const { user: next } = await api.login(email, password);
+    async (input: StaffLogin) => {
+      const { user: next } = await api.login(input);
       setUser(next);
       await loadAccess();
     },

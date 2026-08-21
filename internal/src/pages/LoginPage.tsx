@@ -7,8 +7,10 @@ import { landingPath } from '../lib/access';
 export function LoginPage() {
   const { user, access, loading, login } = useAuth();
   const [searchParams] = useSearchParams();
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [accessCode, setAccessCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,7 +32,7 @@ export function LoginPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await login(email, password);
+      await login({ firstName, lastName, email, accessCode });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not sign in.');
     } finally {
@@ -44,10 +46,34 @@ export function LoginPage() {
         <p className="text-[11px] uppercase tracking-[0.18em] text-brand-600">Atmosphere staff</p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">Internal</h1>
         <p className="mt-2 text-sm text-ink-500">
-          Accounts, product analytics, and system health. Sign in with your Atmosphere account —
-          the same login as the office app, gated to analytics staff.
+          Accounts, product analytics, and system health. Sign in with your name, work email, and
+          staff access code.
         </p>
         <form className="mt-6 space-y-4" onSubmit={(event) => void onSubmit(event)}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block text-sm">
+              <span className="text-ink-600">First name</span>
+              <input
+                type="text"
+                autoComplete="given-name"
+                required
+                value={firstName}
+                onChange={(event) => setFirstName(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-none focus:border-brand-500"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="text-ink-600">Last name</span>
+              <input
+                type="text"
+                autoComplete="family-name"
+                required
+                value={lastName}
+                onChange={(event) => setLastName(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-none focus:border-brand-500"
+              />
+            </label>
+          </div>
           <label className="block text-sm">
             <span className="text-ink-600">Email</span>
             <input
@@ -60,17 +86,17 @@ export function LoginPage() {
             />
           </label>
           <label className="block text-sm">
-            <span className="text-ink-600">Password</span>
+            <span className="text-ink-600">Access code</span>
             <input
               type="password"
-              autoComplete="current-password"
+              autoComplete="off"
               required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
+              value={accessCode}
+              onChange={(event) => setAccessCode(event.target.value)}
               className="mt-1 w-full rounded-lg border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-none focus:border-brand-500"
             />
           </label>
-          {error && <p className="text-sm text-danger-600">{error}</p>}
+          {error && <p className="mt-0 text-sm text-danger-600">{error}</p>}
           <button
             type="submit"
             disabled={submitting}

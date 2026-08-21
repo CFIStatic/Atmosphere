@@ -93,11 +93,20 @@ Health: `GET https://<internal-host>/healthz` → `ok`. nginx also answers
 `/health` and `/api/health` with `ok` so a leftover backend probe cannot
 take the replica down.
 
-### 6. Sign in with a real Atmosphere account
+### 6. Sign in with name, email, and access code
 
-Open the generated domain. Sign in as `jack@jettx.ai` (or any email in
-`ANALYTICS_INTERNAL_EMAILS` on the BFF). The BFF upserts `analytics_staff`
-when `SUPABASE_SERVICE_ROLE_KEY` is set.
+Open the generated domain. The form asks for **first name**, **last name**,
+**email**, and a **staff access code** — not the office-app password.
+
+- Email must be on `ANALYTICS_INTERNAL_EMAILS` (default `jack@jettx.ai`).
+- Access code is `INTERNAL_ACCESS_CODE` on the **Atmosphere** BFF service
+  (not on Atmosphere-internal). Local / preview default is
+  `atmosphere-internal`.
+- Set the production code in Railway Variables on `Atmosphere`, or in GitHub
+  environment `Keys` as `INTERNAL_ACCESS_CODE`.
+
+The BFF upserts `analytics_staff` when `SUPABASE_SERVICE_ROLE_KEY` is set,
+and stores the name you typed as the staff display name.
 
 Manual grant for someone else:
 
@@ -141,5 +150,6 @@ Sign in with a real staff account. Same cookies as the office app.
 | Knob | Meaning |
 | --- | --- |
 | `ANALYTICS_INTERNAL_EMAILS` | Auto-grant internal scope (default `jack@jettx.ai`) |
+| `INTERNAL_ACCESS_CODE` | Staff access code for the internal site login (BFF) |
 | `npm run analytics:grant --prefix backend -- someone@company.com internal` | Manual grant |
 | Migration `20260821160000_internal_account_detail.sql` | One-org members/jobs/usage RPC |

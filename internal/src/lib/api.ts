@@ -7,6 +7,7 @@ import type {
   OverviewPayload,
   RangeParams,
   ReadyPayload,
+  StaffLogin,
 } from './types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -66,10 +67,10 @@ function rangeQuery({ from, to, months }: RangeParams): string {
 }
 
 export const api = {
-  login: (email: string, password: string) =>
-    request<{ user: AuthUser }>('/api/auth/login', {
+  login: (input: StaffLogin) =>
+    request<{ user: AuthUser }>('/api/auth/internal-login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(input),
     }),
 
   logout: () => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),

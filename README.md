@@ -310,8 +310,8 @@ A/B experiments: seed/manage rows in `public.experiments`, set `status` to
 internal analytics dashboard under **A/B tests**.
 
 The same data is also a separately hosted staff site at **`internal/`**
-(Railway service `Atmosphere-internal`). That image always calls the live BFF
-— no demo fixtures. See [`internal/README.md`](internal/README.md).
+(Railway service `Atmosphere-internal`). Sign in with first name, last name,
+email, and `INTERNAL_ACCESS_CODE` on the BFF. See [`internal/README.md`](internal/README.md).
 
 ## Related docs
 
