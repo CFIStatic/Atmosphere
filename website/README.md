@@ -170,6 +170,8 @@ stamps it onto every page as `<html data-app-origin>`; `site.js` then:
   (the app's create-account wizard). A signed-in visitor still lands on
   that form instead of their dashboard, so the link can create a new
   account from the marketing site;
+- rewrites **Forgot password?** (`data-app-path="/forgot-password"`) to
+  `{origin}/forgot-password`;
 - turns the sign-in and sign-up pages' forms into a handoff — submitting
   forwards to the app with the typed email prefilled (never the password).
 

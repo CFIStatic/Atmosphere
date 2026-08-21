@@ -46,5 +46,9 @@ describe('LoginPage', () => {
     expect(screen.queryByText('Need an account?')).toBeNull();
     expect(screen.queryByText('Link to office account')).toBeNull();
     expect(screen.queryByText(/start a new organization/i)).toBeNull();
+    expect(screen.getByRole('link', { name: 'Forgot password?' })).toHaveAttribute(
+      'href',
+      '/forgot-password',
+    );
   });
 });

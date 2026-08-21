@@ -98,10 +98,12 @@ export const config = {
     pepper: required('DEVICE_PEPPER', devOnly('atmosphere-dev-pepper-do-not-use-in-production')),
   },
 
-  // Where the password-reset email sends the user back to. Must also be listed
-  // in the Supabase dashboard under Authentication → URL Configuration.
-  passwordResetRedirectUrl:
-    process.env.PASSWORD_RESET_REDIRECT_URL ?? `${frontendOrigins[0]}/reset-password`,
+  // Where the password-reset email sends the user back to when Atmosphere
+  // mail is unavailable and we fall through to Supabase's mailer. Prefer
+  // passwordResetRedirectUrl() (publicAppOrigin + /reset-password) — do not
+  // stamp FRONTEND_ORIGIN[0], which is often localhost or the unmapped
+  // custom domain. Override with PASSWORD_RESET_REDIRECT_URL.
+  passwordResetRedirectUrl: process.env.PASSWORD_RESET_REDIRECT_URL ?? '',
 
   xactimate: {
     // Which driver reaches Xactimate. 'mock' is the default deliberately: the
