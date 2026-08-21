@@ -30,17 +30,19 @@ const nameField = z
   .max(80, 'Name is too long')
   .regex(/^[\p{L}][\p{L}\s'.-]*$/u, 'Enter a real name');
 
-export const internalStaffLoginSchema = z.object({
+export const internalStaffStartSchema = z.object({
   firstName: nameField,
   lastName: nameField,
   email: emailField,
-  accessCode: z
-    .string({ required_error: 'Access code is required' })
-    .min(1, 'Access code is required')
-    .max(128, 'Access code is too long'),
 });
 
-export type InternalStaffLogin = z.infer<typeof internalStaffLoginSchema>;
+export const internalStaffVerifySchema = z.object({
+  challenge: z.string().trim().min(16).max(4000),
+  code: z
+    .string({ required_error: 'Authenticator code is required' })
+    .trim()
+    .regex(/^\d{6}$/, 'Enter the 6-digit code from Microsoft Authenticator'),
+});
 
 /** Body of the "email me a reset link" request. */
 export const forgotPasswordSchema = z.object({ email: emailField });

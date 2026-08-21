@@ -9,13 +9,20 @@ import {
   type ReactNode,
 } from 'react';
 import { api, ApiError } from '../lib/api';
-import type { AnalyticsAccess, AuthUser, StaffLogin } from '../lib/types';
+import type {
+  AnalyticsAccess,
+  AuthUser,
+  StaffChallengeResponse,
+  StaffIdentity,
+  StaffVerify,
+} from '../lib/types';
 
 interface AuthValue {
   user: AuthUser | null;
   access: AnalyticsAccess | null;
   loading: boolean;
-  login: (input: StaffLogin) => Promise<void>;
+  startSignIn: (input: StaffIdentity) => Promise<StaffChallengeResponse>;
+  login: (input: StaffVerify) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -56,8 +63,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [loadAccess]);
 
+  const startSignIn = useCallback(
+    (input: StaffIdentity) => api.startSignIn(input),
+    [],
+  );
+
   const login = useCallback(
-    async (input: StaffLogin) => {
+    async (input: StaffVerify) => {
       const { user: next } = await api.login(input);
       setUser(next);
       await loadAccess();
@@ -76,8 +88,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, access, loading, login, logout }),
-    [user, access, loading, login, logout],
+    () => ({ user, access, loading, startSignIn, login, logout }),
+    [user, access, loading, startSignIn, login, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -15,7 +15,8 @@ import {
   resetPasswordSchema,
   pinSchema,
   pinUnlockSchema,
-  internalStaffLoginSchema,
+  internalStaffStartSchema,
+  internalStaffVerifySchema,
 } from '../lib/validation.js';
 import { badRequest, unauthorized, HttpError } from '../lib/errors.js';
 import {
@@ -34,9 +35,13 @@ import {
   sessionTokens,
   signInPasswordAccount,
 } from '../auth/passwordAccount.js';
-import { evaluateInternalStaffGate, STAFF_LOGIN_DENIED } from '../lib/internalStaffGate.js';
+import { STAFF_LOGIN_DENIED } from '../lib/internalStaffGate.js';
 import { allowlistedAnalyticsScope, ensureAllowlistedAnalyticsAccess } from '../lib/analyticsAccess.js';
 import { openInternalStaffSession } from '../auth/internalStaffSession.js';
+import { signStaffChallenge, readStaffChallenge } from '../lib/internalStaffChallenge.js';
+import { otpauthUrl, randomTotpSecret, verifyTotp } from '../lib/totp.js';
+import { loadEnrolledTotp, saveEnrolledTotp } from '../auth/internalStaffTotpStore.js';
+import { toDataURL as totpQrDataUrl } from 'qrcode';
 
 export const authRouter = Router();
 
@@ -126,46 +131,103 @@ authRouter.post('/login', authLimiter, async (req: Request, res: Response, next:
 });
 
 /**
- * POST /api/auth/internal-login
- * Internal staff site: first name, last name, allowlisted email, access code.
- * Mints a real session without the office-app password.
+ * POST /api/auth/internal-challenge
+ * Internal staff site step 1: name + allowlisted email. Returns either a
+ * Microsoft Authenticator enrollment QR or a prompt for the 6-digit code.
  */
-authRouter.post('/internal-login', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
+authRouter.post('/internal-challenge', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const body = internalStaffLoginSchema.parse(req.body);
-    const expected = config.analytics.internalAccessCode;
-    if (!expected) {
+    const body = internalStaffStartSchema.parse(req.body);
+    if (!createAdminClient()) {
       throw new HttpError(
         503,
-        'Staff access code is not configured on this server.',
+        'Staff sign-in is not configured on this server.',
         'internal_login_unavailable',
       );
     }
-
-    const gate = evaluateInternalStaffGate({
-      firstName: body.firstName,
-      lastName: body.lastName,
-      email: body.email,
-      accessCode: body.accessCode,
-      expectedAccessCode: expected,
-      allowlisted: allowlistedAnalyticsScope(body.email) !== null,
-    });
-    if (!gate.ok) {
+    if (allowlistedAnalyticsScope(body.email) === null) {
       throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
     }
 
-    const { user, session } = await openInternalStaffSession({
+    const enrolled = await loadEnrolledTotp(body.email);
+    if (enrolled) {
+      const challenge = signStaffChallenge({
+        email: body.email,
+        firstName: body.firstName,
+        lastName: body.lastName,
+        enrolled: true,
+      });
+      res.json({ status: 'code', challenge });
+      return;
+    }
+
+    const secret = randomTotpSecret();
+    const otpauth = otpauthUrl(body.email, secret);
+    const qrDataUrl = await totpQrDataUrl(otpauth, { margin: 1, width: 220, errorCorrectionLevel: 'M' });
+    const challenge = signStaffChallenge({
       email: body.email,
       firstName: body.firstName,
       lastName: body.lastName,
-      fullName: gate.fullName,
+      enrolled: false,
+      secret,
+    });
+    res.json({
+      status: 'enroll',
+      challenge,
+      otpauthUrl: otpauth,
+      qrDataUrl,
+      secret,
+      issuer: 'Atmosphere Internal',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/auth/internal-login
+ * Internal staff site step 2: 6-digit code from Microsoft Authenticator.
+ */
+authRouter.post('/internal-login', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const body = internalStaffVerifySchema.parse(req.body);
+    const challenge = readStaffChallenge(body.challenge);
+    if (!challenge || allowlistedAnalyticsScope(challenge.email) === null) {
+      throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
+    }
+
+    let secret: string;
+    let minCounter = -1n;
+    if (challenge.enrolled) {
+      const stored = await loadEnrolledTotp(challenge.email);
+      if (!stored) throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
+      secret = stored.secret;
+      minCounter = stored.lastCounter;
+    } else if (challenge.secret) {
+      secret = challenge.secret;
+    } else {
+      throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
+    }
+
+    const verified = verifyTotp(secret, body.code, { minCounter });
+    if (!verified.ok) {
+      throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
+    }
+
+    await saveEnrolledTotp(challenge.email, secret, verified.counter);
+
+    const { user, session } = await openInternalStaffSession({
+      email: challenge.email,
+      firstName: challenge.firstName,
+      lastName: challenge.lastName,
+      fullName: challenge.fullName,
     });
 
     setSessionCookies(res, session);
-    await ensureAllowlistedAnalyticsAccess(user, gate.fullName);
+    await ensureAllowlistedAnalyticsAccess(user, challenge.fullName);
     await recordEvent(createUserClient(session.access_token), {
       type: 'auth.signed_in',
-      summary: 'signed in to the internal site with an access code',
+      summary: 'signed in to the internal site with Microsoft Authenticator',
       entityId: user.id,
     });
 

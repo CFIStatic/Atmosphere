@@ -23,15 +23,20 @@ SQL both re-check).
 Do this once in the same Railway project that already runs `Atmosphere`
 (the BFF) and `Atmosphere-web` (the office app).
 
-### 1. Apply the account-file migration
+### 1. Apply the account-file and authenticator migrations
 
-On the production Supabase project, apply **one** of these (they are identical):
+On the production Supabase project, apply **one** copy of each (the two
+directories are identical):
 
 - `backend/supabase/migrations/20260821160000_internal_account_detail.sql`
-- `supabase/migrations/20260821160000_internal_account_detail.sql`
+  or `supabase/migrations/20260821160000_internal_account_detail.sql`
+- `backend/supabase/migrations/20260821210000_internal_staff_totp.sql`
+  or `supabase/migrations/20260821210000_internal_staff_totp.sql`
 
-Without it, overview/accounts still load from the existing analytics RPCs;
-opening one org (`/accounts/:id`) returns an error until this function exists.
+Without the account-file migration, overview/accounts still load from the
+existing analytics RPCs; opening one org (`/accounts/:id`) returns an error.
+Without the TOTP table, Microsoft Authenticator sign-in cannot store the
+enrolled secret.
 
 ### 2. Create the service
 
@@ -93,17 +98,21 @@ Health: `GET https://<internal-host>/healthz` → `ok`. nginx also answers
 `/health` and `/api/health` with `ok` so a leftover backend probe cannot
 take the replica down.
 
-### 6. Sign in with name, email, and access code
+### 6. Sign in with Microsoft Authenticator
 
 Open the generated domain. The form asks for **first name**, **last name**,
-**email**, and a **staff access code** — not the office-app password.
+and **email** — not the office-app password.
 
 - Email must be on `ANALYTICS_INTERNAL_EMAILS` (default `jack@jettx.ai`).
-- Access code is `INTERNAL_ACCESS_CODE` on the **Atmosphere** BFF service
-  (not on Atmosphere-internal). Local / preview default is
-  `atmosphere-internal`.
-- Set the production code in Railway Variables on `Atmosphere`, or in GitHub
-  environment `Keys` as `INTERNAL_ACCESS_CODE`.
+- First visit for that email shows a QR code. In Microsoft Authenticator:
+  **+ → Other account (Google, Facebook, etc.) → scan the QR**. Enter the
+  6-digit code. That enrollment is stored on the BFF (encrypted with
+  `DEVICE_PEPPER`). Finish this step in one sitting (about 10 minutes).
+- Later visits only ask for the 6-digit code from the same Authenticator
+  account.
+- The first successful enrollment for an allowlisted email owns that pairing.
+  If you close the page before entering the first code, delete the Atmosphere
+  Internal account in Authenticator and scan again.
 
 The BFF upserts `analytics_staff` when `SUPABASE_SERVICE_ROLE_KEY` is set,
 and stores the name you typed as the staff display name.
@@ -150,6 +159,7 @@ Sign in with a real staff account. Same cookies as the office app.
 | Knob | Meaning |
 | --- | --- |
 | `ANALYTICS_INTERNAL_EMAILS` | Auto-grant internal scope (default `jack@jettx.ai`) |
-| `INTERNAL_ACCESS_CODE` | Staff access code for the internal site login (BFF) |
+| `DEVICE_PEPPER` | Encrypts Microsoft Authenticator secrets (existing BFF secret) |
 | `npm run analytics:grant --prefix backend -- someone@company.com internal` | Manual grant |
 | Migration `20260821160000_internal_account_detail.sql` | One-org members/jobs/usage RPC |
+| Migration `20260821210000_internal_staff_totp.sql` | Authenticator enrollment table |

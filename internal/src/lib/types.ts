@@ -5,11 +5,26 @@ export interface AnalyticsAccess {
   displayName: string | null;
 }
 
-export interface StaffLogin {
+export interface StaffIdentity {
   firstName: string;
   lastName: string;
   email: string;
-  accessCode: string;
+}
+
+export type StaffChallengeResponse =
+  | { status: 'code'; challenge: string }
+  | {
+      status: 'enroll';
+      challenge: string;
+      otpauthUrl: string;
+      qrDataUrl: string;
+      secret: string;
+      issuer: string;
+    };
+
+export interface StaffVerify {
+  challenge: string;
+  code: string;
 }
 
 export interface AuthUser {

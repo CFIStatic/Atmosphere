@@ -122,7 +122,6 @@ jobs:
           ANTHROPIC_MODEL: claude-sonnet-5
           VERIFICATION_PRIMARY_MODEL: gemini-2.5-flash
           VERIFICATION_ESCALATION_MODEL: claude-sonnet-5
-          INTERNAL_ACCESS_CODE: ${{ secrets.INTERNAL_ACCESS_CODE || vars.INTERNAL_ACCESS_CODE }}
         run: node scripts/syncGithubEnvToRailway.mjs
 
       - name: Ensure Resend can send as hello@invites.jettx.ai

@@ -266,7 +266,7 @@ Fail-loud at boot when `NODE_ENV=production` (see `backend/src/lib/productionGua
 | `FRONTEND_ORIGIN` | CORS allowlist (comma-separated) |
 | `SUPABASE_URL` / `SUPABASE_ANON_KEY` | Auth + RLS-backed reads |
 | `SUPABASE_SERVICE_ROLE_KEY` | PIN unlock, signed uploads, media catalog, schedulers |
-| `DEVICE_PEPPER` | PIN hashing (never store in the DB) |
+| `DEVICE_PEPPER` | PIN hashing and internal-site Authenticator secrets (never store in the DB) |
 | `CONTACT_TO_EMAIL` / `CAREERS_TO_EMAIL` | Public site forms — defaults to `jack@jettx.ai` |
 | `SMTP_*` or `RESEND_API_KEY` + `CAREERS_FROM_EMAIL` | Atmosphere-sent invites and field OTPs. Resend From is `hello@invites.jettx.ai` (verified subdomain). Reply-To stays `jack@jettx.ai`. |
 | `MEDIA_BACKEND=supabase` | Do not use `memory` or the `s3` stub in prod |
@@ -275,7 +275,6 @@ Strongly recommended:
 
 - `ANTHROPIC_API_KEY` and/or `GOOGLE_API_KEY` for Verifier dictation
 - `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` (+ `STRIPE_ONBOARDING_PRICE_ID`) — see [`docs/stripe.md`](./stripe.md)
-- `INTERNAL_ACCESS_CODE` — staff access code for the internal site login
 - `COOKIE_SECURE=true` (default when `NODE_ENV=production`)
 - `BACKUP_ENCRYPTION_KEY` if `BACKUP_ENABLED` is on
 - `LOG_LEVEL=info` (structured JSON logs)
@@ -310,8 +309,11 @@ the next `/api/analytics/access` probe when `SUPABASE_SERVICE_ROLE_KEY` is set �
 no SQL step in preview.
 
 The internal staff site (`internal/`) signs in with first name, last name,
-email, and `INTERNAL_ACCESS_CODE` (`POST /api/auth/internal-login`). Set that
-variable on the **Atmosphere** BFF. Development default is `atmosphere-internal`.
+and email (`POST /api/auth/internal-challenge`), then a 6-digit Microsoft
+Authenticator code (`POST /api/auth/internal-login`). First visit for an
+allowlisted email enrolls Authenticator; later visits only ask for the code.
+Secrets are encrypted with `DEVICE_PEPPER`. Apply
+`20260821210000_internal_staff_totp.sql` on production Supabase.
 
 Optional manual grant for others:
 
