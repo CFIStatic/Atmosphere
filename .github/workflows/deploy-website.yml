@@ -5,6 +5,13 @@ name: Deploy website
 #   so this updates that service instead of creating Atmosphere-website)
 #     healthcheck GET /health — not /api/health
 #   GitHub Pages — optional; skipped until Settings → Pages → GitHub Actions
+#
+# One-time on the Railway `website` service (Settings → Config-as-code):
+#   Config File = /website/railway.toml
+# This job copies that file over the upload root for `railway up`, but GitHub
+# autodeploys on the service read the real repo — without the setting they
+# resolve the backend's /railway.toml and fail the healthcheck
+# (see docs/production.md → "If the website service fails its healthcheck").
 on:
   push:
     branches:
