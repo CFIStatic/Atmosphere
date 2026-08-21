@@ -3,7 +3,8 @@ name: Deploy website
 # Two hosts for website/:
 #   Railway service `website` in outstanding-kindness (Hobby plan is at cap,
 #   so this updates that service instead of creating Atmosphere-website)
-#     healthcheck GET /health — not /api/health
+#     Config File = /website/railway.toml
+#     healthcheck GET /health (also answered at /api/health, never proxied)
 #   GitHub Pages — optional; skipped until Settings → Pages → GitHub Actions
 on:
   push:
@@ -136,7 +137,8 @@ jobs:
           cleanup() { docker rm -f atmosphere-website-ci >/dev/null 2>&1 || true; }
           trap cleanup EXIT
           sleep 2
-          curl -fsS http://127.0.0.1:18080/health
+          curl -fsS http://127.0.0.1:18080/health | grep -qx 'ok'
+          curl -fsS http://127.0.0.1:18080/api/health | grep -qx 'ok'
           curl -fsS http://127.0.0.1:18080/ | grep -q 'Atmosphere'
 
       - name: Deploy corporate site
