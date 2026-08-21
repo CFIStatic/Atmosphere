@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apiFailureMessage, parseApiJson } from './api';
+import { apiFailureMessage, parseApiJson, backendUnreachableMessage } from './api';
 
 describe('parseApiJson', () => {
   it('returns {} for empty and non-JSON bodies', () => {
@@ -30,8 +30,14 @@ describe('apiFailureMessage', () => {
       expect(apiFailureMessage(status, {}, '')).toMatchObject({
         code: 'backend_unreachable',
       });
-      expect(apiFailureMessage(status, {}, '').message).toMatch(/npm run dev/);
+      expect(apiFailureMessage(status, {}, '').message).toBe(backendUnreachableMessage());
     }
+  });
+
+  it('tells production not to run npm run dev', () => {
+    expect(backendUnreachableMessage(true)).toMatch(/Cannot reach the Atmosphere API/);
+    expect(backendUnreachableMessage(true)).not.toMatch(/npm run dev/);
+    expect(backendUnreachableMessage(false)).toMatch(/npm run dev/);
   });
 
   it('keeps a generic fallback for non-empty unexplained 500s', () => {

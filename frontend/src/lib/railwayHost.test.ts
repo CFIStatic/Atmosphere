@@ -21,9 +21,19 @@ describe('Railway office-app image', () => {
     const nginx = read('nginx/default.conf.template');
     expect(nginx).toContain('location /api');
     expect(nginx).toContain('proxy_pass ${API_UPSTREAM}');
+    expect(nginx).toContain('proxy_set_header Host $proxy_host');
+    expect(nginx).toContain('proxy_ssl_server_name on');
+    expect(nginx).toContain('add_header Cache-Control "no-store"');
     expect(nginx).toContain('location /verifier/');
     expect(nginx).toContain('location /fieldcapture/');
     expect(nginx).toContain('location = /healthz');
+  });
+
+  it('points API_UPSTREAM at the Atmosphere private domain, not the public URL', () => {
+    const upstream = read('api.upstream').trim();
+    expect(upstream).toBe(
+      'http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}',
+    );
   });
 
   it('points the Railway app service at this Dockerfile, not the backend one', () => {

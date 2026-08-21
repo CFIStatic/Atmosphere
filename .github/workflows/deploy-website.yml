@@ -10,6 +10,7 @@ on:
     branches:
       - main
       - cursor/host-corporate-website-51c8
+      - cursor/fix-railway-office-deploy-157d
     paths:
       - 'website/**'
       - '.dockerignore'
@@ -139,10 +140,15 @@ jobs:
           curl -fsS http://127.0.0.1:18080/ | grep -q 'Atmosphere'
 
       - name: Deploy corporate site
+        env:
+          RAILWAY_ENVIRONMENT: production
+          RAILWAY_UP_ATTEMPTS: '8'
         run: |
           cp website/railway.toml railway.toml
-          echo "Deploying Railway service: $RAILWAY_WEBSITE_SERVICE"
-          railway up --ci --service "$RAILWAY_WEBSITE_SERVICE"
+          export RAILWAY_SERVICE="$RAILWAY_WEBSITE_SERVICE"
+          echo "Deploying Railway service: $RAILWAY_SERVICE"
+          chmod +x backend/scripts/railwayUp.sh
+          backend/scripts/railwayUp.sh
 
       - name: Generate a public domain
         id: domain

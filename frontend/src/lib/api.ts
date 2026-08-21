@@ -2329,8 +2329,13 @@ export function parseApiJson(text: string): Record<string, unknown> {
   }
 }
 
-const BACKEND_UNREACHABLE_MESSAGE =
-  'Atmosphere API is not running. Start it with `cd backend && npm run dev` (port 4000), then try again.';
+export function backendUnreachableMessage(isProd = import.meta.env.PROD): string {
+  return isProd
+    ? 'Cannot reach the Atmosphere API right now. Wait a moment and try again.'
+    : 'Atmosphere API is not running. Start it with `cd backend && npm run dev` (port 4000), then try again.';
+}
+
+const BACKEND_UNREACHABLE_MESSAGE = backendUnreachableMessage();
 
 /**
  * Turn opaque gateway / proxy failures into an actionable message.

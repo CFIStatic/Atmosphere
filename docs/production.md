@@ -7,9 +7,10 @@ off or mocked until they are staffed and monitored.
 
 ## Railway auto-deploy
 
-Do this once in the Railway dashboard. GitHub Actions currently deploys **only
-the backend**, and only on `main`. Every other Railway service stays stale
-until it is linked to this repo with Autodeploy on.
+Do this once in the Railway dashboard. GitHub Actions deploys the backend
+(`Atmosphere`) and the office app (`Atmosphere-web`) on `main`. GitHub
+Autodeploy is the fallback if Actions is skipped; without either, a service
+stays on its last successful image.
 
 Databases, Redis, and volumes are not git apps — skip them. The marketing site
 is GitHub Pages (`website/`), not Railway. iOS is App Store.
@@ -130,6 +131,9 @@ Manual backend fallback: **Actions → Deploy Work Verification → Run workflow
 
 - **Wrong branch.** Production is `main` only. Other branches need a PR
   (Step 2).
+- **Wrong office service name.** The live office service is `Atmosphere-web`,
+  not `app`. Deploy Work Verification logs `Service not found` when the job
+  targets a name that is not on the canvas.
 - **Watch paths.** Autodeploy skips commits that miss that service’s
   `watchPatterns`. In Deployments, turn on **Show skipped**.
 - **Wait for CI.** A failing GitHub Actions run skips the Railway deploy.
@@ -147,7 +151,7 @@ Official references: [GitHub Autodeploys](https://docs.railway.com/deployments/g
 | Surface | Artifact | Notes |
 | --- | --- | --- |
 | Backend BFF | `backend/` (`Dockerfile` or `npm run build && npm start`) | Node 22, long-lived process; needs FFmpeg for proof sparse frames. **Railway service `Atmosphere` (override with `RAILWAY_SERVICE`).** |
-| Office app | `frontend/` + `verifier/` + `fieldcapture/` | One nginx image; `/api` proxied to the BFF. **Railway service `app`.** |
+| Office app | `frontend/` + `verifier/` + `fieldcapture/` | One nginx image; `/api` proxied to the BFF. **Railway service `Atmosphere-web` (override with `RAILWAY_APP_SERVICE`).** |
 | Marketing site | `website/` | Already CD’d to GitHub Pages |
 | Native Field | `apps/field-ios/` | App Store path; uses the same BFF |
 
@@ -163,7 +167,7 @@ Same-origin `/api` is the point: session cookies stay `SameSite=Lax`, Field Capt
 
 In the Railway project that already runs the BFF (`Atmosphere`):
 
-1. **+ Create** → **Empty service**. Name it `app` (or set GitHub secret `RAILWAY_APP_SERVICE` to whatever you named it).
+1. **+ Create** → **Empty service**. Name it `Atmosphere-web` (or set GitHub secret `RAILWAY_APP_SERVICE` / `RAILWAY_WEB_SERVICE` to whatever you named it). There is no service named `app` in this project — targeting `app` makes GitHub Actions fail with `Service not found` and the office URL stays on the last successful image.
 2. Settings → **Config File**: `/frontend/railway.toml`  
    Without this, deploys from the repo root apply `/railway.toml` and build the **backend** image into the app service.
 3. Settings → **Root Directory**: `/` (repo root). The Dockerfile copies `verifier/` and `fieldcapture/` as siblings of `frontend/`.
@@ -177,23 +181,23 @@ In the Railway project that already runs the BFF (`Atmosphere`):
 
 ### 2. Public origin
 
-On the **app** service: Settings → Networking → **Generate domain**, then attach `app.atmosphereteam.com` (or your real app host).
+On the **Atmosphere-web** service: Settings → Networking → **Generate domain**, then attach `app.atmosphereteam.com` (or your real app host).
 
 On the **backend** service, `FRONTEND_ORIGIN` must include that https origin (comma-separated if you also keep the `*.up.railway.app` URL):
 
 ```text
-FRONTEND_ORIGIN=https://app.atmosphereteam.com,https://${{app.RAILWAY_PUBLIC_DOMAIN}}
+FRONTEND_ORIGIN=https://app.atmosphereteam.com,https://${{Atmosphere-web.RAILWAY_PUBLIC_DOMAIN}}
 ```
 
 The deploy workflow already defaults `FRONTEND_ORIGIN` to `https://app.atmosphereteam.com` from GitHub Keys. Add the Railway domain in the dashboard if you sign in before the custom domain is live.
 
 ### 3. Ship it
 
-`.github/workflows/deploy-production.yml` deploys **both** services (`railway up --service backend` and `--service app`). Needs `RAILWAY_TOKEN` in the `Keys` environment. Optional: `RAILWAY_APP_SERVICE` if the app service is not named `app`.
+`.github/workflows/deploy-production.yml` deploys **both** services (`railway up --service Atmosphere` and `--service Atmosphere-web`). Needs `RAILWAY_TOKEN` in the `Keys` environment. Optional: `RAILWAY_APP_SERVICE` if the office service is not named `Atmosphere-web`.
 
 ```bash
 # Or from a laptop, after `railway link` (repo root, not frontend/):
-railway up --service app
+railway up --service Atmosphere-web
 ```
 
 Health probe: `GET https://<app-host>/healthz` → `ok`. The SPA is `/`; Field Capture is `/fieldcapture/`; Verifier is `/verifier/`.

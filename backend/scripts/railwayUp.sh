@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
-# Upload backend/ to the Atmosphere Railway service and wait until the
+# Upload the current directory to a Railway service and wait until the
 # replica is live. `--ci` exits after ~8 minutes while the Metal builder is
 # still queued, which is what produced "Deployment failed to build" with no
 # Docker layers. Wait for the full deploy instead, and retry a stuck builder.
+# RAILWAY_SERVICE selects the target (Atmosphere, Atmosphere-web, website, …).
+#
+# `railway up --ci` also exits immediately with "Deploys have been paused due
+# to an upstream issue" (see https://status.railway.com/incident/VVL3A03V).
+# Treat that as retryable instead of failing the GitHub job on the first pause.
 set -u
 
 service="${RAILWAY_SERVICE:-Atmosphere}"
 project="${RAILWAY_PROJECT_ID:-d0af58bd-0eec-431d-bad3-4da4b4a2e2ae}"
 environment="${RAILWAY_ENVIRONMENT:-production}"
-max_attempts="${RAILWAY_UP_ATTEMPTS:-4}"
+max_attempts="${RAILWAY_UP_ATTEMPTS:-8}"
 wait_secs="${RAILWAY_UP_TIMEOUT:-900}"
 
 echo "Deploying Railway service=$service project=$project environment=$environment"
@@ -25,22 +30,31 @@ dump_build_logs() {
 attempt=1
 while [ "$attempt" -le "$max_attempts" ]; do
   echo "railway up attempt $attempt/$max_attempts (wait ${wait_secs}s)"
-  if timeout "$wait_secs" railway up \
+  log="$(mktemp)"
+  timeout "$wait_secs" railway up \
     --service "$service" \
     --project "$project" \
     --environment "$environment" \
-    --verbose
-  then
+    --verbose >"$log" 2>&1
+  status=$?
+  cat "$log"
+  if [ "$status" -eq 0 ]; then
+    rm -f "$log"
     echo "Railway deploy succeeded"
     exit 0
   fi
-  status=$?
   echo "railway up exited $status"
-  dump_build_logs
+  if grep -qi 'paused due to an upstream issue' "$log"; then
+    echo "Railway paused deploys (https://status.railway.com/incident/VVL3A03V). Retrying."
+    sleep $((attempt * 60))
+  else
+    dump_build_logs
+    sleep $((attempt * 30))
+  fi
+  rm -f "$log"
   if [ "$attempt" -eq "$max_attempts" ]; then
     exit 1
   fi
-  sleep $((attempt * 30))
   attempt=$((attempt + 1))
 done
 
