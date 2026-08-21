@@ -73,6 +73,20 @@ export const SERVICE_TRADE_OPTIONS = [
 
 export type ServiceTrade = (typeof SERVICE_TRADE_OPTIONS)[number]['value'];
 
+/**
+ * Trades a person on a job can be. General contractor is a party role, not a
+ * trade, so it is omitted here. Keep verifier/index.html JOB_TRADES in sync.
+ */
+export const JOB_PARTY_TRADE_OPTIONS = SERVICE_TRADE_OPTIONS.filter(
+  (t) => t.value !== 'general_contractor',
+);
+
+export const JOB_PARTY_ROLE_OPTIONS = [
+  { value: 'owner' as const, label: 'Homeowner' },
+  { value: 'adjuster' as const, label: 'Adjuster' },
+  { value: 'general_contractor' as const, label: 'General contractor' },
+];
+
 export function usageIntentsForRole(role: MemberRole): UsageIntent[] {
   const roleOption = VERIFIER_ROLE_OPTIONS.find((r) => r.value === role);
   return roleOption?.usageIntents ?? (['exploring'] as UsageIntent[]);

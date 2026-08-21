@@ -14,6 +14,7 @@ import { JobProgressDashboard } from '../components/shared/JobProgressDashboard'
 import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPanel';
 import { ScopeDocPanel } from '../components/shared/ScopeDocPanel';
 import { JobReadinessPanel } from '../components/shared/JobReadinessPanel';
+import { JOB_PARTY_TRADE_OPTIONS } from '../components/setup/verifierSetupOptions';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 type HandoffState = {
@@ -589,12 +590,21 @@ function PartyList({ record, onChanged }: { record: SharedJobRecord; onChanged: 
             placeholder="Company"
             className="min-w-[10rem] flex-1 rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
           />
-          <input
+          <select
+            required
             value={trade}
             onChange={(e) => setTrade(e.target.value)}
-            placeholder="Trade"
-            className="w-32 rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
-          />
+            className="min-w-[10rem] rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+          >
+            <option value="" disabled>
+              Trade
+            </option>
+            {JOB_PARTY_TRADE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
           <button
             type="submit"
             className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-ink-900"

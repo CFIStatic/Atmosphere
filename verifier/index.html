@@ -1707,21 +1707,86 @@
   var DEMO_PEOPLE = {
     cedar: [
       { name: 'Cedar Ridge HOA', role: 'owner' },
-      { name: 'Delgado Roofing', role: 'subcontractor' }
+      { name: 'Delgado Roofing', role: 'subcontractor', trade: 'roofing' }
     ],
     meridian: [{ name: 'Property owner', role: 'owner' }],
     camden: [{ name: 'Camden Court HOA', role: 'owner' }]
   };
   var jobSheet = { key: null, tab: 'share', made: null, error: null, busy: false };
 
+  /**
+   * Trades a person on a job can be. Keep in sync with
+   * frontend/src/components/setup/verifierSetupOptions.ts JOB_PARTY_TRADE_OPTIONS.
+   * General contractor is a party role below, not a trade.
+   */
+  var JOB_TRADES = [
+    { value: 'hvac', label: 'HVAC' },
+    { value: 'plumbing', label: 'Plumbing' },
+    { value: 'electrical', label: 'Electrical' },
+    { value: 'drywall', label: 'Drywall' },
+    { value: 'painting', label: 'Painting' },
+    { value: 'roofing', label: 'Roofing' },
+    { value: 'flooring', label: 'Flooring' },
+    { value: 'carpentry', label: 'Carpentry' },
+    { value: 'masonry', label: 'Masonry & concrete' },
+    { value: 'insulation', label: 'Insulation' },
+    { value: 'siding', label: 'Siding & exterior' },
+    { value: 'windows_doors', label: 'Windows & doors' },
+    { value: 'landscaping', label: 'Landscaping' },
+    { value: 'cleaning', label: 'Cleaning & janitorial' },
+    { value: 'facilities', label: 'Facilities maintenance' },
+    { value: 'fire_life_safety', label: 'Fire & life safety' },
+    { value: 'security', label: 'Security & access control' },
+    { value: 'low_voltage', label: 'Low voltage / AV / data' },
+    { value: 'pool_spa', label: 'Pool & spa' },
+    { value: 'pest_control', label: 'Pest control' },
+    { value: 'appliance', label: 'Appliance repair' },
+    { value: 'restoration', label: 'Restoration (water / fire / mold)' },
+    { value: 'other', label: 'Other service trade' }
+  ];
+  var JOB_PARTY_ROLES = [
+    { value: 'owner', label: 'Homeowner' },
+    { value: 'adjuster', label: 'Adjuster' },
+    { value: 'general_contractor', label: 'General contractor' }
+  ];
+
   function jsonOrNull(r) { return r.ok ? r.json() : Promise.resolve(null); }
 
-  function roleWord(role) {
+  function tradeLabel(value) {
+    if (!value) return '';
+    for (var i = 0; i < JOB_TRADES.length; i++) {
+      if (JOB_TRADES[i].value === value) return JOB_TRADES[i].label;
+    }
+    return value;
+  }
+
+  function roleWord(role, trade) {
+    if (trade) return tradeLabel(trade);
     if (role === 'owner') return 'Homeowner';
     if (role === 'adjuster') return 'Adjuster';
     if (role === 'general_contractor') return 'General contractor';
     if (role === 'subcontractor') return 'Subcontractor';
     return role || 'On the job';
+  }
+
+  function parseInviteKind(value) {
+    if (value && value.indexOf('role:') === 0) return { role: value.slice(5), trade: null };
+    if (value && value.indexOf('trade:') === 0) return { role: 'subcontractor', trade: value.slice(6) };
+    return { role: 'subcontractor', trade: null };
+  }
+
+  function inviteKindOptionsHtml() {
+    var html = '<option value="" disabled selected>Choose a trade or role</option>';
+    html += '<optgroup label="Trade">';
+    JOB_TRADES.forEach(function (t) {
+      html += '<option value="trade:' + t.value + '">' + esc(t.label) + '</option>';
+    });
+    html += '</optgroup><optgroup label="On this job">';
+    JOB_PARTY_ROLES.forEach(function (r) {
+      html += '<option value="role:' + r.value + '">' + esc(r.label) + '</option>';
+    });
+    html += '</optgroup>';
+    return html;
   }
 
   function boardFromClips(key, items) {
@@ -1779,7 +1844,7 @@
     var counts = (proof && proof.counts) || {};
     var risks = (record.risks || []).filter(function (r) { return r.level === 'blocker' || r.level === 'warn'; });
     var people = (record.parties || []).filter(function (p) { return !p.revoked_at; }).map(function (p) {
-      return { name: p.company, role: p.role, id: p.id, email: p.email };
+      return { name: p.company, role: p.role, id: p.id, email: p.email, trade: p.trade };
     });
     var recent = days.slice(0, 5).map(function (d) {
       var label = d.contradicted ? 'Issue' : (d.accepted || d.payable) ? 'Verified' : (d.hasBefore && !d.hasAfter) ? 'On site' : 'In review';
@@ -2250,22 +2315,16 @@
     var live = canOpenJobRecord(key);
     if (jobSheet.tab === 'invite') {
       body.innerHTML =
-        '<p class="jf-note">Add a sub, homeowner, or adjuster to this job file. Subs get a capture link; homeowners and other parties can be sent a read-only progress link from Send a link.</p>' +
+        '<p class="jf-note">Add a trade, homeowner, or adjuster to this job file. Trades get a capture link; homeowners and other parties can be sent a read-only progress link from Send a link.</p>' +
         (jobSheet.error ? '<p class="jf-note" style="color:var(--fail)">' + esc(jobSheet.error) + '</p>' : '') +
         '<form id="jf-invite-form">' +
           '<div class="row2">' +
             '<label><span>Company or name</span><input name="company" required placeholder="Delgado Roofing" /></label>' +
-            '<label><span>Trade / role</span><select name="role">' +
-              '<option value="subcontractor">Subcontractor</option>' +
-              '<option value="owner">Homeowner</option>' +
-              '<option value="adjuster">Adjuster</option>' +
-              '<option value="general_contractor">General contractor</option>' +
+            '<label><span>Trade / role</span><select name="kind" required>' +
+              inviteKindOptionsHtml() +
             '</select></label>' +
           '</div>' +
-          '<div class="row2">' +
-            '<label><span>Trade (optional)</span><input name="trade" placeholder="Roofing" /></label>' +
-            '<label><span>Email (optional)</span><input name="email" type="email" placeholder="crew@example.com" /></label>' +
-          '</div>' +
+          '<label><span>Email (optional)</span><input name="email" type="email" placeholder="crew@example.com" /></label>' +
           '<button class="jf-submit" type="submit"' + (jobSheet.busy ? ' disabled' : '') + '>Add to this job</button>' +
         '</form>' +
         peopleListHtml(b);
@@ -2303,7 +2362,7 @@
     var people = (b && b.people) || [];
     if (!people.length) return '<p class="jf-note" style="margin-top:14px">Nobody is on this job yet.</p>';
     return '<ul class="jf-list">' + people.map(function (p) {
-      return '<li><div><div class="who">' + esc(p.name) + '</div><div class="meta">' + esc(roleWord(p.role)) +
+      return '<li><div><div class="who">' + esc(p.name) + '</div><div class="meta">' + esc(roleWord(p.role, p.trade)) +
         (p.email ? ' · ' + esc(p.email) : '') + '</div></div></li>';
     }).join('') + '</ul>';
   }
@@ -2382,15 +2441,17 @@
   function submitInvite(form) {
     var key = jobSheet.key;
     var company = (form.company.value || '').trim();
-    var role = form.role.value || 'subcontractor';
-    var trade = (form.trade.value || '').trim();
+    var kind = form.kind.value || '';
+    var parsed = parseInviteKind(kind);
+    var role = parsed.role;
+    var trade = parsed.trade;
     var email = (form.email.value || '').trim();
-    if (!company) return;
+    if (!company || !kind) return;
     jobSheet.busy = true;
     jobSheet.error = null;
     paintJobFileSheet();
     if (!canOpenJobRecord(key)) {
-      DEMO_PEOPLE[key] = (DEMO_PEOPLE[key] || []).concat([{ name: company, role: role, email: email || null }]);
+      DEMO_PEOPLE[key] = (DEMO_PEOPLE[key] || []).concat([{ name: company, role: role, trade: trade, email: email || null }]);
       JOB_BOARD[key] = null;
       hydrateJobBoard(key);
       jobSheet.busy = false;
