@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Atmosphere's security model — no stored passwords, httpOnly sessions, Row-Level Security, device-bound PINs, and an append-only audit trail." />
+  <meta name="description" content="Atmosphere's security model — no stored passwords, httpOnly sessions, database-enforced access, device-bound PINs, and an append-only audit trail." />
   <meta name="theme-color" content="#FBFAF7" />
   <title>Security · Atmosphere</title>
   <meta property="og:title" content="Security · Atmosphere" />
-  <meta property="og:description" content="Atmosphere's security model — no stored passwords, httpOnly sessions, Row-Level Security, device-bound PINs, and an append-only audit trail." />
+  <meta property="og:description" content="Atmosphere's security model — no stored passwords, httpOnly sessions, database-enforced access, device-bound PINs, and an append-only audit trail." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Atmosphere" />
   <meta property="og:image" content="/assets/og.png" />
@@ -117,31 +117,21 @@
       <div class="eyebrow mono">Architecture</div>
       <h2>Every request wears the caller's identity</h2>
       <p>
-        The browser talks to a backend-for-frontend. The backend talks to Postgres with
-        the caller's own JWT — never a service-role key — so Row-Level Security decides
-        what every query can see.
+        The browser talks to our application. The application talks to the database as
+        the signed-in person — never with a privileged bypass — so access rules in the
+        database decide what every query can see.
       </p>
     </div>
     <div class="diagram mono">
       <pre>
-┌───────────┐   httpOnly cookies    ┌───────────────┐   caller's JWT, never    ┌──────────────────┐
-│  Browser  │ ────────────────────▶ │  Express BFF  │ ───service-role key────▶ │ Postgres + RLS   │
-│ (no       │ ◀──────────────────── │  auth proxy   │ ◀──────────────────────  │ (Supabase Auth)  │
-│  tokens)  │     SSE transcript    └───────┬───────┘                          └──────────────────┘
-└───────────┘                               │  ▲
-                                            ▼  │
-                                    ┌───────────────┐
-                                    │ Anthropic API │
-                                    └───────────────┘
-                                            ▲
-                    outbound-only WebSocket │  screenshots ↓ · clicks + keys ↑
-                                    ┌───────┴───────────┐
-                                    │ Atmosphere agent  │  ← runs on the computer
-                                    │ macOS · Win · Lin │     being operated
-                                    └───────────────────┘</pre>
+┌───────────┐    httpOnly cookies    ┌───────────────┐    caller's identity     ┌──────────────────┐
+│  Browser  │ ─────────────────────▶ │  Application  │ ──never a privileged───▶ │     Database     │
+│ (no       │ ◀───────────────────── │    server     │ ◀──────────────────────  │  (enforces who   │
+│  tokens)  │                        └───────────────┘                          │   can see what)  │
+└───────────┘                                                                   └──────────────────┘</pre>
       <p class="diagram-caption">
-        The frontend holds no tokens. The database enforces access. The operated machine
-        only ever dials out.
+        The frontend holds no tokens. The database enforces access. Devices in the field
+        only ever dial out.
       </p>
     </div>
   </div>
@@ -159,29 +149,29 @@
     </div>
     <div class="sec-grid">
       <div class="sec-card">
-        <span class="kbd mono">bcrypt</span>
+        <span class="kbd mono">hash</span>
         <h3>Passwords are never stored by us</h3>
         <p>
-          Supabase Auth stores only a bcrypt hash in the secure <span class="mono">auth.users</span>
-          table. The app never sees or persists a plaintext password.
+          Sign-in stores only a one-way hash. The app never sees or persists a
+          plaintext password.
         </p>
       </div>
       <div class="sec-card">
         <span class="kbd mono">httpOnly</span>
         <h3>Tokens never touch browser JavaScript</h3>
         <p>
-          The backend exchanges credentials for a session and puts the access and
-          refresh tokens in httpOnly cookies. Page JavaScript holds nothing worth
-          stealing, which mitigates token theft via XSS.
+          The application exchanges credentials for a session and puts it in httpOnly
+          cookies. Page JavaScript holds nothing worth stealing, which mitigates token
+          theft via XSS.
         </p>
       </div>
       <div class="sec-card">
-        <span class="kbd mono">RLS</span>
-        <h3>Row-Level Security is the source of truth</h3>
+        <span class="kbd mono">access</span>
+        <h3>The database is the source of truth</h3>
         <p>
-          Every org query runs under the caller's JWT — never the service-role key. Who
-          can see what is decided at the database layer, where cross-organization data
-          simply doesn't exist for you.
+          Every query runs as the signed-in person — never with a privileged bypass.
+          Who can see what is decided at the database, where another organization's
+          data simply doesn't exist for you.
         </p>
       </div>
       <div class="sec-card">
@@ -198,16 +188,16 @@
         <h3>Password recovery happens on the server</h3>
         <p>
           Reset links arrive by email, and the token exchange is performed on the
-          server — so no Supabase token is ever exposed to page JavaScript, even during
+          server — so no session token is ever exposed to page JavaScript, even during
           recovery.
         </p>
       </div>
       <div class="sec-card">
         <span class="kbd mono">outbound</span>
-        <h3>The agent dials out, never in</h3>
+        <h3>Devices dial out, never in</h3>
         <p>
-          A computer running the Atmosphere agent connects over an outbound-only
-          WebSocket. No inbound port is opened on the machine being operated.
+          A phone, tablet, or office computer only ever connects outbound. No inbound
+          port is opened on a machine in the field.
         </p>
       </div>
     </div>
