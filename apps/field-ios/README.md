@@ -65,7 +65,10 @@ Pick any iPhone simulator and press Run (⌘R).
 A Personal Team build expires after 7 days — Run from Xcode again to refresh.
 The phone signs in with the same email/password as the Atmosphere website.
 A physical iPhone never uses localhost; it talks to the hosted Atmosphere
-project. RoomPlan needs a LiDAR iPhone.
+office app (`https://atmosphere-web-production.up.railway.app`), which
+proxies `/api` to the BFF. That filing path is what queues internal AI
+action-reading of the day film. Direct Supabase is only a fallback if the
+BFF cannot be reached. RoomPlan needs a LiDAR iPhone.
 
 To use the **web** Field Capture on the phone instead (no Xcode):
 
@@ -115,8 +118,10 @@ AI dictation and twin review stay in the **office Verifier**.
 
 ## API (account-linked)
 
-On a physical iPhone the app talks to the Atmosphere Supabase project
-(same users and jobs as the website). A local BFF is optional in Simulator.
+On a physical iPhone the app talks to the Atmosphere office BFF
+(`https://atmosphere-web-production.up.railway.app/api/field-app/*`) so
+day films enqueue server-side vision: sparse frames, action log, and
+Verifier dictation. A local BFF is used in Simulator when one is running.
 
 1. Create account: BFF `POST /api/field-app/register` (email + password + join code or new office name), or Supabase `POST /auth/v1/signup` plus `create_org` / `join_org`
 2. Sign-in: `POST /auth/v1/token?grant_type=password` (or BFF `POST /api/auth/login`)

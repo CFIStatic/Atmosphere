@@ -203,6 +203,61 @@ test('serialization: office dictation prefers narration_text over the day summar
   assert.equal(item.analysis?.summary, 'Short headline.');
 });
 
+test('serialization: structured actions from the vision log ride with dictation', () => {
+  const item = serializeEvidence({
+    proof: {
+      id: 'p-actions',
+      job_id: 'j1',
+      party_id: 'pt1',
+      phase: 'after',
+      work_date: '2026-08-20',
+      captured_at: '2026-08-20T14:00:00Z',
+      received_at: '2026-08-20T14:11:00Z',
+      duration_seconds: '90',
+      byte_size: '2000',
+      lat: null,
+      lon: null,
+      accuracy_m: null,
+      content_hash: 'abc',
+      state: 'checked',
+      checks: [{ key: 'on_site', verdict: 'pass', detail: 'on site' }],
+      ai_summary: 'Drywall coming off the south wall.',
+      ai_findings: {},
+      ai_material_change: null,
+      ai_model: 'claude',
+      analysis_status: 'done',
+      narration_status: 'done',
+      narration_text: 'The crew is pulling wet drywall.',
+      narration: { entries: [], model: 'claude' },
+      actions: [
+        {
+          atSeconds: 12,
+          action: 'remove',
+          description: 'Worker pulling wet drywall off the south wall.',
+          objectLabel: 'drywall',
+          toolLabel: 'utility knife',
+          materialLabel: null,
+          objects: ['drywall'],
+          confidence: 0.86,
+          model: 'claude',
+          source: 'ai_vision',
+        },
+      ],
+      legal_hold: false,
+      retention_until: null,
+    },
+    jobName: 'Kitchen demo',
+    jobNumber: 1041,
+    company: 'Field Capture',
+    contactName: 'Marcus',
+    tier: 1,
+    dayHasAfter: true,
+  });
+
+  assert.equal(item.analysisState, 'done');
+  assert.equal((item.analysis as { actions?: Array<{ action: string }> } | null)?.actions?.[0]?.action, 'remove');
+});
+
 test('serialization: a wrong-house clip arrives flagged with no analysis body', () => {
   const item = serializeEvidence({
     proof: {
@@ -274,9 +329,14 @@ test('labels flatten what the narration saw, and only what it saw', () => {
   assert.ok(!labels.includes('stage:exclusion'));
 });
 
-test('labels survive a clip with no narration at all', () => {
-  const labels = labelsForProof({ phase: 'before', trade: null, narration: null });
-  assert.deepEqual(labels, ['before']);
+test('labels include action verbs from the vision log', () => {
+  const labels = labelsForProof({
+    phase: 'after',
+    actions: [{ action: 'remove', objectLabel: 'drywall' }],
+  });
+  assert.ok(labels.includes('after'));
+  assert.ok(labels.includes('action:remove'));
+  assert.ok(labels.includes('drywall'));
 });
 
 /* ---- downloads ---- */

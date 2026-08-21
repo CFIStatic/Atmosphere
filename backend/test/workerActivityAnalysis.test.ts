@@ -40,6 +40,7 @@ test('descriptionFindings marks analysis as description-only (no scope cross-ref
     narrationSummary: 'Drywall removal visible.',
     model: 'test-model',
     frameCount: 8,
+    actions: [],
   });
   assert.equal(findings.scopeCrossRef, false);
   assert.equal(findings.kind, 'day_film');

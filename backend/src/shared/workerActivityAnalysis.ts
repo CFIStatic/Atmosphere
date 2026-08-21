@@ -77,15 +77,20 @@ export function descriptionFindings(dictation: VideoDictationResult): Record<str
     longForm: true,
     scopeCrossRef: false,
     summary: dictation.narrationText,
-    workPerformed: [],
+    workPerformed: dictation.actions.map((action) => action.description),
     materialChange: null,
     materialBecause: null,
     changes: [],
     cannotTell: [],
     scopeVerdicts: [],
     concerns: [],
-    timeline: [],
+    timeline: dictation.actions.map((action) => ({
+      atSeconds: action.atSeconds,
+      action: action.action,
+      summary: action.description,
+    })),
     windowsTotal: 0,
     windowsRead: 0,
+    actions: dictation.actions,
   };
 }

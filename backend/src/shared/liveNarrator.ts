@@ -1,5 +1,10 @@
 import { anthropicClient, isModelProviderConfigured } from '../lib/anthropic.js';
 import { config } from '../config.js';
+import {
+  actionsFromNarrationEntries,
+  parseVisionActions,
+  type VisionAction,
+} from './proofActions.js';
 
 /**
  * The model, watching the filming itself.
@@ -140,6 +145,8 @@ export interface VideoNarration {
   /** The report: a few sentences of what the video shows, start to finish. */
   report: string;
   model: string | null;
+  /** Structured actions the model saw being performed. */
+  actions: VisionAction[];
 }
 
 const NARRATE_SYSTEM = `You are reading frames, in order, from one video filmed on a job site against a numbered shot list.
@@ -149,9 +156,10 @@ Your output becomes the written report attached to this video. Rules:
 2. The report is 2-4 sentences narrating the video start to finish: where it opens, what work state it shows, where it ends. Only what the frames show.
 3. Never state or imply that work was completed unless a frame shows the completed state.
 4. Prefer -1 and plain uncertainty over a guess. An honest "the middle of the clip never shows the work area" is more valuable than an invented tour.
+5. Also list distinct work actions visible in the frames. action MUST be one of: locate, measure, mark, pick_up, carry, position, align, cut, drill, fasten, apply, connect, test, inspect, remove, clean, protect, correct, wait, other. atSeconds must match a provided frame timestamp.
 
 Reply with JSON only:
-{"entries": [{"frame": number, "stage": number, "note": string}], "report": string}`;
+{"entries": [{"frame": number, "stage": number, "note": string}], "report": string, "actions": [{"atSeconds": number, "action": "remove", "description": string, "object": string, "tool": string, "material": string, "objects": [string], "confidence": number}]}`;
 
 export function parseNarration(
   text: string,
@@ -198,8 +206,14 @@ export function parseNarration(
   // arithmetic does not hallucinate.
   const seen = new Set(entries.map((e) => e.stageIndex).filter((i) => i >= 0));
   const coverage = steps.map((step, i) => ({ stageIndex: i, label: step.label, seen: seen.has(i) }));
+  const framesAt = frames.map((frame) => frame.atSeconds);
+  const parsedActions = parseVisionActions((parsed as { actions?: unknown }).actions, {
+    frames: framesAt,
+  });
+  const actions =
+    parsedActions.length > 0 ? parsedActions : actionsFromNarrationEntries(entries);
 
-  return { entries, coverage, report: parsed.report.trim().slice(0, 2000) };
+  return { entries, coverage, report: parsed.report.trim().slice(0, 2000), actions };
 }
 
 export async function narrateProofVideo(input: {

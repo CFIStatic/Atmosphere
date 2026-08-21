@@ -77,7 +77,7 @@ struct DoorView: View {
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(FieldTheme.pass)
                         Text(
-                            "The office opens the Verifier for video + audio with AI dictation, and the property twin built from measurements."
+                            "The office opens the Verifier for video + audio. Atmosphere reads the film internally, stores the actions it saw, and writes the dictation beside the clip."
                         )
                         .font(.system(size: 12))
                         .foregroundStyle(FieldTheme.pass.opacity(0.85))

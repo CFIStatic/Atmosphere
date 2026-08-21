@@ -8,6 +8,7 @@ import {
   assertProcessableDuration,
   framesContentFingerprint,
   isLongFormVideo,
+  parseDictationPayload,
   pickEvenlySpaced,
   prepareVideoFrames,
 } from '../src/shared/videoIntelligence.js';
@@ -83,4 +84,29 @@ test('prepareVideoFrames is source-agnostic (field_capture and media_upload shar
 
   // Cleanup any leftover temp dirs from failed runs is handled inside extract.
   await rm(join(tmpdir(), 'atm-sparse-unused'), { recursive: true, force: true }).catch(() => undefined);
+});
+
+test('parseDictationPayload extracts narration and a grounded action log', () => {
+  const parsed = parseDictationPayload(
+    JSON.stringify({
+      narration: 'The crew pulls wet drywall, then sets air movers.',
+      summary: 'Demo then drying.',
+      actions: [
+        {
+          atSeconds: 14,
+          action: 'remove',
+          description: 'Pulling wet drywall from the south wall.',
+          object: 'drywall',
+          confidence: 0.9,
+        },
+      ],
+    }),
+    [0, 12, 40],
+    'claude-test',
+  );
+  assert.equal(parsed.narration.startsWith('The crew pulls'), true);
+  assert.equal(parsed.actions.length, 1);
+  assert.equal(parsed.actions[0]!.action, 'remove');
+  assert.equal(parsed.actions[0]!.atSeconds, 12);
+  assert.equal(parsed.actions[0]!.model, 'claude-test');
 });

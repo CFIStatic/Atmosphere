@@ -1130,6 +1130,10 @@
           { atSeconds: 48, text: 'Underlayment rows visible mid-slope; debris staged below.' },
           { atSeconds: 110, text: 'Driveway bags and ladder; no close pass on the ridge.' }
         ],
+        actions: [
+          { atSeconds: 12, action: 'remove', description: 'Temporary tarp pulled off the north slope; decking exposed.' },
+          { atSeconds: 48, action: 'position', description: 'Synthetic underlayment being laid across mid-slope.' }
+        ],
         changes: ['Tarp removed from the north slope', 'Decking exposed, no visible sheathing damage', 'Underlayment laid across approximately two thirds of the slope'],
         scope: [
           { title: 'Remove temporary tarp', verdict: 'appears_complete' },
@@ -2552,10 +2556,18 @@
 
     var text = a.dictation || a.summary || '';
     var html = '<p>' + esc(text) + '</p>';
+    if (a.actions && a.actions.length) {
+      html += '<p class="k" style="margin:14px 0 6px">Actions seen</p><ul class="entries">' + a.actions.map(function (act) {
+        var t = act.atSeconds != null ? dur(act.atSeconds) : '';
+        var verb = String(act.action || '').replace(/_/g, ' ');
+        var body = (verb ? verb + ' — ' : '') + (act.description || '');
+        return '<li><span class="t">' + esc(String(t)) + '</span><span>' + esc(body) + '</span></li>';
+      }).join('') + '</ul>';
+    }
     if (a.dictationEntries && a.dictationEntries.length) {
       html += '<ul class="entries">' + a.dictationEntries.map(function (e) {
         var t = e.atSeconds != null ? dur(e.atSeconds) : (e.t || '');
-        var body = e.text || e.summary || '';
+        var body = e.text || e.note || e.summary || '';
         return '<li><span class="t">' + esc(String(t)) + '</span><span>' + esc(body) + '</span></li>';
       }).join('') + '</ul>';
     }
@@ -2678,7 +2690,11 @@
       rows.push({ at: Math.max(0, Number(at) || 0), text: t, kind: kind || 'note' });
     }
     (a.dictationEntries || []).forEach(function (e) {
-      add(e.atSeconds, e.text || e.summary, 'read');
+      add(e.atSeconds, e.text || e.note || e.summary, 'read');
+    });
+    (a.actions || []).forEach(function (act) {
+      var verb = String(act.action || '').replace(/_/g, ' ');
+      add(act.atSeconds, (verb ? verb + ' — ' : '') + (act.description || ''), 'action');
     });
     (a.timeline || []).forEach(function (t) {
       add(t.startSeconds, t.summary, 'window');
@@ -3263,6 +3279,7 @@
             summary: (raw.analysis && raw.analysis.summary) || '',
             dictation: (raw.analysis && (raw.analysis.dictation || raw.analysis.summary)) || '',
             dictationEntries: (raw.analysis && raw.analysis.dictationEntries) || [],
+            actions: (raw.analysis && raw.analysis.actions) || [],
             changes: (raw.analysis && raw.analysis.changes) || [],
             scope: (raw.analysis && raw.analysis.scope) || [],
             couldNotTell: (raw.analysis && raw.analysis.couldNotTell) || [],

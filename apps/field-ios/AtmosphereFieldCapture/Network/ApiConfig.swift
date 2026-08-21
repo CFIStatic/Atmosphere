@@ -3,16 +3,20 @@ import Foundation
 /**
  * Where Field Capture talks to Atmosphere.
  *
- * Auth and today’s jobs use the same Atmosphere project the website uses
- * (Supabase). A local BFF (`http://127.0.0.1:4000`) is only used from the
- * iOS Simulator when that process is actually running — a physical iPhone
- * cannot reach the Mac’s loopback, which is why older builds showed
- * “Could not connect to the server.”
+ * Physical iPhones file day films through the hosted office app, which
+ * reverse-proxies `/api` to the BFF. That is what queues internal AI
+ * action-reading. The iOS Simulator still prefers a local BFF when one is
+ * running. Direct Supabase is only a fallback if the BFF is unreachable, so
+ * a crew can still upload when the API is down — those films will not be
+ * read until they are filed through `/api/field-app`.
  */
 enum ApiConfig {
     /// Atmosphere’s hosted project — same users and jobs as the dashboard.
     static let supabaseURL = URL(string: "https://ccxatzfsvzetciiwsjlj.supabase.co")!
     static let supabaseAnonKey = "sb_publishable_4ppzqtXQPeVPuzP8Ant-pQ_MZIPMcGn"
+
+    /// Production office origin. nginx proxies `/api` onto the Express BFF.
+    static let productionBffURL = URL(string: "https://atmosphere-web-production.up.railway.app")!
 
     static var isSimulator: Bool {
         #if targetEnvironment(simulator)
@@ -22,22 +26,23 @@ enum ApiConfig {
         #endif
     }
 
-    /// Optional Express BFF. Nil on a physical device when the plist still
-    /// points at localhost — the phone then uses Supabase directly.
+    /// Optional Express BFF. Nil only when no usable origin can be resolved.
     static func bffBaseURL() -> URL? {
         UserDefaults.standard.removeObject(forKey: "atmosphere.apiBase")
         let plist = Bundle.main.object(forInfoDictionaryKey: "ATMOSPHERE_API_BASE") as? String
         let env = ProcessInfo.processInfo.environment["ATMOSPHERE_API_BASE"]
         let raw = (plist?.isEmpty == false ? plist : nil)
             ?? (env?.isEmpty == false ? env : nil)
-            ?? (isSimulator ? "http://127.0.0.1:4000" : nil)
+            ?? (isSimulator ? "http://127.0.0.1:4000" : productionBffURL.absoluteString)
         guard let raw, let url = URL(string: stripTrailingSlash(raw)),
               let scheme = url.scheme?.lowercased(),
               scheme == "http" || scheme == "https",
               let host = url.host, !host.isEmpty
-        else { return nil }
-        if isPlaceholder(host) { return nil }
-        if isLoopback(host), !isSimulator { return nil }
+        else {
+            return isSimulator ? nil : productionBffURL
+        }
+        if isPlaceholder(host) { return isSimulator ? nil : productionBffURL }
+        if isLoopback(host), !isSimulator { return productionBffURL }
         return url
     }
 

@@ -187,6 +187,11 @@ export function serializeEvidence(input: {
     (typeof findings.narrative === 'string' && findings.narrative.trim()
       ? findings.narrative.trim()
       : null);
+  const actions = Array.isArray(proof.actions)
+    ? proof.actions
+    : Array.isArray(findings.actions)
+      ? findings.actions
+      : [];
 
   return {
     id: proof.id,
@@ -226,6 +231,7 @@ export function serializeEvidence(input: {
             dictation: dictation ?? proof.ai_summary ?? findings.summary ?? null,
             dictationStatus: proof.narration_status ?? (dictation ? 'done' : null),
             dictationEntries: Array.isArray(proof.narration?.entries) ? proof.narration.entries : [],
+            actions,
             materialChange,
             materialBecause: findings.materialBecause ?? null,
             changes: Array.isArray(findings.changes) ? findings.changes : [],
@@ -273,11 +279,16 @@ export function labelsForProof(input: {
   } | null;
   stageKinds?: string[];
   materialChange?: string | null;
+  actions?: Array<{ action: string; objectLabel?: string | null }>;
 }): string[] {
   const labels = new Set<string>();
   labels.add(input.phase.toLowerCase());
   if (input.trade?.trim()) labels.add(input.trade.trim().toLowerCase());
   if (input.materialChange) labels.add(`change:${input.materialChange}`);
+  for (const seen of input.actions ?? []) {
+    labels.add(`action:${seen.action}`);
+    if (seen.objectLabel?.trim()) labels.add(seen.objectLabel.trim().toLowerCase().slice(0, 40));
+  }
 
   const coverage = input.narration?.coverage ?? [];
   for (const step of coverage) {

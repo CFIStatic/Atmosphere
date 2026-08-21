@@ -169,6 +169,12 @@ final class FieldDaySession: ObservableObject {
                 DoorCheck(id: "2", label: "Video + audio sealed", detail: "mic track present", ok: true),
                 DoorCheck(id: "3", label: "Filed to \(jobName)", detail: "office evidence library", ok: true),
                 DoorCheck(
+                    id: "ai",
+                    label: "Queued for AI reading",
+                    detail: "actions + dictation in the Verifier",
+                    ok: true
+                ),
+                DoorCheck(
                     id: "4",
                     label: "Twin session",
                     detail: twinId ?? "—",
