@@ -19,6 +19,7 @@ is GitHub Pages (`website/`), not Railway. iOS is App Store.
 | --- | --- | --- | --- |
 | Backend BFF | `/railway.toml` | `Dockerfile` (repo root) | `backend/**`, `Dockerfile`, `railway.toml` |
 | Office console | `/frontend/railway.toml` | `frontend/Dockerfile` | `frontend/**`, `verifier/**`, `fieldcapture/**`, `frontend/Dockerfile` |
+| Internal staff site | `/internal/railway.toml` | `internal/Dockerfile` | `internal/**`, `internal/Dockerfile` |
 
 Both services use **Root Directory `/`**. The console must not use `/frontend`
 as root — Vite copies sibling `verifier/` and `fieldcapture/` into the build.
@@ -152,6 +153,7 @@ Official references: [GitHub Autodeploys](https://docs.railway.com/deployments/g
 | --- | --- | --- |
 | Backend BFF | `backend/` (`Dockerfile` or `npm run build && npm start`) | Node 22, long-lived process; needs FFmpeg for proof sparse frames. **Railway service `Atmosphere` (override with `RAILWAY_SERVICE`).** |
 | Office app | `frontend/` + `verifier/` + `fieldcapture/` | One nginx image; `/api` proxied to the BFF. **Railway service `Atmosphere-web` (override with `RAILWAY_APP_SERVICE`).** |
+| Internal staff site | `internal/` | Accounts, analytics, system health. **Railway service `Atmosphere-internal` (override with `RAILWAY_INTERNAL_SERVICE`).** Staff-only; `noindex`. |
 | Marketing site | `website/` | Already CD’d to GitHub Pages |
 | Native Field | `apps/field-ios/` | App Store path; uses the same BFF |
 
@@ -214,12 +216,28 @@ Health probe: `GET https://<app-host>/healthz` → `ok`. The SPA is `/`; Field C
 
 Invite emails use the first origin in `FRONTEND_ORIGIN`, so put the public `https://` app URL first.
 
+### Host the internal staff site on Railway
+
+Atmosphere Internal (`internal/`) is a third Railway service next to the BFF and office app. Same-origin `/api` again: staff sign in with the same Atmosphere account; `analytics_staff` gates named accounts.
+
+1. **+ Create → Empty service.** Name it `Atmosphere-internal` (or set `RAILWAY_INTERNAL_SERVICE`).
+2. Settings → **Config File**: `/internal/railway.toml`
+3. Settings → **Root Directory**: `/`
+4. Variable `API_UPSTREAM=http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}`
+5. Networking → **Generate domain**. Add that https origin to backend `FRONTEND_ORIGIN`. Production CORS already allows `https://atmosphere-internal*.up.railway.app`.
+6. Health probe: `GET /healthz` → `ok`.
+
+Do not point customers here. The site sends `X-Robots-Tag: noindex`. Grant access with `ANALYTICS_INTERNAL_EMAILS` or `npm run analytics:grant --prefix backend -- someone@company.com internal`.
+
+See [`internal/README.md`](../internal/README.md).
+
 Local stand-in for this topology:
 
 ```bash
 docker compose up --build
-# app:  http://localhost:8080
-# api:  http://localhost:4000  (also reachable as http://localhost:8080/api/…)
+# app:       http://localhost:8080
+# internal:  http://localhost:8081
+# api:       http://localhost:4000  (also reachable as http://localhost:8080/api/…)
 ```
 
 ## Supabase

@@ -342,6 +342,8 @@ export const analyticsRangeSchema = z
     path: ['to'],
   });
 
+export const analyticsOrgIdSchema = z.string().uuid('org id must be a uuid');
+
 export const analyticsDatasetSchema = z.enum([
   'all',
   'summary',

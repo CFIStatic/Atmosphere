@@ -20,6 +20,7 @@
 #   RAILWAY_SERVICE        (backend service name, default: Atmosphere)
 #   RAILWAY_APP_SERVICE    (office app service name, default: Atmosphere-web)
 #   RAILWAY_WEB_SERVICE    (alias of RAILWAY_APP_SERVICE)
+#   RAILWAY_INTERNAL_SERVICE (staff site, default: Atmosphere-internal)
 #
 # One-time on the Railway **Atmosphere-web** service (Settings → Config-as-code):
 #   Config File = /frontend/railway.toml
@@ -51,6 +52,7 @@ on:
       - 'frontend/**'
       - 'verifier/**'
       - 'fieldcapture/**'
+      - 'internal/**'
       - 'Dockerfile'
       - '.github/workflows/deploy-production.yml'
 
@@ -199,6 +201,54 @@ jobs:
           # railway up reads /railway.toml from the upload root. Without this copy
           # the CLI builds the backend Dockerfile and probes /api/health on nginx.
           cp frontend/railway.toml railway.toml
+          export RAILWAY_SERVICE="$service"
+          export RAILWAY_PROJECT_ID="$project"
+          chmod +x backend/scripts/railwayUp.sh
+          backend/scripts/railwayUp.sh
+
+  internal:
+    name: Deploy internal site
+    runs-on: ubuntu-latest
+    environment: Keys
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Require Railway token
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "Add RAILWAY_TOKEN to the GitHub environment Keys (Railway → Account → Tokens)."
+            exit 1
+          fi
+
+      - name: Deploy internal site
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || vars.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
+          RAILWAY_INTERNAL_SERVICE: ${{ secrets.RAILWAY_INTERNAL_SERVICE || vars.RAILWAY_INTERNAL_SERVICE }}
+          RAILWAY_ENVIRONMENT: production
+        run: |
+          set -euo pipefail
+          project="${RAILWAY_PROJECT_ID}"
+          service="${RAILWAY_INTERNAL_SERVICE:-Atmosphere-internal}"
+          echo "Deploying internal site to Railway service '$service' in project $project."
+          echo "That service's Config File must be /internal/railway.toml (see docs/production.md)."
+          railway link --project "$project" --environment production --service "$service" \
+            || railway link --project "$project" --environment production \
+            || railway link --project "$project" \
+            || true
+          railway status --project "$project" --environment production || railway status || true
+          printf '%s' 'internal/Dockerfile' | railway variable set RAILWAY_DOCKERFILE_PATH --stdin --skip-deploys --service "$service"
+          tr -d '\n' < internal/api.upstream | railway variable set API_UPSTREAM --stdin --skip-deploys --service "$service"
+          cp internal/railway.toml railway.toml
           export RAILWAY_SERVICE="$service"
           export RAILWAY_PROJECT_ID="$project"
           chmod +x backend/scripts/railwayUp.sh

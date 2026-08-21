@@ -126,6 +126,7 @@ Atmosphere/
 │   ├── src/geometry/         Property twins
 │   └── supabase/migrations/  Jobs, proof, field identity, media, twins
 ├── website/                  Marketing site (Work Verification first)
+├── internal/                 Staff site (accounts, analytics, system) — Railway
 └── docs/                     Deeper notes (media storage, CRM, etc.)
 ```
 
@@ -308,6 +309,10 @@ A/B experiments: seed/manage rows in `public.experiments`, set `status` to
 `running`, instrument with `useExperiment()` in the UI. Results appear on the
 internal analytics dashboard under **A/B tests**.
 
+The same data is also a separately hosted staff site at **`internal/`**
+(Railway service `Atmosphere-internal`, local `http://localhost:5175` or
+`http://localhost:8081`). See [`internal/README.md`](internal/README.md).
+
 ## Related docs
 
 | Doc | Topic |
@@ -321,6 +326,7 @@ internal analytics dashboard under **A/B tests**.
 | [`docs/synthetic-pipeline.md`](docs/synthetic-pipeline.md) | Synthetic A/V smoke path |
 | [`docs/CRM.md`](docs/CRM.md) | CRM mirror (supports job files; not the product) |
 | [`website/`](website/) | Public Work Verification site |
+| [`internal/`](internal/) | Staff accounts + analytics site (hostable) |
 
 ## What this repo is not selling
 

@@ -1,0 +1,16 @@
+# Staff data platform (internal/). Do not reuse the API railway.toml —
+# that probes /api/health and starts `node dist/index.js`, which 502s here.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "internal/Dockerfile"
+watchPatterns = [
+  "internal/**",
+  "internal/Dockerfile",
+]
+
+[deploy]
+healthcheckPath = "/healthz"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
