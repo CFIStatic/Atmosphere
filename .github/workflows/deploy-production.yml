@@ -274,6 +274,11 @@ jobs:
           tr -d '\n' < internal/api.upstream | railway variable set API_UPSTREAM \
             --stdin --skip-deploys --service "$service_id" \
             --project "$project" --environment production
+          # Autodeploy of this SHA may already have uploaded the same
+          # internal/** tree and crashed on empty API_UPSTREAM. railway up
+          # then skips watch paths and leaves the old replica. Dirty a
+          # watched file so this CLI upload is a new image with the var set.
+          printf '\n# gha %s %s\n' "${GITHUB_SHA}" "$(date -u +%Y%m%dT%H%M%SZ)" >> internal/nginx/default.conf.template
           cp internal/railway.toml railway.toml
           cp internal/railway.json railway.json
           backend/scripts/railwayUp.sh

@@ -51,6 +51,33 @@ while [ "$attempt" -le "$max_attempts" ]; do
   status=$?
   cat "$log"
   if [ "$status" -eq 0 ]; then
+    if grep -qi 'no changes detected in watch paths' "$log"; then
+      echo "railway up skipped the image build (watch paths). Redeploying so current variables apply."
+      rm -f "$log"
+      log="$(mktemp)"
+      timeout "$wait_secs" railway redeploy \
+        --service "$service" \
+        --project "$project" \
+        --environment "$environment" \
+        --yes >"$log" 2>&1 \
+        || timeout "$wait_secs" railway redeploy --service "$service" --yes >"$log" 2>&1
+      status=$?
+      cat "$log"
+      if [ "$status" -eq 0 ]; then
+        rm -f "$log"
+        echo "Railway redeploy succeeded"
+        exit 0
+      fi
+      echo "railway redeploy exited $status"
+      dump_build_logs
+      rm -f "$log"
+      if [ "$attempt" -eq "$max_attempts" ]; then
+        exit 1
+      fi
+      attempt=$((attempt + 1))
+      sleep $((attempt * 30))
+      continue
+    fi
     rm -f "$log"
     echo "Railway deploy succeeded"
     exit 0

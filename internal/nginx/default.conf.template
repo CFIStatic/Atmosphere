@@ -1,5 +1,7 @@
 # Internal staff site. PORT and API_UPSTREAM are substituted at container start.
 # NGINX_ENVSUBST_FILTER only expands those two; other $vars are nginx's own.
+# API_UPSTREAM must be the Atmosphere APIs private HTTP URL (Railway reference
+# variable), never loopback and never the public https BFF host.
 
 server {
   listen ${PORT};
