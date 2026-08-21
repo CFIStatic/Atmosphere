@@ -74,7 +74,7 @@ describe('internal staff login schema', () => {
     });
     assert.equal(start.email, 'jack@jettx.ai');
     const verify = internalStaffVerifySchema.parse({
-      challenge: 'abc.def',
+      challenge: 'a'.repeat(32) + '.' + 'b'.repeat(32),
       code: '123456',
     });
     assert.equal(verify.code, '123456');

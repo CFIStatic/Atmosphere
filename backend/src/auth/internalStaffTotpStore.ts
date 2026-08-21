@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto';
 import { config } from '../config.js';
-import { createAdminClient } from './supabase.js';
-import { logger } from './logger.js';
+import { createAdminClient } from '../lib/supabase.js';
+import { logger } from '../lib/logger.js';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_BYTES = 12;
