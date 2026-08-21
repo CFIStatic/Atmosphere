@@ -1,1 +1,1 @@
-http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}
+http://atmosphere-apis.railway.internal:4000
