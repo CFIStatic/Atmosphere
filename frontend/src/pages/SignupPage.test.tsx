@@ -1,17 +1,26 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const authState = vi.hoisted(() => ({
+  user: null as {
+    id: string;
+    email: string | null;
+    createdAt: string;
+    lastSignInAt: string | null;
+    emailConfirmed: boolean;
+    metadata: Record<string, unknown>;
+  } | null,
+  loading: false,
+  membership: null as { org: { id: string; name: string } | null } | null,
+  signup: vi.fn(),
+  refreshMembership: vi.fn(),
+  logout: vi.fn(),
+}));
+
 vi.mock('../context/AuthContext', () => ({
-  useAuth: () => ({
-    user: null,
-    loading: false,
-    membership: null,
-    signup: vi.fn(),
-    refreshMembership: vi.fn(),
-    logout: vi.fn(),
-  }),
+  useAuth: () => authState,
 }));
 
 vi.mock('../lib/api', () => ({
@@ -34,17 +43,27 @@ vi.mock('../hooks/usePendingAuthRedirect', () => ({
 
 import { SignupPage } from './SignupPage';
 
+function renderSignup(initialEntry = '/signup') {
+  return render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <SignupPage />
+    </MemoryRouter>,
+  );
+}
+
 describe('SignupPage', () => {
   beforeEach(() => {
     document.title = 'Atmosphere';
+    authState.user = null;
+    authState.loading = false;
+    authState.membership = null;
+    authState.signup.mockReset();
+    authState.refreshMembership.mockReset();
+    authState.logout.mockReset().mockResolvedValue(undefined);
   });
 
   it('starts on account details only — workspace and join code wait for step 2', () => {
-    render(
-      <MemoryRouter>
-        <SignupPage />
-      </MemoryRouter>,
-    );
+    renderSignup();
 
     expect(screen.getByLabelText('Your name')).toBeInTheDocument();
     expect(screen.getByLabelText('Work email')).toBeInTheDocument();
@@ -60,11 +79,7 @@ describe('SignupPage', () => {
 
   it('switches the right-hand card when a left-rail step is clicked', async () => {
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <SignupPage />
-      </MemoryRouter>,
-    );
+    renderSignup();
 
     await user.click(screen.getByRole('button', { name: 'Your workspace' }));
     expect(screen.getByRole('heading', { name: 'Your workspace' })).toBeInTheDocument();
@@ -79,5 +94,63 @@ describe('SignupPage', () => {
     await user.click(screen.getByRole('button', { name: 'Create your account' }));
     expect(screen.getByRole('heading', { name: 'Create your account' })).toBeInTheDocument();
     expect(screen.getByLabelText('Your name')).toBeInTheDocument();
+  });
+
+  it('keeps a signed-in customer on create-account instead of sending them to the dashboard', () => {
+    authState.user = {
+      id: 'user-1',
+      email: 'jane@acme.com',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastSignInAt: '2026-08-20T00:00:00.000Z',
+      emailConfirmed: true,
+      metadata: {},
+    };
+    authState.membership = { org: { id: 'org-1', name: 'Acme' } };
+
+    renderSignup();
+
+    expect(screen.getByRole('heading', { name: 'Create your account' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Your name')).toBeInTheDocument();
+    expect(screen.getByLabelText('Work email')).toBeInTheDocument();
+    expect(screen.getByLabelText('Password')).toBeInTheDocument();
+    expect(screen.getByText('jane@acme.com')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Account ready' })).toBeNull();
+  });
+
+  it('signs the current session out before creating a different account', async () => {
+    const user = userEvent.setup();
+    authState.user = {
+      id: 'user-1',
+      email: 'jane@acme.com',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastSignInAt: '2026-08-20T00:00:00.000Z',
+      emailConfirmed: true,
+      metadata: {},
+    };
+    authState.membership = { org: { id: 'org-1', name: 'Acme' } };
+    authState.signup.mockResolvedValue({
+      needsEmailConfirmation: false,
+      membership: null,
+      user: {
+        id: 'user-2',
+        email: 'new@acme.com',
+        emailConfirmed: true,
+      },
+    });
+
+    renderSignup();
+    await user.type(screen.getByLabelText('Your name'), 'New Person');
+    await user.type(screen.getByLabelText('Work email'), 'new@acme.com');
+    await user.type(screen.getByLabelText('Password'), 'password1');
+    await user.click(screen.getByRole('button', { name: 'Continue to workspace' }));
+
+    await waitFor(() => {
+      expect(authState.signup).toHaveBeenCalledWith('new@acme.com', 'password1');
+    });
+    expect(authState.logout).toHaveBeenCalledTimes(1);
+    expect(authState.logout.mock.invocationCallOrder[0]).toBeLessThan(
+      authState.signup.mock.invocationCallOrder[0]!,
+    );
   });
 });

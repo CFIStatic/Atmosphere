@@ -14,6 +14,8 @@
         var toSignup = href.indexOf('signup') !== -1;
         var qsIndex = href.indexOf('?');
         var qs = qsIndex >= 0 ? href.slice(qsIndex) : '';
+        // Create-account CTAs always open /signup — never /login — so a
+        // signed-in visitor is not bounced to their dashboard.
         a.setAttribute('href', APP_ORIGIN + (toSignup ? '/signup' : '/login') + qs);
       });
   }
@@ -252,6 +254,7 @@
   function authUrl(kind, nextPath) {
     var origin = appOrigin();
     if (!origin) return null;
+    // /signup is the create-account wizard for every visitor, signed in or not.
     return kind === 'signup' ? origin + '/signup' : origin + '/login';
   }
 
