@@ -21,7 +21,7 @@ accent, monospace as the "audit record" voice). Positioned written for service c
 | `docs.html`       | Resources hub — documentation index, guides, troubleshooting |
 | `doc-*.html`      | Resource pages: getting started, recipes, troubleshooting, field capture, verifier, billing |
 | `about.html`      | About — the Work Verification company, story and principles |
-| `careers.html`    | Careers — roles, hiring process, and a working application form |
+| `careers.html`    | Careers — software engineering and sales roles, hiring process, application form |
 | `contact.html`    | Contact — sales/support blocks and an intake form           |
 | `signin.html`     | Sign in — email/password plus the device-bound PIN          |
 | `signup.html`     | Create your organization — onboarding walkthrough and form  |
@@ -179,8 +179,8 @@ dashboard. Unset, the site keeps its designed early-access surfaces.
 
 ## Known gaps before production
 
-- The careers listings and benefits are placeholders, and the on-site roles
-  still need a real city named.
+- The careers listings are the current engineering and sales openings; location
+  is confirmed during hiring rather than named on the page.
 - Privacy and terms are plain-language drafts and need review by counsel.
 - The investor page is a designed surface — the data room behind it (auth +
   documents) doesn't exist yet; "Request access" routes to contact.
