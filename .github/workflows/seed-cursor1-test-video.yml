@@ -1,0 +1,48 @@
+# One-shot: file the Cursor 1 product-testing clip on the live Jettx LLC org.
+# Uses the Keys environment so SUPABASE_SERVICE_ROLE_KEY is available.
+# Safe to re-run — it upserts the same party's same-day before clip.
+name: Seed Cursor 1 test video
+
+on:
+  push:
+    branches:
+      - cursor/seed-cursor1-test-video-a05f
+  workflow_dispatch:
+
+concurrency:
+  group: seed-cursor1-test-video
+  cancel-in-progress: false
+
+jobs:
+  seed:
+    name: File Cursor 1 on Jettx LLC
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: Keys
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install ffmpeg
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core
+
+      - name: Install backend
+        working-directory: backend
+        run: npm ci
+
+      - name: File the 60s Cursor 1 clip
+        working-directory: backend
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL || 'https://ccxatzfsvzetciiwsjlj.supabase.co' }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || vars.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npm run seed:test-video -- --org "Jettx LLC" --title "Cursor 1" --purpose "See how the product works — product testing." --duration 60
