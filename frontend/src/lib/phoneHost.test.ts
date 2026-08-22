@@ -123,8 +123,10 @@ describe('phone home-screen manifests', () => {
     expect(app).toContain('goHomeAfterDoor');
     expect(app).not.toMatch(/if \(LIVE\) finishLiveDay/);
     expect(app).toMatch(/if \(state\.recorder\) \{\s*finishLiveDay\(\)/);
+    expect(app).toContain("addEventListener('click', onFinish)");
     expect(app).not.toContain("addEventListener('pointerleave'");
     const html = readFileSync(resolve(repoRoot, 'fieldcapture/index.html'), 'utf8');
-    expect(html).toContain('touch-action: none');
+    expect(html).toContain('Finish the day');
+    expect(html).not.toContain('Hold to finish the day');
   });
 });

@@ -48,6 +48,7 @@ on:
       - cursor/fix-job-create-memory-fk-51c8
       - cursor/fix-railway-office-deploy-157d
       - cursor/internal-data-platform-e19d
+      - cursor/field-capture-hosted-app-35bd
     paths:
       - 'backend/**'
       - 'supabase/migrations/**'

@@ -267,20 +267,31 @@
       stop: function () {
         return new Promise(function (resolve, reject) {
           var recorder = state.recorder;
-          if (!recorder || recorder.state === 'inactive') {
-            reject(new Error('Not recording.'));
-            return;
-          }
-          recorder.onstop = function () {
-            if (state.timer) clearInterval(state.timer);
-            var type = recorder.mimeType || state.mimeType || 'video/webm';
-            var blob = new Blob(state.chunks, { type: type });
+          function releaseHardware() {
+            if (state.timer) {
+              clearInterval(state.timer);
+              state.timer = null;
+            }
             if (state.stream) {
               state.stream.getTracks().forEach(function (t) {
                 t.stop();
               });
+              state.stream = null;
             }
             if (videoEl) videoEl.srcObject = null;
+          }
+          if (!recorder || recorder.state === 'inactive') {
+            releaseHardware();
+            reject(new Error('Not recording.'));
+            return;
+          }
+          var settled = false;
+          function settleStop() {
+            if (settled) return;
+            settled = true;
+            releaseHardware();
+            var type = recorder.mimeType || state.mimeType || 'video/webm';
+            var blob = new Blob(state.chunks, { type: type });
             if (!blob.size) {
               reject(new Error('Recording was empty.'));
               return;
@@ -291,8 +302,19 @@
               durationSeconds: Math.max(1, Math.floor((Date.now() - state.startedAt) / 1000)),
               hasAudio: true,
             });
-          };
-          recorder.stop();
+          }
+          recorder.onstop = settleStop;
+          try {
+            if (typeof recorder.requestData === 'function' && recorder.state === 'recording') {
+              recorder.requestData();
+            }
+            recorder.stop();
+          } catch (err) {
+            releaseHardware();
+            reject(err);
+            return;
+          }
+          setTimeout(settleStop, 2000);
         });
       },
       watchPosition: function (onSite) {

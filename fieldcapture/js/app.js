@@ -450,7 +450,7 @@
     if (!stopBtn) return;
     stopBtn.removeAttribute('data-holding');
     var lbl = stopBtn.querySelector('.lbl');
-    if (lbl) lbl.textContent = 'Hold to finish the day';
+    if (lbl) lbl.textContent = 'Finish the day';
   }
 
   function returnHome(message, isErr) {
@@ -626,51 +626,31 @@
     $('#donebtn').classList.add('on');
   }
 
-  /* ---------- hold to finish ---------- */
+  /* ---------- finish the day (tap — iOS hold was a no-op on hosted) ---------- */
 
-  var holdTimer = null;
   function bindHold() {
     var stopBtn = $('#stopbtn');
     if (!stopBtn) return;
-    stopBtn.addEventListener('contextmenu', function (e) {
-      e.preventDefault();
-    });
-    function beginHold(e) {
-      if (e && e.cancelable) e.preventDefault();
-      if (state.finishing) return;
-      if (holdTimer) return;
-      if (e && e.pointerId != null && stopBtn.setPointerCapture) {
-        try {
-          stopBtn.setPointerCapture(e.pointerId);
-        } catch (err) {}
+    var armed = false;
+    function onFinish(e) {
+      if (e) {
+        if (e.cancelable) e.preventDefault();
+        if (e.stopPropagation) e.stopPropagation();
       }
-      stopBtn.setAttribute('data-holding', '1');
-      stopBtn.querySelector('.lbl').textContent = 'Keep holding…';
-      holdTimer = setTimeout(function () {
-        holdTimer = null;
-        completeDay();
-      }, 1500);
+      if (armed || state.finishing) return;
+      armed = true;
+      completeDay();
+      setTimeout(function () {
+        armed = false;
+      }, 2500);
     }
-    function cancelHold() {
-      if (!holdTimer) return;
-      clearTimeout(holdTimer);
-      holdTimer = null;
-      if (state.finishing) return;
-      resetStopButton();
-    }
-    stopBtn.addEventListener('pointerdown', beginHold);
-    stopBtn.addEventListener('pointerup', cancelHold);
-    stopBtn.addEventListener('pointercancel', cancelHold);
-    stopBtn.addEventListener('lostpointercapture', cancelHold);
-    stopBtn.addEventListener('mousedown', beginHold);
-    stopBtn.addEventListener('mouseup', cancelHold);
-    stopBtn.addEventListener('touchstart', beginHold, { passive: false });
-    stopBtn.addEventListener('touchend', cancelHold);
-    stopBtn.addEventListener('touchcancel', cancelHold);
+    stopBtn.addEventListener('click', onFinish);
+    stopBtn.addEventListener('pointerup', onFinish);
+    stopBtn.addEventListener('touchend', onFinish, { passive: false });
     stopBtn.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        completeDay();
+        onFinish(e);
       }
     });
   }
