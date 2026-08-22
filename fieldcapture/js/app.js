@@ -426,6 +426,10 @@
     state.recorder
       .start()
       .then(function () {
+        if (state.homeTimer) {
+          clearTimeout(state.homeTimer);
+          state.homeTimer = null;
+        }
         show('s-rec');
         $('#rec-since').textContent = 'since ' + new Date().toLocaleTimeString();
         $('#live-text').textContent = 'Recording video + audio. Keep the phone on you.';
@@ -453,6 +457,10 @@
     if (state.homeTimer) {
       clearTimeout(state.homeTimer);
       state.homeTimer = null;
+    }
+    var rec = document.getElementById('s-rec');
+    if (rec && rec.getAttribute('data-on') === '1' && !state.finishing) {
+      return;
     }
     state.finishing = false;
     state.recorder = null;
@@ -654,6 +662,11 @@
     stopBtn.addEventListener('pointerup', cancelHold);
     stopBtn.addEventListener('pointercancel', cancelHold);
     stopBtn.addEventListener('lostpointercapture', cancelHold);
+    stopBtn.addEventListener('mousedown', beginHold);
+    stopBtn.addEventListener('mouseup', cancelHold);
+    stopBtn.addEventListener('touchstart', beginHold, { passive: false });
+    stopBtn.addEventListener('touchend', cancelHold);
+    stopBtn.addEventListener('touchcancel', cancelHold);
     stopBtn.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
@@ -698,6 +711,10 @@
     var seconds = 0;
     var timer = null;
     $('#daybtn').onclick = function () {
+      if (state.homeTimer) {
+        clearTimeout(state.homeTimer);
+        state.homeTimer = null;
+      }
       show('s-rec');
       $('#scene').innerHTML = '';
       $('#preview').hidden = true;
