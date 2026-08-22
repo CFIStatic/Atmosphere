@@ -1049,6 +1049,21 @@ export const config = {
     ),
     investorEmails: parseEmailList(process.env.ANALYTICS_INVESTOR_EMAILS, []),
   },
+
+  /**
+   * Internal /admin support portal allow-lists. Scopes: support < admin < ops.
+   * Defaults mirror analytics so Atmosphere staff reach the portal in preview
+   * without a separate grant step when SUPABASE_SERVICE_ROLE_KEY is set.
+   */
+  platformAdmin: {
+    supportEmails: parseEmailList(process.env.PLATFORM_SUPPORT_EMAILS, []),
+    adminEmails: parseEmailList(process.env.PLATFORM_ADMIN_EMAILS, []),
+    // Prefer PLATFORM_OPS_EMAILS; otherwise reuse analytics internal list / Jack.
+    opsEmails: parseEmailList(
+      process.env.PLATFORM_OPS_EMAILS ?? process.env.ANALYTICS_INTERNAL_EMAILS,
+      ['jack@jettx.ai'],
+    ),
+  },
 } as const;
 
 /** Positive int from env, or null when unset / invalid (means “unlimited”). */

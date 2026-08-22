@@ -408,6 +408,25 @@ A/B experiments live in `public.experiments` (see migration
 `status` to `running` to start assigning variants; results appear on
 `/analytics` under **A/B tests**.
 
+### Internal support portal (`/admin`)
+
+Company-wide customer support is gated by `public.platform_staff` (scopes:
+`support` < `admin` < `ops`). This is separate from org membership and from
+analytics.
+
+- Apply migration `20260817090000_platform_admin_portal.sql`.
+- `PLATFORM_OPS_EMAILS` (defaults to `ANALYTICS_INTERNAL_EMAILS` / `jack@jettx.ai`)
+  are auto-granted on `/api/admin/access` when the service role key is set.
+- Optional: `PLATFORM_SUPPORT_EMAILS`, `PLATFORM_ADMIN_EMAILS`.
+
+```bash
+cd backend && npm run admin:grant -- someone@company.com ops
+```
+
+Tabs: Accounts, Users (password reset / recovery link; ban at admin+),
+Infrastructure + Database (ops), Audit log. Mutating actions write to
+`platform_admin_audit`.
+
 ## Health checks
 
 | Probe | Path | Use |

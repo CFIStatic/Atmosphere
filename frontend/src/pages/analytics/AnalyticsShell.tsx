@@ -63,6 +63,14 @@ export function AnalyticsShell({
               {otherView.label}
             </Link>
           )}
+          {scope === 'internal' && (
+            <Link
+              to="/admin"
+              className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100 transition hover:bg-amber-500/20"
+            >
+              Support portal
+            </Link>
+          )}
           <button
             onClick={() => navigate('/dashboard')}
             className="rounded-lg border border-white/10 px-3 py-2 text-sm text-gray-300 transition hover:bg-white/5"
