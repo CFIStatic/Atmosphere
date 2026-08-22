@@ -35,3 +35,8 @@ export function useMemoryMediaStore(): boolean {
 export function useMemoryGeometryStore(): boolean {
   return process.env.GEOMETRY_STORE === 'memory';
 }
+
+/** Unit tests / offline smoke: skip Postgres for legal hold + activity. */
+export function useMemoryLegalStore(): boolean {
+  return process.env.LEGAL_STORE === 'memory';
+}

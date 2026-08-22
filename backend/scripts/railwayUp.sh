@@ -54,7 +54,12 @@ while [ "$attempt" -le "$max_attempts" ]; do
     --verbose >"$log" 2>&1
   status=$?
   cat "$log"
-  if grep -qi 'failed with service unavailable' "$log"; then
+  # Railway logs "Attempt #N failed with service unavailable. Continuing to
+  # retry" while the probe window is still open. That is normal startup, not
+  # a finished failure — treating it as fatal aborted healthy website deploys
+  # and the next attempt then hit "no changes in watch paths" and was marked
+  # success. Only a completed failed deploy is fatal.
+  if grep -qiE 'Deployment failed|Healthcheck failed|healthcheck failure' "$log"; then
     echo "railway up reached a failed healthcheck."
     status=1
   fi

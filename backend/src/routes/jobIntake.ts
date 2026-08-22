@@ -8,6 +8,7 @@ import { jobTitleForIntake, proposeIntakeFromText } from '../verifier/intakeProp
 import { partyInviteEmail } from '../verifier/partyInviteEmail.js';
 import { sendSystemMail } from '../lib/systemMail.js';
 import { publicAppOrigin } from '../lib/publicAppOrigin.js';
+import { jobSharePagePath } from '../lib/jobSharePath.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { recordAccess } from './proofOfWork.js';
 import {
@@ -476,7 +477,7 @@ async function deliverPartyInvite(input: {
       actorLabelFor(input.supabase, input.userId),
     ]);
     const emailParam = encodeURIComponent(email);
-    const sharePath = `/shared/${input.token}?email=${emailParam}`;
+    const sharePath = jobSharePagePath(input.token, email);
     const origin = publicAppOrigin();
     const mail = partyInviteEmail({
       orgName: (org as any)?.name ?? 'a contractor',
@@ -841,13 +842,12 @@ jobIntakeRouter.post('/intake/approve', async (req: Request, res: Response, next
         email: party.email,
         token: party.token,
       });
-      const emailParam = party.email ? `?email=${encodeURIComponent(party.email)}` : '';
       invites.push({
         id: party.id,
         name: party.name,
         email: party.email,
         token: party.token,
-        sharePath: `/shared/${party.token}${emailParam}`,
+        sharePath: jobSharePagePath(party.token, party.email),
         fieldCapturePath: `/fieldcapture/index.html?token=${encodeURIComponent(party.token)}`,
         external: party.external,
         emailed: delivery.emailed,

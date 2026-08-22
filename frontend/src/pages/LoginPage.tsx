@@ -14,7 +14,8 @@ import { EyeIcon, EyeOffIcon, SpinnerIcon } from '../components/icons';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function LoginPage() {
-  const { user, loading, login, unlockWithPin } = useAuth();
+  const { user, loading, membership, membershipLoading, login, unlockWithPin, logout } =
+    useAuth();
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const queueRedirect = usePendingAuthRedirect();
@@ -82,13 +83,13 @@ export function LoginPage() {
     );
   }
 
-  if (user) {
-    return <Navigate to={redirectTo} replace />;
-  }
-
+  // A leftover session must not skip this page — Sign in from the marketing
+  // site is supposed to show the form, the same way Create an organization
+  // stays on signup instead of bouncing to the last workspace.
   const emailValid = EMAIL_RE.test(email.trim());
   const passwordValid = password.length >= 8;
   const canSubmit = emailValid && passwordValid && !submitting;
+  const pinUnlock = showPin && !user;
 
   function rejectPin(message: string) {
     setPinError(message);
@@ -126,8 +127,11 @@ export function LoginPage() {
 
     setSubmitting(true);
     try {
-      const membership = await login(email.trim(), password);
-      queueRedirect(postAuthDestination(membership, redirectTo));
+      if (user) {
+        await logout();
+      }
+      const nextMembership = await login(email.trim(), password);
+      queueRedirect(postAuthDestination(nextMembership, redirectTo));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {
@@ -135,8 +139,11 @@ export function LoginPage() {
     }
   }
 
+  function continueSignedIn() {
+    queueRedirect(postAuthDestination(membership, redirectTo));
+  }
+
   const createAccountHref = signupHref({ next: redirectTo, email: email.trim() || undefined });
-  const returningToUsage = redirectTo === '/usage' || redirectTo.startsWith('/usage?');
 
   return (
     <div className="relative flex min-h-screen flex-col bg-paper-100">
@@ -147,7 +154,7 @@ export function LoginPage() {
       <main className="flex flex-1 items-center justify-center px-4 pb-16">
         <div className="w-full max-w-md animate-fade-in-up">
           <div className="rounded-2xl border border-line bg-paper-0 p-8 shadow-lift sm:p-10">
-            {showPin ? (
+            {pinUnlock ? (
               <>
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-500">
                   This device
@@ -205,17 +212,42 @@ export function LoginPage() {
                 </p>
                 <h1 className="mt-2 text-2xl font-bold tracking-tight text-ink-900">Welcome back</h1>
                 <p className="mt-1.5 text-sm text-ink-600">
-                  {returningToUsage
-                    ? 'Sign in to open your usage dashboard for this billing period.'
-                    : 'Sign in to your Atmosphere workspace.'}
+                  Sign in to your Atmosphere workspace.
                 </p>
 
-                {returningToUsage && (
-                  <p className="mt-4 rounded-lg border border-brand-200 bg-brand-50/80 px-3.5 py-3 text-sm text-ink-700">
-                    After you sign in, you will land on <strong>Usage</strong> — jobs processed,
-                    compute units, and your estimated bill.
-                  </p>
+                {user && (
+                  <div className="mt-6 rounded-lg border border-brand-200 bg-brand-50/80 px-3.5 py-3 text-sm text-ink-700">
+                    <p>
+                      You&apos;re signed in as{' '}
+                      <span className="font-medium text-ink-900">{user.email}</span>
+                      {membership?.org?.name ? (
+                        <>
+                          {' '}
+                          at <span className="font-medium text-ink-900">{membership.org.name}</span>
+                        </>
+                      ) : null}
+                      . Continue to that workspace, or sign in below with a different account.
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={continueSignedIn}
+                        disabled={membershipLoading}
+                        className="rounded-lg bg-brand-500 px-3.5 py-2 text-sm font-semibold text-ink-900 shadow-sm transition hover:bg-brand-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Continue to workspace
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => logout()}
+                        className="rounded-lg border border-line bg-paper-0 px-3.5 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
+                      >
+                        Sign out
+                      </button>
+                    </div>
+                  </div>
                 )}
+
 
                 {error && (
                   <div
@@ -303,7 +335,7 @@ export function LoginPage() {
                   </button>
                 </form>
 
-                {pinEnrolled && (
+                {pinEnrolled && !user && (
                   <button
                     type="button"
                     onClick={() => {

@@ -175,6 +175,7 @@ jobs:
           trap cleanup EXIT
           sleep 2
           curl -fsS http://127.0.0.1:18080/health | grep -qx 'ok'
+          # Must be the nginx probe, not a proxied BFF JSON body.
           curl -fsS http://127.0.0.1:18080/api/health | grep -qx 'ok'
           curl -fsS http://127.0.0.1:18080/ | grep -q 'Atmosphere'
 
@@ -185,6 +186,10 @@ jobs:
         run: |
           cp website/railway.toml railway.toml
           cp website/railway.json railway.json
+          # Each attempt must change a file under website/** or Railway skips
+          # the rebuild after a failed healthcheck and we treat that as success.
+          echo "# railway-up $(date -u +%s)" > website/.railway-up-stamp
+          export RAILWAY_UP_STAMP_FILE="$PWD/website/.railway-up-stamp"
           export RAILWAY_SERVICE="$RAILWAY_WEBSITE_SERVICE"
           echo "Deploying Railway service: $RAILWAY_SERVICE"
           chmod +x backend/scripts/railwayUp.sh

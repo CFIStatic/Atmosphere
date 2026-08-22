@@ -5,7 +5,7 @@
  */
 export function isLiveFirstPath(path: string): boolean {
   if (/^\/api\/auth(\/|$)/.test(path)) return true;
-  if (path === '/api/profile') return true;
+  if (path === '/api/profile' || path === '/api/profile/avatar') return true;
   if (/^\/api\/org(\/|$)/.test(path)) return true;
   if (path === '/api/evidence-portal/library') return true;
   if (path === '/api/operations/shared') return true;

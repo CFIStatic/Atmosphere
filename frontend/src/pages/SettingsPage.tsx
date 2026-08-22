@@ -1,5 +1,4 @@
 import {
-  useCallback,
   useEffect,
   useState,
   type ButtonHTMLAttributes,
@@ -12,28 +11,26 @@ import {
   api,
   ApiError,
   CONTRACTOR_TYPE_LABELS,
+  CONTRACTOR_TYPE_ORDER,
   ROLE_LABELS,
   WORK_TYPE_LABELS,
   type ContractorType,
-  type MailStatus,
-  type Diagnosis,
-  type Integration,
   type OrgMember,
 } from '../lib/api';
 import { Logo } from '../components/Logo';
 import { BillingSection } from '../components/settings/BillingSection';
 import { InvitePanel } from '../components/team/InvitePanel';
-import { displayName, initials, nameFromMetadata } from '../lib/display';
+import { displayName, nameFromMetadata } from '../lib/display';
+import { AVATAR_ACCEPT, prepareAvatarUpload } from '../lib/avatarImage';
+import { PersonAvatar } from '../components/PersonAvatar';
 import { setPreference, usePreferences, type Preferences } from '../lib/preferences';
-import { usePlatform } from '../lib/usePlatform';
-import type { PlatformId } from '../lib/platforms';
 import {
   BuildingIcon,
+  CameraIcon,
   CheckIcon,
   EyeIcon,
   EyeOffIcon,
   LogOutIcon,
-  SearchIcon,
   ShieldIcon,
   SlidersIcon,
   SpinnerIcon,
@@ -41,24 +38,14 @@ import {
   CreditCardIcon,
 } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
-import { WORK_VERIFICATION_TOUR, queueProductTour } from '../lib/productTour';
 
-type SectionId =
-  | 'profile'
-  | 'security'
-  | 'organization'
-  | 'billing'
-  | 'sending'
-  | 'contactdata'
-  | 'preferences';
+type SectionId = 'profile' | 'security' | 'organization' | 'billing' | 'preferences';
 
 interface SettingsSection {
   id: SectionId;
   label: string;
   blurb: string;
   icon: typeof UserIcon;
-  /** When set, the section only appears inside that platform. */
-  platform?: PlatformId;
 }
 
 const SECTIONS: SettingsSection[] = [
@@ -71,33 +58,10 @@ const SECTIONS: SettingsSection[] = [
     icon: BuildingIcon,
   },
   {
-    // Sits with the org because that is what it is about — the company's plan,
-    // its seats, its receipts. Manager-only: everyone else can see what the
-    // company owns without being shown what it costs.
     id: 'billing',
     label: 'Billing',
     blurb: 'Seats, what Atmosphere costs, and past charges',
     icon: CreditCardIcon,
-    platform: 'manager',
-  },
-  {
-    // Connecting a mailbox is a Sales concern and an owner decision: it is the
-    // company's own address that campaign mail goes out from.
-    id: 'sending',
-    label: 'Sending email',
-    blurb: 'The mailbox campaigns send from',
-    icon: SearchIcon,
-    platform: 'sales',
-  },
-  {
-    // Where prospecting gets its data is a Sales question. Showing it to
-    // someone working in Field or Operations is clutter at best, and at worst
-    // invites them to change how another team's tooling behaves.
-    id: 'contactdata',
-    label: 'Contact data',
-    blurb: 'Where prospect emails and phones come from',
-    icon: SearchIcon,
-    platform: 'sales',
   },
   { id: 'preferences', label: 'Preferences', blurb: 'How this device behaves', icon: SlidersIcon },
 ];
@@ -106,23 +70,14 @@ function isSectionId(value: string | null): value is SectionId {
   return SECTIONS.some((section) => section.id === value);
 }
 
-/** The sections this platform actually owns, plus the ones everybody has. */
-function sectionsFor(platform: PlatformId): SettingsSection[] {
-  return SECTIONS.filter((section) => !section.platform || section.platform === platform);
-}
-
 export function SettingsPage() {
   useFeatureTimer('settings');
   // The section lives in the URL so a settings link can point at one directly
   // and the browser's back button steps between them.
   const [params, setParams] = useSearchParams();
-  const [platform] = usePlatform();
-  const visible = sectionsFor(platform);
   const raw = params.get('section');
-  // A section this platform does not own falls back to Profile rather than
-  // rendering a panel with no way to navigate to or from it.
   const requested: SectionId = isSectionId(raw) ? raw : 'profile';
-  const active: SectionId = visible.some((s) => s.id === requested) ? requested : 'profile';
+  const active: SectionId = SECTIONS.some((s) => s.id === requested) ? requested : 'profile';
 
   function select(section: SectionId) {
     setParams(section === 'profile' ? {} : { section }, { replace: false });
@@ -145,7 +100,7 @@ export function SettingsPage() {
 
         <nav className="mt-8 border-b border-line" aria-label="Settings sections">
           <ul className="flex gap-1 overflow-x-auto pb-px">
-            {visible.map((section) => {
+            {SECTIONS.map((section) => {
               const isActive = section.id === active;
               return (
                 <li key={section.id} className="shrink-0">
@@ -179,8 +134,6 @@ export function SettingsPage() {
             </>
           )}
           {active === 'billing' && <BillingSection />}
-          {active === 'sending' && <SendingSection />}
-          {active === 'contactdata' && <ContactDataSection />}
           {active === 'preferences' && <PreferencesSection />}
         </div>
       </div>
@@ -332,7 +285,9 @@ function ProfileSection() {
   const { user, profile, setProfile } = useAuth();
   const resolvedName = profile?.fullName || nameFromMetadata(user?.metadata);
   const [name, setName] = useState(resolvedName ?? '');
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -343,8 +298,15 @@ function ProfileSection() {
     setName((current) => (current === '' ? incoming : current));
   }, [profile?.fullName, user?.metadata]);
 
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
   const storedName = profile?.fullName ?? '';
   const dirty = name.trim() !== storedName;
+  const avatarUrl = previewUrl || profile?.avatarUrl || null;
 
   async function save() {
     setSaving(true);
@@ -362,6 +324,50 @@ function ProfileSection() {
     }
   }
 
+  async function onPickPhoto(file: File | undefined) {
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const prepared = await prepareAvatarUpload(file);
+      setPreviewUrl((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return prepared.previewUrl;
+      });
+      const { profile: updated } = await api.uploadAvatar({
+        filename: prepared.filename,
+        mediaType: prepared.mediaType,
+        contentBase64: prepared.contentBase64,
+      });
+      setProfile(updated);
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 2500);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Could not update that photo.');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function removePhoto() {
+    setUploading(true);
+    setError(null);
+    try {
+      const { profile: updated } = await api.removeAvatar();
+      setProfile(updated);
+      setPreviewUrl((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return null;
+      });
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 2500);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not remove that photo.');
+    } finally {
+      setUploading(false);
+    }
+  }
+
   return (
     <>
       <Card
@@ -369,14 +375,64 @@ function ProfileSection() {
         description="This is how teammates see you in the linked accounts list."
       >
         <div className="flex items-center gap-4">
-          <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-brand-500 text-lg font-semibold text-white">
-            {initials(name || profile?.fullName, user?.email)}
-          </span>
+          <label className="relative shrink-0 cursor-pointer">
+            <PersonAvatar
+              fullName={name || profile?.fullName}
+              email={user?.email}
+              avatarUrl={avatarUrl}
+              size="lg"
+            />
+            <span className="absolute inset-0 grid place-items-center rounded-full bg-ink-900/45 text-white opacity-0 transition hover:opacity-100">
+              {uploading ? (
+                <SpinnerIcon className="animate-spin" width={18} height={18} />
+              ) : (
+                <CameraIcon width={18} height={18} />
+              )}
+            </span>
+            <input
+              type="file"
+              accept={AVATAR_ACCEPT}
+              className="sr-only"
+              aria-label="Upload a profile photo or icon"
+              disabled={uploading}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                void onPickPhoto(file);
+              }}
+            />
+          </label>
           <div className="min-w-0">
             <p className="truncate text-base font-semibold text-ink-900">
               {displayName(name || profile?.fullName, user?.email)}
             </p>
             <p className="truncate text-sm text-ink-500">{user?.email}</p>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <label className="cursor-pointer text-sm font-medium text-brand-700 transition hover:text-brand-800">
+                {profile?.avatarUrl || previewUrl ? 'Change photo' : 'Upload photo or icon'}
+                <input
+                  type="file"
+                  accept={AVATAR_ACCEPT}
+                  className="sr-only"
+                  disabled={uploading}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = '';
+                    void onPickPhoto(file);
+                  }}
+                />
+              </label>
+              {(profile?.avatarUrl || previewUrl) && (
+                <button
+                  type="button"
+                  onClick={() => void removePhoto()}
+                  disabled={uploading}
+                  className="text-sm font-medium text-ink-600 transition hover:text-ink-900 disabled:opacity-50"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -572,13 +628,6 @@ function SignOutCard() {
  * Organization
  * -------------------------------------------------------------------------- */
 
-const CONTRACTOR_ORDER: ContractorType[] = [
-  'restoration',
-  'roofing',
-  'general_contractor',
-  'other',
-];
-
 function OrganizationSection() {
   const { membership, refreshMembership } = useAuth();
   const [contractorType, setContractorType] = useState<ContractorType | null>(
@@ -662,7 +711,7 @@ function OrganizationSection() {
             <option value="" className="bg-paper-200/50">
               Select a company type
             </option>
-            {CONTRACTOR_ORDER.map((value) => (
+            {CONTRACTOR_TYPE_ORDER.map((value) => (
               <option key={value} value={value} className="bg-paper-200/50">
                 {CONTRACTOR_TYPE_LABELS[value]}
               </option>
@@ -729,9 +778,12 @@ function LinkedAccountsCard() {
                 className="flex items-center justify-between gap-4 bg-paper-0 px-4 py-3"
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-500 text-sm font-semibold text-white">
-                    {initials(member.fullName, member.email)}
-                  </span>
+                  <PersonAvatar
+                    fullName={member.fullName}
+                    email={member.email}
+                    avatarUrl={member.avatarUrl}
+                    size="sm"
+                  />
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-ink-900">
                       {name}
@@ -854,7 +906,6 @@ function FieldCaptureAppSection() {
 
 function PreferencesSection() {
   const preferences = usePreferences();
-  const navigate = useNavigate();
 
   return (
     <Card
@@ -871,26 +922,6 @@ function PreferencesSection() {
             description={toggle.description}
           />
         ))}
-
-        <div className="flex flex-wrap items-center justify-between gap-4 py-4">
-          <div>
-            <p className="text-sm font-medium text-ink-900">Product walkthrough</p>
-            <p className="mt-0.5 text-sm text-ink-600">
-              Replay the guided tour with simulated previews of Field Capture and the Evidence
-              Platform.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              queueProductTour(WORK_VERIFICATION_TOUR.id);
-              navigate('/verifier-library?tour=1');
-            }}
-            className="rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
-          >
-            Replay tour
-          </button>
-        </div>
 
         <div className="flex items-center justify-between gap-4 py-4">
           <div>
@@ -927,734 +958,3 @@ function PreferencesSection() {
   );
 }
 
-/**
- * Contact data — where prospect emails and phone numbers actually come from.
- *
- * This screen exists because the honest answer to "is this data real?" is
- * configuration, not marketing. A deployment with no vendor key returns
- * invented people; one with a vendor but no verifier returns addresses nobody
- * confirmed. Both are legitimate states to be in and neither should be a
- * surprise, so the panel names them rather than showing a green tick for
- * "connected" and leaving it there.
- *
- * The Test button makes real credential calls. A key can be present,
- * well-formed, and rejected — or valid with no credits left behind it — and
- * only asking the vendor tells you which.
- */
-function ContactDataSection() {
-  const [items, setItems] = useState<Integration[]>([]);
-  const [mode, setMode] = useState<string>('');
-  const [sellUnverified, setSellUnverified] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [testing, setTesting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async (test: boolean) => {
-    test ? setTesting(true) : setLoading(true);
-    setError(null);
-    try {
-      const res = await api.prospectingIntegrations(test);
-      setItems(res.items);
-      setMode(res.mode);
-      setSellUnverified(res.sellUnverified);
-    } catch (err) {
-      setError(
-        err instanceof ApiError && err.code === 'insufficient_role'
-          ? 'Only an owner or admin can see the contact-data configuration.'
-          : err instanceof Error
-            ? err.message
-            : 'Could not load integrations.',
-      );
-    } finally {
-      setTesting(false);
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load(false);
-  }, [load]);
-
-  const sources = items.filter((i) => i.kind === 'source');
-  const verifiers = items.filter((i) => i.kind === 'verifier');
-  const liveSource = sources.some((s) => s.configured);
-  const liveVerifier = verifiers.some((v) => v.configured);
-
-  return (
-    <div className="space-y-5">
-      <Card
-        title="What this is finding"
-        description="Prospecting buys contact details from data vendors and confirms the addresses before you are charged. Both halves have to be configured for the results to be real."
-      >
-        {loading ? (
-          <p className="text-sm text-ink-600">Checking…</p>
-        ) : error ? (
-          <ErrorText message={error} />
-        ) : (
-          <div className="space-y-4">
-            <div
-              className={`rounded-lg border p-4 text-sm ${
-                liveSource && liveVerifier
-                  ? 'border-success-200 bg-success-50 text-success-600'
-                  : 'border-caution-200 bg-caution-50 text-caution-600'
-              }`}
-            >
-              {!liveSource ? (
-                <>
-                  <strong>Sample data.</strong> No contact-data vendor is connected, so searches
-                  return invented people and reveals are free. Nothing here reaches a real person.
-                </>
-              ) : !liveVerifier ? (
-                <>
-                  <strong>Unverified.</strong> A vendor is connected, but nothing is confirming
-                  that the addresses it returns actually exist.{' '}
-                  {sellUnverified
-                    ? 'This deployment sells them anyway — every address is the vendor’s word alone.'
-                    : 'Unconfirmed addresses are withheld rather than billed, so match rates will look low until a verifier is added.'}
-                </>
-              ) : (
-                <>
-                  <strong>Live.</strong> Real contact data, and every address is checked against
-                  the receiving mail server before you are charged for it.
-                </>
-              )}
-            </div>
-
-            <ReadOnlyRow label="Mode" value={mode === 'live' ? 'Live' : 'Sandbox'} />
-
-            <IntegrationList
-              heading="Sources"
-              blurb="Asked in order until one has the person. More sources, higher match rate."
-              items={sources}
-            />
-            <IntegrationList
-              heading="Verification"
-              blurb="Confirms a mailbox exists. ZeroBounce and NeverBounce work over HTTPS; the built-in SMTP probe needs outbound port 25, which most hosts block."
-              items={verifiers}
-            />
-
-            <div className="flex items-center gap-3 pt-1">
-              <PrimaryButton onClick={() => void load(true)} disabled={testing}>
-                {testing ? 'Testing…' : 'Test credentials'}
-              </PrimaryButton>
-              <span className="text-xs text-ink-500">
-                Makes a real call to each connected vendor.
-              </span>
-            </div>
-          </div>
-        )}
-      </Card>
-
-      <TestLookupCard />
-
-      <NetworkCard />
-
-      <Card
-        title="Connecting a vendor"
-        description="Keys are set on the server, not here — they belong to Atmosphere rather than to one organization, and the per-reveal credit charge is what covers them."
-      >
-        <dl className="space-y-3 text-sm">
-          {[
-            ['PEOPLE_DATA_LABS_API_KEY', 'Person search and enrichment. The primary source.'],
-            ['HUNTER_API_KEY', 'Domain crawler. Finds people at small companies no database holds.'],
-            ['ZEROBOUNCE_API_KEY', 'Mailbox verification over HTTPS. Works on any host.'],
-            ['NEVERBOUNCE_API_KEY', 'Alternative verifier, same job.'],
-          ].map(([key, blurb]) => (
-            <div key={key} className="flex flex-col gap-0.5">
-              <code className="font-mono text-xs text-ink-900">{key}</code>
-              <span className="text-ink-600">{blurb}</span>
-            </div>
-          ))}
-        </dl>
-      </Card>
-    </div>
-  );
-}
-
-function IntegrationList({
-  heading,
-  blurb,
-  items,
-}: {
-  heading: string;
-  blurb: string;
-  items: Integration[];
-}) {
-  return (
-    <div>
-      <h3 className="text-sm font-semibold text-ink-900">{heading}</h3>
-      <p className="mt-0.5 text-xs text-ink-500">{blurb}</p>
-      <ul className="mt-3 space-y-2">
-        {items.map((item) => (
-          <li
-            key={item.id}
-            className="flex items-center justify-between gap-3 rounded-lg glass-card px-3.5 py-2.5"
-          >
-            <span className="text-sm text-ink-900">{item.name}</span>
-            <IntegrationBadge item={item} />
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-/**
- * Four states, deliberately distinct. "Configured but never tested" is not the
- * same claim as "we called it and it answered", and collapsing them is how a
- * settings screen ends up reassuring somebody about a key that does not work.
- */
-function IntegrationBadge({ item }: { item: Integration }) {
-  if (!item.configured) {
-    return <span className="text-xs text-ink-500">Not connected</span>;
-  }
-  if (item.reachable === true) {
-    return (
-      <span className="rounded-full bg-success-50 px-2 py-0.5 text-xs font-medium text-success-600">
-        Working
-      </span>
-    );
-  }
-  if (item.reachable === false) {
-    return (
-      <span
-        className="rounded-full bg-danger-50 px-2 py-0.5 text-xs font-medium text-danger-600"
-        title={item.detail ?? undefined}
-      >
-        Failing
-      </span>
-    );
-  }
-  return (
-    <span className="rounded-full bg-paper-200 px-2 py-0.5 text-xs font-medium text-ink-700">
-      Connected · untested
-    </span>
-  );
-}
-
-/**
- * The shared contact network — the one setting on this page with someone
- * else's interests on the other side of it.
- *
- * Contributing means this organization's business contacts become findable by
- * every other customer. That is a genuinely good trade for the org — the pool
- * gets better for them too — but the people in those records never agreed to
- * anything, so the control says exactly what happens rather than describing it
- * as "improve your results". Off is the default, and turning it off again
- * withdraws what was already given rather than merely stopping new writes.
- */
-function NetworkCard() {
-  const [contributing, setContributing] = useState(false);
-  const [enabled, setEnabled] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api
-      .networkSettings()
-      .then((res) => {
-        setContributing(res.contributing);
-        setEnabled(res.enabled);
-      })
-      .catch(() => setEnabled(false))
-      .finally(() => setLoading(false));
-  }, []);
-
-  async function toggle(next: boolean) {
-    setBusy(true);
-    setError(null);
-    setNote(null);
-    try {
-      const res = await api.setNetworkContribution(next);
-      setContributing(res.contributing);
-      setNote(
-        next
-          ? 'Contributing. Your business contacts are now findable by other organizations.'
-          : `Withdrawn — ${res.withdrawn} ${res.withdrawn === 1 ? 'record' : 'records'} removed from the pool.`,
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not change that.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function contributeNow() {
-    setBusy(true);
-    setError(null);
-    setNote(null);
-    try {
-      const res = await api.contributeToNetwork();
-      setNote(`Shared ${res.contributed} of ${res.considered} contacts.`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not contribute.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (!enabled) return null;
-
-  return (
-    <Card
-      title="Shared contact network"
-      description="Organizations that opt in pool the business contacts they already hold, and can find people the others have recorded. It is the single biggest lever on how often a search finds somebody."
-    >
-      {loading ? (
-        <p className="text-sm text-ink-600">Checking…</p>
-      ) : (
-        <div className="space-y-4">
-          <Toggle
-            checked={contributing}
-            onChange={(next) => void toggle(next)}
-            label="Contribute our contacts"
-            description="Your contacts' names, work emails and work phone numbers become findable by other Atmosphere organizations. Personal addresses and shared mailboxes are never shared. Turning this off removes everything you have contributed."
-          />
-
-          <div className="rounded-lg border border-line p-4 text-xs leading-relaxed text-ink-600">
-            <p className="font-medium text-ink-800">What this means for the people in your CRM</p>
-            <p className="mt-1">
-              Their work contact details are shared with other companies using Atmosphere. Anyone
-              can ask to be removed, and an erasure is permanent across the whole network — it
-              cannot be undone by another organization contributing them again. Only business
-              addresses are eligible; personal ones are rejected outright.
-            </p>
-          </div>
-
-          {contributing && (
-            <div className="flex items-center gap-3">
-              <PrimaryButton onClick={() => void contributeNow()} busy={busy}>
-                Share existing contacts
-              </PrimaryButton>
-              <span className="text-xs text-ink-500">
-                Pushes contacts you already have. New ones go automatically.
-              </span>
-            </div>
-          )}
-
-          {note && <p className="text-sm text-success-600">{note}</p>}
-          <ErrorText message={error} />
-        </div>
-      )}
-    </Card>
-  );
-}
-
-/**
- * Test a lookup — the answer to "is any of this real?"
- *
- * A search result cannot answer that question: it looks identical whether the
- * pipeline confirmed a mailbox or a vendor asserted something nobody checked.
- * This runs the whole thing against a name and company you pick and shows what
- * each stage actually did, so a null result says which stage was empty instead
- * of leaving somebody guessing.
- *
- * Run it on yourself first. You already know your own work address, so it
- * tells you immediately whether the machinery works.
- */
-function TestLookupCard() {
-  const [fullName, setFullName] = useState('');
-  const [domain, setDomain] = useState('');
-  const [result, setResult] = useState<Diagnosis | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function run(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    setResult(null);
-    try {
-      setResult(await api.diagnoseLookup(fullName, domain));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not run that lookup.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Card
-      title="Test a lookup"
-      description="Runs the full pipeline against one person without charging or saving anything. Try your own name and company domain — you already know the right answer, which makes it the honest test."
-    >
-      <form onSubmit={run} className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Full name">
-            <input
-              className={INPUT_CLASS}
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="Marcia Delgado"
-              required
-              minLength={2}
-            />
-          </Field>
-          <Field label="Company domain" hint="Just the domain — vantageresidential.com">
-            <input
-              className={INPUT_CLASS}
-              value={domain}
-              onChange={(e) => setDomain(e.target.value)}
-              placeholder="vantageresidential.com"
-              required
-              minLength={3}
-            />
-          </Field>
-        </div>
-        <PrimaryButton type="submit" busy={busy}>
-          Run lookup
-        </PrimaryButton>
-        <ErrorText message={error} />
-      </form>
-
-      {result && (
-        <div className="mt-6 space-y-4 border-t border-line pt-5">
-          <div
-            className={`rounded-lg border p-4 text-sm ${
-              result.wouldReturn
-                ? 'border-success-200 bg-success-50 text-success-600'
-                : 'border-caution-200 bg-caution-50 text-caution-600'
-            }`}
-          >
-            {result.summary}
-          </div>
-
-          <div>
-            <h3 className="text-sm font-semibold text-ink-900">Sources</h3>
-            <ul className="mt-2 space-y-1.5">
-              {result.stages.length === 0 && (
-                <li className="text-xs text-ink-500">No free sources are enabled.</li>
-              )}
-              {result.stages.map((stage) => (
-                <li
-                  key={stage.name}
-                  className="flex items-center justify-between gap-3 rounded-lg glass-card px-3 py-2 text-xs"
-                >
-                  <span className="text-ink-800">{stage.name}</span>
-                  <span className="text-ink-500">
-                    {stage.directHit && <span className="text-success-600">held them · </span>}
-                    {stage.evidenceFound} known {stage.evidenceFound === 1 ? 'address' : 'addresses'}
-                    {' · '}
-                    {stage.ms}ms
-                    {stage.note ? ` · ${stage.note}` : ''}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <dl className="grid gap-2 text-xs sm:grid-cols-3">
-            <ReadOnlyRow label="Evidence" value={`${result.evidenceTotal} addresses`} />
-            <ReadOnlyRow
-              label="Convention"
-              value={
-                result.inferredPattern
-                  ? `${result.inferredPattern} (${result.patternSupport} agree)`
-                  : 'none inferred'
-              }
-            />
-            <ReadOnlyRow label="Verifier" value={result.mailboxVerifier ?? 'none configured'} />
-          </dl>
-
-          {result.candidates.length > 0 && (
-            <div>
-              <h3 className="text-sm font-semibold text-ink-900">Addresses tried</h3>
-              <p className="mt-0.5 text-xs text-ink-500">
-                Masked on purpose — this runs the same machinery a paid reveal runs.
-              </p>
-              <ul className="mt-2 space-y-1.5">
-                {result.candidates.map((candidate) => (
-                  <li
-                    key={candidate.masked}
-                    className="flex items-center justify-between gap-3 rounded-lg glass-card px-3 py-2 text-xs"
-                  >
-                    <span className="font-mono text-ink-800">{candidate.masked}</span>
-                    <span
-                      title={candidate.reason}
-                      className={
-                        candidate.verdict === 'valid'
-                          ? 'text-success-600'
-                          : candidate.verdict === 'invalid'
-                            ? 'text-danger-600'
-                            : 'text-caution-600'
-                      }
-                    >
-                      {candidate.verdict}
-                      {candidate.verifier ? ` · ${candidate.verifier}` : ''}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-    </Card>
-  );
-}
-
-/**
- * Sending email — connecting the mailbox campaigns go out from.
- *
- * Reachable during setup and forever after, because the mailbox is the thing
- * most likely to need reconnecting: people change jobs, revoke grants, and
- * rotate passwords, and a campaign that silently stops sending is worse than
- * one that never started.
- *
- * The page is explicit about what is being asked for. "Connect your email" is
- * the kind of phrase that gets clicked without thought; what we actually want
- * is permission to send as you and nothing else, and saying so is both more
- * honest and — in my experience of these consent screens — more likely to be
- * granted.
- */
-function SendingSection() {
-  const [state, setState] = useState<MailStatus | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
-  const [params, setParams] = useSearchParams();
-
-  const [address, setAddress] = useState('');
-  const [maxRecipients, setMaxRecipients] = useState(200);
-  const [savedPolicy, setSavedPolicy] = useState(false);
-
-  const load = useCallback(async () => {
-    try {
-      const res = await api.mailStatus();
-      setState(res);
-      setAddress(res.policy?.postalAddress ?? '');
-      setMaxRecipients(res.policy?.maxRecipients ?? 200);
-    } catch (err) {
-      setError(
-        err instanceof ApiError && err.code === 'insufficient_role'
-          ? 'Only an owner or admin can set up sending.'
-          : err instanceof Error
-            ? err.message
-            : 'Could not load sending setup.',
-      );
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  // The provider sends the browser back here with ?code=&state=.
-  useEffect(() => {
-    const code = params.get('code');
-    const oauthState = params.get('state');
-    if (!code || !oauthState) return;
-    const system = params.get('provider') ?? 'google_mail';
-
-    setBusy(system);
-    api
-      .completeMailbox(system, code, oauthState)
-      .then((res) => {
-        setNote(`Connected — campaigns will send from ${res.address}.`);
-        return load();
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Could not finish connecting.'))
-      .finally(() => {
-        setBusy(null);
-        const next = new URLSearchParams(params);
-        next.delete('code');
-        next.delete('state');
-        setParams(next, { replace: true });
-      });
-  }, [params, setParams, load]);
-
-  async function connect(system: 'google_mail' | 'microsoft_mail') {
-    setBusy(system);
-    setError(null);
-    try {
-      const { url } = await api.connectMailbox(system);
-      window.location.href = url;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not start that connection.');
-      setBusy(null);
-    }
-  }
-
-  async function disconnect(system: string) {
-    setBusy(system);
-    try {
-      await api.disconnectMailbox(system);
-      setNote('Disconnected. Campaigns will not send until a mailbox is connected again.');
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not disconnect.');
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function savePolicy(event: FormEvent) {
-    event.preventDefault();
-    setError(null);
-    try {
-      await api.saveSendPolicy({ postalAddress: address, maxRecipients });
-      setSavedPolicy(true);
-      setTimeout(() => setSavedPolicy(false), 2500);
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save that.');
-    }
-  }
-
-  const connectedSystems = new Set((state?.connected ?? []).map((c) => c.system));
-  const hasMailbox = connectedSystems.size > 0;
-  const hasAddress = Boolean(state?.policy?.postalAddress?.trim());
-
-  return (
-    <div className="space-y-5">
-      <Card
-        title="The mailbox campaigns send from"
-        description="Campaign email goes out from your own address, so it lands like a note from a person and replies come straight back to you."
-      >
-        {!state ? (
-          <p className="text-sm text-ink-600">Loading…</p>
-        ) : (
-          <div className="space-y-3">
-            <div
-              className={`rounded-lg border p-4 text-sm ${
-                hasMailbox && hasAddress
-                  ? 'border-success-200 bg-success-50 text-success-600'
-                  : 'border-caution-200 bg-caution-50 text-caution-600'
-              }`}
-            >
-              {!hasMailbox ? (
-                <>
-                  <strong>No mailbox connected.</strong> Campaigns cannot send until one is.
-                </>
-              ) : !hasAddress ? (
-                <>
-                  <strong>Almost there.</strong> Add your postal address below — every commercial
-                  email is legally required to carry one, and sending is blocked until it does.
-                </>
-              ) : (
-                <>
-                  <strong>Ready to send.</strong> {state.sentToday} sent today.
-                </>
-              )}
-            </div>
-
-            {state.providers.map((provider) => {
-              const isConnected = connectedSystems.has(provider.id);
-              const detail = state.connected.find((c) => c.system === provider.id);
-              return (
-                <div key={provider.id} className="rounded-lg glass-card p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h3 className="text-sm font-semibold text-ink-900">{provider.name}</h3>
-                      <p className="mt-1 text-xs leading-relaxed text-ink-600">{provider.note}</p>
-                      {detail?.accountLabel && (
-                        <p className="mt-1.5 text-xs text-success-600">
-                          Sending as {detail.accountLabel}
-                        </p>
-                      )}
-                    </div>
-                    <div className="shrink-0">
-                      {isConnected ? (
-                        <button
-                          onClick={() => void disconnect(provider.id)}
-                          disabled={busy === provider.id}
-                          className="rounded-lg border border-line px-3 py-2 text-xs font-medium text-ink-700 transition hover:bg-paper-200/50 disabled:opacity-50"
-                        >
-                          Disconnect
-                        </button>
-                      ) : (
-                        <PrimaryButton
-                          onClick={() => void connect(provider.id)}
-                          busy={busy === provider.id}
-                          disabled={!provider.available || !state.vaultConfigured}
-                        >
-                          Connect
-                        </PrimaryButton>
-                      )}
-                    </div>
-                  </div>
-                  {!provider.available && !isConnected && (
-                    <p className="mt-2 text-xs text-caution-600">
-                      Not configured on this deployment.
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-
-            {note && <p className="text-sm text-success-600">{note}</p>}
-            <ErrorText message={error} />
-          </div>
-        )}
-      </Card>
-
-      <Card
-        title="What every email must carry"
-        description="US law requires a physical postal address and a working unsubscribe in every commercial email. We add both automatically — the address has to be yours."
-      >
-        <form onSubmit={savePolicy} className="space-y-4">
-          <Field
-            label="Your postal address"
-            hint="Appears at the foot of every campaign email. A PO box is fine."
-          >
-            <input
-              className={INPUT_CLASS}
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="Atmosphere Restoration, 100 Congress Ave, Austin TX 78701"
-            />
-          </Field>
-          <Field
-            label="Most people one campaign may reach"
-            hint="A wall, not a target. An audience rule that unexpectedly matches four thousand people should stop here rather than send."
-          >
-            <input
-              type="number"
-              min={1}
-              max={5000}
-              className={INPUT_CLASS}
-              value={maxRecipients}
-              onChange={(e) => setMaxRecipients(Number(e.target.value))}
-            />
-          </Field>
-          <div className="flex items-center gap-3">
-            <PrimaryButton type="submit">Save</PrimaryButton>
-            <Saved show={savedPolicy} />
-          </div>
-        </form>
-      </Card>
-
-      <Card
-        title="What we can and cannot do with your mailbox"
-        description="Worth being precise about, because the permission screen goes past quickly."
-      >
-        <dl className="space-y-3 text-sm">
-          <div>
-            <dt className="font-medium text-ink-800">We can send</dt>
-            <dd className="mt-0.5 text-ink-600">
-              Messages you have written, to people your campaign rules select. They appear in your
-              Sent folder like anything else you send.
-            </dd>
-          </div>
-          <div>
-            <dt className="font-medium text-ink-800">We cannot read</dt>
-            <dd className="mt-0.5 text-ink-600">
-              The permission requested is send-only. There is no version of this connection that
-              can open a message in your inbox — not your mail, not your contacts, not your
-              calendar.
-            </dd>
-          </div>
-          <div>
-            <dt className="font-medium text-ink-800">You can revoke it without us</dt>
-            <dd className="mt-0.5 text-ink-600">
-              From your Google or Microsoft account settings, at any time. Disconnecting here does
-              the same thing.
-            </dd>
-          </div>
-        </dl>
-      </Card>
-    </div>
-  );
-}

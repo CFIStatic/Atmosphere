@@ -32,7 +32,8 @@ $$;
 create table if not exists public.profiles (
   id uuid primary key references auth.users (id),
   email text,
-  full_name text
+  full_name text,
+  avatar_url text
 );
 
 create table if not exists public.orgs (

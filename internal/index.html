@@ -4,13 +4,38 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex, nofollow, noarchive" />
-    <meta name="theme-color" content="#141311" />
+    <meta name="theme-color" content="#141311" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f4f1eb" media="(prefers-color-scheme: light)" />
     <meta
       name="description"
       content="Atmosphere Internal — staff accounts, analytics, and system health."
     />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Atmosphere Internal</title>
+    <script>
+      (function () {
+        try {
+          var pref = localStorage.getItem('atmosphere.theme');
+          if (pref !== 'light' && pref !== 'dark') {
+            try {
+              var prefs = JSON.parse(localStorage.getItem('atmosphere.preferences') || '{}');
+              pref = prefs.theme;
+            } catch (e) {}
+          }
+          if (pref !== 'light' && pref !== 'dark') {
+            pref = localStorage.getItem('atm-theme');
+          }
+          if (pref !== 'light' && pref !== 'dark') {
+            pref = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          }
+          document.documentElement.setAttribute('data-theme', pref);
+          document.documentElement.setAttribute('data-theme-preference', pref);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+          document.documentElement.setAttribute('data-theme-preference', 'dark');
+        }
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

@@ -119,10 +119,12 @@ Atmosphere/
 │   │   ├── fieldIdentity.ts  Claim codes + My jobs
 │   │   ├── evidencePortal.ts Verifier library + shares
 │   │   ├── mediaCatalog.ts   Fleet media catalog
+│   │   ├── legal.ts          Staff legal hold, vault, user monitor
 │   │   └── geometry.ts       RoomPlan / twin writes
 │   ├── src/verifier/         Intake propose, readiness, invite email copy
 │   ├── src/lib/systemMail.ts Atmosphere-sent transactional email
 │   ├── src/media/            Catalog + storage drivers
+│   ├── src/legal/            Legal hold, video vault, user-action monitor
 │   ├── src/geometry/         Property twins
 │   └── supabase/migrations/  Jobs, proof, field identity, media, twins
 ├── website/                  Marketing site (Work Verification first)
@@ -130,9 +132,8 @@ Atmosphere/
 └── docs/                     Deeper notes (media storage, CRM, etc.)
 ```
 
-Sales, classic operations, and Manager UIs may still exist in the tree. They are
-**not** the product on display — the console only surfaces Verification and
-Field (`VISIBLE_PLATFORM_IDS` in `frontend/src/lib/platforms.ts`).
+The console is Work Verification and Field Capture only. Sales, Manager, and
+the other later-product screens have been removed from the product.
 
 ## Quick start
 

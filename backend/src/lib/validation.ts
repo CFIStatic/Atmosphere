@@ -30,19 +30,35 @@ const nameField = z
   .max(80, 'Name is too long')
   .regex(/^[\p{L}][\p{L}\s'.-]*$/u, 'Enter a real name');
 
+const optionalStaffName = z
+  .string()
+  .trim()
+  .max(80)
+  .optional()
+  .default('')
+  .refine((value) => value === '' || nameField.safeParse(value).success, 'Enter a real name');
+
+const authenticatorCodeField = z
+  .string({ required_error: 'Authenticator code is required' })
+  .trim()
+  .regex(/^\d{6}$/, 'Enter the 6-digit code from Microsoft Authenticator');
+
 export const internalStaffStartSchema = z.object({
-  firstName: nameField,
-  lastName: nameField,
+  firstName: optionalStaffName,
+  lastName: optionalStaffName,
   email: emailField,
 });
 
-export const internalStaffVerifySchema = z.object({
-  challenge: z.string().trim().min(16).max(4000),
-  code: z
-    .string({ required_error: 'Authenticator code is required' })
-    .trim()
-    .regex(/^\d{6}$/, 'Enter the 6-digit code from Microsoft Authenticator'),
-});
+export const internalStaffVerifySchema = z
+  .object({
+    challenge: z.string().trim().min(16).max(4000).optional(),
+    email: emailField.optional(),
+    code: authenticatorCodeField,
+  })
+  .refine((value) => Boolean(value.challenge || value.email), {
+    message: 'Enter your work email and the 6-digit Authenticator code.',
+    path: ['email'],
+  });
 
 /** Body of the "email me a reset link" request. */
 export const forgotPasswordSchema = z.object({ email: emailField });
@@ -133,6 +149,24 @@ export const updateProfileSchema = z.object({
     .nullable(),
 });
 
+const AVATAR_MEDIA_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/x-icon',
+  'image/vnd.microsoft.icon',
+] as const;
+
+/** Body of a profile photo upload — a picture or icon, sent as base64. */
+export const uploadAvatarSchema = z.object({
+  filename: z.string().trim().min(1, 'Choose a picture').max(200, 'That filename is too long'),
+  mediaType: z.enum(AVATAR_MEDIA_TYPES, {
+    errorMap: () => ({ message: 'Use a JPEG, PNG, WebP, GIF, or ICO image' }),
+  }),
+  contentBase64: z.string().min(8, 'That image is empty'),
+});
+
 /** Account types a member can hold within an organization. */
 export const MEMBER_ROLES = [
   'project_manager',
@@ -184,8 +218,9 @@ const usageIntentsSchema = z
   });
 
 /**
- * Website signup wizard only asks for a company name (or a join code).
- * These fill the questionnaire fields so create_org / join_org still succeed.
+ * Website signup asks for a company name (or a join code) and, when creating,
+ * a company type. Role / work type / usage intents still default so create_org
+ * / join_org succeed without the old questionnaire.
  */
 export const WEBSITE_SIGNUP_ONBOARDING = {
   role: 'field_technician',
@@ -364,6 +399,8 @@ export const analyticsRangeSchema = z
   });
 
 export const analyticsOrgIdSchema = z.string().uuid('org id must be a uuid');
+
+export const accessRequestIdSchema = z.string().uuid('request id must be a uuid');
 
 export const analyticsDatasetSchema = z.enum([
   'all',

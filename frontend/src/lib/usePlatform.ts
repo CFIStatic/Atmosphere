@@ -23,6 +23,13 @@ function isPlatformId(value: string | null): value is PlatformId {
 export function initPlatform(): void {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
+    // Sales and Manager used to be stored here. Those products are gone —
+    // land on Verification rather than leaving the device stuck on a dead id.
+    if (raw === 'sales' || raw === 'manager') {
+      current = DEFAULT;
+      window.localStorage.setItem(STORAGE_KEY, DEFAULT);
+      return;
+    }
     if (isPlatformId(raw)) current = raw;
   } catch {
     /* private mode: the default stands for this session */

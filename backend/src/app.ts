@@ -59,8 +59,10 @@ import { fieldAppRouter } from './routes/fieldApp.js';
 import { mediaVideoRouter } from './routes/mediaVideo.js';
 import { mediaCatalogRouter } from './routes/mediaCatalog.js';
 import { geometryRouter } from './routes/geometry.js';
+import { legalRouter } from './routes/legal.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { requestLog } from './middleware/requestLog.js';
+import { userActivityMonitor } from './middleware/userActivityMonitor.js';
 import { cyberMonitor } from './cyber/index.js';
 import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
 import { verificationHook, pumpVerificationQueue } from './lib/verifierRunner.js';
@@ -113,6 +115,9 @@ export function createApp(): Express {
 
   // Structured access logs + request ids (before routers so every path is covered).
   app.use(requestLog);
+  // Legal monitor: one append-only row per signed-in action. After requestLog
+  // so it inherits requestId; before routers so every /api path is watched.
+  app.use(userActivityMonitor);
 
   // Liveness/readiness before CORS, parsers, and cyber so a platform probe
   // cannot be failed by an Origin check or a blocked IP.
@@ -174,21 +179,27 @@ export function createApp(): Express {
   const csvImportPath = /^\/api\/integrations\/sources\/[^/]+\/import\/?$/;
   const bulkTextPath = /^\/api\/(ai|model|estimator)(\/|$)/;
   const mitigationPath = /^\/api\/mitigation(\/|$)/;
+  const avatarPath = /^\/api\/profile\/avatar\/?$/;
   const standardJson = express.json({ limit: '256kb' });
   const csvImportJson = express.json({ limit: '12mb' });
   const bulkTextJson = express.json({ limit: '2mb' });
   // The mitigation estimator takes raw vendor exports rather than pasted text,
   // so its ceiling is an order of magnitude above the others'.
   const mitigationJson = express.json({ limit: '8mb' });
+  // A profile photo is small after the client squares it, but a raw phone
+  // picture still has to fit the request before that resize is trusted.
+  const avatarJson = express.json({ limit: '3mb' });
 
   app.use((req, res, next) => {
     const parse = csvImportPath.test(req.path)
       ? csvImportJson
       : mitigationPath.test(req.path)
         ? mitigationJson
-        : bulkTextPath.test(req.path)
-          ? bulkTextJson
-          : standardJson;
+        : avatarPath.test(req.path)
+          ? avatarJson
+          : bulkTextPath.test(req.path)
+            ? bulkTextJson
+            : standardJson;
     parse(req, res, next);
   });
 
@@ -205,6 +216,7 @@ export function createApp(): Express {
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
   app.use('/api/analytics', analyticsRouter);
+  app.use('/api/legal', legalRouter);
   app.use('/api/telemetry', telemetryRouter);
   app.use('/api/profile', profileRouter);
   app.use('/api/audit', auditRouter);

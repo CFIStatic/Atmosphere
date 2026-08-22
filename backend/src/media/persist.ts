@@ -25,6 +25,8 @@ export function mediaRowToObject(r: Record<string, unknown>): MediaObject {
     refId: (r.ref_id as string) ?? null,
     retentionUntil: (r.retention_until as string) ?? null,
     legalHold: Boolean(r.legal_hold),
+    deletedAt: (r.deleted_at as string) ?? null,
+    deletedBy: (r.deleted_by as string) ?? null,
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at),
   };
@@ -52,6 +54,8 @@ export async function persistMediaObject(media: MediaObject): Promise<void> {
       ref_id: media.refId ?? null,
       retention_until: media.retentionUntil ?? null,
       legal_hold: media.legalHold ?? false,
+      deleted_at: media.deletedAt ?? null,
+      deleted_by: media.deletedBy ?? null,
       updated_at: media.updatedAt,
       created_at: media.createdAt,
     },

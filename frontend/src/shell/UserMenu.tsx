@@ -2,6 +2,8 @@ import { useNavigate } from 'react-router-dom';
 import { Check, Eye, LogOut, Moon, Sun, User } from 'lucide-react';
 import { Badge, Button, Popover, cn } from '../design';
 import { useAuth } from '../context/AuthContext';
+import { PersonAvatar } from '../components/PersonAvatar';
+import { nameFromMetadata } from '../lib/display';
 import { labelForRole } from '../domain/approvals';
 import type { Role } from '../domain/types';
 import { themeLabel } from '../lib/theme';
@@ -18,12 +20,11 @@ const ROLES: Role[] = [
 ];
 
 export function UserMenu() {
-  const { user, logout } = useAuth();
+  const { user, profile, logout } = useAuth();
   const { role, actualRole, isOverridden, viewAs } = useViewer();
   const { preference, theme, toggle } = useTheme();
   const navigate = useNavigate();
 
-  const initials = (user?.email ?? '?').slice(0, 2).toUpperCase();
   const ThemeIcon = theme === 'dark' ? Moon : Sun;
 
   return (
@@ -34,11 +35,14 @@ export function UserMenu() {
         <button
           type="button"
           aria-label="Account menu"
-          // brand-400 rather than a fixed light shade: the token darkens on the
-          // off-white ground, so the initials stay legible in both themes.
-          className="relative grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-500/15 text-2xs font-semibold text-brand-400 transition hover:bg-brand-500/25"
+          className="relative rounded-full transition hover:opacity-90"
         >
-          {initials}
+          <PersonAvatar
+            fullName={profile?.fullName || nameFromMetadata(user?.metadata)}
+            email={user?.email}
+            avatarUrl={profile?.avatarUrl}
+            size="md"
+          />
           {isOverridden && (
             <span className="absolute -bottom-0.5 -right-0.5 grid h-3.5 w-3.5 place-items-center rounded-full border-2 border-canvas bg-state-warn">
               <Eye className="h-2 w-2 text-on-accent" />

@@ -24,6 +24,7 @@ interface AuthValue {
   startSignIn: (input: StaffIdentity) => Promise<StaffChallengeResponse>;
   login: (input: StaffVerify) => Promise<void>;
   logout: () => Promise<void>;
+  loadAccess: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthValue | undefined>(undefined);
@@ -88,8 +89,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, access, loading, startSignIn, login, logout }),
-    [user, access, loading, startSignIn, login, logout],
+    () => ({ user, access, loading, startSignIn, login, logout, loadAccess }),
+    [user, access, loading, startSignIn, login, logout, loadAccess],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

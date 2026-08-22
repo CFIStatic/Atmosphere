@@ -59,6 +59,7 @@ export interface Profile {
   id: string | null;
   email: string | null;
   fullName: string | null;
+  avatarUrl: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 }
@@ -67,6 +68,7 @@ export interface OrgMember {
   userId: string;
   email: string | null;
   fullName: string | null;
+  avatarUrl?: string | null;
   role: MemberRole;
   workType: WorkType;
   usageIntents: UsageIntent[];
@@ -835,6 +837,41 @@ export interface CustodyEntry {
   actor_role: string | null;
   detail: string | null;
   occurred_at: string;
+}
+
+export type JobLegalHoldKind = 'subpoena' | 'lawsuit' | 'preservation' | 'investigation' | 'other';
+
+export interface JobLegalHold {
+  id: string;
+  caseNumber: string;
+  kind: JobLegalHoldKind;
+  title: string;
+  reason: string;
+  counselName: string | null;
+  status: 'open' | 'released';
+  createdAt: string;
+}
+
+export interface JobLegalClip {
+  id: string;
+  title: string | null;
+  workDate: string | null;
+  phase: string | null;
+  company: string | null;
+  legalHold: boolean;
+  userDeleted: boolean;
+  contentHash: string | null;
+  durationSeconds: number | null;
+  byteSize: number | null;
+  receivedAt: string | null;
+}
+
+export interface JobLegalHoldPortal {
+  job: { id: string; title: string | null; jobNumber: number | null; orgId: string };
+  hold: JobLegalHold | null;
+  holds: JobLegalHold[];
+  clips: JobLegalClip[];
+  counts: { clips: number; onHold: number; userDeleted: number; jobOnHold: boolean };
 }
 
 /** A share link scoped to one job — evidence library or progress dashboard. */
@@ -2485,6 +2522,14 @@ export const api = {
       body: JSON.stringify({ fullName }),
     }),
 
+  uploadAvatar: (input: { filename: string; mediaType: string; contentBase64: string }) =>
+    request<{ profile: Profile }>('/api/profile/avatar', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  removeAvatar: () => request<{ profile: Profile }>('/api/profile/avatar', { method: 'DELETE' }),
+
   // ---- Device PIN ----
   pinStatus: () =>
     request<{ enrolled: boolean; lockedUntil?: string | null }>('/api/auth/pin/status', {
@@ -3074,6 +3119,30 @@ export const api = {
     request<{ ok: boolean }>(`/api/operations/shared/${jobId}/evidence/${proofId}/hold`, {
       method: 'POST',
       body: JSON.stringify(input),
+    }),
+
+  jobLegalHold: (jobId: string) =>
+    request<JobLegalHoldPortal>(`/api/operations/shared/${jobId}/legal-hold`, { method: 'GET' }),
+
+  openJobLegalHold: (
+    jobId: string,
+    input: {
+      kind: JobLegalHoldKind;
+      reason: string;
+      caseNumber?: string;
+      title?: string;
+      counselName?: string;
+    },
+  ) =>
+    request<{ hold: JobLegalHold }>(`/api/operations/shared/${jobId}/legal-hold`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  releaseJobLegalHold: (jobId: string, reason: string) =>
+    request<{ hold: JobLegalHold }>(`/api/operations/shared/${jobId}/legal-hold/release`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
     }),
 
   evidenceShares: (jobId?: string, kind?: 'evidence' | 'progress') =>
@@ -6405,6 +6474,14 @@ export const CONTRACTOR_TYPE_LABELS: Record<ContractorType, string> = {
   general_contractor: 'General contractor',
   other: 'Something else',
 };
+
+/** Display order for company-type pickers (signup and Settings). */
+export const CONTRACTOR_TYPE_ORDER: ContractorType[] = [
+  'restoration',
+  'roofing',
+  'general_contractor',
+  'other',
+];
 
 export const USAGE_INTENT_LABELS: Record<UsageIntent, string> = {
   mitigation_estimating: 'Mitigation estimating',

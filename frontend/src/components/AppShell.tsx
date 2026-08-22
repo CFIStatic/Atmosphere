@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { api } from '../lib/api';
-import { displayName, initials, nameFromMetadata } from '../lib/display';
+import { displayName, nameFromMetadata } from '../lib/display';
+import { PersonAvatar } from './PersonAvatar';
 import { setPreference, usePreferences } from '../lib/preferences';
 import {
   cycleThemePreference,
@@ -40,7 +40,6 @@ const JUMP_TARGETS = (() => {
       }
     }
   }
-  // Later product (agent runs): seen.set('/audit:Audit trail', { to: '/audit', label: 'Audit trail', Icon: AuditIcon });
   seen.set('/technician:Field capture', { to: '/technician', label: 'Field capture', Icon: MicIcon });
   return [...seen.values()];
 })();
@@ -61,38 +60,20 @@ export function AppShell({
   rail?: ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [approvalCount, setApprovalCount] = useState(0);
   const [platformId, setPlatformId] = usePlatform();
-  const navigate = useNavigate();
   const location = useLocation();
 
   // Whole-console session time for Atmosphere-internal product analytics.
   useFeatureTimer('app_shell');
 
   // Landing on a platform's home makes it the active one; shared screens
-  // (Jobs, Billing, Settings) leave the choice alone, so opening a job from
-  // Sales does not throw you into Operations.
+  // (Jobs, Settings) leave the choice alone.
   useEffect(() => {
     const fromPath = platformOfPath(location.pathname);
     if (fromPath && fromPath !== platformId) setPlatformId(fromPath);
   }, [location.pathname, platformId, setPlatformId]);
 
   const platform = PLATFORMS[platformId];
-
-  // The pill is a glance, not a live feed — one fetch per mount is enough,
-  // and a backend without the verifier configured simply shows no pill.
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .getEscalations()
-      .then(({ escalations }) => {
-        if (!cancelled) setApprovalCount(escalations.filter((e) => e.status === 'open').length);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   return (
     <div className="min-h-screen bg-paper-100">
@@ -121,13 +102,10 @@ export function AppShell({
                 {group.label}
               </p>
               <div className="space-y-0.5">
-                {group.items.map(({ to, label, Icon }) => {
-                  const tourTarget = to === '/intake' ? 'nav-start-job' : undefined;
-                  return (
+                {group.items.map(({ to, label, Icon }) => (
                   <NavLink
                     key={`${group.label}-${to}`}
                     to={to}
-                    data-tour={tourTarget}
                     onClick={() => setMobileOpen(false)}
                     className={({ isActive }) =>
                       `relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13.5px] font-medium transition-colors ${
@@ -139,14 +117,8 @@ export function AppShell({
                   >
                     <Icon width={16} height={16} className="shrink-0" />
                     <span className="flex-1 truncate">{label}</span>
-                    {to === '/approvals' && approvalCount > 0 && (
-                      <span className="rounded-full bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700">
-                        {approvalCount}
-                      </span>
-                    )}
                   </NavLink>
-                  );
-                })}
+                ))}
               </div>
             </div>
           ))}
@@ -177,16 +149,6 @@ export function AppShell({
 
             <div className="ml-auto flex items-center gap-3">
               <ThemeToggle />
-              {/* Approvals are an office concern; the Field app's topbar
-                  carries capture, not a queue. */}
-              {approvalCount > 0 && platformId !== 'field' && (
-                <button
-                  onClick={() => navigate('/approvals')}
-                  className="hidden items-center gap-1.5 rounded-full border border-caution-200 bg-caution-50 px-3 py-1.5 text-xs font-semibold text-caution-600 transition hover:border-caution-600 sm:flex"
-                >
-                  {approvalCount} awaiting approval
-                </button>
-              )}
               <AccountMenu />
             </div>
           </div>
@@ -375,9 +337,12 @@ function AccountMenu() {
         aria-expanded={open}
         className="flex items-center gap-2 rounded-full transition hover:opacity-90"
       >
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-500 text-xs font-semibold text-white">
-          {initials(profile?.fullName || nameFromMetadata(user?.metadata), user?.email)}
-        </span>
+        <PersonAvatar
+          fullName={profile?.fullName || nameFromMetadata(user?.metadata)}
+          email={user?.email}
+          avatarUrl={profile?.avatarUrl}
+          size="md"
+        />
         <ChevronDownIcon width={14} height={14} className="hidden shrink-0 text-ink-500 sm:block" />
       </button>
 

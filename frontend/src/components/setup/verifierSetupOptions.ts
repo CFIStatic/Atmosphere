@@ -92,6 +92,11 @@ export function usageIntentsForRole(role: MemberRole): UsageIntent[] {
   return roleOption?.usageIntents ?? (['exploring'] as UsageIntent[]);
 }
 
+/** Restoration jobs start as mitigation; every other company type is construction. */
+export function workTypeForContractorType(contractorType: ContractorType): WorkType {
+  return contractorType === 'restoration' ? 'mitigation' : 'construction';
+}
+
 export function resolveVerifierSetup(
   role: MemberRole,
   trade: ServiceTrade,

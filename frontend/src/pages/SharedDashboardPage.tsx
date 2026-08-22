@@ -14,6 +14,8 @@ import { JobProgressDashboard } from '../components/shared/JobProgressDashboard'
 import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPanel';
 import { ScopeDocPanel } from '../components/shared/ScopeDocPanel';
 import { JobReadinessPanel } from '../components/shared/JobReadinessPanel';
+import { JobLegalHoldPortal } from '../components/shared/JobLegalHoldPortal';
+import { EvidenceLocker } from '../components/shared/EvidenceLocker';
 import { JOB_PARTY_TRADE_OPTIONS } from '../components/setup/verifierSetupOptions';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
@@ -112,7 +114,6 @@ export function SharedDashboardPage() {
   const [freshInvites, setFreshInvites] = useState<IntakeCaptureInvite[]>(
     () => handoff?.freshInvites ?? [],
   );
-  const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
   useFeatureTimer('job_files');
   const openSeq = useRef(0);
   const recordIdRef = useRef<string | null>(freshRecord?.job.id ?? requestedJob ?? null);
@@ -287,7 +288,7 @@ export function SharedDashboardPage() {
             <button
               type="button"
               onClick={openShare}
-              className="rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-semibold text-ink-900"
+              className="rounded-lg bg-ink-900 px-3.5 py-2 text-sm font-semibold text-paper-0 transition hover:bg-ink-800"
             >
               Share
             </button>
@@ -308,7 +309,7 @@ export function SharedDashboardPage() {
                 {freshInvites.length
                   ? freshInvites.every((i) => i.emailed || !i.email)
                     ? ' — Field Capture invites went out.'
-                    : ' — invite links are ready below (some emails did not send).'
+                    : ' — some invites could not be emailed.'
                   : '.'}{' '}
                 Footage will land on the Dashboard as they film.
               </p>
@@ -326,50 +327,25 @@ export function SharedDashboardPage() {
           </div>
           {freshInvites.length > 0 && (
             <ul className="space-y-2 border-t border-success-200/70 pt-3">
-              {freshInvites.map((inv) => {
-                const path = inv.external
-                  ? inv.sharePath
-                  : inv.fieldCapturePath || inv.sharePath;
-                const href =
-                  typeof window !== 'undefined' ? `${window.location.origin}${path}` : path;
-                return (
-                  <li
-                    key={inv.id}
-                    className="flex flex-wrap items-center gap-2 rounded-lg bg-paper-0/70 px-3 py-2"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-ink-900">{inv.name}</p>
-                      <p className="truncate text-xs text-ink-500">
-                        {inv.email ?? 'No email on file'}
-                        {' · '}
-                        {inv.emailed
-                          ? 'Emailed'
-                          : inv.email
-                            ? 'Email did not send — copy the link'
-                            : 'Copy their capture link'}
-                      </p>
-                    </div>
-                    <code className="max-w-[14rem] truncate rounded-md bg-paper-100 px-2 py-1 text-[11px] text-ink-700 sm:max-w-xs">
-                      {href}
-                    </code>
-                    <button
-                      type="button"
-                      className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-ink-900"
-                      onClick={() => {
-                        void navigator.clipboard.writeText(href).then(
-                          () => {
-                            setCopiedInviteId(inv.id);
-                            window.setTimeout(() => setCopiedInviteId(null), 2000);
-                          },
-                          () => undefined,
-                        );
-                      }}
-                    >
-                      {copiedInviteId === inv.id ? 'Copied' : 'Copy link'}
-                    </button>
-                  </li>
-                );
-              })}
+              {freshInvites.map((inv) => (
+                <li
+                  key={inv.id}
+                  className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-paper-0/70 px-3 py-2"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-ink-900">{inv.name}</p>
+                    <p className="truncate text-xs text-ink-500">
+                      {inv.email ?? 'No email on file'}
+                      {' · '}
+                      {inv.emailed
+                        ? 'Emailed'
+                        : inv.email
+                          ? 'Email did not send'
+                          : 'Invite created'}
+                    </p>
+                  </div>
+                </li>
+              ))}
             </ul>
           )}
         </div>
@@ -397,6 +373,11 @@ export function SharedDashboardPage() {
                   : undefined
               }
             />
+
+            <div className="mt-4 space-y-4">
+              <JobLegalHoldPortal jobId={record.job.id} jobTitle={record.job.title} />
+              <EvidenceLocker jobId={record.job.id} />
+            </div>
 
                 <details className="mt-4 rounded-xl glass-card group">
                   <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-ink-900 marker:content-none [&::-webkit-details-marker]:hidden">

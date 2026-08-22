@@ -10,6 +10,9 @@ import { UsagePage } from './pages/UsagePage';
 import { ExperimentsPage } from './pages/ExperimentsPage';
 import { MeteringPage } from './pages/MeteringPage';
 import { SystemPage } from './pages/SystemPage';
+import { AccessPage } from './pages/AccessPage';
+import { LegalPage } from './pages/LegalPage';
+import { JobLegalPage } from './pages/JobLegalPage';
 
 export function App() {
   return (
@@ -29,9 +32,12 @@ export function App() {
             <Route path="overview" element={<OverviewPage />} />
             <Route path="accounts" element={<AccountsPage />} />
             <Route path="accounts/:orgId" element={<AccountDetailPage />} />
+            <Route path="access" element={<AccessPage />} />
             <Route path="usage" element={<UsagePage />} />
             <Route path="experiments" element={<ExperimentsPage />} />
             <Route path="metering" element={<MeteringPage />} />
+            <Route path="legal" element={<LegalPage />} />
+            <Route path="legal/jobs/:jobId" element={<JobLegalPage />} />
             <Route path="system" element={<SystemPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

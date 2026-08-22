@@ -198,6 +198,34 @@ Manual backend fallback: **Actions → Deploy Work Verification → Run workflow
   backend 300s `/api/health` probe, not nginx. The deploy job also applies
   that json onto the service with `internal/scripts/apply-railway-config.sh`.
 
+### Get the corporate website working
+
+The marketing site is already hosted. Three different hostnames are in play
+and only one of them is live:
+
+| URL | What you get today |
+| --- | --- |
+| `https://website-production-7e3f.up.railway.app` | **Live** Corporate Website (`website/`) |
+| `https://atmosphere-website-production.up.railway.app` | Railway `Application not found` — that hostname was never generated |
+| `https://atmosphereteam.com` / `www` | Squarespace **Coming Soon** parking page (DNS still on Squarespace) |
+
+Until DNS moves, share the Railway URL. To put `atmosphereteam.com` on this
+site:
+
+1. Railway → **Corporate Website** → Settings → Networking → **Custom Domain**
+   → add `atmosphereteam.com` and `www.atmosphereteam.com`. Railway prints
+   the CNAME / ALIAS records it wants.
+2. Squarespace → Domains → DNS → remove the parking A records
+   (`198.185.159.*`, `198.49.23.*`) and the `ext-sq.squarespace.com` CNAME.
+   Put Railway's records in their place. Apex domains need an ALIAS/ANAME
+   (or Railway's nameservers); `www` is a CNAME onto the Railway hostname.
+3. Wait for TLS to go **Active** on the Railway domain row. Then set
+   `SITE_ORIGIN` on the website service (and in `website/Dockerfile` if you
+   want it baked into sitemap/robots) to `https://atmosphereteam.com`.
+
+GitHub Pages is optional and **not configured** on this repo. The Railway
+service is the production host.
+
 ### If the website service fails its healthcheck on every main push
 
 Symptom: the `website` (Corporate Website) service shows **Deployment failed
@@ -209,6 +237,14 @@ the repo-root `/railway.toml` (the backend's). The nginx image then deployed
 with the backend's settings and never answered the probe. The CLI deploys from
 `deploy-website.yml` worked because that job copies `website/railway.toml`
 over the upload root — which masked the missing setting.
+
+A second, later failure mode: `railwayUp.sh` treated Railway's in-window
+`Attempt #N failed with service unavailable. Continuing to retry` lines as a
+finished failure, aborted, then retried and hit `no changes detected in
+watch paths` and marked the job green. The replica never took the new image.
+The script now ignores those retry lines, website deploys stamp
+`website/.railway-up-stamp` so a retry rebuilds, and `website-start.sh`
+boots through the nginx image entrypoint (same as the staff site).
 
 Fix, once, on the `website` service:
 
@@ -232,7 +268,7 @@ Official references: [GitHub Autodeploys](https://docs.railway.com/deployments/g
 | --- | --- | --- |
 | Backend BFF | `backend/` (`Dockerfile` or `npm run build && npm start`) | Node 22, long-lived process; needs FFmpeg for proof sparse frames. **Railway service `Atmosphere APIs` (override with `RAILWAY_SERVICE`).** |
 | Office app | `frontend/` + `verifier/` + `fieldcapture/` | One nginx image; `/api` proxied to the BFF. **Railway service `Atmosphere-web` (override with `RAILWAY_APP_SERVICE`).** |
-| Marketing site | `website/` | nginx image on Railway service `website`; GitHub Pages optional (`deploy-website.yml`); nginx proxies `/api` for the careers and contact forms |
+| Marketing site | `website/` | nginx image on Railway service **Corporate Website**; live URL `https://website-production-7e3f.up.railway.app`; GitHub Pages optional (`deploy-website.yml`); nginx proxies `/api` for the careers and contact forms |
 | Internal staff site | `internal/` | Accounts, analytics, system health. **Railway service `Internal Growth Metrics` (override with `RAILWAY_INTERNAL_SERVICE`).** Staff-only; `noindex`. |
 | Native Field | `apps/field-ios/` | App Store path; uses the same BFF |
 
@@ -392,10 +428,15 @@ no SQL step in preview.
 
 The internal staff site (`internal/`) signs in with first name, last name,
 and email (`POST /api/auth/internal-challenge`), then a 6-digit Microsoft
-Authenticator code (`POST /api/auth/internal-login`). First visit for an
-allowlisted email enrolls Authenticator; later visits only ask for the code.
-Secrets are encrypted with `DEVICE_PEPPER`. Apply
-`20260821210000_internal_staff_totp.sql` on production Supabase.
+Authenticator code (`POST /api/auth/internal-login`). After that first
+setup, email + the Authenticator code is the password — no office-app
+password. Allowlisted emails enroll immediately. Other employees are queued
+on **Access** until an internal admin approves them
+(`GET/POST /api/analytics/access-requests`). Apply
+`20260821210000_internal_staff_totp.sql`,
+`20260822170000_internal_access_requests.sql`, and
+`20260822181000_internal_staff_totp_names.sql` on production Supabase.
+Secrets are encrypted with `DEVICE_PEPPER`.
 
 Optional manual grant for others:
 

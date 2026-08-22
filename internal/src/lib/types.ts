@@ -3,16 +3,39 @@ export type AnalyticsScope = 'investor' | 'internal';
 export interface AnalyticsAccess {
   scope: AnalyticsScope | null;
   displayName: string | null;
+  pendingAccessRequests?: number;
+}
+
+export type AccessRequestStatus = 'pending' | 'approved' | 'denied';
+
+export interface AccessRequest {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  status: AccessRequestStatus;
+  requestedAt: string;
+  lastRequestedAt: string;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  userId: string | null;
+}
+
+export interface AccessRequestList {
+  requests: AccessRequest[];
+  pendingCount: number;
 }
 
 export interface StaffIdentity {
-  firstName: string;
-  lastName: string;
+  firstName?: string;
+  lastName?: string;
   email: string;
 }
 
 export type StaffChallengeResponse =
   | { status: 'code'; challenge: string }
+  | { status: 'pending' }
+  | { status: 'setup' }
   | {
       status: 'enroll';
       challenge: string;
@@ -23,7 +46,8 @@ export type StaffChallengeResponse =
     };
 
 export interface StaffVerify {
-  challenge: string;
+  challenge?: string;
+  email?: string;
   code: string;
 }
 
@@ -262,4 +286,61 @@ export interface RangeParams {
   from: Date;
   to: Date;
   months: number;
+}
+
+export type LegalHoldKind = 'subpoena' | 'lawsuit' | 'preservation' | 'investigation' | 'other';
+export type LegalHoldStatus = 'open' | 'released';
+export type LegalSubjectType = 'org' | 'user' | 'job' | 'proof' | 'media';
+
+export interface LegalHoldSubject {
+  id: string;
+  holdId: string;
+  subjectType: LegalSubjectType;
+  subjectId: string;
+  createdAt: string;
+}
+
+export interface LegalHold {
+  id: string;
+  caseNumber: string;
+  kind: LegalHoldKind;
+  title: string;
+  reason: string;
+  counselName: string | null;
+  receivedAt: string;
+  dueAt: string | null;
+  status: LegalHoldStatus;
+  createdBy: string | null;
+  createdAt: string;
+  releasedBy: string | null;
+  releasedAt: string | null;
+  releaseReason: string | null;
+  subjects: LegalHoldSubject[];
+}
+
+export interface UserActivityEvent {
+  id: string;
+  occurredAt: string;
+  actorUserId: string | null;
+  actorEmail: string | null;
+  actorLabel: string | null;
+  orgId: string | null;
+  action: string;
+  resourceType: string | null;
+  resourceId: string | null;
+  path: string | null;
+  status: number | null;
+}
+
+export interface LegalProductionPackage {
+  production: { id: string; itemCount: number; activityCount: number; createdAt: string };
+  videos: Array<{
+    id: string;
+    sourceKind: string;
+    sourceId: string;
+    userDeleted: boolean;
+    downloadUrl: string | null;
+    contentHash: string | null;
+  }>;
+  activity: UserActivityEvent[];
 }

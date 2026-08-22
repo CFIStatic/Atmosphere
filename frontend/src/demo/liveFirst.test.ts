@@ -6,6 +6,7 @@ describe('isLiveFirstPath', () => {
     expect(isLiveFirstPath('/api/auth/me')).toBe(true);
     expect(isLiveFirstPath('/api/auth/login')).toBe(true);
     expect(isLiveFirstPath('/api/profile')).toBe(true);
+    expect(isLiveFirstPath('/api/profile/avatar')).toBe(true);
     expect(isLiveFirstPath('/api/org/me')).toBe(true);
     expect(isLiveFirstPath('/api/org/members')).toBe(true);
   });
