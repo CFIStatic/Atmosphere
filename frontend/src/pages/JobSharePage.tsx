@@ -22,9 +22,9 @@ import type { CaptureGuide } from '../lib/api';
  * they came here to do and will scroll to find; the scope is the thing they
  * would not have read otherwise.
  *
- * Nothing here can be edited afterwards. Accepting a revision, filing a video,
- * asking a question — each is an entry in a record, which is the point of the
- * whole feature and worth the cost of not being able to take it back.
+ * Nothing here can be edited afterwards. Accepting a revision or filing a
+ * video is an entry in a record, which is the point of the whole feature
+ * and worth the cost of not being able to take it back.
  */
 
 const shareApi = jobShareApiPath;
