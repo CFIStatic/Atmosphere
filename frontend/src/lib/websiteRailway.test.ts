@@ -17,31 +17,32 @@ describe('Railway corporate-website image', () => {
     expect(dockerfile).toContain('CMD ["nginx", "-g", "daemon off;"]');
     expect(dockerfile).toContain('NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM)$$');
     expect(dockerfile).toContain('SITE_ORIGIN=https://website-production-7e3f.up.railway.app');
-    expect(dockerfile).toContain('15-validate-website-env.sh');
-    expect(dockerfile).toContain('chmod -x /docker-entrypoint.d/15-validate-website-env.sh');
+    expect(dockerfile).toContain('15-validate-website-env.envsh');
+    expect(dockerfile).toContain('chmod +x /usr/local/bin/website-start.sh');
+    expect(dockerfile).toContain('/docker-entrypoint.d/15-validate-website-env.envsh');
+    expect(dockerfile).not.toContain('chmod -x');
     expect(dockerfile).not.toContain('ENTRYPOINT ["/usr/local/bin/website-start.sh"]');
 
     const start = read('website/nginx/website-start.sh');
     expect(start).toContain('exec /docker-entrypoint.sh nginx -g \'daemon off;\'');
-    expect(start).toContain('/docker-entrypoint.d/15-validate-website-env.sh');
+    expect(start).toContain('/docker-entrypoint.d/15-validate-website-env.envsh');
     expect(start).not.toContain('exec nginx -g');
   });
 
   it('rewrites interpolated-empty API_UPSTREAM so nginx can bind', () => {
-    const script = read('website/nginx/15-validate-website-env.sh');
+    const script = read('website/nginx/15-validate-website-env.envsh');
     expect(script).toContain('invalid port in upstream');
     expect(script).toContain('http://:');
-    expect(script).toContain('BusyBox ash');
+    expect(script).toContain('*.envsh is sourced');
     expect(script).toContain('https://atmosphere-production.up.railway.app');
     expect(script).toContain('http://[A-Za-z0-9._-]*');
-    expect(script).not.toMatch(/^chmod/m);
     expect(script).not.toContain('grep -Eq');
 
     const out = execFileSync(
       'sh',
       [
         '-c',
-        'API_UPSTREAM="http://:"; . ./website/nginx/15-validate-website-env.sh; printf %s "$API_UPSTREAM"',
+        'API_UPSTREAM="http://:"; . ./website/nginx/15-validate-website-env.envsh; printf %s "$API_UPSTREAM"',
       ],
       { encoding: 'utf8', cwd: repoRoot },
     );
@@ -51,7 +52,7 @@ describe('Railway corporate-website image', () => {
       'sh',
       [
         '-c',
-        'set -e; API_UPSTREAM="http://:"; . ./website/nginx/15-validate-website-env.sh; printf %s "$API_UPSTREAM"',
+        'set -e; API_UPSTREAM="http://:"; . ./website/nginx/15-validate-website-env.envsh; printf %s "$API_UPSTREAM"',
       ],
       { encoding: 'utf8', cwd: repoRoot },
     );
@@ -61,7 +62,7 @@ describe('Railway corporate-website image', () => {
       'sh',
       [
         '-c',
-        'API_UPSTREAM="http://atmosphere.railway.internal:8080"; . ./website/nginx/15-validate-website-env.sh; printf %s "$API_UPSTREAM"',
+        'API_UPSTREAM="http://atmosphere.railway.internal:8080"; . ./website/nginx/15-validate-website-env.envsh; printf %s "$API_UPSTREAM"',
       ],
       { encoding: 'utf8', cwd: repoRoot },
     );
