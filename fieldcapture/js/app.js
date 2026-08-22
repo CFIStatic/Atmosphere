@@ -175,6 +175,8 @@
     jobs: [],
     activeJobId: null,
     account: false,
+    finishing: false,
+    homeTimer: null,
   };
 
   function readStoredSession() {
@@ -439,10 +441,60 @@
       });
   }
 
+  function resetStopButton() {
+    var stopBtn = $('#stopbtn');
+    if (!stopBtn) return;
+    stopBtn.removeAttribute('data-holding');
+    var lbl = stopBtn.querySelector('.lbl');
+    if (lbl) lbl.textContent = 'Hold to finish the day';
+  }
+
+  function returnHome(message, isErr) {
+    if (state.homeTimer) {
+      clearTimeout(state.homeTimer);
+      state.homeTimer = null;
+    }
+    state.finishing = false;
+    state.recorder = null;
+    resetStopButton();
+    show('s-home');
+    setStatus(
+      message || (LIVE || state.account ? 'Ready for another day.' : ''),
+      isErr,
+    );
+    if (state.account && state.accessToken) {
+      Core.loadTodayJobs(API_BASE, state.accessToken)
+        .then(function (jobs) {
+          return Core.loadFieldMe(API_BASE, state.accessToken).then(function (me) {
+            enterAccountHome(me, jobs);
+            if (message) setStatus(message, isErr);
+          });
+        })
+        .catch(function () {});
+    }
+  }
+
+  function goHomeAfterDoor(message) {
+    if (state.homeTimer) clearTimeout(state.homeTimer);
+    state.homeTimer = setTimeout(function () {
+      state.homeTimer = null;
+      returnHome(message || 'Day filed. Ready for another day.');
+    }, 1800);
+  }
+
   function finishLiveDay() {
-    if (!state.recorder) return;
-    if (state.stopWatch) state.stopWatch();
-    $('#stopbtn').querySelector('.lbl').textContent = 'Finishing…';
+    if (!state.recorder || state.finishing) return;
+    state.finishing = true;
+    if (state.stopWatch) {
+      state.stopWatch();
+      state.stopWatch = null;
+    }
+    var stopBtn = $('#stopbtn');
+    if (stopBtn) {
+      stopBtn.removeAttribute('data-holding');
+      var lbl = stopBtn.querySelector('.lbl');
+      if (lbl) lbl.textContent = 'Finishing…';
+    }
     state.recorder
       .stop()
       .then(function (clip) {
@@ -456,19 +508,35 @@
           blob: clip.blob,
           mimeType: clip.mimeType,
           onStep: function (step) {
-            $('#upload-step').textContent = step;
+            var el = $('#upload-step');
+            if (el) el.textContent = step;
           },
         });
       })
       .then(function (result) {
         state.uploadResult = result;
         renderDoorLive(result);
+        goHomeAfterDoor();
       })
       .catch(function (err) {
-        $('#upload-step').textContent = err.message || 'Upload failed.';
-        $('#upload-step').style.color = 'var(--fail)';
-        renderDoorFailed(err);
+        var step = $('#upload-step');
+        if (step) {
+          step.textContent = err.message || 'Upload failed.';
+          step.style.color = 'var(--fail)';
+          renderDoorFailed(err);
+          goHomeAfterDoor();
+          return;
+        }
+        returnHome(err.message || 'Could not finish the recording.', true);
       });
+  }
+
+  function completeDay() {
+    if (state.recorder) {
+      finishLiveDay();
+      return;
+    }
+    if (window.__demoFinish) window.__demoFinish();
   }
 
   function openDoorUploading() {
@@ -556,33 +624,40 @@
   function bindHold() {
     var stopBtn = $('#stopbtn');
     if (!stopBtn) return;
+    stopBtn.addEventListener('contextmenu', function (e) {
+      e.preventDefault();
+    });
     function beginHold(e) {
       if (e && e.cancelable) e.preventDefault();
+      if (state.finishing) return;
       if (holdTimer) return;
+      if (e && e.pointerId != null && stopBtn.setPointerCapture) {
+        try {
+          stopBtn.setPointerCapture(e.pointerId);
+        } catch (err) {}
+      }
       stopBtn.setAttribute('data-holding', '1');
       stopBtn.querySelector('.lbl').textContent = 'Keep holding…';
       holdTimer = setTimeout(function () {
         holdTimer = null;
-        if (LIVE) finishLiveDay();
-        else if (window.__demoFinish) window.__demoFinish();
+        completeDay();
       }, 1500);
     }
     function cancelHold() {
       if (!holdTimer) return;
       clearTimeout(holdTimer);
       holdTimer = null;
-      stopBtn.removeAttribute('data-holding');
-      stopBtn.querySelector('.lbl').textContent = 'Hold to finish the day';
+      if (state.finishing) return;
+      resetStopButton();
     }
     stopBtn.addEventListener('pointerdown', beginHold);
     stopBtn.addEventListener('pointerup', cancelHold);
-    stopBtn.addEventListener('pointerleave', cancelHold);
     stopBtn.addEventListener('pointercancel', cancelHold);
+    stopBtn.addEventListener('lostpointercapture', cancelHold);
     stopBtn.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        if (LIVE) finishLiveDay();
-        else if (window.__demoFinish) window.__demoFinish();
+        completeDay();
       }
     });
   }
@@ -644,6 +719,7 @@
         '<div class="tlrow"><b>Demo day</b><span>Open with ?token= to file a real day film.</span></div>';
       $('#doneline').classList.add('on');
       $('#donebtn').classList.add('on');
+      goHomeAfterDoor('Demo only — nothing uploaded.');
     };
     show('s-home');
   }
@@ -663,8 +739,7 @@
   registerFieldCaptureApp();
   probeHostedOffice();
   $('#donebtn').addEventListener('click', function () {
-    show('s-home');
-    setStatus(LIVE || state.account ? 'Ready for another day.' : '');
+    returnHome();
   });
 
   if (LIVE) {

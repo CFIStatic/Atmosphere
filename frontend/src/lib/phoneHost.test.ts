@@ -115,4 +115,16 @@ describe('phone home-screen manifests', () => {
     );
     expect(host.displayHost(hosted, '')).toBe('atmosphere-web-production.up.railway.app');
   });
+
+  it('finishes a connected day film without a job-share token and returns to Today', () => {
+    const app = readFileSync(resolve(repoRoot, 'fieldcapture/js/app.js'), 'utf8');
+    expect(app).toContain('function completeDay');
+    expect(app).toContain('function returnHome');
+    expect(app).toContain('goHomeAfterDoor');
+    expect(app).not.toMatch(/if \(LIVE\) finishLiveDay/);
+    expect(app).toMatch(/if \(state\.recorder\) \{\s*finishLiveDay\(\)/);
+    expect(app).not.toContain("addEventListener('pointerleave'");
+    const html = readFileSync(resolve(repoRoot, 'fieldcapture/index.html'), 'utf8');
+    expect(html).toContain('touch-action: none');
+  });
 });
