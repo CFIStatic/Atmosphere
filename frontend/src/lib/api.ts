@@ -2374,6 +2374,11 @@ export function backendUnreachableMessage(isProd = import.meta.env.PROD): string
 
 const BACKEND_UNREACHABLE_MESSAGE = backendUnreachableMessage();
 
+/** Empty 502/504 from nginx while the BFF is still reachable on retry. */
+export function isRetryableGatewayStatus(status: number): boolean {
+  return status === 502 || status === 504;
+}
+
 /**
  * Turn opaque gateway / proxy failures into an actionable message.
  * Empty-body 500s are the classic Vite-proxy-when-API-is-down signature.
@@ -2402,9 +2407,8 @@ export function apiFailureMessage(
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  let res: Response;
-  try {
-    res = await fetch(`${API_BASE}${path}`, {
+  const exec = () =>
+    fetch(`${API_BASE}${path}`, {
       ...options,
       credentials: 'include', // send/receive the httpOnly session cookies
       headers: {
@@ -2412,6 +2416,17 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
         ...(options.headers ?? {}),
       },
     });
+
+  let res: Response;
+  try {
+    res = await exec();
+    // Office nginx can 502/504 for a couple of seconds after an Atmosphere
+    // APIs deploy (stale private IP, or a public-host hairpin). One retry
+    // beats the "Cannot reach the Atmosphere API" banner on /login.
+    if (isRetryableGatewayStatus(res.status)) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      res = await exec();
+    }
   } catch {
     throw new ApiError(0, BACKEND_UNREACHABLE_MESSAGE, 'network_error');
   }

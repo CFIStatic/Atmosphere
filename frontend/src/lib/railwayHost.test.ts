@@ -19,35 +19,81 @@ describe('Railway office-app image', () => {
     const dockerfile = read('Dockerfile');
     expect(dockerfile).toContain('COPY verifier /verifier');
     expect(dockerfile).toContain('COPY fieldcapture /fieldcapture');
-    expect(dockerfile).toContain('NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM)$$');
+    expect(dockerfile).toContain('NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM|NGINX_RESOLVER)$$');
+    expect(dockerfile).toContain('ENTRYPOINT ["/usr/local/bin/office-start.sh"]');
+
+    const start = read('nginx/office-start.sh');
+    expect(start).toContain('exec /docker-entrypoint.sh');
+    expect(start).toContain('is_usable_upstream');
+    expect(start).toContain('invalid port in upstream');
+    expect(start).toContain('http://:');
+    expect(start).toContain('NGINX_RESOLVER');
+    expect(start).toContain('[fd12::10]');
+    expect(start).not.toContain('exec nginx -g');
   });
 
-  it('proxies /api and serves the static apps on one origin', () => {
+  it('proxies /api with runtime DNS so a BFF redeploy cannot 504 Sign in', () => {
     const nginx = read('nginx/default.conf.template');
     expect(nginx).toContain('location /api');
-    expect(nginx).toContain('proxy_pass ${API_UPSTREAM}');
+    expect(nginx).toContain('resolver ${NGINX_RESOLVER}');
+    expect(nginx).toContain('ipv6=on');
+    expect(nginx).toContain('set $api_upstream "${API_UPSTREAM}"');
+    expect(nginx).toContain('proxy_pass $api_upstream');
     expect(nginx).toContain('proxy_set_header Host $proxy_host');
     expect(nginx).toContain('proxy_ssl_server_name on');
+    expect(nginx).toContain('error_page 502 503 504 = @api_down');
     expect(nginx).toContain('add_header Cache-Control "no-store"');
     expect(nginx).toContain('location /verifier/');
     expect(nginx).toContain('location /fieldcapture/');
     expect(nginx).toContain('location = /healthz');
+    expect(nginx).toContain('location = /health');
+    expect(nginx).toContain('location = /api/health');
   });
 
-  it('points API_UPSTREAM at the Atmosphere private domain, not the public URL', () => {
+  it('points API_UPSTREAM at Atmosphere APIs, not the old Atmosphere name or the public URL', () => {
     const upstream = readRoot('api.upstream').trim();
     expect(upstream).toBe(
-      'http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}',
+      'http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}',
     );
+    expect(upstream).not.toContain('${{Atmosphere.');
+    expect(upstream).not.toContain('https://');
   });
 
   it('points the Railway app service at this Dockerfile, not the backend one', () => {
     const toml = read('railway.toml');
     expect(toml).toContain('dockerfilePath = "frontend/Dockerfile"');
     expect(toml).toContain('healthcheckPath = "/healthz"');
+    expect(toml).toContain('startCommand = "/usr/local/bin/office-start.sh"');
     expect(toml).toContain('frontend/**');
     expect(toml).toContain('verifier/**');
     expect(toml).toContain('fieldcapture/**');
+    expect(toml).not.toContain('startCommand = "node dist/index.js"');
+  });
+
+  it('applies nginx + GET /healthz onto the Railway service from CI', () => {
+    const script = read('scripts/apply-railway-config.sh');
+    expect(script).toContain('frontend/Dockerfile');
+    expect(script).toContain('/usr/local/bin/office-start.sh');
+    expect(script).toContain('healthcheck_path="/healthz"');
+    expect(script).toContain('Login & Dashboard');
+    expect(script).toContain('not node dist/index.js');
+
+    const json = JSON.parse(read('railway.json')) as {
+      build: { dockerfilePath: string };
+      deploy: { healthcheckPath: string; startCommand: string; healthcheckTimeout: number };
+    };
+    expect(json.build.dockerfilePath).toBe('frontend/Dockerfile');
+    expect(json.deploy.healthcheckPath).toBe('/healthz');
+    expect(json.deploy.startCommand).toBe('/usr/local/bin/office-start.sh');
+    expect(json.deploy.healthcheckTimeout).toBe(60);
+  });
+
+  it('smokes /healthz and a JSON 503 login on the office image in CI', () => {
+    const ci = readRoot('.github/workflows/ci.yml');
+    expect(ci).toContain('atmosphere-app:ci');
+    expect(ci).toContain('/healthz');
+    expect(ci).toContain('/api/auth/login');
+    expect(ci).toContain('backend_unreachable');
   });
 
   it('does not exclude the app sources from the repo-root Docker context', () => {
@@ -78,6 +124,7 @@ describe('every front door proxies /api over the private mesh', () => {
     const appJob = office.slice(office.indexOf('name: Deploy office app'));
     expect(appJob).toContain('resolveRailwayService.mjs');
     expect(appJob).toContain('Login & Dashboard');
+    expect(appJob).toContain('frontend/scripts/apply-railway-config.sh');
     expect(appJob).not.toMatch(publicHost);
   });
 
