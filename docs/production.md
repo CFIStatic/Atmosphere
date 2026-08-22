@@ -14,7 +14,7 @@ stays on its last successful image.
 
 Databases, Redis, and volumes are not git apps — skip them. iOS is App Store.
 The marketing site (`website/`) deploys to the Railway nginx service `website`
-(GitHub Pages is an optional second host — see
+from its own workflow (GitHub Pages is an optional second host — see
 `.github/workflows/deploy-website.yml`).
 
 | Railway service | Config as Code | Dockerfile | Rebuilds when these paths change |
@@ -92,6 +92,40 @@ The marketing image is nginx, not Node. Settings → **Config File** =
 `/website/railway.toml` so Autodeploy does not inherit `node dist/index.js`
 and `/api/health` from the repo-root file. Healthcheck is `GET /health`
 (also answered at `/api/health` so a leftover API probe still passes).
+
+#### `API_UPSTREAM` on every front door
+
+The office console, the marketing site, and the staff console
+(`Atmosphere-internal`) are three nginx front doors onto the same BFF. All
+three take the **same** upstream, which lives in one file at the repo root:
+
+```bash
+cat api.upstream
+# http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}
+```
+
+Plain `http://`, private domain, no public host. Set to
+`https://atmosphere-production.up.railway.app` instead, a `/api` request
+leaves the private network and comes back in through the edge (jfk1 → ams1),
+which 502s for a few seconds. What that looks like from the outside is a front
+door reporting the Atmosphere API as unreachable while the BFF is perfectly
+healthy — the office console spinning on `/login`, the site’s careers and
+contact forms failing to post, the staff console refusing to sign anyone in.
+
+The deploy workflows keep all three in sync from that file, so a fix here does
+not need a dashboard visit:
+
+| Service | Set by |
+| --- | --- |
+| `Atmosphere-web` | `deploy-production.yml` → office app job |
+| `website` | `deploy-website.yml` (override with the `API_UPSTREAM` Actions variable only if the site ever moves out of this project) |
+| `Atmosphere-internal` | `deploy-production.yml` → `scripts/railwayPrivateUpstream.sh` (name it with `RAILWAY_INTERNAL_SERVICE`) |
+
+The staff console is **not built from this repo** — only its upstream variable
+is managed here, and only when it is already wrong. That job warns and moves
+on if the service is missing, so it never blocks a production deploy. To fix
+one by hand: Railway → that service → Variables → `API_UPSTREAM` → the value
+above → Deploy.
 
 #### Any extra service you added later
 
@@ -196,7 +230,8 @@ Official references: [GitHub Autodeploys](https://docs.railway.com/deployments/g
 | --- | --- | --- |
 | Backend BFF | `backend/` (`Dockerfile` or `npm run build && npm start`) | Node 22, long-lived process; needs FFmpeg for proof sparse frames. **Railway service `Atmosphere` (override with `RAILWAY_SERVICE`).** |
 | Office app | `frontend/` + `verifier/` + `fieldcapture/` | One nginx image; `/api` proxied to the BFF. **Railway service `Atmosphere-web` (override with `RAILWAY_APP_SERVICE`).** |
-| Marketing site | `website/` | nginx image on Railway service `website`; GitHub Pages optional (`deploy-website.yml`) |
+| Marketing site | `website/` | nginx image on Railway service `website`; GitHub Pages optional (`deploy-website.yml`); nginx proxies `/api` for the careers and contact forms |
+| Staff console | not in this repo | Railway service `Atmosphere-internal`. Only its `API_UPSTREAM` is managed here |
 | Native Field | `apps/field-ios/` | App Store path; uses the same BFF |
 
 Compose sketch: `docker compose up --build` (see root `docker-compose.yml`). Same shape as Railway: browser hits `:8080`, nginx proxies `/api` to the BFF.
@@ -221,7 +256,9 @@ In the Railway project that already runs the BFF (`Atmosphere`):
    | --- | --- |
    | `API_UPSTREAM` | `http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}` |
 
-   Replace `Atmosphere` with the BFF service name if you overrode `RAILWAY_SERVICE`.
+   Replace `Atmosphere` with the BFF service name if you overrode
+   `RAILWAY_SERVICE`. Same value on every front door — see
+   [`API_UPSTREAM` on every front door](#api_upstream-on-every-front-door).
 
 ### 2. Public origin
 

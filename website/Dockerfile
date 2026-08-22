@@ -10,7 +10,10 @@
 FROM nginx:1.27-alpine AS runtime
 
 ENV PORT=8080
-ENV API_UPSTREAM=https://atmosphere-production.up.railway.app
+# Local default only. On Railway this is the BFF's private domain (api.upstream,
+# set by .github/workflows/deploy-website.yml). Never fall back to the public
+# https host: that hairpins /api out of the mesh and 502s the site's forms.
+ENV API_UPSTREAM=http://127.0.0.1:4000
 ENV APP_ORIGIN=https://atmosphere-web-production.up.railway.app
 ENV SITE_ORIGIN=https://atmosphere-website-production.up.railway.app
 # Keep the image filter anchored in case something other than website-start.sh
