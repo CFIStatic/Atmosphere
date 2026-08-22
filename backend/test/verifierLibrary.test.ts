@@ -258,6 +258,50 @@ test('serialization: structured actions from the vision log ride with dictation'
   assert.equal((item.analysis as { actions?: Array<{ action: string }> } | null)?.actions?.[0]?.action, 'remove');
 });
 
+test('serialization: a queued clip still carries partial dictation so the player can write live', () => {
+  const item = serializeEvidence({
+    proof: {
+      id: 'p-queued',
+      job_id: 'j1',
+      party_id: 'pt1',
+      phase: 'after',
+      work_date: '2026-08-22',
+      captured_at: '2026-08-22T16:00:00Z',
+      received_at: '2026-08-22T16:04:00Z',
+      duration_seconds: '132',
+      byte_size: '2000',
+      lat: 30.5,
+      lon: -97.67,
+      accuracy_m: 8,
+      content_hash: 'queued',
+      state: 'checked',
+      checks: [{ key: 'on_site', verdict: 'pass', detail: 'on site' }],
+      ai_summary: null,
+      ai_findings: {},
+      ai_material_change: null,
+      ai_model: null,
+      analysis_status: 'queued',
+      narration_status: 'running',
+      narration_text: null,
+      narration: { entries: [{ atSeconds: 12, text: 'Board is going up on the long wall.' }], model: 'claude' },
+      legal_hold: false,
+      retention_until: null,
+    },
+    jobName: 'Camden Court',
+    jobNumber: 1044,
+    company: 'Vantage Drywall',
+    contactName: 'Luis Marte',
+    tier: 2,
+    dayHasAfter: true,
+  });
+
+  assert.equal(item.analysisState, 'queued');
+  assert.equal(item.analysis?.dictationStatus, 'running');
+  assert.deepEqual(item.analysis?.dictationEntries, [
+    { atSeconds: 12, text: 'Board is going up on the long wall.' },
+  ]);
+});
+
 test('serialization: a wrong-house clip arrives flagged with no analysis body', () => {
   const item = serializeEvidence({
     proof: {

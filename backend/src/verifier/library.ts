@@ -224,7 +224,7 @@ export function serializeEvidence(input: {
     retentionUntil: proof.retention_until ?? null,
     labels: Array.isArray(proof.labels) ? proof.labels : [],
     analysis:
-      analysis === 'done'
+      analysis === 'done' || analysis === 'queued'
         ? {
             summary: proof.ai_summary ?? findings.summary ?? null,
             /** Spoken-style description for the office player — primary reading. */

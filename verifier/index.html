@@ -725,6 +725,12 @@
     color: var(--accent); background: var(--accent-soft);
     padding: 2px 8px; border-radius: 999px;
   }
+  .alog-head .livepill.writing {
+    animation: pill-pulse 1.4s ease-in-out infinite;
+  }
+  .alog-empty {
+    margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: var(--ink-2);
+  }
   .alog { list-style: none; margin: 0; padding: 0; }
   .alog li {
     display: grid; grid-template-columns: 52px 1fr; gap: 10px;
@@ -739,8 +745,34 @@
     display: grid; background: var(--accent-soft); color: var(--ink);
     box-shadow: inset 3px 0 0 var(--accent);
   }
+  .alog li.land { animation: alog-land 280ms ease-out; }
   .alog .t { font-family: var(--mono); font-size: 11px; color: var(--faint); padding-top: 2px; }
   .alog li.on .t { color: var(--accent); font-weight: 700; }
+  .alog li.typing .body::after {
+    content: ''; display: inline-block; width: 1.5px; height: 0.9em;
+    margin-left: 2px; vertical-align: -1px; background: var(--accent);
+    animation: caret 1s steps(1) infinite;
+  }
+  @keyframes pill-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .55; }
+  }
+  @keyframes alog-land {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes caret {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .alog-head .livepill.writing,
+    .alog li.land,
+    .alog li.typing .body::after { animation: none; }
+  }
+  .controls button .icon-pause { display: none; }
+  .controls button[data-playing="1"] .icon-play { display: none; }
+  .controls button[data-playing="1"] .icon-pause { display: block; }
 
   .kv { display: grid; grid-template-columns: 116px minmax(0,1fr); gap: 6px 12px; font-size: 12.5px; }
   .kv dt { color: var(--muted); }
@@ -993,8 +1025,9 @@
         <div class="player">
           <div class="frame" id="d-frame"></div>
           <div class="controls">
-            <button id="d-play" aria-label="Play frames">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            <button id="d-play" aria-label="Play clip">
+              <svg class="icon-play" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              <svg class="icon-pause" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>
             </button>
             <div class="scrub" id="d-scrub"></div>
             <span class="time" id="d-time">frame 1 / 6</span>
@@ -1079,14 +1112,21 @@
   /** Six frames across a clip, drifting from the opening state to the closing one. */
   function frames(from, to, label) {
     var out = [];
+    var seconds = to.seconds || 120;
     for (var i = 0; i < 6; i++) {
       var t = i / 5;
+      var wet = from.wet + (to.wet - from.wet) * t;
+      var cut = from.cut + (to.cut - from.cut) * t;
+      var gear = Math.round(from.gear + (to.gear - from.gear) * t);
       out.push({
-        at: Math.round((i + 0.5) * (to.seconds || 120) / 6),
+        at: Math.round(i * seconds / 5),
+        wet: wet,
+        cut: cut,
+        gear: gear,
         src: frameSVG({
-          wet: from.wet + (to.wet - from.wet) * t,
-          cut: from.cut + (to.cut - from.cut) * t,
-          gear: Math.round(from.gear + (to.gear - from.gear) * t),
+          wet: wet,
+          cut: cut,
+          gear: gear,
           night: to.night,
           label: label,
         }),
@@ -1415,7 +1455,16 @@
         { verdict: 'pass', what: 'Not filed before', detail: 'This file has not appeared on any other day or job.' },
         { verdict: 'pass', what: 'Long enough to show the work', detail: '2 min 12 s.' }
       ],
-      analysis: { state: 'queued', reason: 'Queued for analysis. Both halves of the day are filed; the model has not read them yet.' },
+      analysis: {
+        state: 'queued',
+        reason: 'Queued for analysis. Both halves of the day are filed; the model has not read them yet.',
+        dictationEntries: [
+          { atSeconds: 12, text: 'Front room: framing is closed; two dehumidifiers still in the corner.' },
+          { atSeconds: 38, text: 'Board is hung on the long wall; joints not taped yet.' },
+          { atSeconds: 74, text: 'Second sheet going up at the window return.' },
+          { atSeconds: 110, text: 'Equipment pulled. The other two rooms in the brief are not in this pass.' }
+        ]
+      },
       custody: [
         { action: 'uploaded', by: 'Luis Marte, Vantage Drywall', role: 'subcontractor', at: '2026-07-30T17:02', detail: 'after · 2026-07-30' }
       ],
@@ -1470,7 +1519,8 @@
     sortKey: 'recorded',
     /** asc | desc — toggle on repeated clicks of the same header */
     sortDir: 'desc',
-    groupByJob: true, collapsed: {}, open: null, frame: 0, playing: null
+    groupByJob: true, collapsed: {}, open: null, frame: 0, playhead: 0,
+    playing: null, typeTimer: null, livePoll: null, typedUpTo: -1
   };
 
   var $ = function (sel) { return document.querySelector(sel); };
@@ -2565,7 +2615,11 @@
   function openLoaded(item, tab) {
     state.open = item;
     state.frame = 0;
+    state.playhead = 0;
+    state.typedUpTo = -1;
     stopPlay();
+    stopTyping();
+    startLiveAnalysisWatch(item);
 
     $('#d-title').textContent = (JOBS[item.job] || { name: item.jobName || 'Job' }).name;
     $('#d-meta').innerHTML =
@@ -2578,13 +2632,8 @@
       $('#d-frame').innerHTML =
         '<video controls playsinline preload="metadata" src="' + esc(item._videoUrl) + '"></video>';
       $('#d-scrub').innerHTML = '';
-      $('#d-time').textContent = 'full clip · ' + dur(item.duration);
-      var vid = $('#d-frame').querySelector('video');
-      if (vid) {
-        vid.addEventListener('timeupdate', function () { syncAnalysisLog(vid.currentTime); });
-        vid.addEventListener('seeked', function () { syncAnalysisLog(vid.currentTime); });
-        vid.addEventListener('play', function () { syncAnalysisLog(vid.currentTime); });
-      }
+      $('#d-time').textContent = '0:00 / ' + dur(item.duration);
+      bindClipVideo($('#d-frame').querySelector('video'));
     } else {
       item._frames = item._remoteFrames && item._remoteFrames.length
         ? item._remoteFrames
@@ -2598,14 +2647,41 @@
       Array.prototype.forEach.call($('#d-scrub').querySelectorAll('button'), function (b) {
         b.addEventListener('click', function () { stopPlay(); setFrame(+b.dataset.i); });
       });
-      setFrame(0);
+      paintFrame(0);
     }
 
+    setPlayButton(false);
     renderDictation(item);
     renderAnalysis(item);
     setTab(tab || 'integrity');
     $('#detail').setAttribute('data-open', '1');
     $('#d-close').focus();
+  }
+
+  function clipVideo() {
+    var host = $('#d-frame');
+    return host ? host.querySelector('video') : null;
+  }
+
+  function bindClipVideo(vid) {
+    if (!vid) return;
+    var onHead = function () {
+      var t = vid.currentTime || 0;
+      $('#d-time').textContent = dur(t) + ' / ' + dur(vid.duration || (state.open && state.open.duration) || 0);
+      syncAnalysisLog(t);
+    };
+    vid.addEventListener('timeupdate', onHead);
+    vid.addEventListener('seeked', onHead);
+    vid.addEventListener('play', function () { setPlayButton(true); onHead(); });
+    vid.addEventListener('pause', function () { setPlayButton(false); });
+    vid.addEventListener('ended', function () { setPlayButton(false); });
+  }
+
+  function setPlayButton(on) {
+    var btn = $('#d-play');
+    if (!btn) return;
+    btn.setAttribute('data-playing', on ? '1' : '0');
+    btn.setAttribute('aria-label', on ? 'Pause clip' : 'Play clip');
   }
 
   function renderDictation(item) {
@@ -2658,9 +2734,9 @@
     el.innerHTML = html;
   }
 
-  function setFrame(i) {
+  function paintFrame(i) {
     var item = state.open;
-    if (!item) return;
+    if (!item || !item._frames || !item._frames[i]) return;
     state.frame = i;
     var f = item._frames[i];
     $('#d-frame').innerHTML = '<img alt="Frame ' + (i + 1) + ' of the clip" src="' + f.src + '" />';
@@ -2668,11 +2744,86 @@
     Array.prototype.forEach.call($('#d-scrub').querySelectorAll('button'), function (b) {
       b.setAttribute('aria-pressed', String(+b.dataset.i === i));
     });
-    syncAnalysisLog(f.at);
+  }
+
+  function setFrame(i) {
+    var item = state.open;
+    if (!item || !item._frames || !item._frames[i]) return;
+    paintFrame(i);
+    syncAnalysisLog(item._frames[i].at);
   }
 
   function stopPlay() {
     if (state.playing) { clearInterval(state.playing); state.playing = null; }
+    var vid = clipVideo();
+    if (vid && !vid.paused) vid.pause();
+    setPlayButton(false);
+  }
+
+  function stopTyping() {
+    if (state.typeTimer) { clearInterval(state.typeTimer); state.typeTimer = null; }
+  }
+
+  function stopLiveAnalysisWatch() {
+    if (state.livePoll) { clearInterval(state.livePoll); state.livePoll = null; }
+  }
+
+  function startLiveAnalysisWatch(item) {
+    stopLiveAnalysisWatch();
+    if (!item || !item._remote) return;
+    if (!analysisIsLive(item)) return;
+    state.livePoll = setInterval(function () {
+      fetchRemoteDetail(item, { skipVideo: true }).then(function () {
+        if (state.open !== item) return;
+        var tabBtn = document.querySelector('.tabs button[aria-selected="true"]');
+        var tab = tabBtn ? tabBtn.getAttribute('data-tab') : 'integrity';
+        if (tab === 'integrity') setTab('integrity');
+        counts();
+        render();
+        if (!analysisIsLive(item)) stopLiveAnalysisWatch();
+      });
+    }, 4000);
+  }
+
+  function startTyping(li, index) {
+    var body = li.querySelector('.body');
+    var full = li.getAttribute('data-full') || '';
+    if (!body) return;
+    if (state.typedUpTo > index) {
+      body.textContent = full;
+      li.classList.remove('typing');
+      return;
+    }
+    if (state.typedUpTo === index && body.textContent === full) {
+      li.classList.remove('typing');
+      return;
+    }
+    if (state.typedUpTo === index && state.typeTimer) return;
+    stopTyping();
+    var reduce = false;
+    try { reduce = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+    if (reduce || full.length < 4) {
+      body.textContent = full;
+      li.classList.remove('typing');
+      state.typedUpTo = index;
+      return;
+    }
+    var shown = body.textContent;
+    var i = (shown && full.indexOf(shown) === 0) ? shown.length : 0;
+    if (i === 0) {
+      body.textContent = '';
+      li.classList.add('land');
+    }
+    li.classList.add('typing');
+    state.typeTimer = setInterval(function () {
+      i += 1;
+      body.textContent = full.slice(0, i);
+      if (i >= full.length) {
+        stopTyping();
+        li.classList.remove('typing');
+        state.typedUpTo = index;
+      }
+    }, 18);
   }
 
   function renderAnalysis(item) {
@@ -2761,6 +2912,7 @@
     el.innerHTML = html;
   }
 
+  /* ::live-analysis */
   function analysisLog(item) {
     var a = item.analysis || {};
     var rows = [];
@@ -2794,44 +2946,138 @@
       a.scope.forEach(function (s, i) {
         var w = VERDICT_WORD[s.verdict];
         add(
-          Math.round(i * d2 / Math.max(a.scope.length - 1, 1)),
+          Math.round((i + 1) * d2 / (a.scope.length + 1)),
           s.title + (w ? ' — ' + w[1] : ''),
           'scope'
         );
       });
     }
-    if (!rows.length && (a.dictation || a.summary)) add(0, a.dictation || a.summary, 'read');
-    if (!rows.length && a.reason) add(0, a.reason, 'note');
+    if (!rows.length && (a.dictation || a.summary)) {
+      var prose = String(a.dictation || a.summary);
+      var sentences = prose.replace(/([.!?])\s+/g, '$1\n').split('\n').filter(Boolean);
+      var durS = item.duration || 120;
+      if (sentences.length <= 1) add(Math.min(8, Math.round(durS * 0.08)), prose, 'read');
+      else sentences.forEach(function (s, i) {
+        add(Math.round((i + 1) * durS / (sentences.length + 1)), s, 'read');
+      });
+    }
+    if (!rows.length) {
+      synthesizedLiveScript(item).forEach(function (r) { add(r.at, r.text, r.kind); });
+    }
     rows.sort(function (x, y) { return x.at - y.at; });
     return rows;
   }
 
+  function synthesizedLiveScript(item) {
+    var a = item.analysis || {};
+    if (a.state === 'failed' || a.state === 'paired' || a.state === 'skipped') return [];
+    var fs = item._frames || [];
+    if (!fs.length) return [];
+    var out = [];
+    var last = '';
+    fs.forEach(function (f) {
+      var text = noteFromMetrics(item, f);
+      if (!text || text === last) return;
+      last = text;
+      var at = Math.max(0, Number(f.at) || 0);
+      if (at === 0) at = 4;
+      out.push({ at: at, text: text, kind: 'live' });
+    });
+    return out;
+  }
+
+  function noteFromMetrics(item, f) {
+    if (f.wet == null && f.cut == null && f.gear == null) return '';
+    var wet = Number(f.wet) || 0;
+    var cut = Number(f.cut) || 0;
+    var gear = Number(f.gear) || 0;
+    var bits = [];
+    if (wet >= 0.45) bits.push('Staining still reads on the affected wall.');
+    else if (wet >= 0.18) bits.push('The stain line is receding; the wall is drying.');
+    else if (wet > 0) bits.push('Affected wall looks mostly dry in this pass.');
+    if (cut >= 0.55) bits.push('Flood cut is open; studs are in frame.');
+    else if (cut >= 0.2) bits.push('Cut line is started along the run.');
+    else if (cut > 0) bits.push('Finish work is closing the cut.');
+    if (gear >= 2) bits.push(gear + ' drying units running in shot.');
+    else if (gear >= 1) bits.push('Drying equipment still in the room.');
+    if (!bits.length) {
+      bits.push(item.phase === 'before'
+        ? 'Walkthrough of the work area before the day starts.'
+        : 'Walkthrough of the work area.');
+    }
+    return bits.join(' ');
+  }
+
+  function lastRevealedIndex(rows, seconds) {
+    var last = -1;
+    var t = Number(seconds) || 0;
+    for (var i = 0; i < rows.length; i++) {
+      if (t + 0.05 >= rows[i].at) last = i;
+    }
+    return last;
+  }
+
+  function analysisIsLive(item) {
+    var a = (item && item.analysis) || {};
+    return a.state === 'queued' || a.state === 'none' || a.state === 'running' || !a.state;
+  }
+
+  function analysisPillLabel(item, revealedCount, rowCount) {
+    var a = (item && item.analysis) || {};
+    if (a.state === 'failed') return 'Failed';
+    if (a.state === 'paired') return 'Before half';
+    if (a.state === 'skipped') return 'Waiting';
+    if (analysisIsLive(item)) return 'Writing…';
+    if (rowCount && revealedCount < rowCount) return 'Writing…';
+    return 'Read';
+  }
+  /* ::live-analysis-end */
+
   function currentPlayhead() {
-    var host = $('#d-frame');
-    var vid = host && host.querySelector('video');
+    var vid = clipVideo();
     if (vid) return vid.currentTime || 0;
-    var item = state.open;
-    if (item && item._frames && item._frames[state.frame]) return item._frames[state.frame].at || 0;
-    return 0;
+    return state.playhead || 0;
   }
 
   function syncAnalysisLog(seconds) {
+    state.playhead = Number(seconds) || 0;
+    var item = state.open;
+    if (!item) return;
+    var rows = analysisLog(item);
+    var last = lastRevealedIndex(rows, state.playhead);
+    if (state.typedUpTo > last) state.typedUpTo = last;
+    var pill = document.querySelector('.alog-head .livepill');
+    if (pill) {
+      var label = analysisPillLabel(item, last + 1, rows.length);
+      pill.textContent = label;
+      pill.classList.toggle('writing', label === 'Writing…');
+    }
+    var empty = document.getElementById('alog-empty');
+    if (empty) empty.hidden = last >= 0 && rows.length > 0;
     var list = document.getElementById('alog');
     if (!list) return;
     var items = list.querySelectorAll('[data-at]');
     if (!items.length) return;
-    var lastSeen = -1;
     Array.prototype.forEach.call(items, function (li, i) {
-      if (seconds >= Number(li.getAttribute('data-at'))) lastSeen = i;
+      li.classList.toggle('on', i === last);
+      li.classList.toggle('seen', i < last);
+      li.classList.toggle('soon', i > last);
+      if (i < last) {
+        var full = li.getAttribute('data-full') || '';
+        var body = li.querySelector('.body');
+        if (body) body.textContent = full;
+        li.classList.remove('typing');
+      }
     });
-    if (lastSeen < 0) lastSeen = 0;
-    Array.prototype.forEach.call(items, function (li, i) {
-      li.classList.toggle('on', i === lastSeen);
-      li.classList.toggle('seen', i < lastSeen);
-      li.classList.toggle('soon', i > lastSeen);
-    });
-    var cur = items[lastSeen];
-    if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (last >= 0) {
+      var cur = items[last];
+      if (cur) {
+        startTyping(cur, last);
+        if (cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    } else {
+      stopTyping();
+    }
   }
 
   function seekTo(seconds) {
@@ -2860,23 +3106,39 @@
   function renderScopeLog(item) {
     var a = item.analysis || {};
     var rows = analysisLog(item);
-    var writing = a.state === 'queued' || a.state === 'none';
+    var last = lastRevealedIndex(rows, currentPlayhead());
+    var pill = analysisPillLabel(item, last + 1, rows.length);
+    var writing = pill === 'Writing…';
     var html = '<div class="alog-head"><h4>AI analysis</h4>' +
-      (writing
-        ? '<span class="livepill">Writing…</span>'
-        : a.state === 'failed'
-          ? '<span class="livepill">Failed</span>'
-          : '<span class="livepill">Reading the footage</span>') +
-      '</div>';
-    if (!rows.length) {
-      html += '<p class="footnote" style="margin-top:4px">' +
-        esc(a.reason || 'The assistant is reading this clip. Notes land here as the footage plays.') +
-        '</p>';
+      '<span class="livepill' + (writing ? ' writing' : '') + '">' + esc(pill) + '</span></div>';
+
+    if (a.state === 'failed') {
+      html += '<p class="alog-empty">The dictation failed after retries. The footage itself is unaffected and can be re-read from the platform.</p>';
       return html;
     }
-    html += '<ul class="alog" id="alog">' + rows.map(function (r, i) {
-      return '<li data-at="' + r.at + '" class="' + (i === 0 ? 'on' : 'soon') + '">' +
-        '<span class="t">' + dur(r.at) + '</span><span>' + esc(r.text) + '</span></li>';
+    if (a.state === 'paired' || a.state === 'skipped') {
+      html += '<p class="alog-empty">' + esc(
+        a.reason || (a.state === 'paired'
+          ? 'This is the before half of a day. Open the after clip for the notes of what changed.'
+          : 'No after video has been filed for this day, so there is nothing to compare against.')
+      ) + '</p>';
+      if (a.pairedWith) {
+        html += '<p><button class="navitem" style="width:auto;margin:6px 0 0;border:1px solid var(--line)" data-goto="' + a.pairedWith + '">Open ' + esc(a.pairedWith) + '</button></p>';
+      }
+      return html;
+    }
+
+    html += '<p class="alog-empty" id="alog-empty"' + (last >= 0 && rows.length ? ' hidden' : '') + '>' +
+      esc(a.reason && !rows.length
+        ? a.reason
+        : 'The assistant is reading this clip. Notes land here as the footage plays.') +
+      '</p>';
+    if (!rows.length) return html;
+
+    html += '<ul class="alog" id="alog" aria-live="polite">' + rows.map(function (r, i) {
+      var cls = i < last ? 'seen' : i === last ? 'on' : 'soon';
+      return '<li data-at="' + r.at + '" data-full="' + esc(r.text) + '" class="' + cls + '">' +
+        '<span class="t">' + dur(r.at) + '</span><span class="body">' + (i <= last ? esc(r.text) : '') + '</span></li>';
     }).join('') + '</ul>';
     return html;
   }
@@ -2894,6 +3156,8 @@
       Array.prototype.forEach.call(el.querySelectorAll('#alog [data-at]'), function (li) {
         li.addEventListener('click', function () { seekTo(Number(li.getAttribute('data-at'))); });
       });
+      var goto = el.querySelector('[data-goto]');
+      if (goto) goto.addEventListener('click', function () { open(goto.dataset.goto); });
       syncAnalysisLog(currentPlayhead());
       return;
     }
@@ -3390,8 +3654,12 @@
 
   $('#d-close').addEventListener('click', function () {
     stopPlay();
+    stopTyping();
+    stopLiveAnalysisWatch();
     $('#detail').setAttribute('data-open', '0');
     state.open = null;
+    state.typedUpTo = -1;
+    state.playhead = 0;
   });
   $('#detail').addEventListener('click', function (e) {
     if (e.target === $('#detail')) $('#d-close').click();
@@ -3401,12 +3669,21 @@
   });
 
   $('#d-play').addEventListener('click', function () {
+    var vid = clipVideo();
+    if (vid) {
+      if (vid.paused) vid.play();
+      else vid.pause();
+      return;
+    }
     if (state.playing) { stopPlay(); return; }
+    var item = state.open;
+    if (!item || !item._frames || !item._frames.length) return;
+    setPlayButton(true);
     state.playing = setInterval(function () {
-      var item = state.open;
-      if (!item) return stopPlay();
+      var cur = state.open;
+      if (!cur || !cur._frames) return stopPlay();
       var next = state.frame + 1;
-      if (next >= item._frames.length) { stopPlay(); return; }
+      if (next >= cur._frames.length) { stopPlay(); return; }
       setFrame(next);
     }, 700);
   });
@@ -3433,7 +3710,43 @@
   // no token, the signed-in session is the credential.
   var ORG_MODE = false;
 
+  function mapAnalysisBody(raw, stateName) {
+    var src = raw.analysis || {};
+    return {
+      state: stateName,
+      reason: src.reason || null,
+      materialChange: src.materialChange,
+      materialBecause: src.materialBecause,
+      summary: src.summary || '',
+      dictation: src.dictation || src.summary || '',
+      dictationEntries: src.dictationEntries || [],
+      actions: src.actions || [],
+      changes: src.changes || [],
+      scope: src.scope || [],
+      couldNotTell: src.couldNotTell || [],
+      longForm: Boolean(src.longForm),
+      timeline: src.timeline || null,
+      windowsTotal: src.windowsTotal != null ? src.windowsTotal : null,
+      windowsRead: src.windowsRead != null ? src.windowsRead : null
+    };
+  }
+
   function mapRemoteItem(raw, jobKey) {
+    var analysis;
+    if (raw.analysisState === 'done') {
+      analysis = mapAnalysisBody(raw, 'done');
+    } else if (raw.analysisState === 'paired') {
+      analysis = { state: 'paired', pairedWith: raw.analysis && raw.analysis.pairedWith };
+    } else if (raw.analysisState === 'waiting_on_after') {
+      analysis = { state: 'skipped', reason: 'No after video has been filed for this day, so there is nothing to compare against.' };
+    } else if (raw.analysisState === 'queued') {
+      analysis = mapAnalysisBody(raw, 'queued');
+      analysis.reason = analysis.reason || 'Queued for analysis. The model has not read the day yet.';
+    } else if (raw.analysisState === 'failed') {
+      analysis = { state: 'failed' };
+    } else {
+      analysis = mapAnalysisBody(raw, 'none');
+    }
     return {
       _remote: true,
       id: raw.id,
@@ -3453,62 +3766,40 @@
       tier: raw.tier || 1,
       hold: raw.legalHold ? { on: true, reason: 'This clip is under legal hold. Retention cannot delete it while the hold stands.', by: '', at: '' } : null,
       checks: raw.checks || [],
-      analysis: raw.analysisState === 'done'
-        ? {
-            state: 'done',
-            materialChange: raw.analysis && raw.analysis.materialChange,
-            materialBecause: raw.analysis && raw.analysis.materialBecause,
-            summary: (raw.analysis && raw.analysis.summary) || '',
-            dictation: (raw.analysis && (raw.analysis.dictation || raw.analysis.summary)) || '',
-            dictationEntries: (raw.analysis && raw.analysis.dictationEntries) || [],
-            actions: (raw.analysis && raw.analysis.actions) || [],
-            changes: (raw.analysis && raw.analysis.changes) || [],
-            scope: (raw.analysis && raw.analysis.scope) || [],
-            couldNotTell: (raw.analysis && raw.analysis.couldNotTell) || [],
-            longForm: Boolean(raw.analysis && raw.analysis.longForm),
-            timeline: (raw.analysis && raw.analysis.timeline) || null,
-            windowsTotal: raw.analysis ? raw.analysis.windowsTotal : null,
-            windowsRead: raw.analysis ? raw.analysis.windowsRead : null
-          }
-        : raw.analysisState === 'paired'
-          ? { state: 'paired' }
-          : raw.analysisState === 'waiting_on_after'
-            ? { state: 'skipped', reason: 'No after video has been filed for this day, so there is nothing to compare against.' }
-            : raw.analysisState === 'queued'
-              ? { state: 'queued', reason: 'Queued for analysis. The model has not read the day yet.' }
-              : raw.analysisState === 'failed'
-                ? { state: 'failed' }
-                : { state: 'none' },
+      analysis: analysis,
       custody: [],
       _loaded: false
     };
   }
 
-  function fetchRemoteDetail(item) {
+  function fetchRemoteDetail(item, opts) {
+    var skipVideo = opts && opts.skipVideo;
     var detailUrl = ORG_MODE
       ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id)
       : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id);
     var videoUrl = ORG_MODE
       ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id) + '/video'
       : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id) + '/video';
-    return Promise.all([
-      fetch(detailUrl, { credentials: 'include' }).then(function (r) {
-        if (!r.ok) throw new Error('detail');
-        return r.json();
-      }),
-      fetch(videoUrl, { credentials: 'include' })
+    var detail = fetch(detailUrl, { credentials: 'include' }).then(function (r) {
+      if (!r.ok) throw new Error('detail');
+      return r.json();
+    });
+    var video = skipVideo
+      ? Promise.resolve(null)
+      : fetch(videoUrl, { credentials: 'include' })
         .then(function (r) { return r.ok ? r.json() : null; })
-        .catch(function () { return null; })
-    ])
+        .catch(function () { return null; });
+    return Promise.all([detail, video])
       .then(function (parts) {
         var payload = parts[0];
-        var video = parts[1];
+        var videoBody = parts[1];
         // Prefer the freshest analysis/dictation from the detail payload.
         if (payload.item) {
           var mapped = mapRemoteItem(payload.item, item.job);
           item.analysis = mapped.analysis;
           item.checks = mapped.checks;
           item.hold = mapped.hold;
+          item.duration = mapped.duration;
         }
         item.custody = (payload.custody || []).map(function (c) {
           return {
@@ -3522,7 +3813,7 @@
         item._remoteFrames = (payload.frames || []).map(function (f) {
           return { at: f.atSeconds, src: f.url };
         });
-        item._videoUrl = video && video.url ? video.url : null;
+        if (videoBody && videoBody.url) item._videoUrl = videoBody.url;
         item._loaded = true;
       })
       .catch(function () {
