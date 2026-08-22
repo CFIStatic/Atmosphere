@@ -77,6 +77,7 @@ describe('every front door proxies /api over the private mesh', () => {
     expect(office).toContain("tr -d '\\n' < api.upstream");
     const appJob = office.slice(office.indexOf('name: Deploy office app'));
     expect(appJob).toContain('resolveRailwayService.mjs');
+    expect(appJob).toContain('Login & Dashboard');
     expect(appJob).not.toMatch(publicHost);
   });
 
