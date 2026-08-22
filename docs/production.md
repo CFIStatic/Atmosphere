@@ -12,18 +12,28 @@ Do this once in the Railway dashboard. GitHub Actions deploys the backend
 Autodeploy is the fallback if Actions is skipped; without either, a service
 stays on its last successful image.
 
-Databases, Redis, and volumes are not git apps — skip them. The marketing site
-is GitHub Pages (`website/`) and a Railway nginx service (`website`). iOS is
-App Store.
+Databases, Redis, and volumes are not git apps — skip them. iOS is App Store.
+The marketing site (`website/`) deploys to the Railway nginx service `website`
+(GitHub Pages is an optional second host — see
+`.github/workflows/deploy-website.yml`).
 
 | Railway service | Config as Code | Dockerfile | Rebuilds when these paths change |
 | --- | --- | --- | --- |
 | Backend BFF | `/railway.toml` | `Dockerfile` (repo root) | `backend/**`, `Dockerfile`, `railway.toml` |
 | Office console | `/frontend/railway.toml` | `frontend/Dockerfile` | `frontend/**`, `verifier/**`, `fieldcapture/**`, `frontend/Dockerfile` |
-| Corporate site | `/website/railway.toml` | `website/Dockerfile` | `website/**`, `.dockerignore` |
+| Corporate site (`website`) | `/website/railway.toml` | `website/Dockerfile` | `website/**`, `.dockerignore`, `.github/workflows/deploy-website.yml` |
 
-All git-backed services use **Root Directory `/`**. The console must not use `/frontend`
-as root — Vite copies sibling `verifier/` and `fieldcapture/` into the build.
+All git-backed services use **Root Directory `/`**. The console must not use
+`/frontend` as root — Vite copies sibling `verifier/` and `fieldcapture/`
+into the build — and `website/Dockerfile` also copies from the repo root.
+
+> **Heads-up:** Railway has deprecated config-as-code files. Existing
+> (legacy) services keep reading their `railway.toml` until the hard cutoff
+> on **2026-12-01**; new services cannot opt in at all. Before the cutoff,
+> mirror each service's settings above (start command, healthcheck path,
+> watch paths, Dockerfile path) into its dashboard Settings, or migrate to
+> Railway's Infrastructure as Code (`.railway/railway.ts`). See
+> https://docs.railway.com/infrastructure-as-code.
 
 ### Step 0 — GitHub App (once)
 
@@ -152,6 +162,30 @@ Manual backend fallback: **Actions → Deploy Work Verification → Run workflow
   `/frontend/railway.toml`. The corporate site must use `/website/railway.toml`
   for the same reason.
 
+### If the website service fails its healthcheck on every main push
+
+Symptom: the `website` (Corporate Website) service shows **Deployment failed
+during network process → Healthcheck failure** after ~5 minutes, on commits
+that never touched `website/`, and the deployment says **via GitHub**.
+
+Cause: the service's Config File was never set, so GitHub autodeploys resolve
+the repo-root `/railway.toml` (the backend's). The nginx image then deployed
+with the backend's settings and never answered the probe. The CLI deploys from
+`deploy-website.yml` worked because that job copies `website/railway.toml`
+over the upload root — which masked the missing setting.
+
+Fix, once, on the `website` service:
+
+1. Settings → **Config-as-code** → Config File = `/website/railway.toml`.
+   That brings its nginx start command, `GET /health` probe, and the
+   `website/**` watch paths onto GitHub autodeploys too.
+2. Or, if GitHub autodeploy on this service is unwanted (Actions already
+   ships it via CLI on website changes), Settings → **Disable Autodeploy**.
+
+The repo also no longer sets a `startCommand` in the root `railway.toml`
+(the backend Dockerfile's CMD is the same command), so even a service still
+inheriting the root config boots its own image instead of crash-looping.
+
 Official references: [GitHub Autodeploys](https://docs.railway.com/deployments/github-autodeploys),
 [PR Environments](https://docs.railway.com/guides/preview-deployments-with-pr-environments),
 [Monorepos](https://docs.railway.com/deployments/monorepo).
@@ -162,14 +196,14 @@ Official references: [GitHub Autodeploys](https://docs.railway.com/deployments/g
 | --- | --- | --- |
 | Backend BFF | `backend/` (`Dockerfile` or `npm run build && npm start`) | Node 22, long-lived process; needs FFmpeg for proof sparse frames. **Railway service `Atmosphere` (override with `RAILWAY_SERVICE`).** |
 | Office app | `frontend/` + `verifier/` + `fieldcapture/` | One nginx image; `/api` proxied to the BFF. **Railway service `Atmosphere-web` (override with `RAILWAY_APP_SERVICE`).** |
-| Marketing site | `website/` | Already CD’d to GitHub Pages |
+| Marketing site | `website/` | nginx image on Railway service `website`; GitHub Pages optional (`deploy-website.yml`) |
 | Native Field | `apps/field-ios/` | App Store path; uses the same BFF |
 
 Compose sketch: `docker compose up --build` (see root `docker-compose.yml`). Same shape as Railway: browser hits `:8080`, nginx proxies `/api` to the BFF.
 
 ## Host the office app on Railway
 
-The marketing site stays on GitHub Pages. The **product** (office console, Verifier, Field Capture) is a second Railway service next to the BFF, same project.
+The marketing site ships separately to the Railway `website` service (see `.github/workflows/deploy-website.yml`). The **product** (office console, Verifier, Field Capture) is a second Railway service next to the BFF, same project.
 
 Same-origin `/api` is the point: session cookies stay `SameSite=Lax`, Field Capture does not need `?api=`, and `VITE_API_BASE_URL` stays empty.
 
