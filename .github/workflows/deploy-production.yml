@@ -26,8 +26,9 @@
 #   Config File = /frontend/railway.toml
 # Without that, `railway up` from the repo root applies /railway.toml and
 # builds the backend image instead. See docs/production.md.
-# This job also copies frontend/railway.toml over the root file and sets
-# RAILWAY_DOCKERFILE_PATH so a missing Config File still builds the office image.
+# This job also copies frontend/railway.toml over the root file, stamps
+# nginx + GET /healthz onto the service, and sets RAILWAY_DOCKERFILE_PATH so
+# a missing Config File still builds the office image.
 #
 # Put GOOGLE_API_KEY / GOOGLE_MAPS_API_KEY / ANTHROPIC_API_KEY in `Keys`
 # as well (not only the "Google API keys" environment) so this job can see them.
@@ -48,6 +49,7 @@ on:
       - cursor/fix-job-create-memory-fk-51c8
       - cursor/fix-railway-office-deploy-157d
       - cursor/internal-data-platform-e19d
+      - cursor/office-healthcheck-958b
     paths:
       - 'backend/**'
       - 'supabase/migrations/**'
@@ -65,8 +67,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Classify changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need the previous tip. fetch-depth: 2 plus a 2-commit push leaves
+          # github.event.before missing; git diff then fails closed and skips
+          # the API deploy (which is how the listen-first fix almost missed Railway).
+          fetch-depth: 0
+      - id: filter
+        name: Detect backend-image paths
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" != "push" ]; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          before="${{ github.event.before }}"
+          if [ -z "$before" ] || [[ "$before" =~ ^0+$ ]]; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! git cat-file -e "${before}^{commit}" 2>/dev/null; then
+            echo "Cannot see $before; deploying Atmosphere APIs to be safe."
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files="$(git diff --name-only "$before" "${{ github.sha }}")"
+          printf '%s\n' "$files"
+          if printf '%s\n' "$files" | grep -Eq '^(backend/|Dockerfile$|railway.toml$|supabase/migrations/)'; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "backend=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping Atmosphere APIs — this push did not change the BFF image."
+          fi
+
   backend:
     name: Sync Keys → Railway and deploy backend
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     environment: Keys
     steps:
@@ -204,7 +247,7 @@ jobs:
           project="${RAILWAY_PROJECT_ID}"
           service="${RAILWAY_APP_SERVICE:-${RAILWAY_WEB_SERVICE:-Login & Dashboard}}"
           echo "Deploying office app to Railway service '$service' in project $project."
-          echo "That service's Config File must be /frontend/railway.toml (see docs/production.md)."
+          echo "Writing frontend/railway.json onto the service (nginx + /healthz)."
           railway link --project "$project" --environment production --service "$service" \
             || railway link --project "$project" --environment production \
             || railway link --project "$project" \
@@ -215,17 +258,29 @@ jobs:
           service_id="$(node backend/scripts/resolveRailwayService.mjs "$service")"
           echo "Resolved '$service' to $service_id"
           service="$service_id"
-          printf '%s' 'frontend/Dockerfile' | railway variable set RAILWAY_DOCKERFILE_PATH --stdin --skip-deploys --service "$service"
-          # Private HTTP to the BFF. The public https://atmosphere-production URL
-          # hairpins out of the mesh (jfk1 → ams1 hops) and 502s /api for ~3s,
-          # which is the spinner on /login (api.me() before the form).
-          tr -d '\n' < api.upstream | railway variable set API_UPSTREAM --stdin --skip-deploys --service "$service"
+          chmod +x frontend/scripts/apply-railway-config.sh backend/scripts/railwayUp.sh
+          RAILWAY_APP_SERVICE="$service" frontend/scripts/apply-railway-config.sh
+          # Private mesh 504s from this nginx (same as Internal Growth Metrics).
+          # wget can reach railway.internal over IPv6; nginx then tries IPv4
+          # and Sign in shows "Cannot reach the Atmosphere API". Public BFF
+          # is healthy. A brief hairpin 502 is better than a permanent 504.
+          upstream="https://atmosphere-production.up.railway.app"
+          echo "API_UPSTREAM=$upstream"
+          printf '%s' "$upstream" | railway variable set API_UPSTREAM \
+            --stdin --skip-deploys --service "$service"
           # railway up reads /railway.toml from the upload root. Without this copy
           # the CLI builds the backend Dockerfile and probes /api/health on nginx.
           cp frontend/railway.toml railway.toml
+          cp frontend/railway.json railway.json
+          # Autodeploy of this SHA may already have uploaded the same
+          # frontend/** tree and failed /healthz. railway up then skips watch
+          # paths and leaves the old replica. Dirty a watched file so this
+          # CLI upload is a new image with office-start.sh.
+          printf '\n# gha %s %s\n' "${GITHUB_SHA}" "$(date -u +%Y%m%dT%H%M%SZ)" >> frontend/nginx/default.conf.template
+          export RAILWAY_UP_STAMP_FILE="$PWD/frontend/nginx/default.conf.template"
+          export RAILWAY_UP_ATTEMPTS=3
           export RAILWAY_SERVICE="$service"
           export RAILWAY_PROJECT_ID="$project"
-          chmod +x backend/scripts/railwayUp.sh
           backend/scripts/railwayUp.sh
 
   internal:

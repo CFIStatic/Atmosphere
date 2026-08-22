@@ -2402,9 +2402,8 @@ export function apiFailureMessage(
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  let res: Response;
-  try {
-    res = await fetch(`${API_BASE}${path}`, {
+  const exec = () =>
+    fetch(`${API_BASE}${path}`, {
       ...options,
       credentials: 'include', // send/receive the httpOnly session cookies
       headers: {
@@ -2412,6 +2411,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
         ...(options.headers ?? {}),
       },
     });
+
+  let res: Response;
+  try {
+    res = await exec();
+    // Office nginx hairpins the public BFF for a couple of seconds after
+    // deploy and returns empty 502/504. One retry beats the login banner.
+    if (res.status === 502 || res.status === 504) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      res = await exec();
+    }
   } catch {
     throw new ApiError(0, BACKEND_UNREACHABLE_MESSAGE, 'network_error');
   }

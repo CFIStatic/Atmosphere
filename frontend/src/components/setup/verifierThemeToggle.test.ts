@@ -18,9 +18,16 @@ describe('verifier dashboard theme toggle', () => {
     const topbar = verifierHtml.match(/<header class="topbar">[\s\S]*?<\/header>/);
     expect(topbar).not.toBeNull();
     expect(topbar![0]).toContain('id="theme-toggle"');
+    expect(topbar![0]).toContain('class="theme-toggle-label"');
     expect(topbar![0]).toContain('class="icon-moon"');
     expect(topbar![0]).toContain('class="icon-sun"');
     expect(topbar![0]).toMatch(/aria-label="Switch to (dark|light) mode"/);
+    expect(topbar![0]).not.toContain('id="theme-toggle-rail"');
+
+    const railHead = verifierHtml.match(/<div class="rail-head"[\s\S]*?<\/div>/);
+    expect(railHead).not.toBeNull();
+    expect(railHead![0]).toContain('Atmosphere');
+    expect(railHead![0]).not.toContain('theme-toggle');
   });
 
   it('shows the destination icon for the current theme', () => {

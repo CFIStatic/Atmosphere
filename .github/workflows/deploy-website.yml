@@ -21,6 +21,7 @@ on:
       - main
       - cursor/host-corporate-website-51c8
       - cursor/fix-railway-office-deploy-157d
+      - cursor/office-healthcheck-958b
     paths:
       - 'website/**'
       - '.dockerignore'

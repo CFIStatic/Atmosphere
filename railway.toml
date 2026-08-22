@@ -4,8 +4,10 @@
 # Variables still come from GitHub Keys via Actions, or Railway Variables.
 #
 # Deploy probe is liveness (/api/health), not readiness (/api/ready).
-# /api/ready talks to Supabase; a paused project or egress blip would
-# fail the Railway replica even when Node is serving.
+# The process binds and answers /api/health before config/guards load.
+# /api/ready talks to Supabase and reports production-guard errors; a
+# paused project or a mailbox check must not fail the replica.
+# Stamp: listen-first health so this revision rebuilds Atmosphere APIs.
 
 [build]
 builder = "DOCKERFILE"

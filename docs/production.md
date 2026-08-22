@@ -78,7 +78,7 @@ The office image reverse-proxies `/api` at runtime. Set this on the office
 service **before** the first Autodeploy:
 
 ```text
-API_UPSTREAM=http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}
+API_UPSTREAM=http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}
 ```
 
 Leave `VITE_API_BASE_URL` empty so the SPA uses same-origin `/api` and
@@ -102,7 +102,7 @@ repo root:
 
 ```bash
 cat api.upstream
-# http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}
+# http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}
 ```
 
 Plain `http://`, private domain, no public host. Set to
@@ -116,6 +116,13 @@ contact forms failing to post.
 The staff site (`internal/`, Railway service `Internal Growth Metrics`) is
 the exception: its nginx 504s on the private mesh, so the deploy job points
 it at the public BFF host.
+
+Login & Dashboard **sets the public BFF** (`https://atmosphere-production.up.railway.app`),
+same as the staff site. `office-start.sh` also forces that whenever
+`RAILWAY_ENVIRONMENT` is set. wget can reach `railway.internal` over IPv6
+while nginx then tries IPv4 and Sign in 504s — “Cannot reach the Atmosphere API”
+— even though the public API is healthy. The marketing site still *sets*
+the private-mesh URL; `website-start.sh` forces public on Railway too.
 
 The deploy workflows keep these in sync, so a fix here does not need a
 dashboard visit:
@@ -183,9 +190,9 @@ Manual backend fallback: **Actions → Deploy Work Verification → Run workflow
 
 - **Wrong branch.** Production is `main` only. Other branches need a PR
   (Step 2).
-- **Wrong office service name.** The live office service is `Atmosphere-web`,
-  not `app`. Deploy Work Verification logs `Service not found` when the job
-  targets a name that is not on the canvas.
+- **Wrong office service name.** The live office service is `Login & Dashboard`
+  (`Atmosphere-web` is the old alias), not `app`. Deploy Work Verification
+  logs `Service not found` when the job targets a name that is not on the canvas.
 - **Watch paths.** Autodeploy skips commits that miss that service’s
   `watchPatterns`. In Deployments, turn on **Show skipped**.
 - **Wait for CI.** A failing GitHub Actions run skips the Railway deploy.
@@ -226,6 +233,61 @@ site:
 GitHub Pages is optional and **not configured** on this repo. The Railway
 service is the production host.
 
+### If Atmosphere APIs fails `/api/health`
+
+Symptom: the `Atmosphere APIs` service builds the Node image, then Network →
+Healthcheck shows `Path: /api/health` and `Attempt #N failed with service
+unavailable` until the 5-minute `healthcheckTimeout` expires.
+
+Cause: `node dist/index.js` used to import `config` and run
+`assertProductionReady()` **before** `listen()`. A missing production secret
+or a personal `CONTACT_TO_EMAIL` / `CAREERS_TO_EMAIL` threw, the process never
+bound `$PORT`, and Railway reported connection-refused as "service unavailable"
+for the whole retry window. Every later office/website push that also
+`railway up`s this service repeated the same 5-minute failure.
+
+Fix, in the repo:
+
+1. The process binds `0.0.0.0:$PORT` and answers `GET /api/health` before
+   loading config or the Express app.
+2. Production-guard failures are logged and reported on `/api/ready`. They
+   must not abort listen.
+3. The production deploy job skips the backend image when the push only
+   touched office, website, or internal files.
+
+`/api/health` is liveness (process is up). `/api/ready` is readiness
+(Supabase + production guards). Keep Railway's probe on `/api/health`.
+
+### If Login & Dashboard fails its healthcheck
+
+Symptom: the `Login & Dashboard` service shows **Deployment failed during
+network process → Healthcheck failure** after exactly 60 seconds. Build and
+Deploy succeed; Post-deploy never starts. The deployment says **via CLI**.
+
+Cause: Railway's start command replaces the nginx image ENTRYPOINT, so
+`${PORT}` is never substituted and the replica never answers `/healthz`. A
+leftover Config File pointing at the repo-root `/railway.toml` can also
+inject `node dist/index.js` or probe `/api/health` (which nginx used to
+proxy to the BFF — a hung `API_UPSTREAM` then fails the deploy).
+
+A later failure: `API_UPSTREAM` still referenced `${{Atmosphere.…}}` after
+the BFF was renamed **Atmosphere APIs**. Railway interpolates those to
+empty, nginx gets `proxy_pass http://:`, and dies with `invalid port in
+upstream ":"` before `/healthz` can answer.
+
+Fix, in the repo (the deploy job applies this automatically):
+
+1. `office-start.sh` binds `0.0.0.0:$PORT` and starts nginx. Never Node.
+2. `GET /healthz`, `/health`, and `/api/health` are answered locally so a
+   hung BFF cannot fail the replica.
+3. `office-start.sh` rejects `http://:` (empty Railway refs) so nginx can
+   still bind; `api.upstream` now points at `"Atmosphere APIs"`.
+4. `frontend/scripts/apply-railway-config.sh` stamps those settings onto
+   the service so Autodeploy and CLI agree.
+
+One-time on the service if Autodeploy is still on: Settings →
+**Config-as-code** → Config File = `/frontend/railway.toml`.
+
 ### If the website service fails its healthcheck on every main push
 
 Symptom: the `website` (Corporate Website) service shows **Deployment failed
@@ -237,6 +299,12 @@ the repo-root `/railway.toml` (the backend's). The nginx image then deployed
 with the backend's settings and never answered the probe. The CLI deploys from
 `deploy-website.yml` worked because that job copies `website/railway.toml`
 over the upload root — which masked the missing setting.
+
+A later failure on CLI deploys: `API_UPSTREAM` still referenced
+`${{Atmosphere.…}}` after the BFF was renamed **Atmosphere APIs**. Railway
+interpolates those to empty, nginx gets `proxy_pass http://:` (line 63),
+and dies before `GET /health` can answer. `website-start.sh` now rejects
+that value the same way the office app does.
 
 A second, later failure mode: `railwayUp.sh` treated Railway's in-window
 `Attempt #N failed with service unavailable. Continuing to retry` lines as a
@@ -292,11 +360,13 @@ In the Railway project that already runs the BFF (`Atmosphere`):
 
    | Variable | Value |
    | --- | --- |
-   | `API_UPSTREAM` | `http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}` |
+   | `API_UPSTREAM` | `http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}` |
 
-   Replace `Atmosphere` with the BFF service name if you overrode
+   Replace `"Atmosphere APIs"` with the BFF service name if you overrode
    `RAILWAY_SERVICE`. Same value on every front door — see
    [`API_UPSTREAM` on every front door](#api_upstream-on-every-front-door).
+   A leftover `${{Atmosphere.…}}` interpolates to `http://:` and nginx
+   refuses to start (`invalid port in upstream ":"`).
 
 ### 2. Public origin
 
