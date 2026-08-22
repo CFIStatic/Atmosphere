@@ -20,6 +20,10 @@ describe('Railway office-app image', () => {
     expect(dockerfile).toContain('COPY verifier /verifier');
     expect(dockerfile).toContain('COPY fieldcapture /fieldcapture');
     expect(dockerfile).toContain('NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM)$$');
+    expect(dockerfile).toContain('ENTRYPOINT ["/usr/local/bin/office-start.sh"]');
+    const start = read('nginx/office-start.sh');
+    expect(start).toContain('exec nginx');
+    expect(start).toContain('is_usable_upstream');
   });
 
   it('proxies /api and serves the static apps on one origin', () => {
@@ -34,6 +38,8 @@ describe('Railway office-app image', () => {
     expect(nginx).toContain('application/manifest+json');
     expect(nginx).toContain('location = /fieldcapture/sw.js');
     expect(nginx).toContain('location = /healthz');
+    expect(nginx).toContain('location = /health');
+    expect(nginx).toContain('location = /api/health');
   });
 
   it('points API_UPSTREAM at the Atmosphere private domain, not the public URL', () => {
@@ -47,6 +53,7 @@ describe('Railway office-app image', () => {
     const toml = read('railway.toml');
     expect(toml).toContain('dockerfilePath = "frontend/Dockerfile"');
     expect(toml).toContain('healthcheckPath = "/healthz"');
+    expect(toml).toContain('startCommand = "/usr/local/bin/office-start.sh"');
     expect(toml).toContain('frontend/**');
     expect(toml).toContain('verifier/**');
     expect(toml).toContain('fieldcapture/**');
@@ -62,25 +69,43 @@ describe('Railway office-app image', () => {
     expect(compose).toContain('dockerfile: frontend/Dockerfile');
     expect(compose).toContain('API_UPSTREAM: http://backend:4000');
   });
+
+  it('applies nginx + GET /healthz onto the Railway service from CI', () => {
+    const script = read('scripts/apply-railway-config.sh');
+    expect(script).toContain('/usr/local/bin/office-start.sh');
+    expect(script).toContain('healthcheck_path="/healthz"');
+    expect(script).toContain('Login & Dashboard');
+    const json = JSON.parse(read('railway.json')) as {
+      deploy: { healthcheckPath: string; startCommand: string };
+    };
+    expect(json.deploy.healthcheckPath).toBe('/healthz');
+    expect(json.deploy.startCommand).toBe('/usr/local/bin/office-start.sh');
+  });
+
+  it('smokes /healthz on the office image in CI', () => {
+    const ci = readRoot('.github/workflows/ci.yml');
+    expect(ci).toContain('atmosphere-app-ci');
+    expect(ci).toContain('/healthz');
+    expect(ci).toContain('/api/health');
+  });
 });
 
 /**
- * Office console and marketing site are nginx front doors onto one BFF.
- * Pointed at the public https host, /api leaves the mesh and 502s. They share
- * api.upstream at the repo root. The staff site in internal/ is the exception:
- * its nginx 504s on the private mesh, so that deploy uses the public BFF.
+ * Marketing site still *sets* api.upstream (private mesh). Login & Dashboard
+ * and the staff site 504 on railway.internal from nginx, so those deploys
+ * point nginx at the public BFF. office-start.sh also forces that on Railway.
  */
 describe('every front door proxies /api over the private mesh', () => {
   const office = readRoot('.github/workflows/deploy-production.yml');
   const site = readRoot('.github/workflows/deploy-website.yml');
   const publicHost = /API_UPSTREAM.*https:\/\/[a-z0-9-]+\.up\.railway\.app/;
 
-  it('takes the office upstream from the shared root file', () => {
-    expect(office).toContain("tr -d '\\n' < api.upstream");
+  it('stamps nginx + /healthz onto Login & Dashboard and uses the public BFF', () => {
     const appJob = office.slice(office.indexOf('name: Deploy office app'));
     expect(appJob).toContain('resolveRailwayService.mjs');
     expect(appJob).toContain('Login & Dashboard');
-    expect(appJob).not.toMatch(publicHost);
+    expect(appJob).toContain('frontend/scripts/apply-railway-config.sh');
+    expect(appJob).toContain('upstream="https://atmosphere-production.up.railway.app"');
   });
 
   it('takes the marketing-site upstream from that same file', () => {

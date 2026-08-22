@@ -1,6 +1,6 @@
 # Office console + Field Capture + Verifier.
 # PORT and API_UPSTREAM are substituted at container start
-# (NGINX_ENVSUBST_FILTER). Every other $var is nginx's own.
+# (office-start.sh / NGINX_ENVSUBST_FILTER). Every other $var is nginx's own.
 
 server {
   listen ${PORT};
@@ -17,9 +17,26 @@ server {
   # Verifier is iframed by the office shell on the same origin.
   add_header X-Frame-Options SAMEORIGIN always;
 
+  # Platform probes must never proxy to the BFF. A hung or empty API_UPSTREAM
+  # is what turned Login & Dashboard deploys into Network > Healthcheck failure.
   location = /healthz {
     access_log off;
     default_type text/plain;
+    add_header Cache-Control "no-store";
+    return 200 'ok';
+  }
+
+  location = /health {
+    access_log off;
+    default_type text/plain;
+    add_header Cache-Control "no-store";
+    return 200 'ok';
+  }
+
+  location = /api/health {
+    access_log off;
+    default_type text/plain;
+    add_header Cache-Control "no-store";
     return 200 'ok';
   }
 
