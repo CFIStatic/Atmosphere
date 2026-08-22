@@ -85,8 +85,6 @@ export function JobSharePage() {
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
-  const [question, setQuestion] = useState('');
-  const [extra, setExtra] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -116,27 +114,6 @@ export function JobSharePage() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not record that.');
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function ask() {
-    if (!question.trim()) return;
-    setBusy('ask');
-    try {
-      await call(shareApi(token, '/ask'), {
-        method: 'POST',
-        body: JSON.stringify({
-          body: question,
-          asScopeItem: extra.trim() || undefined,
-        }),
-      });
-      setQuestion('');
-      setExtra('');
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not send that.');
     } finally {
       setBusy(null);
     }
@@ -257,37 +234,6 @@ export function JobSharePage() {
             days={days}
             onDone={load}
           />
-
-          {/* Asking, which is the whole point of having this in their hand.
-              Ten seconds to raise it beats a phone call nobody answers. */}
-          <section className="mt-5 rounded-xl border border-line bg-paper-0 p-4">
-            <h2 className="text-base font-semibold text-ink-900">Ask before you do it</h2>
-            <p className="mt-0.5 text-xs text-ink-600">
-              Anything you are unsure about, or extra work you have found. It goes on the record and
-              the office sees it straight away.
-            </p>
-            <textarea
-              rows={3}
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              placeholder="Found rot under the north valley — six sheets. Photos to follow."
-              className="mt-2 w-full rounded-lg border border-line bg-paper-100 px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
-            />
-            <input
-              value={extra}
-              onChange={(e) => setExtra(e.target.value)}
-              placeholder="If it is extra work, name it here — e.g. Replace 6 sheets of decking"
-              className="mt-2 w-full rounded-lg border border-line bg-paper-100 px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
-            />
-            <button
-              onClick={() => void ask()}
-              disabled={busy === 'ask' || !question.trim()}
-              className="mt-2 flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900 disabled:opacity-50"
-            >
-              {busy === 'ask' && <SpinnerIcon className="animate-spin" width={13} height={13} />}
-              Send it
-            </button>
-          </section>
 
           {view.messages.length > 0 && (
             <section className="mt-5">
