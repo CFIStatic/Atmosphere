@@ -48,6 +48,7 @@ on:
       - cursor/fix-job-create-memory-fk-51c8
       - cursor/fix-railway-office-deploy-157d
       - cursor/internal-data-platform-e19d
+      - claude/urgent-fix-o0z422
     paths:
       - 'backend/**'
       - 'supabase/migrations/**'
@@ -60,13 +61,18 @@ on:
       - 'scripts/railwayPrivateUpstream.sh'
       - '.github/workflows/deploy-production.yml'
 
+# Per-ref group: a push to one branch must not cancel another branch's
+# in-flight production deploy mid-`railway up` (run #19 died exactly that
+# way). Same-ref pushes still supersede each other.
 concurrency:
-  group: deploy-production
+  group: deploy-production-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   backend:
     name: Sync Keys → Railway and deploy backend
+    # The office /api fix branch deploys the office app only.
+    if: github.ref_name != 'claude/urgent-fix-o0z422'
     runs-on: ubuntu-latest
     environment: Keys
     steps:
@@ -216,20 +222,51 @@ jobs:
           echo "Resolved '$service' to $service_id"
           service="$service_id"
           printf '%s' 'frontend/Dockerfile' | railway variable set RAILWAY_DOCKERFILE_PATH --stdin --skip-deploys --service "$service"
-          # Private HTTP to the BFF. The public https://atmosphere-production URL
-          # hairpins out of the mesh (jfk1 → ams1 hops) and 502s /api for ~3s,
-          # which is the spinner on /login (api.me() before the form).
+          # api.upstream is the public BFF host, same as the live staff site:
+          # the private mesh 504s from these nginx containers, and the old
+          # Atmosphere service-reference variable stopped resolving when the
+          # BFF was renamed to "Atmosphere APIs" — the office image then failed
+          # /healthz and the stale replica kept serving 502s on /api, which is
+          # the "Cannot reach the Atmosphere API" error on signup.
           tr -d '\n' < api.upstream | railway variable set API_UPSTREAM --stdin --skip-deploys --service "$service"
           # railway up reads /railway.toml from the upload root. Without this copy
           # the CLI builds the backend Dockerfile and probes /api/health on nginx.
           cp frontend/railway.toml railway.toml
+          # Dirty a watched file so railway up cannot count a watch-path skip
+          # as success and leave the replica that still has the dead upstream.
+          printf '\n# gha %s %s\n' "${GITHUB_SHA}" "$(date -u +%Y%m%dT%H%M%SZ)" >> frontend/nginx/default.conf.template
+          export RAILWAY_UP_STAMP_FILE="$PWD/frontend/nginx/default.conf.template"
+          export RAILWAY_UP_ATTEMPTS=3
           export RAILWAY_SERVICE="$service"
           export RAILWAY_PROJECT_ID="$project"
           chmod +x backend/scripts/railwayUp.sh
           backend/scripts/railwayUp.sh
 
+      - name: Verify office /api reaches the BFF
+        run: |
+          set -uo pipefail
+          url="https://atmosphere-web-production.up.railway.app"
+          ok=""
+          for i in $(seq 1 30); do
+            hz="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$url/healthz" || true)"
+            api="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$url/api/health" || true)"
+            echo "attempt $i/30: /healthz=$hz /api/health=$api"
+            if [ "$hz" = "200" ] && [ "$api" = "200" ]; then
+              ok=1
+              break
+            fi
+            sleep 10
+          done
+          if [ -z "$ok" ]; then
+            echo "Office /api/health is still not 200 — signup would still show 'Cannot reach the Atmosphere API'."
+            exit 1
+          fi
+          echo "Office app is live and /api answers through the proxy."
+
   internal:
     name: Deploy internal site
+    # The office /api fix branch deploys the office app only.
+    if: github.ref_name != 'claude/urgent-fix-o0z422'
     runs-on: ubuntu-latest
     environment: Keys
     steps:

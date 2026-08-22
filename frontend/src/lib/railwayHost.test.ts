@@ -34,11 +34,14 @@ describe('Railway office-app image', () => {
     expect(nginx).toContain('location = /healthz');
   });
 
-  it('points API_UPSTREAM at the Atmosphere private domain, not the public URL', () => {
+  it('points API_UPSTREAM at the public BFF host, never a service reference', () => {
+    // A ${{Atmosphere.*}} reference stopped resolving when the BFF service was
+    // renamed to "Atmosphere APIs": the office image failed /healthz on deploy
+    // and the stale replica kept serving 502s ("Cannot reach the Atmosphere
+    // API" on signup). The staff site is live on the public host — the private
+    // mesh 504s from these nginx containers — so every front door uses it.
     const upstream = readRoot('api.upstream').trim();
-    expect(upstream).toBe(
-      'http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}',
-    );
+    expect(upstream).toBe('https://atmosphere-production.up.railway.app');
   });
 
   it('points the Railway app service at this Dockerfile, not the backend one', () => {
@@ -64,11 +67,12 @@ describe('Railway office-app image', () => {
 
 /**
  * Office console and marketing site are nginx front doors onto one BFF.
- * Pointed at the public https host, /api leaves the mesh and 502s. They share
- * api.upstream at the repo root. The staff site in internal/ is the exception:
- * its nginx 504s on the private mesh, so that deploy uses the public BFF.
+ * They share api.upstream at the repo root (currently the public BFF host —
+ * the private mesh 504s from these nginx containers; see that file's test
+ * above), so the value changes in exactly one place, never inline in a
+ * workflow. The staff site deploy sets the same public host explicitly.
  */
-describe('every front door proxies /api over the private mesh', () => {
+describe('every front door takes /api upstream from the shared file', () => {
   const office = readRoot('.github/workflows/deploy-production.yml');
   const site = readRoot('.github/workflows/deploy-website.yml');
   const publicHost = /API_UPSTREAM.*https:\/\/[a-z0-9-]+\.up\.railway\.app/;

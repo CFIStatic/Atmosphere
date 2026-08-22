@@ -1,1 +1,1 @@
-http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}
+https://atmosphere-production.up.railway.app
