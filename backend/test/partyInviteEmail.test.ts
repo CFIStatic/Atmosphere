@@ -43,6 +43,8 @@ test('an existing account gets sign-in; a missing one gets create-with-this-addr
   const has = partyInviteEmail(base).text;
   assert.ok(has.includes('You already have an Atmosphere account'));
   assert.ok(has.includes('Sign in with that exact email'));
+  assert.ok(has.includes('not the office job list'));
+  assert.ok(!has.includes('My jobs'));
   assert.ok(!has.includes('Create a free account with that exact address'));
 
   const not = partyInviteEmail({ ...base, recipientHasAccount: false });

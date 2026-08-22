@@ -25,12 +25,15 @@ export function ClaimInvitationPanel({
   company,
   onClaimed,
   initialContact = '',
+  returnTo,
 }: {
   token: string;
   company: string;
   onClaimed: (session: string) => void;
   /** Prefill from the invite email query string. */
   initialContact?: string;
+  /** After creating an account, come back to this job — not the office list. */
+  returnTo?: string;
 }) {
   const seeded = initialContact.trim();
   const looksLikeEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(seeded);
@@ -43,9 +46,10 @@ export function ClaimInvitationPanel({
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const signupLink = looksLikeEmail
-    ? signupHref({ email: seeded.toLowerCase() })
-    : signupHref();
+  const signupLink = signupHref({
+    email: looksLikeEmail ? seeded.toLowerCase() : undefined,
+    next: returnTo,
+  });
 
   async function sendCode() {
     setBusy(true);

@@ -285,8 +285,11 @@ export default function App() {
           {/* The subcontractor's screen. Outside every guard by construction:
               they work for six general contractors and have an account with
               none of them, and a shared job record that requires signing in is
-              not shared. The token in the path is the whole credential. */}
-          <Route path="/shared/:token" element={<JobSharePage />} />
+              not shared. The token in the path is the whole credential.
+              `/*` keeps legacy base64 tokens that contain `/` on this page
+              instead of the catch-all, which would dump a signed-in office
+              user onto their jobs dashboard. */}
+          <Route path="/shared/:token/*" element={<JobSharePage />} />
 
           {/* The same person, one level up. A sub who has proved they control
               a phone or an inbox gets every job across every general

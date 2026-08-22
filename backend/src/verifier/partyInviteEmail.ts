@@ -5,11 +5,11 @@
  * The org is named in the body so the recipient knows who the job is for.
  *
  * Two audiences, one address:
- *   - Has an Atmosphere account → sign in; job is waiting.
+ *   - Has an Atmosphere account → sign in if asked; stay on this job.
  *   - Does not → create a free account with this exact address.
  *
- * The capture link opens without a login; the account fork is about keeping
- * every job in one place after.
+ * The capture link opens the invited job (scope, accept, film) without a
+ * login. It must not dump a signed-in office user onto their jobs dashboard.
  */
 
 export function partyInviteEmail(input: {
@@ -58,7 +58,7 @@ export function partyInviteEmail(input: {
   if (input.recipientHasAccount) {
     textLines.push(
       `You already have an Atmosphere account as ${input.recipientEmail}.`,
-      'Sign in with that exact email after you open the link — the job shows under My jobs.',
+      'Sign in with that exact email if the page asks — you stay on this job (scope, accept, and film), not the office job list.',
     );
   } else {
     textLines.push(
@@ -94,8 +94,8 @@ export function partyInviteEmail(input: {
     ? `<p style="margin:16px 0 0;font-size:15px;line-height:1.5;color:#3f3a34;">
          You already have an Atmosphere account as
          <strong>${escapeHtml(input.recipientEmail)}</strong>.
-         Sign in with that email after you open the link — the job shows under
-         <strong>My jobs</strong>.
+         Sign in with that email if the page asks — you stay on this job
+         (scope, accept, and film), not the office job list.
        </p>`
     : `<p style="margin:16px 0 0;font-size:15px;line-height:1.5;color:#3f3a34;">
          There is no Atmosphere account for

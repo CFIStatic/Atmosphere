@@ -12,6 +12,7 @@
  */
 import { DEMO_ESTIMATE, DEMO_ESTIMATE_SOURCES, DEMO_ESTIMATE_TAKEOFF } from './demoEstimate';
 import { isLiveFirstPath } from './liveFirst';
+import { jobSharePagePath } from '../lib/jobSharePath';
 import type {
   AgentMemory,
   Escalation,
@@ -2619,13 +2620,12 @@ const routes: Array<[string, RegExp, Handler]> = [
         const email = person.email ? String(person.email).toLowerCase() : null;
         const external = Boolean(person.external || !person.userId);
         const name = String(person.company || person.fullName || 'Field Capture');
-        const emailParam = email ? `?email=${encodeURIComponent(email)}` : '';
         return {
           id: `party-${token}`,
           name,
           email,
           token,
-          sharePath: `/shared/${token}${emailParam}`,
+          sharePath: jobSharePagePath(token, email),
           fieldCapturePath: `/fieldcapture/index.html?token=${encodeURIComponent(token)}`,
           external,
           emailed: Boolean(email),

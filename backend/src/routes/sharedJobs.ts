@@ -14,6 +14,7 @@ import {
   type ScopeItem,
 } from '../shared/jobRecord.js';
 import { buildCaptureGuide } from '../shared/captureGuide.js';
+import { jobShareActionPattern, jobSharePagePath, readJobShareToken } from '../lib/jobSharePath.js';
 import {
   createUploadUrl,
   recordProof,
@@ -61,6 +62,13 @@ const shareLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many requests.', code: 'rate_limited' },
 });
+
+/** Put a (possibly slash-containing) token on req.params.token. */
+function attachShareToken(req: Request, _res: Response, next: NextFunction) {
+  const token = readJobShareToken(req.params as Record<string, string | undefined>);
+  if (token) req.params.token = token;
+  next();
+}
 
 const PARTY_SELECT =
   'id, company, trade, contact_name, email, phone, role, invited_at, last_seen_at, revoked_at, created_at';
@@ -335,7 +343,7 @@ sharedJobsRouter.get(
 
       res.json({
         company: (data as any).company,
-        path: `/shared/${(data as any).access_token}`,
+        path: jobSharePagePath((data as any).access_token),
       });
     } catch (err) {
       next(err);
@@ -592,8 +600,9 @@ async function partyForToken(token: string) {
  * on the token so the crew reads it on the same screen they film from.
  */
 jobShareRouter.get(
-  '/:token/capture-guide',
+  jobShareActionPattern('/capture-guide'),
   shareLimiter,
+  attachShareToken,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const phase = req.query.phase === 'after' ? 'after' : 'before';
@@ -618,51 +627,11 @@ jobShareRouter.get(
   },
 );
 
-/** GET /api/job-share/:token — the sub's view of the job. */
-jobShareRouter.get('/:token', shareLimiter, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { party, admin } = await partyForToken(req.params.token);
-    const record = await loadRecord(admin, party.org_id, party.job_id);
-    if (!record.job) throw new HttpError(404, 'This job no longer exists.', 'job_not_found');
-
-    const currentRevision = record.briefs[0]?.revision ?? null;
-    const mine = record.acks
-      .filter((a) => a.party_id === party.id)
-      .reduce((best: number | null, a) => (best === null || a.revision > best ? a.revision : best), null);
-
-    res.json({
-      you: { company: party.company, trade: party.trade, role: party.role },
-      job: {
-        jobNumber: record.job.job_number,
-        title: record.job.title,
-        claimNumber: record.job.claim_number,
-        scheduledStart: record.job.scheduled_start,
-      },
-      brief: record.briefs[0] ?? null,
-      currentRevision,
-      acknowledgedRevision: mine,
-      ...clearToWork({
-        party,
-        scope: record.scope,
-        acknowledgedRevision: mine,
-        currentRevision,
-      }),
-      // Exclusions first. Whoever reads this is reading it on a phone, and the
-      // top of the screen is where they stop.
-      scope: scopeForParty(record.scope, party.id),
-      // Only what they can see: their own lines and the shared ones. Another
-      // sub's pricing is none of their business.
-      messages: record.messages.filter((m) => !m.party_id || m.party_id === party.id),
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
 /** POST /api/job-share/:token/accept — accept the current revision. */
 jobShareRouter.post(
-  '/:token/accept',
+  jobShareActionPattern('/accept'),
   shareLimiter,
+  attachShareToken,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { party, admin } = await partyForToken(req.params.token);
@@ -718,8 +687,9 @@ jobShareRouter.post(
  * pick up does the work and argues about it later.
  */
 jobShareRouter.post(
-  '/:token/ask',
+  jobShareActionPattern('/ask'),
   shareLimiter,
+  attachShareToken,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { party, admin } = await partyForToken(req.params.token);
@@ -845,8 +815,9 @@ sharedJobsRouter.post('/shared/:jobId/evidence/:proofId/hold', setEvidenceHold);
  * knows about how it was filmed.
  */
 jobShareRouter.post(
-  '/:token/proof/upload-url',
+  jobShareActionPattern('/proof/upload-url'),
   shareLimiter,
+  attachShareToken,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { party, admin } = await partyForToken(req.params.token);
@@ -858,8 +829,9 @@ jobShareRouter.post(
 );
 
 jobShareRouter.post(
-  '/:token/proof',
+  jobShareActionPattern('/proof'),
   shareLimiter,
+  attachShareToken,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { party, admin } = await partyForToken(req.params.token);
@@ -871,12 +843,64 @@ jobShareRouter.post(
 );
 
 jobShareRouter.get(
-  '/:token/proof',
+  jobShareActionPattern('/proof'),
   shareLimiter,
+  attachShareToken,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { party, admin } = await partyForToken(req.params.token);
       res.json(await listPartyProofs(party, admin));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * GET /api/job-share/:token — the sub's view of the job.
+ *
+ * Registered last among GETs: the pattern is a greedy capture and would
+ * otherwise swallow /proof and /capture-guide.
+ */
+jobShareRouter.get(
+  jobShareActionPattern(),
+  shareLimiter,
+  attachShareToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { party, admin } = await partyForToken(req.params.token);
+      const record = await loadRecord(admin, party.org_id, party.job_id);
+      if (!record.job) throw new HttpError(404, 'This job no longer exists.', 'job_not_found');
+
+      const currentRevision = record.briefs[0]?.revision ?? null;
+      const mine = record.acks
+        .filter((a) => a.party_id === party.id)
+        .reduce((best: number | null, a) => (best === null || a.revision > best ? a.revision : best), null);
+
+      res.json({
+        you: { company: party.company, trade: party.trade, role: party.role },
+        job: {
+          jobNumber: record.job.job_number,
+          title: record.job.title,
+          claimNumber: record.job.claim_number,
+          scheduledStart: record.job.scheduled_start,
+        },
+        brief: record.briefs[0] ?? null,
+        currentRevision,
+        acknowledgedRevision: mine,
+        ...clearToWork({
+          party,
+          scope: record.scope,
+          acknowledgedRevision: mine,
+          currentRevision,
+        }),
+        // Exclusions first. Whoever reads this is reading it on a phone, and the
+        // top of the screen is where they stop.
+        scope: scopeForParty(record.scope, party.id),
+        // Only what they can see: their own lines and the shared ones. Another
+        // sub's pricing is none of their business.
+        messages: record.messages.filter((m) => !m.party_id || m.party_id === party.id),
+      });
     } catch (err) {
       next(err);
     }
