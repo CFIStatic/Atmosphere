@@ -209,7 +209,7 @@ Health probe: `GET https://<app-host>/healthz` → `ok`. The SPA is `/`; Field C
 | GitHub Actions variable `WEBSITE_APP_ORIGIN` | `https://app.atmosphereteam.com` — marketing Sign in / Get started CTAs (see `website/README.md`) |
 | GitHub Actions variable `WEBSITE_API_ORIGIN` | Backend’s public https origin — careers/contact forms on Pages |
 | GitHub Actions variable `FRONTEND_ORIGIN` | Same as backend `FRONTEND_ORIGIN` (synced onto Railway by the deploy job) |
-| Supabase → Auth → URL configuration | Add the app origin; password-reset redirect `{origin}/reset-password` |
+| Supabase → Auth → URL configuration | Site URL = live office origin (never `http://localhost:3000`). Also allow `{origin}/reset-password`. Recovery mail is sent by Atmosphere with a `token_hash` link, so a leftover localhost Site URL cannot hijack the click. |
 | Stripe webhooks | Still `POST https://<backend-public-host>/api/webhooks/stripe` (not the app host) |
 
 Invite emails use the first origin in `FRONTEND_ORIGIN`, so put the public `https://` app URL first.
@@ -226,7 +226,11 @@ docker compose up --build
 
 1. Dedicated **production** project (never the shared demo URL from `.env.example`).
 2. Apply migrations — see [Migration apply order](#migration-apply-order).
-3. Auth → URL configuration: add the production frontend origin and password-reset redirect.
+3. Auth → URL configuration: set Site URL to the live office origin (not
+   `http://localhost:3000`) and allow `{origin}/reset-password`. Atmosphere
+   mails recovery links itself (`token_hash` on `/reset-password`) as
+   Atmosphere, never as Supabase Auth. The dashboard values are unused for
+   this flow.
 4. Storage: ensure `job-proofs` exists (migration
    `20260815180000_job_proofs_storage_bucket.sql`) with an appropriate size cap.
 5. Store `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` only

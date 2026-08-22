@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import { initPreferences } from './lib/preferences';
+import { consumeRecoveryRedirect } from './lib/recoveryLink';
 import { initPlatform } from './lib/usePlatform';
 import './index.css';
 
@@ -9,6 +10,9 @@ import './index.css';
 // animation they asked us to suppress.
 initPreferences();
 initPlatform();
+// Stock recovery emails land on `/#access_token=…&type=recovery`. Move them
+// onto /reset-password before the router sends `/` to the dashboard.
+consumeRecoveryRedirect();
 
 async function boot() {
   // Demo builds answer every /api call in-page; the interceptor must be

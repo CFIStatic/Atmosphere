@@ -33,6 +33,7 @@ import {
   sessionTokens,
   signInPasswordAccount,
 } from '../auth/passwordAccount.js';
+import { sendPasswordReset } from '../auth/sendPasswordReset.js';
 
 export const authRouter = Router();
 
@@ -220,9 +221,10 @@ const recoveryLimiter = rateLimit({
 
 /**
  * POST /api/auth/forgot-password
- * Sends a recovery email. Always answers with the same body whether or not the
- * address is registered — anything else turns this into an oracle for
- * enumerating which of a company's emails have accounts.
+ * Emails an Atmosphere-branded recovery link (platform SMTP / Resend).
+ * Atmosphere mints a token_hash so the click opens the live office
+ * /reset-password page — not Supabase Auth and not Site URL (localhost:3000).
+ * Always answers with the same body whether or not the address is registered.
  */
 authRouter.post(
   '/forgot-password',
@@ -230,17 +232,7 @@ authRouter.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { email } = forgotPasswordSchema.parse(req.body);
-      const supabase = createAnonClient();
-
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: config.passwordResetRedirectUrl,
-      });
-
-      if (error) {
-        // Logged for operators, never surfaced to the caller.
-
-        console.warn('[forgot-password] supabase error:', error.status, error.message);
-      }
+      await sendPasswordReset(email);
 
       res.json({
         ok: true,
