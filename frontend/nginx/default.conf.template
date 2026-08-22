@@ -47,6 +47,20 @@ server {
     try_files $uri $uri/ /verifier/index.html;
   }
 
+  # Chrome / iOS will not treat Field Capture as an installable app if the
+  # manifest is served as application/octet-stream (nginx's default).
+  location ~* \.webmanifest$ {
+    default_type application/manifest+json;
+    add_header Cache-Control "no-cache";
+    add_header X-Content-Type-Options nosniff always;
+  }
+
+  location = /fieldcapture/sw.js {
+    add_header Cache-Control "no-cache";
+    add_header Service-Worker-Allowed "/fieldcapture/";
+    add_header X-Content-Type-Options nosniff always;
+  }
+
   location /fieldcapture/ {
     try_files $uri $uri/ /fieldcapture/index.html;
   }

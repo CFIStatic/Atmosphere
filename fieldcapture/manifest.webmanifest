@@ -1,10 +1,12 @@
 {
+  "id": "/fieldcapture/",
   "name": "Atmosphere Field Capture",
   "short_name": "Field Capture",
   "description": "One button. Film the day. Upload the proof.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#FBFAF7",
   "theme_color": "#BC4508",
   "icons": [

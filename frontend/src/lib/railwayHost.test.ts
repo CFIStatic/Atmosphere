@@ -31,6 +31,8 @@ describe('Railway office-app image', () => {
     expect(nginx).toContain('add_header Cache-Control "no-store"');
     expect(nginx).toContain('location /verifier/');
     expect(nginx).toContain('location /fieldcapture/');
+    expect(nginx).toContain('application/manifest+json');
+    expect(nginx).toContain('location = /fieldcapture/sw.js');
     expect(nginx).toContain('location = /healthz');
   });
 

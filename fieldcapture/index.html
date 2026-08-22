@@ -9,8 +9,10 @@
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-title" content="Field Capture" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <link rel="manifest" href="manifest.webmanifest" />
 <link rel="apple-touch-icon" href="icons/atmosphere-180.png" />
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
 <script>
   (function () {
     try {
@@ -306,6 +308,37 @@
 
   .foot { padding: 10px 18px 20px; font-size: 11px; color: var(--faint); line-height: 1.6; }
 
+  .hostchip {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-top: 8px; padding: 4px 9px; border-radius: 999px;
+    background: var(--pass-soft); color: var(--pass);
+    font-family: var(--mono); font-size: 10.5px; font-weight: 650;
+  }
+  .hostchip[data-state="checking"], .hostchip[data-state="off"] {
+    background: var(--warn-soft); color: var(--warn);
+  }
+  .hostchip[data-state="fail"] {
+    background: var(--fail-soft); color: var(--fail);
+  }
+  .who .hostchip { display: flex; margin-top: 4px; margin-left: auto; }
+
+  .install {
+    margin: 12px 18px 0; padding: 14px 15px;
+    border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+  }
+  .install b { display: block; font-size: 14px; font-weight: 700; letter-spacing: -0.01em; }
+  .install p { font-size: 13px; color: var(--ink-2); margin-top: 6px; line-height: 1.45; }
+  .install .row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .install button {
+    border: 0; border-radius: 10px; padding: 10px 14px;
+    font-size: 13px; font-weight: 700;
+  }
+  .install .go { background: var(--accent); color: #fff; }
+  .install .skip { background: var(--line-soft); color: var(--ink-2); }
+  @media (display-mode: standalone) {
+    .install { display: none !important; }
+  }
+
   /* Property twin — App Store Field measures while filming; office gets the 3D model. */
   .twin {
     margin-top: 18px; padding: 14px 15px;
@@ -494,6 +527,20 @@
     </span>
     <span class="who" id="who-line" hidden></span>
   </div>
+  <div class="pad" id="host-bar" style="padding-top:8px;padding-bottom:0">
+    <span class="hostchip" id="host-chip" data-state="checking">Checking the hosted office…</span>
+  </div>
+  <div class="install" id="install-sheet" hidden>
+    <b>Use Field Capture as an app</b>
+    <p id="install-copy">
+      Add it to your home screen. Camera, microphone, and uploads go to the hosted
+      Atmosphere office — the same place the dashboard is already running.
+    </p>
+    <div class="row">
+      <button type="button" class="go" id="install-btn" hidden>Install</button>
+      <button type="button" class="skip" id="install-dismiss">Continue in this browser</button>
+    </div>
+  </div>
 
   <!-- ================= HOME: before the day starts ================= -->
   <div class="screen" id="s-home" data-on="1">
@@ -637,7 +684,8 @@
   </div>
 </div>
 
+<script src="js/host.js"></script>
 <script src="js/capture-core.js"></script>
-<script src="js/app.js?v=elevate13"></script>
+<script src="js/app.js?v=hosted1"></script>
 </body>
 </html>

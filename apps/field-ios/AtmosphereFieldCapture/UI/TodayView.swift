@@ -133,6 +133,10 @@ struct TodayView: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(FieldTheme.muted)
                     .lineLimit(1)
+                Text("Talks to \(ApiConfig.displayHost())")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(FieldTheme.faint)
+                    .lineLimit(1)
             }
             Spacer()
             Menu {
