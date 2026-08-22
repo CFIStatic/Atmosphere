@@ -85,9 +85,8 @@
   }
 
   /* Follow the console's stored preference when present; otherwise the OS.
-     There is no toggle here on purpose — this page is often opened from a
-     share link — but it must not disagree with an explicit Dark/Light choice
-     made in the workspace. */
+     The top-bar toggle writes the same keys as the workspace and marketing
+     site so a choice here sticks everywhere on this origin. */
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #141311;
@@ -198,6 +197,27 @@
   .search svg { position: absolute; left: 9px; top: 10px; color: var(--faint); }
 
   .topbar .spacer { flex: 1; }
+  /* Moon in light (switch to dark), sun in dark (switch to light) — same
+     destination-icon rule as the console header and the marketing site. */
+  .theme-toggle {
+    width: 32px; height: 32px; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: transparent; border: 1px solid var(--line); border-radius: 50%;
+    color: var(--ink-2); cursor: pointer; padding: 0;
+    transition: color .15s ease, border-color .15s ease, background .15s ease;
+  }
+  .theme-toggle:hover {
+    color: var(--ink); border-color: var(--muted); background: var(--line-soft);
+  }
+  .theme-toggle:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+  .theme-toggle svg { display: none; }
+  .theme-toggle .icon-moon { display: block; }
+  :root[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+  :root[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+  :root[data-theme="light"] .theme-toggle .icon-moon { display: block; }
+  :root[data-theme="light"] .theme-toggle .icon-sun { display: none; }
   .who-wrap { position: relative; }
   .who {
     display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--ink-2);
@@ -838,6 +858,10 @@
     <input id="q" type="search" placeholder="Search videos by job, company, ID, or hash" aria-label="Search videos" />
   </div>
   <div class="spacer"></div>
+  <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark mode" title="Light mode. Click for dark.">
+    <svg class="icon-moon" width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+    <svg class="icon-sun" width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="3.2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v1.8M8 13.2V15M15 8h-1.8M2.8 8H1M12.95 3.05l-1.27 1.27M4.32 11.68l-1.27 1.27M12.95 12.95l-1.27-1.27M4.32 4.32 3.05 3.05" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+  </button>
   <div class="who-wrap" id="who-wrap">
     <button type="button" class="who" id="who-btn" aria-haspopup="menu" aria-expanded="false">
       <div>
@@ -2978,6 +3002,103 @@
     new URLSearchParams(location.search).get('rail') === '1';
   if (RAIL_ONLY) document.body.setAttribute('data-atm-rail-only', '1');
 
+  /* Light ↔ dark. Same keys as the React console and the marketing site so a
+     tap here is visible everywhere on this origin. */
+  var THEME_KEY = 'atmosphere.theme';
+  var PREFS_KEY = 'atmosphere.preferences';
+  var LEGACY_THEME_KEY = 'atm-theme';
+
+  function osTheme() {
+    try {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    } catch (e) {
+      return 'dark';
+    }
+  }
+
+  function coerceTheme(p) {
+    if (p === 'light' || p === 'dark') return p;
+    return osTheme();
+  }
+
+  function readThemePref() {
+    try {
+      var stored = localStorage.getItem(THEME_KEY);
+      if (stored === 'light' || stored === 'dark' || stored === 'system') return coerceTheme(stored);
+      try {
+        var prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
+        if (prefs.theme === 'light' || prefs.theme === 'dark' || prefs.theme === 'system') {
+          return coerceTheme(prefs.theme);
+        }
+      } catch (e) { /* ignore */ }
+      stored = localStorage.getItem(LEGACY_THEME_KEY);
+      if (stored === 'light' || stored === 'dark') return stored;
+    } catch (e) { /* private mode */ }
+    return osTheme();
+  }
+
+  function persistThemePref(pref) {
+    pref = coerceTheme(pref);
+    try {
+      localStorage.setItem(THEME_KEY, pref);
+      var prefs = {};
+      try { prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}') || {}; } catch (e) { prefs = {}; }
+      prefs.theme = pref;
+      localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+      localStorage.setItem(LEGACY_THEME_KEY, pref);
+    } catch (e) { /* private mode */ }
+    return pref;
+  }
+
+  function applyThemePref(pref) {
+    pref = coerceTheme(pref);
+    document.documentElement.setAttribute('data-theme', pref);
+    document.documentElement.setAttribute('data-theme-preference', pref);
+    return pref;
+  }
+
+  function themeLabel(pref) {
+    return pref === 'light' ? 'Light' : 'Dark';
+  }
+
+  function labelThemeToggle(toggle, pref) {
+    var next = pref === 'dark' ? 'light' : 'dark';
+    toggle.setAttribute('aria-label', 'Switch to ' + next + ' mode');
+    toggle.setAttribute('title', themeLabel(pref) + ' mode. Click for ' + next + '.');
+  }
+
+  function setThemePref(pref, opts) {
+    pref = persistThemePref(pref);
+    applyThemePref(pref);
+    var toggle = document.getElementById('theme-toggle');
+    if (toggle) labelThemeToggle(toggle, pref);
+    if (EMBEDDED && !(opts && opts.fromParent)) {
+      window.parent.postMessage({ atmosphere: 'theme', preference: pref }, '*');
+    }
+    return pref;
+  }
+
+  function initThemeToggle() {
+    var toggle = document.getElementById('theme-toggle');
+    var pref = readThemePref();
+    persistThemePref(pref);
+    applyThemePref(pref);
+    if (toggle) {
+      labelThemeToggle(toggle, pref);
+      toggle.addEventListener('click', function () {
+        setThemePref(readThemePref() === 'dark' ? 'light' : 'dark');
+      });
+    }
+    window.addEventListener('storage', function (event) {
+      if (event.key !== THEME_KEY && event.key !== PREFS_KEY && event.key !== LEGACY_THEME_KEY) return;
+      var next = readThemePref();
+      applyThemePref(next);
+      if (toggle) labelThemeToggle(toggle, next);
+    });
+  }
+
+  initThemeToggle();
+
   var activeRoute = '/verifier-library';
   // Which rail row owns the orange overlay. Dashboard and the Videos filters
   // share /verifier-library in the shell, so route alone cannot tell them apart
@@ -3201,6 +3322,7 @@
     if (d && d.atmosphere === 'session') applySession(d);
     if (d && d.atmosphere === 'active-route') setActiveRoute(d.path);
     if (d && d.atmosphere === 'layout') setRailOnly(!!d.railOnly);
+    if (d && d.atmosphere === 'theme') setThemePref(d.preference, { fromParent: true });
   });
 
   var appFrame = document.getElementById('app-frame');

@@ -4,6 +4,8 @@ import { SpinnerIcon } from './icons';
 import { useAuth } from '../context/AuthContext';
 import { ROLE_LABELS } from '../lib/api';
 import { displayName, initials, nameFromMetadata } from '../lib/display';
+import { usePreferences } from '../lib/preferences';
+import { isThemePreference, setThemePreference } from '../lib/theme';
 
 /**
  * The Verifier portal iframe — one persistent instance per operations shell.
@@ -21,6 +23,7 @@ export function VerifierFrame({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { theme } = usePreferences();
   const { user, profile, membership, logout } = useAuth();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [srcDoc, setSrcDoc] = useState<string | null>(null);
@@ -62,16 +65,25 @@ export function VerifierFrame({
   const syncFrame = useCallback(() => {
     postToFrame({ atmosphere: 'layout', railOnly });
     postToFrame({ atmosphere: 'active-route', path: location.pathname });
+    postToFrame({ atmosphere: 'theme', preference: theme });
     postSession();
-  }, [location.pathname, postSession, postToFrame, railOnly]);
+  }, [location.pathname, postSession, postToFrame, railOnly, theme]);
 
   useLayoutEffect(() => {
     if (frameReady) syncFrame();
   }, [frameReady, syncFrame]);
 
   useEffect(() => {
+    if (frameReady) postToFrame({ atmosphere: 'theme', preference: theme });
+  }, [frameReady, postToFrame, theme]);
+
+  useEffect(() => {
     function onMessage(event: MessageEvent) {
-      const data = event.data as { atmosphere?: string; to?: string } | null;
+      const data = event.data as {
+        atmosphere?: string;
+        to?: string;
+        preference?: unknown;
+      } | null;
       if (!data?.atmosphere) return;
 
       if (data.atmosphere === 'navigate' && typeof data.to === 'string') {
@@ -84,6 +96,10 @@ export function VerifierFrame({
       }
       if (data.atmosphere === 'sign-out') {
         void logout().then(() => navigate('/login', { replace: true }));
+        return;
+      }
+      if (data.atmosphere === 'theme' && isThemePreference(data.preference)) {
+        setThemePreference(data.preference);
       }
     }
     window.addEventListener('message', onMessage);
