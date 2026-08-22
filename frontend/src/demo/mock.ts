@@ -3885,8 +3885,13 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
         } catch {
           /* not JSON */
         }
+        return live;
       }
-      return live;
+      // A live 401/403 on the avatar means this browser is not the signed-in
+      // tenant. Fall through so the demo Settings page can still store a photo.
+      if (!(path === '/api/profile/avatar' && (live.status === 401 || live.status === 403))) {
+        return live;
+      }
     } catch {
       /* live API unreachable — fall through to demo fixtures */
     }
