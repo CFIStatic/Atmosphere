@@ -3,13 +3,17 @@ import assert from 'node:assert/strict';
 import { createApp } from '../src/app.js';
 import { classifyRequest } from '../src/legal/classify.js';
 import {
+  buildOfficeJobLegalPortal,
+  buildStaffJobLegalPortal,
   canPurgeBytes,
   createLegalHold,
   getLegalHold,
   listLegalHolds,
   listUserActivity,
+  openJobLegalHold,
   produceHold,
   recordUserAction,
+  releaseJobLegalHold,
   releaseLegalHold,
   resetLegalStoreForTests,
   vaultFromMediaObject,
@@ -204,6 +208,68 @@ test('a hold must name a subject and a release must name a reason', async () => 
     () => releaseLegalHold(hold.id, { reason: '   ' }),
     (e: unknown) => e instanceof HttpError && e.code === 'reason_required',
   );
+});
+
+test('a job legal-hold portal freezes the job and still lists a deleted clip for staff', async () => {
+  resetLegalStoreForTests();
+  resetMediaCatalogForTests();
+
+  const { session } = await beginMediaUpload({
+    orgId: ORG,
+    kind: 'field_day_video',
+    contentType: 'video/mp4',
+    durationSeconds: 45,
+    byteSize: 800,
+    driver: new MemoryMediaStorage(),
+  });
+  const ready = await completeMediaUpload({
+    orgId: ORG,
+    sessionId: session.id,
+    byteSize: 800,
+    contentHash: 'jobhold123456',
+  });
+  await vaultFromMediaObject(ready, { jobId: JOB, actorUserId: USER });
+  await softDeleteMedia(ready.id, ORG, USER);
+  await markSourceDeleted('media_object', ready.id);
+
+  const hold = await openJobLegalHold({
+    orgId: ORG,
+    jobId: JOB,
+    jobTitle: '14 Aug drywall',
+    kind: 'lawsuit',
+    reason: 'Complaint filed — preserve the job file.',
+    createdBy: USER,
+  });
+  assert.equal(hold.subjects[0].subjectType, 'job');
+  assert.equal(hold.subjects[0].subjectId, JOB);
+
+  const office = await buildOfficeJobLegalPortal({
+    orgId: ORG,
+    jobId: JOB,
+    jobTitle: '14 Aug drywall',
+    clips: [],
+  });
+  assert.equal(office.counts.jobOnHold, true);
+  assert.equal(office.counts.userDeleted, 0);
+  assert.equal(office.hold?.id, hold.id);
+
+  const staff = await buildStaffJobLegalPortal({ orgId: ORG, jobId: JOB, jobTitle: '14 Aug drywall' });
+  assert.equal(staff.counts.userDeleted, 1);
+  assert.equal(staff.videos[0].sourceId, ready.id);
+
+  await assert.rejects(
+    () =>
+      openJobLegalHold({
+        orgId: ORG,
+        jobId: JOB,
+        kind: 'subpoena',
+        reason: 'Second hold',
+      }),
+    (e: unknown) => e instanceof HttpError && e.code === 'job_already_on_hold',
+  );
+
+  const released = await releaseJobLegalHold(JOB, { releasedBy: USER, reason: 'Settled' });
+  assert.equal(released.status, 'released');
 });
 
 test('GET /api/legal/holds is 401 without a session', async () => {

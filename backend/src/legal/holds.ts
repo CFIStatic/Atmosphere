@@ -123,3 +123,22 @@ export function requireOpenHold(id: string): LegalHoldRecord {
   if (!record) throw new HttpError(404, 'Legal hold not found', 'legal_hold_not_found');
   return record;
 }
+
+export async function openHoldsForJob(jobId: string, orgId?: string | null): Promise<LegalHoldRecord[]> {
+  const holds = (await loadHolds()).filter((hold) => hold.status === 'open');
+  return holds.filter((hold) =>
+    hold.subjects.some(
+      (subject) =>
+        (subject.subjectType === 'job' && subject.subjectId === jobId) ||
+        (orgId != null && subject.subjectType === 'org' && subject.subjectId === orgId),
+    ),
+  );
+}
+
+export async function jobHasOpenHold(
+  jobId: string,
+  orgId?: string | null,
+): Promise<LegalHoldRecord | null> {
+  const holds = await openHoldsForJob(jobId, orgId);
+  return holds[0] ?? null;
+}

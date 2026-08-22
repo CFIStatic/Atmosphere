@@ -837,6 +837,41 @@ export interface CustodyEntry {
   occurred_at: string;
 }
 
+export type JobLegalHoldKind = 'subpoena' | 'lawsuit' | 'preservation' | 'investigation' | 'other';
+
+export interface JobLegalHold {
+  id: string;
+  caseNumber: string;
+  kind: JobLegalHoldKind;
+  title: string;
+  reason: string;
+  counselName: string | null;
+  status: 'open' | 'released';
+  createdAt: string;
+}
+
+export interface JobLegalClip {
+  id: string;
+  title: string | null;
+  workDate: string | null;
+  phase: string | null;
+  company: string | null;
+  legalHold: boolean;
+  userDeleted: boolean;
+  contentHash: string | null;
+  durationSeconds: number | null;
+  byteSize: number | null;
+  receivedAt: string | null;
+}
+
+export interface JobLegalHoldPortal {
+  job: { id: string; title: string | null; jobNumber: number | null; orgId: string };
+  hold: JobLegalHold | null;
+  holds: JobLegalHold[];
+  clips: JobLegalClip[];
+  counts: { clips: number; onHold: number; userDeleted: number; jobOnHold: boolean };
+}
+
 /** A share link scoped to one job — evidence library or progress dashboard. */
 export interface EvidenceShare {
   id: string;
@@ -3074,6 +3109,30 @@ export const api = {
     request<{ ok: boolean }>(`/api/operations/shared/${jobId}/evidence/${proofId}/hold`, {
       method: 'POST',
       body: JSON.stringify(input),
+    }),
+
+  jobLegalHold: (jobId: string) =>
+    request<JobLegalHoldPortal>(`/api/operations/shared/${jobId}/legal-hold`, { method: 'GET' }),
+
+  openJobLegalHold: (
+    jobId: string,
+    input: {
+      kind: JobLegalHoldKind;
+      reason: string;
+      caseNumber?: string;
+      title?: string;
+      counselName?: string;
+    },
+  ) =>
+    request<{ hold: JobLegalHold }>(`/api/operations/shared/${jobId}/legal-hold`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  releaseJobLegalHold: (jobId: string, reason: string) =>
+    request<{ hold: JobLegalHold }>(`/api/operations/shared/${jobId}/legal-hold/release`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
     }),
 
   evidenceShares: (jobId?: string, kind?: 'evidence' | 'progress') =>

@@ -11,6 +11,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { requireAnalytics } from '../middleware/requireAnalytics.js';
 import { badRequest } from '../lib/errors.js';
 import {
+  buildStaffJobLegalPortal,
   createLegalHold,
   getLegalHold,
   listLegalHolds,
@@ -155,6 +156,16 @@ legalRouter.get('/videos/:vaultId/url', async (req: Request, res: Response, next
       },
       expiresInSeconds: 600,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /api/legal/jobs/:jobId — staff job portal, including customer-deleted clips */
+legalRouter.get('/jobs/:jobId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const portal = await buildStaffJobLegalPortal({ jobId: String(req.params.jobId) });
+    res.json(portal);
   } catch (err) {
     next(err);
   }

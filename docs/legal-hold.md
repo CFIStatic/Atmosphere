@@ -41,6 +41,21 @@ Customers cannot. The legal tables enable RLS and grant nothing to `anon` or
 analytics scope as the accounts file (`requireAuth` +
 `requireAnalytics('internal')`). The BFF uses the service role.
 
+## Job portal
+
+The office job file has a Legal hold panel. Opening a hold freezes every
+clip on that job, and every clip that arrives while the hold is open.
+Customer delete still hides a file from the locker; staff open
+`/legal/jobs/:jobId` on the internal site (or `GET /api/legal/jobs/:jobId`)
+to produce it.
+
+| Method | Path | Who | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/operations/shared/:jobId/legal-hold` | Office | Job portal (visible clips only) |
+| POST | `/api/operations/shared/:jobId/legal-hold` | Office | Freeze the job |
+| POST | `/api/operations/shared/:jobId/legal-hold/release` | Office | Release with a reason |
+| GET | `/api/legal/jobs/:jobId` | Staff | Vault including customer-deleted clips |
+
 ## API
 
 | Method | Path | Purpose |

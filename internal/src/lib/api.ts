@@ -139,6 +139,8 @@ export const api = {
       body: JSON.stringify({ note }),
     }),
 
+  staffJobLegal: (jobId: string) => request<any>(`/api/legal/jobs/${jobId}`),
+
   legalActivity: (query?: { q?: string; orgId?: string; actorUserId?: string }) => {
     const params = new URLSearchParams();
     if (query?.q) params.set('q', query.q);

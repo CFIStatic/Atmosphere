@@ -41,7 +41,7 @@ import {
   persistProofActions,
   type VisionAction,
 } from '../shared/proofActions.js';
-import { markSourceDeleted, recordUserAction, vaultFromProof } from '../legal/index.js';
+import { applyOpenHoldToProof, markSourceDeleted, recordUserAction, vaultFromProof } from '../legal/index.js';
 
 /**
  * Proof of work: the endpoints.
@@ -307,6 +307,13 @@ export async function recordProof(party: any, admin: any, body: unknown) {
 
   void vaultFromProof(proof as any).catch((err) => {
     console.warn('[legal] vault proof failed:', err instanceof Error ? err.message : err);
+  });
+  void applyOpenHoldToProof({
+    orgId: party.org_id,
+    jobId: party.job_id,
+    proofId: (proof as any).id,
+  }).catch((err) => {
+    console.warn('[legal] apply job hold failed:', err instanceof Error ? err.message : err);
   });
   void recordUserAction({
     orgId: party.org_id,

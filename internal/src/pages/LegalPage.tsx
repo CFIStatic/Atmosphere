@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import type {
   LegalHold,
@@ -21,6 +22,8 @@ export function LegalPage() {
   const [query, setQuery] = useState('');
   const [production, setProduction] = useState<LegalProductionPackage | null>(null);
 
+  const navigate = useNavigate();
+  const [jobPortalId, setJobPortalId] = useState('');
   const [caseNumber, setCaseNumber] = useState('');
   const [kind, setKind] = useState<LegalHoldKind>('subpoena');
   const [title, setTitle] = useState('');
@@ -84,6 +87,28 @@ export function LegalPage() {
         <StatTile label="Released" value={String(counts.released)} />
         <StatTile label="Recent actions" value={String(events.length)} />
       </div>
+
+      <SectionHeading title="Job portal" hint="Staff view, including customer-deleted clips." />
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (jobPortalId.trim()) navigate(`/legal/jobs/${jobPortalId.trim()}`);
+        }}
+        className="mb-8 flex flex-wrap gap-2"
+      >
+        <input
+          value={jobPortalId}
+          onChange={(event) => setJobPortalId(event.target.value)}
+          placeholder="Job uuid"
+          className="w-full max-w-md rounded-lg border border-line-strong bg-paper-0 px-3 py-2 font-mono text-xs"
+        />
+        <button
+          type="submit"
+          className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
+        >
+          Open job
+        </button>
+      </form>
 
       <SectionHeading title="Open a hold" hint="Staff only. Needs at least one subject." />
       <form onSubmit={(event: FormEvent) => void onCreate(event)} className="grid gap-3 rounded-xl border border-line bg-paper-0 p-5 sm:grid-cols-2">

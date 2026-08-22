@@ -19,7 +19,17 @@ import type { LegalVaultEntry, VaultMediaInput } from './types.js';
 
 export async function vaultMedia(input: VaultMediaInput): Promise<LegalVaultEntry> {
   const existing = getVaultBySource(input.sourceKind, input.sourceId);
-  if (existing) return existing;
+  if (existing) {
+    if (!existing.jobId && input.jobId) {
+      existing.jobId = input.jobId;
+      try {
+        await persistVault(existing);
+      } catch (err) {
+        console.warn('[legal] vault job link failed:', err instanceof Error ? err.message : err);
+      }
+    }
+    return existing;
+  }
   const entry = createVaultEntry(input);
   try {
     await persistVault(entry);

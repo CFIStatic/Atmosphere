@@ -73,6 +73,27 @@ const RULES: Rule[] = [
     resourceParam: 2,
   },
   {
+    method: 'POST',
+    pattern: new RegExp(`^/api/operations/shared/(${UUID})/legal-hold/?$`),
+    action: 'legal.job_hold_opened',
+    resourceType: 'job',
+    resourceParam: 1,
+  },
+  {
+    method: 'POST',
+    pattern: new RegExp(`^/api/operations/shared/(${UUID})/legal-hold/release/?$`),
+    action: 'legal.job_hold_released',
+    resourceType: 'job',
+    resourceParam: 1,
+  },
+  {
+    method: 'GET',
+    pattern: new RegExp(`^/api/legal/jobs/(${UUID})/?$`),
+    action: 'legal.job_portal_viewed',
+    resourceType: 'job',
+    resourceParam: 1,
+  },
+  {
     method: 'GET',
     pattern: new RegExp(`^/api/operations/shared/proof/(${UUID})/video/?$`),
     action: 'video.viewed',
