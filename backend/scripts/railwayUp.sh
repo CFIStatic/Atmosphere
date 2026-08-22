@@ -59,8 +59,12 @@ while [ "$attempt" -le "$max_attempts" ]; do
   fi
   if [ "$status" -eq 0 ]; then
     if grep -qi 'no changes detected in watch paths' "$log"; then
-      echo "railway up skipped the image build (watch paths). Retrying with a new stamp instead of redeploying the previous replica."
-      status=1
+      if [ -n "${RAILWAY_UP_STAMP_FILE:-}" ]; then
+        echo "railway up skipped the image build (watch paths). Retrying with a new stamp."
+        status=1
+      else
+        echo "railway up skipped the image build (watch paths); no stamp file, treating as success."
+      fi
     fi
   fi
   if [ "$status" -eq 0 ]; then
