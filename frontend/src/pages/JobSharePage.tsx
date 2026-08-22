@@ -166,13 +166,6 @@ export function JobSharePage() {
         <h1 className="mt-1 text-2xl font-bold text-ink-900">
           {view?.job.title ?? 'Loading…'}
         </h1>
-        {view && (
-          <p className="mt-1 text-sm text-ink-600">
-            {view.you.company}
-            {view.you.trade ? ` · ${view.you.trade}` : ''}
-            {view.job.jobNumber !== null ? ` · job #${view.job.jobNumber}` : ''}
-          </p>
-        )}
       </header>
 
       {error && (
