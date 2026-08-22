@@ -15,9 +15,10 @@ ENV PORT=8080
 # https host: that hairpins /api out of the mesh and 502s the site's forms.
 ENV API_UPSTREAM=http://127.0.0.1:4000
 ENV APP_ORIGIN=https://atmosphere-web-production.up.railway.app
-ENV SITE_ORIGIN=https://atmosphere-website-production.up.railway.app
-# Keep the image filter anchored in case something other than website-start.sh
-# runs envsubst. Unanchored `PORT` matched Railway vars like `RAILWAY_*PORT*`.
+# Live Corporate Website hostname (Settings → Networking). The
+# atmosphere-website-production.up.railway.app name was never generated.
+ENV SITE_ORIGIN=https://website-production-7e3f.up.railway.app
+# Only substitute our knobs. Unanchored PORT matched Railway vars like RAILWAY_*PORT*.
 ENV NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM)$$
 
 COPY website/nginx/default.conf.template /etc/nginx/templates/default.conf.template
@@ -35,9 +36,12 @@ RUN rm -rf /usr/share/nginx/html/nginx /usr/share/nginx/html/Dockerfile \
       /usr/share/nginx/html/sitemap.xml /usr/share/nginx/html/robots.txt
 
 EXPOSE 8080
+# Docker HEALTHCHECK is exec-form — expand PORT at build time (8080). Railway
+# uses its own GET /health probe against $PORT, not this instruction.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD wget -qO- "http://127.0.0.1:$${PORT:-8080}/health" >/dev/null || exit 1
+  CMD wget -qO- http://127.0.0.1:8080/health >/dev/null || exit 1
 
-# Use website-start.sh so ${PORT} is substituted even when Railway replaces CMD.
-# Do not start Node.
-ENTRYPOINT ["/usr/local/bin/website-start.sh"]
+# Official nginx entrypoint (envsubst + IPv6). website-start.sh is kept as the
+# Railway startCommand so a leftover `node dist/index.js` cannot take over.
+ENTRYPOINT ["/docker-entrypoint.sh"]
+CMD ["nginx", "-g", "daemon off;"]

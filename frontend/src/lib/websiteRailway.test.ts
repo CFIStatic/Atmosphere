@@ -10,19 +10,23 @@ function read(rel: string) {
 }
 
 describe('Railway corporate-website image', () => {
-  it('starts nginx via its own entrypoint and never inherits node dist/index.js', () => {
+  it('starts nginx via the image entrypoint and never inherits node dist/index.js', () => {
     const dockerfile = read('website/Dockerfile');
-    expect(dockerfile).toContain('ENTRYPOINT ["/usr/local/bin/website-start.sh"]');
+    expect(dockerfile).toContain('ENTRYPOINT ["/docker-entrypoint.sh"]');
+    expect(dockerfile).toContain('CMD ["nginx", "-g", "daemon off;"]');
     expect(dockerfile).toContain('NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM)$$');
+    expect(dockerfile).toContain('SITE_ORIGIN=https://website-production-7e3f.up.railway.app');
+    expect(dockerfile).not.toContain('ENTRYPOINT ["/usr/local/bin/website-start.sh"]');
 
     const start = read('website/nginx/website-start.sh');
-    expect(start).toContain("envsubst '${PORT} ${API_UPSTREAM}'");
-    expect(start).toContain("exec nginx -g 'daemon off;'");
+    expect(start).toContain('exec /docker-entrypoint.sh nginx -g \'daemon off;\'');
+    expect(start).not.toContain('exec nginx -g');
   });
 
   it('answers platform health probes locally so a hung BFF cannot fail the deploy', () => {
     const nginx = read('website/nginx/default.conf.template');
-    expect(nginx).toContain('listen 0.0.0.0:${PORT}');
+    expect(nginx).toContain('listen ${PORT}');
+    expect(nginx).not.toContain('listen 0.0.0.0:${PORT}');
     expect(nginx).toContain('location = /health');
     expect(nginx).toContain('location = /healthz');
     expect(nginx).toContain('location = /api/health');
@@ -34,6 +38,7 @@ describe('Railway corporate-website image', () => {
     const toml = read('website/railway.toml');
     expect(toml).toContain('dockerfilePath = "website/Dockerfile"');
     expect(toml).toContain('healthcheckPath = "/health"');
+    expect(toml).toContain('healthcheckTimeout = 120');
     expect(toml).toContain('startCommand = "/usr/local/bin/website-start.sh"');
     expect(toml).toContain('website/**');
     expect(toml).not.toContain('healthcheckPath = "/api/health"');
@@ -45,6 +50,8 @@ describe('Railway corporate-website image', () => {
     expect(workflow).toContain('resolveRailwayService.mjs');
     expect(workflow).toContain('RAILWAY_WEBSITE_SERVICE');
     expect(workflow).toContain('website/scripts/apply-railway-config.sh');
+    expect(workflow).toContain('RAILWAY_UP_STAMP_FILE');
+    expect(workflow).toContain('website/.railway-up-stamp');
 
     const resolver = read('backend/scripts/resolveRailwayService.mjs');
     expect(resolver).toContain("website: ['corporate website', 'website']");
@@ -56,6 +63,7 @@ describe('Railway corporate-website image', () => {
     expect(script).toContain('website/Dockerfile');
     expect(script).toContain('/usr/local/bin/website-start.sh');
     expect(script).toContain("healthcheck_path=\"/health\"");
+    expect(script).toContain("healthcheck_timeout=\"120\"");
     expect(script).toContain('Corporate Website');
     expect(script).toContain('not node dist/index.js');
 
@@ -66,6 +74,12 @@ describe('Railway corporate-website image', () => {
     expect(json.build.dockerfilePath).toBe('website/Dockerfile');
     expect(json.deploy.healthcheckPath).toBe('/health');
     expect(json.deploy.startCommand).toBe('/usr/local/bin/website-start.sh');
-    expect(json.deploy.healthcheckTimeout).toBe(60);
+    expect(json.deploy.healthcheckTimeout).toBe(120);
+  });
+
+  it('does not treat in-window Railway probe retries as a finished failure', () => {
+    const up = read('backend/scripts/railwayUp.sh');
+    expect(up).toContain('Deployment failed|Healthcheck failed|healthcheck failure');
+    expect(up).not.toMatch(/grep -qi 'failed with service unavailable'/);
   });
 });

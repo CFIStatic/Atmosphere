@@ -62,6 +62,8 @@ jobs:
       - name: Migration inventory
         run: npm run check:migrations
         working-directory: backend
+      - name: Railway upload healthcheck matcher
+        run: bash backend/scripts/railwayUp.healthcheck.test.sh
 
   frontend:
     name: Frontend
@@ -175,7 +177,8 @@ jobs:
           docker run -d --name atmosphere-website-ci -e PORT=8080 -p 18080:8080 atmosphere-website:ci
           trap 'docker rm -f atmosphere-website-ci >/dev/null 2>&1 || true' EXIT
           sleep 2
-          curl -fsS http://127.0.0.1:18080/health
+          curl -fsS http://127.0.0.1:18080/health | grep -qx 'ok'
+          curl -fsS http://127.0.0.1:18080/api/health | grep -qx 'ok'
           curl -fsS http://127.0.0.1:18080/ | grep -q 'Atmosphere'
 
   docker-internal:
