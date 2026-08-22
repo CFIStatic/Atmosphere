@@ -122,13 +122,10 @@ export function AppShell({
                 {group.label}
               </p>
               <div className="space-y-0.5">
-                {group.items.map(({ to, label, Icon }) => {
-                  const tourTarget = to === '/intake' ? 'nav-start-job' : undefined;
-                  return (
+                {group.items.map(({ to, label, Icon }) => (
                   <NavLink
                     key={`${group.label}-${to}`}
                     to={to}
-                    data-tour={tourTarget}
                     onClick={() => setMobileOpen(false)}
                     className={({ isActive }) =>
                       `relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13.5px] font-medium transition-colors ${
@@ -146,8 +143,7 @@ export function AppShell({
                       </span>
                     )}
                   </NavLink>
-                  );
-                })}
+                ))}
               </div>
             </div>
           ))}

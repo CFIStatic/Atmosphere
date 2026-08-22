@@ -71,9 +71,9 @@ vi.mock('../lib/avatarImage', async () => {
 
 import { SettingsPage } from './SettingsPage';
 
-function renderSettings() {
+function renderSettings(path = '/settings') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[path]}>
       <SettingsPage />
     </MemoryRouter>,
   );
@@ -126,5 +126,17 @@ describe('Settings profile photo', () => {
     await user.upload(screen.getByLabelText('Upload a profile photo or icon'), file);
 
     expect(apiMocks.uploadAvatar).toHaveBeenCalled();
+  });
+});
+
+describe('Settings preferences', () => {
+  it('no longer offers a product walkthrough replay', () => {
+    renderSettings('/settings?section=preferences');
+
+    expect(screen.getByText('This device')).toBeInTheDocument();
+    expect(screen.getByText('Reduce motion')).toBeInTheDocument();
+    expect(screen.getByText('Appearance')).toBeInTheDocument();
+    expect(screen.queryByText('Product walkthrough')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Replay tour' })).toBeNull();
   });
 });
