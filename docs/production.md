@@ -248,7 +248,9 @@ Fix, in the repo (the deploy job applies this automatically):
 1. `office-start.sh` binds `0.0.0.0:$PORT` and starts nginx. Never Node.
 2. `GET /healthz`, `/health`, and `/api/health` are answered locally so a
    hung BFF cannot fail the replica.
-3. `frontend/scripts/apply-railway-config.sh` stamps those settings onto
+3. `office-start.sh` rejects `http://:` (empty Railway refs) so nginx can
+   still bind; `api.upstream` now points at `"Atmosphere APIs"`.
+4. `frontend/scripts/apply-railway-config.sh` stamps those settings onto
    the service so Autodeploy and CLI agree.
 
 One-time on the service if Autodeploy is still on: Settings →
