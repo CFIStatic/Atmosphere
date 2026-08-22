@@ -141,16 +141,12 @@ async function findOrg(admin: SupabaseClient, name: string) {
     (exact ?? [])[0];
   if (hit) return hit as { id: string; name: string; created_by: string | null };
 
-  const { data: fuzzy, error: fuzzyErr } = await admin
-    .from('orgs')
-    .select('id, name, created_by')
-    .ilike('name', `%${name.split(/\s+/)[0]}%`)
-    .limit(20);
-  if (fuzzyErr) throw new Error(fuzzyErr.message);
-  const names = (fuzzy ?? []).map((o) => `  · ${o.name} (${o.id})`).join('\n');
+  const { data: all, error: allErr } = await admin.from('orgs').select('id, name').limit(80);
+  if (allErr) throw new Error(allErr.message);
+  const names = (all ?? []).map((o) => `  · ${o.name} (${o.id})`).join('\n');
   fail(
     `No organization named "${name}".` +
-      (names ? `\nNearby names:\n${names}` : '\nNo similar organization names were found.'),
+      (names ? `\nOrganizations on this project:\n${names}` : '\nNo organizations were found.'),
   );
 }
 
@@ -225,7 +221,7 @@ async function ensureJob(
     throw new Error(jobError?.message ?? 'Could not create the testing job.');
   }
 
-  await admin.from('job_briefs').insert({
+  const { error: briefError } = await admin.from('job_briefs').insert({
     org_id: orgId,
     job_id: job.id,
     revision: 0,
@@ -233,8 +229,9 @@ async function ensureJob(
     note: opts.purpose,
     created_by: userId,
   });
+  if (briefError) console.warn(`  brief skipped: ${briefError.message}`);
 
-  await admin.from('job_scope_items').insert({
+  const { error: scopeError } = await admin.from('job_scope_items').insert({
     org_id: orgId,
     job_id: job.id,
     title: opts.purpose.slice(0, 200),
@@ -242,6 +239,7 @@ async function ensureJob(
     revision: 1,
     created_by: userId,
   });
+  if (scopeError) console.warn(`  scope skipped: ${scopeError.message}`);
 
   return {
     id: job.id as string,
