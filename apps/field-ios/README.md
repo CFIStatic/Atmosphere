@@ -63,20 +63,25 @@ Pick any iPhone simulator and press Run (⌘R).
    Capture** from the home screen.
 
 A Personal Team build expires after 7 days — Run from Xcode again to refresh.
-The phone signs in with the same email/password as the Atmosphere website.
-A physical iPhone never uses localhost; it talks to the hosted Atmosphere
-office app (`https://atmosphere-web-production.up.railway.app`), which
-proxies `/api` to the BFF. That filing path is what queues internal AI
-action-reading of the day film. Direct Supabase is only a fallback if the
-BFF cannot be reached. RoomPlan needs a LiDAR iPhone.
+On a **physical iPhone** the app always talks to the hosted Atmosphere office
+(`https://atmosphere-web-production.up.railway.app`) — Info.plist localhost is
+ignored. The header shows **Talks to atmosphere-web-production.up.railway.app**.
+That filing path queues internal AI action-reading of the day film. Direct
+Supabase is only a fallback if the BFF cannot be reached. RoomPlan needs a
+LiDAR iPhone.
 
-To use the **web** Field Capture on the phone instead (no Xcode):
+To use the **web** Field Capture as a home-screen app (no Xcode), open the
+hosted URL in Safari and Add to Home Screen:
+
+```text
+https://atmosphere-web-production.up.railway.app/fieldcapture/
+```
+
+To tunnel a local Vite copy instead:
 
 ```bash
 bash scripts/host-phone.sh
 ```
-
-Open the printed `/fieldcapture/` URL in Safari, then Share → Add to Home Screen.
 
 **Create an account or sign in** on first install (same email/password as the
 Atmosphere website). Link the phone to the office with the join code from

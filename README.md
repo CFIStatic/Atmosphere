@@ -187,21 +187,27 @@ Without `token`, live upload is refused (no invented demo day unless `demo=1`).
 
 ### Open on your phone
 
-The office console and Field Capture are installable on a phone (Safari → Share
-→ **Add to Home Screen**). They need HTTPS, so do not point the phone at
-`localhost`.
+The hosted office already serves Field Capture over HTTPS. Open this on the
+phone and install it as an app — that is the same backend the dashboard uses:
 
-With the API on `:4000` and the Vite app on `:5174`:
+```text
+https://atmosphere-web-production.up.railway.app/fieldcapture/
+```
+
+**iPhone:** Safari → Share → **Add to Home Screen**.  
+**Android:** Chrome menu → **Install app**.  
+A chip on the screen reads **Connected to atmosphere-web-production.up.railway.app**
+when the phone can reach the live API. `app.atmosphereteam.com` is not live yet.
+
+The native iPhone app (`apps/field-ios/`) also talks only to that hosted origin
+on a physical device. Xcode → Personal Team → Run on the iPhone. Simulator
+still uses a local BFF when one is running.
+
+To tunnel a **local** Vite app instead (`localhost` has no camera in Safari):
 
 ```bash
 bash scripts/host-phone.sh
 ```
-
-That prints two HTTPS URLs. Open **Field Capture** to film the day; open
-**Office** to sign in to the same account as the desktop app.
-
-The native iPhone app is `apps/field-ios/` — Xcode → your Personal Team → Run
-on the device. It talks to the Atmosphere project directly (not localhost).
 
 ### Verifier
 

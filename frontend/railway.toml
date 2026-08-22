@@ -1,14 +1,10 @@
 # Railway service config for the office app (console + Verifier + Field Capture).
 #
-# One-time on this service (Settings):
-#   Config File  = /frontend/railway.toml
-#   Root Directory = /   (repo root — the Dockerfile copies verifier/ and fieldcapture/)
+# Root Directory = /   (repo root — the Dockerfile copies verifier/ and fieldcapture/)
+# New services cannot set Config File. The deploy job applies these same
+# settings with frontend/scripts/apply-railway-config.sh.
 #
-# Runtime variable (Variables tab, not GitHub Keys):
-#   API_UPSTREAM=http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}
-#
-# Then generate a domain (or attach app.atmosphereteam.com) and put that origin
-# on the backend as FRONTEND_ORIGIN. See docs/production.md.
+# office-start.sh uses the public BFF on Railway (private mesh 504s from this nginx).
 
 [build]
 builder = "DOCKERFILE"
@@ -22,6 +18,8 @@ watchPatterns = [
 
 [deploy]
 healthcheckPath = "/healthz"
-healthcheckTimeout = 60
+healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5
+# Own entrypoint (envsubst of PORT). Never node dist/index.js.
+startCommand = "/usr/local/bin/office-start.sh"

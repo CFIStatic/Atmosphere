@@ -12,8 +12,12 @@
   var params = new URLSearchParams(location.search);
   var TOKEN = params.get('token') || params.get('share') || '';
   var FORCE_DEMO = params.get('demo') === '1';
-  var API_BASE = params.get('api') || '';
+  var Host = window.FieldCaptureHost || {};
+  var API_BASE =
+    (Host.resolveApiBase && Host.resolveApiBase(params.get('api') || '', location.href)) || '';
   var STORAGE_BASE = params.get('storage') || '';
+  var HOST_LABEL =
+    (Host.displayHost && Host.displayHost(location.href, API_BASE)) || location.host;
   var LIVE = Boolean(TOKEN) && !FORCE_DEMO;
   var DEMO = FORCE_DEMO || (!TOKEN && params.get('allowDemo') === '1');
   var ACCESS_KEY = 'atm.field.accessToken';
@@ -35,7 +39,91 @@
       var el = document.getElementById(s);
       if (el) el.setAttribute('data-on', s === id ? '1' : '0');
     });
+    var sheet = $('#install-sheet');
+    if (sheet && !sheet.hasAttribute('data-dismissed')) {
+      sheet.hidden = id === 's-rec' || id === 's-door' || isStandalone();
+    }
+    var bar = $('#host-bar');
+    if (bar) bar.hidden = id === 's-rec' || id === 's-door';
     window.scrollTo(0, 0);
+  }
+
+  function isStandalone() {
+    return Boolean(Host.isStandaloneDisplay && Host.isStandaloneDisplay());
+  }
+
+  function setHostChip(state, text) {
+    var el = $('#host-chip');
+    if (!el) return;
+    el.setAttribute('data-state', state || 'checking');
+    el.textContent = text || '';
+  }
+
+  function probeHostedOffice() {
+    var origin = API_BASE || location.origin;
+    setHostChip('checking', 'Checking ' + HOST_LABEL + '…');
+    return fetch(origin.replace(/\/$/, '') + '/api/health', {
+      credentials: 'include',
+      headers: { Accept: 'application/json, text/plain' },
+    })
+      .then(function (r) {
+        if (!r.ok) throw new Error('health ' + r.status);
+        setHostChip('ok', 'Connected to ' + HOST_LABEL);
+      })
+      .catch(function () {
+        setHostChip('fail', 'Cannot reach ' + HOST_LABEL);
+      });
+  }
+
+  function bindInstallSheet() {
+    var sheet = $('#install-sheet');
+    if (!sheet) return;
+    if (isStandalone()) {
+      sheet.hidden = true;
+      sheet.setAttribute('data-dismissed', '1');
+      return;
+    }
+    try {
+      if (sessionStorage.getItem('atm.field.installDismissed') === '1') {
+        sheet.hidden = true;
+        sheet.setAttribute('data-dismissed', '1');
+        return;
+      }
+    } catch (e) {}
+    sheet.hidden = false;
+    var copy = $('#install-copy');
+    var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    if (copy) {
+      copy.textContent = isIOS
+        ? 'Safari → Share → Add to Home Screen. Opens as Field Capture and files to the hosted office.'
+        : 'Install to the home screen. Camera, microphone, and uploads go to the hosted Atmosphere office.';
+    }
+    var dismiss = $('#install-dismiss');
+    if (dismiss) {
+      dismiss.addEventListener('click', function () {
+        sheet.hidden = true;
+        sheet.setAttribute('data-dismissed', '1');
+        try {
+          sessionStorage.setItem('atm.field.installDismissed', '1');
+        } catch (e2) {}
+      });
+    }
+    var installBtn = $('#install-btn');
+    window.addEventListener('beforeinstallprompt', function (event) {
+      event.preventDefault();
+      if (!installBtn) return;
+      installBtn.hidden = false;
+      installBtn.onclick = function () {
+        event.prompt();
+      };
+    });
+  }
+
+  function registerFieldCaptureApp() {
+    if (!('serviceWorker' in navigator)) return;
+    var secure = location.protocol === 'https:' || location.hostname === 'localhost';
+    if (!secure) return;
+    navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {});
   }
 
   /**
@@ -87,6 +175,8 @@
     jobs: [],
     activeJobId: null,
     account: false,
+    finishing: false,
+    homeTimer: null,
   };
 
   function readStoredSession() {
@@ -336,6 +426,10 @@
     state.recorder
       .start()
       .then(function () {
+        if (state.homeTimer) {
+          clearTimeout(state.homeTimer);
+          state.homeTimer = null;
+        }
         show('s-rec');
         $('#rec-since').textContent = 'since ' + new Date().toLocaleTimeString();
         $('#live-text').textContent = 'Recording video + audio. Keep the phone on you.';
@@ -351,10 +445,64 @@
       });
   }
 
+  function resetStopButton() {
+    var stopBtn = $('#stopbtn');
+    if (!stopBtn) return;
+    stopBtn.removeAttribute('data-holding');
+    var lbl = stopBtn.querySelector('.lbl');
+    if (lbl) lbl.textContent = 'Finish the day';
+  }
+
+  function returnHome(message, isErr) {
+    if (state.homeTimer) {
+      clearTimeout(state.homeTimer);
+      state.homeTimer = null;
+    }
+    var rec = document.getElementById('s-rec');
+    if (rec && rec.getAttribute('data-on') === '1' && !state.finishing) {
+      return;
+    }
+    state.finishing = false;
+    state.recorder = null;
+    resetStopButton();
+    show('s-home');
+    setStatus(
+      message || (LIVE || state.account ? 'Ready for another day.' : ''),
+      isErr,
+    );
+    if (state.account && state.accessToken) {
+      Core.loadTodayJobs(API_BASE, state.accessToken)
+        .then(function (jobs) {
+          return Core.loadFieldMe(API_BASE, state.accessToken).then(function (me) {
+            enterAccountHome(me, jobs);
+            if (message) setStatus(message, isErr);
+          });
+        })
+        .catch(function () {});
+    }
+  }
+
+  function goHomeAfterDoor(message) {
+    if (state.homeTimer) clearTimeout(state.homeTimer);
+    state.homeTimer = setTimeout(function () {
+      state.homeTimer = null;
+      returnHome(message || 'Day filed. Ready for another day.');
+    }, 1800);
+  }
+
   function finishLiveDay() {
-    if (!state.recorder) return;
-    if (state.stopWatch) state.stopWatch();
-    $('#stopbtn').querySelector('.lbl').textContent = 'Finishing…';
+    if (!state.recorder || state.finishing) return;
+    state.finishing = true;
+    if (state.stopWatch) {
+      state.stopWatch();
+      state.stopWatch = null;
+    }
+    var stopBtn = $('#stopbtn');
+    if (stopBtn) {
+      stopBtn.removeAttribute('data-holding');
+      var lbl = stopBtn.querySelector('.lbl');
+      if (lbl) lbl.textContent = 'Finishing…';
+    }
     state.recorder
       .stop()
       .then(function (clip) {
@@ -368,19 +516,35 @@
           blob: clip.blob,
           mimeType: clip.mimeType,
           onStep: function (step) {
-            $('#upload-step').textContent = step;
+            var el = $('#upload-step');
+            if (el) el.textContent = step;
           },
         });
       })
       .then(function (result) {
         state.uploadResult = result;
         renderDoorLive(result);
+        goHomeAfterDoor();
       })
       .catch(function (err) {
-        $('#upload-step').textContent = err.message || 'Upload failed.';
-        $('#upload-step').style.color = 'var(--fail)';
-        renderDoorFailed(err);
+        var step = $('#upload-step');
+        if (step) {
+          step.textContent = err.message || 'Upload failed.';
+          step.style.color = 'var(--fail)';
+          renderDoorFailed(err);
+          goHomeAfterDoor();
+          return;
+        }
+        returnHome(err.message || 'Could not finish the recording.', true);
       });
+  }
+
+  function completeDay() {
+    if (state.recorder) {
+      finishLiveDay();
+      return;
+    }
+    if (window.__demoFinish) window.__demoFinish();
   }
 
   function openDoorUploading() {
@@ -462,39 +626,31 @@
     $('#donebtn').classList.add('on');
   }
 
-  /* ---------- hold to finish ---------- */
+  /* ---------- finish the day (tap — iOS hold was a no-op on hosted) ---------- */
 
-  var holdTimer = null;
   function bindHold() {
     var stopBtn = $('#stopbtn');
     if (!stopBtn) return;
-    function beginHold(e) {
-      if (e && e.cancelable) e.preventDefault();
-      if (holdTimer) return;
-      stopBtn.setAttribute('data-holding', '1');
-      stopBtn.querySelector('.lbl').textContent = 'Keep holding…';
-      holdTimer = setTimeout(function () {
-        holdTimer = null;
-        if (LIVE) finishLiveDay();
-        else if (window.__demoFinish) window.__demoFinish();
-      }, 1500);
+    var armed = false;
+    function onFinish(e) {
+      if (e) {
+        if (e.cancelable) e.preventDefault();
+        if (e.stopPropagation) e.stopPropagation();
+      }
+      if (armed || state.finishing) return;
+      armed = true;
+      completeDay();
+      setTimeout(function () {
+        armed = false;
+      }, 2500);
     }
-    function cancelHold() {
-      if (!holdTimer) return;
-      clearTimeout(holdTimer);
-      holdTimer = null;
-      stopBtn.removeAttribute('data-holding');
-      stopBtn.querySelector('.lbl').textContent = 'Hold to finish the day';
-    }
-    stopBtn.addEventListener('pointerdown', beginHold);
-    stopBtn.addEventListener('pointerup', cancelHold);
-    stopBtn.addEventListener('pointerleave', cancelHold);
-    stopBtn.addEventListener('pointercancel', cancelHold);
+    stopBtn.addEventListener('click', onFinish);
+    stopBtn.addEventListener('pointerup', onFinish);
+    stopBtn.addEventListener('touchend', onFinish, { passive: false });
     stopBtn.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        if (LIVE) finishLiveDay();
-        else if (window.__demoFinish) window.__demoFinish();
+        onFinish(e);
       }
     });
   }
@@ -535,6 +691,10 @@
     var seconds = 0;
     var timer = null;
     $('#daybtn').onclick = function () {
+      if (state.homeTimer) {
+        clearTimeout(state.homeTimer);
+        state.homeTimer = null;
+      }
       show('s-rec');
       $('#scene').innerHTML = '';
       $('#preview').hidden = true;
@@ -556,6 +716,7 @@
         '<div class="tlrow"><b>Demo day</b><span>Open with ?token= to file a real day film.</span></div>';
       $('#doneline').classList.add('on');
       $('#donebtn').classList.add('on');
+      goHomeAfterDoor('Demo only — nothing uploaded.');
     };
     show('s-home');
   }
@@ -571,9 +732,11 @@
   }
 
   bindHold();
+  bindInstallSheet();
+  registerFieldCaptureApp();
+  probeHostedOffice();
   $('#donebtn').addEventListener('click', function () {
-    show('s-home');
-    setStatus(LIVE || state.account ? 'Ready for another day.' : '');
+    returnHome();
   });
 
   if (LIVE) {

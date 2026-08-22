@@ -24,11 +24,27 @@ describe('phone home-screen manifests', () => {
   });
 
   it('installs Field Capture as a standalone app', () => {
-    const manifest = readJson('fieldcapture/manifest.webmanifest');
+    const manifest = readJson('fieldcapture/manifest.webmanifest') as {
+      name: string;
+      start_url: string;
+      display: string;
+      id?: string;
+      icons: { src: string; sizes: string }[];
+    };
     expect(manifest.name).toMatch(/Field Capture/);
     expect(manifest.start_url).toBe('./');
     expect(manifest.display).toBe('standalone');
+    expect(manifest.id).toBe('/fieldcapture/');
     expect(manifest.icons.some((icon) => icon.src.includes('atmosphere-192.png'))).toBe(true);
+    expect(existsSync(resolve(repoRoot, 'fieldcapture/sw.js'))).toBe(true);
+    expect(existsSync(resolve(repoRoot, 'fieldcapture/js/host.js'))).toBe(true);
+    expect(existsSync(resolve(repoRoot, 'fieldcapture/icons/atmosphere-180.png'))).toBe(true);
+
+    const html = readFileSync(resolve(repoRoot, 'fieldcapture/index.html'), 'utf8');
+    expect(html).toContain('apple-mobile-web-app-capable" content="yes"');
+    expect(html).toContain('id="install-sheet"');
+    expect(html).toContain('js/host.js');
+    expect(html).toContain('id="host-chip"');
   });
 
   it('shows the Atmosphere bars and name in the hosted dashboard tab', () => {
@@ -68,6 +84,49 @@ describe('phone home-screen manifests', () => {
     );
     expect(swift).toContain('https://atmosphere-web-production.up.railway.app');
     expect(swift).toContain('productionBffURL');
-    expect(swift).toContain('isLoopback(host), !isSimulator { return productionBffURL }');
+    expect(swift).toContain('if !isSimulator');
+    expect(swift).toContain('return productionBffURL');
+    expect(swift).toContain('static func displayHost()');
+
+    const today = readFileSync(
+      resolve(repoRoot, 'apps/field-ios/AtmosphereFieldCapture/UI/TodayView.swift'),
+      'utf8',
+    );
+    expect(today).toContain('ApiConfig.displayHost()');
+  });
+
+  it('ignores a localhost ?api= when Field Capture is opened on the hosted origin', () => {
+    const src = readFileSync(resolve(repoRoot, 'fieldcapture/js/host.js'), 'utf8');
+    const sandbox: { FieldCaptureHost?: {
+      resolveApiBase: (query: string, href: string) => string;
+      displayHost: (href: string, apiBase: string) => string;
+    } } = {};
+    const run = new Function('window', 'globalThis', `${src}\nreturn globalThis.FieldCaptureHost;`);
+    const host = run(undefined, sandbox) as {
+      resolveApiBase: (query: string, href: string) => string;
+      displayHost: (href: string, apiBase: string) => string;
+    };
+    const hosted = 'https://atmosphere-web-production.up.railway.app/fieldcapture/';
+    expect(host.resolveApiBase('', hosted)).toBe('');
+    expect(host.resolveApiBase('http://127.0.0.1:4000', hosted)).toBe('');
+    expect(host.resolveApiBase('http://localhost:4000', hosted)).toBe('');
+    expect(host.resolveApiBase('http://127.0.0.1:4000', 'http://127.0.0.1:5174/fieldcapture/')).toBe(
+      'http://127.0.0.1:4000',
+    );
+    expect(host.displayHost(hosted, '')).toBe('atmosphere-web-production.up.railway.app');
+  });
+
+  it('finishes a connected day film without a job-share token and returns to Today', () => {
+    const app = readFileSync(resolve(repoRoot, 'fieldcapture/js/app.js'), 'utf8');
+    expect(app).toContain('function completeDay');
+    expect(app).toContain('function returnHome');
+    expect(app).toContain('goHomeAfterDoor');
+    expect(app).not.toMatch(/if \(LIVE\) finishLiveDay/);
+    expect(app).toMatch(/if \(state\.recorder\) \{\s*finishLiveDay\(\)/);
+    expect(app).toContain("addEventListener('click', onFinish)");
+    expect(app).not.toContain("addEventListener('pointerleave'");
+    const html = readFileSync(resolve(repoRoot, 'fieldcapture/index.html'), 'utf8');
+    expect(html).toContain('Finish the day');
+    expect(html).not.toContain('Hold to finish the day');
   });
 });

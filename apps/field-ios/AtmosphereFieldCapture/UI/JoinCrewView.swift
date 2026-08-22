@@ -52,6 +52,10 @@ struct JoinCrewView: View {
                 .font(.system(size: 14))
                 .foregroundStyle(FieldTheme.muted)
 
+                Text("This app talks to \(ApiConfig.displayHost()) — the hosted Atmosphere office, not your laptop.")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(FieldTheme.pass)
+
                 VStack(spacing: 10) {
                     TextField("First and last name", text: $fullName)
                         .textContentType(.name)

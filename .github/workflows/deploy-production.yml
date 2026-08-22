@@ -48,6 +48,7 @@ on:
       - cursor/fix-job-create-memory-fk-51c8
       - cursor/fix-railway-office-deploy-157d
       - cursor/internal-data-platform-e19d
+      - cursor/field-capture-hosted-app-35bd
     paths:
       - 'backend/**'
       - 'supabase/migrations/**'
@@ -204,28 +205,31 @@ jobs:
           project="${RAILWAY_PROJECT_ID}"
           service="${RAILWAY_APP_SERVICE:-${RAILWAY_WEB_SERVICE:-Login & Dashboard}}"
           echo "Deploying office app to Railway service '$service' in project $project."
-          echo "That service's Config File must be /frontend/railway.toml (see docs/production.md)."
+          echo "Writing frontend/railway.json onto the service (nginx + /healthz)."
           railway link --project "$project" --environment production --service "$service" \
             || railway link --project "$project" --environment production \
             || railway link --project "$project" \
             || true
           railway status --project "$project" --environment production || railway status || true
           # Live name is Login & Dashboard; Atmosphere-web is the old alias.
-          # railway variable set rejects names that are not on the canvas.
           service_id="$(node backend/scripts/resolveRailwayService.mjs "$service")"
           echo "Resolved '$service' to $service_id"
           service="$service_id"
-          printf '%s' 'frontend/Dockerfile' | railway variable set RAILWAY_DOCKERFILE_PATH --stdin --skip-deploys --service "$service"
-          # Private HTTP to the BFF. The public https://atmosphere-production URL
-          # hairpins out of the mesh (jfk1 → ams1 hops) and 502s /api for ~3s,
-          # which is the spinner on /login (api.me() before the form).
-          tr -d '\n' < api.upstream | railway variable set API_UPSTREAM --stdin --skip-deploys --service "$service"
-          # railway up reads /railway.toml from the upload root. Without this copy
-          # the CLI builds the backend Dockerfile and probes /api/health on nginx.
+          chmod +x frontend/scripts/apply-railway-config.sh backend/scripts/railwayUp.sh
+          RAILWAY_APP_SERVICE="$service" frontend/scripts/apply-railway-config.sh
+          # Private mesh 504s from this nginx. Public BFF is healthy. A brief
+          # hairpin 502 is better than a permanent 504 on Sign in.
+          upstream="https://atmosphere-production.up.railway.app"
+          echo "API_UPSTREAM=$upstream"
+          printf '%s' "$upstream" | railway variable set API_UPSTREAM \
+            --stdin --skip-deploys --service "$service"
           cp frontend/railway.toml railway.toml
+          cp frontend/railway.json railway.json
+          printf '\n# gha %s %s\n' "${GITHUB_SHA}" "$(date -u +%Y%m%dT%H%M%SZ)" >> frontend/nginx/default.conf.template
+          export RAILWAY_UP_STAMP_FILE="$PWD/frontend/nginx/default.conf.template"
+          export RAILWAY_UP_ATTEMPTS=3
           export RAILWAY_SERVICE="$service"
           export RAILWAY_PROJECT_ID="$project"
-          chmod +x backend/scripts/railwayUp.sh
           backend/scripts/railwayUp.sh
 
   internal:
