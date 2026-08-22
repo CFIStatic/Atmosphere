@@ -5,6 +5,7 @@ import { ApiError } from '../lib/api';
 import { landingPath } from '../lib/access';
 import { forgetStaffEmail, readRememberedStaffEmail, rememberStaffEmail } from '../lib/rememberedEmail';
 import type { StaffChallengeResponse } from '../lib/types';
+import { ThemeToggle } from '../components/ThemeToggle';
 
 type Step =
   | { kind: 'returning' }
@@ -125,7 +126,10 @@ export function LoginPage() {
   }
 
   return (
-    <div className="grid min-h-screen place-items-center bg-paper-100 px-6">
+    <div className="relative grid min-h-screen place-items-center bg-paper-100 px-6">
+      <div className="absolute right-6 top-4">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-md rounded-2xl border border-line bg-paper-0 p-8 shadow-sm">
         <p className="text-[11px] uppercase tracking-[0.18em] text-brand-600">Atmosphere staff</p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">Internal</h1>

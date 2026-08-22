@@ -38,6 +38,7 @@ describe('LoginPage', () => {
     expect(screen.queryByLabelText('Access code')).toBeNull();
     expect(screen.queryByLabelText('Password')).toBeNull();
     expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Switch to (light|dark) mode/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /demo/i })).toBeNull();
   });
 

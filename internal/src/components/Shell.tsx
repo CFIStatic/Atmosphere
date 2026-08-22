@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { canManageAccess, canSeeAccounts } from '../lib/access';
+import { ThemeToggle } from './ThemeToggle';
 
 const NAV = [
   { to: '/overview', label: 'Overview' },
@@ -58,6 +59,7 @@ export function Shell() {
             ))}
           </nav>
           <div className="flex items-center gap-3 text-sm text-ink-600">
+            <ThemeToggle />
             <span className="hidden sm:inline">{access?.displayName ?? user?.email}</span>
             <button
               type="button"
