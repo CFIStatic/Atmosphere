@@ -13,6 +13,7 @@ describe('setupWizardCopy', () => {
     expect(copy.lede).toMatch(/account, workspace, then billing/i);
     expect(copy.steps[0]?.detail).toMatch(/name, email, and a password/i);
     expect(copy.steps[0]?.detail).not.toMatch(/join code/i);
+    expect(copy.steps[1]?.detail).toMatch(/company type/i);
     expect(copy.steps[1]?.detail).toMatch(/join code/i);
   });
 

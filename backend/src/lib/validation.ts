@@ -218,8 +218,9 @@ const usageIntentsSchema = z
   });
 
 /**
- * Website signup wizard only asks for a company name (or a join code).
- * These fill the questionnaire fields so create_org / join_org still succeed.
+ * Website signup asks for a company name (or a join code) and, when creating,
+ * a company type. Role / work type / usage intents still default so create_org
+ * / join_org succeed without the old questionnaire.
  */
 export const WEBSITE_SIGNUP_ONBOARDING = {
   role: 'field_technician',

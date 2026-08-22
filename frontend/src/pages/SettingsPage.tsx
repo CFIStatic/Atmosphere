@@ -12,6 +12,7 @@ import {
   api,
   ApiError,
   CONTRACTOR_TYPE_LABELS,
+  CONTRACTOR_TYPE_ORDER,
   ROLE_LABELS,
   WORK_TYPE_LABELS,
   type ContractorType,
@@ -677,13 +678,6 @@ function SignOutCard() {
  * Organization
  * -------------------------------------------------------------------------- */
 
-const CONTRACTOR_ORDER: ContractorType[] = [
-  'restoration',
-  'roofing',
-  'general_contractor',
-  'other',
-];
-
 function OrganizationSection() {
   const { membership, refreshMembership } = useAuth();
   const [contractorType, setContractorType] = useState<ContractorType | null>(
@@ -767,7 +761,7 @@ function OrganizationSection() {
             <option value="" className="bg-paper-200/50">
               Select a company type
             </option>
-            {CONTRACTOR_ORDER.map((value) => (
+            {CONTRACTOR_TYPE_ORDER.map((value) => (
               <option key={value} value={value} className="bg-paper-200/50">
                 {CONTRACTOR_TYPE_LABELS[value]}
               </option>

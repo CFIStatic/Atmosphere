@@ -6475,6 +6475,14 @@ export const CONTRACTOR_TYPE_LABELS: Record<ContractorType, string> = {
   other: 'Something else',
 };
 
+/** Display order for company-type pickers (signup and Settings). */
+export const CONTRACTOR_TYPE_ORDER: ContractorType[] = [
+  'restoration',
+  'roofing',
+  'general_contractor',
+  'other',
+];
+
 export const USAGE_INTENT_LABELS: Record<UsageIntent, string> = {
   mitigation_estimating: 'Mitigation estimating',
   construction_estimating: 'Construction estimating',
