@@ -7,7 +7,7 @@ from their library.
 Install:
 
 ```bash
-psql "$DATABASE_URL" -f supabase/migrations/20260822180000_legal_hold_and_user_monitor.sql
+psql "$DATABASE_URL" -f supabase/migrations/20260822183000_legal_hold_and_user_monitor.sql
 ```
 
 Idempotent with the rest of the tree. Apply once — the file is mirrored under
