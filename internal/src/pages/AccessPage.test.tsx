@@ -5,18 +5,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AccessPage } from './AccessPage';
 import type { AccessRequest } from '../lib/types';
 
-const loadAccess = vi.fn();
-const accessRequests = vi.fn();
-const approveAccessRequest = vi.fn();
-const denyAccessRequest = vi.fn();
-const approveAllAccessRequests = vi.fn();
+const mocks = vi.hoisted(() => ({
+  loadAccess: vi.fn(),
+  accessRequests: vi.fn(),
+  approveAccessRequest: vi.fn(),
+  denyAccessRequest: vi.fn(),
+  approveAllAccessRequests: vi.fn(),
+}));
 
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({
     user: { id: 'admin', email: 'jack@jettx.ai', createdAt: '2026-01-01T00:00:00.000Z' },
     access: { scope: 'internal', displayName: 'Jack', pendingAccessRequests: 2 },
     loading: false,
-    loadAccess,
+    loadAccess: mocks.loadAccess,
   }),
 }));
 
@@ -25,10 +27,10 @@ vi.mock('../lib/api', async () => {
   return {
     ...actual,
     api: {
-      accessRequests,
-      approveAccessRequest,
-      denyAccessRequest,
-      approveAllAccessRequests,
+      accessRequests: mocks.accessRequests,
+      approveAccessRequest: mocks.approveAccessRequest,
+      denyAccessRequest: mocks.denyAccessRequest,
+      approveAllAccessRequests: mocks.approveAllAccessRequests,
     },
   };
 });
@@ -51,12 +53,12 @@ function request(partial: Partial<AccessRequest>): AccessRequest {
 
 describe('AccessPage', () => {
   beforeEach(() => {
-    loadAccess.mockReset();
-    accessRequests.mockReset();
-    approveAccessRequest.mockReset();
-    denyAccessRequest.mockReset();
-    approveAllAccessRequests.mockReset();
-    accessRequests.mockResolvedValue({
+    mocks.loadAccess.mockReset();
+    mocks.accessRequests.mockReset();
+    mocks.approveAccessRequest.mockReset();
+    mocks.denyAccessRequest.mockReset();
+    mocks.approveAllAccessRequests.mockReset();
+    mocks.accessRequests.mockResolvedValue({
       pendingCount: 2,
       requests: [
         request({ id: 'req-1', firstName: 'Alex', lastName: 'Rivera', email: 'alex@company.com' }),
@@ -68,8 +70,11 @@ describe('AccessPage', () => {
         }),
       ],
     });
-    approveAllAccessRequests.mockResolvedValue({ approved: [], pendingCount: 0 });
-    approveAccessRequest.mockResolvedValue({ request: request({ status: 'approved' }), pendingCount: 1 });
+    mocks.approveAllAccessRequests.mockResolvedValue({ approved: [], pendingCount: 0 });
+    mocks.approveAccessRequest.mockResolvedValue({
+      request: request({ status: 'approved' }),
+      pendingCount: 1,
+    });
   });
 
   it('lists employees waiting to join and can approve all of them', async () => {
@@ -87,6 +92,6 @@ describe('AccessPage', () => {
     expect(screen.getAllByRole('button', { name: 'Approve' })).toHaveLength(2);
 
     await user.click(screen.getByRole('button', { name: 'Approve all (2)' }));
-    await waitFor(() => expect(approveAllAccessRequests).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.approveAllAccessRequests).toHaveBeenCalledTimes(1));
   });
 });

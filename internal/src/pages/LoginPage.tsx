@@ -65,7 +65,7 @@ export function LoginPage() {
 
   async function onVerify(event: FormEvent) {
     event.preventDefault();
-    if (step.kind === 'identity') return;
+    if (step.kind === 'identity' || step.kind === 'pending') return;
     setSubmitting(true);
     setError(null);
     try {
