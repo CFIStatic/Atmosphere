@@ -78,7 +78,7 @@ The office image reverse-proxies `/api` at runtime. Set this on the office
 service **before** the first Autodeploy:
 
 ```text
-API_UPSTREAM=http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}
+API_UPSTREAM=https://atmosphere-production.up.railway.app
 ```
 
 Leave `VITE_API_BASE_URL` empty so the SPA uses same-origin `/api` and
@@ -97,25 +97,27 @@ and `/api/health` from the repo-root file. Healthcheck is `GET /health`
 #### `API_UPSTREAM` on every front door
 
 The office console and the marketing site are nginx front doors onto the
-same BFF. They take the **same** private-mesh upstream from one file at the
-repo root:
+same BFF. They take the **same** upstream from one file at the repo root:
 
 ```bash
 cat api.upstream
-# http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}
+# https://atmosphere-production.up.railway.app
 ```
 
-Plain `http://`, private domain, no public host. Set to
-`https://atmosphere-production.up.railway.app` instead, a `/api` request
-leaves the private network and comes back in through the edge (jfk1 → ams1),
-which 502s for a few seconds. What that looks like from the outside is a front
-door reporting the Atmosphere API as unreachable while the BFF is perfectly
-healthy — the office console spinning on `/login`, the site’s careers and
-contact forms failing to post.
+The public BFF host, on purpose — two hard lessons from the 2026-08-21
+outage:
 
-The staff site (`internal/`, Railway service `Internal Growth Metrics`) is
-the exception: its nginx 504s on the private mesh, so the deploy job points
-it at the public BFF host.
+- **Never a `RAILWAY_PRIVATE_DOMAIN`/`PORT` service reference.** The old
+  `Atmosphere` reference stopped resolving when the BFF was renamed to
+  `Atmosphere APIs`; the office image then failed `/healthz` on deploy and
+  the stale replica kept 502ing `/api` — signup showing "Cannot reach the
+  Atmosphere API" while the BFF was healthy.
+- **Not the private mesh URL either, for now.** `atmosphere.railway.internal`
+  504s from these nginx containers (staff and office both hit it that
+  night); the staff site has been live on the public host since. The
+  public-host hairpin can 502 `/api` for a few seconds right after a BFF
+  deploy — a blip, not an outage. If the mesh routing is ever fixed and
+  verified from an nginx container, switch this file back in one place.
 
 The deploy workflows keep these in sync, so a fix here does not need a
 dashboard visit:
@@ -256,10 +258,9 @@ In the Railway project that already runs the BFF (`Atmosphere`):
 
    | Variable | Value |
    | --- | --- |
-   | `API_UPSTREAM` | `http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}` |
+   | `API_UPSTREAM` | `https://atmosphere-production.up.railway.app` |
 
-   Replace `Atmosphere` with the BFF service name if you overrode
-   `RAILWAY_SERVICE`. Same value on every front door — see
+   Same value on every front door, from root `api.upstream` — see
    [`API_UPSTREAM` on every front door](#api_upstream-on-every-front-door).
 
 ### 2. Public origin
@@ -305,7 +306,7 @@ Atmosphere Internal (`internal/`) is a third Railway service next to the BFF and
 2. Settings → **Config File**: `/internal/railway.json` (same settings as `internal/railway.toml`). New services that cannot set Config File still get those values from `internal/scripts/apply-railway-config.sh` on deploy.
 3. Settings → **Root Directory**: `/`
 4. Trigger branch must contain `internal/` (until this is on `main`, use the branch that added it). Deploying `main` before that merge cannot see `/internal/railway.json`.
-5. Variable `API_UPSTREAM=http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}`
+5. Variable `API_UPSTREAM=https://atmosphere-production.up.railway.app` (the deploy job sets this; service references and the private mesh both burned us — see [`API_UPSTREAM` on every front door](#api_upstream-on-every-front-door))
 6. Networking → **Generate domain**. Add that https origin to backend `FRONTEND_ORIGIN`. Production CORS already allows the live staff host `https://melodious-inspiration-production-5ad9.up.railway.app`.
 7. Health probe: `GET /healthz` → `ok` (also `/health` and `/api/health`). nginx starts with `startCommand` from `internal/railway.json`, not `node dist/index.js`.
 
