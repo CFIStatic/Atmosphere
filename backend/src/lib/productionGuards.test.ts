@@ -12,11 +12,15 @@ describe('productionGuards module', () => {
   it('exports assertProductionReady', async () => {
     const mod = await import('./productionGuards.js');
     assert.equal(typeof mod.assertProductionReady, 'function');
+    assert.equal(typeof mod.evaluateProductionGuards, 'function');
   });
 
   it('is a no-op when not in production', async () => {
-    const { assertProductionReady } = await import('./productionGuards.js');
+    const { assertProductionReady, evaluateProductionGuards } = await import(
+      './productionGuards.js'
+    );
     assert.doesNotThrow(() => assertProductionReady());
+    assert.deepEqual(evaluateProductionGuards(), { errors: [], warnings: [] });
   });
 });
 

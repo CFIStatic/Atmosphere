@@ -4,6 +4,7 @@ import { createAnonClient, createAdminClient } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { smtpConfigured } from '../lib/careersMail.js';
 import { systemMailConfigured } from '../lib/systemMail.js';
+import { lastProductionGuardReport } from '../lib/productionGuards.js';
 
 export const healthRouter = Router();
 
@@ -56,6 +57,11 @@ healthRouter.get('/ready', async (_req: Request, res: Response) => {
     ok: Boolean(config.frontendOrigins.length && config.device.pepper),
     detail: config.isProduction ? 'production' : 'development',
   };
+  const guards = lastProductionGuardReport();
+  checks.productionGuards = {
+    ok: guards.errors.length === 0,
+    detail: guards.errors[0] ?? (config.isProduction ? 'ok' : 'development'),
+  };
   checks.mail = {
     ok: systemMailConfigured(),
     detail: smtpConfigured()
@@ -65,7 +71,7 @@ healthRouter.get('/ready', async (_req: Request, res: Response) => {
         : 'unconfigured',
   };
 
-  const required = ['supabaseAuth', 'config'] as const;
+  const required = ['supabaseAuth', 'config', 'productionGuards'] as const;
   const ready = required.every((key) => checks[key]?.ok);
 
   // Storage/admin are strongly preferred in production but a deploy that has

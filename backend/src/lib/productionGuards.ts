@@ -3,19 +3,27 @@ import { logger } from './logger.js';
 
 const PERSONAL_INBOX_RE = /@(yahoo|gmail|googlemail|hotmail|outlook|live|icloud)\./i;
 
-/**
- * Fail-loud checks that must pass before a production process serves traffic.
- * Called once at boot from `index.ts` after config has loaded.
- *
- * Soft warnings (mock drivers the verification path does not need) go to logs
- * but do not abort — set `ALLOW_MOCK_DRIVERS=true` to silence those warnings
- * when a non-verification surface is intentionally mocked.
- */
-export function assertProductionReady(): void {
-  if (!config.isProduction) return;
+export type ProductionGuardReport = { errors: string[]; warnings: string[] };
 
+let lastReport: ProductionGuardReport = { errors: [], warnings: [] };
+
+export function lastProductionGuardReport(): ProductionGuardReport {
+  return lastReport;
+}
+
+/**
+ * Collect production-config problems. Used by `/api/ready` and by boot.
+ * Boot must not abort the process — Railway's deploy probe is `/api/health`,
+ * and throwing before listen is what produced five minutes of
+ * "service unavailable" on every Atmosphere APIs deploy.
+ */
+export function evaluateProductionGuards(): ProductionGuardReport {
   const errors: string[] = [];
   const warnings: string[] = [];
+  if (!config.isProduction) {
+    lastReport = { errors, warnings };
+    return lastReport;
+  }
 
   if (!config.supabase.serviceRoleKey) {
     errors.push(
@@ -90,6 +98,18 @@ export function assertProductionReady(): void {
       );
     }
   }
+
+  lastReport = { errors, warnings };
+  return lastReport;
+}
+
+/**
+ * Log production-config problems. Throws when errors exist so callers that
+ * still want fail-loud (tests, CLI) can catch. `index.ts` catches and keeps
+ * serving `/api/health`.
+ */
+export function assertProductionReady(): void {
+  const { errors, warnings } = evaluateProductionGuards();
 
   for (const warning of warnings) {
     logger.warn('production_guard', { detail: warning });

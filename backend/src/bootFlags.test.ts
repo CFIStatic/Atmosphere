@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import http from 'node:http';
 import {
+  createLivenessListener,
   isHealthProbePath,
+  isLivenessProbePath,
   listenHost,
+  listenPort,
   resolveBackupsEnabled,
   resolveComputerUseEnabled,
 } from './bootFlags.js';
@@ -78,11 +82,50 @@ describe('listenHost', () => {
   });
 });
 
+describe('listenPort', () => {
+  it('uses PORT or 4000', () => {
+    assert.equal(listenPort({}), 4000);
+    assert.equal(listenPort({ PORT: '8080' }), 8080);
+    assert.equal(listenPort({ PORT: 'nope' }), 4000);
+  });
+});
+
 describe('isHealthProbePath', () => {
   it('recognises liveness and readiness probes', () => {
     assert.equal(isHealthProbePath('/'), true);
     assert.equal(isHealthProbePath('/api/health'), true);
     assert.equal(isHealthProbePath('/api/ready'), true);
     assert.equal(isHealthProbePath('/api/auth/login'), false);
+  });
+
+  it('keeps readiness off the liveness list', () => {
+    assert.equal(isLivenessProbePath('/api/health'), true);
+    assert.equal(isLivenessProbePath('/api/ready'), false);
+  });
+});
+
+describe('createLivenessListener', () => {
+  it('answers GET /api/health before createApp loads', async () => {
+    const server = http.createServer(createLivenessListener());
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    assert.ok(address && typeof address === 'object');
+    try {
+      const health = await fetch(`http://127.0.0.1:${address.port}/api/health`);
+      assert.equal(health.status, 200);
+      const body = (await health.json()) as { status?: string; service?: string };
+      assert.equal(body.status, 'ok');
+      assert.equal(body.service, 'atmosphere-backend');
+
+      const ready = await fetch(`http://127.0.0.1:${address.port}/api/ready`);
+      assert.equal(ready.status, 503);
+
+      const other = await fetch(`http://127.0.0.1:${address.port}/api/auth/login`);
+      assert.equal(other.status, 503);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((err) => (err ? reject(err) : resolve())),
+      );
+    }
   });
 });

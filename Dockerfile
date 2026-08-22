@@ -29,6 +29,8 @@ ENV PORT=4000
 ENV HOST=0.0.0.0
 ENV COMPUTER_USE_ENABLED=false
 ENV BACKUP_ENABLED=false
+ENV MEDIA_BACKEND=supabase
+ENV ALLOW_MOCK_DRIVERS=true
 ENV FRONTEND_ORIGIN=https://app.atmosphereteam.com
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates ffmpeg \
