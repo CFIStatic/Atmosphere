@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { api, ApiError } from '../lib/api';
+import {
+  api,
+  ApiError,
+  CONTRACTOR_TYPE_LABELS,
+  CONTRACTOR_TYPE_ORDER,
+  type ContractorType,
+} from '../lib/api';
 import { loginHref, parseSignupIntent, resolveAuthRedirect } from '../lib/authRedirect';
 import { PLATFORM_HOME } from '../lib/platforms';
 import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
@@ -16,7 +22,10 @@ import {
   workspaceNameFrom,
   type SetupWizardStep,
 } from '../components/setup/setupWizard';
-import { resolveVerifierSetup } from '../components/setup/verifierSetupOptions';
+import {
+  resolveVerifierSetup,
+  workTypeForContractorType,
+} from '../components/setup/verifierSetupOptions';
 import { EyeIcon, EyeOffIcon, SpinnerIcon, CheckIcon } from '../components/icons';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -53,6 +62,7 @@ export function SignupPage() {
 
   const [mode, setMode] = useState<OrgMode>(orgIntent === 'join' ? 'join' : 'create');
   const [orgName, setOrgName] = useState('');
+  const [contractorType, setContractorType] = useState<ContractorType | null>(null);
   const [joinCode, setJoinCode] = useState('');
 
   const [error, setError] = useState<string | null>(null);
@@ -130,7 +140,8 @@ export function SignupPage() {
   const emailValid = EMAIL_RE.test(email.trim());
   const passwordValid = password.length >= 8;
   const joinCodeValid = JOIN_CODE_RE.test(joinCode.trim());
-  const orgStepValid = mode === 'join' ? joinCodeValid : orgName.trim().length >= 2;
+  const orgStepValid =
+    mode === 'join' ? joinCodeValid : orgName.trim().length >= 2 && Boolean(contractorType);
 
   function enterApp() {
     scheduleWorkVerificationTour();
@@ -161,19 +172,29 @@ export function SignupPage() {
         return;
       }
 
-      const { role: finalRole, workType, contractorType, usageIntents } = resolveVerifierSetup(
+      const { role: finalRole, usageIntents } = resolveVerifierSetup(
         SETUP_DEFAULTS.role,
         SETUP_DEFAULTS.trade,
         true,
       );
 
       if (mode === 'join') {
-        await api.joinOrg(joinCode.trim().toUpperCase(), finalRole, workType, usageIntents);
+        await api.joinOrg(
+          joinCode.trim().toUpperCase(),
+          finalRole,
+          SETUP_DEFAULTS.workType,
+          usageIntents,
+        );
       } else {
+        if (!contractorType) {
+          setError('Select a company type.');
+          goToStep(2);
+          return;
+        }
         await api.createOrg(
           orgName.trim(),
           finalRole,
-          workType,
+          workTypeForContractorType(contractorType),
           contractorType,
           usageIntents,
         );
@@ -364,32 +385,53 @@ export function SignupPage() {
           subtitle={
             mode === 'join'
               ? 'The code from your invite links this login to the team workspace.'
-              : 'Name the company workspace, or enter a join code if you were invited.'
+              : 'Name the company and pick the company type, or enter a join code if you were invited.'
           }
         >
           {error && <Alert>{error}</Alert>}
 
           {mode === 'create' ? (
-            <Field label="Company name" htmlFor="org-name" className="mt-5">
-              <input
-                id="org-name"
-                value={orgName}
-                onChange={(e) => setOrgName(e.target.value)}
-                placeholder="e.g. Meridian Services"
-                autoFocus
-                className={inputClass}
-              />
-              <p className="mt-2 text-xs text-ink-500">
-                Were you invited?{' '}
-                <button
-                  type="button"
-                  onClick={() => setMode('join')}
-                  className="font-medium text-brand-600 hover:text-brand-700"
+            <>
+              <Field label="Company name" htmlFor="org-name" className="mt-5">
+                <input
+                  id="org-name"
+                  value={orgName}
+                  onChange={(e) => setOrgName(e.target.value)}
+                  placeholder="e.g. Meridian Services"
+                  autoFocus
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Company type" htmlFor="org-contractor-type" className="mt-4">
+                <select
+                  id="org-contractor-type"
+                  value={contractorType ?? ''}
+                  onChange={(e) =>
+                    setContractorType((e.target.value || null) as ContractorType | null)
+                  }
+                  className={inputClass}
                 >
-                  Enter a join code
-                </button>
-              </p>
-            </Field>
+                  <option value="" className="bg-paper-200/50">
+                    Select a company type
+                  </option>
+                  {CONTRACTOR_TYPE_ORDER.map((value) => (
+                    <option key={value} value={value} className="bg-paper-200/50">
+                      {CONTRACTOR_TYPE_LABELS[value]}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-2 text-xs text-ink-500">
+                  Were you invited?{' '}
+                  <button
+                    type="button"
+                    onClick={() => setMode('join')}
+                    className="font-medium text-brand-600 hover:text-brand-700"
+                  >
+                    Enter a join code
+                  </button>
+                </p>
+              </Field>
+            </>
           ) : (
             <Field label="Join code" htmlFor="join-code" className="mt-5">
               <input

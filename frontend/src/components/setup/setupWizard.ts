@@ -24,7 +24,7 @@ export const SETUP_WIZARD_STEPS = [
   {
     step: 2 as const,
     title: 'Your workspace',
-    detail: 'Name the company workspace, or enter a join code if you were invited.',
+    detail: 'Name the company, pick the company type, or enter a join code if you were invited.',
   },
   {
     step: 3 as const,
