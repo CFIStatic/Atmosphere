@@ -12,6 +12,7 @@ set -eu
 export PORT="${PORT:-8080}"
 # Local default only. Railway sets the BFF private-mesh URL from api.upstream.
 API_UPSTREAM="${API_UPSTREAM:-http://127.0.0.1:4000}"
+PUBLIC_UPSTREAM="https://atmosphere-production.up.railway.app"
 
 # Same crash as Login & Dashboard: a leftover ${{Atmosphere.…}} interpolates
 # to http://: and nginx dies with `invalid port in upstream ":"` at
@@ -21,9 +22,20 @@ is_usable_upstream() {
   echo "$1" | grep -Eq '^https?://[A-Za-z0-9._-]+(:[0-9]+)?(/.*)?$'
 }
 
+is_private_mesh() {
+  echo "$1" | grep -Eq 'railway\.internal'
+}
+
+upstream_answers() {
+  wget -q -T 2 -O /dev/null "$1/api/health" 2>/dev/null
+}
+
 if ! is_usable_upstream "$API_UPSTREAM"; then
   echo "website-start: API_UPSTREAM='$API_UPSTREAM' is not a host:port URL; falling back so nginx can bind." >&2
-  API_UPSTREAM="https://atmosphere-production.up.railway.app"
+  API_UPSTREAM="$PUBLIC_UPSTREAM"
+elif is_private_mesh "$API_UPSTREAM" && ! upstream_answers "$API_UPSTREAM"; then
+  echo "website-start: $API_UPSTREAM did not answer /api/health (private mesh 504); using public BFF." >&2
+  API_UPSTREAM="$PUBLIC_UPSTREAM"
 fi
 
 export API_UPSTREAM

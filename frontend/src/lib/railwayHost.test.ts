@@ -26,8 +26,12 @@ describe('Railway office-app image', () => {
     expect(start).toContain("envsubst '${PORT} ${API_UPSTREAM}'");
     expect(start).toContain("exec nginx -g 'daemon off;'");
     expect(start).toContain('is_usable_upstream');
+    expect(start).toContain('is_private_mesh');
+    expect(start).toContain('upstream_answers');
     expect(start).toContain('invalid port in upstream');
     expect(start).toContain('http://:');
+    expect(start).toContain('railway\\.internal');
+    expect(start).toContain('https://atmosphere-production.up.railway.app');
   });
 
   it('proxies /api and serves the static apps on one origin', () => {

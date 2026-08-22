@@ -20,23 +20,35 @@ const server = http.createServer(liveness);
 
 let stopBackground = (): void => undefined;
 
-server.on('error', (err) => {
-  logger.error('listen_failed', {
-    host,
-    port,
-    detail: err instanceof Error ? err.message : String(err),
+function bind(bindHost: string): void {
+  server.removeAllListeners('error');
+  server.on('error', (err: NodeJS.ErrnoException) => {
+    if (
+      bindHost === '::' &&
+      (err.code === 'EAFNOSUPPORT' || err.code === 'EADDRNOTAVAIL' || err.code === 'EINVAL')
+    ) {
+      logger.warn('listen_fallback_ipv4', { detail: err.message });
+      bind('0.0.0.0');
+      return;
+    }
+    logger.error('listen_failed', {
+      host: bindHost,
+      port,
+      detail: err.message,
+    });
+    process.exit(1);
   });
-  process.exit(1);
-});
+  server.listen({ port, host: bindHost, ipv6Only: false }, () => {
+    logger.info('listening', {
+      host: bindHost,
+      port,
+      health: '/api/health',
+    });
+    void loadApplication();
+  });
+}
 
-server.listen(port, host, () => {
-  logger.info('listening', {
-    host,
-    port,
-    health: '/api/health',
-  });
-  void loadApplication();
-});
+bind(host);
 
 async function loadApplication(): Promise<void> {
   try {

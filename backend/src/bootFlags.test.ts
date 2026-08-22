@@ -71,14 +71,16 @@ describe('resolveBackupsEnabled', () => {
 });
 
 describe('listenHost', () => {
-  it('binds all interfaces so Railway IPv4 healthchecks can connect', () => {
-    assert.equal(listenHost({}), '0.0.0.0');
-    assert.equal(listenHost({ HOST: '127.0.0.1' }), '0.0.0.0');
-    assert.equal(listenHost({ HOST: 'localhost' }), '0.0.0.0');
+  it('binds dual-stack so Railway IPv4 healthchecks and IPv6 private mesh both connect', () => {
+    assert.equal(listenHost({}), '::');
+    assert.equal(listenHost({ HOST: '127.0.0.1' }), '::');
+    assert.equal(listenHost({ HOST: 'localhost' }), '::');
+    assert.equal(listenHost({ HOST: '0.0.0.0' }), '::');
   });
 
   it('honours an explicit non-loopback HOST', () => {
     assert.equal(listenHost({ HOST: '::' }), '::');
+    assert.equal(listenHost({ HOST: '10.0.0.5' }), '10.0.0.5');
   });
 });
 

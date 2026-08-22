@@ -22,8 +22,11 @@ describe('Railway corporate-website image', () => {
     expect(start).toContain('exec /docker-entrypoint.sh nginx -g \'daemon off;\'');
     expect(start).not.toContain('exec nginx -g');
     expect(start).toContain('is_usable_upstream');
+    expect(start).toContain('is_private_mesh');
+    expect(start).toContain('upstream_answers');
     expect(start).toContain('invalid port in upstream');
     expect(start).toContain('http://:');
+    expect(start).toContain('railway\\.internal');
   });
 
   it('answers platform health probes locally so a hung BFF cannot fail the deploy', () => {
