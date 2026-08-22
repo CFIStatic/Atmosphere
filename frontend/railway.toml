@@ -5,7 +5,7 @@
 #   Root Directory = /   (repo root — the Dockerfile copies verifier/ and fieldcapture/)
 #
 # Runtime variable (Variables tab, not GitHub Keys):
-#   API_UPSTREAM=http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}
+#   API_UPSTREAM=http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}
 #
 # Then generate a domain (or attach app.atmosphereteam.com) and put that origin
 # on the backend as FRONTEND_ORIGIN. See docs/production.md.

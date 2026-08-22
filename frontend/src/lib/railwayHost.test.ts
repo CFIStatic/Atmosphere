@@ -25,6 +25,9 @@ describe('Railway office-app image', () => {
     const start = read('nginx/office-start.sh');
     expect(start).toContain("envsubst '${PORT} ${API_UPSTREAM}'");
     expect(start).toContain("exec nginx -g 'daemon off;'");
+    expect(start).toContain('is_usable_upstream');
+    expect(start).toContain('invalid port in upstream');
+    expect(start).toContain('http://:');
   });
 
   it('proxies /api and serves the static apps on one origin', () => {
@@ -45,8 +48,9 @@ describe('Railway office-app image', () => {
   it('points API_UPSTREAM at the Atmosphere private domain, not the public URL', () => {
     const upstream = readRoot('api.upstream').trim();
     expect(upstream).toBe(
-      'http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}',
+      'http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}',
     );
+    expect(upstream).not.toContain('${{Atmosphere.');
   });
 
   it('points the Railway app service at this Dockerfile, not the backend one', () => {

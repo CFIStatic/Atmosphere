@@ -78,7 +78,7 @@ The office image reverse-proxies `/api` at runtime. Set this on the office
 service **before** the first Autodeploy:
 
 ```text
-API_UPSTREAM=http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}
+API_UPSTREAM=http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}
 ```
 
 Leave `VITE_API_BASE_URL` empty so the SPA uses same-origin `/api` and
@@ -102,7 +102,7 @@ repo root:
 
 ```bash
 cat api.upstream
-# http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}
+# http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}
 ```
 
 Plain `http://`, private domain, no public host. Set to
@@ -238,6 +238,11 @@ leftover Config File pointing at the repo-root `/railway.toml` can also
 inject `node dist/index.js` or probe `/api/health` (which nginx used to
 proxy to the BFF — a hung `API_UPSTREAM` then fails the deploy).
 
+A later failure: `API_UPSTREAM` still referenced `${{Atmosphere.…}}` after
+the BFF was renamed **Atmosphere APIs**. Railway interpolates those to
+empty, nginx gets `proxy_pass http://:`, and dies with `invalid port in
+upstream ":"` before `/healthz` can answer.
+
 Fix, in the repo (the deploy job applies this automatically):
 
 1. `office-start.sh` binds `0.0.0.0:$PORT` and starts nginx. Never Node.
@@ -315,11 +320,13 @@ In the Railway project that already runs the BFF (`Atmosphere`):
 
    | Variable | Value |
    | --- | --- |
-   | `API_UPSTREAM` | `http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}` |
+   | `API_UPSTREAM` | `http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}` |
 
-   Replace `Atmosphere` with the BFF service name if you overrode
+   Replace `"Atmosphere APIs"` with the BFF service name if you overrode
    `RAILWAY_SERVICE`. Same value on every front door — see
    [`API_UPSTREAM` on every front door](#api_upstream-on-every-front-door).
+   A leftover `${{Atmosphere.…}}` interpolates to `http://:` and nginx
+   refuses to start (`invalid port in upstream ":"`).
 
 ### 2. Public origin
 
