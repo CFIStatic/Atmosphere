@@ -32,7 +32,10 @@ export function allowlistedAnalyticsScope(email: string | undefined | null): Ana
  * analytics_staff row. No-op when service role is unset or the email is not
  * allowlisted. Safe to call on every /access probe.
  */
-export async function ensureAllowlistedAnalyticsAccess(user: User | undefined): Promise<void> {
+export async function ensureAllowlistedAnalyticsAccess(
+  user: User | undefined,
+  displayName?: string | null,
+): Promise<void> {
   if (!user?.id) return;
   const scope = allowlistedAnalyticsScope(user.email);
   if (!scope) return;
@@ -46,11 +49,15 @@ export async function ensureAllowlistedAnalyticsAccess(user: User | undefined): 
     return;
   }
 
+  const fromMeta =
+    typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name.trim() : '';
+  const name = displayName?.trim() || fromMeta || user.email || null;
+
   const { error } = await admin.from('analytics_staff').upsert(
     {
       user_id: user.id,
       scope,
-      display_name: user.email ?? null,
+      display_name: name,
     },
     { onConflict: 'user_id' },
   );

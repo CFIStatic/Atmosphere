@@ -1,14 +1,30 @@
 # Corporate marketing site (website/). Do not reuse the API railway.toml —
 # that probes /api/health and starts `node dist/index.js`, which 502s here.
+#
+# One-time on the Railway `website` service (Settings → Config-as-code):
+#   Config File    = /website/railway.toml
+#   Root Directory = /
+# Without that, GitHub autodeploys resolve the repo-root /railway.toml (the
+# backend's) and this service deploys with the wrong start command and probe.
+# The deploy-website.yml CLI path copies this file to the upload root, which
+# masks the missing setting for CLI deploys only.
 
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "website/Dockerfile"
+# A frontend- or backend-only push must not rebuild the marketing site.
+# GitHub Autodeploy of a frontend-only commit used to rebuild this service
+# and fail Network > Healthcheck.
+watchPatterns = [
+  "website/**",
+  ".dockerignore",
+  ".github/workflows/deploy-website.yml",
+]
 
 [deploy]
 healthcheckPath = "/health"
-healthcheckTimeout = 180
+healthcheckTimeout = 60
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5
-# nginx image entrypoint (envsubst of PORT). Never node dist/index.js.
-startCommand = "/docker-entrypoint.sh nginx -g 'daemon off;'"
+# Own entrypoint (envsubst of PORT). Never node dist/index.js.
+startCommand = "/usr/local/bin/website-start.sh"

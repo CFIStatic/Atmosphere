@@ -2,10 +2,15 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireAnalytics } from '../middleware/requireAnalytics.js';
-import { analyticsRangeSchema, analyticsDatasetSchema } from '../lib/validation.js';
+import {
+  analyticsDatasetSchema,
+  analyticsOrgIdSchema,
+  analyticsRangeSchema,
+} from '../lib/validation.js';
 import { HttpError } from '../lib/errors.js';
 import {
   getAccess,
+  getAccountDetail,
   getAccounts,
   getExperiments,
   getFeatures,
@@ -124,6 +129,29 @@ analyticsRouter.get(
       const { from, to } = parseRange(req);
       const supabase = createUserClient(req.accessToken!);
       res.json({ accounts: await getAccounts(supabase, from, to, 500) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** One organization file — members, jobs, usage. Internal scope only. */
+analyticsRouter.get(
+  '/accounts/:orgId',
+  requireAnalytics('internal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = analyticsOrgIdSchema.safeParse(req.params.orgId);
+      if (!parsed.success) {
+        throw new HttpError(400, parsed.error.issues[0]?.message ?? 'Invalid org id', 'invalid_org');
+      }
+      const { from, to } = parseRange(req);
+      const supabase = createUserClient(req.accessToken!);
+      const detail = await getAccountDetail(supabase, parsed.data, from, to);
+      if (!detail) {
+        throw new HttpError(404, 'Organization not found', 'org_not_found');
+      }
+      res.json(detail);
     } catch (err) {
       next(err);
     }

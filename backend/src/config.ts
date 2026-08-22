@@ -31,12 +31,13 @@ const backupsEnabled = resolveBackupsEnabled(process.env, isProduction);
 // running against the shared demo project / a localhost CORS origin.
 const devOnly = (value: string): string | undefined => (isProduction ? undefined : value);
 
-// Dev default matches .env.example: app (:5174), marketing site (:5173), and
-// both localhost / 127.0.0.1 Host headers Cursor and browsers swap between.
+// Dev default matches .env.example: app (:5174), marketing site (:5173),
+// internal staff site (:5175), and both localhost / 127.0.0.1 Host headers
+// Cursor and browsers swap between.
 const frontendOriginRaw = isProduction
   ? required('FRONTEND_ORIGIN')
   : (process.env.FRONTEND_ORIGIN ??
-    'http://localhost:5174,http://localhost:5173,http://127.0.0.1:5174,http://127.0.0.1:5173');
+    'http://localhost:5174,http://localhost:5173,http://localhost:5175,http://127.0.0.1:5174,http://127.0.0.1:5173,http://127.0.0.1:5175');
 
 // Comma-separated list of allowed browser origins for CORS.
 const frontendOrigins = frontendOriginRaw
@@ -98,10 +99,12 @@ export const config = {
     pepper: required('DEVICE_PEPPER', devOnly('atmosphere-dev-pepper-do-not-use-in-production')),
   },
 
-  // Where the password-reset email sends the user back to. Must also be listed
-  // in the Supabase dashboard under Authentication → URL Configuration.
-  passwordResetRedirectUrl:
-    process.env.PASSWORD_RESET_REDIRECT_URL ?? `${frontendOrigins[0]}/reset-password`,
+  // Where the password-reset email sends the user back to when Atmosphere
+  // mail is unavailable and we fall through to Supabase's mailer. Prefer
+  // passwordResetRedirectUrl() (publicAppOrigin + /reset-password) — do not
+  // stamp FRONTEND_ORIGIN[0], which is often localhost or the unmapped
+  // custom domain. Override with PASSWORD_RESET_REDIRECT_URL.
+  passwordResetRedirectUrl: process.env.PASSWORD_RESET_REDIRECT_URL ?? '',
 
   xactimate: {
     // Which driver reaches Xactimate. 'mock' is the default deliberately: the

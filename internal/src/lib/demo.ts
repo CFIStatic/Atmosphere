@@ -1,0 +1,327 @@
+/**
+ * Test fixtures only. Not imported by the hosted SPA — production always
+ * calls the live BFF.
+ */
+import type {
+  AccountDetail,
+  AccountRow,
+  ExperimentStats,
+  MeteringPayload,
+  OverviewPayload,
+  ReadyPayload,
+} from './types';
+
+const generatedAt = '2026-08-21T15:00:00.000Z';
+
+const accounts: AccountRow[] = [
+  {
+    orgId: '11111111-1111-4111-8111-111111111111',
+    orgName: 'Harbor Mitigation Co',
+    createdAt: '2025-05-12T00:00:00.000Z',
+    planCode: 'team',
+    planName: 'Team',
+    billingInterval: 'annual',
+    status: 'active',
+    seats: 8,
+    members: 7,
+    mrrCents: 47900,
+    arrCents: 574800,
+    revenueInRangeCents: 47900,
+    creditSpendCents: 18.4,
+    activeHours: 126.2,
+    topFeature: 'Verifier',
+    lastActiveAt: '2026-08-21T11:40:00.000Z',
+  },
+  {
+    orgId: '22222222-2222-4222-8222-222222222222',
+    orgName: 'Cedar Ridge Builders',
+    createdAt: '2025-07-03T00:00:00.000Z',
+    planCode: 'pro',
+    planName: 'Pro',
+    billingInterval: 'monthly',
+    status: 'active',
+    seats: 6,
+    members: 5,
+    mrrCents: 19900,
+    arrCents: 238800,
+    revenueInRangeCents: 19900,
+    creditSpendCents: 9.1,
+    activeHours: 64.8,
+    topFeature: 'Field Capture',
+    lastActiveAt: '2026-08-20T18:12:00.000Z',
+  },
+  {
+    orgId: '33333333-3333-4333-8333-333333333333',
+    orgName: 'Northwind Restoration',
+    createdAt: '2024-11-20T00:00:00.000Z',
+    planCode: 'team',
+    planName: 'Team',
+    billingInterval: 'annual',
+    status: 'active',
+    seats: 12,
+    members: 9,
+    mrrCents: 59900,
+    arrCents: 718800,
+    revenueInRangeCents: 59900,
+    creditSpendCents: 31.2,
+    activeHours: 188.4,
+    topFeature: 'Job files',
+    lastActiveAt: '2026-08-21T09:05:00.000Z',
+  },
+  {
+    orgId: '44444444-4444-4444-8444-444444444444',
+    orgName: 'Willow Creek Builders',
+    createdAt: '2026-06-14T00:00:00.000Z',
+    planCode: 'free',
+    planName: 'Free',
+    billingInterval: 'monthly',
+    status: 'trialing',
+    seats: 1,
+    members: 2,
+    mrrCents: 0,
+    arrCents: 0,
+    revenueInRangeCents: 0,
+    creditSpendCents: 0,
+    activeHours: 4.1,
+    topFeature: 'Start a job',
+    lastActiveAt: '2026-08-18T16:00:00.000Z',
+  },
+  {
+    orgId: '55555555-5555-4555-8555-555555555555',
+    orgName: 'Lakeshore Property Care',
+    createdAt: '2026-02-01T00:00:00.000Z',
+    planCode: 'pro',
+    planName: 'Pro',
+    billingInterval: 'monthly',
+    status: 'canceled',
+    seats: 1,
+    members: 2,
+    mrrCents: 0,
+    arrCents: 0,
+    revenueInRangeCents: 0,
+    creditSpendCents: 2.4,
+    activeHours: 1.2,
+    topFeature: null,
+    lastActiveAt: '2026-07-11T00:00:00.000Z',
+  },
+];
+
+export const demoOverview: OverviewPayload = {
+  scope: 'internal',
+  generatedAt,
+  range: { from: '2025-08-21T00:00:00.000Z', to: '2026-08-21T00:00:00.000Z' },
+  summary: {
+    scope: 'internal',
+    range: { from: '2025-08-21T00:00:00.000Z', to: '2026-08-21T00:00:00.000Z', days: 365 },
+    customers: {
+      orgsTotal: 14,
+      orgsNew: 3,
+      orgsPaying: 11,
+      orgsActive: 12,
+      orgsGrowthMomPct: 8.3,
+    },
+    users: {
+      usersTotal: 86,
+      usersNew: 9,
+      usersActive: 54,
+      usersGrowthMomPct: 6.1,
+    },
+    seats: {
+      seatsLicensed: 72,
+      seatsFilled: 61,
+      seatUtilizationPct: 84.7,
+      seatsGrowthMomPct: 4.2,
+    },
+    revenue: {
+      mrrCents: 218500,
+      arrCents: 2622000,
+      annualContractedArrCents: 1911600,
+      mrrGrowthMomPct: 5.4,
+      netNewMrrCents: 11200,
+      collectedInRangeCents: 1842000,
+      trailing12mRevenueCents: 1842000,
+      avgMonthlySpendPerAccountCents: 19860,
+      arpaMrrCents: 19864,
+      trialPipelineMrrCents: 19900,
+    },
+    engagement: {
+      trackedHours: 412.6,
+      sessions: 1480,
+      featuresUsed: 18,
+      featuresTracked: 22,
+      aiRequests: 940,
+    },
+    unitEconomics: {
+      billedUsageCents: 18400,
+      modelCostCents: 6100,
+      grossMarginCents: 12300,
+      grossMarginPct: 66.8,
+    },
+  },
+  monthly: [
+    { month: '2025-09-01', newOrgs: 1, totalOrgs: 8, payingOrgs: 6, activeOrgs: 7, churnedOrgs: 0, mrrCents: 142000, arrCents: 1704000, revenueCents: 142000, trackedHours: 21 },
+    { month: '2025-10-01', newOrgs: 1, totalOrgs: 9, payingOrgs: 7, activeOrgs: 8, churnedOrgs: 0, mrrCents: 154000, arrCents: 1848000, revenueCents: 154000, trackedHours: 28 },
+    { month: '2025-11-01', newOrgs: 0, totalOrgs: 9, payingOrgs: 7, activeOrgs: 8, churnedOrgs: 0, mrrCents: 154000, arrCents: 1848000, revenueCents: 154000, trackedHours: 31 },
+    { month: '2025-12-01', newOrgs: 1, totalOrgs: 10, payingOrgs: 8, activeOrgs: 9, churnedOrgs: 0, mrrCents: 168000, arrCents: 2016000, revenueCents: 210000, trackedHours: 36 },
+    { month: '2026-01-01', newOrgs: 1, totalOrgs: 11, payingOrgs: 9, activeOrgs: 10, churnedOrgs: 0, mrrCents: 181000, arrCents: 2172000, revenueCents: 181000, trackedHours: 38 },
+    { month: '2026-02-01', newOrgs: 1, totalOrgs: 12, payingOrgs: 10, activeOrgs: 11, churnedOrgs: 0, mrrCents: 194000, arrCents: 2328000, revenueCents: 194000, trackedHours: 41 },
+    { month: '2026-03-01', newOrgs: 0, totalOrgs: 12, payingOrgs: 10, activeOrgs: 11, churnedOrgs: 0, mrrCents: 194000, arrCents: 2328000, revenueCents: 194000, trackedHours: 44 },
+    { month: '2026-04-01', newOrgs: 1, totalOrgs: 13, payingOrgs: 11, activeOrgs: 12, churnedOrgs: 0, mrrCents: 207000, arrCents: 2484000, revenueCents: 207000, trackedHours: 48 },
+    { month: '2026-05-01', newOrgs: 0, totalOrgs: 13, payingOrgs: 11, activeOrgs: 12, churnedOrgs: 0, mrrCents: 207000, arrCents: 2484000, revenueCents: 207000, trackedHours: 51 },
+    { month: '2026-06-01', newOrgs: 1, totalOrgs: 14, payingOrgs: 11, activeOrgs: 12, churnedOrgs: 0, mrrCents: 207000, arrCents: 2484000, revenueCents: 207000, trackedHours: 49 },
+    { month: '2026-07-01', newOrgs: 0, totalOrgs: 14, payingOrgs: 11, activeOrgs: 11, churnedOrgs: 1, mrrCents: 207300, arrCents: 2487600, revenueCents: 188000, trackedHours: 46 },
+    { month: '2026-08-01', newOrgs: 0, totalOrgs: 14, payingOrgs: 11, activeOrgs: 12, churnedOrgs: 0, mrrCents: 218500, arrCents: 2622000, revenueCents: 218500, trackedHours: 52 },
+  ],
+  features: [
+    { featureKey: 'verifier_library', label: 'Verifier', area: 'Verification', sessions: 410, activeHours: 148.2, users: 32, orgs: 9, sharePct: 35.9, aiRequests: 620, lastUsedAt: '2026-08-21T11:40:00.000Z' },
+    { featureKey: 'job_files', label: 'Job files', area: 'Verification', sessions: 280, activeHours: 92.4, users: 28, orgs: 11, sharePct: 22.4, aiRequests: 40, lastUsedAt: '2026-08-21T09:05:00.000Z' },
+    { featureKey: 'field_capture', label: 'Field Capture', area: 'Field', sessions: 190, activeHours: 71.1, users: 41, orgs: 10, sharePct: 17.2, aiRequests: 12, lastUsedAt: '2026-08-20T18:12:00.000Z' },
+    { featureKey: 'job_intake', label: 'Start a job', area: 'Verification', sessions: 120, activeHours: 38.6, users: 18, orgs: 8, sharePct: 9.4, aiRequests: 210, lastUsedAt: '2026-08-21T08:22:00.000Z' },
+    { featureKey: 'billing_console', label: 'Billing', area: 'Back office', sessions: 44, activeHours: 8.2, users: 9, orgs: 6, sharePct: 2.0, aiRequests: 0, lastUsedAt: '2026-08-19T14:00:00.000Z' },
+    { featureKey: 'email_marketing', label: 'Email marketing', area: 'Sales', sessions: 6, activeHours: 0.4, users: 2, orgs: 1, sharePct: 0.1, aiRequests: 0, lastUsedAt: '2026-06-02T00:00:00.000Z' },
+  ],
+  planMix: [
+    { planCode: 'team', planName: 'Team', billingInterval: 'annual', orgs: 5, seats: 48, mrrCents: 167600, arrCents: 2011200, mrrSharePct: 76.7 },
+    { planCode: 'pro', planName: 'Pro', billingInterval: 'monthly', orgs: 4, seats: 12, mrrCents: 50900, arrCents: 610800, mrrSharePct: 23.3 },
+    { planCode: 'free', planName: 'Free', billingInterval: 'monthly', orgs: 2, seats: 2, mrrCents: 0, arrCents: 0, mrrSharePct: 0 },
+  ],
+  retention: [
+    { cohortMonth: '2025-11-01', cohortSize: 2, monthOffset: 0, activeOrgs: 2, retentionPct: 100 },
+    { cohortMonth: '2025-11-01', cohortSize: 2, monthOffset: 1, activeOrgs: 2, retentionPct: 100 },
+    { cohortMonth: '2025-11-01', cohortSize: 2, monthOffset: 9, activeOrgs: 2, retentionPct: 100 },
+    { cohortMonth: '2026-02-01', cohortSize: 2, monthOffset: 0, activeOrgs: 2, retentionPct: 100 },
+    { cohortMonth: '2026-02-01', cohortSize: 2, monthOffset: 5, activeOrgs: 1, retentionPct: 50 },
+  ],
+  accounts,
+  productIntelligence: {
+    confidence: 'medium',
+    confidenceNote: 'Based on 12 months of product heartbeats across 14 organizations.',
+    insights: [
+      {
+        id: 'invest-verifier',
+        kind: 'invest',
+        priority: 'high',
+        title: 'Verifier is where time is spent',
+        rationale: 'A third of tracked hours land in the evidence library.',
+        action: 'Keep the verification path first in the product, not a side tab.',
+      },
+      {
+        id: 'cut-email',
+        kind: 'cut',
+        priority: 'medium',
+        title: 'Email marketing is unused',
+        rationale: 'Two users, six sessions, last touch in June.',
+        action: 'Leave it off the console until a customer asks.',
+      },
+      {
+        id: 'stick-field',
+        kind: 'stickiness',
+        priority: 'high',
+        title: 'Field Capture brings crews back',
+        rationale: 'Most unique users, second-highest hours.',
+        action: 'Shorten the invite-to-first-clip loop.',
+      },
+    ],
+  },
+};
+
+export const demoExperiments: ExperimentStats[] = [
+  {
+    experimentKey: 'intake_combined_address',
+    name: 'Combined name + address on Start a job',
+    status: 'running',
+    description: 'One field versus two.',
+    variants: [
+      { variantKey: 'control', label: 'Split fields', weight: 50, assignments: 80, exposures: 74, conversions: 41, events: 120 },
+      { variantKey: 'combined', label: 'Combined field', weight: 50, assignments: 76, exposures: 71, conversions: 48, events: 118 },
+    ],
+  },
+];
+
+export const demoMetering: MeteringPayload = {
+  totals: { eventCount: 940, aiCostNanos: 6100_0000000, computeUnits: 1820, distinctOrgs: 9 },
+  byCustomer: [
+    { orgId: accounts[2].orgId, orgName: accounts[2].orgName, eventCount: 410, aiCostNanos: 2800_0000000, computeUnits: 820, distinctJobs: 18 },
+    { orgId: accounts[0].orgId, orgName: accounts[0].orgName, eventCount: 260, aiCostNanos: 1700_0000000, computeUnits: 510, distinctJobs: 11 },
+    { orgId: accounts[1].orgId, orgName: accounts[1].orgName, eventCount: 140, aiCostNanos: 900_0000000, computeUnits: 280, distinctJobs: 7 },
+  ],
+  byWorkflow: [
+    { workflowId: 'verifier.dictation', eventCount: 620, aiCostNanos: 3900_0000000 },
+    { workflowId: 'intake.propose', eventCount: 210, aiCostNanos: 1400_0000000 },
+  ],
+  byModel: [
+    { provider: 'google', model: 'gemini-2.5-flash', eventCount: 700, aiCostNanos: 2100_0000000 },
+    { provider: 'anthropic', model: 'claude-sonnet-5', eventCount: 240, aiCostNanos: 4000_0000000 },
+  ],
+};
+
+export const demoReady: ReadyPayload = {
+  status: 'ready',
+  service: 'atmosphere-backend',
+  time: generatedAt,
+  checks: {
+    supabaseAuth: { ok: true },
+    supabaseAdmin: { ok: true },
+    storage: { ok: true, detail: 'job-proofs' },
+    config: { ok: true, detail: 'development' },
+    mail: { ok: true, detail: 'resend' },
+  },
+};
+
+export function demoAccountDetail(orgId: string): AccountDetail | null {
+  const account = accounts.find((row) => row.orgId === orgId);
+  if (!account) return null;
+  return {
+    account,
+    members: [
+      {
+        userId: 'aaaaaaa1-1111-4111-8111-111111111111',
+        email: `owner@${account.orgName.split(' ')[0].toLowerCase()}.example`,
+        fullName: 'Alex Rivera',
+        role: 'project_manager',
+        workType: 'mitigation',
+        status: 'active',
+        createdAt: account.createdAt,
+      },
+      {
+        userId: 'aaaaaaa2-1111-4111-8111-111111111111',
+        email: `office@${account.orgName.split(' ')[0].toLowerCase()}.example`,
+        fullName: 'Jordan Lee',
+        role: 'office_manager',
+        workType: 'mitigation',
+        status: 'active',
+        createdAt: account.createdAt,
+      },
+    ],
+    jobs: {
+      total: account.members + 3,
+      byStatus: [
+        { status: 'active', count: Math.max(1, account.members - 1) },
+        { status: 'complete', count: 2 },
+      ],
+      recent: [
+        {
+          id: `${orgId.slice(0, 8)}-job-1`,
+          title: 'Elm Street water loss',
+          status: 'active',
+          workType: 'mitigation',
+          jobNumber: 1042,
+          createdAt: '2026-08-12T00:00:00.000Z',
+        },
+        {
+          id: `${orgId.slice(0, 8)}-job-2`,
+          title: 'Cedar roof tear-off',
+          status: 'complete',
+          workType: 'construction',
+          jobNumber: 1038,
+          createdAt: '2026-07-28T00:00:00.000Z',
+        },
+      ],
+    },
+    features: [
+      { featureKey: 'verifier_library', label: 'Verifier', activeHours: Math.round(account.activeHours * 0.4 * 10) / 10, sessions: 40 },
+      { featureKey: 'job_files', label: 'Job files', activeHours: Math.round(account.activeHours * 0.3 * 10) / 10, sessions: 22 },
+      { featureKey: 'field_capture', label: 'Field Capture', activeHours: Math.round(account.activeHours * 0.2 * 10) / 10, sessions: 18 },
+    ],
+  };
+}

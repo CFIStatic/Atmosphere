@@ -12,16 +12,29 @@ Do this once in the Railway dashboard. GitHub Actions deploys the backend
 Autodeploy is the fallback if Actions is skipped; without either, a service
 stays on its last successful image.
 
-Databases, Redis, and volumes are not git apps — skip them. The marketing site
-is GitHub Pages (`website/`), not Railway. iOS is App Store.
+Databases, Redis, and volumes are not git apps — skip them. iOS is App Store.
+The marketing site (`website/`) deploys to the Railway nginx service `website`
+from its own workflow (GitHub Pages is an optional second host — see
+`.github/workflows/deploy-website.yml`).
 
 | Railway service | Config as Code | Dockerfile | Rebuilds when these paths change |
 | --- | --- | --- | --- |
 | Backend BFF | `/railway.toml` | `Dockerfile` (repo root) | `backend/**`, `Dockerfile`, `railway.toml` |
 | Office console | `/frontend/railway.toml` | `frontend/Dockerfile` | `frontend/**`, `verifier/**`, `fieldcapture/**`, `frontend/Dockerfile` |
+| Corporate site (`website`) | `/website/railway.toml` | `website/Dockerfile` | `website/**`, `.dockerignore`, `.github/workflows/deploy-website.yml` |
+| Internal staff site | `/internal/railway.json` | `internal/Dockerfile` | `internal/**`, `internal/Dockerfile` |
 
-Both services use **Root Directory `/`**. The console must not use `/frontend`
-as root — Vite copies sibling `verifier/` and `fieldcapture/` into the build.
+All git-backed services use **Root Directory `/`**. The console must not use
+`/frontend` as root — Vite copies sibling `verifier/` and `fieldcapture/`
+into the build — and `website/Dockerfile` also copies from the repo root.
+
+> **Heads-up:** Railway has deprecated config-as-code files. Existing
+> (legacy) services keep reading their `railway.toml` until the hard cutoff
+> on **2026-12-01**; new services cannot opt in at all. Before the cutoff,
+> mirror each service's settings above (start command, healthcheck path,
+> watch paths, Dockerfile path) into its dashboard Settings, or migrate to
+> Railway's Infrastructure as Code (`.railway/railway.ts`). See
+> https://docs.railway.com/infrastructure-as-code.
 
 ### Step 0 — GitHub App (once)
 
@@ -73,6 +86,45 @@ httpOnly cookies just work. `FRONTEND_ORIGIN` on the backend must include
 the office app’s public origin or cookies/CORS fail.
 
 Healthcheck is `/healthz`. nginx listens on Railway’s `PORT`.
+
+#### Corporate website variables
+
+The marketing image is nginx, not Node. Settings → **Config File** =
+`/website/railway.toml` so Autodeploy does not inherit `node dist/index.js`
+and `/api/health` from the repo-root file. Healthcheck is `GET /health`
+(also answered at `/api/health` so a leftover API probe still passes).
+
+#### `API_UPSTREAM` on every front door
+
+The office console and the marketing site are nginx front doors onto the
+same BFF. They take the **same** private-mesh upstream from one file at the
+repo root:
+
+```bash
+cat api.upstream
+# http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}
+```
+
+Plain `http://`, private domain, no public host. Set to
+`https://atmosphere-production.up.railway.app` instead, a `/api` request
+leaves the private network and comes back in through the edge (jfk1 → ams1),
+which 502s for a few seconds. What that looks like from the outside is a front
+door reporting the Atmosphere API as unreachable while the BFF is perfectly
+healthy — the office console spinning on `/login`, the site’s careers and
+contact forms failing to post.
+
+The staff site (`internal/`, Railway service `Internal Growth Metrics`) is
+the exception: its nginx 504s on the private mesh, so the deploy job points
+it at the public BFF host.
+
+The deploy workflows keep these in sync, so a fix here does not need a
+dashboard visit:
+
+| Service | Set by |
+| --- | --- |
+| `Atmosphere-web` | `deploy-production.yml` → office app job (`api.upstream`) |
+| `website` | `deploy-website.yml` (override with the `API_UPSTREAM` Actions variable only if the site ever moves out of this project) |
+| `Internal Growth Metrics` | `deploy-production.yml` → internal site job (public BFF; name it with `RAILWAY_INTERNAL_SERVICE`) |
 
 #### Any extra service you added later
 
@@ -140,7 +192,35 @@ Manual backend fallback: **Actions → Deploy Work Verification → Run workflow
 - **GitHub App.** Re-accept permissions; reconnect the repo on the service.
 - **Config as Code.** Frontend still using `/railway.toml` will try to start
   `node dist/index.js` and healthcheck `/api/health`. Point it at
-  `/frontend/railway.toml`.
+  `/frontend/railway.toml`. The corporate site must use `/website/railway.toml`
+  for the same reason. The internal site is the same trap: Config File
+  must be `/internal/railway.json`. A ~5 minute Network healthcheck is the
+  backend 300s `/api/health` probe, not nginx. The deploy job also applies
+  that json onto the service with `internal/scripts/apply-railway-config.sh`.
+
+### If the website service fails its healthcheck on every main push
+
+Symptom: the `website` (Corporate Website) service shows **Deployment failed
+during network process → Healthcheck failure** after ~5 minutes, on commits
+that never touched `website/`, and the deployment says **via GitHub**.
+
+Cause: the service's Config File was never set, so GitHub autodeploys resolve
+the repo-root `/railway.toml` (the backend's). The nginx image then deployed
+with the backend's settings and never answered the probe. The CLI deploys from
+`deploy-website.yml` worked because that job copies `website/railway.toml`
+over the upload root — which masked the missing setting.
+
+Fix, once, on the `website` service:
+
+1. Settings → **Config-as-code** → Config File = `/website/railway.toml`.
+   That brings its nginx start command, `GET /health` probe, and the
+   `website/**` watch paths onto GitHub autodeploys too.
+2. Or, if GitHub autodeploy on this service is unwanted (Actions already
+   ships it via CLI on website changes), Settings → **Disable Autodeploy**.
+
+The repo also no longer sets a `startCommand` in the root `railway.toml`
+(the backend Dockerfile's CMD is the same command), so even a service still
+inheriting the root config boots its own image instead of crash-looping.
 
 Official references: [GitHub Autodeploys](https://docs.railway.com/deployments/github-autodeploys),
 [PR Environments](https://docs.railway.com/guides/preview-deployments-with-pr-environments),
@@ -150,16 +230,17 @@ Official references: [GitHub Autodeploys](https://docs.railway.com/deployments/g
 
 | Surface | Artifact | Notes |
 | --- | --- | --- |
-| Backend BFF | `backend/` (`Dockerfile` or `npm run build && npm start`) | Node 22, long-lived process; needs FFmpeg for proof sparse frames. **Railway service `Atmosphere` (override with `RAILWAY_SERVICE`).** |
+| Backend BFF | `backend/` (`Dockerfile` or `npm run build && npm start`) | Node 22, long-lived process; needs FFmpeg for proof sparse frames. **Railway service `Atmosphere APIs` (override with `RAILWAY_SERVICE`).** |
 | Office app | `frontend/` + `verifier/` + `fieldcapture/` | One nginx image; `/api` proxied to the BFF. **Railway service `Atmosphere-web` (override with `RAILWAY_APP_SERVICE`).** |
-| Marketing site | `website/` | Already CD’d to GitHub Pages |
+| Marketing site | `website/` | nginx image on Railway service `website`; GitHub Pages optional (`deploy-website.yml`); nginx proxies `/api` for the careers and contact forms |
+| Internal staff site | `internal/` | Accounts, analytics, system health. **Railway service `Internal Growth Metrics` (override with `RAILWAY_INTERNAL_SERVICE`).** Staff-only; `noindex`. |
 | Native Field | `apps/field-ios/` | App Store path; uses the same BFF |
 
 Compose sketch: `docker compose up --build` (see root `docker-compose.yml`). Same shape as Railway: browser hits `:8080`, nginx proxies `/api` to the BFF.
 
 ## Host the office app on Railway
 
-The marketing site stays on GitHub Pages. The **product** (office console, Verifier, Field Capture) is a second Railway service next to the BFF, same project.
+The marketing site ships separately to the Railway `website` service (see `.github/workflows/deploy-website.yml`). The **product** (office console, Verifier, Field Capture) is a second Railway service next to the BFF, same project.
 
 Same-origin `/api` is the point: session cookies stay `SameSite=Lax`, Field Capture does not need `?api=`, and `VITE_API_BASE_URL` stays empty.
 
@@ -177,7 +258,9 @@ In the Railway project that already runs the BFF (`Atmosphere`):
    | --- | --- |
    | `API_UPSTREAM` | `http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}` |
 
-   Replace `Atmosphere` with the BFF service name if you overrode `RAILWAY_SERVICE`.
+   Replace `Atmosphere` with the BFF service name if you overrode
+   `RAILWAY_SERVICE`. Same value on every front door — see
+   [`API_UPSTREAM` on every front door](#api_upstream-on-every-front-door).
 
 ### 2. Public origin
 
@@ -209,24 +292,47 @@ Health probe: `GET https://<app-host>/healthz` → `ok`. The SPA is `/`; Field C
 | GitHub Actions variable `WEBSITE_APP_ORIGIN` | `https://app.atmosphereteam.com` — marketing Sign in / Get started CTAs (see `website/README.md`) |
 | GitHub Actions variable `WEBSITE_API_ORIGIN` | Backend’s public https origin — careers/contact forms on Pages |
 | GitHub Actions variable `FRONTEND_ORIGIN` | Same as backend `FRONTEND_ORIGIN` (synced onto Railway by the deploy job) |
-| Supabase → Auth → URL configuration | Add the app origin; password-reset redirect `{origin}/reset-password` |
+| Supabase → Auth → URL configuration | Site URL = live office origin (never `http://localhost:3000`). Also allow `{origin}/reset-password`. Recovery mail is sent by Atmosphere with a `token_hash` link, so a leftover localhost Site URL cannot hijack the click. |
 | Stripe webhooks | Still `POST https://<backend-public-host>/api/webhooks/stripe` (not the app host) |
 
 Invite emails use the first origin in `FRONTEND_ORIGIN`, so put the public `https://` app URL first.
+
+### Host the internal staff site on Railway
+
+Atmosphere Internal (`internal/`) is a third Railway service next to the BFF and office app. Same-origin `/api` again: staff sign in with the same Atmosphere account; `analytics_staff` gates named accounts.
+
+1. **+ Create → Empty service** in the **existing** Atmosphere project. Name it `Internal Growth Metrics` (or set `RAILWAY_INTERNAL_SERVICE`). Do not create a second Railway project.
+2. Settings → **Config File**: `/internal/railway.json` (same settings as `internal/railway.toml`). New services that cannot set Config File still get those values from `internal/scripts/apply-railway-config.sh` on deploy.
+3. Settings → **Root Directory**: `/`
+4. Trigger branch must contain `internal/` (until this is on `main`, use the branch that added it). Deploying `main` before that merge cannot see `/internal/railway.json`.
+5. Variable `API_UPSTREAM=http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}`
+6. Networking → **Generate domain**. Add that https origin to backend `FRONTEND_ORIGIN`. Production CORS already allows the live staff host `https://melodious-inspiration-production-5ad9.up.railway.app`.
+7. Health probe: `GET /healthz` → `ok` (also `/health` and `/api/health`). nginx starts with `startCommand` from `internal/railway.json`, not `node dist/index.js`.
+
+Do not point customers here. The site sends `X-Robots-Tag: noindex`. The
+hosted image has no demo-data path — sign-in and every report hit the live
+BFF. Grant access with `ANALYTICS_INTERNAL_EMAILS` or `npm run analytics:grant --prefix backend -- someone@company.com internal`.
+
+See [`internal/README.md`](../internal/README.md).
 
 Local stand-in for this topology:
 
 ```bash
 docker compose up --build
-# app:  http://localhost:8080
-# api:  http://localhost:4000  (also reachable as http://localhost:8080/api/…)
+# app:       http://localhost:8080
+# internal:  http://localhost:8081
+# api:       http://localhost:4000  (also reachable as http://localhost:8080/api/…)
 ```
 
 ## Supabase
 
 1. Dedicated **production** project (never the shared demo URL from `.env.example`).
 2. Apply migrations — see [Migration apply order](#migration-apply-order).
-3. Auth → URL configuration: add the production frontend origin and password-reset redirect.
+3. Auth → URL configuration: set Site URL to the live office origin (not
+   `http://localhost:3000`) and allow `{origin}/reset-password`. Atmosphere
+   mails recovery links itself (`token_hash` on `/reset-password`) as
+   Atmosphere, never as Supabase Auth. The dashboard values are unused for
+   this flow.
 4. Storage: ensure `job-proofs` exists (migration
    `20260815180000_job_proofs_storage_bucket.sql`) with an appropriate size cap.
 5. Store `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` only
@@ -242,7 +348,7 @@ Fail-loud at boot when `NODE_ENV=production` (see `backend/src/lib/productionGua
 | `FRONTEND_ORIGIN` | CORS allowlist (comma-separated) |
 | `SUPABASE_URL` / `SUPABASE_ANON_KEY` | Auth + RLS-backed reads |
 | `SUPABASE_SERVICE_ROLE_KEY` | PIN unlock, signed uploads, media catalog, schedulers |
-| `DEVICE_PEPPER` | PIN hashing (never store in the DB) |
+| `DEVICE_PEPPER` | PIN hashing and internal-site Authenticator secrets (never store in the DB) |
 | `CONTACT_TO_EMAIL` / `CAREERS_TO_EMAIL` | Public site forms — defaults to `jack@jettx.ai` |
 | `SMTP_*` or `RESEND_API_KEY` + `CAREERS_FROM_EMAIL` | Atmosphere-sent invites and field OTPs. Resend From is `hello@invites.jettx.ai` (verified subdomain). Reply-To stays `jack@jettx.ai`. |
 | `MEDIA_BACKEND=supabase` | Do not use `memory` or the `s3` stub in prod |
@@ -284,6 +390,13 @@ npm run check:migrations --prefix backend
 the next `/api/analytics/access` probe when `SUPABASE_SERVICE_ROLE_KEY` is set —
 no SQL step in preview.
 
+The internal staff site (`internal/`) signs in with first name, last name,
+and email (`POST /api/auth/internal-challenge`), then a 6-digit Microsoft
+Authenticator code (`POST /api/auth/internal-login`). First visit for an
+allowlisted email enrolls Authenticator; later visits only ask for the code.
+Secrets are encrypted with `DEVICE_PEPPER`. Apply
+`20260821210000_internal_staff_totp.sql` on production Supabase.
+
 Optional manual grant for others:
 
 ```bash
@@ -302,6 +415,7 @@ A/B experiments live in `public.experiments` (see migration
 | Liveness | `GET /api/health` | Process up (no deps) |
 | Readiness | `GET /api/ready` | Supabase Auth reachable; admin/storage reported |
 | App | `GET /healthz` | nginx on the office-app service is serving |
+| Marketing | `GET /health` | nginx on the corporate-site service is serving |
 
 Point the **platform deploy probe** (Railway) at `/api/health` so a brief
 Supabase blip cannot roll back a good process. Point a load-balancer

@@ -1,58 +1,21 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { api, ApiError, type RecoveryCredential } from '../lib/api';
+import { api, ApiError } from '../lib/api';
+import { takeRecoveryLink } from '../lib/recoveryLink';
 import { postAuthDestination } from '../lib/postAuth';
 import { PLATFORM_HOME } from '../lib/platforms';
 import { getPlatform } from '../lib/usePlatform';
 import { Logo } from '../components/Logo';
 import { EyeIcon, EyeOffIcon, SpinnerIcon } from '../components/icons';
 
-interface ParsedLink {
-  credential: RecoveryCredential | null;
-  linkError: string | null;
-}
-
-/**
- * Pull the recovery credential out of the URL.
- *
- * Supabase delivers it three different ways — `?token_hash=` with a customised
- * email template, `?code=` under PKCE, or a `#access_token=…` fragment with the
- * stock template — so all three are read here and handed to the backend, which
- * does the actual exchange.
- */
-function parseRecoveryLink(): ParsedLink {
-  const search = new URLSearchParams(window.location.search);
-  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-
-  const linkError =
-    search.get('error_description') ??
-    hash.get('error_description') ??
-    search.get('error') ??
-    hash.get('error');
-  if (linkError) return { credential: null, linkError };
-
-  const tokenHash = search.get('token_hash');
-  if (tokenHash) return { credential: { tokenHash }, linkError: null };
-
-  const code = search.get('code');
-  if (code) return { credential: { code }, linkError: null };
-
-  const accessToken = hash.get('access_token');
-  const refreshToken = hash.get('refresh_token');
-  if (accessToken && refreshToken) {
-    return { credential: { accessToken, refreshToken }, linkError: null };
-  }
-
-  return { credential: null, linkError: null };
-}
-
 export function ResetPasswordPage() {
   const navigate = useNavigate();
   const { adoptUser } = useAuth();
 
   // Read during the first render, before the effect below scrubs the URL.
-  const [{ credential, linkError }] = useState<ParsedLink>(parseRecoveryLink);
+  // takeRecoveryLink keeps the credential if StrictMode remounts after scrub.
+  const [{ credential, linkError }] = useState(takeRecoveryLink);
 
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');

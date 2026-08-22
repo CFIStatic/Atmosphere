@@ -3,8 +3,18 @@ name: Deploy website
 # Two hosts for website/:
 #   Railway service `website` in outstanding-kindness (Hobby plan is at cap,
 #   so this updates that service instead of creating Atmosphere-website)
-#     healthcheck GET /health — not /api/health
+#     Config File = /website/railway.toml
+#     healthcheck GET /health (also answered at /api/health, never proxied)
 #   GitHub Pages — optional; skipped until Settings → Pages → GitHub Actions
+#
+# One-time on the Railway `website` service (Settings → Config-as-code):
+#   Config File = /website/railway.toml
+# This job copies that file over the upload root for `railway up`, but GitHub
+# autodeploys on the service read the real repo — without the setting they
+# resolve the backend's /railway.toml (which used to crash-loop nginx on
+# `node dist/index.js` and fail the healthcheck; the root file no longer sets
+# a startCommand, so that misresolution now boots nginx and survives).
+# See docs/production.md → "If the website service fails its healthcheck".
 on:
   push:
     branches:
@@ -14,6 +24,7 @@ on:
     paths:
       - 'website/**'
       - '.dockerignore'
+      - 'api.upstream'
       - '.github/workflows/deploy-website.yml'
   workflow_dispatch:
 
@@ -104,7 +115,9 @@ jobs:
       RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
       RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || vars.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
       RAILWAY_WEBSITE_SERVICE: ${{ secrets.RAILWAY_WEBSITE_SERVICE || vars.RAILWAY_WEBSITE_SERVICE || 'website' }}
-      API_UPSTREAM: ${{ vars.API_UPSTREAM || 'https://atmosphere-production.up.railway.app' }}
+      # Empty unless someone hosts the site outside the BFF's Railway project.
+      # The default is the private mesh URL in api.upstream — see the step below.
+      API_UPSTREAM_OVERRIDE: ${{ vars.API_UPSTREAM }}
     steps:
       - uses: actions/checkout@v4
 
@@ -123,9 +136,20 @@ jobs:
 
       - name: Point the website service at nginx, not the API
         run: |
+          set -euo pipefail
           # Do not railway add here — the Hobby plan is at its service cap.
           # The existing `website` service in outstanding-kindness is the target.
-          printf '%s' "$API_UPSTREAM" | railway variable set API_UPSTREAM --stdin --skip-deploys --service "$RAILWAY_WEBSITE_SERVICE"
+          #
+          # The careers and contact forms post to /api on this host. Proxying
+          # that to the public https BFF URL leaves the mesh and comes back in
+          # through the edge, which 502s for a few seconds; the private domain
+          # in api.upstream stays inside the project. Same rule as the office
+          # console and the staff console.
+          upstream="${API_UPSTREAM_OVERRIDE:-}"
+          if [ -z "$upstream" ]; then
+            upstream="$(tr -d '\n' < api.upstream)"
+          fi
+          printf '%s' "$upstream" | railway variable set API_UPSTREAM --stdin --skip-deploys --service "$RAILWAY_WEBSITE_SERVICE"
           printf '%s' 'website/Dockerfile' | railway variable set RAILWAY_DOCKERFILE_PATH --stdin --skip-deploys --service "$RAILWAY_WEBSITE_SERVICE"
 
       - name: Smoke the nginx image
@@ -136,7 +160,8 @@ jobs:
           cleanup() { docker rm -f atmosphere-website-ci >/dev/null 2>&1 || true; }
           trap cleanup EXIT
           sleep 2
-          curl -fsS http://127.0.0.1:18080/health
+          curl -fsS http://127.0.0.1:18080/health | grep -qx 'ok'
+          curl -fsS http://127.0.0.1:18080/api/health | grep -qx 'ok'
           curl -fsS http://127.0.0.1:18080/ | grep -q 'Atmosphere'
 
       - name: Deploy corporate site

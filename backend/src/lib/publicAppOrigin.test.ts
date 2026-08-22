@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { LIVE_OFFICE_ORIGIN, publicAppOrigin } from './publicAppOrigin.js';
+import {
+  LIVE_OFFICE_ORIGIN,
+  isUnusablePasswordResetUrl,
+  passwordResetRedirectUrl,
+  publicAppOrigin,
+  recoveryPageUrl,
+} from './publicAppOrigin.js';
 
 describe('publicAppOrigin', () => {
   it('prefers the live Railway office over the unmapped custom domain', () => {
@@ -22,5 +28,69 @@ describe('publicAppOrigin', () => {
       publicAppOrigin(['https://office.example.com']),
       'https://office.example.com',
     );
+  });
+});
+
+describe('passwordResetRedirectUrl', () => {
+  const officeAndCustom = [
+    'https://app.atmosphereteam.com',
+    'https://atmosphere-web-production.up.railway.app',
+  ];
+
+  it('stamps the live office /reset-password, not FRONTEND_ORIGIN[0]', () => {
+    assert.equal(
+      passwordResetRedirectUrl(officeAndCustom, '', true),
+      `${LIVE_OFFICE_ORIGIN}/reset-password`,
+    );
+  });
+
+  it('rejects localhost:3000 even in development', () => {
+    assert.equal(isUnusablePasswordResetUrl('http://localhost:3000/reset-password', false), true);
+    assert.equal(
+      passwordResetRedirectUrl(
+        ['http://localhost:3000'],
+        'http://localhost:3000/reset-password',
+        false,
+      ),
+      `${LIVE_OFFICE_ORIGIN}/reset-password`,
+    );
+  });
+
+  it('rejects loopback in production', () => {
+    assert.equal(
+      isUnusablePasswordResetUrl('http://localhost:5174/reset-password', true),
+      true,
+    );
+  });
+
+  it('does not stamp localhost FRONTEND_ORIGIN into recovery emails', () => {
+    assert.equal(
+      passwordResetRedirectUrl(
+        ['http://localhost:5174', 'http://localhost:5173'],
+        '',
+        false,
+      ),
+      `${LIVE_OFFICE_ORIGIN}/reset-password`,
+    );
+  });
+
+  it('keeps an explicit local Vite URL in development', () => {
+    assert.equal(
+      passwordResetRedirectUrl(
+        ['http://localhost:5174'],
+        'http://localhost:5174/reset-password',
+        false,
+      ),
+      'http://localhost:5174/reset-password',
+    );
+  });
+
+  it('puts token_hash on the reset page, never a session JWT', () => {
+    const url = recoveryPageUrl(`${LIVE_OFFICE_ORIGIN}/reset-password`, 'hashed-token');
+    assert.equal(
+      url,
+      `${LIVE_OFFICE_ORIGIN}/reset-password?token_hash=hashed-token&type=recovery`,
+    );
+    assert.ok(!url.includes('access_token'));
   });
 });

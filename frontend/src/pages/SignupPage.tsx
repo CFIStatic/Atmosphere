@@ -233,7 +233,6 @@ export function SignupPage() {
       step={step}
       intent={orgIntent}
       onStepSelect={goToStep}
-      signInHref={!user ? signInHref : undefined}
       headerAction={
         user ? (
           <button

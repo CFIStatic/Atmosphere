@@ -10,15 +10,27 @@
 # Treat that as retryable instead of failing the GitHub job on the first pause.
 set -u
 
-service="${RAILWAY_SERVICE:-Atmosphere}"
+here="$(cd "$(dirname "$0")" && pwd)"
+service="${RAILWAY_SERVICE:-Atmosphere APIs}"
 project="${RAILWAY_PROJECT_ID:-d0af58bd-0eec-431d-bad3-4da4b4a2e2ae}"
 environment="${RAILWAY_ENVIRONMENT:-production}"
 max_attempts="${RAILWAY_UP_ATTEMPTS:-8}"
 wait_secs="${RAILWAY_UP_TIMEOUT:-900}"
 
+case "$service" in
+  Atmosphere) service="Atmosphere APIs" ;;
+  Atmosphere-internal) service="Internal Growth Metrics" ;;
+  Atmosphere-web) service="Login & Dashboard" ;;
+esac
+
+if resolved="$(node "$here/resolveRailwayService.mjs" "$service")"; then
+  echo "Resolved Railway service '$service' to $resolved"
+  service="$resolved"
+fi
+
 echo "Deploying Railway service=$service project=$project environment=$environment"
 
-railway status --project "$project" --environment "$environment" --service "$service" || true
+railway status --project "$project" --environment "$environment" || true
 
 dump_build_logs() {
   echo "---- railway build logs (latest) ----"
@@ -29,6 +41,9 @@ dump_build_logs() {
 
 attempt=1
 while [ "$attempt" -le "$max_attempts" ]; do
+  if [ -n "${RAILWAY_UP_STAMP_FILE:-}" ] && [ -f "${RAILWAY_UP_STAMP_FILE}" ]; then
+    printf '\n# railway-up-retry %s %s\n' "$attempt" "$(date -u +%s)" >> "$RAILWAY_UP_STAMP_FILE"
+  fi
   echo "railway up attempt $attempt/$max_attempts (wait ${wait_secs}s)"
   log="$(mktemp)"
   timeout "$wait_secs" railway up \
@@ -38,6 +53,20 @@ while [ "$attempt" -le "$max_attempts" ]; do
     --verbose >"$log" 2>&1
   status=$?
   cat "$log"
+  if grep -qi 'failed with service unavailable' "$log"; then
+    echo "railway up reached a failed healthcheck."
+    status=1
+  fi
+  if [ "$status" -eq 0 ]; then
+    if grep -qi 'no changes detected in watch paths' "$log"; then
+      if [ -n "${RAILWAY_UP_STAMP_FILE:-}" ]; then
+        echo "railway up skipped the image build (watch paths). Retrying with a new stamp."
+        status=1
+      else
+        echo "railway up skipped the image build (watch paths); no stamp file, treating as success."
+      fi
+    fi
+  fi
   if [ "$status" -eq 0 ]; then
     rm -f "$log"
     echo "Railway deploy succeeded"
