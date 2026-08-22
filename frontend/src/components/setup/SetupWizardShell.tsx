@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
 import { Logo } from '../Logo';
 import { CheckIcon } from '../icons';
 import {
@@ -11,14 +10,12 @@ import {
 export function SetupWizardShell({
   step,
   intent = 'create',
-  signInHref,
   headerAction,
   onStepSelect,
   children,
 }: {
   step: SetupWizardStep;
   intent?: OrgSetupIntent;
-  signInHref?: string;
   headerAction?: ReactNode;
   onStepSelect?: (step: SetupWizardStep) => void;
   children: ReactNode;
@@ -28,15 +25,7 @@ export function SetupWizardShell({
     <div className="relative flex min-h-screen flex-col bg-paper-100">
       <header className="flex items-center justify-between gap-4 px-6 py-6 sm:px-10">
         <Logo />
-        {headerAction ??
-          (signInHref ? (
-            <Link
-              to={signInHref}
-              className="text-sm font-medium text-ink-600 transition hover:text-ink-900"
-            >
-              Already have an account? <span className="font-semibold text-brand-600">Sign in</span>
-            </Link>
-          ) : null)}
+        {headerAction}
       </header>
 
       <main className="flex flex-1 items-start justify-center px-4 pb-16 pt-2 sm:items-center">
