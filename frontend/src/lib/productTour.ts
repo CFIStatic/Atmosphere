@@ -82,7 +82,7 @@ export const WORK_VERIFICATION_TOUR: ProductTourDefinition = {
       id: 'usage',
       title: 'Usage & billing',
       body: 'Your dashboard shows processed jobs this period, included allowance, and estimated charges — no token counts on the invoice.',
-      route: '/usage',
+      route: '/settings?section=billing',
       simulation: 'usage-meter',
       placement: 'center',
     },

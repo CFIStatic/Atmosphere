@@ -130,9 +130,8 @@ Atmosphere/
 └── docs/                     Deeper notes (media storage, CRM, etc.)
 ```
 
-Sales, classic operations, and Manager UIs may still exist in the tree. They are
-**not** the product on display — the console only surfaces Verification and
-Field (`VISIBLE_PLATFORM_IDS` in `frontend/src/lib/platforms.ts`).
+The console is Work Verification and Field Capture only. Sales, Manager, and
+the other later-product screens have been removed from the product.
 
 ## Quick start
 
