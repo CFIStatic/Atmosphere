@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   formatTodayAt,
+  pickInviteToken,
   pickTodayJobs,
   sortJobsForOpen,
   todayKey,
@@ -175,4 +176,18 @@ test('the dashboard puts the job worked today above older folders', () => {
     sorted.map((j) => j.jobId),
     ['today', 'old', 'empty'],
   );
+});
+
+test('pickInviteToken uses the email invite for that job, not another crew', () => {
+  const parties = [
+    { jobId: 'job-3', email: 'other@example.com', accessToken: 'someone-else' },
+    { jobId: 'job-3', email: 'jack@jettx.ai', accessToken: 'ce731b712f8eaf218161c24baa03c0731ad11ea93b15cb0b' },
+    { jobId: 'job-9', email: 'jack@jettx.ai', accessToken: 'other-job' },
+  ];
+  assert.equal(
+    pickInviteToken(parties, 'job-3', 'Jack@jettx.ai'),
+    'ce731b712f8eaf218161c24baa03c0731ad11ea93b15cb0b',
+  );
+  assert.equal(pickInviteToken(parties, 'job-3', 'nobody@jettx.ai'), null);
+  assert.equal(pickInviteToken(parties, 'job-3', null), null);
 });

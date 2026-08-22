@@ -130,8 +130,12 @@
     root.innerHTML = jobs
       .map(function (j) {
         var selected = state.account && j.id && j.id === state.activeJobId;
+        var href = j.sharePath ? escapeHtml(j.sharePath) : '';
+        var open = href ? 'a' : 'div';
+        var hrefAttr = href ? ' href="' + href + '"' : '';
         return (
-          '<div class="erow"' +
+          '<' + open + ' class="erow"' +
+          hrefAttr +
           (j.id ? ' data-job-id="' + escapeHtml(j.id) + '"' : '') +
           (selected ? ' data-selected="1"' : '') +
           '>' +
@@ -144,12 +148,13 @@
           '</span></span>' +
           '<span class="at">' +
           escapeHtml(j.filmed ? 'Filmed' : j.at || '') +
-          '</span></div>'
+          '</span></' + open + '>'
         );
       })
       .join('');
     if (state.account) {
       root.querySelectorAll('[data-job-id]').forEach(function (row) {
+        if (row.tagName === 'A') return;
         row.style.cursor = 'pointer';
         row.addEventListener('click', function () {
           state.activeJobId = row.getAttribute('data-job-id');
@@ -195,6 +200,7 @@
             addr: payload.job && payload.job.claimNumber ? 'Claim ' + payload.job.claimNumber : 'Shared job',
             at: 'Today',
             placed: true,
+            sharePath: '/shared/' + TOKEN,
           },
         ]);
         setStatus('Ready — pick a job.');
@@ -241,6 +247,7 @@
         at: j.at || 'Today',
         placed: Boolean(j.placed),
         filmed: Boolean(j.filmed),
+        sharePath: j.sharePath || '',
       };
     });
     if (!state.activeJobId || !state.jobs.some(function (j) { return j.id === state.activeJobId; })) {
@@ -518,6 +525,7 @@
         addr: '1841 Meridian Ave, Austin',
         at: '7:00 AM',
         placed: true,
+        sharePath: '/shared/demo-token',
       },
     ];
     renderExpect(JOBS);

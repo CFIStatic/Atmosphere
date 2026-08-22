@@ -128,7 +128,7 @@ export function JobSharePage() {
       data-testid="invited-job"
     >
       <header>
-        <p className="text-xs font-medium uppercase tracking-wide text-brand-600">Job record</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-brand-600">What's happening</p>
         <h1 className="mt-1 text-2xl font-bold text-ink-900">
           {view?.job.title ?? 'Loading…'}
         </h1>
@@ -411,8 +411,10 @@ function ProofSection({
             </span>
           ) : filed ? (
             `${phase === 'before' ? 'Before' : 'After'} filed — refilm`
+          ) : phase === 'before' ? (
+            'Start film'
           ) : (
-            `Film ${phase === 'before' ? 'before you start' : 'when you finish'}`
+            'Film when you finish'
           )}
         </button>
       </div>

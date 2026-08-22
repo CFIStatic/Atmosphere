@@ -55,6 +55,9 @@ describe('JobSharePage', () => {
     expect(screen.queryByRole('link', { name: /Create your free account/i })).not.toBeInTheDocument();
     expect(screen.queryByText('Ask before you do it')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Send it' })).not.toBeInTheDocument();
+    expect(screen.getByText("What's happening")).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Start film' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Film before you start/i })).not.toBeInTheDocument();
   });
 
   it('still asks them to accept when they are not clear to work', async () => {
