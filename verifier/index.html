@@ -1677,11 +1677,17 @@
     return best;
   }
 
+  /**
+   * A camera that is still rolling. Footage already received is recorded —
+   * even when analysis is still queued — so it must not read as live.
+   */
   function isActiveRecording(e) {
+    if (e.uploadedAt) return false;
+    if (e.recording || e.live) return true;
     var a = (e.analysis || {}).state;
-    if (a === 'queued') return true;
-    if (a === 'done' || a === 'paired' || a === 'skipped' || a === 'failed') return false;
-    var t = clipInstant(e, ['uploadedAt', 'capturedAt']);
+    if (a === 'recording' || a === 'live') return true;
+    if (a === 'queued' || a === 'done' || a === 'paired' || a === 'skipped' || a === 'failed') return false;
+    var t = clipInstant(e, ['capturedAt']);
     return Boolean(t && (Date.now() - t) < 30 * 60 * 1000);
   }
 
