@@ -63,11 +63,10 @@ describe('Railway office-app image', () => {
 });
 
 /**
- * Office console, marketing site, and staff console are three nginx front
- * doors onto one BFF. Any of them pointed at the public https host sends /api
- * back out of the mesh and in through the edge, which 502s — the screen that
- * reports the Atmosphere API as unreachable. api.upstream is the one value
- * they all take, so it lives at the repo root rather than under frontend/.
+ * Office console and marketing site are nginx front doors onto one BFF.
+ * Pointed at the public https host, /api leaves the mesh and 502s. They share
+ * api.upstream at the repo root. The staff site in internal/ is the exception:
+ * its nginx 504s on the private mesh, so that deploy uses the public BFF.
  */
 describe('every front door proxies /api over the private mesh', () => {
   const office = readRoot('.github/workflows/deploy-production.yml');
@@ -76,7 +75,8 @@ describe('every front door proxies /api over the private mesh', () => {
 
   it('takes the office upstream from the shared root file', () => {
     expect(office).toContain("tr -d '\\n' < api.upstream");
-    expect(office).not.toMatch(publicHost);
+    const appJob = office.slice(office.indexOf('name: Deploy office app'));
+    expect(appJob).not.toMatch(publicHost);
   });
 
   it('takes the marketing-site upstream from that same file', () => {
@@ -84,13 +84,10 @@ describe('every front door proxies /api over the private mesh', () => {
     expect(site).not.toMatch(publicHost);
   });
 
-  it('syncs the staff console, which this repo does not build', () => {
-    expect(office).toContain('scripts/railwayPrivateUpstream.sh "$RAILWAY_INTERNAL_SERVICE"');
-
-    const sync = readRoot('scripts/railwayPrivateUpstream.sh');
-    expect(sync).toContain('api.upstream');
-    // Writing the variable redeploys that service, so a correct one is left be.
-    expect(sync).toContain('http://*.railway.internal:*');
+  it('deploys the staff site from this repo to the public BFF', () => {
+    expect(office).toContain("service=\"${RAILWAY_INTERNAL_SERVICE:-Internal Growth Metrics}\"");
+    expect(office).toContain('upstream="https://atmosphere-production.up.railway.app"');
+    expect(office).toContain('cp internal/railway.toml railway.toml');
   });
 
   it('never bakes a public https upstream into the website image', () => {
