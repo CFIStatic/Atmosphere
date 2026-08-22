@@ -268,6 +268,12 @@ with the backend's settings and never answered the probe. The CLI deploys from
 `deploy-website.yml` worked because that job copies `website/railway.toml`
 over the upload root — which masked the missing setting.
 
+A later failure on CLI deploys: `API_UPSTREAM` still referenced
+`${{Atmosphere.…}}` after the BFF was renamed **Atmosphere APIs**. Railway
+interpolates those to empty, nginx gets `proxy_pass http://:` (line 63),
+and dies before `GET /health` can answer. `website-start.sh` now rejects
+that value the same way the office app does.
+
 A second, later failure mode: `railwayUp.sh` treated Railway's in-window
 `Attempt #N failed with service unavailable. Continuing to retry` lines as a
 finished failure, aborted, then retried and hit `no changes detected in
