@@ -6,6 +6,7 @@
 #
 # App (console + Verifier + Field Capture): http://localhost:8080
 #   nginx reverse-proxies /api to the backend, same as Railway.
+# Internal staff site: http://localhost:8081
 # Backend: http://localhost:4000  (GET /api/health, /api/ready)
 
 services:
@@ -42,6 +43,19 @@ services:
       API_UPSTREAM: http://backend:4000
     ports:
       - '8080:80'
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  internal:
+    build:
+      context: .
+      dockerfile: internal/Dockerfile
+    environment:
+      PORT: '80'
+      API_UPSTREAM: http://backend:4000
+    ports:
+      - '8081:80'
     depends_on:
       backend:
         condition: service_healthy

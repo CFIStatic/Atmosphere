@@ -44,7 +44,7 @@ describe('signatures: decoy paths', () => {
   });
 
   it('does not treat real Atmosphere routes as decoys', () => {
-    for (const p of ['/api/health', '/api/auth/login', '/api/cyber/status', '/api/crm/jobs']) {
+    for (const p of ['/api/health', '/api/auth/login', '/api/auth/internal-challenge', '/api/auth/internal-login', '/api/cyber/status', '/api/crm/jobs']) {
       assert.equal(isDecoyPath(p), false, `${p} must not be a decoy`);
     }
   });

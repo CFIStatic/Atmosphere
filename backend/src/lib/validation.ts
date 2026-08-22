@@ -23,6 +23,27 @@ export const credentialsSchema = z.object({
 
 export type Credentials = z.infer<typeof credentialsSchema>;
 
+const nameField = z
+  .string({ required_error: 'Name is required' })
+  .trim()
+  .min(1, 'Enter your name')
+  .max(80, 'Name is too long')
+  .regex(/^[\p{L}][\p{L}\s'.-]*$/u, 'Enter a real name');
+
+export const internalStaffStartSchema = z.object({
+  firstName: nameField,
+  lastName: nameField,
+  email: emailField,
+});
+
+export const internalStaffVerifySchema = z.object({
+  challenge: z.string().trim().min(16).max(4000),
+  code: z
+    .string({ required_error: 'Authenticator code is required' })
+    .trim()
+    .regex(/^\d{6}$/, 'Enter the 6-digit code from Microsoft Authenticator'),
+});
+
 /** Body of the "email me a reset link" request. */
 export const forgotPasswordSchema = z.object({ email: emailField });
 
@@ -341,6 +362,8 @@ export const analyticsRangeSchema = z
     message: 'Ranges longer than ten years are not supported',
     path: ['to'],
   });
+
+export const analyticsOrgIdSchema = z.string().uuid('org id must be a uuid');
 
 export const analyticsDatasetSchema = z.enum([
   'all',

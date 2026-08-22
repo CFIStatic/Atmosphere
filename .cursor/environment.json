@@ -1,10 +1,11 @@
 {
   "name": "Atmosphere",
-  "install": "cd backend && npm install && cd ../frontend && npm install",
+  "install": "cd backend && npm install && cd ../frontend && npm install && cd ../internal && npm install",
   "start": "bash .cursor/ensure-api.sh --background",
   "ports": [
     { "name": "website", "port": 5173 },
     { "name": "app", "port": 5174 },
+    { "name": "internal", "port": 5175 },
     { "name": "api", "port": 4000 }
   ],
   "terminals": [
@@ -22,6 +23,11 @@
       "name": "app",
       "command": "cd frontend && npm run dev -- --host",
       "description": "React product app on :5174"
+    },
+    {
+      "name": "internal",
+      "command": "cd internal && npm run dev -- --host",
+      "description": "Staff accounts + analytics site on :5175"
     }
   ]
 }

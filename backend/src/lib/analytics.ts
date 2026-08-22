@@ -162,6 +162,43 @@ export interface AccountRow {
   lastActiveAt: string | null;
 }
 
+export interface AccountMember {
+  userId: string;
+  email: string | null;
+  fullName: string | null;
+  role: string;
+  workType: string | null;
+  status: string;
+  createdAt: string;
+}
+
+export interface AccountJob {
+  id: string;
+  title: string;
+  status: string;
+  workType: string | null;
+  jobNumber: number | null;
+  createdAt: string;
+}
+
+export interface AccountOrgFeature {
+  featureKey: string;
+  label: string;
+  activeHours: number;
+  sessions: number;
+}
+
+export interface AccountDetail {
+  account: AccountRow;
+  members: AccountMember[];
+  jobs: {
+    total: number;
+    byStatus: Array<{ status: string; count: number }>;
+    recent: AccountJob[];
+  };
+  features: AccountOrgFeature[];
+}
+
 export interface PlanMixRow {
   planCode: string;
   planName: string;
@@ -334,6 +371,31 @@ export async function getFeatures(
   }));
 }
 
+function mapAccountRow(r: Record<string, unknown>): AccountRow {
+  return {
+    orgId: String(r.org_id ?? r.orgId ?? ''),
+    orgName: String(r.org_name ?? r.orgName ?? ''),
+    createdAt: String(r.created_at ?? r.createdAt ?? ''),
+    planCode: String(r.plan_code ?? r.planCode ?? 'free'),
+    planName: String(r.plan_name ?? r.planName ?? 'Free'),
+    billingInterval: String(r.billing_interval ?? r.billingInterval ?? 'monthly'),
+    status: String(r.status ?? 'active'),
+    seats: num(r.seats),
+    members: num(r.members),
+    mrrCents: num(r.mrr_cents ?? r.mrrCents),
+    arrCents: num(r.arr_cents ?? r.arrCents),
+    revenueInRangeCents: num(r.revenue_in_range_cents ?? r.revenueInRangeCents),
+    creditSpendCents: num(r.credit_spend_cents ?? r.creditSpendCents),
+    activeHours: num(r.active_hours ?? r.activeHours),
+    topFeature:
+      (r.top_feature as string | null | undefined) ??
+      (r.topFeature as string | null) ??
+      null,
+    lastActiveAt:
+      (r.last_active_at as string | null | undefined) ?? (r.lastActiveAt as string | null) ?? null,
+  };
+}
+
 export async function getAccounts(
   supabase: SupabaseClient,
   from: Date,
@@ -346,24 +408,81 @@ export async function getAccounts(
     p_limit: limit,
   });
   if (error) throw rpcError(error, 'analytics_accounts_failed');
-  return ((data ?? []) as any[]).map((r) => ({
-    orgId: r.org_id,
-    orgName: r.org_name,
-    createdAt: r.created_at,
-    planCode: r.plan_code,
-    planName: r.plan_name,
-    billingInterval: r.billing_interval,
-    status: r.status,
-    seats: num(r.seats),
-    members: num(r.members),
-    mrrCents: num(r.mrr_cents),
-    arrCents: num(r.arr_cents),
-    revenueInRangeCents: num(r.revenue_in_range_cents),
-    creditSpendCents: num(r.credit_spend_cents),
-    activeHours: num(r.active_hours),
-    topFeature: r.top_feature ?? null,
-    lastActiveAt: r.last_active_at ?? null,
-  }));
+  return ((data ?? []) as any[]).map((r) => mapAccountRow(r));
+}
+
+/** Translate the analytics_account_detail JSONB payload. Exported for tests. */
+export function mapAccountDetail(data: unknown): AccountDetail | null {
+  if (!data || typeof data !== 'object') return null;
+  const d = data as Record<string, unknown>;
+  const accountRaw = d.account;
+  if (!accountRaw || typeof accountRaw !== 'object') return null;
+
+  const membersRaw = Array.isArray(d.members) ? d.members : [];
+  const jobsRaw =
+    d.jobs && typeof d.jobs === 'object' ? (d.jobs as Record<string, unknown>) : {};
+  const byStatusRaw = Array.isArray(jobsRaw.byStatus) ? jobsRaw.byStatus : [];
+  const recentRaw = Array.isArray(jobsRaw.recent) ? jobsRaw.recent : [];
+  const featuresRaw = Array.isArray(d.features) ? d.features : [];
+
+  return {
+    account: mapAccountRow(accountRaw as Record<string, unknown>),
+    members: membersRaw.map((row) => {
+      const m = (row ?? {}) as Record<string, unknown>;
+      return {
+        userId: String(m.userId ?? m.user_id ?? ''),
+        email: (m.email as string | null) ?? null,
+        fullName: (m.fullName as string | null) ?? (m.full_name as string | null) ?? null,
+        role: String(m.role ?? ''),
+        workType: (m.workType as string | null) ?? (m.work_type as string | null) ?? null,
+        status: String(m.status ?? 'active'),
+        createdAt: String(m.createdAt ?? m.created_at ?? ''),
+      };
+    }),
+    jobs: {
+      total: num(jobsRaw.total),
+      byStatus: byStatusRaw.map((row) => {
+        const s = (row ?? {}) as Record<string, unknown>;
+        return { status: String(s.status ?? ''), count: num(s.count) };
+      }),
+      recent: recentRaw.map((row) => {
+        const j = (row ?? {}) as Record<string, unknown>;
+        const jobNumber = j.jobNumber ?? j.job_number;
+        return {
+          id: String(j.id ?? ''),
+          title: String(j.title ?? ''),
+          status: String(j.status ?? ''),
+          workType: (j.workType as string | null) ?? (j.work_type as string | null) ?? null,
+          jobNumber: jobNumber === null || jobNumber === undefined ? null : Number(jobNumber),
+          createdAt: String(j.createdAt ?? j.created_at ?? ''),
+        };
+      }),
+    },
+    features: featuresRaw.map((row) => {
+      const f = (row ?? {}) as Record<string, unknown>;
+      return {
+        featureKey: String(f.featureKey ?? f.feature_key ?? ''),
+        label: String(f.label ?? f.featureKey ?? ''),
+        activeHours: num(f.activeHours ?? f.active_hours),
+        sessions: num(f.sessions),
+      };
+    }),
+  };
+}
+
+export async function getAccountDetail(
+  supabase: SupabaseClient,
+  orgId: string,
+  from: Date,
+  to: Date,
+): Promise<AccountDetail | null> {
+  const { data, error } = await supabase.rpc('analytics_account_detail', {
+    p_org_id: orgId,
+    p_from: from.toISOString(),
+    p_to: to.toISOString(),
+  });
+  if (error) throw rpcError(error, 'analytics_account_detail_failed');
+  return mapAccountDetail(data);
 }
 
 export async function getPlanMix(supabase: SupabaseClient): Promise<PlanMixRow[]> {

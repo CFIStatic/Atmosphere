@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  isAtmosphereRailwayInternalOrigin,
   isAtmosphereRailwayWebOrigin,
   isCloudflareQuickTunnelOrigin,
 } from './previewOrigins.js';
@@ -58,5 +59,52 @@ describe('isAtmosphereRailwayWebOrigin', () => {
       false,
     );
     assert.equal(isAtmosphereRailwayWebOrigin('https://app.atmosphereteam.com'), false);
+  });
+});
+
+describe('isAtmosphereRailwayInternalOrigin', () => {
+  it('accepts the production Internal Growth Metrics hostname', () => {
+    assert.equal(
+      isAtmosphereRailwayInternalOrigin(
+        'https://melodious-inspiration-production-5ad9.up.railway.app',
+      ),
+      true,
+    );
+  });
+
+  it('accepts the unsuffixed service hostname and other Railway environments', () => {
+    assert.equal(
+      isAtmosphereRailwayInternalOrigin('https://atmosphere-internal.up.railway.app'),
+      true,
+    );
+    assert.equal(
+      isAtmosphereRailwayInternalOrigin('https://atmosphere-internal-staging.up.railway.app'),
+      true,
+    );
+  });
+
+  it('rejects lookalikes and the office / backend hosts', () => {
+    assert.equal(
+      isAtmosphereRailwayInternalOrigin('http://atmosphere-internal-production.up.railway.app'),
+      false,
+    );
+    assert.equal(
+      isAtmosphereRailwayInternalOrigin('https://atmosphere-web-production.up.railway.app'),
+      false,
+    );
+    assert.equal(
+      isAtmosphereRailwayInternalOrigin('https://atmosphere-production.up.railway.app'),
+      false,
+    );
+    assert.equal(
+      isAtmosphereRailwayInternalOrigin(
+        'https://atmosphere-internal-production.up.railway.app.evil.com',
+      ),
+      false,
+    );
+    assert.equal(
+      isAtmosphereRailwayInternalOrigin('https://evil-atmosphere-internal.up.railway.app'),
+      false,
+    );
   });
 });

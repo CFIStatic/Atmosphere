@@ -17,10 +17,10 @@
 #   RAILWAY_TOKEN
 # Optional:
 #   RAILWAY_PROJECT_ID     (Project settings → General)
-#   RAILWAY_SERVICE        (backend service name, default: Atmosphere)
-#   RAILWAY_APP_SERVICE    (office app service name, default: Atmosphere-web)
+#   RAILWAY_SERVICE        (backend service name, default: Atmosphere APIs)
+#   RAILWAY_APP_SERVICE    (office app service name, default: Atmosphere-web / Login & Dashboard)
 #   RAILWAY_WEB_SERVICE    (alias of RAILWAY_APP_SERVICE)
-#   RAILWAY_INTERNAL_SERVICE (staff console service name, default: Atmosphere-internal)
+#   RAILWAY_INTERNAL_SERVICE (staff site, default: Internal Growth Metrics)
 #
 # One-time on the Railway **Atmosphere-web** service (Settings → Config-as-code):
 #   Config File = /frontend/railway.toml
@@ -33,7 +33,8 @@
 # as well (not only the "Google API keys" environment) so this job can see them.
 #
 # Auto-deploys on push to main, the live Atmosphere API branch, the
-# job-create memory FK fix branch, and the office-service-name fix branch.
+# job-create memory FK fix branch, the office-service-name fix branch, and
+# the internal staff site branch (backend + internal only — not the office app).
 # Manual run still works: Actions → Deploy Work Verification → Run workflow.
 
 name: Deploy Work Verification
@@ -46,12 +47,14 @@ on:
       - cursor/fix-railway-keys-deploy-51c8
       - cursor/fix-job-create-memory-fk-51c8
       - cursor/fix-railway-office-deploy-157d
+      - cursor/internal-data-platform-e19d
     paths:
       - 'backend/**'
       - 'supabase/migrations/**'
       - 'frontend/**'
       - 'verifier/**'
       - 'fieldcapture/**'
+      - 'internal/**'
       - 'Dockerfile'
       - 'api.upstream'
       - 'scripts/railwayPrivateUpstream.sh'
@@ -66,9 +69,6 @@ jobs:
     name: Sync Keys → Railway and deploy backend
     runs-on: ubuntu-latest
     environment: Keys
-    defaults:
-      run:
-        working-directory: backend
     steps:
       - uses: actions/checkout@v4
 
@@ -92,14 +92,15 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
-          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere' }}
+          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere APIs' }}
           NODE_ENV: production
           MEDIA_BACKEND: supabase
           COMPUTER_USE_ENABLED: 'false'
           BACKUP_ENABLED: 'false'
           ALLOW_MOCK_DRIVERS: 'true'
           HOST: '0.0.0.0'
-          FRONTEND_ORIGIN: ${{ vars.FRONTEND_ORIGIN || 'https://atmosphere-web-production.up.railway.app,https://app.atmosphereteam.com' }}
+          PORT: '4000'
+          FRONTEND_ORIGIN: ${{ vars.FRONTEND_ORIGIN || 'https://atmosphere-web-production.up.railway.app,https://app.atmosphereteam.com,https://melodious-inspiration-production-5ad9.up.railway.app' }}
           SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || vars.SUPABASE_SERVICE_ROLE_KEY }}
@@ -123,12 +124,14 @@ jobs:
           ANTHROPIC_MODEL: claude-sonnet-5
           VERIFICATION_PRIMARY_MODEL: gemini-2.5-flash
           VERIFICATION_ESCALATION_MODEL: claude-sonnet-5
+        working-directory: backend
         run: node scripts/syncGithubEnvToRailway.mjs
 
       - name: Ensure Resend can send as hello@invites.jettx.ai
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY || vars.RESEND_API_KEY }}
           RESEND_SENDING_DOMAIN: invites.jettx.ai
+        working-directory: backend
         run: node scripts/ensureResendSendingDomain.mjs
 
       - name: Repair memory_events job FK on Supabase
@@ -140,21 +143,34 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.SUPABASE_DB_URL }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD || secrets.POSTGRES_PASSWORD }}
+        working-directory: backend
         run: node scripts/applyMemoryCaptureRepair.mjs
 
       - name: Deploy backend
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
-          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere' }}
+          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere APIs' }}
           RAILWAY_ENVIRONMENT: production
         run: |
-          echo "Deploying Railway service: $RAILWAY_SERVICE"
-          chmod +x scripts/railwayUp.sh
-          scripts/railwayUp.sh
+          # Upload the repo root so root railway.toml watchPatterns (backend/**)
+          # match. `railway up` from backend/ previously skipped the Docker
+          # build ("no changes detected in watch paths") and left production
+          # on an image without /api/auth/internal-challenge.
+          echo "Deploying Railway service: $RAILWAY_SERVICE from repo root"
+          chmod +x backend/scripts/railwayUp.sh
+          if service_id="$(node backend/scripts/resolveRailwayService.mjs "$RAILWAY_SERVICE")"; then
+            echo "Resolved '$RAILWAY_SERVICE' to $service_id"
+            printf '%s' 'Dockerfile' | railway variable set RAILWAY_DOCKERFILE_PATH \
+              --stdin --skip-deploys --service "$service_id" \
+              --project "$RAILWAY_PROJECT_ID" --environment production || true
+            export RAILWAY_SERVICE="$service_id"
+          fi
+          backend/scripts/railwayUp.sh
 
   app:
     name: Deploy office app
+    if: github.ref_name != 'cursor/internal-data-platform-e19d'
     runs-on: ubuntu-latest
     environment: Keys
     steps:
@@ -208,15 +224,9 @@ jobs:
           backend/scripts/railwayUp.sh
 
   internal:
-    name: Point the staff console at the private BFF
+    name: Deploy internal site
     runs-on: ubuntu-latest
     environment: Keys
-    # The staff console (Atmosphere-internal) is not built from this repo — it
-    # is a separate nginx front door onto the same BFF. What this repo does own
-    # is the upstream every front door must use, so keep that one variable in
-    # sync here instead of leaving it to a dashboard edit. Pointed at the public
-    # https host it 502s /api and the sign-in screen reports the API as
-    # unreachable. Warns and moves on when the service is absent.
     steps:
       - uses: actions/checkout@v4
 
@@ -227,21 +237,56 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
-      - name: Sync API_UPSTREAM onto the staff console
+      - name: Require Railway token
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "Add RAILWAY_TOKEN to the GitHub environment Keys (Railway → Account → Tokens)."
+            exit 1
+          fi
+
+      - name: Deploy internal site
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || vars.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
-          RAILWAY_INTERNAL_SERVICE: ${{ secrets.RAILWAY_INTERNAL_SERVICE || vars.RAILWAY_INTERNAL_SERVICE || 'Atmosphere-internal' }}
+          RAILWAY_INTERNAL_SERVICE: ${{ secrets.RAILWAY_INTERNAL_SERVICE || vars.RAILWAY_INTERNAL_SERVICE }}
           RAILWAY_ENVIRONMENT: production
         run: |
           set -euo pipefail
-          if [ -z "${RAILWAY_TOKEN:-}" ]; then
-            echo "::warning::No RAILWAY_TOKEN in the Keys environment — skipping the staff-console upstream sync."
-            exit 0
-          fi
-          railway link --project "$RAILWAY_PROJECT_ID" --environment production --service "$RAILWAY_INTERNAL_SERVICE" \
-            || railway link --project "$RAILWAY_PROJECT_ID" --environment production \
-            || railway link --project "$RAILWAY_PROJECT_ID" \
+          project="${RAILWAY_PROJECT_ID}"
+          service="${RAILWAY_INTERNAL_SERVICE:-Internal Growth Metrics}"
+          echo "Deploying internal site to Railway service '$service' in project $project."
+          echo "Writing internal/railway.json onto the service (nginx + /healthz)."
+          case "$service" in
+            Atmosphere-internal|Atmosphere-Internal) service="Internal Growth Metrics" ;;
+          esac
+          export RAILWAY_PROJECT_ID="$project"
+          export RAILWAY_ENVIRONMENT=production
+          railway status --project "$project" --environment production || railway status || true
+          service_id="$(node backend/scripts/resolveRailwayService.mjs "$service")"
+          echo "Resolved '$service' to $service_id"
+          export RAILWAY_INTERNAL_SERVICE="$service_id"
+          export RAILWAY_SERVICE="$service_id"
+          railway link --project "$project" --environment production --service "$service_id" \
+            || railway link --project "$project" --environment production \
+            || railway link --project "$project" \
             || true
-          chmod +x scripts/railwayPrivateUpstream.sh
-          scripts/railwayPrivateUpstream.sh "$RAILWAY_INTERNAL_SERVICE"
+          chmod +x internal/scripts/apply-railway-config.sh backend/scripts/railwayUp.sh
+          internal/scripts/apply-railway-config.sh
+          # Public BFF on purpose: the private mesh 504s from this nginx.
+          upstream="https://atmosphere-production.up.railway.app"
+          echo "API_UPSTREAM=$upstream"
+          printf '%s' "$upstream" | railway variable set API_UPSTREAM \
+            --stdin --skip-deploys --service "$service_id" \
+            --project "$project" --environment production
+          # Autodeploy of this SHA may already have uploaded the same
+          # internal/** tree and crashed on empty API_UPSTREAM. railway up
+          # then skips watch paths and leaves the old replica. Dirty a
+          # watched file so this CLI upload is a new image with the var set.
+          printf '\n# gha %s %s\n' "${GITHUB_SHA}" "$(date -u +%Y%m%dT%H%M%SZ)" >> internal/nginx/default.conf.template
+          export RAILWAY_UP_STAMP_FILE="$PWD/internal/nginx/default.conf.template"
+          export RAILWAY_UP_ATTEMPTS=3
+          cp internal/railway.toml railway.toml
+          cp internal/railway.json railway.json
+          backend/scripts/railwayUp.sh

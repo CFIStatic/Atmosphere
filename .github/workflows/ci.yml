@@ -81,6 +81,23 @@ jobs:
       - run: npm run build
         working-directory: frontend
 
+  internal:
+    name: Internal site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: internal/package-lock.json
+      - run: npm ci
+        working-directory: internal
+      - run: npm test
+        working-directory: internal
+      - run: npm run build
+        working-directory: internal
+
   agent:
     name: Agent
     runs-on: ubuntu-latest
@@ -160,3 +177,11 @@ jobs:
           sleep 2
           curl -fsS http://127.0.0.1:18080/health
           curl -fsS http://127.0.0.1:18080/ | grep -q 'Atmosphere'
+
+  docker-internal:
+    name: Internal site image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build internal site image
+        run: docker build -f internal/Dockerfile -t atmosphere-internal:ci .

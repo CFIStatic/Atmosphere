@@ -22,6 +22,7 @@ from its own workflow (GitHub Pages is an optional second host — see
 | Backend BFF | `/railway.toml` | `Dockerfile` (repo root) | `backend/**`, `Dockerfile`, `railway.toml` |
 | Office console | `/frontend/railway.toml` | `frontend/Dockerfile` | `frontend/**`, `verifier/**`, `fieldcapture/**`, `frontend/Dockerfile` |
 | Corporate site (`website`) | `/website/railway.toml` | `website/Dockerfile` | `website/**`, `.dockerignore`, `.github/workflows/deploy-website.yml` |
+| Internal staff site | `/internal/railway.json` | `internal/Dockerfile` | `internal/**`, `internal/Dockerfile` |
 
 All git-backed services use **Root Directory `/`**. The console must not use
 `/frontend` as root — Vite copies sibling `verifier/` and `fieldcapture/`
@@ -95,9 +96,9 @@ and `/api/health` from the repo-root file. Healthcheck is `GET /health`
 
 #### `API_UPSTREAM` on every front door
 
-The office console, the marketing site, and the staff console
-(`Atmosphere-internal`) are three nginx front doors onto the same BFF. All
-three take the **same** upstream, which lives in one file at the repo root:
+The office console and the marketing site are nginx front doors onto the
+same BFF. They take the **same** private-mesh upstream from one file at the
+repo root:
 
 ```bash
 cat api.upstream
@@ -110,22 +111,20 @@ leaves the private network and comes back in through the edge (jfk1 → ams1),
 which 502s for a few seconds. What that looks like from the outside is a front
 door reporting the Atmosphere API as unreachable while the BFF is perfectly
 healthy — the office console spinning on `/login`, the site’s careers and
-contact forms failing to post, the staff console refusing to sign anyone in.
+contact forms failing to post.
 
-The deploy workflows keep all three in sync from that file, so a fix here does
-not need a dashboard visit:
+The staff site (`internal/`, Railway service `Internal Growth Metrics`) is
+the exception: its nginx 504s on the private mesh, so the deploy job points
+it at the public BFF host.
+
+The deploy workflows keep these in sync, so a fix here does not need a
+dashboard visit:
 
 | Service | Set by |
 | --- | --- |
-| `Atmosphere-web` | `deploy-production.yml` → office app job |
+| `Atmosphere-web` | `deploy-production.yml` → office app job (`api.upstream`) |
 | `website` | `deploy-website.yml` (override with the `API_UPSTREAM` Actions variable only if the site ever moves out of this project) |
-| `Atmosphere-internal` | `deploy-production.yml` → `scripts/railwayPrivateUpstream.sh` (name it with `RAILWAY_INTERNAL_SERVICE`) |
-
-The staff console is **not built from this repo** — only its upstream variable
-is managed here, and only when it is already wrong. That job warns and moves
-on if the service is missing, so it never blocks a production deploy. To fix
-one by hand: Railway → that service → Variables → `API_UPSTREAM` → the value
-above → Deploy.
+| `Internal Growth Metrics` | `deploy-production.yml` → internal site job (public BFF; name it with `RAILWAY_INTERNAL_SERVICE`) |
 
 #### Any extra service you added later
 
@@ -194,7 +193,10 @@ Manual backend fallback: **Actions → Deploy Work Verification → Run workflow
 - **Config as Code.** Frontend still using `/railway.toml` will try to start
   `node dist/index.js` and healthcheck `/api/health`. Point it at
   `/frontend/railway.toml`. The corporate site must use `/website/railway.toml`
-  for the same reason.
+  for the same reason. The internal site is the same trap: Config File
+  must be `/internal/railway.json`. A ~5 minute Network healthcheck is the
+  backend 300s `/api/health` probe, not nginx. The deploy job also applies
+  that json onto the service with `internal/scripts/apply-railway-config.sh`.
 
 ### If the website service fails its healthcheck on every main push
 
@@ -228,10 +230,10 @@ Official references: [GitHub Autodeploys](https://docs.railway.com/deployments/g
 
 | Surface | Artifact | Notes |
 | --- | --- | --- |
-| Backend BFF | `backend/` (`Dockerfile` or `npm run build && npm start`) | Node 22, long-lived process; needs FFmpeg for proof sparse frames. **Railway service `Atmosphere` (override with `RAILWAY_SERVICE`).** |
+| Backend BFF | `backend/` (`Dockerfile` or `npm run build && npm start`) | Node 22, long-lived process; needs FFmpeg for proof sparse frames. **Railway service `Atmosphere APIs` (override with `RAILWAY_SERVICE`).** |
 | Office app | `frontend/` + `verifier/` + `fieldcapture/` | One nginx image; `/api` proxied to the BFF. **Railway service `Atmosphere-web` (override with `RAILWAY_APP_SERVICE`).** |
 | Marketing site | `website/` | nginx image on Railway service `website`; GitHub Pages optional (`deploy-website.yml`); nginx proxies `/api` for the careers and contact forms |
-| Staff console | not in this repo | Railway service `Atmosphere-internal`. Only its `API_UPSTREAM` is managed here |
+| Internal staff site | `internal/` | Accounts, analytics, system health. **Railway service `Internal Growth Metrics` (override with `RAILWAY_INTERNAL_SERVICE`).** Staff-only; `noindex`. |
 | Native Field | `apps/field-ios/` | App Store path; uses the same BFF |
 
 Compose sketch: `docker compose up --build` (see root `docker-compose.yml`). Same shape as Railway: browser hits `:8080`, nginx proxies `/api` to the BFF.
@@ -295,12 +297,31 @@ Health probe: `GET https://<app-host>/healthz` → `ok`. The SPA is `/`; Field C
 
 Invite emails use the first origin in `FRONTEND_ORIGIN`, so put the public `https://` app URL first.
 
+### Host the internal staff site on Railway
+
+Atmosphere Internal (`internal/`) is a third Railway service next to the BFF and office app. Same-origin `/api` again: staff sign in with the same Atmosphere account; `analytics_staff` gates named accounts.
+
+1. **+ Create → Empty service** in the **existing** Atmosphere project. Name it `Internal Growth Metrics` (or set `RAILWAY_INTERNAL_SERVICE`). Do not create a second Railway project.
+2. Settings → **Config File**: `/internal/railway.json` (same settings as `internal/railway.toml`). New services that cannot set Config File still get those values from `internal/scripts/apply-railway-config.sh` on deploy.
+3. Settings → **Root Directory**: `/`
+4. Trigger branch must contain `internal/` (until this is on `main`, use the branch that added it). Deploying `main` before that merge cannot see `/internal/railway.json`.
+5. Variable `API_UPSTREAM=http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}`
+6. Networking → **Generate domain**. Add that https origin to backend `FRONTEND_ORIGIN`. Production CORS already allows the live staff host `https://melodious-inspiration-production-5ad9.up.railway.app`.
+7. Health probe: `GET /healthz` → `ok` (also `/health` and `/api/health`). nginx starts with `startCommand` from `internal/railway.json`, not `node dist/index.js`.
+
+Do not point customers here. The site sends `X-Robots-Tag: noindex`. The
+hosted image has no demo-data path — sign-in and every report hit the live
+BFF. Grant access with `ANALYTICS_INTERNAL_EMAILS` or `npm run analytics:grant --prefix backend -- someone@company.com internal`.
+
+See [`internal/README.md`](../internal/README.md).
+
 Local stand-in for this topology:
 
 ```bash
 docker compose up --build
-# app:  http://localhost:8080
-# api:  http://localhost:4000  (also reachable as http://localhost:8080/api/…)
+# app:       http://localhost:8080
+# internal:  http://localhost:8081
+# api:       http://localhost:4000  (also reachable as http://localhost:8080/api/…)
 ```
 
 ## Supabase
@@ -327,7 +348,7 @@ Fail-loud at boot when `NODE_ENV=production` (see `backend/src/lib/productionGua
 | `FRONTEND_ORIGIN` | CORS allowlist (comma-separated) |
 | `SUPABASE_URL` / `SUPABASE_ANON_KEY` | Auth + RLS-backed reads |
 | `SUPABASE_SERVICE_ROLE_KEY` | PIN unlock, signed uploads, media catalog, schedulers |
-| `DEVICE_PEPPER` | PIN hashing (never store in the DB) |
+| `DEVICE_PEPPER` | PIN hashing and internal-site Authenticator secrets (never store in the DB) |
 | `CONTACT_TO_EMAIL` / `CAREERS_TO_EMAIL` | Public site forms — defaults to `jack@jettx.ai` |
 | `SMTP_*` or `RESEND_API_KEY` + `CAREERS_FROM_EMAIL` | Atmosphere-sent invites and field OTPs. Resend From is `hello@invites.jettx.ai` (verified subdomain). Reply-To stays `jack@jettx.ai`. |
 | `MEDIA_BACKEND=supabase` | Do not use `memory` or the `s3` stub in prod |
@@ -368,6 +389,13 @@ npm run check:migrations --prefix backend
 `ANALYTICS_INTERNAL_EMAILS` (default: `jack@jettx.ai`) are **auto-granted** on
 the next `/api/analytics/access` probe when `SUPABASE_SERVICE_ROLE_KEY` is set —
 no SQL step in preview.
+
+The internal staff site (`internal/`) signs in with first name, last name,
+and email (`POST /api/auth/internal-challenge`), then a 6-digit Microsoft
+Authenticator code (`POST /api/auth/internal-login`). First visit for an
+allowlisted email enrolls Authenticator; later visits only ask for the code.
+Secrets are encrypted with `DEVICE_PEPPER`. Apply
+`20260821210000_internal_staff_totp.sql` on production Supabase.
 
 Optional manual grant for others:
 

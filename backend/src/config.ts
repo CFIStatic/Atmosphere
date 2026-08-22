@@ -31,12 +31,13 @@ const backupsEnabled = resolveBackupsEnabled(process.env, isProduction);
 // running against the shared demo project / a localhost CORS origin.
 const devOnly = (value: string): string | undefined => (isProduction ? undefined : value);
 
-// Dev default matches .env.example: app (:5174), marketing site (:5173), and
-// both localhost / 127.0.0.1 Host headers Cursor and browsers swap between.
+// Dev default matches .env.example: app (:5174), marketing site (:5173),
+// internal staff site (:5175), and both localhost / 127.0.0.1 Host headers
+// Cursor and browsers swap between.
 const frontendOriginRaw = isProduction
   ? required('FRONTEND_ORIGIN')
   : (process.env.FRONTEND_ORIGIN ??
-    'http://localhost:5174,http://localhost:5173,http://127.0.0.1:5174,http://127.0.0.1:5173');
+    'http://localhost:5174,http://localhost:5173,http://localhost:5175,http://127.0.0.1:5174,http://127.0.0.1:5173,http://127.0.0.1:5175');
 
 // Comma-separated list of allowed browser origins for CORS.
 const frontendOrigins = frontendOriginRaw
