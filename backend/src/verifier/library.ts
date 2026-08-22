@@ -206,6 +206,8 @@ export function serializeEvidence(input: {
     capturedAt: proof.captured_at,
     uploadedAt: proof.received_at,
     durationSeconds: proof.duration_seconds === null ? null : Number(proof.duration_seconds),
+    /** Signed JPEG of the clip; attached after serialize by attachThumbnailUrls. */
+    thumbnailUrl: null as string | null,
     byteSize: proof.byte_size === null ? null : Number(proof.byte_size),
     gps:
       proof.lat === null || proof.lat === undefined

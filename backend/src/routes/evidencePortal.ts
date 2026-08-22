@@ -12,6 +12,7 @@ import {
   shareRecipientAllowed,
   shareState,
 } from '../verifier/library.js';
+import { attachThumbnailUrls, signedPreviewUrl, type ProofPreviewRow } from '../verifier/thumbnails.js';
 import { jobTitleForIntake } from '../verifier/intakePropose.js';
 import { shareEmail } from '../verifier/shareEmail.js';
 import { progressShareEmail } from '../verifier/progressShareEmail.js';
@@ -111,7 +112,7 @@ async function assembleLibrary(client: any, orgId: string, proofs: any[]) {
       .map((p) => `${p.job_id}|${p.party_id}|${p.work_date}`),
   );
 
-  return proofs.map((proof) => {
+  const items = proofs.map((proof) => {
     const job = jobById.get(proof.job_id);
     const party = partyById.get(proof.party_id);
     const dayKey = `${proof.job_id}|${proof.party_id}|${proof.work_date}`;
@@ -125,6 +126,33 @@ async function assembleLibrary(client: any, orgId: string, proofs: any[]) {
       dayHasAfter: daysWithAfter.has(dayKey),
     });
   });
+  // A signed JPEG of the clip itself — the list used to draw a fake room
+  // because this was never attached. Failures here must not hide the library.
+  await attachThumbnailUrls(items).catch((err) => {
+    console.warn('[library] thumbnails unavailable:', err instanceof Error ? err.message : err);
+  });
+  return items;
+}
+
+function asPreviewRow(proof: any): ProofPreviewRow {
+  return {
+    id: proof.id,
+    org_id: proof.org_id,
+    job_id: proof.job_id,
+    party_id: proof.party_id ?? null,
+    work_date: proof.work_date,
+    phase: proof.phase,
+    storage_path: proof.storage_path ?? null,
+    duration_seconds: proof.duration_seconds === null || proof.duration_seconds === undefined
+      ? null
+      : Number(proof.duration_seconds),
+  };
+}
+
+async function redirectToPreview(res: Response, admin: any, proof: any) {
+  const url = await signedPreviewUrl(admin, asPreviewRow(proof));
+  if (!url) throw new HttpError(404, 'No preview is available for this clip.', 'no_preview');
+  res.redirect(302, url);
 }
 
 /**
@@ -300,6 +328,33 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
     next(err);
   }
 });
+
+/**
+ * GET /api/evidence-portal/evidence/:proofId/thumbnail
+ *
+ * A still from the clip for <img> tags. Redirects to a short-lived signed
+ * JPEG. Not logged as a view — seeing the list is not watching the video.
+ */
+evidencePortalRouter.get(
+  '/evidence/:proofId/thumbnail',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { supabase, orgId } = await requireOrgContext(req);
+      const { data: proof } = await supabase
+        .from('job_proofs')
+        .select('id, org_id, job_id, party_id, work_date, phase, storage_path, duration_seconds')
+        .eq('org_id', orgId)
+        .eq('id', req.params.proofId)
+        .maybeSingle();
+      if (!proof) throw new HttpError(404, 'No such clip.', 'not_found');
+      const admin = createAdminClient();
+      if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');
+      await redirectToPreview(res, admin, proof);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 /** GET /api/evidence-portal/evidence/:proofId — one clip, whole. */
 evidencePortalRouter.get(
@@ -757,6 +812,26 @@ evidenceShareRouter.get('/:token', async (req: Request, res: Response, next: Nex
     next(err);
   }
 });
+
+/** GET /api/verifier-share/:token/evidence/:proofId/thumbnail — list still. */
+evidenceShareRouter.get(
+  '/:token/evidence/:proofId/thumbnail',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { share, admin } = await shareForToken(req.params.token, req);
+      const { data: proof } = await admin
+        .from('job_proofs')
+        .select('id, org_id, job_id, party_id, work_date, phase, storage_path, duration_seconds')
+        .eq('job_id', share.job_id)
+        .eq('id', req.params.proofId)
+        .maybeSingle();
+      if (!proof) throw new HttpError(404, 'No such clip on this job.', 'not_found');
+      await redirectToPreview(res, admin, proof);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 /** GET /api/verifier-share/:token/evidence/:proofId — one clip, logged. */
 evidenceShareRouter.get(

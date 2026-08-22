@@ -1,7 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { longFormBudget, planSparseTimestamps } from '../src/shared/sparseExtract.js';
+import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import {
+  extractPreviewFrameFromUrl,
+  longFormBudget,
+  pickPreviewFrame,
+  planSparseTimestamps,
+  previewAtSeconds,
+} from '../src/shared/sparseExtract.js';
 import { segmentFrames } from '../src/shared/longAnalyst.js';
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Day-length (and overnight) sampling. What earns a test is the cost ceiling:
@@ -48,6 +61,79 @@ test('a diversity-kept day (≤180 distinct frames) windows into a bounded read'
   );
   assert.ok(windows.length <= 28, `expected ≤28 windows, got ${windows.length}`);
   assert.ok(windows.every((w) => w.frameIdxs.length <= 12));
+});
+
+test('preview timestamp sits a quarter of the way in, never on the opening', () => {
+  assert.equal(previewAtSeconds(60), 15);
+  assert.equal(previewAtSeconds(4), 1);
+  assert.equal(previewAtSeconds(0), 0.5);
+  assert.equal(previewAtSeconds(null), 0.5);
+  assert.ok(previewAtSeconds(0.8) > 0);
+  assert.ok(previewAtSeconds(0.8) < 0.8);
+});
+
+test('pickPreviewFrame prefers the still closest to the preview timestamp', () => {
+  const frames = [
+    { atSeconds: 0, id: 'open' },
+    { atSeconds: 1, id: 'early' },
+    { atSeconds: 20, id: 'work' },
+    { atSeconds: 59, id: 'end' },
+  ];
+  assert.equal(pickPreviewFrame(frames, 60)?.id, 'work');
+  assert.equal(pickPreviewFrame(frames, null)?.id, 'open');
+  assert.equal(pickPreviewFrame([], 60), null);
+});
+
+test('extractPreviewFrameFromUrl seeks then takes one JPEG', async () => {
+  const calls: string[][] = [];
+  const runner = async (_bin: string, args: string[]) => {
+    calls.push(args);
+    const out = args[args.length - 1];
+    await writeFile(out, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+    return { stdout: '', stderr: '', code: 0 };
+  };
+  const frame = await extractPreviewFrameFromUrl({
+    url: 'https://example.test/clip.mp4',
+    durationSeconds: 40,
+    runner,
+  });
+  assert.equal(frame.atSeconds, 10);
+  assert.equal(frame.jpeg[0], 0xff);
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].includes('-ss'));
+  assert.ok(calls[0].includes('10'));
+  assert.ok(calls[0].includes('-frames:v'));
+});
+
+test('extractPreviewFrameFromUrl pulls a real JPEG from a generated clip', async () => {
+  const dir = join(tmpdir(), `atm-preview-test-${Date.now()}`);
+  await mkdir(dir, { recursive: true });
+  const videoPath = join(dir, 'clip.mp4');
+  try {
+    await execFileAsync('ffmpeg', [
+      '-y',
+      '-f',
+      'lavfi',
+      '-i',
+      'color=c=0x2266aa:s=320x180:d=2:r=24',
+      '-c:v',
+      'libx264',
+      '-pix_fmt',
+      'yuv420p',
+      '-movflags',
+      '+faststart',
+      videoPath,
+    ]);
+    const frame = await extractPreviewFrameFromUrl({
+      url: videoPath,
+      durationSeconds: 2,
+    });
+    assert.ok(frame.jpeg.length > 200);
+    assert.equal(frame.jpeg[0], 0xff);
+    assert.equal(frame.jpeg[1], 0xd8);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test('zero or negative duration yields no timestamps', () => {
