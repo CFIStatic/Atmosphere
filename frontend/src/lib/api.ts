@@ -59,6 +59,7 @@ export interface Profile {
   id: string | null;
   email: string | null;
   fullName: string | null;
+  avatarUrl: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 }
@@ -67,6 +68,7 @@ export interface OrgMember {
   userId: string;
   email: string | null;
   fullName: string | null;
+  avatarUrl?: string | null;
   role: MemberRole;
   workType: WorkType;
   usageIntents: UsageIntent[];
@@ -2484,6 +2486,14 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ fullName }),
     }),
+
+  uploadAvatar: (input: { filename: string; mediaType: string; contentBase64: string }) =>
+    request<{ profile: Profile }>('/api/profile/avatar', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  removeAvatar: () => request<{ profile: Profile }>('/api/profile/avatar', { method: 'DELETE' }),
 
   // ---- Device PIN ----
   pinStatus: () =>

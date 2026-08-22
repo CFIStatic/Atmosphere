@@ -133,6 +133,24 @@ export const updateProfileSchema = z.object({
     .nullable(),
 });
 
+const AVATAR_MEDIA_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/x-icon',
+  'image/vnd.microsoft.icon',
+] as const;
+
+/** Body of a profile photo upload — a picture or icon, sent as base64. */
+export const uploadAvatarSchema = z.object({
+  filename: z.string().trim().min(1, 'Choose a picture').max(200, 'That filename is too long'),
+  mediaType: z.enum(AVATAR_MEDIA_TYPES, {
+    errorMap: () => ({ message: 'Use a JPEG, PNG, WebP, GIF, or ICO image' }),
+  }),
+  contentBase64: z.string().min(8, 'That image is empty'),
+});
+
 /** Account types a member can hold within an organization. */
 export const MEMBER_ROLES = [
   'project_manager',

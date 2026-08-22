@@ -174,21 +174,27 @@ export function createApp(): Express {
   const csvImportPath = /^\/api\/integrations\/sources\/[^/]+\/import\/?$/;
   const bulkTextPath = /^\/api\/(ai|model|estimator)(\/|$)/;
   const mitigationPath = /^\/api\/mitigation(\/|$)/;
+  const avatarPath = /^\/api\/profile\/avatar\/?$/;
   const standardJson = express.json({ limit: '256kb' });
   const csvImportJson = express.json({ limit: '12mb' });
   const bulkTextJson = express.json({ limit: '2mb' });
   // The mitigation estimator takes raw vendor exports rather than pasted text,
   // so its ceiling is an order of magnitude above the others'.
   const mitigationJson = express.json({ limit: '8mb' });
+  // A profile photo is small after the client squares it, but a raw phone
+  // picture still has to fit the request before that resize is trusted.
+  const avatarJson = express.json({ limit: '3mb' });
 
   app.use((req, res, next) => {
     const parse = csvImportPath.test(req.path)
       ? csvImportJson
       : mitigationPath.test(req.path)
         ? mitigationJson
-        : bulkTextPath.test(req.path)
-          ? bulkTextJson
-          : standardJson;
+        : avatarPath.test(req.path)
+          ? avatarJson
+          : bulkTextPath.test(req.path)
+            ? bulkTextJson
+            : standardJson;
     parse(req, res, next);
   });
 

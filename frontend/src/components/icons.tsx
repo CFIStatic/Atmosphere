@@ -544,6 +544,20 @@ export function UserIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function CameraIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" width="20" height="20" aria-hidden="true" {...props}>
+      <path
+        d="M8.4 7.2 9.2 5.6A1.4 1.4 0 0110.4 5h3.2a1.4 1.4 0 011.2.7l.8 1.5H18a2 2 0 012 2v8.3a2 2 0 01-2 2H6a2 2 0 01-2-2V9.2a2 2 0 012-2h2.4Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="13" r="3.1" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
 export function ShieldIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" width="20" height="20" aria-hidden="true" {...props}>
