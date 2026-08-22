@@ -532,7 +532,6 @@
     cursor: pointer;
   }
   tr.jobrow td.titlecell .job-open:hover { color: var(--accent); text-decoration: underline; }
-  tr.jobrow td.titlecell .id { font-weight: 400; margin-left: 6px; }
   .jobfile { display: inline-flex; align-items: center; gap: 12px; min-width: 0; vertical-align: middle; }
   .jobfile .caret2 { flex: none; color: var(--faint); transition: transform .15s; }
   tr.jobrow[aria-expanded="false"] .caret2 { transform: rotate(-90deg); }
@@ -1912,7 +1911,7 @@
     var uploader = latestUpload
       ? esc(latestUpload.person || '—') + '<small>' + esc(latestUpload.company || '') + '</small>'
       : '—';
-    var nameInner = esc(job.name) + (job.number ? '<span class="id">#' + job.number + '</span>' : '');
+    var nameInner = esc(job.name);
     var nameCell = canOpenJobRecord(key)
       ? '<button type="button" class="t fname job-open" title="Open job record">' + nameInner + '</button>'
       : '<div class="t fname">' + nameInner + '</div>';
