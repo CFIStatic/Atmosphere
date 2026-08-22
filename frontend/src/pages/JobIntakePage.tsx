@@ -296,18 +296,16 @@ export function JobIntakePage() {
                     {inv.attachedToAccount ? ' Already on their My jobs list.' : ''}
                   </p>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <code className="glass-field min-w-0 flex-1 truncate rounded-lg px-3 py-2 text-xs text-ink-800">
+                    <a
+                      href={inv.sharePath}
+                      className="glass-field min-w-0 flex-1 truncate rounded-lg px-3 py-2 text-xs text-brand-700 underline-offset-2 hover:underline"
+                    >
                       {window.location.origin}
-                      {inv.external ? inv.sharePath : inv.fieldCapturePath || inv.sharePath}
-                    </code>
+                      {inv.sharePath}
+                    </a>
                     <button
                       type="button"
-                      onClick={() =>
-                        void copyLink(
-                          inv.external ? inv.sharePath : inv.fieldCapturePath || inv.sharePath,
-                          inv.id,
-                        )
-                      }
+                      onClick={() => void copyLink(inv.sharePath, inv.id)}
                       className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-ink-900"
                     >
                       {copiedId === inv.id ? 'Copied' : 'Copy'}

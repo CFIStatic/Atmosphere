@@ -145,7 +145,9 @@
           escapeHtml(j.addr) +
           (j.filmed ? ' <span class="filmedpin">· filmed today</span>' : '') +
           (j.placed ? '' : ' <span class="warnpin">· cannot be placed from GPS</span>') +
-          '</span></span>' +
+          '</span>' +
+          (href ? '<span class="sharelink">' + href + '</span>' : '') +
+          '</span>' +
           '<span class="at">' +
           escapeHtml(j.filmed ? 'Filmed' : j.at || '') +
           '</span></' + open + '>'
@@ -525,7 +527,7 @@
         addr: '1841 Meridian Ave, Austin',
         at: '7:00 AM',
         placed: true,
-        sharePath: '/shared/demo-token',
+        sharePath: '/shared/demo-token?email=jack%40jettx.ai',
       },
     ];
     renderExpect(JOBS);
