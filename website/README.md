@@ -144,10 +144,19 @@ hard-codes a host. Pricing embeds its FAQ as JSON-LD.
 
 ## Hosting
 
-`.github/workflows/deploy-website.yml` publishes this directory to GitHub
-Pages on every push to `main` that touches `website/`. The first run enables
-Pages on the repo; if the token lacks permission for that, flip it once by
-hand (Settings → Pages → Source: **GitHub Actions**) and re-run.
+Production is the Railway service **Corporate Website** (alias `website`):
+
+`https://website-production-7e3f.up.railway.app`
+
+`.github/workflows/deploy-website.yml` ships this directory there on every
+push to `main` that touches `website/`. GitHub Pages is an optional second
+host and is **not enabled** on the repo today. `atmosphereteam.com` still
+points at a Squarespace parking page — see `docs/production.md` → "Get the
+corporate website working" to attach the custom domain.
+
+The first Pages run enables Pages on the repo; if the token lacks permission
+for that, flip it once by hand (Settings → Pages → Source: **GitHub Actions**)
+and re-run.
 
 The static site works fully on Pages except the two backend-wired forms
 (careers, contact), which need the Express backend hosted somewhere with the

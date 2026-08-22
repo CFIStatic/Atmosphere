@@ -6,7 +6,9 @@ map $http_upgrade $connection_upgrade {
 }
 
 server {
-  listen 0.0.0.0:${PORT};
+  # Same listen form as the office + staff nginx images. Binding only
+  # 0.0.0.0 left IPv6 replicas unreachable to Railway's healthcheck.
+  listen ${PORT};
   server_name _;
   root /usr/share/nginx/html;
   index index.html;
