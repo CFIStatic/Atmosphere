@@ -161,6 +161,10 @@ jobs:
           fi
           printf '%s' "$upstream" | railway variable set API_UPSTREAM --stdin --skip-deploys --service "$service"
           printf '%s' 'website/Dockerfile' | railway variable set RAILWAY_DOCKERFILE_PATH --stdin --skip-deploys --service "$service"
+          # Stamp nginx + GET /health onto the service so GitHub Autodeploy
+          # does not inherit the backend Dockerfile and 300s /api/health probe.
+          chmod +x website/scripts/apply-railway-config.sh
+          RAILWAY_WEBSITE_SERVICE="$service" website/scripts/apply-railway-config.sh
 
       - name: Smoke the nginx image
         run: |
@@ -180,6 +184,7 @@ jobs:
           RAILWAY_UP_ATTEMPTS: '8'
         run: |
           cp website/railway.toml railway.toml
+          cp website/railway.json railway.json
           export RAILWAY_SERVICE="$RAILWAY_WEBSITE_SERVICE"
           echo "Deploying Railway service: $RAILWAY_SERVICE"
           chmod +x backend/scripts/railwayUp.sh
