@@ -39,4 +39,14 @@ describe('Railway corporate-website image', () => {
     expect(toml).not.toContain('healthcheckPath = "/api/health"');
     expect(toml).not.toContain('startCommand = "node dist/index.js"');
   });
+
+  it('resolves the live Corporate Website service before railway variable set', () => {
+    const workflow = read('.github/workflows/deploy-website.yml');
+    expect(workflow).toContain('resolveRailwayService.mjs');
+    expect(workflow).toContain('RAILWAY_WEBSITE_SERVICE');
+
+    const resolver = read('backend/scripts/resolveRailwayService.mjs');
+    expect(resolver).toContain("website: ['corporate website', 'website']");
+    expect(resolver).toContain("'corporate website': ['corporate website', 'website']");
+  });
 });

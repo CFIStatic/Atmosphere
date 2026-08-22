@@ -20,6 +20,9 @@ const ALIASES = {
   'internal growth metrics': ['internal growth metrics', 'melodious-inspiration'],
   'atmosphere-web': ['login & dashboard', 'atmosphere-web'],
   'login & dashboard': ['login & dashboard', 'atmosphere-web'],
+  website: ['corporate website', 'website'],
+  'corporate website': ['corporate website', 'website'],
+  'atmosphere-website': ['corporate website', 'website'],
 };
 
 function norm(value) {
