@@ -22,6 +22,7 @@ import { isModelProviderConfigured } from '../lib/anthropic.js';
 import { config } from '../config.js';
 import { DailyBudget } from '../shared/liveBudget.js';
 import { labelsForProof } from '../verifier/library.js';
+import { queuePreviewFrame } from '../verifier/thumbnails.js';
 import { buildCaptureGuide } from '../shared/captureGuide.js';
 import { scopeForParty } from '../shared/jobRecord.js';
 import { analyseLongRecording } from '../shared/longAnalyst.js';
@@ -269,6 +270,20 @@ export async function recordProof(party: any, admin: any, body: unknown) {
         { onConflict: 'proof_id,at_seconds' },
       );
     }
+  } else {
+    // Day-length / iOS uploads often ship no device stills. Pull one JPEG
+    // in the background so the Dashboard list has a real preview before
+    // the narration worker finishes a full sparse extract.
+    queuePreviewFrame(admin, {
+      id: (proof as any).id,
+      org_id: party.org_id,
+      job_id: party.job_id,
+      party_id: party.id,
+      work_date: input.workDate,
+      phase: input.phase,
+      storage_path: input.storagePath,
+      duration_seconds: input.durationSeconds ?? null,
+    });
   }
 
   // Two readings queue here, not one. The narration is per-video. The day

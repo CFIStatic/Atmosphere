@@ -15,6 +15,44 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { selectDiverseFrames } from './frameDiversity.js';
 
+/**
+ * Where a list thumbnail should come from on the timeline.
+ *
+ * The first frame of a phone recording is usually a thumb over the lens or a
+ * black settle. A quarter of the way in is far enough to be the work and
+ * early enough to still be a "preview" of the clip.
+ */
+export function previewAtSeconds(durationSeconds?: number | null): number {
+  const duration = Number(durationSeconds);
+  if (!Number.isFinite(duration) || duration <= 0) return 0.5;
+  if (duration <= 1) return Math.round(duration * 50) / 100;
+  return Math.round(Math.min(duration * 0.25, duration - 0.25) * 100) / 100;
+}
+
+/**
+ * The still that should represent a clip in a list: closest to the preview
+ * timestamp, so a stack of device frames or a sparse workday sample both
+ * pick something that looks like the video rather than the opening.
+ */
+export function pickPreviewFrame<T extends { atSeconds: number }>(
+  frames: T[],
+  durationSeconds?: number | null,
+): T | null {
+  if (!frames.length) return null;
+  const sorted = [...frames].sort((a, b) => a.atSeconds - b.atSeconds);
+  const target = previewAtSeconds(durationSeconds);
+  let best = sorted[0]!;
+  let bestDist = Math.abs(best.atSeconds - target);
+  for (const frame of sorted) {
+    const dist = Math.abs(frame.atSeconds - target);
+    if (dist < bestDist) {
+      best = frame;
+      bestDist = dist;
+    }
+  }
+  return best;
+}
+
 export type CommandRunner = (
   bin: string,
   args: string[],
@@ -179,5 +217,74 @@ export async function extractSparseFramesFromUrl(input: {
     }));
   } finally {
     await rm(workDir, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+/**
+ * One JPEG for a library thumbnail. Seeks to the preview timestamp so the
+ * list does not show the first (often black) frame. Falls back to the
+ * opening if the seek overshoots a short clip.
+ *
+ * FFmpeg reads the signed URL — Node never holds the video.
+ */
+export async function extractPreviewFrameFromUrl(input: {
+  url: string;
+  durationSeconds?: number | null;
+  atSeconds?: number;
+  width?: number;
+  ffmpegPath?: string;
+  runner?: CommandRunner;
+}): Promise<{ atSeconds: number; jpeg: Buffer }> {
+  const runner = input.runner ?? defaultRunner;
+  const ffmpeg = input.ffmpegPath ?? process.env.FFMPEG_PATH ?? 'ffmpeg';
+  const at = input.atSeconds ?? previewAtSeconds(input.durationSeconds);
+  const width = Math.max(64, Math.floor(input.width ?? 480));
+  const workDir = join(tmpdir(), `atm-preview-${randomUUID()}`);
+  await mkdir(workDir, { recursive: true });
+  const outPath = join(workDir, 'preview.jpg');
+
+  const argsFor = (seek: number | null) => {
+    const args = ['-y', '-hide_banner', '-loglevel', 'error'];
+    if (seek != null && seek > 0) {
+      args.push('-ss', String(seek));
+    }
+    args.push(
+      '-i',
+      input.url,
+      '-frames:v',
+      '1',
+      '-vf',
+      `scale=${width}:-1`,
+      '-q:v',
+      '5',
+      outPath,
+    );
+    return args;
+  };
+
+  try {
+    let usedAt = Math.max(0, at);
+    let { code, stderr } = await runner(ffmpeg, argsFor(usedAt));
+    if (code !== 0 || !(await fileHasBytes(outPath))) {
+      usedAt = 0;
+      ({ code, stderr } = await runner(ffmpeg, argsFor(null)));
+    }
+    if (code !== 0) {
+      throw new Error(`ffmpeg preview failed: ${stderr.slice(0, 500)}`);
+    }
+    const jpeg = await readFile(outPath);
+    if (!jpeg.length) throw new Error('ffmpeg preview produced an empty file');
+    return { atSeconds: usedAt, jpeg };
+  } finally {
+    await rm(workDir, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+async function fileHasBytes(path: string): Promise<boolean> {
+  try {
+    const buf = await readFile(path);
+    return buf.length > 0;
+  } catch {
+    return false;
   }
 }

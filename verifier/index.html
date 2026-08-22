@@ -1479,7 +1479,7 @@
   function money(n) { return n.toLocaleString('en-US'); }
   function mb(bytes) { return bytes == null ? '—' : (bytes / 1048576).toFixed(0) + ' MB'; }
   function dur(s) {
-    if (s == null) return '—';
+    if (s == null || !(Number(s) > 0)) return '—';
     var m = Math.floor(s / 60), r = Math.round(s % 60);
     return m + ':' + String(r).padStart(2, '0');
   }
@@ -1626,8 +1626,24 @@
     render();
   }
 
+  function fallbackThumb() {
+    return frameSVG({ wet: 0.3, cut: 0.2, gear: 0, night: false, label: null });
+  }
+
   function thumbFor(item) {
-    if (!item.after) return frameSVG({ wet: 0.3, cut: 0.2, gear: 0, night: false, label: null });
+    // Live clips: a JPEG of the video. Demo clips: the illustrated room,
+    // because there is no file behind them.
+    if (item.thumbnailUrl) return item.thumbnailUrl;
+    if (item._remote && item.id) {
+      if (ORG_MODE) {
+        return '/api/evidence-portal/evidence/' + encodeURIComponent(item.id) + '/thumbnail';
+      }
+      if (SHARE_TOKEN) {
+        return '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) +
+          '/evidence/' + encodeURIComponent(item.id) + '/thumbnail';
+      }
+    }
+    if (!item.after) return fallbackThumb();
     return frameSVG({
       wet: item.after.wet, cut: item.after.cut, gear: item.after.gear,
       night: false, label: null
@@ -1641,7 +1657,7 @@
     phase = phase.charAt(0).toUpperCase() + phase.slice(1);
     return '' +
       '<tr tabindex="0" data-id="' + e.id + '">' +
-        '<td><span class="thumb"><img alt="" src="' + thumbFor(e) + '" /><span class="dur">' + dur(e.duration) + '</span></span></td>' +
+        '<td><span class="thumb"><img alt="Video preview" src="' + esc(thumbFor(e)) + '" /><span class="dur">' + dur(e.duration) + '</span></span></td>' +
         '<td class="titlecell">' +
           '<div class="t">' + esc(job.name) + '</div>' +
           '<div class="s">' + esc(phase) +
@@ -2032,6 +2048,14 @@
       $('#resultcount').textContent = list.length + ' of ' + EVIDENCE.length + ' clips';
       rowsEl.innerHTML = list.map(clipRow).join('');
     }
+
+    Array.prototype.forEach.call(rowsEl.querySelectorAll('.thumb img'), function (img) {
+      img.addEventListener('error', function () {
+        if (img.getAttribute('data-fallback') === '1') return;
+        img.setAttribute('data-fallback', '1');
+        img.src = fallbackThumb();
+      });
+    });
 
     Array.prototype.forEach.call(rowsEl.querySelectorAll('tr[data-id]'), function (tr) {
       tr.addEventListener('click', function () { open(tr.dataset.id); });
@@ -3446,6 +3470,7 @@
       capturedAt: raw.capturedAt,
       uploadedAt: raw.uploadedAt,
       duration: raw.durationSeconds,
+      thumbnailUrl: raw.thumbnailUrl || null,
       bytes: raw.byteSize,
       device: null,
       gps: raw.gps ? { lat: raw.gps.lat, lon: raw.gps.lon, accuracy: raw.gps.accuracyM, distanceFt: null } : null,
