@@ -7,6 +7,7 @@
 # The process binds and answers /api/health before config/guards load.
 # /api/ready talks to Supabase and reports production-guard errors; a
 # paused project or a mailbox check must not fail the replica.
+# Stamp: listen-first health so this revision rebuilds Atmosphere APIs.
 
 [build]
 builder = "DOCKERFILE"
