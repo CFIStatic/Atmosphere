@@ -66,7 +66,7 @@ describe('phone home-screen manifests', () => {
       resolve(repoRoot, 'apps/field-ios/AtmosphereFieldCapture/Network/ApiConfig.swift'),
       'utf8',
     );
-    expect(swift).toContain('https://atmosphere-web-production.up.railway.app');
+    expect(swift).toContain('https://atmosphere-production.up.railway.app');
     expect(swift).toContain('productionBffURL');
     expect(swift).toContain('isLoopback(host), !isSimulator { return productionBffURL }');
   });
