@@ -5,7 +5,7 @@ import { JOB_SHARE_PAGE_ROUTE } from '../lib/jobSharePath';
 import { JobSharePage } from './JobSharePage';
 
 const SHARE_VIEW = {
-  you: { company: '', trade: 'field_capture', role: 'crew' },
+  you: { company: 'Jack Cyganiak', trade: 'field_capture', role: 'crew' },
   job: { jobNumber: 3, title: 'Meridian Ave', claimNumber: null, scheduledStart: null },
   brief: null,
   currentRevision: 1,
@@ -36,7 +36,7 @@ describe('JobSharePage', () => {
 
   it('does not show the internal trade slug or job number under the title', async () => {
     render(
-      <MemoryRouter initialEntries={['/shared/tok']}>
+      <MemoryRouter initialEntries={['/shared/tok?email=jack%40jettx.ai']}>
         <Routes>
           <Route path={JOB_SHARE_PAGE_ROUTE} element={<JobSharePage />} />
         </Routes>
@@ -48,6 +48,11 @@ describe('JobSharePage', () => {
     expect(screen.queryByText(/job #3/i)).not.toBeInTheDocument();
     expect(screen.queryByText('You are clear to work')).not.toBeInTheDocument();
     expect(screen.queryByText(/Accepted revision/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Keep your jobs in one place')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Powered by Atmosphere/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/This record works for/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Send me a code/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Create your free account/i })).not.toBeInTheDocument();
   });
 
   it('still asks them to accept when they are not clear to work', async () => {

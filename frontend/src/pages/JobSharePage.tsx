@@ -1,12 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { SpinnerIcon } from '../components/icons';
 import { readCapture, todayISO } from '../lib/proofCapture';
 import { signupHref } from '../lib/authRedirect';
 import { jobShareApiPath, jobSharePagePath, jobShareTokenFromRoute } from '../lib/jobSharePath';
 import { CaptureGuideSteps } from '../components/shared/CaptureGuideSteps';
-import { ClaimInvitationPanel } from '../components/shared/ClaimInvitationPanel';
-import { readFieldSession, writeFieldSession } from './MyJobsPage';
 import type { CaptureGuide } from '../lib/api';
 
 /**
@@ -82,12 +80,6 @@ const STATE_STYLE: Record<string, string> = {
 export function JobSharePage() {
   const params = useParams();
   const token = jobShareTokenFromRoute(params);
-  const [searchParams] = useSearchParams();
-  const inviteReturnTo = jobSharePagePath(token, searchParams.get('email'));
-  const inviteEmail = useMemo(() => {
-    const raw = searchParams.get('email')?.trim() ?? '';
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw) ? raw : '';
-  }, [searchParams]);
   const [view, setView] = useState<ShareView | null>(null);
   const [days, setDays] = useState<ProofDay[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -95,9 +87,6 @@ export function JobSharePage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [question, setQuestion] = useState('');
   const [extra, setExtra] = useState('');
-  // Seeded from the stored session rather than from the server: a sub who has
-  // already claimed some other GC's link should not be asked again here.
-  const [claimed, setClaimed] = useState(() => Boolean(readFieldSession()));
 
   const load = useCallback(async () => {
     try {
@@ -314,95 +303,9 @@ export function JobSharePage() {
             </section>
           )}
 
-          {/* Above the pitch and below the work. Claiming is about this sub's
-              other general contractors, so it belongs after everything to do
-              with the job in front of them — and before the pitch, because
-              collecting their own links is a smaller ask than buying
-              something. */}
-          {claimed ? (
-            <section className="mt-5 rounded-xl glass-card p-5">
-              <h2 className="text-base font-semibold text-ink-900">This job is on your list</h2>
-              <p className="mt-1 text-xs text-ink-600">
-                Saved to your Atmosphere account. Stay on this job to review the
-                scope and film the day.
-              </p>
-            </section>
-          ) : (
-            <div className="mt-5">
-              <ClaimInvitationPanel
-                token={token ?? ''}
-                company={view.you.company}
-                initialContact={inviteEmail}
-                returnTo={inviteReturnTo}
-                onClaimed={(session) => {
-                  writeFieldSession(session);
-                  setClaimed(true);
-                }}
-              />
-            </div>
-          )}
-
-          <AtmospherePitch
-            company={view.you.company}
-            inviteEmail={inviteEmail}
-            returnTo={inviteReturnTo}
-          />
         </>
       )}
     </div>
-  );
-}
-
-/**
- * The lure.
- *
- * A sub lands on this page because a GC sent them here, and everything above
- * quietly demonstrates the product: a scope that cannot be argued about, a
- * record that pays. This is the one place the page speaks for itself — after
- * the work is done, at the bottom, in the sub's own terms. Their pain is that
- * every builder runs a different system and their history resets with each
- * one; the pitch is that the record they just added to could be theirs.
- *
- * Deliberately not a banner, not a popup, and never between the crew and the
- * upload button. A lure that gets in the way of the day's work would cost the
- * GC's trust — and the GC is who brought us here.
- */
-function AtmospherePitch({
-  company,
-  inviteEmail,
-  returnTo,
-}: {
-  company: string;
-  inviteEmail?: string;
-  returnTo?: string;
-}) {
-  const signupLink = signupHref({
-    email: inviteEmail || undefined,
-    next: returnTo,
-  });
-  return (
-    <footer className="mt-8 rounded-xl border border-brand-200 bg-brand-600/5 p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-brand-600">
-        Powered by Atmosphere
-      </p>
-      <p className="mt-1.5 text-sm font-semibold text-ink-900">
-        This record works for {company} too.
-      </p>
-      <p className="mt-1 text-xs text-ink-600">
-        Every video you file and every scope you sign lives in a builder's account today. With your
-        own Atmosphere account, your proof-of-work follows you — every job, every builder, one
-        history that shows how you work. Free for subcontractors.
-        {inviteEmail
-          ? ` Use ${inviteEmail} so this invite stays with your account.`
-          : ''}
-      </p>
-      <Link
-        to={signupLink}
-        className="mt-3 inline-block rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900 transition hover:bg-brand-700"
-      >
-        {inviteEmail ? 'Create your free account' : 'Get your own record'}
-      </Link>
-    </footer>
   );
 }
 
