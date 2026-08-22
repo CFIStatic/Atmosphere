@@ -79,6 +79,7 @@ function resolveRailwayService(name) {
     Atmosphere: 'Atmosphere APIs',
     'Atmosphere-internal': 'Internal Growth Metrics',
     'Atmosphere-web': 'Login & Dashboard',
+    website: 'Corporate Website',
   };
   const wanted = aliases[name] ?? name;
   const resolved = spawnSync(

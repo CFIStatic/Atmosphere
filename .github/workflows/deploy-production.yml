@@ -210,6 +210,11 @@ jobs:
             || railway link --project "$project" \
             || true
           railway status --project "$project" --environment production || railway status || true
+          # Live name is Login & Dashboard; Atmosphere-web is the old alias.
+          # railway variable set rejects names that are not on the canvas.
+          service_id="$(node backend/scripts/resolveRailwayService.mjs "$service")"
+          echo "Resolved '$service' to $service_id"
+          service="$service_id"
           printf '%s' 'frontend/Dockerfile' | railway variable set RAILWAY_DOCKERFILE_PATH --stdin --skip-deploys --service "$service"
           # Private HTTP to the BFF. The public https://atmosphere-production URL
           # hairpins out of the mesh (jfk1 → ams1 hops) and 502s /api for ~3s,

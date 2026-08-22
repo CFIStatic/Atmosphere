@@ -128,6 +128,10 @@ jobs:
             exit 1
           fi
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
@@ -135,22 +139,28 @@ jobs:
         run: railway link --project "$RAILWAY_PROJECT_ID" --environment production || railway link --project "$RAILWAY_PROJECT_ID" || true
 
       - name: Point the website service at nginx, not the API
+        env:
+          RAILWAY_ENVIRONMENT: production
         run: |
           set -euo pipefail
           # Do not railway add here — the Hobby plan is at its service cap.
-          # The existing `website` service in outstanding-kindness is the target.
+          # Live name is Corporate Website; `website` is the old alias.
+          # railway variable set rejects names that are not on the canvas.
           #
           # The careers and contact forms post to /api on this host. Proxying
           # that to the public https BFF URL leaves the mesh and comes back in
           # through the edge, which 502s for a few seconds; the private domain
           # in api.upstream stays inside the project. Same rule as the office
           # console and the staff console.
+          service="$(node backend/scripts/resolveRailwayService.mjs "$RAILWAY_WEBSITE_SERVICE")"
+          echo "Resolved '$RAILWAY_WEBSITE_SERVICE' to $service"
+          echo "RAILWAY_WEBSITE_SERVICE=$service" >> "$GITHUB_ENV"
           upstream="${API_UPSTREAM_OVERRIDE:-}"
           if [ -z "$upstream" ]; then
             upstream="$(tr -d '\n' < api.upstream)"
           fi
-          printf '%s' "$upstream" | railway variable set API_UPSTREAM --stdin --skip-deploys --service "$RAILWAY_WEBSITE_SERVICE"
-          printf '%s' 'website/Dockerfile' | railway variable set RAILWAY_DOCKERFILE_PATH --stdin --skip-deploys --service "$RAILWAY_WEBSITE_SERVICE"
+          printf '%s' "$upstream" | railway variable set API_UPSTREAM --stdin --skip-deploys --service "$service"
+          printf '%s' 'website/Dockerfile' | railway variable set RAILWAY_DOCKERFILE_PATH --stdin --skip-deploys --service "$service"
 
       - name: Smoke the nginx image
         run: |
