@@ -39,44 +39,76 @@ export function decryptTotpSecret(row: { cipher: string; iv: string; tag: string
 export async function loadEnrolledTotp(email: string): Promise<{
   secret: string;
   lastCounter: bigint;
+  firstName: string | null;
+  lastName: string | null;
 } | null> {
   const admin = createAdminClient();
   if (!admin) return null;
-  const { data, error } = await admin
+  const full = await admin
     .from('internal_staff_totp')
-    .select('secret_cipher, secret_iv, secret_tag, last_counter')
+    .select('secret_cipher, secret_iv, secret_tag, last_counter, first_name, last_name')
     .eq('email', email)
     .maybeSingle();
+  const { data, error } = full.error
+    ? await admin
+        .from('internal_staff_totp')
+        .select('secret_cipher, secret_iv, secret_tag, last_counter')
+        .eq('email', email)
+        .maybeSingle()
+    : full;
   if (error) {
     logger.warn('internal_totp_load_failed', { email, detail: error.message });
     return null;
   }
   if (!data) return null;
+  const row = data as {
+    secret_cipher: string;
+    secret_iv: string;
+    secret_tag: string;
+    last_counter: number | string;
+    first_name?: string | null;
+    last_name?: string | null;
+  };
   return {
     secret: decryptTotpSecret({
-      cipher: String(data.secret_cipher),
-      iv: String(data.secret_iv),
-      tag: String(data.secret_tag),
+      cipher: String(row.secret_cipher),
+      iv: String(row.secret_iv),
+      tag: String(row.secret_tag),
     }),
-    lastCounter: BigInt(data.last_counter ?? -1),
+    lastCounter: BigInt(row.last_counter ?? -1),
+    firstName: typeof row.first_name === 'string' && row.first_name.trim() ? row.first_name : null,
+    lastName: typeof row.last_name === 'string' && row.last_name.trim() ? row.last_name : null,
   };
 }
 
-export async function saveEnrolledTotp(email: string, secret: string, lastCounter: bigint): Promise<void> {
+export async function saveEnrolledTotp(
+  email: string,
+  secret: string,
+  lastCounter: bigint,
+  names?: { firstName?: string; lastName?: string },
+): Promise<void> {
   const admin = createAdminClient();
   if (!admin) throw new Error('missing_service_role');
   const sealed = encryptTotpSecret(secret);
-  const { error } = await admin.from('internal_staff_totp').upsert(
-    {
-      email,
-      secret_cipher: sealed.cipher,
-      secret_iv: sealed.iv,
-      secret_tag: sealed.tag,
-      last_counter: Number(lastCounter),
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'email' },
-  );
+  const row: Record<string, unknown> = {
+    email,
+    secret_cipher: sealed.cipher,
+    secret_iv: sealed.iv,
+    secret_tag: sealed.tag,
+    last_counter: Number(lastCounter),
+    updated_at: new Date().toISOString(),
+  };
+  if (names?.firstName?.trim()) row.first_name = names.firstName.trim();
+  if (names?.lastName?.trim()) row.last_name = names.lastName.trim();
+  const { error } = await admin.from('internal_staff_totp').upsert(row, { onConflict: 'email' });
+  if (error && (row.first_name || row.last_name)) {
+    delete row.first_name;
+    delete row.last_name;
+    const retry = await admin.from('internal_staff_totp').upsert(row, { onConflict: 'email' });
+    if (!retry.error) return;
+    logger.warn('internal_totp_save_failed', { email, detail: retry.error.message });
+    throw retry.error;
+  }
   if (error) {
     logger.warn('internal_totp_save_failed', { email, detail: error.message });
     throw error;

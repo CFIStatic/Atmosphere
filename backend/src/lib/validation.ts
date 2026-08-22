@@ -30,19 +30,35 @@ const nameField = z
   .max(80, 'Name is too long')
   .regex(/^[\p{L}][\p{L}\s'.-]*$/u, 'Enter a real name');
 
+const optionalStaffName = z
+  .string()
+  .trim()
+  .max(80)
+  .optional()
+  .default('')
+  .refine((value) => value === '' || nameField.safeParse(value).success, 'Enter a real name');
+
+const authenticatorCodeField = z
+  .string({ required_error: 'Authenticator code is required' })
+  .trim()
+  .regex(/^\d{6}$/, 'Enter the 6-digit code from Microsoft Authenticator');
+
 export const internalStaffStartSchema = z.object({
-  firstName: nameField,
-  lastName: nameField,
+  firstName: optionalStaffName,
+  lastName: optionalStaffName,
   email: emailField,
 });
 
-export const internalStaffVerifySchema = z.object({
-  challenge: z.string().trim().min(16).max(4000),
-  code: z
-    .string({ required_error: 'Authenticator code is required' })
-    .trim()
-    .regex(/^\d{6}$/, 'Enter the 6-digit code from Microsoft Authenticator'),
-});
+export const internalStaffVerifySchema = z
+  .object({
+    challenge: z.string().trim().min(16).max(4000).optional(),
+    email: emailField.optional(),
+    code: authenticatorCodeField,
+  })
+  .refine((value) => Boolean(value.challenge || value.email), {
+    message: 'Enter your work email and the 6-digit Authenticator code.',
+    path: ['email'],
+  });
 
 /** Body of the "email me a reset link" request. */
 export const forgotPasswordSchema = z.object({ email: emailField });

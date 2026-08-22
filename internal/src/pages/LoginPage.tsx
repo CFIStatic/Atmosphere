@@ -3,9 +3,11 @@ import { Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ApiError } from '../lib/api';
 import { landingPath } from '../lib/access';
+import { forgetStaffEmail, readRememberedStaffEmail, rememberStaffEmail } from '../lib/rememberedEmail';
 import type { StaffChallengeResponse } from '../lib/types';
 
 type Step =
+  | { kind: 'returning' }
   | { kind: 'identity' }
   | { kind: 'pending' }
   | { kind: 'enroll'; challenge: string; qrDataUrl: string; secret: string }
@@ -13,6 +15,7 @@ type Step =
 
 function stepFromChallenge(next: StaffChallengeResponse): Step {
   if (next.status === 'pending') return { kind: 'pending' };
+  if (next.status === 'setup') return { kind: 'identity' };
   if (next.status === 'enroll') {
     return {
       kind: 'enroll',
@@ -27,11 +30,14 @@ function stepFromChallenge(next: StaffChallengeResponse): Step {
 export function LoginPage() {
   const { user, access, loading, startSignIn, login } = useAuth();
   const [searchParams] = useSearchParams();
+  const remembered = readRememberedStaffEmail();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(remembered);
   const [code, setCode] = useState('');
-  const [step, setStep] = useState<Step>({ kind: 'identity' });
+  const [step, setStep] = useState<Step>(() =>
+    remembered ? { kind: 'returning' } : { kind: 'identity' },
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,13 +69,34 @@ export function LoginPage() {
     }
   }
 
+  async function onReturning(event: FormEvent) {
+    event.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      const next = await startSignIn({ email });
+      if (next.status === 'code') {
+        await login({ email, code: code.replace(/\s+/g, '') });
+        rememberStaffEmail(email);
+        return;
+      }
+      setCode('');
+      setStep(stepFromChallenge(next));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not sign in.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function onVerify(event: FormEvent) {
     event.preventDefault();
-    if (step.kind === 'identity' || step.kind === 'pending') return;
+    if (step.kind === 'identity' || step.kind === 'pending' || step.kind === 'returning') return;
     setSubmitting(true);
     setError(null);
     try {
       await login({ challenge: step.challenge, code: code.replace(/\s+/g, '') });
+      rememberStaffEmail(email);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not sign in.');
     } finally {
@@ -81,6 +108,20 @@ export function LoginPage() {
     setStep({ kind: 'identity' });
     setCode('');
     setError(null);
+  }
+
+  function backToReturning() {
+    setStep({ kind: 'returning' });
+    setCode('');
+    setError(null);
+  }
+
+  function useDifferentEmail() {
+    forgetStaffEmail();
+    setEmail('');
+    setFirstName('');
+    setLastName('');
+    backToIdentity();
   }
 
   return (
@@ -102,12 +143,61 @@ export function LoginPage() {
               Request another email
             </button>
           </>
+        ) : step.kind === 'returning' ? (
+          <>
+            <p className="mt-2 text-sm text-ink-500">
+              After the first Microsoft Authenticator setup, the 6-digit code is your password.
+            </p>
+            <form className="mt-6 space-y-4" onSubmit={(event) => void onReturning(event)}>
+              <label className="block text-sm">
+                <span className="text-ink-600">Email</span>
+                <input
+                  type="email"
+                  autoComplete="username"
+                  required
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-line-strong bg-paper-50 px-3 py-2 text-ink-900 outline-none focus:border-brand-500"
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-ink-600">Password</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="\d{6}"
+                  maxLength={6}
+                  required
+                  value={code}
+                  onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                  className="mt-1 w-full rounded-lg border border-line-strong bg-paper-50 px-3 py-2 tracking-[0.3em] text-ink-900 outline-none focus:border-brand-500"
+                />
+              </label>
+              <p className="text-xs text-ink-500">6-digit code from Microsoft Authenticator</p>
+              {error && <p className="text-sm text-danger-600">{error}</p>}
+              <button
+                type="submit"
+                disabled={submitting || code.length !== 6}
+                className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-500 disabled:opacity-60"
+              >
+                {submitting ? 'Signing in…' : 'Sign in'}
+              </button>
+              <button
+                type="button"
+                onClick={useDifferentEmail}
+                className="w-full text-sm text-ink-500 hover:text-ink-800"
+              >
+                First time? Set up Authenticator
+              </button>
+            </form>
+          </>
         ) : step.kind === 'identity' ? (
           <>
             <p className="mt-2 text-sm text-ink-500">
-              Accounts, product analytics, and system health. Sign in with your name, work email,
-              and Microsoft Authenticator — not the office-app password. If you are not on the
-              staff list yet, Continue queues you for admin approval.
+              First visit: enter your name and work email, then add Atmosphere Internal in
+              Microsoft Authenticator. After that, the 6-digit code is your password. If you are
+              not on the staff list yet, Continue queues you for admin approval.
             </p>
             <form className="mt-6 space-y-4" onSubmit={(event) => void onIdentity(event)}>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -153,14 +243,21 @@ export function LoginPage() {
               >
                 {submitting ? 'Checking…' : 'Continue'}
               </button>
+              <button
+                type="button"
+                onClick={backToReturning}
+                className="w-full text-sm text-ink-500 hover:text-ink-800"
+              >
+                I already set up Authenticator
+              </button>
             </form>
           </>
         ) : (
           <>
             <p className="mt-2 text-sm text-ink-500">
               {step.kind === 'enroll'
-                ? 'Add Atmosphere Internal in Microsoft Authenticator, then enter the 6-digit code.'
-                : `Enter the 6-digit code from Microsoft Authenticator for ${email}.`}
+                ? 'Add Atmosphere Internal in Microsoft Authenticator, then enter the 6-digit code. That code is your password from now on.'
+                : `Enter the 6-digit Microsoft Authenticator code for ${email}. That code is your password.`}
             </p>
             {step.kind === 'enroll' && (
               <div className="mt-4 rounded-xl border border-line bg-paper-50 p-4">
@@ -181,7 +278,7 @@ export function LoginPage() {
             )}
             <form className="mt-6 space-y-4" onSubmit={(event) => void onVerify(event)}>
               <label className="block text-sm">
-                <span className="text-ink-600">Authenticator code</span>
+                <span className="text-ink-600">Password</span>
                 <input
                   type="text"
                   inputMode="numeric"
@@ -194,6 +291,7 @@ export function LoginPage() {
                   className="mt-1 w-full rounded-lg border border-line-strong bg-paper-50 px-3 py-2 tracking-[0.3em] text-ink-900 outline-none focus:border-brand-500"
                 />
               </label>
+              <p className="text-xs text-ink-500">6-digit code from Microsoft Authenticator</p>
               {error && <p className="text-sm text-danger-600">{error}</p>}
               <button
                 type="submit"
@@ -204,7 +302,7 @@ export function LoginPage() {
               </button>
               <button
                 type="button"
-                onClick={backToIdentity}
+                onClick={useDifferentEmail}
                 className="w-full text-sm text-ink-500 hover:text-ink-800"
               >
                 Use a different email

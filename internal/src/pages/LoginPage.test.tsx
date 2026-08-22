@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LoginPage } from './LoginPage';
+import { rememberStaffEmail } from '../lib/rememberedEmail';
 
 const startSignIn = vi.fn();
 const login = vi.fn();
@@ -21,6 +22,7 @@ describe('LoginPage', () => {
   beforeEach(() => {
     startSignIn.mockReset();
     login.mockReset();
+    localStorage.clear();
   });
 
   it('asks for first name, last name, and email — not a password or shared code', () => {
@@ -67,7 +69,8 @@ describe('LoginPage', () => {
     expect(await screen.findByAltText('QR code for Microsoft Authenticator')).toBeInTheDocument();
     expect(screen.getByText(/Other account/)).toBeInTheDocument();
     expect(screen.getByText(/Setup key: JBSWY3DPEHPK3PXP/)).toBeInTheDocument();
-    expect(screen.getByLabelText('Authenticator code')).toBeInTheDocument();
+    expect(screen.getByLabelText('Password')).toBeInTheDocument();
+    expect(screen.getByText(/6-digit code from Microsoft Authenticator/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
   });
 
@@ -90,7 +93,7 @@ describe('LoginPage', () => {
       email: 'alex@company.com',
     });
     expect(await screen.findByText(/waiting on an Atmosphere admin/)).toBeInTheDocument();
-    expect(screen.queryByLabelText('Authenticator code')).toBeNull();
+    expect(screen.queryByLabelText('Password')).toBeNull();
     expect(screen.getByRole('button', { name: 'Request another email' })).toBeInTheDocument();
   });
 
@@ -108,10 +111,32 @@ describe('LoginPage', () => {
     await user.type(screen.getByLabelText('Email'), 'jack@jettx.ai');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
-    expect(await screen.findByLabelText('Authenticator code')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Password')).toBeInTheDocument();
     expect(screen.queryByAltText('QR code for Microsoft Authenticator')).toBeNull();
-    await user.type(screen.getByLabelText('Authenticator code'), '123456');
+    await user.type(screen.getByLabelText('Password'), '123456');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
     expect(login).toHaveBeenCalledWith({ challenge: 'tok', code: '123456' });
+  });
+
+  it('uses the authenticator code as the password after the first setup', async () => {
+    const user = userEvent.setup();
+    rememberStaffEmail('jack@jettx.ai');
+    startSignIn.mockResolvedValue({ status: 'code', challenge: 'tok' });
+    login.mockResolvedValue(undefined);
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByLabelText('First name')).toBeNull();
+    expect(screen.getByLabelText('Email')).toHaveValue('jack@jettx.ai');
+    expect(screen.getByLabelText('Password')).toBeInTheDocument();
+    expect(screen.getByText(/6-digit code is your password/)).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Password'), '654321');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(startSignIn).toHaveBeenCalledWith({ email: 'jack@jettx.ai' });
+    expect(login).toHaveBeenCalledWith({ email: 'jack@jettx.ai', code: '654321' });
   });
 });

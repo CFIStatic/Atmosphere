@@ -27,14 +27,15 @@ export interface AccessRequestList {
 }
 
 export interface StaffIdentity {
-  firstName: string;
-  lastName: string;
+  firstName?: string;
+  lastName?: string;
   email: string;
 }
 
 export type StaffChallengeResponse =
   | { status: 'code'; challenge: string }
   | { status: 'pending' }
+  | { status: 'setup' }
   | {
       status: 'enroll';
       challenge: string;
@@ -45,7 +46,8 @@ export type StaffChallengeResponse =
     };
 
 export interface StaffVerify {
-  challenge: string;
+  challenge?: string;
+  email?: string;
   code: string;
 }
 

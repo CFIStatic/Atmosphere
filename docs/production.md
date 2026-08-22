@@ -392,11 +392,14 @@ no SQL step in preview.
 
 The internal staff site (`internal/`) signs in with first name, last name,
 and email (`POST /api/auth/internal-challenge`), then a 6-digit Microsoft
-Authenticator code (`POST /api/auth/internal-login`). Allowlisted emails
-enroll immediately. Other employees are queued on **Access** until an
-internal admin approves them (`GET/POST /api/analytics/access-requests`).
-Apply `20260821210000_internal_staff_totp.sql` and
-`20260822170000_internal_access_requests.sql` on production Supabase.
+Authenticator code (`POST /api/auth/internal-login`). After that first
+setup, email + the Authenticator code is the password — no office-app
+password. Allowlisted emails enroll immediately. Other employees are queued
+on **Access** until an internal admin approves them
+(`GET/POST /api/analytics/access-requests`). Apply
+`20260821210000_internal_staff_totp.sql`,
+`20260822170000_internal_access_requests.sql`, and
+`20260822181000_internal_staff_totp_names.sql` on production Supabase.
 Secrets are encrypted with `DEVICE_PEPPER`.
 
 Optional manual grant for others:
