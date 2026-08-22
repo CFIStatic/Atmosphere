@@ -124,7 +124,7 @@ export function partyInviteEmail(input: {
               Open job on phone
             </a>
           </p>
-          ${accountBlock}
+          ${accountBlock ? `\n          ${accountBlock}` : ''}
           <p style="margin:24px 0 0;font-size:12px;line-height:1.4;color:#78716c;">
             If you were not expecting this, ignore it — nothing happens until the link is opened.
           </p>

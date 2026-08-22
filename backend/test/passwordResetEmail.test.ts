@@ -38,6 +38,7 @@ describe('passwordResetEmail', () => {
     assert.ok(html.includes('#D2500A'));
     assert.ok(html.includes('Choose a new password'));
     assert.ok(html.includes('Expires in 1 hour · one use'));
+    assert.ok(!html.includes('Or paste this link'));
     assert.ok(html.includes(`${LIVE_OFFICE_ORIGIN}/login`));
     assert.ok(text.includes('expires in one hour'));
     assert.ok(text.includes('ignore it'));

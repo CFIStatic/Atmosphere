@@ -43,6 +43,8 @@ test('Atmosphere sends the invite; the org is named, not the From party', () => 
     ),
   );
   assert.ok(!html.includes('Or paste this link'));
+  assert.ok(!html.includes('You already have an Atmosphere account'));
+  assert.ok(!html.includes(base.recipientEmail));
 });
 
 test('an existing account gets no account copy; a missing one gets create-with-this-address', () => {
