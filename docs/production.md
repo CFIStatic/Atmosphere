@@ -117,11 +117,12 @@ The staff site (`internal/`, Railway service `Internal Growth Metrics`) is
 the exception: its nginx 504s on the private mesh, so the deploy job points
 it at the public BFF host.
 
-Login & Dashboard and the corporate site still *set* the private-mesh URL.
-If that host does not answer `/api/health` at boot (IPv4-only BFF, mesh
-blip), `office-start.sh` / `website-start.sh` fall back to the public BFF
-so Sign in is not a 504 HTML page mapped to “Cannot reach the Atmosphere API”.
-The BFF listens dual-stack (`::`, `ipv6Only=false`) so the mesh can connect.
+Login & Dashboard **sets the public BFF** (`https://atmosphere-production.up.railway.app`),
+same as the staff site. `office-start.sh` also forces that whenever
+`RAILWAY_ENVIRONMENT` is set. wget can reach `railway.internal` over IPv6
+while nginx then tries IPv4 and Sign in 504s — “Cannot reach the Atmosphere API”
+— even though the public API is healthy. The marketing site still *sets*
+the private-mesh URL; `website-start.sh` forces public on Railway too.
 
 The deploy workflows keep these in sync, so a fix here does not need a
 dashboard visit:

@@ -29,7 +29,14 @@ upstream_answers() {
   wget -q -T 2 -O /dev/null "$1/api/health" 2>/dev/null
 }
 
-if ! is_usable_upstream "$API_UPSTREAM"; then
+# Login & Dashboard nginx 504s on railway.internal even when wget can
+# reach the BFF over IPv6 (nginx then tries IPv4 and burns connect_timeout).
+# Same reason Internal Growth Metrics uses the public host. Compose / local
+# keep the passed-in upstream so `backend:4000` still works.
+if [ -n "${RAILWAY_ENVIRONMENT:-}${RAILWAY_PROJECT_ID:-}" ]; then
+  echo "office-start: Railway replica — using public BFF (private mesh 504s from this nginx)." >&2
+  API_UPSTREAM="$PUBLIC_UPSTREAM"
+elif ! is_usable_upstream "$API_UPSTREAM"; then
   echo "office-start: API_UPSTREAM='$API_UPSTREAM' is not a host:port URL; falling back so nginx can bind." >&2
   API_UPSTREAM="$PUBLIC_UPSTREAM"
 elif is_private_mesh "$API_UPSTREAM" && ! upstream_answers "$API_UPSTREAM"; then

@@ -30,7 +30,10 @@ upstream_answers() {
   wget -q -T 2 -O /dev/null "$1/api/health" 2>/dev/null
 }
 
-if ! is_usable_upstream "$API_UPSTREAM"; then
+if [ -n "${RAILWAY_ENVIRONMENT:-}${RAILWAY_PROJECT_ID:-}" ]; then
+  echo "website-start: Railway replica — using public BFF (private mesh 504s from this nginx)." >&2
+  API_UPSTREAM="$PUBLIC_UPSTREAM"
+elif ! is_usable_upstream "$API_UPSTREAM"; then
   echo "website-start: API_UPSTREAM='$API_UPSTREAM' is not a host:port URL; falling back so nginx can bind." >&2
   API_UPSTREAM="$PUBLIC_UPSTREAM"
 elif is_private_mesh "$API_UPSTREAM" && ! upstream_answers "$API_UPSTREAM"; then

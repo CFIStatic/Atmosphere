@@ -260,10 +260,14 @@ jobs:
           service="$service_id"
           chmod +x frontend/scripts/apply-railway-config.sh backend/scripts/railwayUp.sh
           RAILWAY_APP_SERVICE="$service" frontend/scripts/apply-railway-config.sh
-          # Private HTTP to the BFF. The public https://atmosphere-production URL
-          # hairpins out of the mesh (jfk1 → ams1 hops) and 502s /api for ~3s,
-          # which is the spinner on /login (api.me() before the form).
-          tr -d '\n' < api.upstream | railway variable set API_UPSTREAM --stdin --skip-deploys --service "$service"
+          # Private mesh 504s from this nginx (same as Internal Growth Metrics).
+          # wget can reach railway.internal over IPv6; nginx then tries IPv4
+          # and Sign in shows "Cannot reach the Atmosphere API". Public BFF
+          # is healthy. A brief hairpin 502 is better than a permanent 504.
+          upstream="https://atmosphere-production.up.railway.app"
+          echo "API_UPSTREAM=$upstream"
+          printf '%s' "$upstream" | railway variable set API_UPSTREAM \
+            --stdin --skip-deploys --service "$service"
           # railway up reads /railway.toml from the upload root. Without this copy
           # the CLI builds the backend Dockerfile and probes /api/health on nginx.
           cp frontend/railway.toml railway.toml

@@ -28,6 +28,7 @@ describe('Railway office-app image', () => {
     expect(start).toContain('is_usable_upstream');
     expect(start).toContain('is_private_mesh');
     expect(start).toContain('upstream_answers');
+    expect(start).toContain('RAILWAY_ENVIRONMENT');
     expect(start).toContain('invalid port in upstream');
     expect(start).toContain('http://:');
     expect(start).toContain('railway\\.internal');
@@ -107,23 +108,23 @@ describe('Railway office-app image', () => {
 });
 
 /**
- * Office console and marketing site are nginx front doors onto one BFF.
- * Pointed at the public https host, /api leaves the mesh and 502s. They share
- * api.upstream at the repo root. The staff site in internal/ is the exception:
- * its nginx 504s on the private mesh, so that deploy uses the public BFF.
+ * Marketing site still *sets* api.upstream (private mesh). Login & Dashboard
+ * and Internal Growth Metrics 504 on railway.internal, so those deploys
+ * point nginx at the public BFF. office-start.sh also forces that on Railway.
  */
 describe('every front door proxies /api over the private mesh', () => {
   const office = readRoot('.github/workflows/deploy-production.yml');
   const site = readRoot('.github/workflows/deploy-website.yml');
   const publicHost = /API_UPSTREAM.*https:\/\/[a-z0-9-]+\.up\.railway\.app/;
 
-  it('takes the office upstream from the shared root file', () => {
-    expect(office).toContain("tr -d '\\n' < api.upstream");
+  it('points the office app at the public BFF because the private mesh 504s', () => {
     const appJob = office.slice(office.indexOf('name: Deploy office app'));
     expect(appJob).toContain('resolveRailwayService.mjs');
     expect(appJob).toContain('Login & Dashboard');
     expect(appJob).toContain('frontend/scripts/apply-railway-config.sh');
-    expect(appJob).not.toMatch(publicHost);
+    expect(appJob).toContain('https://atmosphere-production.up.railway.app');
+    expect(appJob).toContain('API_UPSTREAM=$upstream');
+    expect(appJob).not.toContain("tr -d '\\n' < api.upstream");
   });
 
   it('takes the marketing-site upstream from that same file', () => {
