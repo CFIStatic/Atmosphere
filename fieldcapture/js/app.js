@@ -29,6 +29,11 @@
     return document.querySelector(sel);
   }
 
+  function when(sel, fn) {
+    var node = $(sel);
+    if (node) fn(node);
+  }
+
   var SCREENS = ['s-home', 's-rec', 's-door', 's-blocked'];
   function show(id) {
     SCREENS.forEach(function (s) {
@@ -192,12 +197,12 @@
             placed: true,
           },
         ]);
-        setStatus('Ready — tap Start. Records video + microphone.');
-        $('#daybtn').disabled = false;
+        setStatus('Ready — pick a job.');
+        when('#daybtn', function (btn) { btn.disabled = false; });
       })
       .catch(function (err) {
         setStatus(err.message || 'Could not open this link.', true);
-        $('#daybtn').disabled = true;
+        when('#daybtn', function (btn) { btn.disabled = true; });
         show('s-blocked');
         $('#blocked-msg').textContent = err.message || 'This link is invalid or expired.';
       });
@@ -250,10 +255,10 @@
     }
     renderExpect(state.jobs);
     $('#week-wrap').hidden = true;
-    $('#daybtn').disabled = !state.activeJobId;
+    when('#daybtn', function (btn) { btn.disabled = !state.activeJobId; });
     setStatus(
       state.activeJobId
-        ? 'Ready — tap Start. Records video + microphone.'
+        ? 'Ready — pick a job.'
         : 'Nothing on the schedule for today. Ask the office to start a job.',
     );
     show('s-home');
@@ -270,7 +275,7 @@
   function bootAccount() {
     document.body.setAttribute('data-mode', 'account');
     readStoredSession();
-    $('#daybtn').addEventListener('click', startLiveDay);
+    when('#daybtn', function (btn) { btn.addEventListener('click', startLiveDay); });
     var form = $('#login-form');
     if (form) {
       form.addEventListener('submit', function (event) {
@@ -534,19 +539,21 @@
 
     var seconds = 0;
     var timer = null;
-    $('#daybtn').onclick = function () {
-      show('s-rec');
-      $('#scene').innerHTML = '';
-      $('#preview').hidden = true;
-      $('#rec-since').textContent = 'demo';
-      seconds = 0;
-      timer = setInterval(function () {
-        seconds += 1;
-        $('#clock').textContent = fmt(seconds);
-      }, 1000);
-      $('#live-text').textContent = 'Demo recording — no bytes leave this phone.';
-      $('#site-text').textContent = 'Demo site';
-    };
+    when('#daybtn', function (btn) {
+      btn.onclick = function () {
+        show('s-rec');
+        $('#scene').innerHTML = '';
+        $('#preview').hidden = true;
+        $('#rec-since').textContent = 'demo';
+        seconds = 0;
+        timer = setInterval(function () {
+          seconds += 1;
+          $('#clock').textContent = fmt(seconds);
+        }, 1000);
+        $('#live-text').textContent = 'Demo recording — no bytes leave this phone.';
+        $('#site-text').textContent = 'Demo site';
+      };
+    });
     window.__demoFinish = function () {
       if (timer) clearInterval(timer);
       show('s-door');
@@ -578,7 +585,7 @@
 
   if (LIVE) {
     document.body.setAttribute('data-mode', 'live');
-    $('#daybtn').addEventListener('click', startLiveDay);
+    when('#daybtn', function (btn) { btn.addEventListener('click', startLiveDay); });
     bootLive();
   } else if (DEMO) {
     bootDemo();
