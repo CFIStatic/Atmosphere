@@ -287,3 +287,60 @@ export interface RangeParams {
   to: Date;
   months: number;
 }
+
+export type LegalHoldKind = 'subpoena' | 'lawsuit' | 'preservation' | 'investigation' | 'other';
+export type LegalHoldStatus = 'open' | 'released';
+export type LegalSubjectType = 'org' | 'user' | 'job' | 'proof' | 'media';
+
+export interface LegalHoldSubject {
+  id: string;
+  holdId: string;
+  subjectType: LegalSubjectType;
+  subjectId: string;
+  createdAt: string;
+}
+
+export interface LegalHold {
+  id: string;
+  caseNumber: string;
+  kind: LegalHoldKind;
+  title: string;
+  reason: string;
+  counselName: string | null;
+  receivedAt: string;
+  dueAt: string | null;
+  status: LegalHoldStatus;
+  createdBy: string | null;
+  createdAt: string;
+  releasedBy: string | null;
+  releasedAt: string | null;
+  releaseReason: string | null;
+  subjects: LegalHoldSubject[];
+}
+
+export interface UserActivityEvent {
+  id: string;
+  occurredAt: string;
+  actorUserId: string | null;
+  actorEmail: string | null;
+  actorLabel: string | null;
+  orgId: string | null;
+  action: string;
+  resourceType: string | null;
+  resourceId: string | null;
+  path: string | null;
+  status: number | null;
+}
+
+export interface LegalProductionPackage {
+  production: { id: string; itemCount: number; activityCount: number; createdAt: string };
+  videos: Array<{
+    id: string;
+    sourceKind: string;
+    sourceId: string;
+    userDeleted: boolean;
+    downloadUrl: string | null;
+    contentHash: string | null;
+  }>;
+  activity: UserActivityEvent[];
+}

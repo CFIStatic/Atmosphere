@@ -47,6 +47,7 @@ const ACTION_WORD: Record<string, string> = {
   held: 'Placed on hold',
   released: 'Hold lifted',
   shared: 'Link shared',
+  deleted: 'Removed from library',
 };
 
 const ACTION_DOT: Record<string, string> = {
@@ -59,6 +60,7 @@ const ACTION_DOT: Record<string, string> = {
   held: 'bg-caution-600',
   released: 'bg-caution-600',
   shared: 'bg-brand-600',
+  deleted: 'bg-ink-400',
 };
 
 const when = (iso: string | null) =>

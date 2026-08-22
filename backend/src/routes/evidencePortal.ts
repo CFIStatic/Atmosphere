@@ -724,6 +724,7 @@ evidenceShareRouter.get('/:token', async (req: Request, res: Response, next: Nex
         .from('job_proofs')
         .select(PORTAL_PROOF_SELECT)
         .eq('job_id', share.job_id)
+        .is('deleted_at', null)
         .order('received_at', { ascending: false })
         .limit(500),
     ]);

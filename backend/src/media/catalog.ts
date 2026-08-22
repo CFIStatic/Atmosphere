@@ -18,6 +18,7 @@ import {
   persistUploadSession,
 } from './persist.js';
 import { assertWithinQuotas, usageOf, type CatalogView } from './quotas.js';
+import { markSourceDeleted, vaultFromMediaObject } from '../legal/vault.js';
 import type {
   MediaKind,
   MediaObject,
@@ -160,6 +161,8 @@ export async function beginMediaUpload(input: {
     refId: input.refId ?? null,
     retentionUntil: null,
     legalHold: false,
+    deletedAt: null,
+    deletedBy: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -228,6 +231,9 @@ export async function completeMediaUpload(input: {
   media.updatedAt = new Date().toISOString();
   objects.set(media.id, media);
   await persistMediaObject(media);
+  void vaultFromMediaObject(media).catch((err) => {
+    console.warn('[legal] vault media failed:', err instanceof Error ? err.message : err);
+  });
 
   const add = media.durationSeconds ?? 0;
   if (add > 0) {
@@ -258,6 +264,33 @@ export async function listMediaForOrgHydrated(orgId: string): Promise<MediaObjec
     for (const m of rows) objects.set(m.id, m);
   }
   return listMediaForOrg(orgId);
+}
+
+/**
+ * Hide a catalog object from the customer library. The vault keeps the key
+ * and the bytes stay in object storage.
+ */
+export async function softDeleteMedia(
+  mediaId: string,
+  orgId: string,
+  deletedBy?: string | null,
+): Promise<MediaObject> {
+  const media = await getMedia(mediaId);
+  if (!media || media.orgId !== orgId) {
+    throw new HttpError(404, 'Media object not found', 'media_not_found');
+  }
+  if (media.state === 'deleted' || media.deletedAt) {
+    return media;
+  }
+  const now = new Date().toISOString();
+  media.state = 'deleted';
+  media.deletedAt = now;
+  media.deletedBy = deletedBy ?? null;
+  media.updatedAt = now;
+  objects.set(media.id, media);
+  await persistMediaObject(media);
+  await markSourceDeleted('media_object', media.id);
+  return media;
 }
 
 export async function markTier(

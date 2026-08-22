@@ -29,7 +29,9 @@ import {
   jobEvidence,
   evidenceCustody,
   setEvidenceHold,
+  deleteEvidence,
 } from './proofOfWork.js';
+import { getJobLegalHold, releaseJobHold, setJobLegalHold } from './jobLegalHold.js';
 
 /**
  * The shared job record.
@@ -806,6 +808,10 @@ sharedJobsRouter.get('/shared/proof/:proofId/video', proofVideoUrl);
 sharedJobsRouter.get('/shared/:jobId/evidence', jobEvidence);
 sharedJobsRouter.get('/shared/:jobId/evidence/:proofId/custody', evidenceCustody);
 sharedJobsRouter.post('/shared/:jobId/evidence/:proofId/hold', setEvidenceHold);
+sharedJobsRouter.delete('/shared/:jobId/evidence/:proofId', deleteEvidence);
+sharedJobsRouter.get('/shared/:jobId/legal-hold', getJobLegalHold);
+sharedJobsRouter.post('/shared/:jobId/legal-hold', setJobLegalHold);
+sharedJobsRouter.post('/shared/:jobId/legal-hold/release', releaseJobHold);
 
 /**
  * The subcontractor's side, through their job token.
