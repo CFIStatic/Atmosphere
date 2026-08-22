@@ -119,10 +119,12 @@ Atmosphere/
 │   │   ├── fieldIdentity.ts  Claim codes + My jobs
 │   │   ├── evidencePortal.ts Verifier library + shares
 │   │   ├── mediaCatalog.ts   Fleet media catalog
+│   │   ├── legal.ts          Staff legal hold, vault, user monitor
 │   │   └── geometry.ts       RoomPlan / twin writes
 │   ├── src/verifier/         Intake propose, readiness, invite email copy
 │   ├── src/lib/systemMail.ts Atmosphere-sent transactional email
 │   ├── src/media/            Catalog + storage drivers
+│   ├── src/legal/            Legal hold, video vault, user-action monitor
 │   ├── src/geometry/         Property twins
 │   └── supabase/migrations/  Jobs, proof, field identity, media, twins
 ├── website/                  Marketing site (Work Verification first)

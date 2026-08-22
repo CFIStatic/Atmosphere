@@ -28,6 +28,7 @@ import {
   jobEvidence,
   evidenceCustody,
   setEvidenceHold,
+  deleteEvidence,
 } from './proofOfWork.js';
 
 /**
@@ -836,6 +837,7 @@ sharedJobsRouter.get('/shared/proof/:proofId/video', proofVideoUrl);
 sharedJobsRouter.get('/shared/:jobId/evidence', jobEvidence);
 sharedJobsRouter.get('/shared/:jobId/evidence/:proofId/custody', evidenceCustody);
 sharedJobsRouter.post('/shared/:jobId/evidence/:proofId/hold', setEvidenceHold);
+sharedJobsRouter.delete('/shared/:jobId/evidence/:proofId', deleteEvidence);
 
 /**
  * The subcontractor's side, through their job token.

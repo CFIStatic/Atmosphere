@@ -10,6 +10,11 @@ import type {
   StaffChallengeResponse,
   StaffIdentity,
   StaffVerify,
+  LegalHold,
+  LegalHoldKind,
+  LegalSubjectType,
+  LegalProductionPackage,
+  UserActivityEvent,
 } from './types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -106,6 +111,42 @@ export const api = {
     request<AccountDetail>(`/api/analytics/accounts/${orgId}?${rangeQuery(range)}`),
 
   ready: () => request<ReadyPayload>('/api/ready'),
+
+  legalHolds: () => request<{ holds: LegalHold[]; counts: { open: number; released: number } }>('/api/legal/holds'),
+
+  createLegalHold: (input: {
+    caseNumber: string;
+    kind: LegalHoldKind;
+    title: string;
+    reason: string;
+    counselName?: string;
+    subjects: Array<{ subjectType: LegalSubjectType; subjectId: string }>;
+  }) =>
+    request<{ hold: LegalHold }>('/api/legal/holds', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  releaseLegalHold: (id: string, reason: string) =>
+    request<{ hold: LegalHold }>(`/api/legal/holds/${id}/release`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+
+  produceLegalHold: (id: string, note?: string) =>
+    request<LegalProductionPackage>(`/api/legal/holds/${id}/produce`, {
+      method: 'POST',
+      body: JSON.stringify({ note }),
+    }),
+
+  legalActivity: (query?: { q?: string; orgId?: string; actorUserId?: string }) => {
+    const params = new URLSearchParams();
+    if (query?.q) params.set('q', query.q);
+    if (query?.orgId) params.set('orgId', query.orgId);
+    if (query?.actorUserId) params.set('actorUserId', query.actorUserId);
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return request<{ events: UserActivityEvent[]; count: number }>(`/api/legal/activity${suffix}`);
+  },
 
   exportUrl: (range: RangeParams, dataset = 'all') =>
     `${API_BASE}/api/analytics/export?${rangeQuery(range)}&dataset=${dataset}`,

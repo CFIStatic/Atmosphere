@@ -41,6 +41,7 @@ import {
   persistProofActions,
   type VisionAction,
 } from '../shared/proofActions.js';
+import { markSourceDeleted, recordUserAction, vaultFromProof } from '../legal/index.js';
 
 /**
  * Proof of work: the endpoints.
@@ -215,34 +216,39 @@ export async function recordProof(party: any, admin: any, body: unknown) {
     { seenHashes },
   );
 
-  // Upsert on the unique (party, day, phase): a second attempt replaces rather
-  // than piling up, because two different "after" videos for one day is an
-  // argument nobody can settle.
-  const { data: proof, error } = await admin
+  // Visible unique (party, day, phase): a second attempt replaces the live
+  // row. A customer-deleted clip stays in the vault and does not block a refilm.
+  const proofRow = {
+    org_id: party.org_id,
+    job_id: party.job_id,
+    party_id: party.id,
+    work_date: input.workDate,
+    phase: input.phase,
+    storage_path: input.storagePath,
+    byte_size: input.byteSize ?? null,
+    duration_seconds: input.durationSeconds ?? null,
+    content_hash: input.contentHash ?? null,
+    captured_at: input.capturedAt ?? null,
+    received_at: receivedAt,
+    lat: input.lat ?? null,
+    lon: input.lon ?? null,
+    accuracy_m: input.accuracyM ?? null,
+    state: 'checked',
+    checks,
+  };
+  const { data: existingVisible } = await admin
     .from('job_proofs')
-    .upsert(
-      {
-        org_id: party.org_id,
-        job_id: party.job_id,
-        party_id: party.id,
-        work_date: input.workDate,
-        phase: input.phase,
-        storage_path: input.storagePath,
-        byte_size: input.byteSize ?? null,
-        duration_seconds: input.durationSeconds ?? null,
-        content_hash: input.contentHash ?? null,
-        captured_at: input.capturedAt ?? null,
-        received_at: receivedAt,
-        lat: input.lat ?? null,
-        lon: input.lon ?? null,
-        accuracy_m: input.accuracyM ?? null,
-        state: 'checked',
-        checks,
-      },
-      { onConflict: 'party_id,work_date,phase' },
-    )
-    .select(PROOF_SELECT)
-    .single();
+    .select('id')
+    .eq('party_id', party.id)
+    .eq('work_date', input.workDate)
+    .eq('phase', input.phase)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  const write = existingVisible?.id
+    ? admin.from('job_proofs').update(proofRow).eq('id', existingVisible.id)
+    : admin.from('job_proofs').insert(proofRow);
+  const { data: proof, error } = await write.select(PROOF_SELECT).single();
   if (error) throw new HttpError(400, error.message, 'proof_failed');
 
   if (input.frames?.length) {
@@ -297,6 +303,18 @@ export async function recordProof(party: any, admin: any, body: unknown) {
     actorLabel: `${party.contact_name ? `${party.contact_name}, ` : ''}${party.company}`,
     actorRole: party.role ?? 'subcontractor',
     detail: `${input.phase} · ${input.workDate}`,
+  });
+
+  void vaultFromProof(proof as any).catch((err) => {
+    console.warn('[legal] vault proof failed:', err instanceof Error ? err.message : err);
+  });
+  void recordUserAction({
+    orgId: party.org_id,
+    action: 'video.uploaded',
+    resourceType: 'proof',
+    resourceId: (proof as any).id,
+    actorLabel: `${party.contact_name ? `${party.contact_name}, ` : ''}${party.company}`,
+    detail: { phase: input.phase, workDate: input.workDate, jobId: party.job_id },
   });
 
   // Optional deep verification pipeline (FFmpeg / rules / review). Additive and
@@ -1145,6 +1163,7 @@ export async function listPartyProofs(party: any, admin: any) {
     .from('job_proofs')
     .select(PROOF_SELECT)
     .eq('party_id', party.id)
+    .is('deleted_at', null)
     .order('work_date', { ascending: false })
     .limit(60);
 
@@ -1203,6 +1222,7 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
       .select(PROOF_SELECT)
       .eq('org_id', orgId)
       .eq('job_id', jobId)
+      .is('deleted_at', null)
       .order('work_date', { ascending: false })
       .limit(200),
     supabase.from('job_parties').select('id, company, trade').eq('job_id', jobId),
@@ -1712,6 +1732,52 @@ export async function setEvidenceHold(req: Request, res: Response, next: NextFun
     });
 
     res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * DELETE /api/operations/shared/:jobId/evidence/:proofId
+ * Hide a clip from the customer library. The vault keeps the file.
+ */
+export async function deleteEvidence(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId, userId, supabase } = await requireOrgContext(req);
+    const now = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('job_proofs')
+      .update({ deleted_at: now, deleted_by: userId })
+      .eq('org_id', orgId)
+      .eq('job_id', req.params.jobId)
+      .eq('id', req.params.proofId)
+      .is('deleted_at', null)
+      .select('id, storage_path, job_id')
+      .maybeSingle();
+    if (error) throw new HttpError(400, error.message, 'delete_failed');
+    if (!data) throw new HttpError(404, 'Evidence not found', 'proof_not_found');
+
+    await markSourceDeleted('job_proof', req.params.proofId);
+    const actor = await actorFor(supabase, userId);
+    await recordAccess(supabase, {
+      orgId,
+      jobId: req.params.jobId,
+      proofId: req.params.proofId,
+      action: 'deleted',
+      detail: 'Customer deleted this clip from their library. The vault still holds it.',
+      ...actor,
+    });
+    await recordUserAction({
+      actorUserId: userId,
+      actorLabel: actor.actorLabel,
+      orgId,
+      action: 'video.deleted',
+      resourceType: 'proof',
+      resourceId: req.params.proofId,
+      detail: { jobId: req.params.jobId },
+    });
+
+    res.json({ ok: true, deletedAt: now });
   } catch (err) {
     next(err);
   }

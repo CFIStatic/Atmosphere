@@ -53,6 +53,9 @@ export type MediaObject = {
   refId?: string | null;
   retentionUntil?: string | null;
   legalHold?: boolean;
+  /** When the customer hid this object. Bytes stay in the legal vault. */
+  deletedAt?: string | null;
+  deletedBy?: string | null;
   createdAt: string;
   updatedAt: string;
 };

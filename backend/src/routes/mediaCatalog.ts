@@ -14,6 +14,7 @@ import {
   orgUsageHydrated,
   setOrgQuota,
   getOrgQuota,
+  softDeleteMedia,
 } from '../media/catalog.js';
 import { formatDurationHours } from '../media/quotas.js';
 import { MEDIA_KINDS, MEDIA_TIERS } from '../media/types.js';
@@ -148,7 +149,9 @@ mediaCatalogRouter.get(
     try {
       const { orgId } = await requireOrgContext(req);
       const media = await getMedia(String(req.params.id));
-      if (!media || media.orgId !== orgId) throw notFound('Media object not found');
+      if (!media || media.orgId !== orgId || media.state === 'deleted' || media.deletedAt) {
+        throw notFound('Media object not found');
+      }
       res.json({ media });
     } catch (err) {
       next(err);
@@ -163,12 +166,31 @@ mediaCatalogRouter.get(
     try {
       const { orgId } = await requireOrgContext(req);
       const media = await getMedia(String(req.params.id));
-      if (!media || media.orgId !== orgId) throw notFound('Media object not found');
+      if (!media || media.orgId !== orgId || media.state === 'deleted' || media.deletedAt) {
+        throw notFound('Media object not found');
+      }
       if (media.state !== 'ready') {
         throw badRequest('Media is not ready for read', 'media_not_ready');
       }
       const url = await readUrlFor(media, 600);
       res.json({ url, mediaId: media.id, tier: media.tier, expiresInSeconds: 600 });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * DELETE /api/media/catalog/objects/:id
+ * Hide the object from the org library. The legal vault keeps the file.
+ */
+mediaCatalogRouter.delete(
+  '/objects/:id',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { orgId, userId } = await requireOrgContext(req);
+      const media = await softDeleteMedia(String(req.params.id), orgId, userId);
+      res.json({ ok: true, media: { id: media.id, state: media.state, deletedAt: media.deletedAt } });
     } catch (err) {
       next(err);
     }

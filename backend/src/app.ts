@@ -59,8 +59,10 @@ import { fieldAppRouter } from './routes/fieldApp.js';
 import { mediaVideoRouter } from './routes/mediaVideo.js';
 import { mediaCatalogRouter } from './routes/mediaCatalog.js';
 import { geometryRouter } from './routes/geometry.js';
+import { legalRouter } from './routes/legal.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { requestLog } from './middleware/requestLog.js';
+import { userActivityMonitor } from './middleware/userActivityMonitor.js';
 import { cyberMonitor } from './cyber/index.js';
 import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
 import { verificationHook, pumpVerificationQueue } from './lib/verifierRunner.js';
@@ -113,6 +115,9 @@ export function createApp(): Express {
 
   // Structured access logs + request ids (before routers so every path is covered).
   app.use(requestLog);
+  // Legal monitor: one append-only row per signed-in action. After requestLog
+  // so it inherits requestId; before routers so every /api path is watched.
+  app.use(userActivityMonitor);
 
   // Liveness/readiness before CORS, parsers, and cyber so a platform probe
   // cannot be failed by an Origin check or a blocked IP.
@@ -205,6 +210,7 @@ export function createApp(): Express {
   app.use('/api/auth', authRouter);
   app.use('/api/org', orgRouter);
   app.use('/api/analytics', analyticsRouter);
+  app.use('/api/legal', legalRouter);
   app.use('/api/telemetry', telemetryRouter);
   app.use('/api/profile', profileRouter);
   app.use('/api/audit', auditRouter);
