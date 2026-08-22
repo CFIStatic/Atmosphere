@@ -1,14 +1,24 @@
 # Corporate marketing site (website/). Do not reuse the API railway.toml —
 # that probes /api/health and starts `node dist/index.js`, which 502s here.
+#
+# One-time on this service (Settings):
+#   Config File    = /website/railway.toml
+#   Root Directory = /
 
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "website/Dockerfile"
+# GitHub Autodeploy of a frontend-only commit rebuilt this service and failed
+# Network > Healthcheck. Only ship when the marketing image actually changes.
+watchPatterns = [
+  "website/**",
+  ".dockerignore",
+]
 
 [deploy]
 healthcheckPath = "/health"
-healthcheckTimeout = 180
+healthcheckTimeout = 60
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5
-# nginx image entrypoint (envsubst of PORT). Never node dist/index.js.
-startCommand = "/docker-entrypoint.sh nginx -g 'daemon off;'"
+# Own entrypoint (envsubst of PORT). Never node dist/index.js.
+startCommand = "/usr/local/bin/website-start.sh"

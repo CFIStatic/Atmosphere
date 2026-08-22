@@ -13,14 +13,16 @@ Autodeploy is the fallback if Actions is skipped; without either, a service
 stays on its last successful image.
 
 Databases, Redis, and volumes are not git apps — skip them. The marketing site
-is GitHub Pages (`website/`), not Railway. iOS is App Store.
+is GitHub Pages (`website/`) and a Railway nginx service (`website`). iOS is
+App Store.
 
 | Railway service | Config as Code | Dockerfile | Rebuilds when these paths change |
 | --- | --- | --- | --- |
 | Backend BFF | `/railway.toml` | `Dockerfile` (repo root) | `backend/**`, `Dockerfile`, `railway.toml` |
 | Office console | `/frontend/railway.toml` | `frontend/Dockerfile` | `frontend/**`, `verifier/**`, `fieldcapture/**`, `frontend/Dockerfile` |
+| Corporate site | `/website/railway.toml` | `website/Dockerfile` | `website/**`, `.dockerignore` |
 
-Both services use **Root Directory `/`**. The console must not use `/frontend`
+All git-backed services use **Root Directory `/`**. The console must not use `/frontend`
 as root — Vite copies sibling `verifier/` and `fieldcapture/` into the build.
 
 ### Step 0 — GitHub App (once)
@@ -73,6 +75,13 @@ httpOnly cookies just work. `FRONTEND_ORIGIN` on the backend must include
 the office app’s public origin or cookies/CORS fail.
 
 Healthcheck is `/healthz`. nginx listens on Railway’s `PORT`.
+
+#### Corporate website variables
+
+The marketing image is nginx, not Node. Settings → **Config File** =
+`/website/railway.toml` so Autodeploy does not inherit `node dist/index.js`
+and `/api/health` from the repo-root file. Healthcheck is `GET /health`
+(also answered at `/api/health` so a leftover API probe still passes).
 
 #### Any extra service you added later
 
@@ -140,7 +149,8 @@ Manual backend fallback: **Actions → Deploy Work Verification → Run workflow
 - **GitHub App.** Re-accept permissions; reconnect the repo on the service.
 - **Config as Code.** Frontend still using `/railway.toml` will try to start
   `node dist/index.js` and healthcheck `/api/health`. Point it at
-  `/frontend/railway.toml`.
+  `/frontend/railway.toml`. The corporate site must use `/website/railway.toml`
+  for the same reason.
 
 Official references: [GitHub Autodeploys](https://docs.railway.com/deployments/github-autodeploys),
 [PR Environments](https://docs.railway.com/guides/preview-deployments-with-pr-environments),
@@ -306,6 +316,7 @@ A/B experiments live in `public.experiments` (see migration
 | Liveness | `GET /api/health` | Process up (no deps) |
 | Readiness | `GET /api/ready` | Supabase Auth reachable; admin/storage reported |
 | App | `GET /healthz` | nginx on the office-app service is serving |
+| Marketing | `GET /health` | nginx on the corporate-site service is serving |
 
 Point the **platform deploy probe** (Railway) at `/api/health` so a brief
 Supabase blip cannot roll back a good process. Point a load-balancer
