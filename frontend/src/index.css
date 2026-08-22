@@ -282,6 +282,19 @@ body::before {
   outline: none;
 }
 
+/* Browsers paint autofilled fields yellow. Keep them on the same recessed
+   surface as an empty glass field so email/name rows match each other. */
+.glass-field:-webkit-autofill,
+.glass-field:-webkit-autofill:hover,
+.glass-field:-webkit-autofill:focus,
+.glass-field:-webkit-autofill:active {
+  -webkit-text-fill-color: rgb(var(--ink-900));
+  caret-color: rgb(var(--ink-900));
+  box-shadow: 0 0 0 1000px rgb(var(--paper-0)) inset;
+  -webkit-box-shadow: 0 0 0 1000px rgb(var(--paper-0)) inset;
+  transition: background-color 99999s ease-in-out 0s;
+}
+
 /* Dividers inside a pane: light, not a drawn rule. */
 .glass-card .border-line,
 .glass-panel .border-line,

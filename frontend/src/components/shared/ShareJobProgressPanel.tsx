@@ -97,13 +97,6 @@ export function ShareJobProgressPanel({
     await load();
   }
 
-  async function copy(share: { path: string; label: string }) {
-    const full = `${window.location.origin}${share.path}`;
-    await navigator.clipboard?.writeText(full).catch(() => {
-      window.prompt(`Link for ${share.label}`, full);
-    });
-  }
-
   const live = (shares ?? []).filter((s) => s.state === 'live');
 
   const panel = (
@@ -136,7 +129,7 @@ export function ShareJobProgressPanel({
               setCreating(!creating);
               setMade(null);
             }}
-            className="text-xs font-medium text-brand-600 hover:text-brand-700"
+            className="text-xs font-medium text-ink-600 hover:text-ink-900"
           >
             {creating ? 'Cancel' : 'Share'}
           </button>
@@ -158,17 +151,18 @@ export function ShareJobProgressPanel({
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               placeholder="e.g. Cedar Ridge HOA — homeowner"
-              className="mt-1 w-full rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+              className="mt-1 w-full rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
             />
           </label>
           <label className="block">
             <span className="text-xs font-medium text-ink-700">Email them (optional)</span>
             <input
               type="email"
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Leave blank to copy the link yourself"
-              className="mt-1 w-full rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+              placeholder="We'll email them the link"
+              className="mt-1 w-full rounded-lg glass-field px-3 py-2 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
             />
           </label>
           <label className="block">
@@ -187,33 +181,20 @@ export function ShareJobProgressPanel({
           <button
             type="submit"
             disabled={busy}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-ink-900 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-ink-900 px-4 py-2.5 text-sm font-semibold text-paper-0 transition hover:bg-ink-800 disabled:opacity-50"
           >
             {busy && <SpinnerIcon className="animate-spin" width={14} height={14} />}
-            {email.trim() ? 'Email the link' : 'Create link'}
+            {email.trim() ? 'Email the link' : 'Create share'}
           </button>
         </form>
       )}
 
       {made && (
-        <div className="mt-3 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2">
-          <p className="text-xs font-semibold text-brand-700">
-            {made.emailed
-              ? 'Emailed. They can open the link directly — no account needed.'
-              : 'Link created. Copy it and send it yourself:'}
-          </p>
-          {!made.emailed && (
-            <div className="mt-1.5 flex flex-wrap items-center gap-2">
-              <code className="break-all text-[11px] text-ink-700">{made.share.path}</code>
-              <button
-                onClick={() => void copy({ path: made.share.path, label: made.share.label })}
-                className="rounded-full glass-card px-2 py-0.5 text-[10.5px] font-medium text-ink-600 hover:text-ink-900"
-              >
-                Copy link
-              </button>
-            </div>
-          )}
-        </div>
+        <p className="mt-3 rounded-lg border border-line px-3 py-2 text-xs text-ink-700">
+          {made.emailed
+            ? 'Emailed. They can open the link directly — no account needed.'
+            : 'Share created. It is listed below.'}
+        </p>
       )}
 
       {shares === null ? (
@@ -247,20 +228,12 @@ export function ShareJobProgressPanel({
                   {share.state}
                 </span>
                 {share.state === 'live' && (
-                  <>
-                    <button
-                      onClick={() => void copy(share)}
-                      className="rounded-full glass-card px-2 py-0.5 text-[10.5px] font-medium text-ink-600 hover:text-ink-900"
-                    >
-                      Copy link
-                    </button>
-                    <button
-                      onClick={() => void revoke(share)}
-                      className="rounded-full glass-card px-2 py-0.5 text-[10.5px] font-medium text-danger-600 hover:text-danger-700"
-                    >
-                      Revoke
-                    </button>
-                  </>
+                  <button
+                    onClick={() => void revoke(share)}
+                    className="rounded-full border border-line px-2 py-0.5 text-[10.5px] font-medium text-danger-600 hover:text-danger-700"
+                  >
+                    Revoke
+                  </button>
                 )}
               </div>
             </li>

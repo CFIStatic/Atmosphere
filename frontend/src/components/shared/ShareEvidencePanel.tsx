@@ -14,8 +14,7 @@ import { SpinnerIcon } from '../icons';
  *
  * After creating, the panel reports the two facts the sharer is actually
  * standing there wondering: did the email go out (their mailbox, so no is a
- * real possibility and gets the copy-the-link fallback shown immediately, not
- * hunted for), and does the recipient already have an account or are they
+ * real possibility), and does the recipient already have an account or are they
  * about to be walked through making one.
  *
  * The list underneath is the outstanding-links audit: who holds a live way
@@ -89,13 +88,6 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
     await load();
   }
 
-  async function copy(share: { path: string; label: string }) {
-    const full = `${window.location.origin}${share.path}`;
-    await navigator.clipboard?.writeText(full).catch(() => {
-      window.prompt(`Link for ${share.label}`, full);
-    });
-  }
-
   const live = (shares ?? []).filter((s) => s.state === 'live');
 
   return (
@@ -113,7 +105,7 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
             setCreating((v) => !v);
             setMade(null);
           }}
-          className="text-xs font-medium text-brand-600 hover:text-brand-700"
+          className="text-xs font-medium text-ink-600 hover:text-ink-900"
         >
           {creating ? 'Cancel' : 'Share this job'}
         </button>
@@ -141,7 +133,8 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="Their email"
-              className="min-w-[12rem] flex-1 rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+              autoComplete="email"
+              className="min-w-[12rem] flex-1 rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none placeholder:text-ink-400 focus:ring-2 focus:ring-brand-200"
             />
             <select
               value={days}
@@ -163,7 +156,7 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
           <button
             type="submit"
             disabled={busy}
-            className="flex items-center gap-2 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-ink-900 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-lg bg-ink-900 px-3 py-1.5 text-xs font-semibold text-paper-0 transition hover:bg-ink-800 disabled:opacity-50"
           >
             {busy && <SpinnerIcon className="animate-spin" width={12} height={12} />}
             Email them the link
@@ -172,28 +165,15 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
       )}
 
       {made && (
-        <div className="mt-3 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2">
-          <p className="text-xs font-semibold text-brand-700">
-            {made.emailed
-              ? `Emailed. ${
-                  made.recipientHasAccount
-                    ? 'They already have an Atmosphere account — the link opens as soon as they sign in.'
-                    : 'No Atmosphere account under that address yet — the email walks them through creating one with it.'
-                }`
-              : 'Share created, but the email did not go out — no mailbox is connected, or it refused. Send the link yourself:'}
-          </p>
-          {!made.emailed && (
-            <div className="mt-1.5 flex flex-wrap items-center gap-2">
-              <code className="break-all text-[11px] text-ink-700">{made.share.path}</code>
-              <button
-                onClick={() => void copy({ path: made.share.path, label: made.share.label })}
-                className="rounded-full glass-card px-2 py-0.5 text-[10.5px] font-medium text-ink-600 hover:text-ink-900"
-              >
-                Copy link
-              </button>
-            </div>
-          )}
-        </div>
+        <p className="mt-3 rounded-lg border border-line px-3 py-2 text-xs text-ink-700">
+          {made.emailed
+            ? `Emailed. ${
+                made.recipientHasAccount
+                  ? 'They already have an Atmosphere account — the link opens as soon as they sign in.'
+                  : 'No Atmosphere account under that address yet — the email walks them through creating one with it.'
+              }`
+            : 'Share created, but the email did not go out — no mailbox is connected, or it refused.'}
+        </p>
       )}
 
       {shares === null ? (
@@ -227,20 +207,12 @@ export function ShareEvidencePanel({ jobId }: { jobId: string }) {
                   {share.state}
                 </span>
                 {share.state === 'live' && (
-                  <>
-                    <button
-                      onClick={() => void copy(share)}
-                      className="rounded-full glass-card px-2 py-0.5 text-[10.5px] font-medium text-ink-600 hover:text-ink-900"
-                    >
-                      Copy link
-                    </button>
-                    <button
-                      onClick={() => void revoke(share)}
-                      className="rounded-full glass-card px-2 py-0.5 text-[10.5px] font-medium text-danger-600 hover:text-danger-700"
-                    >
-                      Revoke
-                    </button>
-                  </>
+                  <button
+                    onClick={() => void revoke(share)}
+                    className="rounded-full border border-line px-2 py-0.5 text-[10.5px] font-medium text-danger-600 hover:text-danger-700"
+                  >
+                    Revoke
+                  </button>
                 )}
               </div>
             </li>
