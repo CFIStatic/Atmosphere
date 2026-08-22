@@ -26,13 +26,22 @@ export function resolveBackupsEnabled(
 }
 
 /**
- * Railway (and most PaaS healthchecks) probe IPv4. Listening on 127.0.0.1
- * or IPv6-only `::` makes the process look down: "service unavailable".
+ * Railway's public healthcheck is IPv4. The private mesh (office nginx
+ * `API_UPSTREAM`) is IPv6. Listening on 127.0.0.1 hides the process from both.
+ * Listening on 0.0.0.0 only passes the public probe — office `/api/auth/login`
+ * then 504s while https://atmosphere-production.up.railway.app is healthy.
+ * `::` with ipv6Only=false is dual-stack on Linux.
  */
 export function listenHost(env: NodeJS.Dict<string> = process.env): string {
   const raw = env.HOST?.trim();
-  if (!raw || raw === 'localhost' || raw === '127.0.0.1' || raw === '::1') {
-    return '0.0.0.0';
+  if (
+    !raw ||
+    raw === 'localhost' ||
+    raw === '127.0.0.1' ||
+    raw === '::1' ||
+    raw === '0.0.0.0'
+  ) {
+    return '::';
   }
   return raw;
 }

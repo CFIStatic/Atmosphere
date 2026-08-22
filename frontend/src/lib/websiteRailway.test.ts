@@ -20,6 +20,8 @@ describe('Railway corporate-website image', () => {
 
     const start = read('website/nginx/website-start.sh');
     expect(start).toContain('exec /docker-entrypoint.sh nginx -g \'daemon off;\'');
+    expect(start).toContain('is_usable_upstream');
+    expect(start).toContain('http://:');
     expect(start).not.toContain('exec nginx -g');
   });
 

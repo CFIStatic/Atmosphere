@@ -98,7 +98,7 @@ jobs:
           COMPUTER_USE_ENABLED: 'false'
           BACKUP_ENABLED: 'false'
           ALLOW_MOCK_DRIVERS: 'true'
-          HOST: '0.0.0.0'
+          HOST: '::'
           PORT: '4000'
           FRONTEND_ORIGIN: ${{ vars.FRONTEND_ORIGIN || 'https://atmosphere-web-production.up.railway.app,https://app.atmosphereteam.com,https://melodious-inspiration-production-5ad9.up.railway.app' }}
           SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
@@ -215,10 +215,14 @@ jobs:
           service_id="$(node backend/scripts/resolveRailwayService.mjs "$service")"
           echo "Resolved '$service' to $service_id"
           service="$service_id"
+          chmod +x frontend/scripts/apply-railway-config.sh
+          RAILWAY_APP_SERVICE="$service" frontend/scripts/apply-railway-config.sh || true
           printf '%s' 'frontend/Dockerfile' | railway variable set RAILWAY_DOCKERFILE_PATH --stdin --skip-deploys --service "$service"
           # Private HTTP to the BFF. The public https://atmosphere-production URL
           # hairpins out of the mesh (jfk1 → ams1 hops) and 502s /api for ~3s,
           # which is the spinner on /login (api.me() before the form).
+          # The BFF was renamed Atmosphere APIs; api.upstream uses that name so
+          # Railway does not interpolate http://: and kill nginx at boot.
           tr -d '\n' < api.upstream | railway variable set API_UPSTREAM --stdin --skip-deploys --service "$service"
           # railway up reads /railway.toml from the upload root. Without this copy
           # the CLI builds the backend Dockerfile and probes /api/health on nginx.

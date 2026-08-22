@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apiFailureMessage, parseApiJson, backendUnreachableMessage } from './api';
+import { apiFailureMessage, parseApiJson, backendUnreachableMessage, isRetryableGatewayStatus } from './api';
 
 describe('parseApiJson', () => {
   it('returns {} for empty and non-JSON bodies', () => {
@@ -58,5 +58,12 @@ describe('apiFailureMessage', () => {
       message: 'An account with this email already exists. Sign in instead.',
       code: 'email_taken',
     });
+  });
+
+  it('retries empty 502/504 from nginx, not application 401s', () => {
+    expect(isRetryableGatewayStatus(502)).toBe(true);
+    expect(isRetryableGatewayStatus(504)).toBe(true);
+    expect(isRetryableGatewayStatus(503)).toBe(false);
+    expect(isRetryableGatewayStatus(401)).toBe(false);
   });
 });

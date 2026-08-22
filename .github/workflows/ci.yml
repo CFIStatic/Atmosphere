@@ -158,8 +158,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build office app image
-        run: docker build -f frontend/Dockerfile -t atmosphere-app:ci .
+      - name: Build and serve the office app image
+        run: |
+          set -euo pipefail
+          docker build -f frontend/Dockerfile -t atmosphere-app:ci .
+          docker run -d --name atmosphere-app-ci -e PORT=8080 -p 18081:8080 atmosphere-app:ci
+          trap 'docker rm -f atmosphere-app-ci >/dev/null 2>&1 || true' EXIT
+          sleep 2
+          curl -fsS http://127.0.0.1:18081/healthz | grep -qx 'ok'
+          curl -fsS http://127.0.0.1:18081/api/health | grep -qx 'ok'
+          # Dead upstream must be JSON 503, not an HTML 504 that Sign in
+          # surfaces as "Cannot reach the Atmosphere API" after 15s.
+          login="$(curl -sS -m 8 -o /tmp/office-login.json -w '%{http_code}' \
+            -X POST http://127.0.0.1:18081/api/auth/login \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"jack@jettx.ai","password":"password1"}')"
+          test "$login" = 503
+          grep -q backend_unreachable /tmp/office-login.json
 
   docker-website:
     name: Marketing site image
