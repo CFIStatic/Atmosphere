@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -184,7 +184,11 @@ describe('SignupPage', () => {
     expect(screen.getByLabelText('Company type')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
 
-    await user.type(screen.getByLabelText('Company name'), 'Acme Restoration');
+    // Replace the suggested workspace name in one change so the suggest
+    // effect does not refill an emptied field mid-type.
+    fireEvent.change(screen.getByLabelText('Company name'), {
+      target: { value: 'Acme Restoration' },
+    });
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
 
     await user.selectOptions(screen.getByLabelText('Company type'), 'restoration');
