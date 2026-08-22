@@ -176,42 +176,39 @@ export function JobSharePage() {
 
       {view && (
         <>
-          {/* Where they stand, in one sentence, before anything else. */}
-          <section
-            className={`mt-4 rounded-xl border px-4 py-3 ${
-              view.clear ? 'border-success-200 bg-success-50' : 'border-caution-200 bg-caution-50'
-            }`}
-          >
-            <p className={`text-sm font-semibold ${view.clear ? 'text-success-600' : 'text-caution-600'}`}>
-              {view.clear ? 'You are clear to work' : 'Not clear to work yet'}
-            </p>
-            <p className="mt-0.5 text-xs text-ink-700">{view.because}</p>
+          {/* Only when they are not clear: the accept step has to sit above
+              the scope so a crew member cannot start work without seeing it. */}
+          {!view.clear && (
+            <section className="mt-4 rounded-xl border border-caution-200 bg-caution-50 px-4 py-3">
+              <p className="text-sm font-semibold text-caution-600">Not clear to work yet</p>
+              <p className="mt-0.5 text-xs text-ink-700">{view.because}</p>
 
-            {view.currentRevision !== null && view.acknowledgedRevision !== view.currentRevision && (
-              <div className="mt-3">
-                <p className="text-xs text-ink-700">
-                  Read the scope below, then put your name to it. This records that you have seen
-                  revision {view.currentRevision}.
-                </p>
-                <div className="mt-2 flex gap-2">
-                  <input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Your name"
-                    className="min-w-0 flex-1 rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
-                  />
-                  <button
-                    onClick={() => void accept()}
-                    disabled={busy === 'accept' || !name.trim()}
-                    className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900 disabled:opacity-50"
-                  >
-                    {busy === 'accept' && <SpinnerIcon className="animate-spin" width={13} height={13} />}
-                    Accept
-                  </button>
+              {view.currentRevision !== null && view.acknowledgedRevision !== view.currentRevision && (
+                <div className="mt-3">
+                  <p className="text-xs text-ink-700">
+                    Read the scope below, then put your name to it. This records that you have seen
+                    revision {view.currentRevision}.
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Your name"
+                      className="min-w-0 flex-1 rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+                    />
+                    <button
+                      onClick={() => void accept()}
+                      disabled={busy === 'accept' || !name.trim()}
+                      className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900 disabled:opacity-50"
+                    >
+                      {busy === 'accept' && <SpinnerIcon className="animate-spin" width={13} height={13} />}
+                      Accept
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
-          </section>
+              )}
+            </section>
+          )}
 
           {/* Exclusions first, always. Somebody reading this on a phone reads
               the top of the screen and starts working. */}
