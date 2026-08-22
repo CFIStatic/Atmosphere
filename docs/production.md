@@ -226,6 +226,31 @@ site:
 GitHub Pages is optional and **not configured** on this repo. The Railway
 service is the production host.
 
+### If Atmosphere APIs fails `/api/health`
+
+Symptom: the `Atmosphere APIs` service builds the Node image, then Network →
+Healthcheck shows `Path: /api/health` and `Attempt #N failed with service
+unavailable` until the 5-minute `healthcheckTimeout` expires.
+
+Cause: `node dist/index.js` used to import `config` and run
+`assertProductionReady()` **before** `listen()`. A missing production secret
+or a personal `CONTACT_TO_EMAIL` / `CAREERS_TO_EMAIL` threw, the process never
+bound `$PORT`, and Railway reported connection-refused as "service unavailable"
+for the whole retry window. Every later office/website push that also
+`railway up`s this service repeated the same 5-minute failure.
+
+Fix, in the repo:
+
+1. The process binds `0.0.0.0:$PORT` and answers `GET /api/health` before
+   loading config or the Express app.
+2. Production-guard failures are logged and reported on `/api/ready`. They
+   must not abort listen.
+3. The production deploy job skips the backend image when the push only
+   touched office, website, or internal files.
+
+`/api/health` is liveness (process is up). `/api/ready` is readiness
+(Supabase + production guards). Keep Railway's probe on `/api/health`.
+
 ### If Login & Dashboard fails its healthcheck
 
 Symptom: the `Login & Dashboard` service shows **Deployment failed during
