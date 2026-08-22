@@ -39,6 +39,7 @@ describe('Railway office-app image', () => {
     expect(nginx).toContain('proxy_ssl_server_name on');
     expect(nginx).toContain('add_header Cache-Control "no-store"');
     expect(nginx).toContain('location /verifier/');
+    expect(nginx).toMatch(/location \/verifier\/ \{[\s\S]*Cache-Control "no-store"/);
     expect(nginx).toContain('location /fieldcapture/');
     expect(nginx).toContain('location = /healthz');
     expect(nginx).toContain('location = /health');

@@ -107,7 +107,8 @@ export function VerifierFrame({
   }, [logout, navigate, postSession]);
 
   const frameClass = 'h-full w-full border-0';
-  const frameSrc = srcDoc ? undefined : '/verifier/?embed=1';
+  // Bust cached /verifier/index.html so Dashboard picks up chrome fixes.
+  const frameSrc = srcDoc ? undefined : '/verifier/?embed=1&v=dashboard-chrome-2';
 
   return (
     <div className={className} style={style}>

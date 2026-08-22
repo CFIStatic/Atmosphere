@@ -61,6 +61,7 @@ server {
   }
 
   location /verifier/ {
+    add_header Cache-Control "no-store";
     try_files $uri $uri/ /verifier/index.html;
   }
 
