@@ -183,9 +183,9 @@ Manual backend fallback: **Actions → Deploy Work Verification → Run workflow
 
 - **Wrong branch.** Production is `main` only. Other branches need a PR
   (Step 2).
-- **Wrong office service name.** The live office service is `Atmosphere-web`,
-  not `app`. Deploy Work Verification logs `Service not found` when the job
-  targets a name that is not on the canvas.
+- **Wrong office service name.** The live office service is `Login & Dashboard`
+  (`Atmosphere-web` is the old alias), not `app`. Deploy Work Verification
+  logs `Service not found` when the job targets a name that is not on the canvas.
 - **Watch paths.** Autodeploy skips commits that miss that service’s
   `watchPatterns`. In Deployments, turn on **Show skipped**.
 - **Wait for CI.** A failing GitHub Actions run skips the Railway deploy.
@@ -225,6 +225,29 @@ site:
 
 GitHub Pages is optional and **not configured** on this repo. The Railway
 service is the production host.
+
+### If Login & Dashboard fails its healthcheck
+
+Symptom: the `Login & Dashboard` service shows **Deployment failed during
+network process → Healthcheck failure** after exactly 60 seconds. Build and
+Deploy succeed; Post-deploy never starts. The deployment says **via CLI**.
+
+Cause: Railway's start command replaces the nginx image ENTRYPOINT, so
+`${PORT}` is never substituted and the replica never answers `/healthz`. A
+leftover Config File pointing at the repo-root `/railway.toml` can also
+inject `node dist/index.js` or probe `/api/health` (which nginx used to
+proxy to the BFF — a hung `API_UPSTREAM` then fails the deploy).
+
+Fix, in the repo (the deploy job applies this automatically):
+
+1. `office-start.sh` binds `0.0.0.0:$PORT` and starts nginx. Never Node.
+2. `GET /healthz`, `/health`, and `/api/health` are answered locally so a
+   hung BFF cannot fail the replica.
+3. `frontend/scripts/apply-railway-config.sh` stamps those settings onto
+   the service so Autodeploy and CLI agree.
+
+One-time on the service if Autodeploy is still on: Settings →
+**Config-as-code** → Config File = `/frontend/railway.toml`.
 
 ### If the website service fails its healthcheck on every main push
 
