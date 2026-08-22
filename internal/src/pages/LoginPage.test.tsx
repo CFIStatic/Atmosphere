@@ -71,6 +71,29 @@ describe('LoginPage', () => {
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
   });
 
+  it('queues an unknown employee for admin approval', async () => {
+    const user = userEvent.setup();
+    startSignIn.mockResolvedValue({ status: 'pending' });
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    );
+    await user.type(screen.getByLabelText('First name'), 'Alex');
+    await user.type(screen.getByLabelText('Last name'), 'Rivera');
+    await user.type(screen.getByLabelText('Email'), 'alex@company.com');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+
+    expect(startSignIn).toHaveBeenCalledWith({
+      firstName: 'Alex',
+      lastName: 'Rivera',
+      email: 'alex@company.com',
+    });
+    expect(await screen.findByText(/waiting on an Atmosphere admin/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Authenticator code')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Request another email' })).toBeInTheDocument();
+  });
+
   it('asks only for the authenticator code after enrollment', async () => {
     const user = userEvent.setup();
     startSignIn.mockResolvedValue({ status: 'code', challenge: 'tok' });

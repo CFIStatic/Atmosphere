@@ -7,10 +7,12 @@ import type { StaffChallengeResponse } from '../lib/types';
 
 type Step =
   | { kind: 'identity' }
+  | { kind: 'pending' }
   | { kind: 'enroll'; challenge: string; qrDataUrl: string; secret: string }
   | { kind: 'code'; challenge: string };
 
 function stepFromChallenge(next: StaffChallengeResponse): Step {
+  if (next.status === 'pending') return { kind: 'pending' };
   if (next.status === 'enroll') {
     return {
       kind: 'enroll',
@@ -86,11 +88,26 @@ export function LoginPage() {
       <div className="w-full max-w-md rounded-2xl border border-line bg-paper-0 p-8 shadow-sm">
         <p className="text-[11px] uppercase tracking-[0.18em] text-brand-600">Atmosphere staff</p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">Internal</h1>
-        {step.kind === 'identity' ? (
+        {step.kind === 'pending' ? (
+          <>
+            <p className="mt-2 text-sm text-ink-500">
+              Your request is waiting on an Atmosphere admin. After they approve {email || 'you'},
+              come back here and finish Microsoft Authenticator sign-in.
+            </p>
+            <button
+              type="button"
+              onClick={backToIdentity}
+              className="mt-6 w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-500"
+            >
+              Request another email
+            </button>
+          </>
+        ) : step.kind === 'identity' ? (
           <>
             <p className="mt-2 text-sm text-ink-500">
               Accounts, product analytics, and system health. Sign in with your name, work email,
-              and Microsoft Authenticator — not the office-app password.
+              and Microsoft Authenticator — not the office-app password. If you are not on the
+              staff list yet, Continue queues you for admin approval.
             </p>
             <form className="mt-6 space-y-4" onSubmit={(event) => void onIdentity(event)}>
               <div className="grid gap-4 sm:grid-cols-2">

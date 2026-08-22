@@ -3,6 +3,27 @@ export type AnalyticsScope = 'investor' | 'internal';
 export interface AnalyticsAccess {
   scope: AnalyticsScope | null;
   displayName: string | null;
+  pendingAccessRequests?: number;
+}
+
+export type AccessRequestStatus = 'pending' | 'approved' | 'denied';
+
+export interface AccessRequest {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  status: AccessRequestStatus;
+  requestedAt: string;
+  lastRequestedAt: string;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  userId: string | null;
+}
+
+export interface AccessRequestList {
+  requests: AccessRequest[];
+  pendingCount: number;
 }
 
 export interface StaffIdentity {
@@ -13,6 +34,7 @@ export interface StaffIdentity {
 
 export type StaffChallengeResponse =
   | { status: 'code'; challenge: string }
+  | { status: 'pending' }
   | {
       status: 'enroll';
       challenge: string;

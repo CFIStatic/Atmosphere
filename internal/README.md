@@ -9,6 +9,7 @@ sign-in is a real session cookie and every number is a real RPC.
 | --- | --- | --- |
 | Overview | `GET /api/analytics/overview` | investor + internal |
 | Accounts | overview `accounts` + `GET /api/analytics/accounts/:orgId` | internal |
+| Access | `GET /api/analytics/access-requests` | internal admin |
 | Usage | overview `features` | investor + internal |
 | Experiments | `GET /api/analytics/experiments` | internal |
 | Metering | `GET /api/analytics/metering` | internal |
@@ -32,11 +33,14 @@ directories are identical):
   or `supabase/migrations/20260821160000_internal_account_detail.sql`
 - `backend/supabase/migrations/20260821210000_internal_staff_totp.sql`
   or `supabase/migrations/20260821210000_internal_staff_totp.sql`
+- `backend/supabase/migrations/20260822170000_internal_access_requests.sql`
+  or `supabase/migrations/20260822170000_internal_access_requests.sql`
 
 Without the account-file migration, overview/accounts still load from the
 existing analytics RPCs; opening one org (`/accounts/:id`) returns an error.
 Without the TOTP table, Microsoft Authenticator sign-in cannot store the
-enrolled secret.
+enrolled secret. Without the access-request table, unknown employees cannot
+be queued for admin approval.
 
 ### 2. Create the service
 
@@ -104,8 +108,10 @@ take the replica down.
 Open the generated domain. The form asks for **first name**, **last name**,
 and **email** — not the office-app password.
 
-- Email must be on `ANALYTICS_INTERNAL_EMAILS` (default `jack@jettx.ai`).
-- First visit for that email shows a QR code. In Microsoft Authenticator:
+- Allowlisted emails (`ANALYTICS_INTERNAL_EMAILS`, default `jack@jettx.ai`)
+  sign in immediately. Anyone else is queued on **Access** for an internal
+  admin to approve (or deny). Approved employees then enroll Authenticator.
+- First visit for an approved email shows a QR code. In Microsoft Authenticator:
   **+ → Other account (Google, Facebook, etc.) → scan the QR**. Enter the
   6-digit code. That enrollment is stored on the BFF (encrypted with
   `DEVICE_PEPPER`). Finish this step in one sitting (about 10 minutes).
@@ -175,7 +181,9 @@ Sign in with a real staff account. Same cookies as the office app.
 | Knob | Meaning |
 | --- | --- |
 | `ANALYTICS_INTERNAL_EMAILS` | Auto-grant internal scope (default `jack@jettx.ai`) |
+| **Access** page | Internal admin queue — approve one employee or approve all |
 | `DEVICE_PEPPER` | Encrypts Microsoft Authenticator secrets (existing BFF secret) |
 | `npm run analytics:grant --prefix backend -- someone@company.com internal` | Manual grant |
 | Migration `20260821160000_internal_account_detail.sql` | One-org members/jobs/usage RPC |
 | Migration `20260821210000_internal_staff_totp.sql` | Authenticator enrollment table |
+| Migration `20260822170000_internal_access_requests.sql` | Employee access-request queue |

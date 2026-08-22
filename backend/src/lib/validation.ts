@@ -365,6 +365,8 @@ export const analyticsRangeSchema = z
 
 export const analyticsOrgIdSchema = z.string().uuid('org id must be a uuid');
 
+export const accessRequestIdSchema = z.string().uuid('request id must be a uuid');
+
 export const analyticsDatasetSchema = z.enum([
   'all',
   'summary',

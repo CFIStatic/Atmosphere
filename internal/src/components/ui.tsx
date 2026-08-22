@@ -84,11 +84,13 @@ export function Sparkline({
 
 export function StatusPill({ status }: { status: string }) {
   const tone =
-    status === 'active' || status === 'ready' || status === 'running'
+    status === 'active' || status === 'ready' || status === 'running' || status === 'approved'
       ? 'border-success-600/30 text-success-600'
-      : status === 'canceled' || status === 'not_ready'
+      : status === 'canceled' || status === 'not_ready' || status === 'denied'
         ? 'border-danger-600/30 text-danger-600'
-        : 'border-line-strong text-ink-500';
+        : status === 'pending'
+          ? 'border-brand-600/30 text-brand-600'
+          : 'border-line-strong text-ink-500';
   return (
     <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${tone}`}>
       {status}

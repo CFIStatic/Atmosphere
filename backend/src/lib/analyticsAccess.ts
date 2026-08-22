@@ -1,5 +1,6 @@
 /**
- * Auto-provision analytics_staff for allowlisted Atmosphere emails.
+ * Auto-provision analytics_staff for allowlisted Atmosphere emails or
+ * employees an internal admin has approved from the staff site.
  *
  * Preview / day-to-day: Jack (and any ANALYTICS_INTERNAL_EMAILS) sign in and
  * immediately see /analytics — no SQL grant step. The database allow-list is
@@ -8,6 +9,7 @@
  */
 
 import type { User } from '@supabase/supabase-js';
+import { attachApprovedUser, isApprovedInternalEmail } from '../auth/internalAccessRequests.js';
 import { config } from '../config.js';
 import { createAdminClient } from './supabase.js';
 import { logger } from './logger.js';
@@ -27,17 +29,27 @@ export function allowlistedAnalyticsScope(email: string | undefined | null): Ana
   return null;
 }
 
+export async function resolvedAnalyticsScope(
+  email: string | undefined | null,
+): Promise<AnalyticsScope | null> {
+  const allowlisted = allowlistedAnalyticsScope(email);
+  if (allowlisted) return allowlisted;
+  if (await isApprovedInternalEmail(email)) return 'internal';
+  return null;
+}
+
 /**
- * If the signed-in user is on the Atmosphere staff allow-list, upsert their
- * analytics_staff row. No-op when service role is unset or the email is not
- * allowlisted. Safe to call on every /access probe.
+ * If the signed-in user is on the Atmosphere staff allow-list or has an
+ * approved access request, upsert their analytics_staff row. No-op when
+ * service role is unset or the email is not granted. Safe to call on every
+ * /access probe.
  */
 export async function ensureAllowlistedAnalyticsAccess(
   user: User | undefined,
   displayName?: string | null,
 ): Promise<void> {
   if (!user?.id) return;
-  const scope = allowlistedAnalyticsScope(user.email);
+  const scope = await resolvedAnalyticsScope(user.email);
   if (!scope) return;
 
   const admin = createAdminClient();
@@ -68,6 +80,10 @@ export async function ensureAllowlistedAnalyticsAccess(
       detail: error.message,
     });
     return;
+  }
+
+  if (scope === 'internal' && !allowlistedAnalyticsScope(user.email)) {
+    await attachApprovedUser(user);
   }
 
   logger.info('analytics_auto_grant', { email: user.email, scope });

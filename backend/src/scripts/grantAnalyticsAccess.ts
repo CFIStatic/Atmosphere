@@ -5,10 +5,10 @@
  *   npm run analytics:grant -- investor@fund.com investor
  *   npm run analytics:grant -- someone@atmosphere.app revoke
  *
- * Access is deliberately not self-service: `analytics_staff` has no INSERT
- * policy, so the only way in is this script, holding the service-role key. That
- * is the whole security model for company-wide revenue — keep the key out of the
- * browser and the door stays shut.
+ * Access is not self-service: `analytics_staff` has no INSERT policy. Internal
+ * admins approve employees from the staff Access page (service role on the BFF),
+ * or this script grants a row directly. Keep the service-role key out of the
+ * browser.
  */
 
 import 'dotenv/config';

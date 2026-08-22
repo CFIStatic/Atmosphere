@@ -37,7 +37,8 @@ import {
 } from '../auth/passwordAccount.js';
 import { sendPasswordReset } from '../auth/sendPasswordReset.js';
 import { STAFF_LOGIN_DENIED } from '../lib/internalStaffGate.js';
-import { allowlistedAnalyticsScope, ensureAllowlistedAnalyticsAccess } from '../lib/analyticsAccess.js';
+import { resolvedAnalyticsScope, ensureAllowlistedAnalyticsAccess } from '../lib/analyticsAccess.js';
+import { recordAccessRequest } from '../auth/internalAccessRequests.js';
 import { openInternalStaffSession } from '../auth/internalStaffSession.js';
 import { signStaffChallenge, readStaffChallenge } from '../lib/internalStaffChallenge.js';
 import { otpauthUrl, randomTotpSecret, verifyTotp } from '../lib/totp.js';
@@ -133,8 +134,9 @@ authRouter.post('/login', authLimiter, async (req: Request, res: Response, next:
 
 /**
  * POST /api/auth/internal-challenge
- * Internal staff site step 1: name + allowlisted email. Returns either a
- * Microsoft Authenticator enrollment QR or a prompt for the 6-digit code.
+ * Internal staff site step 1: name + approved email. Allowlisted or
+ * admin-approved staff get a Microsoft Authenticator enrollment QR or a
+ * prompt for the 6-digit code. Everyone else is queued for admin approval.
  */
 authRouter.post('/internal-challenge', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -146,7 +148,12 @@ authRouter.post('/internal-challenge', authLimiter, async (req: Request, res: Re
         'internal_login_unavailable',
       );
     }
-    if (allowlistedAnalyticsScope(body.email) === null) {
+    if ((await resolvedAnalyticsScope(body.email)) === null) {
+      const recorded = await recordAccessRequest(body);
+      if (recorded === 'pending') {
+        res.json({ status: 'pending' });
+        return;
+      }
       throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
     }
 
@@ -193,7 +200,7 @@ authRouter.post('/internal-login', authLimiter, async (req: Request, res: Respon
   try {
     const body = internalStaffVerifySchema.parse(req.body);
     const challenge = readStaffChallenge(body.challenge);
-    if (!challenge || allowlistedAnalyticsScope(challenge.email) === null) {
+    if (!challenge || (await resolvedAnalyticsScope(challenge.email)) === null) {
       throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
     }
 

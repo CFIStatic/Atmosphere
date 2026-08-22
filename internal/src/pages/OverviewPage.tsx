@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useOverview } from '../hooks/useOverview';
 import { count, hours, money, moneyCompact, percent, signedPercent } from '../lib/format';
-import { canSeeAccounts } from '../lib/access';
+import { canManageAccess, canSeeAccounts } from '../lib/access';
 import { useAuth } from '../context/AuthContext';
 import { EmptyState, SectionHeading, Sparkline, StatTile } from '../components/ui';
 
@@ -31,6 +31,17 @@ export function OverviewPage() {
           </p>
         )}
       </div>
+
+      {canManageAccess(access?.scope) && (access?.pendingAccessRequests ?? 0) > 0 && (
+        <p className="mt-4 rounded-xl border border-brand-600/30 bg-brand-500/10 px-4 py-3 text-sm text-ink-800">
+          {access?.pendingAccessRequests === 1
+            ? '1 employee is waiting to join Internal Growth Metrics.'
+            : `${access?.pendingAccessRequests} employees are waiting to join Internal Growth Metrics.`}{' '}
+          <Link to="/access" className="font-medium text-brand-600 hover:underline">
+            Review access requests
+          </Link>
+        </p>
+      )}
 
       {error && (
         <p className="mt-4 text-sm text-danger-600">

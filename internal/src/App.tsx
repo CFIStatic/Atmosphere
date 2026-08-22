@@ -10,6 +10,7 @@ import { UsagePage } from './pages/UsagePage';
 import { ExperimentsPage } from './pages/ExperimentsPage';
 import { MeteringPage } from './pages/MeteringPage';
 import { SystemPage } from './pages/SystemPage';
+import { AccessPage } from './pages/AccessPage';
 
 export function App() {
   return (
@@ -29,6 +30,7 @@ export function App() {
             <Route path="overview" element={<OverviewPage />} />
             <Route path="accounts" element={<AccountsPage />} />
             <Route path="accounts/:orgId" element={<AccountDetailPage />} />
+            <Route path="access" element={<AccessPage />} />
             <Route path="usage" element={<UsagePage />} />
             <Route path="experiments" element={<ExperimentsPage />} />
             <Route path="metering" element={<MeteringPage />} />
