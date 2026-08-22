@@ -180,7 +180,6 @@ jobs:
           trap cleanup EXIT
           sleep 2
           curl -fsS http://127.0.0.1:18080/health | grep -qx 'ok'
-          # Must be the nginx probe, not a proxied BFF JSON body.
           curl -fsS http://127.0.0.1:18080/api/health | grep -qx 'ok'
           curl -fsS http://127.0.0.1:18080/ | grep -q 'Atmosphere'
           # Railway interpolates a renamed-service reference to empty, which
@@ -191,7 +190,11 @@ jobs:
             -e PORT=8080 -e API_UPSTREAM='http://:' -p 18080:8080 \
             atmosphere-website:ci
           sleep 2
-          curl -fsS http://127.0.0.1:18080/health | grep -qx 'ok'
+          if ! curl -fsS http://127.0.0.1:18080/health | grep -qx 'ok'; then
+            echo "nginx did not bind with API_UPSTREAM=http://:"
+            docker logs atmosphere-website-ci || true
+            exit 1
+          fi
           curl -fsS http://127.0.0.1:18080/api/health | grep -qx 'ok'
 
       - name: Deploy corporate site

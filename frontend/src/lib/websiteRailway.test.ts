@@ -31,9 +31,11 @@ describe('Railway corporate-website image', () => {
     const script = read('website/nginx/15-validate-website-env.sh');
     expect(script).toContain('invalid port in upstream');
     expect(script).toContain('http://:');
-    expect(script).toContain('is_usable_upstream');
+    expect(script).toContain('BusyBox ash');
     expect(script).toContain('https://atmosphere-production.up.railway.app');
+    expect(script).toContain('http://[A-Za-z0-9._-]*');
     expect(script).not.toMatch(/^chmod/m);
+    expect(script).not.toContain('grep -Eq');
 
     const out = execFileSync(
       'sh',
@@ -44,6 +46,16 @@ describe('Railway corporate-website image', () => {
       { encoding: 'utf8', cwd: repoRoot },
     );
     expect(out).toBe('https://atmosphere-production.up.railway.app');
+
+    const underSetE = execFileSync(
+      'sh',
+      [
+        '-c',
+        'set -e; API_UPSTREAM="http://:"; . ./website/nginx/15-validate-website-env.sh; printf %s "$API_UPSTREAM"',
+      ],
+      { encoding: 'utf8', cwd: repoRoot },
+    );
+    expect(underSetE).toBe('https://atmosphere-production.up.railway.app');
 
     const kept = execFileSync(
       'sh',
