@@ -20,9 +20,7 @@
 
 -- A customer hide is a custody event. The enum already has held/released;
 -- deleted means they removed it from their library, not from the vault.
-do $$ begin
-  alter type public.job_evidence_action add value if not exists 'deleted';
-exception when duplicate_object then null; end $$;
+alter type public.job_evidence_action add value if not exists 'deleted';
 
 -- ---------------------------------------------------------------------------
 -- Soft-delete on the user-visible catalog
