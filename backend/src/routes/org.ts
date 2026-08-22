@@ -54,10 +54,15 @@ function serializeMembership(m: any) {
 
 function serializeMember(row: any) {
   const p = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+  const avatarUrl =
+    typeof p?.avatar_url === 'string' && /^(https?:|data:image\/)/.test(p.avatar_url.trim())
+      ? p.avatar_url
+      : null;
   return {
     userId: row.user_id,
     email: p?.email ?? null,
     fullName: p?.full_name ?? null,
+    avatarUrl,
     role: row.role,
     workType: row.work_type,
     usageIntents: Array.isArray(row.usage_intents) ? row.usage_intents : [],
@@ -353,7 +358,7 @@ orgRouter.get('/members', async (req: Request, res: Response, next: NextFunction
 
     let result: { data: any[] | null; error: { message: string } | null } = await supabase
       .from('org_members')
-      .select('user_id, role, work_type, usage_intents, status, profiles(email, full_name)')
+      .select('user_id, role, work_type, usage_intents, status, profiles(email, full_name, avatar_url)')
       .eq('org_id', orgId)
       .order('created_at', { ascending: true });
 

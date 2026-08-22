@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
-import { displayName, initials, nameFromMetadata } from '../lib/display';
+import { displayName, nameFromMetadata } from '../lib/display';
+import { PersonAvatar } from './PersonAvatar';
 import { setPreference, usePreferences } from '../lib/preferences';
 import {
   cycleThemePreference,
@@ -375,9 +376,12 @@ function AccountMenu() {
         aria-expanded={open}
         className="flex items-center gap-2 rounded-full transition hover:opacity-90"
       >
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-500 text-xs font-semibold text-white">
-          {initials(profile?.fullName || nameFromMetadata(user?.metadata), user?.email)}
-        </span>
+        <PersonAvatar
+          fullName={profile?.fullName || nameFromMetadata(user?.metadata)}
+          email={user?.email}
+          avatarUrl={profile?.avatarUrl}
+          size="md"
+        />
         <ChevronDownIcon width={14} height={14} className="hidden shrink-0 text-ink-500 sm:block" />
       </button>
 

@@ -57,6 +57,7 @@ const state = {
   onboarded: true,
   email: 'dana@ortizrestoration.com',
   fullName: 'Dana Ortiz' as string | null,
+  avatarUrl: null as string | null,
   orgName: 'Ortiz Restoration Group',
   joinCode: '8F3A9C2B',
   settings: {
@@ -80,6 +81,7 @@ const profile = (): Profile => ({
   id: 'demo-user-1',
   email: state.email,
   fullName: state.fullName,
+  avatarUrl: state.avatarUrl,
   createdAt: '2026-06-02T14:11:00Z',
   updatedAt: '2026-07-28T09:40:00Z',
 });
@@ -1805,7 +1807,7 @@ const routes: Array<[string, RegExp, Handler]> = [
     return { body: { user: user() } };
   }],
   ['POST', /^\/api\/auth\/signup$/, (_m, b) => {
-    state.signedIn = true; state.onboarded = false; state.fullName = null;
+    state.signedIn = true; state.onboarded = false; state.fullName = null; state.avatarUrl = null;
     if (typeof b.email === 'string') state.email = b.email;
     return { body: { user: user(), needsEmailConfirmation: false } };
   }],
@@ -1905,6 +1907,16 @@ const routes: Array<[string, RegExp, Handler]> = [
   ['GET', /^\/api\/profile$/, () => ({ body: { profile: profile() } })],
   ['PATCH', /^\/api\/profile$/, (_m, b) => {
     state.fullName = (b.fullName as string | null) ?? null;
+    return { body: { profile: profile() } };
+  }],
+  ['POST', /^\/api\/profile\/avatar$/, (_m, b) => {
+    const mediaType = typeof b.mediaType === 'string' ? b.mediaType : 'image/jpeg';
+    const content = typeof b.contentBase64 === 'string' ? b.contentBase64 : '';
+    state.avatarUrl = content ? `data:${mediaType};base64,${content}` : null;
+    return { body: { profile: profile() } };
+  }],
+  ['DELETE', /^\/api\/profile\/avatar$/, () => {
+    state.avatarUrl = null;
     return { body: { profile: profile() } };
   }],
 
@@ -3840,10 +3852,15 @@ function adoptLiveIdentity(data: unknown) {
     state.email = user.email;
     state.signedIn = true;
   }
-  const profile = body.profile as { email?: string | null; fullName?: string | null } | undefined;
+  const profile = body.profile as {
+    email?: string | null;
+    fullName?: string | null;
+    avatarUrl?: string | null;
+  } | undefined;
   if (profile) {
     if (profile.email) state.email = profile.email;
     if (profile.fullName !== undefined) state.fullName = profile.fullName;
+    if (profile.avatarUrl !== undefined) state.avatarUrl = profile.avatarUrl;
   }
   const membership = body.membership as { org?: { name?: string } | null } | undefined;
   if (membership?.org?.name) {
@@ -3868,8 +3885,13 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
         } catch {
           /* not JSON */
         }
+        return live;
       }
-      return live;
+      // A live 401/403 on the avatar means this browser is not the signed-in
+      // tenant. Fall through so the demo Settings page can still store a photo.
+      if (!(path === '/api/profile/avatar' && (live.status === 401 || live.status === 403))) {
+        return live;
+      }
     } catch {
       /* live API unreachable — fall through to demo fixtures */
     }

@@ -32,9 +32,10 @@ $$;
 
 -- Existing Atmosphere schema, abridged to what the migration references.
 create table if not exists public.profiles (
-  id        uuid primary key references auth.users(id),
-  email     text,
-  full_name text
+  id         uuid primary key references auth.users(id),
+  email      text,
+  full_name  text,
+  avatar_url text
 );
 
 create table if not exists public.orgs (

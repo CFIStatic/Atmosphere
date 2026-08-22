@@ -23,12 +23,15 @@ import {
 import { Logo } from '../components/Logo';
 import { BillingSection } from '../components/settings/BillingSection';
 import { InvitePanel } from '../components/team/InvitePanel';
-import { displayName, initials, nameFromMetadata } from '../lib/display';
+import { displayName, nameFromMetadata } from '../lib/display';
+import { AVATAR_ACCEPT, prepareAvatarUpload } from '../lib/avatarImage';
+import { PersonAvatar } from '../components/PersonAvatar';
 import { setPreference, usePreferences, type Preferences } from '../lib/preferences';
 import { usePlatform } from '../lib/usePlatform';
 import type { PlatformId } from '../lib/platforms';
 import {
   BuildingIcon,
+  CameraIcon,
   CheckIcon,
   EyeIcon,
   EyeOffIcon,
@@ -332,7 +335,9 @@ function ProfileSection() {
   const { user, profile, setProfile } = useAuth();
   const resolvedName = profile?.fullName || nameFromMetadata(user?.metadata);
   const [name, setName] = useState(resolvedName ?? '');
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -343,8 +348,15 @@ function ProfileSection() {
     setName((current) => (current === '' ? incoming : current));
   }, [profile?.fullName, user?.metadata]);
 
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
   const storedName = profile?.fullName ?? '';
   const dirty = name.trim() !== storedName;
+  const avatarUrl = previewUrl || profile?.avatarUrl || null;
 
   async function save() {
     setSaving(true);
@@ -362,6 +374,50 @@ function ProfileSection() {
     }
   }
 
+  async function onPickPhoto(file: File | undefined) {
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const prepared = await prepareAvatarUpload(file);
+      setPreviewUrl((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return prepared.previewUrl;
+      });
+      const { profile: updated } = await api.uploadAvatar({
+        filename: prepared.filename,
+        mediaType: prepared.mediaType,
+        contentBase64: prepared.contentBase64,
+      });
+      setProfile(updated);
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 2500);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Could not update that photo.');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function removePhoto() {
+    setUploading(true);
+    setError(null);
+    try {
+      const { profile: updated } = await api.removeAvatar();
+      setProfile(updated);
+      setPreviewUrl((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return null;
+      });
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 2500);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not remove that photo.');
+    } finally {
+      setUploading(false);
+    }
+  }
+
   return (
     <>
       <Card
@@ -369,14 +425,64 @@ function ProfileSection() {
         description="This is how teammates see you in the linked accounts list."
       >
         <div className="flex items-center gap-4">
-          <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-brand-500 text-lg font-semibold text-white">
-            {initials(name || profile?.fullName, user?.email)}
-          </span>
+          <label className="relative shrink-0 cursor-pointer">
+            <PersonAvatar
+              fullName={name || profile?.fullName}
+              email={user?.email}
+              avatarUrl={avatarUrl}
+              size="lg"
+            />
+            <span className="absolute inset-0 grid place-items-center rounded-full bg-ink-900/45 text-white opacity-0 transition hover:opacity-100">
+              {uploading ? (
+                <SpinnerIcon className="animate-spin" width={18} height={18} />
+              ) : (
+                <CameraIcon width={18} height={18} />
+              )}
+            </span>
+            <input
+              type="file"
+              accept={AVATAR_ACCEPT}
+              className="sr-only"
+              aria-label="Upload a profile photo or icon"
+              disabled={uploading}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                void onPickPhoto(file);
+              }}
+            />
+          </label>
           <div className="min-w-0">
             <p className="truncate text-base font-semibold text-ink-900">
               {displayName(name || profile?.fullName, user?.email)}
             </p>
             <p className="truncate text-sm text-ink-500">{user?.email}</p>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <label className="cursor-pointer text-sm font-medium text-brand-700 transition hover:text-brand-800">
+                {profile?.avatarUrl || previewUrl ? 'Change photo' : 'Upload photo or icon'}
+                <input
+                  type="file"
+                  accept={AVATAR_ACCEPT}
+                  className="sr-only"
+                  disabled={uploading}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = '';
+                    void onPickPhoto(file);
+                  }}
+                />
+              </label>
+              {(profile?.avatarUrl || previewUrl) && (
+                <button
+                  type="button"
+                  onClick={() => void removePhoto()}
+                  disabled={uploading}
+                  className="text-sm font-medium text-ink-600 transition hover:text-ink-900 disabled:opacity-50"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -729,9 +835,12 @@ function LinkedAccountsCard() {
                 className="flex items-center justify-between gap-4 bg-paper-0 px-4 py-3"
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-500 text-sm font-semibold text-white">
-                    {initials(member.fullName, member.email)}
-                  </span>
+                  <PersonAvatar
+                    fullName={member.fullName}
+                    email={member.email}
+                    avatarUrl={member.avatarUrl}
+                    size="sm"
+                  />
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-ink-900">
                       {name}
