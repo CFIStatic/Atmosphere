@@ -23,6 +23,10 @@ ENV NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM)$$
 
 COPY website/nginx/default.conf.template /etc/nginx/templates/default.conf.template
 COPY website/nginx/website-start.sh /usr/local/bin/website-start.sh
+# Must not be +x: nginx docker-entrypoint sources *.sh that are not executable
+# so the rewritten API_UPSTREAM is visible to envsubst. A +x subprocess would
+# still leave http://: in the parent and nginx would never bind.
+COPY website/nginx/15-validate-website-env.sh /docker-entrypoint.d/15-validate-website-env.sh
 COPY website /usr/share/nginx/html
 RUN rm -rf /usr/share/nginx/html/nginx /usr/share/nginx/html/Dockerfile \
       /usr/share/nginx/html/railway.toml /usr/share/nginx/html/README.md \
@@ -30,6 +34,7 @@ RUN rm -rf /usr/share/nginx/html/nginx /usr/share/nginx/html/Dockerfile \
       /usr/share/nginx/html/scripts \
   && rm -f /etc/nginx/conf.d/default.conf \
   && chmod +x /usr/local/bin/website-start.sh \
+  && chmod -x /docker-entrypoint.d/15-validate-website-env.sh \
   && find /usr/share/nginx/html -name '*.html' -exec \
       sed -i "s|<html lang=\"en\">|<html lang=\"en\" data-app-origin=\"${APP_ORIGIN}\">|" {} + \
   && sed -i "s|https://REPLACE-WITH-YOUR-DOMAIN|${SITE_ORIGIN}|g" \

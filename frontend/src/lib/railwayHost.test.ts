@@ -37,8 +37,9 @@ describe('Railway office-app image', () => {
   it('points API_UPSTREAM at the Atmosphere private domain, not the public URL', () => {
     const upstream = readRoot('api.upstream').trim();
     expect(upstream).toBe(
-      'http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}',
+      'http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}',
     );
+    expect(upstream).not.toContain('${{Atmosphere.');
   });
 
   it('points the Railway app service at this Dockerfile, not the backend one', () => {

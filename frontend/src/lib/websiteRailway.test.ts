@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,11 +17,43 @@ describe('Railway corporate-website image', () => {
     expect(dockerfile).toContain('CMD ["nginx", "-g", "daemon off;"]');
     expect(dockerfile).toContain('NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM)$$');
     expect(dockerfile).toContain('SITE_ORIGIN=https://website-production-7e3f.up.railway.app');
+    expect(dockerfile).toContain('15-validate-website-env.sh');
+    expect(dockerfile).toContain('chmod -x /docker-entrypoint.d/15-validate-website-env.sh');
     expect(dockerfile).not.toContain('ENTRYPOINT ["/usr/local/bin/website-start.sh"]');
 
     const start = read('website/nginx/website-start.sh');
     expect(start).toContain('exec /docker-entrypoint.sh nginx -g \'daemon off;\'');
+    expect(start).toContain('/docker-entrypoint.d/15-validate-website-env.sh');
     expect(start).not.toContain('exec nginx -g');
+  });
+
+  it('rewrites interpolated-empty API_UPSTREAM so nginx can bind', () => {
+    const script = read('website/nginx/15-validate-website-env.sh');
+    expect(script).toContain('invalid port in upstream');
+    expect(script).toContain('http://:');
+    expect(script).toContain('is_usable_upstream');
+    expect(script).toContain('https://atmosphere-production.up.railway.app');
+    expect(script).not.toMatch(/^chmod/m);
+
+    const out = execFileSync(
+      'sh',
+      [
+        '-c',
+        'API_UPSTREAM="http://:"; . ./website/nginx/15-validate-website-env.sh; printf %s "$API_UPSTREAM"',
+      ],
+      { encoding: 'utf8', cwd: repoRoot },
+    );
+    expect(out).toBe('https://atmosphere-production.up.railway.app');
+
+    const kept = execFileSync(
+      'sh',
+      [
+        '-c',
+        'API_UPSTREAM="http://atmosphere.railway.internal:8080"; . ./website/nginx/15-validate-website-env.sh; printf %s "$API_UPSTREAM"',
+      ],
+      { encoding: 'utf8', cwd: repoRoot },
+    );
+    expect(kept).toBe('http://atmosphere.railway.internal:8080');
   });
 
   it('answers platform health probes locally so a hung BFF cannot fail the deploy', () => {
@@ -52,6 +85,8 @@ describe('Railway corporate-website image', () => {
     expect(workflow).toContain('website/scripts/apply-railway-config.sh');
     expect(workflow).toContain('RAILWAY_UP_STAMP_FILE');
     expect(workflow).toContain('website/.railway-up-stamp');
+    expect(workflow).toContain("API_UPSTREAM='http://:'");
+    expect(workflow).toContain('cursor/fix-website-healthcheck-e3e4');
 
     const resolver = read('backend/scripts/resolveRailwayService.mjs');
     expect(resolver).toContain("website: ['corporate website', 'website']");

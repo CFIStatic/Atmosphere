@@ -21,6 +21,7 @@ on:
       - main
       - cursor/host-corporate-website-51c8
       - cursor/fix-railway-office-deploy-157d
+      - cursor/fix-website-healthcheck-e3e4
     paths:
       - 'website/**'
       - '.dockerignore'
@@ -178,6 +179,16 @@ jobs:
           # Must be the nginx probe, not a proxied BFF JSON body.
           curl -fsS http://127.0.0.1:18080/api/health | grep -qx 'ok'
           curl -fsS http://127.0.0.1:18080/ | grep -q 'Atmosphere'
+          # Railway interpolates a renamed-service reference to empty, which
+          # used to kill nginx (`invalid port in upstream ":"`) and fail the
+          # Network healthcheck. The image must still bind /health.
+          docker rm -f atmosphere-website-ci >/dev/null
+          docker run -d --name atmosphere-website-ci \
+            -e PORT=8080 -e API_UPSTREAM='http://:' -p 18080:8080 \
+            atmosphere-website:ci
+          sleep 2
+          curl -fsS http://127.0.0.1:18080/health | grep -qx 'ok'
+          curl -fsS http://127.0.0.1:18080/api/health | grep -qx 'ok'
 
       - name: Deploy corporate site
         env:
