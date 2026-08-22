@@ -2,7 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/*
+ * Theme tokens. Paper is surfaces, ink is text strongest-first.
+ * `data-theme` is the live palette (`dark` | `light`).
+ */
+:root,
+:root[data-theme='dark'] {
   color-scheme: dark;
 
   --brand-50: 49 25 12;
@@ -34,6 +39,40 @@
   --caution-600: 229 184 74;
   --success-50: 18 38 26;
   --success-600: 124 201 141;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --brand-50: 253 244 238;
+  --brand-100: 250 229 214;
+  --brand-200: 244 200 169;
+  --brand-400: 223 123 68;
+  --brand-500: 210 80 10;
+  --brand-600: 188 69 8;
+  --brand-700: 153 54 7;
+
+  --paper-0: 255 255 255;
+  --paper-50: 251 250 247;
+  --paper-100: 244 241 235;
+  --paper-200: 237 233 225;
+  --paper-300: 228 223 213;
+
+  --ink-900: 28 25 23;
+  --ink-800: 41 37 36;
+  --ink-700: 68 64 60;
+  --ink-600: 87 83 78;
+  --ink-500: 120 113 108;
+  --ink-400: 168 162 158;
+
+  --line: 227 222 212;
+  --line-strong: 211 204 190;
+
+  --danger-50: 253 242 240;
+  --danger-600: 180 54 29;
+  --caution-600: 148 106 11;
+  --success-50: 240 247 241;
+  --success-600: 63 125 76;
 }
 
 html,

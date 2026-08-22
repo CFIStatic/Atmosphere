@@ -1,10 +1,12 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { canSeeAccounts } from '../lib/access';
+import { canManageAccess, canSeeAccounts } from '../lib/access';
+import { ThemeToggle } from './ThemeToggle';
 
 const NAV = [
   { to: '/overview', label: 'Overview' },
   { to: '/accounts', label: 'Accounts', internal: true },
+  { to: '/access', label: 'Access', internal: true },
   { to: '/usage', label: 'Usage' },
   { to: '/experiments', label: 'Experiments', internal: true },
   { to: '/metering', label: 'Metering', internal: true },
@@ -16,6 +18,7 @@ export function Shell() {
   const location = useLocation();
   const internal = canSeeAccounts(access?.scope);
   const links = NAV.filter((item) => !('internal' in item && item.internal) || internal);
+  const pending = canManageAccess(access?.scope) ? (access?.pendingAccessRequests ?? 0) : 0;
 
   return (
     <div className="min-h-screen bg-paper-100 text-ink-900">
@@ -47,10 +50,16 @@ export function Shell() {
                 }
               >
                 {item.label}
+                {item.to === '/access' && pending > 0 && (
+                  <span className="ml-1.5 rounded-full bg-brand-600 px-1.5 text-[10px] font-medium text-white">
+                    {pending}
+                  </span>
+                )}
               </NavLink>
             ))}
           </nav>
           <div className="flex items-center gap-3 text-sm text-ink-600">
+            <ThemeToggle />
             <span className="hidden sm:inline">{access?.displayName ?? user?.email}</span>
             <button
               type="button"

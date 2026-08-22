@@ -36,8 +36,9 @@ import {
   signInPasswordAccount,
 } from '../auth/passwordAccount.js';
 import { sendPasswordReset } from '../auth/sendPasswordReset.js';
-import { STAFF_LOGIN_DENIED } from '../lib/internalStaffGate.js';
-import { allowlistedAnalyticsScope, ensureAllowlistedAnalyticsAccess } from '../lib/analyticsAccess.js';
+import { hasStaffName, resolveStaffNames, STAFF_LOGIN_DENIED } from '../lib/internalStaffGate.js';
+import { resolvedAnalyticsScope, ensureAllowlistedAnalyticsAccess } from '../lib/analyticsAccess.js';
+import { recordAccessRequest } from '../auth/internalAccessRequests.js';
 import { openInternalStaffSession } from '../auth/internalStaffSession.js';
 import { signStaffChallenge, readStaffChallenge } from '../lib/internalStaffChallenge.js';
 import { otpauthUrl, randomTotpSecret, verifyTotp } from '../lib/totp.js';
@@ -133,8 +134,9 @@ authRouter.post('/login', authLimiter, async (req: Request, res: Response, next:
 
 /**
  * POST /api/auth/internal-challenge
- * Internal staff site step 1: name + allowlisted email. Returns either a
- * Microsoft Authenticator enrollment QR or a prompt for the 6-digit code.
+ * Internal staff site step 1: name + approved email. Allowlisted or
+ * admin-approved staff get a Microsoft Authenticator enrollment QR or a
+ * prompt for the 6-digit code. Everyone else is queued for admin approval.
  */
 authRouter.post('/internal-challenge', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -146,19 +148,39 @@ authRouter.post('/internal-challenge', authLimiter, async (req: Request, res: Re
         'internal_login_unavailable',
       );
     }
-    if (allowlistedAnalyticsScope(body.email) === null) {
+    const named = hasStaffName(body.firstName) && hasStaffName(body.lastName);
+    if ((await resolvedAnalyticsScope(body.email)) === null) {
+      if (!named) {
+        res.json({ status: 'setup' });
+        return;
+      }
+      const recorded = await recordAccessRequest({
+        email: body.email,
+        firstName: body.firstName,
+        lastName: body.lastName,
+      });
+      if (recorded === 'pending') {
+        res.json({ status: 'pending' });
+        return;
+      }
       throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
     }
 
     const enrolled = await loadEnrolledTotp(body.email);
     if (enrolled) {
+      const names = resolveStaffNames(body, enrolled, body.email);
       const challenge = signStaffChallenge({
         email: body.email,
-        firstName: body.firstName,
-        lastName: body.lastName,
+        firstName: names.firstName,
+        lastName: names.lastName,
         enrolled: true,
       });
       res.json({ status: 'code', challenge });
+      return;
+    }
+
+    if (!named) {
+      res.json({ status: 'setup' });
       return;
     }
 
@@ -192,20 +214,45 @@ authRouter.post('/internal-challenge', authLimiter, async (req: Request, res: Re
 authRouter.post('/internal-login', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = internalStaffVerifySchema.parse(req.body);
-    const challenge = readStaffChallenge(body.challenge);
-    if (!challenge || allowlistedAnalyticsScope(challenge.email) === null) {
-      throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
-    }
-
+    let email: string;
+    let firstName: string;
+    let lastName: string;
     let secret: string;
     let minCounter = -1n;
-    if (challenge.enrolled) {
-      const stored = await loadEnrolledTotp(challenge.email);
+
+    if (body.challenge) {
+      const challenge = readStaffChallenge(body.challenge);
+      if (!challenge || (await resolvedAnalyticsScope(challenge.email)) === null) {
+        throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
+      }
+      email = challenge.email;
+      firstName = challenge.firstName;
+      lastName = challenge.lastName;
+      if (challenge.enrolled) {
+        const stored = await loadEnrolledTotp(challenge.email);
+        if (!stored) throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
+        secret = stored.secret;
+        minCounter = stored.lastCounter;
+        const names = resolveStaffNames(challenge, stored, challenge.email);
+        firstName = names.firstName;
+        lastName = names.lastName;
+      } else if (challenge.secret) {
+        secret = challenge.secret;
+      } else {
+        throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
+      }
+    } else if (body.email) {
+      if ((await resolvedAnalyticsScope(body.email)) === null) {
+        throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
+      }
+      const stored = await loadEnrolledTotp(body.email);
       if (!stored) throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
+      email = body.email;
       secret = stored.secret;
       minCounter = stored.lastCounter;
-    } else if (challenge.secret) {
-      secret = challenge.secret;
+      const names = resolveStaffNames({}, stored, body.email);
+      firstName = names.firstName;
+      lastName = names.lastName;
     } else {
       throw unauthorized(STAFF_LOGIN_DENIED, 'internal_login_denied');
     }
@@ -216,7 +263,7 @@ authRouter.post('/internal-login', authLimiter, async (req: Request, res: Respon
     }
 
     try {
-      await saveEnrolledTotp(challenge.email, secret, verified.counter);
+      await saveEnrolledTotp(email, secret, verified.counter, { firstName, lastName });
     } catch {
       throw new HttpError(
         503,
@@ -225,15 +272,16 @@ authRouter.post('/internal-login', authLimiter, async (req: Request, res: Respon
       );
     }
 
+    const fullName = `${firstName} ${lastName}`.replace(/\s+/g, ' ').trim();
     const { user, session } = await openInternalStaffSession({
-      email: challenge.email,
-      firstName: challenge.firstName,
-      lastName: challenge.lastName,
-      fullName: challenge.fullName,
+      email,
+      firstName,
+      lastName,
+      fullName,
     });
 
     setSessionCookies(res, session);
-    await ensureAllowlistedAnalyticsAccess(user, challenge.fullName);
+    await ensureAllowlistedAnalyticsAccess(user, fullName);
     await recordEvent(createUserClient(session.access_token), {
       type: 'auth.signed_in',
       summary: 'signed in to the internal site with Microsoft Authenticator',

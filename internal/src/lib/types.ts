@@ -3,16 +3,39 @@ export type AnalyticsScope = 'investor' | 'internal';
 export interface AnalyticsAccess {
   scope: AnalyticsScope | null;
   displayName: string | null;
+  pendingAccessRequests?: number;
+}
+
+export type AccessRequestStatus = 'pending' | 'approved' | 'denied';
+
+export interface AccessRequest {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  status: AccessRequestStatus;
+  requestedAt: string;
+  lastRequestedAt: string;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  userId: string | null;
+}
+
+export interface AccessRequestList {
+  requests: AccessRequest[];
+  pendingCount: number;
 }
 
 export interface StaffIdentity {
-  firstName: string;
-  lastName: string;
+  firstName?: string;
+  lastName?: string;
   email: string;
 }
 
 export type StaffChallengeResponse =
   | { status: 'code'; challenge: string }
+  | { status: 'pending' }
+  | { status: 'setup' }
   | {
       status: 'enroll';
       challenge: string;
@@ -23,7 +46,8 @@ export type StaffChallengeResponse =
     };
 
 export interface StaffVerify {
-  challenge: string;
+  challenge?: string;
+  email?: string;
   code: string;
 }
 

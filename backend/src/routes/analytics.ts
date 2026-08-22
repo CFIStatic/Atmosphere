@@ -3,11 +3,18 @@ import { createUserClient } from '../lib/supabase.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireAnalytics } from '../middleware/requireAnalytics.js';
 import {
+  accessRequestIdSchema,
   analyticsDatasetSchema,
   analyticsOrgIdSchema,
   analyticsRangeSchema,
 } from '../lib/validation.js';
 import { HttpError } from '../lib/errors.js';
+import {
+  approveAccessRequests,
+  countPendingAccessRequests,
+  denyAccessRequest,
+  listAccessRequests,
+} from '../auth/internalAccessRequests.js';
 import {
   getAccess,
   getAccountDetail,
@@ -43,7 +50,11 @@ analyticsRouter.get('/access', async (req: Request, res: Response, next: NextFun
     await ensureAllowlistedAnalyticsAccess(req.user);
 
     const supabase = createUserClient(req.accessToken!);
-    res.json(await getAccess(supabase));
+    const access = await getAccess(supabase);
+    if (access.scope === 'internal') {
+      access.pendingAccessRequests = await countPendingAccessRequests();
+    }
+    res.json(access);
   } catch (err) {
     next(err);
   }
@@ -167,6 +178,92 @@ analyticsRouter.get(
       const { from, to } = parseRange(req);
       const supabase = createUserClient(req.accessToken!);
       res.json(await getAdminMeteringAnalytics(supabase, from.toISOString(), to.toISOString()));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * GET /api/analytics/access-requests
+ * Employees waiting to join Internal Growth Metrics. Internal admin only.
+ */
+analyticsRouter.get(
+  '/access-requests',
+  requireAnalytics('internal'),
+  async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const requests = await listAccessRequests();
+      res.json({
+        requests,
+        pendingCount: requests.filter((row) => row.status === 'pending').length,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/analytics/access-requests/approve-all
+ * Grant every pending employee internal analytics access.
+ */
+analyticsRouter.post(
+  '/access-requests/approve-all',
+  requireAnalytics('internal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const approved = await approveAccessRequests({
+        allPending: true,
+        reviewerId: req.user!.id,
+      });
+      res.json({
+        approved,
+        pendingCount: await countPendingAccessRequests(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+analyticsRouter.post(
+  '/access-requests/:id/approve',
+  requireAnalytics('internal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = accessRequestIdSchema.safeParse(req.params.id);
+      if (!parsed.success) {
+        throw new HttpError(400, 'Invalid request id', 'invalid_request');
+      }
+      const approved = await approveAccessRequests({
+        ids: [parsed.data],
+        reviewerId: req.user!.id,
+      });
+      if (approved.length === 0) {
+        throw new HttpError(404, 'Access request not found', 'request_not_found');
+      }
+      res.json({ request: approved[0], pendingCount: await countPendingAccessRequests() });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+analyticsRouter.post(
+  '/access-requests/:id/deny',
+  requireAnalytics('internal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = accessRequestIdSchema.safeParse(req.params.id);
+      if (!parsed.success) {
+        throw new HttpError(400, 'Invalid request id', 'invalid_request');
+      }
+      const denied = await denyAccessRequest(parsed.data, req.user!.id);
+      if (!denied) {
+        throw new HttpError(404, 'Access request not found', 'request_not_found');
+      }
+      res.json({ request: denied, pendingCount: await countPendingAccessRequests() });
     } catch (err) {
       next(err);
     }

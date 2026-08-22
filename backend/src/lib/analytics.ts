@@ -47,6 +47,7 @@ export function scopeAtLeast(scope: AnalyticsScope, min: AnalyticsScope): boolea
 export interface AnalyticsAccess {
   scope: AnalyticsScope | null;
   displayName: string | null;
+  pendingAccessRequests?: number;
 }
 
 export interface SummaryPayload {

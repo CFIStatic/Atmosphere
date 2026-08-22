@@ -1,4 +1,6 @@
 import type {
+  AccessRequest,
+  AccessRequestList,
   AccountDetail,
   AnalyticsAccess,
   AuthUser,
@@ -90,6 +92,26 @@ export const api = {
   me: () => request<{ user: AuthUser }>('/api/auth/me'),
 
   access: () => request<AnalyticsAccess>('/api/analytics/access'),
+
+  accessRequests: () => request<AccessRequestList>('/api/analytics/access-requests'),
+
+  approveAccessRequest: (id: string) =>
+    request<{ request: AccessRequest; pendingCount: number }>(
+      `/api/analytics/access-requests/${id}/approve`,
+      { method: 'POST' },
+    ),
+
+  denyAccessRequest: (id: string) =>
+    request<{ request: AccessRequest; pendingCount: number }>(
+      `/api/analytics/access-requests/${id}/deny`,
+      { method: 'POST' },
+    ),
+
+  approveAllAccessRequests: () =>
+    request<{ approved: AccessRequest[]; pendingCount: number }>(
+      '/api/analytics/access-requests/approve-all',
+      { method: 'POST' },
+    ),
 
   overview: (range: RangeParams) =>
     request<OverviewPayload>(`/api/analytics/overview?${rangeQuery(range)}`),
