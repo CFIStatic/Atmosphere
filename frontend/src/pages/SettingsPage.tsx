@@ -41,7 +41,6 @@ import {
   CreditCardIcon,
 } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
-import { WORK_VERIFICATION_TOUR, queueProductTour } from '../lib/productTour';
 
 type SectionId =
   | 'profile'
@@ -854,7 +853,6 @@ function FieldCaptureAppSection() {
 
 function PreferencesSection() {
   const preferences = usePreferences();
-  const navigate = useNavigate();
 
   return (
     <Card
@@ -871,26 +869,6 @@ function PreferencesSection() {
             description={toggle.description}
           />
         ))}
-
-        <div className="flex flex-wrap items-center justify-between gap-4 py-4">
-          <div>
-            <p className="text-sm font-medium text-ink-900">Product walkthrough</p>
-            <p className="mt-0.5 text-sm text-ink-600">
-              Replay the guided tour with simulated previews of Field Capture and the Evidence
-              Platform.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              queueProductTour(WORK_VERIFICATION_TOUR.id);
-              navigate('/verifier-library?tour=1');
-            }}
-            className="rounded-lg border border-line bg-paper-0 px-4 py-2 text-sm font-medium text-ink-800 transition hover:bg-paper-100"
-          >
-            Replay tour
-          </button>
-        </div>
 
         <div className="flex items-center justify-between gap-4 py-4">
           <div>

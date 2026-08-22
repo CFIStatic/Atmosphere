@@ -8,8 +8,6 @@ import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
 import { getPlatform } from '../lib/usePlatform';
 import { SetupStepCard, SetupWizardShell } from '../components/setup/SetupWizardShell';
 import { SetupBillingStep } from '../components/setup/SetupBillingStep';
-import { scheduleWorkVerificationTour } from '../components/tour/ProductTourHost';
-import { withTourQuery } from '../lib/productTour';
 import {
   SETUP_DEFAULTS,
   initialSetupStep,
@@ -133,8 +131,7 @@ export function SignupPage() {
   const orgStepValid = mode === 'join' ? joinCodeValid : orgName.trim().length >= 2;
 
   function enterApp() {
-    scheduleWorkVerificationTour();
-    queueRedirect(withTourQuery(redirectTo));
+    queueRedirect(redirectTo);
   }
 
   async function continueAfterWorkspace() {

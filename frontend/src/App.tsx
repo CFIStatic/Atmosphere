@@ -17,7 +17,6 @@ import { SignupPage } from './pages/SignupPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
-import { ProductTourHost } from './components/tour/ProductTourHost';
 import { DocumentTitle } from './components/DocumentTitle';
 import { SpinnerIcon } from './components/icons';
 import { PLATFORM_HOME } from './lib/platforms';
@@ -276,7 +275,6 @@ export default function App() {
       {import.meta.env.VITE_DEMO ? <DemoRouteBridge /> : null}
       <AuthProvider>
         <DocumentTitle />
-        <ProductTourHost />
         <Suspense fallback={<FullScreenSpinner />}>
           <Routes>
           <Route path="/login" element={<LoginPage />} />

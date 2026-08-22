@@ -19,18 +19,22 @@ const authState = vi.hoisted(() => ({
   logout: vi.fn(),
 }));
 
+const queueRedirect = vi.hoisted(() => vi.fn());
+
+const apiMocks = vi.hoisted(() => ({
+  getBillingOnboarding: vi.fn().mockResolvedValue({ required: false, complete: true }),
+  startOnboardingCheckout: vi.fn(),
+  updateProfile: vi.fn(),
+  createOrg: vi.fn(),
+  joinOrg: vi.fn(),
+}));
+
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => authState,
 }));
 
 vi.mock('../lib/api', () => ({
-  api: {
-    getBillingOnboarding: () => Promise.resolve({ required: false, complete: true }),
-    startOnboardingCheckout: vi.fn(),
-    updateProfile: vi.fn(),
-    createOrg: vi.fn(),
-    joinOrg: vi.fn(),
-  },
+  api: apiMocks,
   ApiError: class ApiError extends Error {
     status = 400;
     code = 'signup_failed';
@@ -38,7 +42,7 @@ vi.mock('../lib/api', () => ({
 }));
 
 vi.mock('../hooks/usePendingAuthRedirect', () => ({
-  usePendingAuthRedirect: () => vi.fn(),
+  usePendingAuthRedirect: () => queueRedirect,
 }));
 
 import { SignupPage } from './SignupPage';
@@ -60,6 +64,9 @@ describe('SignupPage', () => {
     authState.signup.mockReset();
     authState.refreshMembership.mockReset();
     authState.logout.mockReset().mockResolvedValue(undefined);
+    queueRedirect.mockReset();
+    apiMocks.getBillingOnboarding.mockReset().mockResolvedValue({ required: false, complete: true });
+    apiMocks.createOrg.mockReset().mockResolvedValue({});
   });
 
   it('starts on account details only — workspace and join code wait for step 2', () => {
@@ -152,5 +159,33 @@ describe('SignupPage', () => {
     expect(authState.logout.mock.invocationCallOrder[0]).toBeLessThan(
       authState.signup.mock.invocationCallOrder[0]!,
     );
+  });
+
+  it('enters the app after workspace setup without starting a product tour', async () => {
+    const user = userEvent.setup();
+    authState.user = {
+      id: 'user-2',
+      email: 'new@acme.com',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastSignInAt: '2026-08-22T00:00:00.000Z',
+      emailConfirmed: true,
+      metadata: {},
+    };
+    authState.membership = null;
+    authState.refreshMembership
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ org: { id: 'org-1', name: 'Meridian Services' } });
+
+    renderSignup('/signup?step=2');
+    await user.type(screen.getByLabelText('Company name'), 'Meridian Services');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+
+    await waitFor(() => {
+      expect(queueRedirect).toHaveBeenCalled();
+    });
+    expect(apiMocks.createOrg).toHaveBeenCalled();
+    const destination = String(queueRedirect.mock.calls[0]?.[0] ?? '');
+    expect(destination).toMatch(/^\//);
+    expect(destination).not.toMatch(/[?&]tour=/);
   });
 });
