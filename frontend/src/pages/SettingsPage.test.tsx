@@ -56,6 +56,19 @@ vi.mock('../lib/usePlatform', () => ({
   usePlatform: () => ['operations', vi.fn()],
 }));
 
+vi.mock('../lib/avatarImage', async () => {
+  const actual = await vi.importActual<typeof import('../lib/avatarImage')>('../lib/avatarImage');
+  return {
+    ...actual,
+    prepareAvatarUpload: vi.fn(async (file: File) => ({
+      filename: 'avatar.png',
+      mediaType: 'image/png',
+      contentBase64: 'cGlj',
+      previewUrl: `blob:test/${file.name}`,
+    })),
+  };
+});
+
 import { SettingsPage } from './SettingsPage';
 
 function renderSettings() {
@@ -87,8 +100,9 @@ describe('Settings profile photo', () => {
     authState.profile.avatarUrl = 'https://img.example/jack.jpg';
     renderSettings();
 
-    const photo = screen.getByRole('img', { hidden: true });
-    expect(photo).toHaveAttribute('src', 'https://img.example/jack.jpg');
+    expect(document.querySelector('img')?.getAttribute('src')).toBe(
+      'https://img.example/jack.jpg',
+    );
     expect(screen.getByText('Change photo')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Remove' })).toBeInTheDocument();
 
@@ -97,5 +111,20 @@ describe('Settings profile photo', () => {
     });
     await userEvent.click(screen.getByRole('button', { name: 'Remove' }));
     expect(apiMocks.removeAvatar).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends a picked photo to the profile avatar endpoint', async () => {
+    apiMocks.uploadAvatar.mockResolvedValue({
+      profile: { ...authState.profile, avatarUrl: 'data:image/png;base64,aaa' },
+    });
+    const user = userEvent.setup();
+    renderSettings();
+
+    const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'icon.png', {
+      type: 'image/png',
+    });
+    await user.upload(screen.getByLabelText('Upload a profile photo or icon'), file);
+
+    expect(apiMocks.uploadAvatar).toHaveBeenCalled();
   });
 });
