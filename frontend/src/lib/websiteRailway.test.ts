@@ -44,9 +44,28 @@ describe('Railway corporate-website image', () => {
     const workflow = read('.github/workflows/deploy-website.yml');
     expect(workflow).toContain('resolveRailwayService.mjs');
     expect(workflow).toContain('RAILWAY_WEBSITE_SERVICE');
+    expect(workflow).toContain('website/scripts/apply-railway-config.sh');
 
     const resolver = read('backend/scripts/resolveRailwayService.mjs');
     expect(resolver).toContain("website: ['corporate website', 'website']");
     expect(resolver).toContain("'corporate website': ['corporate website', 'website']");
+  });
+
+  it('applies nginx + GET /health onto the Railway service from CI', () => {
+    const script = read('website/scripts/apply-railway-config.sh');
+    expect(script).toContain('website/Dockerfile');
+    expect(script).toContain('/usr/local/bin/website-start.sh');
+    expect(script).toContain("healthcheck_path=\"/health\"");
+    expect(script).toContain('Corporate Website');
+    expect(script).toContain('not node dist/index.js');
+
+    const json = JSON.parse(read('website/railway.json')) as {
+      build: { dockerfilePath: string };
+      deploy: { healthcheckPath: string; startCommand: string; healthcheckTimeout: number };
+    };
+    expect(json.build.dockerfilePath).toBe('website/Dockerfile');
+    expect(json.deploy.healthcheckPath).toBe('/health');
+    expect(json.deploy.startCommand).toBe('/usr/local/bin/website-start.sh');
+    expect(json.deploy.healthcheckTimeout).toBe(60);
   });
 });
