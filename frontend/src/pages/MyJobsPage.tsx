@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, type ClaimedJob, type FieldJobList } from '../lib/api';
+import { jobSharePagePath } from '../lib/jobSharePath';
 import { SpinnerIcon } from '../components/icons';
 
 /**
@@ -176,7 +177,7 @@ function JobCard({ job, showOrg }: { job: ClaimedJob; showOrg: boolean }) {
   return (
     <li>
       <Link
-        to={`/shared/${job.accessToken}`}
+        to={jobSharePagePath(job.accessToken)}
         className="block rounded-xl border border-line bg-paper-50 px-4 py-3 hover:border-brand-300"
         data-job={job.jobId}
       >

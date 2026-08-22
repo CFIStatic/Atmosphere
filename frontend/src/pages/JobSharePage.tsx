@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { SpinnerIcon } from '../components/icons';
 import { readCapture, todayISO } from '../lib/proofCapture';
 import { signupHref } from '../lib/authRedirect';
+import { jobShareApiPath, jobSharePagePath, jobShareTokenFromRoute } from '../lib/jobSharePath';
 import { CaptureGuideSteps } from '../components/shared/CaptureGuideSteps';
 import { ClaimInvitationPanel } from '../components/shared/ClaimInvitationPanel';
 import { readFieldSession, writeFieldSession } from './MyJobsPage';
@@ -28,7 +29,7 @@ import type { CaptureGuide } from '../lib/api';
  * whole feature and worth the cost of not being able to take it back.
  */
 
-const API = '/api/job-share';
+const shareApi = jobShareApiPath;
 
 interface ScopeItem {
   id: string;
@@ -79,9 +80,10 @@ const STATE_STYLE: Record<string, string> = {
 };
 
 export function JobSharePage() {
-  const { token = '' } = useParams();
+  const params = useParams();
+  const token = jobShareTokenFromRoute(params);
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
+  const inviteReturnTo = jobSharePagePath(token, searchParams.get('email'));
   const inviteEmail = useMemo(() => {
     const raw = searchParams.get('email')?.trim() ?? '';
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw) ? raw : '';
@@ -100,8 +102,8 @@ export function JobSharePage() {
   const load = useCallback(async () => {
     try {
       const [record, proofs] = await Promise.all([
-        call<ShareView>(`${API}/${token}`),
-        call<{ days: ProofDay[] }>(`${API}/${token}/proof`).catch(() => ({ days: [] as ProofDay[] })),
+        call<ShareView>(shareApi(token)),
+        call<{ days: ProofDay[] }>(shareApi(token, '/proof')).catch(() => ({ days: [] as ProofDay[] })),
       ]);
       setView(record);
       setDays(proofs.days);
@@ -118,7 +120,7 @@ export function JobSharePage() {
     if (!view?.currentRevision || !name.trim()) return;
     setBusy('accept');
     try {
-      await call(`${API}/${token}/accept`, {
+      await call(shareApi(token, '/accept'), {
         method: 'POST',
         body: JSON.stringify({ name, revision: view.currentRevision }),
       });
@@ -134,7 +136,7 @@ export function JobSharePage() {
     if (!question.trim()) return;
     setBusy('ask');
     try {
-      await call(`${API}/${token}/ask`, {
+      await call(shareApi(token, '/ask'), {
         method: 'POST',
         body: JSON.stringify({
           body: question,
@@ -155,19 +157,11 @@ export function JobSharePage() {
   const todaysDay = days.find((d) => d.workDate === today);
 
   return (
-    <div className="mx-auto min-h-screen max-w-2xl bg-paper-100 px-4 pb-16 pt-6">
+    <div
+      className="mx-auto min-h-screen max-w-2xl bg-paper-100 px-4 pb-16 pt-6"
+      data-testid="invited-job"
+    >
       <header>
-        {/* Only when somebody arrived from the console. A subcontractor
-            following a link from a text message has nothing to go back to, and
-            a dead back button on their screen is a support call. */}
-        {window.history.length > 1 && (
-          <button
-            onClick={() => navigate(-1)}
-            className="mb-3 text-xs font-medium text-ink-500 hover:text-ink-800"
-          >
-            ← Back to the dashboard
-          </button>
-        )}
         <p className="text-xs font-medium uppercase tracking-wide text-brand-600">Job record</p>
         <h1 className="mt-1 text-2xl font-bold text-ink-900">
           {view?.job.title ?? 'Loading…'}
@@ -339,14 +333,9 @@ export function JobSharePage() {
             <section className="mt-5 rounded-xl glass-card p-5">
               <h2 className="text-base font-semibold text-ink-900">This job is on your list</h2>
               <p className="mt-1 text-xs text-ink-600">
-                Every job a general contractor invites you to now shows up in one place.
+                Saved to your Atmosphere account. Stay on this job to review the
+                scope and film the day.
               </p>
-              <Link
-                to="/my-jobs"
-                className="mt-3 inline-block rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-ink-900"
-              >
-                See all your jobs
-              </Link>
             </section>
           ) : (
             <div className="mt-5">
@@ -354,6 +343,7 @@ export function JobSharePage() {
                 token={token ?? ''}
                 company={view.you.company}
                 initialContact={inviteEmail}
+                returnTo={inviteReturnTo}
                 onClaimed={(session) => {
                   writeFieldSession(session);
                   setClaimed(true);
@@ -362,7 +352,11 @@ export function JobSharePage() {
             </div>
           )}
 
-          <AtmospherePitch company={view.you.company} inviteEmail={inviteEmail} />
+          <AtmospherePitch
+            company={view.you.company}
+            inviteEmail={inviteEmail}
+            returnTo={inviteReturnTo}
+          />
         </>
       )}
     </div>
@@ -386,13 +380,16 @@ export function JobSharePage() {
 function AtmospherePitch({
   company,
   inviteEmail,
+  returnTo,
 }: {
   company: string;
   inviteEmail?: string;
+  returnTo?: string;
 }) {
-  const signupLink = signupHref(
-    inviteEmail ? { email: inviteEmail } : undefined,
-  );
+  const signupLink = signupHref({
+    email: inviteEmail || undefined,
+    next: returnTo,
+  });
   return (
     <footer className="mt-8 rounded-xl border border-brand-200 bg-brand-600/5 p-4">
       <p className="text-xs font-medium uppercase tracking-wide text-brand-600">
@@ -457,7 +454,7 @@ function ProofSection({
   const guidePhase = todaysDay?.hasBefore ? 'after' : 'before';
   useEffect(() => {
     let cancelled = false;
-    call<{ guide: CaptureGuide }>(`${API}/${token}/capture-guide?phase=${guidePhase}`)
+    call<{ guide: CaptureGuide }>(`${shareApi(token, '/capture-guide')}?phase=${guidePhase}`)
       .then((res) => {
         if (!cancelled) setGuide(res.guide);
       })
@@ -480,7 +477,7 @@ function ProofSection({
 
       setStep('Getting somewhere to put it…');
       const extension = (file.name.split('.').pop() ?? 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '');
-      const slot = await call<{ path: string; token: string; uploadUrl?: string }>(`${API}/${token}/proof/upload-url`, {
+      const slot = await call<{ path: string; token: string; uploadUrl?: string }>(shareApi(token, '/proof/upload-url'), {
         method: 'POST',
         body: JSON.stringify({ workDate: today, phase, extension: extension || 'mp4' }),
       });
@@ -498,7 +495,7 @@ function ProofSection({
       if (!put.ok) throw new Error('The upload did not go through. Try again on a better signal.');
 
       setStep('Filing it…');
-      const result = await call<{ problems: string[] }>(`${API}/${token}/proof`, {
+      const result = await call<{ problems: string[] }>(shareApi(token, '/proof'), {
         method: 'POST',
         body: JSON.stringify({
           workDate: today,
@@ -686,7 +683,7 @@ function ProofSection({
       {done?.startsWith('After') && (
         <p className="mt-2 text-[11px] text-ink-500">
           That video is your record as much as the job's.{' '}
-          <Link to={signupHref()} className="font-medium text-brand-600 hover:underline">
+          <Link to={signupHref({ next: jobSharePagePath(token) })} className="font-medium text-brand-600 hover:underline">
             Keep every day's proof in your own Atmosphere account
           </Link>
           {' '}— free for subs.
