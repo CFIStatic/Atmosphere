@@ -202,7 +202,7 @@ jobs:
         run: |
           set -euo pipefail
           project="${RAILWAY_PROJECT_ID}"
-          service="${RAILWAY_APP_SERVICE:-${RAILWAY_WEB_SERVICE:-Atmosphere-web}}"
+          service="${RAILWAY_APP_SERVICE:-${RAILWAY_WEB_SERVICE:-Login & Dashboard}}"
           echo "Deploying office app to Railway service '$service' in project $project."
           echo "That service's Config File must be /frontend/railway.toml (see docs/production.md)."
           railway link --project "$project" --environment production --service "$service" \
