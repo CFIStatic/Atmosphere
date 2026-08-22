@@ -78,7 +78,7 @@ The office image reverse-proxies `/api` at runtime. Set this on the office
 service **before** the first Autodeploy:
 
 ```text
-API_UPSTREAM=http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}
+API_UPSTREAM=http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}
 ```
 
 Leave `VITE_API_BASE_URL` empty so the SPA uses same-origin `/api` and
@@ -102,7 +102,7 @@ repo root:
 
 ```bash
 cat api.upstream
-# http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}
+# http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}
 ```
 
 Plain `http://`, private domain, no public host. Set to
@@ -232,11 +232,26 @@ Symptom: the `website` (Corporate Website) service shows **Deployment failed
 during network process → Healthcheck failure** after ~5 minutes, on commits
 that never touched `website/`, and the deployment says **via GitHub**.
 
-Cause: the service's Config File was never set, so GitHub autodeploys resolve
-the repo-root `/railway.toml` (the backend's). The nginx image then deployed
-with the backend's settings and never answered the probe. The CLI deploys from
-`deploy-website.yml` worked because that job copies `website/railway.toml`
-over the upload root — which masked the missing setting.
+Cause, two layers that look the same from the dashboard:
+
+1. The service's Config File was never set, so GitHub autodeploys resolve
+   the repo-root `/railway.toml` (the backend's). The nginx image then
+   deployed with the backend's 300s `/api/health` probe. A ~5 minute
+   Network healthcheck is that probe, not nginx.
+2. `API_UPSTREAM` still referenced `${{Atmosphere.…}}` after the BFF was
+   renamed **Atmosphere APIs**. Railway injects `http://:`, nginx dies with
+   `invalid port in upstream ":"`, and nothing answers `/health`. The live
+   hostname can still serve the previous replica while every new deploy
+   fails. The CLI deploys from `deploy-website.yml` stamp `api.upstream` onto
+   the service, so a bad template here fails every website ship.
+
+The image now rewrites an unusable `API_UPSTREAM` before nginx binds, so
+`GET /health` and `GET /api/health` answer locally even when the BFF
+reference is empty. `api.upstream` points at `"Atmosphere APIs"`.
+
+The CLI deploys from `deploy-website.yml` also copy `website/railway.toml`
+over the upload root — which used to mask a missing Config File when the
+upstream was still valid.
 
 A second, later failure mode: `railwayUp.sh` treated Railway's in-window
 `Attempt #N failed with service unavailable. Continuing to retry` lines as a
@@ -292,7 +307,7 @@ In the Railway project that already runs the BFF (`Atmosphere`):
 
    | Variable | Value |
    | --- | --- |
-   | `API_UPSTREAM` | `http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}` |
+   | `API_UPSTREAM` | `http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}` |
 
    Replace `Atmosphere` with the BFF service name if you overrode
    `RAILWAY_SERVICE`. Same value on every front door — see

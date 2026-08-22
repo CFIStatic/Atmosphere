@@ -1,0 +1,23 @@
+#!/bin/sh
+# nginx 1.27 docker-entrypoint: *.envsh is sourced, *.sh is launched.
+# Both must be +x or the file is ignored ("Ignoring …, not executable").
+# A launched *.sh cannot export into 20-envsubst-on-templates.sh, which is
+# how API_UPSTREAM=http://: reached nginx as `invalid port in upstream ":"`.
+#
+# Railway resolves a missing ${{Service.FIELD}} to empty. After the BFF was
+# renamed Atmosphere APIs, http://${{Atmosphere.…}} became http://:. Fall
+# back so GET /health still answers.
+#
+# docker-entrypoint.sh runs with `set -e`. Use case, not grep: BusyBox ash
+# exits on grep status 1 even inside `if ! fn`.
+
+case "${API_UPSTREAM:-}" in
+  http://[A-Za-z0-9._-]*|https://[A-Za-z0-9._-]*)
+    ;;
+  *)
+    echo "website: API_UPSTREAM='${API_UPSTREAM:-}' is not a host:port URL; falling back so nginx can bind." >&2
+    API_UPSTREAM="https://atmosphere-production.up.railway.app"
+    ;;
+esac
+
+export API_UPSTREAM

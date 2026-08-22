@@ -23,6 +23,9 @@ ENV NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM)$$
 
 COPY website/nginx/default.conf.template /etc/nginx/templates/default.conf.template
 COPY website/nginx/website-start.sh /usr/local/bin/website-start.sh
+# *.envsh is sourced by nginx 1.27; *.sh is launched as a subprocess.
+# Must be +x or docker-entrypoint ignores the file.
+COPY website/nginx/15-validate-website-env.envsh /docker-entrypoint.d/15-validate-website-env.envsh
 COPY website /usr/share/nginx/html
 RUN rm -rf /usr/share/nginx/html/nginx /usr/share/nginx/html/Dockerfile \
       /usr/share/nginx/html/railway.toml /usr/share/nginx/html/README.md \
@@ -30,6 +33,7 @@ RUN rm -rf /usr/share/nginx/html/nginx /usr/share/nginx/html/Dockerfile \
       /usr/share/nginx/html/scripts \
   && rm -f /etc/nginx/conf.d/default.conf \
   && chmod +x /usr/local/bin/website-start.sh \
+      /docker-entrypoint.d/15-validate-website-env.envsh \
   && find /usr/share/nginx/html -name '*.html' -exec \
       sed -i "s|<html lang=\"en\">|<html lang=\"en\" data-app-origin=\"${APP_ORIGIN}\">|" {} + \
   && sed -i "s|https://REPLACE-WITH-YOUR-DOMAIN|${SITE_ORIGIN}|g" \

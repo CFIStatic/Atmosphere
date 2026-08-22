@@ -13,7 +13,8 @@ server {
   root /usr/share/nginx/html;
   index index.html;
 
-  # Platform probes must never proxy to the BFF. A hung API_UPSTREAM is what
+  # Platform probes must never proxy to the BFF. A hung or empty
+  # API_UPSTREAM (`http://:` after a renamed-service reference) is what
   # turned GitHub Autodeploy into "Deployment failed during network process".
   location = /health {
     access_log off;

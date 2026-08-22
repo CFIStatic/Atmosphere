@@ -14,4 +14,12 @@ export PORT="${PORT:-8080}"
 # Do not default to the public https host — that hairpins /api and 502s forms.
 export API_UPSTREAM="${API_UPSTREAM:-http://127.0.0.1:4000}"
 
+# Rewrite http://: / unresolved ${{…}} before envsubst. nginx 1.27 sources
+# *.envsh (and ignores a non-executable *.sh). See
+# 15-validate-website-env.envsh — that is the Corporate Website healthcheck loop.
+if [ -f /docker-entrypoint.d/15-validate-website-env.envsh ]; then
+  # shellcheck disable=SC1091
+  . /docker-entrypoint.d/15-validate-website-env.envsh
+fi
+
 exec /docker-entrypoint.sh nginx -g 'daemon off;'
