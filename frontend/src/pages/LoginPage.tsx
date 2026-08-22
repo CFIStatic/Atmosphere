@@ -144,7 +144,6 @@ export function LoginPage() {
   }
 
   const createAccountHref = signupHref({ next: redirectTo, email: email.trim() || undefined });
-  const returningToUsage = redirectTo === '/usage' || redirectTo.startsWith('/usage?');
 
   return (
     <div className="relative flex min-h-screen flex-col bg-paper-100">
@@ -213,9 +212,7 @@ export function LoginPage() {
                 </p>
                 <h1 className="mt-2 text-2xl font-bold tracking-tight text-ink-900">Welcome back</h1>
                 <p className="mt-1.5 text-sm text-ink-600">
-                  {returningToUsage
-                    ? 'Sign in to open your usage dashboard for this billing period.'
-                    : 'Sign in to your Atmosphere workspace.'}
+                  Sign in to your Atmosphere workspace.
                 </p>
 
                 {user && (
@@ -251,12 +248,6 @@ export function LoginPage() {
                   </div>
                 )}
 
-                {returningToUsage && (
-                  <p className="mt-4 rounded-lg border border-brand-200 bg-brand-50/80 px-3.5 py-3 text-sm text-ink-700">
-                    After you sign in, you will land on <strong>Usage</strong> — jobs processed,
-                    compute units, and your estimated bill.
-                  </p>
-                )}
 
                 {error && (
                   <div
