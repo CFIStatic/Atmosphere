@@ -87,6 +87,7 @@ describe('Railway corporate-website image', () => {
     expect(workflow).toContain('website/.railway-up-stamp');
     expect(workflow).toContain("API_UPSTREAM='http://:'");
     expect(workflow).toContain('cursor/fix-website-healthcheck-e3e4');
+    expect(workflow).toContain('cancel-in-progress: true');
 
     const resolver = read('backend/scripts/resolveRailwayService.mjs');
     expect(resolver).toContain("website: ['corporate website', 'website']");
