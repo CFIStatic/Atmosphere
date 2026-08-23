@@ -26,7 +26,14 @@ import { buildCaptureGuide } from '../shared/captureGuide.js';
 import { scopeForParty } from '../shared/jobRecord.js';
 import { analyseLongRecording } from '../shared/longAnalyst.js';
 import { prepareVideoFrames } from '../shared/videoIntelligence.js';
-import { probeMetadata } from '../verification/frames/extract.js';
+import {
+  extractPreviewClip,
+  previewClipWindow,
+  probeMetadata,
+} from '../verification/frames/extract.js';
+import { readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   narrateProofVideo,
   observeLiveFrame,
@@ -772,6 +779,8 @@ async function ensureSparseFramesFromStorage(
  * process rather than on every list render.
  */
 const stillsAttempted = new Set<string>();
+const previewAttempted = new Set<string>();
+const previewReady = new Map<string, string>();
 
 export async function ensureStillsAndDuration(
   admin: any,
@@ -839,7 +848,114 @@ export async function ensureStillsAndDuration(
     }
   }
 
+  if (storagePath) {
+    try {
+      await ensurePreviewClip(admin, proofId);
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
   return { durationSeconds, longForm, error };
+}
+
+/** Where the cut-from-the-file preview lives, next to the original. */
+export function previewObjectPath(proof: {
+  org_id: string;
+  job_id: string;
+  party_id: string;
+  work_date: string;
+  phase: string;
+}): string {
+  return `${proof.org_id}/${proof.job_id}/${proof.party_id}/${proof.work_date}-${proof.phase}-preview.mp4`;
+}
+
+/**
+ * Cut a few seconds of the recorded file into an H.264 MP4 the list can play.
+ *
+ * Idempotent. A clip that already has preview_storage_path is a signed URL.
+ * One that does not gets FFmpeg over the stored object, then the path is
+ * written back so the next list render does not cut it again.
+ *
+ * This is the recording itself — not a drawn frame and not a demo pattern.
+ */
+export async function ensurePreviewClip(
+  admin: any,
+  proofId: string,
+): Promise<{ url: string | null; durationSeconds: number | null }> {
+  const previewSelect =
+    'id, org_id, job_id, party_id, work_date, phase, storage_path, preview_storage_path, duration_seconds';
+  const fallbackSelect =
+    'id, org_id, job_id, party_id, work_date, phase, storage_path, duration_seconds';
+  let { data: proof, error: proofError } = await admin
+    .from('job_proofs')
+    .select(previewSelect)
+    .eq('id', proofId)
+    .maybeSingle();
+  if (proofError && /preview_storage_path/i.test(proofError.message ?? '')) {
+    ({ data: proof, error: proofError } = await admin
+      .from('job_proofs')
+      .select(fallbackSelect)
+      .eq('id', proofId)
+      .maybeSingle());
+  }
+  if (proofError || !proof?.storage_path) return { url: null, durationSeconds: null };
+
+  const durationSeconds =
+    Number((proof as any).duration_seconds) > 0 ? Number((proof as any).duration_seconds) : null;
+
+  const sign = async (path: string) => {
+    const { data } = await admin.storage.from(PROOF_BUCKET).createSignedUrl(path, 3600);
+    return (data as { signedUrl?: string } | null)?.signedUrl ?? null;
+  };
+
+  const knownPath =
+    (proof as any).preview_storage_path || previewReady.get(proofId) || null;
+  if (knownPath) {
+    const url = await sign(knownPath);
+    if (url) return { url, durationSeconds };
+  }
+
+  if (previewAttempted.has(proofId)) return { url: null, durationSeconds };
+  previewAttempted.add(proofId);
+
+  const { data: source } = await admin.storage
+    .from(PROOF_BUCKET)
+    .createSignedUrl((proof as any).storage_path, 600);
+  if (!source?.signedUrl) return { url: null, durationSeconds };
+
+  const win = previewClipWindow(durationSeconds);
+  const outPath = join(tmpdir(), `atm-preview-${proofId}.mp4`);
+  try {
+    await extractPreviewClip({
+      filePath: source.signedUrl,
+      outPath,
+      startSeconds: win.start,
+      durationSeconds: win.span,
+    });
+    const bytes = await readFile(outPath);
+    const path = previewObjectPath(proof as any);
+    const { error: uploadError } = await admin.storage.from(PROOF_BUCKET).upload(path, bytes, {
+      contentType: 'video/mp4',
+      upsert: true,
+    });
+    if (uploadError) throw new Error(uploadError.message);
+    await admin
+      .from('job_proofs')
+      .update({ preview_storage_path: path })
+      .eq('id', proofId)
+      .then((res: { error?: { message?: string } | null }) => {
+        if (res?.error && !/preview_storage_path/i.test(res.error.message ?? '')) {
+          throw new Error(res.error.message);
+        }
+      });
+    previewReady.set(proofId, path);
+    previewAttempted.delete(proofId);
+    const url = await sign(path);
+    return { url, durationSeconds };
+  } finally {
+    await rm(outPath, { force: true }).catch(() => undefined);
+  }
 }
 
 async function finishProofActions(

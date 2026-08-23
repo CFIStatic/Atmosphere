@@ -154,9 +154,10 @@ test('serialization: labels attached, integrity computed, flag derived', () => {
   // Without a separate narration_text, dictation falls back to the summary —
   // the office always has something to read next to the video.
   assert.equal(item.analysis?.dictation, 'The slope is stripped.');
-  // No still was passed, so the row carries no poster and the portal draws
-  // its placeholder rather than pointing an <img> at nothing.
+  // No still or file URL was passed, so the row carries neither and the
+  // portal draws its placeholder rather than pointing a player at nothing.
   assert.equal(item.posterUrl, null);
+  assert.equal(item.previewUrl, null);
 });
 
 test('serialization: a still out of the clip rides along as the poster', () => {
@@ -190,13 +191,16 @@ test('serialization: a still out of the clip rides along as the poster', () => {
     proof: base,
     ...named,
     posterUrl: 'https://storage.example/sign/frame.jpg?token=abc',
+    previewUrl: 'https://storage.example/sign/clip.webm?token=def',
   });
   assert.equal(withPoster.posterUrl, 'https://storage.example/sign/frame.jpg?token=abc');
+  assert.equal(withPoster.previewUrl, 'https://storage.example/sign/clip.webm?token=def');
 
   // A clip whose stills have not been extracted yet is null, never undefined:
   // the portal tests the field to decide between a real frame and a drawing.
   const withoutPoster = serializeEvidence({ proof: base, ...named, posterUrl: null });
   assert.equal(withoutPoster.posterUrl, null);
+  assert.equal(withoutPoster.previewUrl, null);
 });
 
 test('serialization: office dictation prefers narration_text over the day summary', () => {

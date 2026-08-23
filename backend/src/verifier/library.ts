@@ -171,6 +171,12 @@ export function serializeEvidence(input: {
    * than showing a broken one.
    */
   posterUrl?: string | null;
+  /**
+   * A signed URL of the recorded file itself, so the list can play a muted
+   * snippet instead of a still. Null when the object is missing. Not a
+   * custody opening — that stays for the route that hands over the player.
+   */
+  previewUrl?: string | null;
 }) {
   const proof = input.proof;
   const checks: StoredCheck[] = Array.isArray(proof.checks) ? proof.checks : [];
@@ -216,6 +222,9 @@ export function serializeEvidence(input: {
     // What the clip looks like, not what the file is called. A list of videos
     // that all render the same drawn rectangle is a list nobody can scan.
     posterUrl: input.posterUrl ?? null,
+    // The file itself, for a short muted play in the preview cell. A still
+    // is a guess at one moment; the recording is what the crew filmed.
+    previewUrl: input.previewUrl ?? null,
     gps:
       proof.lat === null || proof.lat === undefined
         ? null

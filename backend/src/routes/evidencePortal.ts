@@ -5,7 +5,12 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { HttpError } from '../lib/errors.js';
-import { ensureStillsAndDuration, proofVideoUrl, recordAccess } from './proofOfWork.js';
+import {
+  ensurePreviewClip,
+  ensureStillsAndDuration,
+  proofVideoUrl,
+  recordAccess,
+} from './proofOfWork.js';
 import {
   answerFromClip,
   clipRecordFromEvidenceItem,
@@ -109,7 +114,7 @@ async function assembleLibrary(client: any, orgId: string, proofs: any[]) {
   const jobIds = [...new Set(proofs.map((p) => p.job_id))];
   const partyIds = [...new Set(proofs.map((p) => p.party_id).filter(Boolean))];
 
-  const [jobs, parties, episodes, posters] = await Promise.all([
+  const [jobs, parties, episodes, posters, previews] = await Promise.all([
     jobIds.length
       ? client.from('crm_jobs').select('id, title, job_number').in('id', jobIds)
       : Promise.resolve({ data: [] }),
@@ -124,6 +129,7 @@ async function assembleLibrary(client: any, orgId: string, proofs: any[]) {
           .in('job_id', jobIds)
       : Promise.resolve({ data: [] }),
     posterUrls(proofs.map((p) => p.id)),
+    previewUrls(proofs),
   ]);
 
   const jobById = new Map<string, any>((jobs.data ?? []).map((j: any) => [j.id, j]));
@@ -150,6 +156,7 @@ async function assembleLibrary(client: any, orgId: string, proofs: any[]) {
       tier: tierByDay.get(dayKey) ?? null,
       dayHasAfter: daysWithAfter.has(dayKey),
       posterUrl: posters.get(proof.id) ?? null,
+      previewUrl: previews.get(proof.id) ?? null,
     });
   });
 }
@@ -255,7 +262,55 @@ async function posterUrls(proofIds: string[]): Promise<Map<string, string>> {
       if (url) out.set(proofId, url);
     }
   } catch {
-    // Best-effort. A storage hiccup costs the previews, never the list.
+    // Best-effort. A storage hiccup costs the stills, never the list.
+  }
+  return out;
+}
+
+/**
+ * Signed URLs of the cut-from-the-file preview clips.
+ *
+ * Only the H.264 snippet FFmpeg cut from the recording — never a drawn
+ * frame and never a demo pattern. Clips that have not been cut yet are
+ * signed on demand by GET .../preview, and backfilled here so the next
+ * list open already has them.
+ *
+ * Not a custody opening. Four muted seconds in a list is not opening
+ * the file; that log stays on the route that hands over the player.
+ */
+async function previewUrls(
+  proofs: Array<{
+    id: string;
+    storage_path?: string | null;
+    preview_storage_path?: string | null;
+  }>,
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const pathByProof = new Map<string, string>();
+  for (const proof of proofs) {
+    if (proof.preview_storage_path) pathByProof.set(proof.id, proof.preview_storage_path);
+  }
+
+  if (!pathByProof.size) return out;
+
+  const admin = createAdminClient();
+  if (!admin) return out;
+
+  try {
+    const { data: signed } = await admin.storage
+      .from(PROOF_BUCKET)
+      .createSignedUrls([...pathByProof.values()], 3600);
+
+    const urlByPath = new Map<string, string>();
+    for (const row of (signed ?? []) as any[]) {
+      if (row?.path && row?.signedUrl) urlByPath.set(row.path, row.signedUrl);
+    }
+    for (const [proofId, path] of pathByProof) {
+      const url = urlByPath.get(path);
+      if (url) out.set(proofId, url);
+    }
+  } catch {
+    // Best-effort. A storage hiccup costs the moving preview, never the list.
   }
   return out;
 }
@@ -515,6 +570,41 @@ evidencePortalRouter.get(
 
 /** GET /api/evidence-portal/evidence/:proofId/video — minted and logged. */
 evidencePortalRouter.get('/evidence/:proofId/video', proofVideoUrl);
+
+/**
+ * GET /api/evidence-portal/evidence/:proofId/preview
+ * A few seconds cut from the recorded file. Generated on first ask.
+ */
+evidencePortalRouter.get(
+  '/evidence/:proofId/preview',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { orgId, supabase } = await requireOrgContext(req);
+      const { data: proof } = await supabase
+        .from('job_proofs')
+        .select('id')
+        .eq('org_id', orgId)
+        .eq('id', req.params.proofId)
+        .maybeSingle();
+      if (!proof) throw new HttpError(404, 'No such clip.', 'not_found');
+
+      const admin = createAdminClient();
+      if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');
+
+      const preview = await ensurePreviewClip(admin, req.params.proofId);
+      if (!preview.url) {
+        throw new HttpError(404, 'No recorded file to preview.', 'no_preview');
+      }
+      res.json({
+        url: preview.url,
+        durationSeconds: preview.durationSeconds,
+        expiresInSeconds: 3600,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 /**
  * POST /api/evidence-portal/evidence/:proofId/ask
@@ -1064,6 +1154,35 @@ evidenceShareRouter.get(
       });
 
       res.json({ url: (data as any).signedUrl, expiresInSeconds: 600 });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** GET /api/verifier-share/:token/evidence/:proofId/preview — cut from the file. */
+evidenceShareRouter.get(
+  '/:token/evidence/:proofId/preview',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { share, admin } = await shareForToken(req.params.token, req);
+      const { data: proof } = await admin
+        .from('job_proofs')
+        .select('id')
+        .eq('job_id', share.job_id)
+        .eq('id', req.params.proofId)
+        .maybeSingle();
+      if (!proof) throw new HttpError(404, 'No such clip on this job.', 'not_found');
+
+      const preview = await ensurePreviewClip(admin, req.params.proofId);
+      if (!preview.url) {
+        throw new HttpError(404, 'No recorded file to preview.', 'no_preview');
+      }
+      res.json({
+        url: preview.url,
+        durationSeconds: preview.durationSeconds,
+        expiresInSeconds: 3600,
+      });
     } catch (err) {
       next(err);
     }

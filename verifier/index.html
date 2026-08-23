@@ -484,12 +484,20 @@
   tbody tr:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
   .thumb {
-    width: 84px; height: 50px; border-radius: 4px; overflow: hidden;
+    width: 168px; height: 100px; border-radius: 6px; overflow: hidden;
     background: var(--stage); flex: none; position: relative; display: block;
   }
-  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb img,
+  .thumb video { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+  .thumb .wait {
+    display: none; position: absolute; inset: 0; place-items: center;
+    padding: 8px; text-align: center; color: var(--stage-ink);
+    font-size: 11px; font-weight: 650; line-height: 1.35;
+    background: rgba(28, 25, 23, .42);
+  }
+  .thumb video:not([src]) ~ .wait { display: grid; }
   .thumb .dur {
-    position: absolute; right: 3px; bottom: 3px; padding: 1px 4px; border-radius: 3px;
+    position: absolute; right: 4px; bottom: 4px; padding: 1px 5px; border-radius: 3px;
     background: rgba(0,0,0,.78); color: #fff; font-size: 10px; font-variant-numeric: tabular-nums;
   }
   .titlecell { min-width: 220px; }
@@ -683,6 +691,11 @@
   .player { background: var(--stage); border-radius: 10px; overflow: hidden; flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .player .frame { flex: 1; min-height: 240px; display: grid; place-items: center; }
   .player .frame img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .player-wait {
+    margin: 0; padding: 24px; max-width: 22rem;
+    color: var(--stage-ink); font-size: 14px; font-weight: 550;
+    line-height: 1.45; text-align: center;
+  }
   .controls {
     display: flex; align-items: center; gap: 10px; padding: 9px 11px; flex: none;
     border-top: 1px solid var(--stage-2); color: var(--stage-ink);
@@ -1698,11 +1711,14 @@
   /**
    * The preview cell.
    *
-   * A real clip shows a still out of itself — the frame the pipeline kept,
-   * signed by the portal — because a column of identical drawn rectangles is
-   * a column nobody can scan. The drawn frame stays for the demo artifact,
-   * which has no footage behind it, and for a clip whose stills have not been
-   * extracted yet.
+   * A live clip plays a muted snippet of the file itself — four seconds,
+   * starting half a second in so the opening thumb-over-lens is skipped.
+   * A still (or the drawn demo frame) is only the poster and the fallback
+   * for footage that has no signed URL yet.
+   *
+   * Zero seconds is the MediaRecorder lie: a WebM whose header has no
+   * duration. The overlay prints an em dash until the player reads the
+   * real length, rather than claiming the clip is empty.
    */
   function drawnFrame(item) {
     var after = item && item.after;
@@ -1714,6 +1730,38 @@
     return item.poster || drawnFrame(item);
   }
 
+  function clipLength(s) {
+    if (s == null || !(Number(s) > 0)) return '—';
+    return dur(s);
+  }
+
+  function previewWindow(durationSeconds) {
+    var d = Number(durationSeconds);
+    if (!Number.isFinite(d) || d <= 0) return { start: 0.5, span: 4 };
+    var start = d > 2 ? Math.min(0.5, d * 0.1) : 0;
+    var span = Math.min(4, Math.max(0.75, d - start));
+    return { start: start, span: span };
+  }
+
+  function clipThumbHtml(previewUrl, poster, lengthLabel, previewId) {
+    if (previewUrl || previewId) {
+      // A drawn SVG is not a frame of the file. Using it as poster makes a
+      // real clip look like the placeholder even after the player is ready.
+      var posterAttr = (poster && poster.indexOf('data:image/svg') !== 0)
+        ? ' poster="' + esc(poster) + '"'
+        : '';
+      return '<span class="thumb" data-preview="1">' +
+        '<video class="shot" muted playsinline preload="metadata"' + posterAttr +
+        (previewUrl ? ' data-src="' + esc(previewUrl) + '"' : '') +
+        (previewId ? ' data-preview-id="' + esc(previewId) + '"' : '') +
+        '></video>' +
+        '<span class="wait">Opening the recorded clip…</span>' +
+        '<span class="dur">' + lengthLabel + '</span></span>';
+    }
+    return '<span class="thumb"><img class="shot" alt="" loading="lazy" decoding="async" src="' +
+      esc(poster) + '" /><span class="dur">' + lengthLabel + '</span></span>';
+  }
+
   function clipRow(e) {
     var job = JOBS[e.job] || { name: e.jobName || 'Job', number: null };
     var status = clipStatus(e);
@@ -1721,7 +1769,7 @@
     phase = phase.charAt(0).toUpperCase() + phase.slice(1);
     return '' +
       '<tr tabindex="0" data-id="' + e.id + '">' +
-        '<td><span class="thumb"><img class="shot" alt="" loading="lazy" decoding="async" src="' + esc(thumbFor(e)) + '" /><span class="dur">' + dur(e.duration) + '</span></span></td>' +
+        '<td>' + clipThumbHtml(e.previewUrl, thumbFor(e), clipLength(e.duration), e._remote && !e.previewUrl ? e.id : null) + '</td>' +
         '<td class="titlecell">' +
           '<div class="t">' + esc(job.name) + '</div>' +
           '<div class="s">' + esc(phase) +
@@ -1735,6 +1783,138 @@
             '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>' +
           '</button></span></td>' +
       '</tr>';
+  }
+
+  /**
+   * Play the recorded file in the list thumb — muted, a few seconds, then
+   * loop. Src is attached only when the thumb is on screen or hovered so a
+   * page of day-length films does not start fifty downloads.
+   */
+  var previewObserver = null;
+  var previewPlaying = null;
+
+  function previewDurationLabel(seconds) {
+    if (!Number.isFinite(seconds) || seconds <= 0 || seconds === Infinity) return '—';
+    return dur(seconds);
+  }
+
+  function wirePreviewVideo(video) {
+    if (video._previewWired) return;
+    video._previewWired = true;
+    video.addEventListener('loadedmetadata', function () {
+      var label = previewDurationLabel(video.duration);
+      var el = video.parentNode && video.parentNode.querySelector('.dur');
+      // The preview file is a few seconds cut from the day. Its duration
+      // is not the clip's length — only fill when the catalog is empty
+      // and the player is the original file, not a snippet.
+      if (el && label !== '—' && (el.textContent === '—' || el.textContent === '0:00') && video._sourceDuration) {
+        el.textContent = dur(video._sourceDuration);
+      }
+      var id = video.closest && video.closest('tr') && video.closest('tr').getAttribute('data-id');
+      if (id && Number.isFinite(video.duration) && video.duration > 0 && video.duration !== Infinity) {
+        EVIDENCE.forEach(function (item) {
+          if (item.id === id && !(Number(item.duration) > 0)) item.duration = video.duration;
+        });
+      }
+    });
+    video.addEventListener('timeupdate', function () {
+      if (!video._previewing) return;
+      var win = previewWindow(video.duration);
+      if (video.currentTime >= win.start + win.span) {
+        try { video.currentTime = win.start; } catch (err) { /* seek can throw on some WebMs */ }
+      }
+    });
+  }
+
+  function previewApiUrl(proofId) {
+    if (ORG_MODE) return '/api/evidence-portal/evidence/' + encodeURIComponent(proofId) + '/preview';
+    if (SHARE_TOKEN) return '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(proofId) + '/preview';
+    return null;
+  }
+
+  function resolvePreviewSrc(video, done) {
+    if (video.getAttribute('src')) { done(); return; }
+    var ready = video.getAttribute('data-src');
+    if (ready) { video.src = ready; done(); return; }
+    var id = video.getAttribute('data-preview-id');
+    var api = id ? previewApiUrl(id) : null;
+    if (!api) { done(); return; }
+    if (video._previewFetch) { video._previewFetch.then(done); return; }
+    video._previewFetch = fetch(api, { credentials: 'include' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (body) {
+        if (!body || !body.url) return;
+        video.src = body.url;
+        if (Number(body.durationSeconds) > 0) {
+          video._sourceDuration = Number(body.durationSeconds);
+          var el = video.parentNode && video.parentNode.querySelector('.dur');
+          if (el && (el.textContent === '—' || el.textContent === '0:00')) {
+            el.textContent = dur(body.durationSeconds);
+          }
+        }
+      })
+      .catch(function () { /* a missing cut leaves the still */ })
+      .then(function () { done(); });
+  }
+
+  function startPreview(video) {
+    if (!video || video._previewing) return;
+    wirePreviewVideo(video);
+    if (previewPlaying && previewPlaying !== video) stopPreview(previewPlaying, true);
+    video.muted = true;
+    video.playsInline = true;
+    video._previewing = true;
+    previewPlaying = video;
+    var play = function () {
+      if (!video.getAttribute('src')) return;
+      var win = previewWindow(video.duration);
+      if (Number.isFinite(video.duration) && video.duration > win.start) {
+        try { video.currentTime = 0; } catch (err) { /* snippet starts at the cut */ }
+      }
+      var run = video.play();
+      if (run && run.catch) run.catch(function () { /* autoplay can be blocked; hover still works */ });
+    };
+    resolvePreviewSrc(video, function () {
+      if (video.readyState >= 1) play();
+      else video.addEventListener('loadedmetadata', play, { once: true });
+    });
+  }
+
+  function stopPreview(video, unload) {
+    if (!video) return;
+    video._previewing = false;
+    if (previewPlaying === video) previewPlaying = null;
+    video.pause();
+    if (unload) {
+      video.removeAttribute('src');
+      video.load();
+    }
+  }
+
+  function bindPreviewThumbs(root) {
+    if (previewObserver) {
+      previewObserver.disconnect();
+      previewObserver = null;
+    }
+    previewPlaying = null;
+    var thumbs = root.querySelectorAll('.thumb[data-preview]');
+    if (!thumbs.length) return;
+    if (typeof IntersectionObserver === 'function') {
+      previewObserver = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          var video = entry.target.querySelector('video');
+          if (!video) return;
+          if (entry.isIntersecting) startPreview(video);
+          else stopPreview(video, true);
+        });
+      }, { threshold: 0.55 });
+      Array.prototype.forEach.call(thumbs, function (thumb) { previewObserver.observe(thumb); });
+    }
+    Array.prototype.forEach.call(thumbs, function (thumb) {
+      var video = thumb.querySelector('video');
+      if (!video) return;
+      thumb.addEventListener('mouseenter', function () { startPreview(video); });
+    });
   }
 
   function clipInstant(e, keys) {
@@ -1755,6 +1935,28 @@
       if (t >= bestT) { bestT = t; best = e; }
     });
     return best;
+  }
+
+  /**
+   * Which clip to put on screen so the footage is visible, not buried in
+   * the job list. `?open=` / `?clip=` pick one; live libraries open the
+   * newest recording. Demo rows stay closed unless the query asks.
+   */
+  function clipToOpen(items, search, live) {
+    var params = new URLSearchParams(typeof search === 'string' ? search.replace(/^\?/, '') : '');
+    var want = params.get('open') || params.get('clip');
+    if (want === '0' || want === 'none') return null;
+    if (want && want !== 'latest' && want !== '1') {
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].id === want) return items[i];
+      }
+      return null;
+    }
+    if (!items.length) return null;
+    if (live || want === 'latest' || want === '1') {
+      return latestClip(items, ['uploadedAt', 'capturedAt', 'workDate']);
+    }
+    return null;
   }
 
   /**
@@ -2126,6 +2328,8 @@
       kb.addEventListener('click', function (ev2) { ev2.stopPropagation(); toggleMenu(kb, tr.dataset.id); });
       kb.addEventListener('keydown', function (ev2) { ev2.stopPropagation(); });
     });
+
+    bindPreviewThumbs(rowsEl);
 
     Array.prototype.forEach.call(rowsEl.querySelectorAll('tr.jobrow'), function (tr) {
       function flip() {
@@ -2632,12 +2836,24 @@
     not_visible: ['neutral', 'Not visible']
   };
 
+  function showOpeningSheet(item) {
+    state.open = item;
+    $('#d-title').textContent = (JOBS[item.job] || { name: item.jobName || 'Job' }).name;
+    $('#d-meta').innerHTML =
+      '<span class="id">' + esc(item.id) + '</span> · loading the recorded clip…';
+    $('#d-frame').innerHTML = '<p class="player-wait">Opening the recorded clip…</p>';
+    $('#d-scrub').innerHTML = '';
+    $('#d-time').textContent = '…';
+    $('#detail').setAttribute('data-open', '1');
+  }
+
   function open(id, tab) {
     var item = EVIDENCE.filter(function (e) { return e.id === id; })[0];
     if (!item) return;
     // Against a live backend the list is thin: custody and frames arrive when
     // a clip is opened, which is also the moment the access gets logged.
     if (item._remote && !item._loaded) {
+      showOpeningSheet(item);
       fetchRemoteDetail(item).then(function () { openLoaded(item, tab); });
       return;
     }
@@ -2654,15 +2870,19 @@
       '<span class="id">' + esc(item.id) + '</span> · ' + esc(item.phase) + ' · ' +
       dayLabel(item.workDate) + ' · ' + esc(item.company) + ' · ' + dur(item.duration) + ' · ' + mb(item.bytes);
 
-    // Prefer the real file when the portal minted a URL. Frames remain the
-    // fallback for the demo artifact and for clips whose file URL expired.
-    if (item._videoUrl) {
-      // The poster is the same still the list showed, so the player opens on
-      // the clip rather than on the black rectangle a browser picks.
-      var posterAttr = item.poster ? ' poster="' + esc(item.poster) + '"' : '';
+    // Prefer the real file — the list preview URL or the portal-minted one.
+    // Frames remain the fallback for a clip that has neither.
+    var playUrl = item._videoUrl || item.previewUrl;
+    if (playUrl) {
+      // The poster is a still out of the file when we have one, never the
+      // drawn placeholder — that reads as "no footage" on a player that
+      // is about to play the clip.
+      var posterAttr = (item.poster && item.poster.indexOf('data:image/svg') !== 0)
+        ? ' poster="' + esc(item.poster) + '"'
+        : '';
       $('#d-frame').innerHTML =
-        '<video controls playsinline preload="metadata"' + posterAttr +
-        ' src="' + esc(item._videoUrl) + '"></video>';
+        '<video controls playsinline preload="auto"' + posterAttr +
+        ' src="' + esc(playUrl) + '"></video>';
       $('#d-scrub').innerHTML = '';
       $('#d-time').textContent = 'full clip · ' + dur(item.duration);
       var vid = $('#d-frame').querySelector('video');
@@ -2672,6 +2892,11 @@
         vid.addEventListener('play', function () { syncAnalysisLog(vid.currentTime); });
         vid.addEventListener('pause', function () { syncAnalysisLog(vid.currentTime); });
         vid.addEventListener('ended', function () { syncAnalysisLog(vid.currentTime); });
+        vid.addEventListener('error', function () {
+          if (item.previewUrl && vid.getAttribute('src') !== item.previewUrl) {
+            vid.src = item.previewUrl;
+          }
+        });
       }
     } else {
       item._frames = item._remoteFrames && item._remoteFrames.length
@@ -2777,10 +3002,10 @@
 
   function startLivePlayback(item) {
     if (!item) return;
-    if ((item.duration || 0) > 600) return;
     var host = $('#d-frame');
     var vid = host && host.querySelector('video');
     if (vid) {
+      vid.muted = true;
       var attempt = vid.play();
       if (attempt && attempt.catch) {
         attempt.catch(function () {
@@ -2790,6 +3015,7 @@
       }
       return;
     }
+    if ((item.duration || 0) > 600) return;
     if (item._frames && item._frames.length > 1) startFramePlayback();
   }
 
@@ -3780,6 +4006,8 @@
     counts();
     syncSidebarActive();
     render();
+    var clip = clipToOpen(EVIDENCE, location.search, ORG_MODE || Boolean(SHARE_TOKEN));
+    if (clip) open(clip.id);
   }
 
   /* ------------------------------------------------------------------ *
@@ -3813,6 +4041,8 @@
       bytes: raw.byteSize,
       // A signed still out of the clip itself, minted with the list.
       poster: raw.posterUrl || null,
+      // The recorded file, for a muted snippet in the preview cell.
+      previewUrl: raw.previewUrl || null,
       device: null,
       gps: raw.gps ? { lat: raw.gps.lat, lon: raw.gps.lon, accuracy: raw.gps.accuracyM, distanceFt: null } : null,
       hash: raw.hash,
@@ -3857,6 +4087,21 @@
     var videoUrl = ORG_MODE
       ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id) + '/video'
       : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id) + '/video';
+    var cutUrl = previewApiUrl(item.id);
+    var previewReq = cutUrl
+      ? fetch(cutUrl, { credentials: 'include' })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .catch(function () { return null; })
+      : Promise.resolve(null);
+    var applyPreview = function (preview) {
+      if (preview && preview.url) {
+        item.previewUrl = preview.url;
+        if (Number(preview.durationSeconds) > 0 && !(Number(item.duration) > 0)) {
+          item.duration = Number(preview.durationSeconds);
+        }
+        if (!item._videoUrl) item._videoUrl = preview.url;
+      }
+    };
     return Promise.all([
       fetch(detailUrl, { credentials: 'include' }).then(function (r) {
         if (!r.ok) throw new Error('detail');
@@ -3888,13 +4133,24 @@
         item._remoteFrames = (payload.frames || []).map(function (f) {
           return { at: f.atSeconds, src: f.url };
         });
-        item._videoUrl = video && video.url ? video.url : null;
-        item._loaded = true;
+        item._videoUrl = (video && video.url) || item.previewUrl || null;
+        if (item._videoUrl) {
+          item._loaded = true;
+          previewReq.then(applyPreview);
+          return;
+        }
+        return previewReq.then(function (preview) {
+          applyPreview(preview);
+          item._loaded = true;
+        });
       })
       .catch(function () {
         // The list still opens; the tabs just say less. An error here must
         // not eat the click.
-        item._loaded = true;
+        return previewReq.then(function (preview) {
+          applyPreview(preview);
+          item._loaded = true;
+        });
       });
   }
 
