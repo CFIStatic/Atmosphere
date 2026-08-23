@@ -181,7 +181,8 @@ final class AtmosphereClient: ObservableObject {
     /// Crew connect: the person's name plus the company code. No email or password.
     func joinCrew(joinCode: String, deviceId: String, fullName: String? = nil) async throws -> AuthResponse {
         let body = JoinCrewBody(joinCode: joinCode, deviceId: deviceId, fullName: fullName)
-        return try await post(path: "/api/field-app/join", body: body, authed: false)
+        let result: AuthResponse = try await post(path: "/api/field-app/join", body: body, authed: false)
+        return result
     }
 
     func linkOffice(joinCode: String?, orgName: String?, fullName: String? = nil) async throws -> FieldOrg {
