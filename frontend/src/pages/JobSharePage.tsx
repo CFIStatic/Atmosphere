@@ -502,7 +502,10 @@ function ProofSection({
           phase,
           storagePath: slot.path,
           byteSize: file.size,
-          durationSeconds: facts.durationSeconds ?? undefined,
+          durationSeconds:
+            facts.durationSeconds != null && facts.durationSeconds > 0
+              ? facts.durationSeconds
+              : undefined,
           contentHash: facts.contentHash ?? undefined,
           capturedAt: facts.capturedAt,
           lat: facts.lat ?? undefined,

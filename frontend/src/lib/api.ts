@@ -743,6 +743,8 @@ export interface ProofDay {
   reports?: { before: ProofVideoReport | null; after: ProofVideoReport | null };
   /** Ordered: before first, then after. */
   proofIds: string[];
+  /** Same order as proofIds — the length the website preview prints. */
+  proofClips?: Array<{ id: string; durationSeconds: number | null }>;
 }
 
 export type OpeningWord = 'exterior' | 'not_exterior' | 'unclear';
@@ -3182,7 +3184,7 @@ export const api = {
     }),
 
   progressShareVideo: (token: string, proofId: string) =>
-    request<{ url: string; expiresInSeconds: number }>(
+    request<{ url: string; expiresInSeconds: number; durationSeconds?: number | null }>(
       `/api/progress-share/${encodeURIComponent(token)}/proof/${encodeURIComponent(proofId)}/video`,
       { method: 'GET' },
     ),
@@ -3361,7 +3363,7 @@ export const api = {
     ),
 
   proofVideoUrl: (proofId: string) =>
-    request<{ url: string; expiresInSeconds: number }>(
+    request<{ url: string; expiresInSeconds: number; durationSeconds?: number | null }>(
       `/api/operations/shared/proof/${proofId}/video`,
       { method: 'GET' },
     ),

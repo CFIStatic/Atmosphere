@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, type ProofResponse, type ProofDay, type ProofQuestion } from '../../lib/api';
+import { formatClipClocks, formatVideoClock } from '../../lib/videoDuration';
 import { SpinnerIcon } from '../icons';
+import { VideoClockBadge, useMeasuredVideoClock } from './VideoClockBadge';
 
 /**
  * Proof of work.
@@ -66,7 +68,7 @@ export function ProofOfWork({
   heading?: string;
   readOnly?: boolean;
   initialData?: ProofResponse;
-  videoFetcher?: (proofId: string) => Promise<{ url: string }>;
+  videoFetcher?: (proofId: string) => Promise<{ url: string; durationSeconds?: number | null }>;
 }) {
   const [data, setData] = useState<ProofResponse | null>(null);
   const [openDay, setOpenDay] = useState<string | null>(null);
@@ -193,6 +195,7 @@ export function ProofOfWork({
         <ul className="mt-3 space-y-2">
           {data.days.map((day) => {
             const on = openDay === `${day.partyId}|${day.workDate}`;
+            const clocks = formatClipClocks(day.proofClips);
             const tone = day.contradicted
               ? 'border-danger-200 bg-danger-50'
               : day.payable
@@ -216,6 +219,11 @@ export function ProofOfWork({
                         <span className="ml-2 text-xs font-normal text-ink-600">{day.company}</span>
                       </span>
                       <span className="mt-0.5 block text-xs text-ink-600">{day.summary}</span>
+                      {clocks ? (
+                        <span className="mt-0.5 block text-[11px] tabular-nums text-ink-500">
+                          {clocks}
+                        </span>
+                      ) : null}
                     </span>
                     <span className="flex shrink-0 items-center gap-1.5">
                       {day.materialChange && MATERIAL_CHIP[day.materialChange] && (
@@ -473,6 +481,9 @@ export function ProofOfWork({
                                 ? 'Before'
                                 : 'After'
                           }
+                          durationSeconds={
+                            day.proofClips?.find((clip) => clip.id === id)?.durationSeconds ?? null
+                          }
                           videoFetcher={videoFetcher}
                         />
                       ))}
@@ -603,15 +614,26 @@ export function ProofOfWork({
 function ProofVideo({
   proofId,
   label,
+  durationSeconds,
   videoFetcher,
 }: {
   proofId: string;
   label: string;
-  videoFetcher?: (proofId: string) => Promise<{ url: string }>;
+  durationSeconds?: number | null;
+  videoFetcher?: (proofId: string) => Promise<{ url: string; durationSeconds?: number | null }>;
 }) {
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [storedSeconds, setStoredSeconds] = useState<number | null>(
+    durationSeconds != null && durationSeconds > 0 ? durationSeconds : null,
+  );
+  const [clock, videoRef] = useMeasuredVideoClock(storedSeconds);
+  const clockLabel = formatVideoClock(clock);
+
+  useEffect(() => {
+    setStoredSeconds(durationSeconds != null && durationSeconds > 0 ? durationSeconds : null);
+  }, [proofId, durationSeconds]);
 
   async function open() {
     setLoading(true);
@@ -620,6 +642,9 @@ function ProofVideo({
         ? await videoFetcher(proofId)
         : await api.proofVideoUrl(proofId);
       setUrl(res.url);
+      if (res.durationSeconds != null && res.durationSeconds > 0) {
+        setStoredSeconds(res.durationSeconds);
+      }
     } catch {
       setFailed(true);
     } finally {
@@ -633,34 +658,44 @@ function ProofVideo({
         <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">
           {label}
         </span>
-        {url && (
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[11px] text-brand-600 hover:text-brand-700"
-          >
-            Full screen
-          </a>
-        )}
+        <span className="flex items-center gap-2">
+          {clockLabel !== '—' && (
+            <span className="text-[11px] tabular-nums text-ink-500">{clockLabel}</span>
+          )}
+          {url && (
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] text-brand-600 hover:text-brand-700"
+            >
+              Full screen
+            </a>
+          )}
+        </span>
       </div>
 
       {url ? (
-        <video
-          src={url}
-          controls
-          playsInline
-          preload="metadata"
-          className="block max-h-64 w-full bg-black"
-        />
+        <div className="relative">
+          <video
+            ref={videoRef}
+            src={url}
+            controls
+            playsInline
+            preload="metadata"
+            className="block max-h-64 w-full bg-black"
+          />
+          <VideoClockBadge seconds={clock} />
+        </div>
       ) : (
         <button
           onClick={() => void open()}
           disabled={loading || failed}
-          className="flex h-28 w-full items-center justify-center gap-2 text-xs text-ink-600 hover:text-ink-900 disabled:opacity-60"
+          className="relative flex h-28 w-full items-center justify-center gap-2 text-xs text-ink-600 hover:text-ink-900 disabled:opacity-60"
         >
           {loading && <SpinnerIcon className="animate-spin" width={13} height={13} />}
           {failed ? 'Could not load this video' : loading ? 'Loading…' : `Play the ${label.toLowerCase()}`}
+          <VideoClockBadge seconds={clock} />
         </button>
       )}
     </div>

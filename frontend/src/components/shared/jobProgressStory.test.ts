@@ -103,6 +103,10 @@ describe('buildJobProgressStory', () => {
           accepted: true,
           payable: true,
           summary: 'North slope stripped and underlayment down.',
+          proofClips: [
+            { id: 'pf-1', durationSeconds: 68 },
+            { id: 'pf-2', durationSeconds: 94 },
+          ],
           aiFindings: {
             scopeVerdicts: [
               {
@@ -117,7 +121,7 @@ describe('buildJobProgressStory', () => {
       risks: [],
     });
 
-    expect(story.happened.some((i) => i.kind === 'day')).toBe(true);
+    expect(story.happened.some((i) => i.kind === 'day' && i.clock === '1:08 · 1:34')).toBe(true);
     expect(story.happened.some((i) => i.title === 'Tear off and replace roof' && i.badge === 'Done')).toBe(
       true,
     );

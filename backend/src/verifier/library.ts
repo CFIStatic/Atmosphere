@@ -211,7 +211,11 @@ export function serializeEvidence(input: {
     workDate: proof.work_date,
     capturedAt: proof.captured_at,
     uploadedAt: proof.received_at,
-    durationSeconds: proof.duration_seconds === null ? null : Number(proof.duration_seconds),
+    durationSeconds: (() => {
+      if (proof.duration_seconds == null) return null;
+      const n = Number(proof.duration_seconds);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    })(),
     byteSize: proof.byte_size === null ? null : Number(proof.byte_size),
     // What the clip looks like, not what the file is called. A list of videos
     // that all render the same drawn rectangle is a list nobody can scan.

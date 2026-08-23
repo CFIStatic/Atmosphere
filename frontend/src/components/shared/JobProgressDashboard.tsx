@@ -75,6 +75,9 @@ function StoryRow({ item }: { item: StoryItem }) {
         <div className="min-w-0">
           <p className="text-sm font-semibold text-ink-900">{item.title}</p>
           {item.detail ? <p className="mt-0.5 text-sm text-ink-700">{item.detail}</p> : null}
+          {item.clock ? (
+            <p className="mt-1 text-xs tabular-nums text-ink-500">{item.clock}</p>
+          ) : null}
         </div>
         <span
           className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${BADGE_STYLE[item.tone]}`}
@@ -133,7 +136,7 @@ export function JobProgressDashboard({
   record: Pick<SharedJobRecord, 'job' | 'scope' | 'risks' | 'brief'>;
   readOnly?: boolean;
   initialProof?: ProofResponse;
-  videoFetcher?: (proofId: string) => Promise<{ url: string }>;
+  videoFetcher?: (proofId: string) => Promise<{ url: string; durationSeconds?: number | null }>;
   /** Guest shares supply pre-computed metrics instead of scope rows. */
   metrics?: {
     scopePct: number;
@@ -146,7 +149,6 @@ export function JobProgressDashboard({
 }) {
   const [proof, setProof] = useState<ProofResponse | null>(initialProof ?? null);
   const [loading, setLoading] = useState(!initialProof);
-  const [historyOpen, setHistoryOpen] = useState(false);
 
   useEffect(() => {
     if (initialProof) {
@@ -329,17 +331,6 @@ export function JobProgressDashboard({
             hint="Verified days and work that is already done."
             items={story.happened}
             empty="Nothing completed yet. Each day, crews film before they start and again when they finish — those days will show up here."
-            footer={
-              (proof?.days.length ?? 0) > 5 ? (
-                <button
-                  type="button"
-                  onClick={() => setHistoryOpen((v) => !v)}
-                  className="mt-3 text-sm font-medium text-brand-600 hover:text-brand-700"
-                >
-                  {historyOpen ? 'Hide full history' : `Show all ${proof?.days.length} days`}
-                </button>
-              ) : null
-            }
           />
 
           <StorySection
@@ -360,10 +351,10 @@ export function JobProgressDashboard({
         </>
       )}
 
-      {historyOpen && proof && (
+      {!loading && proof && proof.days.length > 0 && (
         <ProofOfWork
           jobId={readOnly ? undefined : jobId}
-          heading="Full work history"
+          heading="Field video"
           readOnly={readOnly}
           initialData={proof}
           videoFetcher={videoFetcher}

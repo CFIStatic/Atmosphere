@@ -50,6 +50,57 @@
     });
   }
 
+  function measuredDuration(duration) {
+    return Number.isFinite(duration) && duration > 0 ? duration : null;
+  }
+
+  function resolveElementDuration(video, timeoutMs) {
+    var immediate = measuredDuration(video.duration);
+    if (immediate != null) return Promise.resolve(immediate);
+    return new Promise(function (resolve) {
+      var settled = false;
+      var finish = function () {
+        if (settled) return;
+        settled = true;
+        video.ontimeupdate = null;
+        video.onseeked = null;
+        var value = measuredDuration(video.duration);
+        try {
+          video.currentTime = 0;
+        } catch (e) {
+          /* ignore */
+        }
+        resolve(value);
+      };
+      video.ontimeupdate = finish;
+      video.onseeked = finish;
+      setTimeout(finish, timeoutMs || 8000);
+      try {
+        video.currentTime = Number.MAX_SAFE_INTEGER;
+      } catch (e) {
+        finish();
+      }
+    });
+  }
+
+  function waitForDuration(video, timeoutMs) {
+    return new Promise(function (resolve) {
+      var settled = false;
+      var finish = function () {
+        if (settled) return;
+        settled = true;
+        resolveElementDuration(video, timeoutMs).then(resolve);
+      };
+      video.onloadedmetadata = finish;
+      video.onerror = function () {
+        if (settled) return;
+        settled = true;
+        resolve(null);
+      };
+      setTimeout(finish, timeoutMs || 8000);
+    });
+  }
+
   function readDuration(file) {
     var url = URL.createObjectURL(file);
     var video = document.createElement('video');
@@ -57,18 +108,9 @@
     video.muted = true;
     video.playsInline = true;
     video.src = url;
-    return new Promise(function (resolve) {
-      var done = function () {
-        var d = Number.isFinite(video.duration) ? video.duration : null;
-        URL.revokeObjectURL(url);
-        resolve(d);
-      };
-      video.onloadedmetadata = done;
-      video.onerror = function () {
-        URL.revokeObjectURL(url);
-        resolve(null);
-      };
-      setTimeout(done, 8000);
+    return waitForDuration(video, 8000).then(function (d) {
+      URL.revokeObjectURL(url);
+      return d;
     });
   }
 
@@ -83,8 +125,7 @@
     video.src = url;
 
     return new Promise(function (resolve) {
-      video.onloadedmetadata = function () {
-        var duration = Number.isFinite(video.duration) ? video.duration : null;
+      waitForDuration(video, 5000).then(function (duration) {
         if (!duration || duration <= 0) {
           URL.revokeObjectURL(url);
           resolve({ durationSeconds: duration, frames: [] });
@@ -139,17 +180,7 @@
           }
         }
         next();
-      };
-      video.onerror = function () {
-        URL.revokeObjectURL(url);
-        resolve({ durationSeconds: null, frames: [] });
-      };
-      setTimeout(function () {
-        if (!Number.isFinite(video.duration)) {
-          URL.revokeObjectURL(url);
-          resolve({ durationSeconds: null, frames: [] });
-        }
-      }, 5000);
+      });
     });
   }
 
@@ -170,7 +201,12 @@
         var media = parts[2];
         return {
           contentHash: hash,
-          durationSeconds: media.durationSeconds != null ? media.durationSeconds : durationHint,
+          durationSeconds:
+            media.durationSeconds != null && media.durationSeconds > 0
+              ? media.durationSeconds
+              : durationHint != null && durationHint > 0
+                ? durationHint
+                : null,
           capturedAt: new Date(file.lastModified || Date.now()).toISOString(),
           lat: position && position.coords ? position.coords.latitude : null,
           lon: position && position.coords ? position.coords.longitude : null,
@@ -446,7 +482,10 @@
               phase: 'after',
               storagePath: slot.path,
               byteSize: file.size,
-              durationSeconds: facts.durationSeconds != null ? facts.durationSeconds : undefined,
+              durationSeconds:
+                facts.durationSeconds != null && facts.durationSeconds > 0
+                  ? facts.durationSeconds
+                  : undefined,
               contentHash: facts.contentHash || undefined,
               capturedAt: facts.capturedAt,
               lat: facts.lat != null ? facts.lat : undefined,

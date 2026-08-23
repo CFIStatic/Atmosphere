@@ -159,6 +159,31 @@ test('serialization: labels attached, integrity computed, flag derived', () => {
   assert.equal(item.posterUrl, null);
 });
 
+test('serialization: a stored 0:00 is unknown, not a real length', () => {
+  const item = serializeEvidence({
+    proof: {
+      id: 'p-zero',
+      job_id: 'j1',
+      party_id: 'pt1',
+      phase: 'after',
+      work_date: '2026-08-23',
+      captured_at: null,
+      received_at: '2026-08-23T18:00:00Z',
+      duration_seconds: 0,
+      byte_size: 1_000,
+      checks: [],
+      state: 'checked',
+    },
+    jobName: 'Jack Cyganiak',
+    jobNumber: null,
+    company: null,
+    contactName: 'Jack Cyganiak',
+    tier: 1,
+    dayHasAfter: true,
+  });
+  assert.equal(item.durationSeconds, null);
+});
+
 test('serialization: a still out of the clip rides along as the poster', () => {
   const base = {
     id: 'p-poster',
