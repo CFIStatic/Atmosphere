@@ -12,6 +12,7 @@ import {
 } from '../shared/clipAsk.js';
 import {
   downloadDecision,
+  matchesLibraryQuery,
   serializeEvidence,
   shareRecipientAllowed,
   shareState,
@@ -111,7 +112,10 @@ async function assembleLibrary(client: any, orgId: string, proofs: any[]) {
 
   const [jobs, parties, episodes, posters] = await Promise.all([
     jobIds.length
-      ? client.from('crm_jobs').select('id, title, job_number').in('id', jobIds)
+      ? client
+          .from('crm_jobs')
+          .select('id, title, job_number, property_id, claim_number')
+          .in('id', jobIds)
       : Promise.resolve({ data: [] }),
     partyIds.length
       ? client.from('job_parties').select('id, company, contact_name').in('id', partyIds)
@@ -128,6 +132,10 @@ async function assembleLibrary(client: any, orgId: string, proofs: any[]) {
 
   const jobById = new Map<string, any>((jobs.data ?? []).map((j: any) => [j.id, j]));
   const partyById = new Map<string, any>((parties.data ?? []).map((p: any) => [p.id, p]));
+  const addrByProperty = await propertyAddresses(
+    client,
+    ((jobs.data ?? []) as any[]).map((j) => j.property_id as string | null),
+  );
   const tierByDay = new Map<string, number>(
     (episodes.data ?? []).map((e: any) => [`${e.job_id}|${e.party_id}|${e.work_date}`, e.tier]),
   );
@@ -140,18 +148,46 @@ async function assembleLibrary(client: any, orgId: string, proofs: any[]) {
   return proofs.map((proof) => {
     const job = jobById.get(proof.job_id);
     const party = partyById.get(proof.party_id);
+    const address = job?.property_id ? (addrByProperty.get(job.property_id) ?? null) : null;
     const dayKey = `${proof.job_id}|${proof.party_id}|${proof.work_date}`;
     return serializeEvidence({
       proof,
-      jobName: job?.title ?? null,
+      jobName: jobTitleForIntake(job?.title, address ?? ''),
       jobNumber: job?.job_number ?? null,
       company: party?.company ?? null,
       contactName: party?.contact_name ?? null,
       tier: tierByDay.get(dayKey) ?? null,
       dayHasAfter: daysWithAfter.has(dayKey),
       posterUrl: posters.get(proof.id) ?? null,
+      address,
+      claimNumber: job?.claim_number ?? null,
     });
   });
+}
+
+async function propertyAddresses(
+  client: any,
+  propertyIds: Array<string | null | undefined>,
+): Promise<Map<string, string>> {
+  const addrByProperty = new Map<string, string>();
+  const ids = [...new Set(propertyIds.filter((id): id is string => Boolean(id)))];
+  if (!ids.length) return addrByProperty;
+  const { data: props, error } = await client
+    .from('crm_properties')
+    .select('id, address_line1, city, region, postal_code')
+    .in('id', ids);
+  if (error) {
+    console.warn('[library] crm_properties unavailable:', error.message);
+    return addrByProperty;
+  }
+  for (const p of (props ?? []) as any[]) {
+    if (!p.id) continue;
+    const parts = [p.address_line1, p.city, p.region, p.postal_code]
+      .map((part: unknown) => (typeof part === 'string' ? part.trim() : ''))
+      .filter(Boolean);
+    if (parts.length) addrByProperty.set(p.id, parts.join(', '));
+  }
+  return addrByProperty;
 }
 
 /**
@@ -377,63 +413,68 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
     if (error) throw new HttpError(500, error.message, 'library_failed');
 
     let items = await assembleLibrary(supabase, orgId, data ?? []);
-    if (q?.trim()) {
-      // The labels are the index; names and hashes come along because that is
-      // what a person actually types. Substring, case-blind, in memory — 500
-      // serialized rows is small, and the GIN index earns its keep on the
-      // database-side queries analytics will run, not here.
-      const needle = q.trim().toLowerCase();
-      items = items.filter((item: any) =>
-        [...(item.labels ?? []), item.jobName, item.company, item.person, item.hash, item.phase]
-          .filter(Boolean)
-          .some((hay: string) => hay.toLowerCase().includes(needle)),
-      );
-    }
 
     // Job files exist before any clip does — Start a job should show the
     // name on the Dashboard so footage has a folder to land in.
-    let jobs: Array<{
+    type LibraryJob = {
       jobId: string;
       jobName: string;
       jobNumber: number | null;
+      address: string | null;
+      claimNumber: string | null;
+      company: string | null;
+      person: string | null;
       createdAt?: string | null;
-    }> = [];
+    };
+    let jobs: LibraryJob[] = [];
     const { data: jobRows, error: jobsError } = await supabase
       .from('crm_jobs')
-      .select('id, title, job_number, created_at, property_id')
+      .select('id, title, job_number, created_at, property_id, claim_number')
       .eq('org_id', orgId)
       .order('created_at', { ascending: false })
       .limit(200);
     if (jobsError) {
       console.warn('[library] crm_jobs unavailable:', jobsError.message);
     } else {
-      const propertyIds = [
-        ...new Set(
-          ((jobRows ?? []) as any[])
-            .map((j) => j.property_id as string | null)
-            .filter((id): id is string => Boolean(id)),
-        ),
-      ];
-      const addrByProperty = new Map<string, string>();
-      if (propertyIds.length) {
-        const { data: props, error: propsError } = await supabase
-          .from('crm_properties')
-          .select('id, address_line1')
-          .in('id', propertyIds);
-        if (propsError) {
-          console.warn('[library] crm_properties unavailable:', propsError.message);
+      const addrByProperty = await propertyAddresses(
+        supabase,
+        ((jobRows ?? []) as any[]).map((j) => j.property_id as string | null),
+      );
+      const partyByJob = new Map<string, { company: string | null; person: string | null }>();
+      const jobIds = ((jobRows ?? []) as any[]).map((j) => j.id as string).filter(Boolean);
+      if (jobIds.length) {
+        const { data: parties, error: partiesError } = await supabase
+          .from('job_parties')
+          .select('job_id, company, contact_name')
+          .eq('org_id', orgId)
+          .in('job_id', jobIds)
+          .is('revoked_at', null);
+        if (partiesError) {
+          console.warn('[library] job_parties unavailable:', partiesError.message);
         } else {
-          for (const p of (props ?? []) as any[]) {
-            if (p.id && p.address_line1) addrByProperty.set(p.id, String(p.address_line1));
+          for (const p of (parties ?? []) as any[]) {
+            if (!p.job_id || partyByJob.has(p.job_id)) continue;
+            partyByJob.set(p.job_id, {
+              company: (p.company as string | null) ?? null,
+              person: (p.contact_name as string | null) ?? null,
+            });
           }
         }
       }
-      jobs = ((jobRows ?? []) as any[]).map((j) => ({
-        jobId: j.id as string,
-        jobName: jobTitleForIntake(j.title, addrByProperty.get(j.property_id) ?? ''),
-        jobNumber: (j.job_number as number | null) ?? null,
-        createdAt: (j.created_at as string | null) ?? null,
-      }));
+      jobs = ((jobRows ?? []) as any[]).map((j) => {
+        const address = addrByProperty.get(j.property_id) ?? null;
+        const party = partyByJob.get(j.id);
+        return {
+          jobId: j.id as string,
+          jobName: jobTitleForIntake(j.title, address ?? ''),
+          jobNumber: (j.job_number as number | null) ?? null,
+          address,
+          claimNumber: (j.claim_number as string | null) ?? null,
+          company: party?.company ?? null,
+          person: party?.person ?? null,
+          createdAt: (j.created_at as string | null) ?? null,
+        };
+      });
     }
     const seen = new Set(jobs.map((j) => j.jobId));
     for (const item of items) {
@@ -444,8 +485,56 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
         jobId: id,
         jobName: ((item as any).jobName as string) || 'Job',
         jobNumber: ((item as any).jobNumber as number | null) ?? null,
+        address: ((item as any).address as string | null) ?? null,
+        claimNumber: ((item as any).claimNumber as string | null) ?? null,
+        company: ((item as any).company as string | null) ?? null,
+        person: ((item as any).person as string | null) ?? null,
         createdAt: ((item as any).uploadedAt as string | null) ?? null,
       });
+    }
+
+    if (q?.trim()) {
+      // Names, addresses, dates, companies, hashes — whatever a person types
+      // to find a video. Substring, case-blind, in memory: 500 rows is small.
+      items = items.filter((item: any) =>
+        matchesLibraryQuery(
+          q,
+          [
+            item.id,
+            item.jobId,
+            item.jobName,
+            item.jobNumber != null ? `#${item.jobNumber}` : null,
+            item.jobNumber,
+            item.address,
+            item.claimNumber,
+            item.company,
+            item.person,
+            item.hash,
+            item.phase,
+            ...(Array.isArray(item.labels) ? item.labels : []),
+          ],
+          [item.workDate, item.capturedAt, item.uploadedAt],
+        ),
+      );
+      const matchingJobIds = new Set(items.map((item: any) => item.jobId).filter(Boolean));
+      jobs = jobs.filter(
+        (job) =>
+          matchingJobIds.has(job.jobId) ||
+          matchesLibraryQuery(
+            q,
+            [
+              job.jobId,
+              job.jobName,
+              job.jobNumber != null ? `#${job.jobNumber}` : null,
+              job.jobNumber,
+              job.address,
+              job.claimNumber,
+              job.company,
+              job.person,
+            ],
+            [job.createdAt],
+          ),
+      );
     }
 
     const lastWorkDateByJob = new Map<string, string>();
@@ -460,7 +549,15 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
 
     res.json({
       items,
-      jobs: jobs.map(({ jobId, jobName, jobNumber }) => ({ jobId, jobName, jobNumber })),
+      jobs: jobs.map(({ jobId, jobName, jobNumber, address, claimNumber, company, person }) => ({
+        jobId,
+        jobName,
+        jobNumber,
+        address,
+        claimNumber,
+        company,
+        person,
+      })),
       counts: {
         total: items.length,
         flagged: items.filter((i: any) => i.flagged).length,

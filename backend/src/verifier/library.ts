@@ -171,6 +171,9 @@ export function serializeEvidence(input: {
    * than showing a broken one.
    */
   posterUrl?: string | null;
+  /** Site address, so a search for the street finds the clip even when the job is named for a person. */
+  address?: string | null;
+  claimNumber?: string | null;
 }) {
   const proof = input.proof;
   const checks: StoredCheck[] = Array.isArray(proof.checks) ? proof.checks : [];
@@ -204,6 +207,8 @@ export function serializeEvidence(input: {
     jobId: proof.job_id,
     jobName: input.jobName,
     jobNumber: input.jobNumber,
+    address: input.address ?? null,
+    claimNumber: input.claimNumber ?? null,
     partyId: proof.party_id,
     company: input.company,
     person: input.contactName,
@@ -266,6 +271,81 @@ export function serializeEvidence(input: {
           }
         : null,
   };
+}
+
+/* ------------------------------------------------------------------ *
+ * Library search — one haystack for every identifier a person types
+ * ------------------------------------------------------------------ */
+
+const MONTHS_SHORT = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const MONTHS_LONG = [
+  'january',
+  'february',
+  'march',
+  'april',
+  'may',
+  'june',
+  'july',
+  'august',
+  'september',
+  'october',
+  'november',
+  'december',
+];
+
+/**
+ * Every way someone might type a filmed / uploaded day. The list prints
+ * "Aug 5"; people also type 8/5, 2026-08-05, and August 5 2026.
+ */
+export function dateSearchPhrases(iso: string | null | undefined): string[] {
+  if (!iso) return [];
+  const day = String(iso).trim().slice(0, 10);
+  const match = day.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return [String(iso).toLowerCase()];
+  const year = match[1];
+  const month = match[2];
+  const date = match[3];
+  const monthIndex = Number(month) - 1;
+  const monthNum = String(Number(month));
+  const dateNum = String(Number(date));
+  const short = MONTHS_SHORT[monthIndex];
+  const long = MONTHS_LONG[monthIndex];
+  if (!short || !long) return [day];
+  return [
+    day,
+    `${month}/${date}/${year}`,
+    `${monthNum}/${dateNum}/${year}`,
+    `${monthNum}/${dateNum}`,
+    `${short} ${dateNum}`,
+    `${short} ${dateNum} ${year}`,
+    `${long} ${dateNum}`,
+    `${long} ${dateNum} ${year}`,
+    year,
+  ];
+}
+
+/**
+ * Does this clip or job file match what the person typed.
+ *
+ * Every whitespace-separated token must appear somewhere in the identifiers —
+ * so "jack aug" finds Jack Cyganiak filmed on August 5, and a missing job
+ * record cannot throw. Empty query matches everything.
+ */
+export function matchesLibraryQuery(
+  query: string | null | undefined,
+  fields: Array<string | number | null | undefined>,
+  dates: Array<string | null | undefined> = [],
+): boolean {
+  const needle = query?.trim().toLowerCase();
+  if (!needle) return true;
+  const hay = [
+    ...fields.map((field) => (field == null ? '' : String(field))),
+    ...dates.flatMap(dateSearchPhrases),
+  ]
+    .filter((part) => part && String(part).trim() && String(part).trim() !== '—')
+    .join(' ')
+    .toLowerCase();
+  return needle.split(/\s+/).every((token) => hay.includes(token));
 }
 
 /* ------------------------------------------------------------------ *

@@ -2,8 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   analysisStateOf,
+  dateSearchPhrases,
   downloadDecision,
   labelsForProof,
+  matchesLibraryQuery,
   shareRecipientAllowed,
   integrityOf,
   labelForCheck,
@@ -138,6 +140,8 @@ test('serialization: labels attached, integrity computed, flag derived', () => {
     contactName: 'Hector Delgado',
     tier: 2,
     dayHasAfter: true,
+    address: '4118 Cedar Ridge Dr, Austin, TX',
+    claimNumber: 'CLM-1038',
   });
 
   assert.equal(item.integrity, 'pass');
@@ -146,6 +150,8 @@ test('serialization: labels attached, integrity computed, flag derived', () => {
   assert.equal(item.checks[0].what, 'Filmed on site');
   assert.equal(item.durationSeconds, 143);
   assert.equal(item.tier, 2);
+  assert.equal(item.address, '4118 Cedar Ridge Dr, Austin, TX');
+  assert.equal(item.claimNumber, 'CLM-1038');
   assert.equal(item.analysis?.materialBecause, 'The tarp is gone.');
   assert.deepEqual(item.analysis?.scope, [
     { title: 'Remove tarp', verdict: 'appears_complete', because: null, seenInWindows: undefined },
@@ -344,6 +350,56 @@ test('serialization: a wrong-house clip arrives flagged with no analysis body', 
   assert.equal(item.legalHold, true);
 });
 
+
+/* ---- library search ---- */
+
+test('search matches job name, company, address, hash, and id', () => {
+  const fields = [
+    'EV-1',
+    'Jack Cyganiak 2',
+    1041,
+    '#1041',
+    '1842 Meridian Ave, Austin, TX',
+    'Delgado Roofing',
+    'Hector Delgado',
+    '9f2c4a1b7e58d309',
+    'after',
+  ];
+  const dates = ['2026-08-05', '2026-08-05T20:48:00'];
+
+  assert.equal(matchesLibraryQuery('', fields, dates), true);
+  assert.equal(matchesLibraryQuery('jack', fields, dates), true);
+  assert.equal(matchesLibraryQuery('Cyganiak', fields, dates), true);
+  assert.equal(matchesLibraryQuery('delgado', fields, dates), true);
+  assert.equal(matchesLibraryQuery('meridian', fields, dates), true);
+  assert.equal(matchesLibraryQuery('1041', fields, dates), true);
+  assert.equal(matchesLibraryQuery('#1041', fields, dates), true);
+  assert.equal(matchesLibraryQuery('9f2c4a1b', fields, dates), true);
+  assert.equal(matchesLibraryQuery('EV-1', fields, dates), true);
+  assert.equal(matchesLibraryQuery('no such job', fields, dates), false);
+});
+
+test('search matches filmed dates the way people type them', () => {
+  const dates = ['2026-08-05'];
+  assert.ok(dateSearchPhrases('2026-08-05').includes('aug 5'));
+  assert.equal(matchesLibraryQuery('aug 5', [], dates), true);
+  assert.equal(matchesLibraryQuery('August 5', [], dates), true);
+  assert.equal(matchesLibraryQuery('8/5/2026', [], dates), true);
+  assert.equal(matchesLibraryQuery('2026-08-05', [], dates), true);
+  assert.equal(matchesLibraryQuery('aug 6', [], dates), false);
+});
+
+test('search requires every token, so a name plus a date narrows the list', () => {
+  const fields = ['Jack Cyganiak 2', 'Delgado Roofing'];
+  const dates = ['2026-08-05'];
+  assert.equal(matchesLibraryQuery('jack aug', fields, dates), true);
+  assert.equal(matchesLibraryQuery('jack sep', fields, dates), false);
+});
+
+test('search ignores a missing job record rather than throwing', () => {
+  assert.equal(matchesLibraryQuery('jack', [undefined, null, 'Jack Cyganiak'], [null]), true);
+  assert.equal(matchesLibraryQuery('hash', [null], []), false);
+});
 
 /* ---- labels ---- */
 
