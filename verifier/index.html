@@ -1168,7 +1168,13 @@
     camden: { key: 'camden', name: 'Camden Court — HOA clubhouse rebuild', number: 1044, address: '900 Camden Ct, Round Rock TX' }
   };
 
-  function ev(o) { return o; }
+  function ev(o) {
+    // Demo rows share one short file so the preview cell can play footage
+    // rather than a still. Live library rows replace this list and carry
+    // their own signed previewUrl from the portal.
+    if (!o.previewUrl) o.previewUrl = '/verifier/demo-preview.mp4';
+    return o;
+  }
 
   var EVIDENCE = [
     ev({
