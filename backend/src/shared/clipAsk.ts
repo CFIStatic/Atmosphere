@@ -137,7 +137,7 @@ export function clipRecordFromEvidenceItem(item: {
 }
 
 export function formatClipTime(seconds: number | null | undefined): string | null {
-  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return null;
+  if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return null;
   const s = Math.round(seconds);
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);

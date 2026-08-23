@@ -227,7 +227,8 @@ export async function recordProof(party: any, admin: any, body: unknown) {
     phase: input.phase,
     storage_path: input.storagePath,
     byte_size: input.byteSize ?? null,
-    duration_seconds: input.durationSeconds ?? null,
+    duration_seconds:
+      input.durationSeconds != null && input.durationSeconds > 0 ? input.durationSeconds : null,
     content_hash: input.contentHash ?? null,
     captured_at: input.capturedAt ?? null,
     received_at: receivedAt,
@@ -772,6 +773,7 @@ async function ensureSparseFramesFromStorage(
  * process rather than on every list render.
  */
 const stillsAttempted = new Set<string>();
+const durationAttempted = new Set<string>();
 
 export async function ensureStillsAndDuration(
   admin: any,
@@ -788,7 +790,8 @@ export async function ensureStillsAndDuration(
   const storagePath = (proofRow as any)?.storage_path ?? null;
   let error: string | null = null;
 
-  if (!(durationSeconds > 0) && storagePath) {
+  if (!(durationSeconds > 0) && storagePath && !durationAttempted.has(proofId)) {
+    durationAttempted.add(proofId);
     try {
       const { data: signed } = await admin.storage
         .from(PROOF_BUCKET)
@@ -1523,7 +1526,7 @@ export async function proofVideoUrl(req: Request, res: Response, next: NextFunct
     const { orgId, userId, supabase } = await requireOrgContext(req);
     const { data: proof } = await supabase
       .from('job_proofs')
-      .select('storage_path, job_id, work_date, phase')
+      .select('storage_path, job_id, work_date, phase, duration_seconds')
       .eq('org_id', orgId)
       .eq('id', req.params.proofId)
       .maybeSingle();
@@ -1550,7 +1553,16 @@ export async function proofVideoUrl(req: Request, res: Response, next: NextFunct
       ...actor,
     });
 
-    res.json({ url: (data as any).signedUrl, expiresInSeconds: 600 });
+    const stored = (proof as any).duration_seconds;
+    const durationSeconds =
+      stored != null && Number.isFinite(Number(stored)) && Number(stored) > 0
+        ? Number(stored)
+        : null;
+    res.json({
+      url: (data as any).signedUrl,
+      expiresInSeconds: 600,
+      durationSeconds,
+    });
   } catch (err) {
     next(err);
   }
@@ -1729,7 +1741,11 @@ export async function jobEvidence(req: Request, res: Response, next: NextFunctio
         category: row.category,
         title: row.title,
         tags: row.tags ?? [],
-        durationSeconds: row.duration_seconds === null ? null : Number(row.duration_seconds),
+        durationSeconds: (() => {
+          if (row.duration_seconds == null) return null;
+          const n = Number(row.duration_seconds);
+          return Number.isFinite(n) && n > 0 ? n : null;
+        })(),
         byteSize: row.byte_size === null ? null : Number(row.byte_size),
         capturedAt: row.captured_at,
         receivedAt: row.received_at,

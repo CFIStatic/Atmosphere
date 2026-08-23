@@ -123,7 +123,7 @@ async function assembleLibrary(client: any, orgId: string, proofs: any[]) {
           .eq('org_id', orgId)
           .in('job_id', jobIds)
       : Promise.resolve({ data: [] }),
-    posterUrls(proofs.map((p) => p.id)),
+    posterUrls(proofs),
   ]);
 
   const jobById = new Map<string, any>((jobs.data ?? []).map((j: any) => [j.id, j]));
@@ -208,8 +208,11 @@ async function backfillStills(proofIds: string[]): Promise<void> {
  * footage, so nothing here writes to the custody trail — that stays for the
  * routes that hand over frames, the analysis, or the file itself.
  */
-async function posterUrls(proofIds: string[]): Promise<Map<string, string>> {
+async function posterUrls(
+  proofs: Array<{ id: string; duration_seconds?: number | null }>,
+): Promise<Map<string, string>> {
   const out = new Map<string, string>();
+  const proofIds = proofs.map((p) => p.id);
   if (!proofIds.length) return out;
   const admin = createAdminClient();
   if (!admin) return out;
@@ -230,10 +233,16 @@ async function posterUrls(proofIds: string[]): Promise<Map<string, string>> {
     }
 
     // Clips filed before stills were extracted independently of the model have
-    // no frame to sign. Backfilling them here is what makes an old row heal
-    // itself the next time somebody opens the library, rather than waiting for
-    // a re-upload. Off the response: the list must not wait on FFmpeg.
-    const missing = proofIds.filter((id) => !pathByProof.has(id));
+    // no frame to sign. Clips that already have a still can still be 0:00 —
+    // MediaRecorder WebM often arrives with no duration, and a poster does not
+    // mean the length was settled. Backfilling both is what makes an old row
+    // heal the next time somebody opens the library. Off the response: the
+    // list must not wait on FFmpeg.
+    const missingStills = proofIds.filter((id) => !pathByProof.has(id));
+    const missingDuration = proofs
+      .filter((p) => !(Number(p.duration_seconds) > 0))
+      .map((p) => p.id);
+    const missing = [...new Set([...missingStills, ...missingDuration])];
     if (missing.length) void backfillStills(missing);
 
     if (!pathByProof.size) return out;
@@ -1042,7 +1051,7 @@ evidenceShareRouter.get(
 
       const { data: proof } = await admin
         .from('job_proofs')
-        .select('id, storage_path, phase, work_date')
+        .select('id, storage_path, phase, work_date, duration_seconds')
         .eq('job_id', share.job_id)
         .eq('id', req.params.proofId)
         .maybeSingle();
@@ -1063,7 +1072,16 @@ evidenceShareRouter.get(
         detail: `via Verifier link — original video, ${(proof as any).phase} · ${(proof as any).work_date}`,
       });
 
-      res.json({ url: (data as any).signedUrl, expiresInSeconds: 600 });
+      const stored = (proof as any).duration_seconds;
+      const durationSeconds =
+        stored != null && Number.isFinite(Number(stored)) && Number(stored) > 0
+          ? Number(stored)
+          : null;
+      res.json({
+        url: (data as any).signedUrl,
+        expiresInSeconds: 600,
+        durationSeconds,
+      });
     } catch (err) {
       next(err);
     }

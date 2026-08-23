@@ -43,6 +43,7 @@ test('formatClipTime: minutes for short clips, hours for a workday', () => {
   assert.equal(formatClipTime(110), '1:50');
   assert.equal(formatClipTime(4620), '1:17:00');
   assert.equal(formatClipTime(null), null);
+  assert.equal(formatClipTime(0), null);
 });
 
 test('did anything happen cites the changes on the clip, with the work date', () => {

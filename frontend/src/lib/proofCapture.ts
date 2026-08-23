@@ -22,6 +22,30 @@
  * unproven is a state the whole system is built to handle honestly.
  */
 
+import { resolveElementDuration } from './videoDuration';
+
+function waitForDuration(video: HTMLVideoElement, timeoutMs: number): Promise<number | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = async () => {
+      if (settled) return;
+      settled = true;
+      resolve(await resolveElementDuration(video, timeoutMs));
+    };
+    video.onloadedmetadata = () => {
+      void finish();
+    };
+    video.onerror = () => {
+      if (settled) return;
+      settled = true;
+      resolve(null);
+    };
+    setTimeout(() => {
+      void finish();
+    }, timeoutMs);
+  });
+}
+
 export interface CaptureFacts {
   contentHash: string | null;
   durationSeconds: number | null;
@@ -100,46 +124,7 @@ export async function extractFrames(
   video.src = url;
 
   try {
-    const duration = await new Promise<number | null>((resolve) => {
-      const measured = () =>
-        Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null;
-      const done = () => resolve(measured());
-
-      video.onloadedmetadata = () => {
-        if (measured() !== null) {
-          done();
-          return;
-        }
-        /*
-         * A clip the browser recorded itself.
-         *
-         * MediaRecorder writes a WebM with no duration in its header, so the
-         * element reports 0 or Infinity no matter how long the crew filmed.
-         * Nothing downstream survives that: the office list prints 0:00, and
-         * the extraction below divides by it and returns no stills at all, so
-         * the video arrives with nothing to show for itself.
-         *
-         * Seeking past any plausible length forces the browser to scan to the
-         * end and work the real duration out. The playhead goes back to the
-         * start afterwards; the loop below seeks per frame anyway.
-         */
-        const settle = () => {
-          video.ontimeupdate = null;
-          video.onseeked = null;
-          video.currentTime = 0;
-          done();
-        };
-        video.ontimeupdate = settle;
-        video.onseeked = settle;
-        try {
-          video.currentTime = Number.MAX_SAFE_INTEGER;
-        } catch {
-          done();
-        }
-      };
-      video.onerror = () => resolve(null);
-      setTimeout(done, 5000);
-    });
+    const duration = await waitForDuration(video, 5000);
 
     if (!duration || duration <= 0) return { durationSeconds: duration, frames: [] };
 
@@ -193,12 +178,7 @@ export async function readDuration(file: File): Promise<number | null> {
   video.playsInline = true;
   video.src = url;
   try {
-    return await new Promise<number | null>((resolve) => {
-      const done = () => resolve(Number.isFinite(video.duration) ? video.duration : null);
-      video.onloadedmetadata = done;
-      video.onerror = () => resolve(null);
-      setTimeout(done, 8000);
-    });
+    return await waitForDuration(video, 8000);
   } finally {
     URL.revokeObjectURL(url);
   }
@@ -227,7 +207,11 @@ export async function readCapture(file: File): Promise<CaptureFacts> {
 
   return {
     contentHash: hash,
-    durationSeconds: media.durationSeconds ?? durationHint,
+    durationSeconds:
+      (media.durationSeconds != null && media.durationSeconds > 0
+        ? media.durationSeconds
+        : null) ??
+      (durationHint != null && durationHint > 0 ? durationHint : null),
     // The file's own modification time, which for a fresh recording is when it
     // was filmed. Falls back to now — recorded either way, and the server's
     // receipt time is what the check actually compares against.

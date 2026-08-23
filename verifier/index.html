@@ -1547,8 +1547,12 @@
   function money(n) { return n.toLocaleString('en-US'); }
   function mb(bytes) { return bytes == null ? '—' : (bytes / 1048576).toFixed(0) + ' MB'; }
   function dur(s) {
-    if (s == null) return '—';
-    var m = Math.floor(s / 60), r = Math.round(s % 60);
+    if (s == null || !isFinite(s) || s <= 0) return '—';
+    var total = Math.round(s);
+    var h = Math.floor(total / 3600);
+    var m = Math.floor((total % 3600) / 60);
+    var r = total % 60;
+    if (h > 0) return h + ':' + String(m).padStart(2, '0') + ':' + String(r).padStart(2, '0');
     return m + ':' + String(r).padStart(2, '0');
   }
   function dayLabel(iso) {
@@ -2644,15 +2648,52 @@
     openLoaded(item, tab);
   }
 
+  function paintOpenMeta(item) {
+    $('#d-meta').innerHTML =
+      '<span class="id">' + esc(item.id) + '</span> · ' + esc(item.phase) + ' · ' +
+      dayLabel(item.workDate) + ' · ' + esc(item.company) + ' · ' + dur(item.duration) + ' · ' + mb(item.bytes);
+  }
+
+  function adoptDuration(item, seconds) {
+    if (!(seconds > 0) || !isFinite(seconds)) return;
+    var next = Math.round(seconds * 100) / 100;
+    if (item.duration > 0 && Math.abs(item.duration - next) < 0.5) return;
+    item.duration = next;
+    var badge = document.querySelector('tr[data-id="' + item.id + '"] .dur');
+    if (badge) badge.textContent = dur(item.duration);
+    if (state.open && state.open.id === item.id) {
+      paintOpenMeta(item);
+      var time = $('#d-time');
+      if (time && item._videoUrl) time.textContent = 'full clip · ' + dur(item.duration);
+    }
+  }
+
+  /**
+   * The stored length is often 0: MediaRecorder WebM has no duration in its
+   * header. The player still learns it as metadata (or playback) settles —
+   * that is the number the list badge should have shown.
+   */
+  function bindVideoDuration(vid, item) {
+    function apply() {
+      if (!(isFinite(vid.duration) && vid.duration > 0)) return false;
+      adoptDuration(item, vid.duration);
+      return true;
+    }
+    vid.addEventListener('loadedmetadata', apply);
+    vid.addEventListener('durationchange', apply);
+    vid.addEventListener('timeupdate', function onTick() {
+      if (apply()) vid.removeEventListener('timeupdate', onTick);
+    });
+    if (vid.readyState >= 1) apply();
+  }
+
   function openLoaded(item, tab) {
     state.open = item;
     state.frame = 0;
     stopPlay();
 
     $('#d-title').textContent = (JOBS[item.job] || { name: item.jobName || 'Job' }).name;
-    $('#d-meta').innerHTML =
-      '<span class="id">' + esc(item.id) + '</span> · ' + esc(item.phase) + ' · ' +
-      dayLabel(item.workDate) + ' · ' + esc(item.company) + ' · ' + dur(item.duration) + ' · ' + mb(item.bytes);
+    paintOpenMeta(item);
 
     // Prefer the real file when the portal minted a URL. Frames remain the
     // fallback for the demo artifact and for clips whose file URL expired.
@@ -2667,6 +2708,7 @@
       $('#d-time').textContent = 'full clip · ' + dur(item.duration);
       var vid = $('#d-frame').querySelector('video');
       if (vid) {
+        bindVideoDuration(vid, item);
         vid.addEventListener('timeupdate', function () { syncAnalysisLog(vid.currentTime); });
         vid.addEventListener('seeked', function () { syncAnalysisLog(vid.currentTime); });
         vid.addEventListener('play', function () { syncAnalysisLog(vid.currentTime); });
@@ -3889,6 +3931,10 @@
           return { at: f.atSeconds, src: f.url };
         });
         item._videoUrl = video && video.url ? video.url : null;
+        if (video && video.durationSeconds > 0) adoptDuration(item, video.durationSeconds);
+        if (payload.item && payload.item.durationSeconds > 0) {
+          adoptDuration(item, payload.item.durationSeconds);
+        }
         item._loaded = true;
       })
       .catch(function () {
@@ -3956,6 +4002,38 @@
       }
     });
     EVIDENCE = (payload.items || []).map(function (raw) { return mapRemoteItem(raw, raw.jobId); });
+    refreshMissingDurations();
+  }
+
+  /**
+   * Opening the library kicks a background FFprobe for any clip that still
+   * claims 0:00. A few seconds later we re-read the list so the preview badge
+   * picks up the settled length without a full reload.
+   */
+  function refreshMissingDurations() {
+    if (!ORG_MODE) return;
+    var missing = EVIDENCE.some(function (e) { return !(e.duration > 0); });
+    if (!missing) return;
+    setTimeout(function () {
+      fetch('/api/evidence-portal/library', { credentials: 'include' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (payload) {
+          if (!payload) return;
+          var byId = {};
+          (payload.items || []).forEach(function (raw) { byId[raw.id] = raw; });
+          var changed = false;
+          EVIDENCE.forEach(function (item) {
+            var fresh = byId[item.id];
+            if (!fresh || !(fresh.durationSeconds > 0)) return;
+            if (item.duration !== fresh.durationSeconds) {
+              item.duration = fresh.durationSeconds;
+              changed = true;
+            }
+          });
+          if (changed) render();
+        })
+        .catch(function () {});
+    }, 6000);
   }
 
   function loadOrgLibrary() {

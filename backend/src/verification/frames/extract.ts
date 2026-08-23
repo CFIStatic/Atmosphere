@@ -11,6 +11,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { verificationConfig } from '../config.js';
 import type { PipelineContext } from '../pipeline/orchestrator.js';
+import {
+  durationFromPacketTimes,
+  durationFromProbe,
+  type ProbeJson,
+} from './duration.js';
 
 export interface VideoMetadata {
   durationSeconds: number | null;
@@ -49,6 +54,34 @@ export const defaultRunner: CommandRunner = (bin, args) =>
     child.on('close', (code) => resolve({ stdout, stderr, code: code ?? 1 }));
   });
 
+async function probeDurationFromPackets(
+  filePath: string,
+  runner: CommandRunner,
+): Promise<number | null> {
+  try {
+    const { stdout, code } = await Promise.race([
+      runner(verificationConfig.ffprobePath, [
+        '-v',
+        'error',
+        '-select_streams',
+        'v:0',
+        '-show_entries',
+        'packet=pts_time',
+        '-of',
+        'csv=p=0',
+        filePath,
+      ]),
+      new Promise<{ stdout: string; stderr: string; code: number }>((resolve) =>
+        setTimeout(() => resolve({ stdout: '', stderr: 'timeout', code: 1 }), 20_000),
+      ),
+    ]);
+    if (code !== 0) return null;
+    return durationFromPacketTimes(stdout);
+  } catch {
+    return null;
+  }
+}
+
 export async function probeMetadata(
   filePath: string,
   runner: CommandRunner = defaultRunner,
@@ -63,15 +96,15 @@ export async function probeMetadata(
     filePath,
   ]);
   if (code !== 0) throw new Error(`ffprobe failed: ${stderr.slice(0, 500)}`);
-  const parsed = JSON.parse(stdout) as {
-    format?: { duration?: string };
+  const parsed = JSON.parse(stdout) as ProbeJson & {
     streams?: Array<{
       codec_type?: string;
       codec_name?: string;
       width?: number;
       height?: number;
       avg_frame_rate?: string;
-      tags?: { rotate?: string };
+      duration?: string | number;
+      tags?: { rotate?: string; DURATION?: string; Duration?: string; duration?: string };
     }>;
   };
   const video = parsed.streams?.find((s) => s.codec_type === 'video');
@@ -80,8 +113,15 @@ export async function probeMetadata(
     const [a, b] = video.avg_frame_rate.split('/').map(Number);
     if (b) fps = a / b;
   }
+  let durationSeconds = durationFromProbe(parsed);
+  // MediaRecorder WebM often has no duration in the header or tags. The last
+  // packet timestamp is the length the browser would have found by seeking
+  // past the end — slower, so only when the cheap read came back empty.
+  if (durationSeconds == null) {
+    durationSeconds = await probeDurationFromPackets(filePath, runner);
+  }
   return {
-    durationSeconds: parsed.format?.duration ? Number(parsed.format.duration) : null,
+    durationSeconds,
     width: video?.width ?? null,
     height: video?.height ?? null,
     codec: video?.codec_name ?? null,

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type EvidenceItem, type CustodyEntry } from '../../lib/api';
+import { formatVideoClock } from '../../lib/videoDuration';
 import { SpinnerIcon } from '../icons';
 
 /**
@@ -73,12 +74,7 @@ const when = (iso: string | null) =>
       })
     : '—';
 
-const length = (seconds: number | null) => {
-  if (seconds === null) return '—';
-  const m = Math.floor(seconds / 60);
-  const s = Math.round(seconds % 60);
-  return `${m}:${String(s).padStart(2, '0')}`;
-};
+const length = (seconds: number | null) => formatVideoClock(seconds);
 
 const size = (bytes: number | null) =>
   bytes === null ? '—' : `${(bytes / 1_048_576).toFixed(1)} MB`;
