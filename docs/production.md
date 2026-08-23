@@ -289,6 +289,52 @@ The repo also no longer sets a `startCommand` in the root `railway.toml`
 (the backend Dockerfile's CMD is the same command), so even a service still
 inheriting the root config boots its own image instead of crash-looping.
 
+### The same fault, wearing a pre-deploy failure
+
+Symptom: Corporate Website shows **Deployment failed during the deploy
+process → Deploy › Pre deploy command**, failing in about four seconds, on a
+commit that only touched `backend/`. Initialization and Build both pass, so
+it reads like a broken command rather than a misrouted service.
+
+Read the **build log**, not the deploy log. If it says
+
+```
+modified file: backend/src/routes/evidencePortal.ts
+build  COPY backend/src ./src
+build  RUN npm run build     > tsc -p tsconfig.json
+runtime RUN apt-get install ... ffmpeg ...
+```
+
+then the marketing site just built the Work Verification BFF, and this is the
+Config File fault above — same cause, later stage. The root `/railway.toml`
+watches `backend/**`, so a backend commit triggers the build; it also sets
+`build.dockerfilePath = Dockerfile`, so the image is the backend's. The
+service's own pre-deploy command is an nginx path that does not exist in a
+`node:22-bookworm-slim` image, so it exits non-zero immediately.
+
+Two things follow from that:
+
+- **The pre-deploy command is not the bug.** Clearing it only moves the
+  failure to the healthcheck, because the wrong image would still deploy.
+  Fix the Config File; the pre-deploy command is collateral.
+- **Stamped settings cannot save you here.** `railway environment edit
+  --service-config` writes `build.dockerfilePath`, `deploy.startCommand` and
+  the probe onto the service, and config-as-code outranks every one of them.
+  `RAILWAY_DOCKERFILE_PATH` loses the same way.
+
+`backend/scripts/applyRailwayConfigFile.mjs` sets the Config File path itself
+(the one setting the CLI cannot reach), and both
+`website/scripts/apply-railway-config.sh` and
+`internal/scripts/apply-railway-config.sh` call it. `deploy-production.yml`
+runs the website one on every production push — including the backend-only
+pushes that trip this, which `deploy-website.yml` never sees. All of it warns
+rather than fails: a config repair must never be what breaks a ship. If the
+warning shows up in the log, set the field by hand.
+
+Nothing in this repo wants a Railway pre-deploy command at all. The BFF's
+real pre-deploy work — Keys sync, the Resend sending domain, the Supabase
+`memory_events` repair — runs as GitHub Actions steps before `railway up`.
+
 Official references: [GitHub Autodeploys](https://docs.railway.com/deployments/github-autodeploys),
 [PR Environments](https://docs.railway.com/guides/preview-deployments-with-pr-environments),
 [Monorepos](https://docs.railway.com/deployments/monorepo).

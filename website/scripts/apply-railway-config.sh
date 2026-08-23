@@ -5,6 +5,11 @@
 # process → Healthcheck failure" after ~5 minutes on commits that never
 # touched website/.
 #
+# The stamp alone is not enough: config-as-code outranks it, so a service
+# whose Config File was never set still reads the root file and still builds
+# the backend image. applyRailwayConfigFile.mjs sets that path too, which is
+# the part that actually stops the inheritance.
+#
 #   RAILWAY_TOKEN=… ./website/scripts/apply-railway-config.sh
 #
 # Safe to re-run. Does not deploy.
@@ -55,10 +60,25 @@ edit deploy.healthcheckPath "$healthcheck_path"
 edit deploy.healthcheckTimeout "$healthcheck_timeout"
 edit deploy.restartPolicyType "$restart_policy"
 edit deploy.restartPolicyMaxRetries "$restart_retries"
+# Nothing in this repo needs a Railway pre-deploy command — the BFF's
+# pre-deploy work (Keys sync, Resend domain, Supabase repair) runs as
+# GitHub Actions steps before railway up. A leftover one set by hand is an
+# nginx path, so it exits non-zero in four seconds on any deploy that
+# inherited the backend image and takes the whole deploy with it.
+edit deploy.preDeployCommand ""
 
 printf '%s' "$dockerfile_path" | railway variable set RAILWAY_DOCKERFILE_PATH \
   --stdin --skip-deploys --service "$service" \
   --project "$project" --environment "$environment" \
   || echo "warn: could not set RAILWAY_DOCKERFILE_PATH"
+
+# The one setting `railway environment edit` cannot reach. Without it the
+# stamps above are overridden by the repo-root /railway.toml on every
+# GitHub autodeploy.
+if ! RAILWAY_SERVICE="$service" node "$repo/backend/scripts/applyRailwayConfigFile.mjs" \
+  "$service" "website/railway.toml"
+then
+  echo "  warn: could not set the Config File. Set it by hand: Settings → Config-as-code → /website/railway.toml"
+fi
 
 echo "Service $service now uses nginx + GET /health (not node dist/index.js / 300s /api/health)."

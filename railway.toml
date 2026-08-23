@@ -24,3 +24,14 @@ restartPolicyMaxRetries = 5
 # office app) resolves THIS file on GitHub autodeploys. With a startCommand
 # here, those nginx images tried to run Node, crash-looped, and failed the
 # healthcheck. Without it they fall back to their image's own entrypoint.
+#
+# Dropping startCommand narrowed that blast radius; it did not close it.
+# build.dockerfilePath and watchPatterns above still reach any service
+# reading this file, and config-as-code outranks whatever
+# `railway environment edit` stamped onto it — so an inheriting service
+# rebuilds on backend-only commits and gets the BFF image, whatever its
+# own settings say. That is how Corporate Website came to build tsc and
+# ffmpeg and then fail its nginx pre-deploy command in four seconds.
+# The fix is per-service and cannot live here: point each service's
+# Config File at its own file. backend/scripts/applyRailwayConfigFile.mjs
+# does that from CI. See docs/production.md.

@@ -218,6 +218,13 @@ jobs:
           echo "Resolved '$service' to $service_id"
           service="$service_id"
           printf '%s' 'frontend/Dockerfile' | railway variable set RAILWAY_DOCKERFILE_PATH --stdin --skip-deploys --service "$service"
+          # RAILWAY_DOCKERFILE_PATH loses to config-as-code. If this service's
+          # Config File was never set, GitHub autodeploys read the repo-root
+          # /railway.toml and build the backend image here instead — the same
+          # fault that made Corporate Website fail its pre-deploy command in
+          # four seconds. Pin the path; warn rather than fail the ship.
+          node backend/scripts/applyRailwayConfigFile.mjs "$service" frontend/railway.toml \
+            || echo "warn: set Config File = /frontend/railway.toml by hand (Settings → Config-as-code)."
           # Private HTTP to the BFF. The public https://atmosphere-production URL
           # hairpins out of the mesh (jfk1 → ams1 hops) and 502s /api for ~3s,
           # which is the spinner on /login (api.me() before the form).
@@ -244,6 +251,46 @@ jobs:
           export RAILWAY_PROJECT_ID="$project"
           chmod +x backend/scripts/railwayUp.sh
           backend/scripts/railwayUp.sh
+
+  website-config:
+    name: Repair Corporate Website config
+    runs-on: ubuntu-latest
+    environment: Keys
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      # No deploy here. deploy-website.yml ships the site when website/**
+      # changes; this job only re-asserts the service's settings, because the
+      # push that breaks Corporate Website is a backend-only one that
+      # deploy-website.yml never sees. The root /railway.toml watches
+      # backend/**, so Railway autodeploys that commit onto every service
+      # whose Config File is unset — building the BFF image on the marketing
+      # site. Config-as-code beats stamped settings, so the Config File path
+      # is the only setting that actually stops it.
+      - name: Point Corporate Website at /website/railway.toml
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || vars.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
+          RAILWAY_WEBSITE_SERVICE: ${{ secrets.RAILWAY_WEBSITE_SERVICE || vars.RAILWAY_WEBSITE_SERVICE || 'Corporate Website' }}
+          RAILWAY_ENVIRONMENT: production
+        run: |
+          set -uo pipefail
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "No RAILWAY_TOKEN; skipping the Corporate Website config repair."
+            exit 0
+          fi
+          railway link --project "$RAILWAY_PROJECT_ID" --environment production || true
+          chmod +x website/scripts/apply-railway-config.sh
+          # Never fail the production deploy over a config repair.
+          website/scripts/apply-railway-config.sh || \
+            echo "warn: could not repair Corporate Website config; see docs/production.md."
 
   internal:
     name: Deploy internal site
