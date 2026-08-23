@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- ask-panel 2026-08-23-live -->
+<!-- ask-panel 2026-08-23-live3 -->
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -766,7 +766,7 @@
   .ask-panel {
     flex: 1; min-height: 0; display: flex; flex-direction: column;
   }
-  .ask-live { flex: 1 1 48%; min-height: 110px; overflow-y: auto; }
+  .ask-live { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
   .ask-chat {
     flex: 1 1 42%; min-height: 168px; display: flex; flex-direction: column;
     border-top: 1px solid var(--line-soft); padding-top: 12px; margin-top: 6px;
@@ -1066,7 +1066,7 @@
 
       <section class="side">
         <div class="tabs" role="tablist">
-          <button role="tab" data-tab="ask" aria-selected="true">Ask</button>
+          <button role="tab" data-tab="ask" aria-selected="true">Analysis</button>
           <button role="tab" data-tab="custody" aria-selected="false">Chain of custody</button>
           <button role="tab" data-tab="details" aria-selected="false">Details</button>
         </div>
@@ -2974,9 +2974,10 @@
   }
 
   function paintClipMeta(item) {
-    $('#d-meta').innerHTML =
-      '<span class="id">' + esc(item.id) + '</span> · ' + esc(item.phase) + ' · ' +
-      dayLabel(item.workDate) + ' · ' + esc(item.company) + ' · ' + dur(item.duration) + ' · ' + mb(item.bytes);
+    var parts = [dayLabel(item.workDate), esc(item.company)];
+    if (item.duration && item.duration > 0) parts.push(dur(item.duration));
+    if (item.bytes) parts.push(mb(item.bytes));
+    $('#d-meta').innerHTML = parts.join(' · ');
   }
 
   function paintLiveCaption(text) {
@@ -3102,15 +3103,8 @@
   function renderScopeLog(item) {
     var a = item.analysis || {};
     var rows = analysisLog(item);
-    var pill = a.state === 'failed' ? 'Failed'
-      : (a.state === 'queued' || a.state === 'none' || !a.state) && !rows.length ? 'Writing…'
-      : a.state === 'paired' || a.state === 'skipped' ? 'Not yet'
-      : 'Ready';
-    var wait = a.reason || (a.state === 'paired'
-      ? 'This is the before half of a day. Open the after clip for the dictation of what changed.'
-      : a.state === 'failed'
-        ? 'The dictation failed after retries. The footage itself is unaffected.'
-        : 'Play the clip. The assistant writes what is on screen as you watch.');
+    var pill = rows.length ? 'Ready' : 'Writing…';
+    var wait = 'The assistant writes what is on screen as you watch.';
     var html = '<div class="alog-head"><h4>AI analysis</h4><span class="livepill" id="alog-pill">' + pill + '</span></div>';
     html += '<p class="footnote alog-wait" id="alog-empty">' + esc(wait) + '</p>';
     if (a.pairedWith) {
@@ -3236,38 +3230,15 @@
   }
 
   function askSuggestionsHtml() {
-    return '<div class="ask-suggest">' +
-      '<button type="button" data-ask="Did anything happen in this clip?">Did anything happen?</button>' +
-      '<button type="button" data-ask="What work is visible?">What work is visible?</button>' +
-      '<button type="button" data-ask="Is anything in this footage unfinished?">Anything unfinished?</button>' +
-      '</div>';
+    return '';
   }
 
-  function renderAsk(item) {
-    var thread = ASK_THREADS[item.id] || [];
-    var html = '<div class="alog-head"><h4>Ask this clip</h4></div>' +
-      '<p class="footnote" style="margin:0 0 12px">Ask what the footage shows. The assistant answers from its reading of this clip — including notes written as you watch.</p>' +
-      '<div class="ask-thread" id="ask-thread">';
-    if (!thread.length) {
-      html += askSuggestionsHtml();
-    } else {
-      thread.forEach(function (m) {
-        html += '<div class="ask-bubble ' + esc(m.role) + '">' + esc(m.text) + '</div>';
-      });
-    }
-    html += '</div>' +
-      '<form id="ask-form" class="ask-form">' +
-      '<input id="ask-input" maxlength="1000" autocomplete="off" placeholder="Ask about this clip…" />' +
-      '<button type="submit">Ask</button>' +
-      '</form>';
-    return html;
+  function renderAsk(_item) {
+    return '';
   }
 
   function renderAskPanel(item) {
-    return '<div class="ask-panel">' +
-      '<div class="ask-live">' + renderScopeLog(item) + '</div>' +
-      '<div class="ask-chat">' + renderAsk(item) + '</div>' +
-      '</div>';
+    return '<div class="ask-panel"><div class="ask-live">' + renderScopeLog(item) + '</div></div>';
   }
 
   function paintAskThread(item, pending) {
@@ -3331,9 +3302,9 @@
   }
 
   function shouldWatch(item) {
-    var s = (item.analysis || {}).state;
-    if (s === 'paired' || s === 'skipped' || s === 'failed') return false;
-    return true;
+    // Official dictation can be skipped/queued/paired on a Field Capture
+    // upload. Live notes still have to watch the file that is on screen.
+    return Boolean(item && (item._remote || item._videoUrl));
   }
 
   function stopLiveWatch() {
