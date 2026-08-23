@@ -8,7 +8,7 @@ export function isLiveFirstPath(path: string): boolean {
   if (path === '/api/profile' || path === '/api/profile/avatar') return true;
   if (/^\/api\/org(\/|$)/.test(path)) return true;
   if (path === '/api/evidence-portal/library') return true;
-  if (/^\/api\/evidence-portal\/evidence\/[^/]+\/ask$/.test(path)) return true;
+  if (/^\/api\/evidence-portal\/evidence\/[^/]+\/(ask|watch)$/.test(path)) return true;
   if (path === '/api/operations/shared') return true;
   if (/^\/api\/operations\/shared\/[^/]+$/.test(path)) return true;
   if (/^\/api\/operations\/shared\/[^/]+\/proof$/.test(path)) return true;
