@@ -77,6 +77,7 @@ describe('verifier dashboard clip preview', () => {
 
     const fromApi = clipThumbHtml(null, 'data:image/svg+xml;charset=utf-8,x', '—', 'proof-1');
     expect(fromApi).toContain('data-preview-id="proof-1"');
+    expect(fromApi).toContain('Opening the recorded clip…');
     expect(fromApi).not.toContain('poster=');
     expect(fromApi).not.toContain('demo-preview');
   });
@@ -86,7 +87,34 @@ describe('verifier dashboard clip preview', () => {
     expect(verifierHtml).toContain('/api/evidence-portal/evidence/');
     expect(verifierHtml).toContain('/preview');
     expect(verifierHtml).toContain('function resolvePreviewSrc');
+    expect(verifierHtml).toContain('function clipToOpen');
+    expect(verifierHtml).toContain('function showOpeningSheet');
     expect(verifierHtml).not.toContain('/verifier/demo-preview.mp4');
     expect(verifierHtml).not.toContain("o.previewUrl = '/verifier/demo-preview.mp4'");
+  });
+
+  it('opens the newest live recording so the footage is on screen', () => {
+    const start = verifierHtml.indexOf('function clipInstant(e, keys)');
+    const end = verifierHtml.indexOf('function isActiveRecording(e)');
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const { clipToOpen } = new Function(
+      `${verifierHtml.slice(start, end)}; return { clipToOpen };`,
+    )() as {
+      clipToOpen: (
+        items: Array<{ id: string; uploadedAt?: string }>,
+        search: string,
+        live: boolean,
+      ) => { id: string } | null;
+    };
+    const items = [
+      { id: 'older', uploadedAt: '2026-08-21T12:00:00Z' },
+      { id: 'jack-after', uploadedAt: '2026-08-22T18:25:00Z' },
+    ];
+    expect(clipToOpen(items, '', true)?.id).toBe('jack-after');
+    expect(clipToOpen(items, '?open=older', true)?.id).toBe('older');
+    expect(clipToOpen(items, '?open=none', true)).toBeNull();
+    expect(clipToOpen(items, '', false)).toBeNull();
+    expect(clipToOpen(items, '?open=latest', false)?.id).toBe('jack-after');
   });
 });

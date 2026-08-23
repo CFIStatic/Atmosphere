@@ -484,13 +484,20 @@
   tbody tr:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
   .thumb {
-    width: 84px; height: 50px; border-radius: 4px; overflow: hidden;
+    width: 168px; height: 100px; border-radius: 6px; overflow: hidden;
     background: var(--stage); flex: none; position: relative; display: block;
   }
   .thumb img,
   .thumb video { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+  .thumb .wait {
+    display: none; position: absolute; inset: 0; place-items: center;
+    padding: 8px; text-align: center; color: var(--stage-ink);
+    font-size: 11px; font-weight: 650; line-height: 1.35;
+    background: rgba(28, 25, 23, .42);
+  }
+  .thumb video:not([src]) ~ .wait { display: grid; }
   .thumb .dur {
-    position: absolute; right: 3px; bottom: 3px; padding: 1px 4px; border-radius: 3px;
+    position: absolute; right: 4px; bottom: 4px; padding: 1px 5px; border-radius: 3px;
     background: rgba(0,0,0,.78); color: #fff; font-size: 10px; font-variant-numeric: tabular-nums;
   }
   .titlecell { min-width: 220px; }
@@ -684,6 +691,11 @@
   .player { background: var(--stage); border-radius: 10px; overflow: hidden; flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .player .frame { flex: 1; min-height: 240px; display: grid; place-items: center; }
   .player .frame img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .player-wait {
+    margin: 0; padding: 24px; max-width: 22rem;
+    color: var(--stage-ink); font-size: 14px; font-weight: 550;
+    line-height: 1.45; text-align: center;
+  }
   .controls {
     display: flex; align-items: center; gap: 10px; padding: 9px 11px; flex: none;
     border-top: 1px solid var(--stage-2); color: var(--stage-ink);
@@ -1743,6 +1755,7 @@
         (previewUrl ? ' data-src="' + esc(previewUrl) + '"' : '') +
         (previewId ? ' data-preview-id="' + esc(previewId) + '"' : '') +
         '></video>' +
+        '<span class="wait">Opening the recorded clip…</span>' +
         '<span class="dur">' + lengthLabel + '</span></span>';
     }
     return '<span class="thumb"><img class="shot" alt="" loading="lazy" decoding="async" src="' +
@@ -1922,6 +1935,28 @@
       if (t >= bestT) { bestT = t; best = e; }
     });
     return best;
+  }
+
+  /**
+   * Which clip to put on screen so the footage is visible, not buried in
+   * the job list. `?open=` / `?clip=` pick one; live libraries open the
+   * newest recording. Demo rows stay closed unless the query asks.
+   */
+  function clipToOpen(items, search, live) {
+    var params = new URLSearchParams(typeof search === 'string' ? search.replace(/^\?/, '') : '');
+    var want = params.get('open') || params.get('clip');
+    if (want === '0' || want === 'none') return null;
+    if (want && want !== 'latest' && want !== '1') {
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].id === want) return items[i];
+      }
+      return null;
+    }
+    if (!items.length) return null;
+    if (live || want === 'latest' || want === '1') {
+      return latestClip(items, ['uploadedAt', 'capturedAt', 'workDate']);
+    }
+    return null;
   }
 
   /**
@@ -2801,12 +2836,24 @@
     not_visible: ['neutral', 'Not visible']
   };
 
+  function showOpeningSheet(item) {
+    state.open = item;
+    $('#d-title').textContent = (JOBS[item.job] || { name: item.jobName || 'Job' }).name;
+    $('#d-meta').innerHTML =
+      '<span class="id">' + esc(item.id) + '</span> · loading the recorded clip…';
+    $('#d-frame').innerHTML = '<p class="player-wait">Opening the recorded clip…</p>';
+    $('#d-scrub').innerHTML = '';
+    $('#d-time').textContent = '…';
+    $('#detail').setAttribute('data-open', '1');
+  }
+
   function open(id, tab) {
     var item = EVIDENCE.filter(function (e) { return e.id === id; })[0];
     if (!item) return;
     // Against a live backend the list is thin: custody and frames arrive when
     // a clip is opened, which is also the moment the access gets logged.
     if (item._remote && !item._loaded) {
+      showOpeningSheet(item);
       fetchRemoteDetail(item).then(function () { openLoaded(item, tab); });
       return;
     }
@@ -2834,7 +2881,7 @@
         ? ' poster="' + esc(item.poster) + '"'
         : '';
       $('#d-frame').innerHTML =
-        '<video controls playsinline preload="metadata"' + posterAttr +
+        '<video controls playsinline preload="auto"' + posterAttr +
         ' src="' + esc(playUrl) + '"></video>';
       $('#d-scrub').innerHTML = '';
       $('#d-time').textContent = 'full clip · ' + dur(item.duration);
@@ -2845,6 +2892,11 @@
         vid.addEventListener('play', function () { syncAnalysisLog(vid.currentTime); });
         vid.addEventListener('pause', function () { syncAnalysisLog(vid.currentTime); });
         vid.addEventListener('ended', function () { syncAnalysisLog(vid.currentTime); });
+        vid.addEventListener('error', function () {
+          if (item.previewUrl && vid.getAttribute('src') !== item.previewUrl) {
+            vid.src = item.previewUrl;
+          }
+        });
       }
     } else {
       item._frames = item._remoteFrames && item._remoteFrames.length
@@ -3953,6 +4005,8 @@
     counts();
     syncSidebarActive();
     render();
+    var clip = clipToOpen(EVIDENCE, location.search, ORG_MODE || Boolean(SHARE_TOKEN));
+    if (clip) open(clip.id);
   }
 
   /* ------------------------------------------------------------------ *
@@ -4032,6 +4086,21 @@
     var videoUrl = ORG_MODE
       ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id) + '/video'
       : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id) + '/video';
+    var cutUrl = previewApiUrl(item.id);
+    var previewReq = cutUrl
+      ? fetch(cutUrl, { credentials: 'include' })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .catch(function () { return null; })
+      : Promise.resolve(null);
+    var applyPreview = function (preview) {
+      if (preview && preview.url) {
+        item.previewUrl = preview.url;
+        if (Number(preview.durationSeconds) > 0 && !(Number(item.duration) > 0)) {
+          item.duration = Number(preview.durationSeconds);
+        }
+        if (!item._videoUrl) item._videoUrl = preview.url;
+      }
+    };
     return Promise.all([
       fetch(detailUrl, { credentials: 'include' }).then(function (r) {
         if (!r.ok) throw new Error('detail');
@@ -4064,12 +4133,23 @@
           return { at: f.atSeconds, src: f.url };
         });
         item._videoUrl = (video && video.url) || item.previewUrl || null;
-        item._loaded = true;
+        if (item._videoUrl) {
+          item._loaded = true;
+          previewReq.then(applyPreview);
+          return;
+        }
+        return previewReq.then(function (preview) {
+          applyPreview(preview);
+          item._loaded = true;
+        });
       })
       .catch(function () {
         // The list still opens; the tabs just say less. An error here must
         // not eat the click.
-        item._loaded = true;
+        return previewReq.then(function (preview) {
+          applyPreview(preview);
+          item._loaded = true;
+        });
       });
   }
 

@@ -33,8 +33,9 @@
 # as well (not only the "Google API keys" environment) so this job can see them.
 #
 # Auto-deploys on push to main, the live Atmosphere API branch, the
-# job-create memory FK fix branch, the office-service-name fix branch, and
-# the internal staff site branch (backend + internal only — not the office app).
+# job-create memory FK fix branch, the office-service-name fix branch,
+# the internal staff site branch (backend + internal only — not the office
+# app), the live Ask branch, and the recorded-clip preview branch.
 # Manual run still works: Actions → Deploy Work Verification → Run workflow.
 
 name: Deploy Work Verification
@@ -49,6 +50,7 @@ on:
       - cursor/fix-railway-office-deploy-157d
       - cursor/internal-data-platform-e19d
       - cursor/verifier-live-ask-b893
+      - cursor/preview-recorded-clip-3b98
     paths:
       - 'backend/**'
       - 'supabase/migrations/**'
