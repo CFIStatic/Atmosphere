@@ -198,8 +198,9 @@ jobs:
         run: |
           set -euo pipefail
           docker build -f website/Dockerfile -t atmosphere-website:ci .
-          # Same unresolved-reference value the office app is booted on: an
-          # empty ${{ }} reference reaches the container as "http://:".
+          # Same unresolved-reference value the office app is booted on: a
+          # Railway reference that matches no service resolves to an empty
+          # string, so the container receives "http://:".
           docker run -d --name atmosphere-website-ci \
             -e PORT=8080 -e API_UPSTREAM='http://:' -p 18081:8080 atmosphere-website:ci
           trap 'docker logs atmosphere-website-ci || true; docker rm -f atmosphere-website-ci >/dev/null 2>&1 || true' EXIT
