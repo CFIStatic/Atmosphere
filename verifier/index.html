@@ -507,8 +507,8 @@
   .chip.hold { background: var(--ink); color: var(--panel); }
   .chip.neutral { background: var(--line-soft); color: var(--ink-2); }
   .chip .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-  tr.jobrow .chip.unknown .dot,
-  tr.jobrow .chip.yellow .dot { animation: recpulse 1.2s ease-in-out infinite; }
+  tr .chip.yellow .dot,
+  tr.jobrow .chip.unknown .dot { animation: recpulse 1.2s ease-in-out infinite; }
   @keyframes recpulse {
     0%, 100% { opacity: 1; }
     50% { opacity: .3; }
@@ -1618,7 +1618,8 @@
       var job = JOBS[item.job] || {};
       return String(job.name || item.jobName || '') + ' ' + String(item.phase || '');
     }
-    if (key === 'status' || key === 'integrity') return integrityRank(item);
+    if (key === 'status') return isActiveRecording(item) ? 1 : 0;
+    if (key === 'integrity') return integrityRank(item);
     if (key === 'recorded') return String(item.workDate || '') + 'T' + String(item.uploadedAt || '');
     if (key === 'uploader') return String(item.person || '') + ' ' + String(item.company || '');
     return String(item.uploadedAt || '');
@@ -1720,26 +1721,28 @@
     return best;
   }
 
+  /**
+   * Filming still in flight — not an uploaded file whose analysis is queued.
+   * A landed video is Recorded even when the model has not read it yet.
+   */
   function isActiveRecording(e) {
     var a = (e.analysis || {}).state;
-    if (a === 'queued') return true;
-    if (a === 'done' || a === 'paired' || a === 'skipped' || a === 'failed') return false;
+    if (a === 'queued' || a === 'done' || a === 'paired' || a === 'skipped' || a === 'failed') {
+      return false;
+    }
     var t = clipInstant(e, ['uploadedAt', 'capturedAt']);
     return Boolean(t && (Date.now() - t) < 30 * 60 * 1000);
   }
 
   function jobRecordingStatus(items) {
     if (!items.length) return { cls: 'red', text: 'No recording' };
-    if (items.some(isActiveRecording)) return { cls: 'yellow', text: 'Active recording' };
-    return { cls: 'green', text: 'Recording' };
+    if (items.some(isActiveRecording)) return { cls: 'yellow', text: 'Recording' };
+    return { cls: 'green', text: 'Recorded' };
   }
 
   function clipStatus(e) {
-    if (isActiveRecording(e)) return { cls: 'yellow', text: 'Active recording' };
-    var integ = integrityOf(e);
-    if (integ === 'fail') return { cls: 'red', text: 'Failed' };
-    if (needsAttention(e) || integ !== 'pass') return { cls: 'yellow', text: 'Needs review' };
-    return { cls: 'green', text: 'Verified' };
+    if (isActiveRecording(e)) return { cls: 'yellow', text: 'Recording' };
+    return { cls: 'green', text: 'Recorded' };
   }
 
   /**
