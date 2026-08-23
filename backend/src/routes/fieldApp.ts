@@ -29,10 +29,11 @@ import {
 /**
  * Field Capture (App Store) ↔ platform account bridge.
  *
- * Crew connect is the company (office join) code, entered once. That
- * creates (or reopens) a field-technician membership for this phone so
- * day films land in `job_proofs` on the office record. A dashboard
- * email/password login still works for people who already have one.
+ * Crew connect is the person's name plus the company (office join) code,
+ * entered once. That creates (or reopens) a field-technician membership
+ * for that name so the office can assign jobs and day films land in
+ * `job_proofs`. A dashboard email/password login still works for people
+ * who already have one.
  */
 export const fieldAppRouter = Router();
 
@@ -111,9 +112,10 @@ fieldAppRouter.post(
 /**
  * POST /api/field-app/join
  *
- * Crew connect: the company code from Settings. Public — there is no
- * session yet. The same phone + code reopens this login so the crew
- * never enter the code again.
+ * Crew connect: first and last name plus the company code from Settings.
+ * Public — there is no session yet. The same name + code reopens this
+ * person so assignments stay on them. The phone stores the code and
+ * does not ask again.
  */
 fieldAppRouter.post(
   '/join',

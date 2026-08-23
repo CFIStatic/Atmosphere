@@ -34,17 +34,18 @@ test('field capture device email is stable for a phone inside one office', () =>
   assert.equal(isFieldCaptureEmail(email), true);
 });
 
-test('field join: company code plus this phone', () => {
+test('field join: name plus company code', () => {
   const parsed = fieldJoinSchema.parse({
+    fullName: '  Nick   Smith ',
     joinCode: '  8f3a9c2b ',
     deviceId: 'A1B2C3D4-E5F6-7890-ABCD-EF1234567890',
   });
+  assert.equal(parsed.fullName, 'Nick Smith');
   assert.equal(parsed.joinCode, '8F3A9C2B');
   assert.equal(parsed.deviceId, 'A1B2C3D4-E5F6-7890-ABCD-EF1234567890');
-  assert.equal(parsed.fullName, undefined);
 });
 
-test('field join: name plus office code still accepted', () => {
+test('field join: name plus office code without a device id', () => {
   const parsed = fieldJoinSchema.parse({
     fullName: '  Nick   Smith ',
     joinCode: '  8f3a9c2b ',
@@ -57,12 +58,12 @@ test('field join: reject a first name only', () => {
   assert.throws(() => fieldJoinSchema.parse({ fullName: 'Nick', joinCode: '8F3A9C2B' }));
 });
 
-test('field join: reject a company code with no phone id', () => {
+test('field join: reject a company code with no name', () => {
   assert.throws(() => fieldJoinSchema.parse({ joinCode: '8F3A9C2B' }));
 });
 
 test('field join: reject a missing join code', () => {
-  assert.throws(() => fieldJoinSchema.parse({ deviceId: 'A1B2C3D4-E5F6-7890-ABCD-EF1234567890' }));
+  assert.throws(() => fieldJoinSchema.parse({ fullName: 'Nick Smith' }));
 });
 
 test('POST /api/field-app/join rejects a first name only before hitting Auth', async () => {
@@ -89,7 +90,7 @@ test('POST /api/field-app/join rejects a first name only before hitting Auth', a
   }
 });
 
-test('POST /api/field-app/join accepts a company code plus this phone at the door', async () => {
+test('POST /api/field-app/join accepts a name plus company code at the door', async () => {
   const { createApp } = await import('../src/app.js');
   const app = createApp();
   const server = app.listen(0);
@@ -101,6 +102,7 @@ test('POST /api/field-app/join accepts a company code plus this phone at the doo
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        fullName: 'Nick Smith',
         joinCode: '8F3A9C2B',
         deviceId: 'A1B2C3D4-E5F6-7890-ABCD-EF1234567890',
       }),
@@ -114,7 +116,7 @@ test('POST /api/field-app/join accepts a company code plus this phone at the doo
   }
 });
 
-test('POST /api/field-app/join rejects a company code with no phone id', async () => {
+test('POST /api/field-app/join rejects a company code with no name', async () => {
   const { createApp } = await import('../src/app.js');
   const app = createApp();
   const server = app.listen(0);
@@ -129,7 +131,7 @@ test('POST /api/field-app/join rejects a company code with no phone id', async (
     });
     assert.equal(res.status, 400);
     const body = (await res.json()) as { error?: string; code?: string };
-    assert.match(body.error ?? '', /company code/i);
+    assert.match(body.error ?? '', /first and last name/i);
     assert.equal(body.code, 'validation_error');
   } finally {
     await new Promise<void>((resolve, reject) =>

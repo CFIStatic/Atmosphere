@@ -1,14 +1,15 @@
 # Atmosphere Field Capture
 
 Production crew app: **one button**, **video + microphone**, filed against the
-**company code from the office** — or through a **job share token**.
+**person’s name and company code from the office** — or through a **job share
+token**.
 
 ## Sign in
 
-Open Field Capture and enter the **company code** from Atmosphere → Settings
-→ Organization. We store it on this phone; later launches open Today already
-linked. Today’s jobs load from that office; the day film files into the org’s
-evidence library.
+Open Field Capture and type your **name** and the **company code** from
+Atmosphere → Settings → Organization. We store both on this phone; later
+launches open Today already linked. Today’s jobs load from that office; the
+day film files into the org’s evidence library.
 
 A job share link (`?token=`) still works without a code — that path is for
 subs who were invited to one job.
@@ -30,14 +31,14 @@ Serve this folder next to the API (same origin or pass `?api=`):
 /fieldcapture/index.html?token=<job-share-token>&api=http://localhost:4000
 ```
 
-Enter the company code once, or open a job share link.
+Enter your name and the company code once, or open a job share link.
 
 The API returns an absolute `uploadUrl` for Storage, so you do **not** need
 `?storage=` for uploads on localhost. Optional:
 
 | Query | Meaning |
 |---|---|
-| *(none)* | Enter the company code once; the phone stays linked |
+| *(none)* | Enter your name and the company code once; the phone stays linked |
 | `token` | Job share access token (no office login) |
 | `api` | API origin if not same-host (e.g. `http://localhost:4000`) |
 | `storage` | Legacy fallback Storage origin if `uploadUrl` is absent |
@@ -45,7 +46,7 @@ The API returns an absolute `uploadUrl` for Storage, so you do **not** need
 
 ## What live mode does
 
-1. Enter the company code (`POST /api/field-app/join`) **or** open `?token=`
+1. Enter your name and the company code (`POST /api/field-app/join`) **or** open `?token=`
 2. Load today’s jobs (`GET /api/field-app/today`) or the shared job
 3. `getUserMedia({ video, audio: true })` + `MediaRecorder` (mic required)
 4. Hold to finish → `readCapture` (hash / duration / GPS / frames)

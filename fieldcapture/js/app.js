@@ -3,7 +3,7 @@
  *
  * Modes:
  *   ?token=<job-share>  → live MediaRecorder + proof upload (no office login)
- *   signed in           → company code once, then jobs from that office
+ *   signed in           → name + company code once, then jobs from that office
  *   ?demo=1             → scripted demo only (explicit)
  */
 (function () {
@@ -20,6 +20,7 @@
   var REFRESH_KEY = 'atm.field.refreshToken';
   var DEVICE_KEY = 'atm.field.deviceId';
   var CODE_KEY = 'atm.field.companyCode';
+  var NAME_KEY = 'atm.field.fullName';
 
   var Core = window.FieldCaptureCore;
   if (!Core) {
@@ -140,6 +141,15 @@
     storeSet(CODE_KEY, next || null);
   }
 
+  function storedFullName() {
+    return (storeGet(NAME_KEY) || '').trim();
+  }
+
+  function writeFullName(name) {
+    var next = (name || '').trim();
+    storeSet(NAME_KEY, next || null);
+  }
+
   /* ---------- home hydration ---------- */
 
   function renderExpect(jobs) {
@@ -239,7 +249,7 @@
       who.innerHTML = '';
     }
     $('#blocked-msg').textContent =
-      'Enter the company code from Atmosphere Settings. We store it on this phone — you will not be asked again. Job share links still work without a code.';
+      'Type your name and the company code from Atmosphere Settings. We store them on this phone — you will not be asked again.';
   }
 
   function showLoginError(message) {
@@ -295,15 +305,20 @@
     });
   }
 
-  function connectWithCode(joinCode, playMotion) {
+  function connectWithCode(fullName, joinCode, playMotion) {
+    var name = (fullName || '').trim();
     var code = (joinCode || '').trim().toUpperCase();
-    return Core.joinCrew({ joinCode: code, deviceId: ensureDeviceId() }, API_BASE).then(function (res) {
+    return Core.joinCrew(
+      { fullName: name, joinCode: code, deviceId: ensureDeviceId() },
+      API_BASE,
+    ).then(function (res) {
       var session = res.session || {};
       if (!session.accessToken) {
         throw new Error('Connected, but no session came back. Try again in a moment.');
       }
       writeStoredSession(session.accessToken, session.refreshToken);
       writeCompanyCode(code);
+      writeFullName(name);
       var opened = bootAccountSession();
       return playMotion ? Promise.all([opened, playElevate()]) : opened;
     });
@@ -324,8 +339,9 @@
       : Promise.reject(new Error('signed out'));
     return resume.catch(function () {
       var code = storedCompanyCode();
-      if (!code) throw new Error('signed out');
-      return connectWithCode(code, false);
+      var name = storedFullName();
+      if (!code || !name) throw new Error('signed out');
+      return connectWithCode(name, code, false);
     });
   }
 
@@ -338,13 +354,14 @@
     if (form) {
       form.addEventListener('submit', function (event) {
         event.preventDefault();
+        var fullName = ($('#login-name') && $('#login-name').value || '').trim();
         var joinCode = ($('#login-code') && $('#login-code').value || '').trim().toUpperCase();
         var btn = $('#login-btn');
         showLoginError('');
         btn.disabled = true;
-        connectWithCode(joinCode, true)
+        connectWithCode(fullName, joinCode, true)
           .catch(function (err) {
-            showLoginError(err.message || 'Could not connect. Check the company code.');
+            showLoginError(err.message || 'Could not connect. Check your name and the company code.');
           })
           .then(function () {
             btn.disabled = false;

@@ -1,0 +1,38 @@
+ATMOSPHERE FIELD CAPTURE - CONNECT SCREEN VERIFICATION
+=======================================================
+
+Date: Sunday, Aug 23, 2026, 7:16 PM (UTC)
+URL: http://127.0.0.1:4177/index.html
+Status: Page hard-refreshed (Ctrl+Shift+R)
+
+CONFIRMED ELEMENTS FROM HTML SOURCE:
+------------------------------------
+
+1. PAGE HEADING:
+   "Connect Field Capture"
+   (Located in: <h1 class="h1">Connect Field Capture</h1>)
+
+2. HELPER TEXT (EXACT):
+   "Enter the company code from Atmosphere Settings. We store it on this phone — you will not be asked again. Job share links still work without a code."
+   (Located in: <p class="lede" id="blocked-msg">...</p>)
+
+3. FORM FIELD:
+   Label: "Company code"
+   Input field: <input id="login-code" name="joinCode" type="text" 
+                autocomplete="off" autocapitalize="characters" 
+                spellcheck="false" required minlength="6" maxlength="12" />
+
+4. BUTTON:
+   "Connect this phone"
+   (Located in: <button class="daybtn" type="submit" id="login-btn">
+                <span class="lbl">Connect this phone</span></button>)
+
+KEY VERIFICATION:
+-----------------
+✓ Helper text DOES include "We store it on this phone — you will not be asked again."
+✓ Only ONE field present: Company code (no name, email, or password fields)
+✓ Connect button present with correct text
+✓ Additional helpful text about job share links working without a code
+
+The connect screen is correctly showing the updated helper text that confirms
+the one-time storage of the company code on the device.

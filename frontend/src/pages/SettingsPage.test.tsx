@@ -137,13 +137,13 @@ describe('Settings profile photo', () => {
 });
 
 describe('Settings Field Capture app', () => {
-  it('tells the office the crew enter the company code once', () => {
+  it('tells the office the crew enter their name and the company code once', () => {
     renderSettings('/settings?section=organization');
 
     expect(screen.getByText('Field Capture app')).toBeInTheDocument();
-    expect(screen.getByText(/enter this company code once/i)).toBeInTheDocument();
-    expect(screen.getByText(/The phone stores it and stays linked/i)).toBeInTheDocument();
-    expect(screen.queryByText(/first and last name/i)).toBeNull();
+    expect(screen.getByText(/type their name and this company code once/i)).toBeInTheDocument();
+    expect(screen.getByText(/first and last name/i)).toBeInTheDocument();
+    expect(screen.getByText(/The phone stores both and stays linked/i)).toBeInTheDocument();
   });
 });
 

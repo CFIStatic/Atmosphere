@@ -852,7 +852,7 @@ function FieldCaptureAppSection() {
   return (
     <Card
       title="Field Capture app"
-      description="Crew open the app, enter this company code once, and the phone stays linked — day films land here."
+      description="Crew open the app, type their name and this company code once, and the phone stays linked — day films land here."
     >
       <div className="rounded-lg border border-line bg-paper-50 px-4 py-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Company code</p>
@@ -880,18 +880,19 @@ function FieldCaptureAppSection() {
       <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm text-ink-700">
         <li>Install Field Capture on the phone.</li>
         <li>
-          They enter this <strong className="font-semibold text-ink-900">company code</strong> once
+          They type their <strong className="font-semibold text-ink-900">first and last name</strong>{' '}
+          and this <strong className="font-semibold text-ink-900">company code</strong> once
           {joinCode ? (
             <>
               {' '}
               (or open <code className="font-mono text-xs">atmosphere-field://join?code={joinCode}</code>)
             </>
           ) : null}
-          . The phone stores it and stays linked.
+          . The phone stores both and stays linked.
         </li>
         <li>
-          That phone appears under Team as a field technician. Put it on a job from the job’s Crew
-          tab — that job then shows in the app.
+          They appear under Team as a field technician. Put them on a job from the job’s Crew tab —
+          that job then shows in the app.
         </li>
       </ol>
       <p className="mt-4 text-sm text-ink-600">

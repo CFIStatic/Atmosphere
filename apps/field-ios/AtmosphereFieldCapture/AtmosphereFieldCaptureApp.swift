@@ -4,9 +4,9 @@ import SwiftUI
 /**
  * Atmosphere Field Capture — App Store entry.
  *
- * Connect the crew once on first install with the company code. Later
- * launches open straight to Today; day films land in that org’s
- * evidence library.
+ * Connect the crew once on first install with their name and the
+ * company code. Later launches open straight to Today; day films land
+ * in that org’s evidence library.
  */
 @main
 struct AtmosphereFieldCaptureApp: App {

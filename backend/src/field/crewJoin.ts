@@ -311,13 +311,13 @@ export async function joinCrewByName(input: { fullName: string; joinCode: string
   };
 }
 
-/** Company code on a phone — device id preferred, name still accepted. */
+/** Name of the person plus the company code. Device id is optional persistence. */
 export async function joinCrew(input: { fullName?: string; joinCode: string; deviceId?: string }) {
-  if (input.deviceId) {
-    return joinCrewByDevice({ deviceId: input.deviceId, joinCode: input.joinCode });
-  }
   if (input.fullName) {
     return joinCrewByName({ fullName: input.fullName, joinCode: input.joinCode });
   }
-  throw new HttpError(400, 'Enter the company code on this phone.', 'validation_error');
+  if (input.deviceId) {
+    return joinCrewByDevice({ deviceId: input.deviceId, joinCode: input.joinCode });
+  }
+  throw new HttpError(400, 'Enter your first and last name.', 'validation_error');
 }

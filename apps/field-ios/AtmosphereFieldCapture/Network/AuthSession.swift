@@ -3,9 +3,10 @@ import Foundation
 /**
  * One-time platform account link for Field Capture.
  *
- * Connect when the app is first installed; the company code and tokens
- * live on this phone and stay signed in across launches. Crew enter the
- * company code once — only again if they explicitly disconnect.
+ * Connect when the app is first installed; the person's name, company
+ * code, and tokens live on this phone and stay signed in across
+ * launches. Crew enter those once — only again if they explicitly
+ * disconnect.
  */
 @MainActor
 final class AuthSession: ObservableObject {
@@ -89,7 +90,7 @@ final class AuthSession: ObservableObject {
                         if await relinkWithStoredCompanyCode() { return }
                         // Session truly dead — only then ask to connect again.
                         clearLink()
-                        lastError = "This phone was disconnected. Enter the company code to continue."
+                        lastError = "This phone was disconnected. Enter your name and the company code to continue."
                     } else {
                         restoreWarning = "Couldn’t refresh jobs right now. You’re still connected — try again when you have signal."
                     }
@@ -100,14 +101,19 @@ final class AuthSession: ObservableObject {
         }
     }
 
-    /// First-install crew connect — company code on this phone.
-    func joinCrew(joinCode: String) async {
+    /// First-install crew connect — name + company code on this phone.
+    func joinCrew(fullName: String, joinCode: String) async {
         lastError = nil
         confirmationNotice = nil
         do {
             try await applyJoinedSession(
-                result: try await api.joinCrew(joinCode: joinCode, deviceId: ensureDeviceId()),
-                joinCode: joinCode
+                result: try await api.joinCrew(
+                    joinCode: joinCode,
+                    deviceId: ensureDeviceId(),
+                    fullName: fullName
+                ),
+                joinCode: joinCode,
+                fullName: fullName
             )
         } catch {
             lastError = Self.friendlyCreateError(error)
@@ -115,17 +121,26 @@ final class AuthSession: ObservableObject {
         }
     }
 
-    /// Reopen the stored company code when the session expired.
+    /// Reopen the stored name + company code when the session expired.
     @discardableResult
     private func relinkWithStoredCompanyCode() async -> Bool {
         let code = UserDefaults.standard.string(forKey: companyCodeKey)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .uppercased() ?? ""
-        guard (6 ... 12).contains(code.count) else { return false }
+        let name = UserDefaults.standard.string(forKey: nameAccount)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard (6 ... 12).contains(code.count), name.split(whereSeparator: { $0.isWhitespace }).count >= 2 else {
+            return false
+        }
         do {
             try await applyJoinedSession(
-                result: try await api.joinCrew(joinCode: code, deviceId: ensureDeviceId()),
-                joinCode: code
+                result: try await api.joinCrew(
+                    joinCode: code,
+                    deviceId: ensureDeviceId(),
+                    fullName: name
+                ),
+                joinCode: code,
+                fullName: name
             )
             lastError = nil
             restoreWarning = nil
@@ -135,7 +150,11 @@ final class AuthSession: ObservableObject {
         }
     }
 
-    private func applyJoinedSession(result: AtmosphereClient.AuthResponse, joinCode: String) async throws {
+    private func applyJoinedSession(
+        result: AtmosphereClient.AuthResponse,
+        joinCode: String,
+        fullName: String? = nil
+    ) async throws {
         guard let session = result.session else {
             throw APIError.http(
                 status: 0,
@@ -145,6 +164,13 @@ final class AuthSession: ObservableObject {
         persist(session: session, email: result.user?.email ?? "")
         UserDefaults.standard.set(true, forKey: linkedFlagKey)
         UserDefaults.standard.set(joinCode.uppercased(), forKey: companyCodeKey)
+        if let fullName {
+            let trimmed = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                self.fullName = trimmed
+                UserDefaults.standard.set(trimmed, forKey: nameAccount)
+            }
+        }
         isLinked = true
         if let org = result.org {
             self.orgName = org.name

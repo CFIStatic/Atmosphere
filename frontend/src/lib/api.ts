@@ -2450,7 +2450,7 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
 
-  /** Field Capture — company code on this phone (no email). */
+  /** Field Capture — name + company code on this phone (no email). */
   fieldJoin: (input: { joinCode: string; deviceId?: string; fullName?: string }) =>
     request<AuthResponse>('/api/field-app/join', {
       method: 'POST',

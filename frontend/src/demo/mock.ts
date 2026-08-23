@@ -1815,8 +1815,8 @@ const routes: Array<[string, RegExp, Handler]> = [
     const fullName = typeof b.fullName === 'string' ? b.fullName.trim() : '';
     const deviceId = typeof b.deviceId === 'string' ? b.deviceId.trim() : '';
     const joinCode = typeof b.joinCode === 'string' ? b.joinCode.trim().toUpperCase() : '';
-    if (!deviceId && fullName.split(/\s+/).filter(Boolean).length < 2) {
-      return { status: 400, body: { error: 'Enter the company code on this phone.', code: 'validation_error' } };
+    if (fullName.split(/\s+/).filter(Boolean).length < 2) {
+      return { status: 400, body: { error: 'Enter your first and last name', code: 'validation_error' } };
     }
     if (!/^[A-Z0-9]{6,12}$/.test(joinCode)) {
       return { status: 400, body: { error: 'Enter a valid join code', code: 'validation_error' } };

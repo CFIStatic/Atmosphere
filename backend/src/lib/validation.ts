@@ -362,20 +362,15 @@ export const fieldDeviceIdField = z
   .regex(/^[A-Za-z0-9-]+$/, 'This phone is missing a stored device id.');
 
 /**
- * Field Capture connect: the company (office join) code, plus a device id
- * so this phone stays linked. A first-and-last name still works for older
- * clients that identified the person that way.
+ * Field Capture connect: the person's name (so the office can assign work
+ * to them) plus the company code. A device id is optional so this phone
+ * can stay linked without asking again.
  */
-export const fieldJoinSchema = z
-  .object({
-    joinCode: officeJoinCodeField,
-    deviceId: fieldDeviceIdField.optional(),
-    fullName: crewFullNameField.optional(),
-  })
-  .refine((value) => Boolean(value.deviceId || value.fullName), {
-    message: 'Enter the company code on this phone.',
-    path: ['deviceId'],
-  });
+export const fieldJoinSchema = z.object({
+  fullName: crewFullNameField,
+  joinCode: officeJoinCodeField,
+  deviceId: fieldDeviceIdField.optional(),
+});
 
 export type FieldJoinInput = z.infer<typeof fieldJoinSchema>;
 
