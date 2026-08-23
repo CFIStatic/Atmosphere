@@ -2,6 +2,8 @@ import type {
   AccessRequest,
   AccessRequestList,
   AccountDetail,
+  AutoHoldDesk,
+  AutoHoldSweep,
   AnalyticsAccess,
   AuthUser,
   ExperimentStats,
@@ -162,6 +164,17 @@ export const api = {
     }),
 
   staffJobLegal: (jobId: string) => request<any>(`/api/legal/jobs/${jobId}`),
+
+  /** What the preservation rules see right now, and what they already froze. */
+  autoHolds: (jobId?: string) =>
+    request<AutoHoldDesk>(`/api/legal/auto-holds${jobId ? `?jobId=${jobId}` : ''}`),
+
+  /** Run the rules. `apply: false` is the dry run. */
+  sweepAutoHolds: (input?: { jobId?: string; apply?: boolean }) =>
+    request<AutoHoldSweep>('/api/legal/auto-holds/sweep', {
+      method: 'POST',
+      body: JSON.stringify({ apply: input?.apply ?? true, ...(input?.jobId ? { jobId: input.jobId } : {}) }),
+    }),
 
   legalActivity: (query?: { q?: string; orgId?: string; actorUserId?: string }) => {
     const params = new URLSearchParams();

@@ -11,15 +11,19 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { requireAnalytics } from '../middleware/requireAnalytics.js';
 import { badRequest } from '../lib/errors.js';
 import {
+  AUTO_HOLD_RULES,
   buildStaffJobLegalPortal,
   createLegalHold,
+  evaluateAutoHolds,
   getLegalHold,
   listLegalHolds,
   listUserActivity,
   produceHold,
   releaseLegalHold,
   requireVault,
+  runAutoHoldSweep,
   signedVaultUrl,
+  unreviewedAutoHolds,
 } from '../legal/index.js';
 import { LEGAL_HOLD_KINDS, LEGAL_SUBJECT_TYPES } from '../legal/types.js';
 
@@ -50,6 +54,11 @@ const releaseSchema = z.object({
 
 const produceSchema = z.object({
   note: z.string().trim().max(2000).optional(),
+});
+
+const sweepSchema = z.object({
+  jobId: z.string().uuid().optional(),
+  apply: z.boolean().default(true),
 });
 
 const activityQuerySchema = z.object({
@@ -133,6 +142,57 @@ legalRouter.post('/holds/:id/produce', async (req: Request, res: Response, next:
     res.status(201).json(pack);
   } catch (err) {
     if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid production'));
+    else next(err);
+  }
+});
+
+/**
+ * GET /api/legal/auto-holds
+ *
+ * The preservation desk. What the rules would freeze right now, what they
+ * already froze, and which automatic holds are past their review date and
+ * waiting on a person. Read-only — nothing opens from a GET.
+ */
+legalRouter.get('/auto-holds', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const jobId = typeof req.query.jobId === 'string' ? req.query.jobId : null;
+    const [signals, holds] = await Promise.all([evaluateAutoHolds({ jobId }), listLegalHolds()]);
+    const automatic = holds.filter((hold) => hold.origin === 'automatic');
+    res.json({
+      rules: AUTO_HOLD_RULES.map((rule) => ({
+        key: rule.key,
+        label: rule.label,
+        kind: rule.kind,
+        why: rule.why,
+        reviewAfterDays: rule.reviewAfterDays,
+      })),
+      signals,
+      holds: automatic,
+      counts: {
+        firing: signals.length,
+        unfrozen: signals.filter((signal) => !signal.heldBy).length,
+        open: automatic.filter((hold) => hold.status === 'open').length,
+        awaitingReview: unreviewedAutoHolds(automatic).length,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/legal/auto-holds/sweep
+ *
+ * Run the rules and freeze what fired. Idempotent — a job already under an
+ * open hold is counted, not re-held. `apply: false` is the dry run.
+ */
+legalRouter.post('/auto-holds/sweep', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const body = sweepSchema.parse(req.body ?? {});
+    const sweep = await runAutoHoldSweep({ jobId: body.jobId ?? null, apply: body.apply });
+    res.status(sweep.opened.length ? 201 : 200).json(sweep);
+  } catch (err) {
+    if (err instanceof z.ZodError) next(badRequest(err.issues[0]?.message ?? 'Invalid sweep'));
     else next(err);
   }
 });

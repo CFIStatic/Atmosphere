@@ -66,27 +66,6 @@ const RULES: Rule[] = [
     resourceParam: 2,
   },
   {
-    method: 'POST',
-    pattern: new RegExp(`^/api/operations/shared/(${UUID})/evidence/(${UUID})/hold/?$`),
-    action: 'evidence.hold_changed',
-    resourceType: 'proof',
-    resourceParam: 2,
-  },
-  {
-    method: 'POST',
-    pattern: new RegExp(`^/api/operations/shared/(${UUID})/legal-hold/?$`),
-    action: 'legal.job_hold_opened',
-    resourceType: 'job',
-    resourceParam: 1,
-  },
-  {
-    method: 'POST',
-    pattern: new RegExp(`^/api/operations/shared/(${UUID})/legal-hold/release/?$`),
-    action: 'legal.job_hold_released',
-    resourceType: 'job',
-    resourceParam: 1,
-  },
-  {
     method: 'GET',
     pattern: new RegExp(`^/api/legal/jobs/(${UUID})/?$`),
     action: 'legal.job_portal_viewed',
@@ -139,6 +118,18 @@ const RULES: Rule[] = [
     action: 'legal.produced',
     resourceType: 'legal_hold',
     resourceParam: 1,
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/legal\/auto-holds\/?$/,
+    action: 'legal.auto_holds_reviewed',
+    resourceType: 'legal_hold',
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/legal\/auto-holds\/sweep\/?$/,
+    action: 'legal.auto_hold_sweep_run',
+    resourceType: 'legal_hold',
   },
   {
     method: 'GET',

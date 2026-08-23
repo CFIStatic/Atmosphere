@@ -28,10 +28,8 @@ import {
   liveObserve,
   jobEvidence,
   evidenceCustody,
-  setEvidenceHold,
   deleteEvidence,
 } from './proofOfWork.js';
-import { getJobLegalHold, releaseJobHold, setJobLegalHold } from './jobLegalHold.js';
 
 /**
  * The shared job record.
@@ -803,15 +801,14 @@ sharedJobsRouter.post('/shared/:jobId/proof/:workDate/decide', decideProofDay);
 sharedJobsRouter.post('/shared/:jobId/proof/:workDate/analyse', reanalyseProofDay);
 sharedJobsRouter.get('/shared/proof/:proofId/video', proofVideoUrl);
 
-// Evidence, in the shape a records system uses: a list, a custody log per file,
-// and a hold that outranks retention.
+// Evidence, in the shape a records system uses: a list and a custody log per
+// file. Holds are not here — preservation is Atmosphere's call, made by the
+// automatic rules in `legal/autoHold.ts` and the staff legal desk, because the
+// party most likely to want a clip frozen is never the party holding the
+// button. A customer delete is a hide; the vault keeps the file regardless.
 sharedJobsRouter.get('/shared/:jobId/evidence', jobEvidence);
 sharedJobsRouter.get('/shared/:jobId/evidence/:proofId/custody', evidenceCustody);
-sharedJobsRouter.post('/shared/:jobId/evidence/:proofId/hold', setEvidenceHold);
 sharedJobsRouter.delete('/shared/:jobId/evidence/:proofId', deleteEvidence);
-sharedJobsRouter.get('/shared/:jobId/legal-hold', getJobLegalHold);
-sharedJobsRouter.post('/shared/:jobId/legal-hold', setJobLegalHold);
-sharedJobsRouter.post('/shared/:jobId/legal-hold/release', releaseJobHold);
 
 /**
  * The subcontractor's side, through their job token.

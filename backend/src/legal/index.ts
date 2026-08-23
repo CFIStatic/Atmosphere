@@ -1,3 +1,16 @@
+export {
+  AUTO_HOLD_RULES,
+  AUTO_HOLD_TRIGGER_ACTIONS,
+  evaluateAutoHolds,
+  jobIdForEvent,
+  noteAutoHoldSignal,
+  resetAutoHoldQueueForTests,
+  runAutoHoldSweep,
+  startAutoHoldScheduler,
+  stopAutoHoldScheduler,
+  unreviewedAutoHolds,
+} from './autoHold.js';
+export type { AutoHoldRule, AutoHoldRuleKey, AutoHoldSignal, AutoHoldSweep } from './autoHold.js';
 export { classifyRequest } from './classify.js';
 export {
   createLegalHold,
@@ -11,7 +24,6 @@ export {
 } from './holds.js';
 export {
   applyOpenHoldToProof,
-  buildOfficeJobLegalPortal,
   buildStaffJobLegalPortal,
   openJobLegalHold,
   releaseJobLegalHold,

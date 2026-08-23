@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import { createApp } from '../src/app.js';
 import { classifyRequest } from '../src/legal/classify.js';
 import {
-  buildOfficeJobLegalPortal,
   buildStaffJobLegalPortal,
+  evaluateAutoHolds,
+  runAutoHoldSweep,
+  unreviewedAutoHolds,
   canPurgeBytes,
   createLegalHold,
   getLegalHold,
@@ -225,7 +227,7 @@ test('a hold must name a subject and a release must name a reason', async () => 
   );
 });
 
-test('a job legal-hold portal freezes the job and still lists a deleted clip for staff', async () => {
+test('a job legal hold freezes the job and still lists a deleted clip for staff', async () => {
   resetLegalStoreForTests();
   resetMediaCatalogForTests();
 
@@ -258,17 +260,9 @@ test('a job legal-hold portal freezes the job and still lists a deleted clip for
   assert.equal(hold.subjects[0].subjectType, 'job');
   assert.equal(hold.subjects[0].subjectId, JOB);
 
-  const office = await buildOfficeJobLegalPortal({
-    orgId: ORG,
-    jobId: JOB,
-    jobTitle: '14 Aug drywall',
-    clips: [],
-  });
-  assert.equal(office.counts.jobOnHold, true);
-  assert.equal(office.counts.userDeleted, 0);
-  assert.equal(office.hold?.id, hold.id);
-
   const staff = await buildStaffJobLegalPortal({ orgId: ORG, jobId: JOB, jobTitle: '14 Aug drywall' });
+  assert.equal(staff.counts.jobOnHold, true);
+  assert.equal(staff.hold?.id, hold.id);
   assert.equal(staff.counts.userDeleted, 1);
   assert.equal(staff.videos[0].sourceId, ready.id);
 
@@ -303,4 +297,195 @@ test('GET /api/legal/holds is 401 without a session', async () => {
       server.close((err) => (err ? reject(err) : resolve())),
     );
   }
+});
+
+// ---------------------------------------------------------------------------
+// Automatic preservation holds
+// ---------------------------------------------------------------------------
+
+const AUTO_JOB = '44444444-4444-4444-8444-444444444444';
+const PROOF = '55555555-5555-4555-8555-555555555555';
+
+function ago(days: number, hours = 0): string {
+  return new Date(Date.now() - days * 86_400_000 - hours * 3_600_000).toISOString();
+}
+
+test('the customer-facing legal-hold routes are gone from the monitor map', () => {
+  // They used to be named actions. Now nothing routes there at all, so they
+  // fall through to the generic bucket rather than pretending to exist.
+  const opened = classifyRequest(fakeReq('POST', `/api/operations/shared/${AUTO_JOB}/legal-hold`));
+  assert.equal(opened.action, 'http.post');
+  const held = classifyRequest(
+    fakeReq('POST', `/api/operations/shared/${AUTO_JOB}/evidence/${PROOF}/hold`),
+  );
+  assert.equal(held.action, 'http.post');
+});
+
+test('deleting video after an outside party read the file fires a preservation rule', async () => {
+  resetLegalStoreForTests();
+
+  await recordUserAction({
+    orgId: ORG,
+    action: 'evidence.asked',
+    resourceType: 'proof',
+    resourceId: PROOF,
+    detail: { jobId: AUTO_JOB },
+    occurredAt: ago(6),
+  });
+  await recordUserAction({
+    actorUserId: USER,
+    orgId: ORG,
+    action: 'video.deleted',
+    resourceType: 'proof',
+    resourceId: PROOF,
+    detail: { jobId: AUTO_JOB },
+    occurredAt: ago(2),
+  });
+
+  const signals = await evaluateAutoHolds({});
+  const signal = signals.find((row) => row.jobId === AUTO_JOB);
+  assert.ok(signal, 'expected a signal on the job');
+  assert.equal(signal.rule, 'delete_after_outside_review');
+  assert.equal(signal.kind, 'preservation');
+  assert.equal(signal.heldBy, null);
+  assert.ok(signal.evidence.length >= 2);
+});
+
+test('a sweep freezes what fired, marks it automatic, and is idempotent', async () => {
+  resetLegalStoreForTests();
+
+  await recordUserAction({
+    orgId: ORG,
+    action: 'evidence.library_viewed',
+    resourceType: 'library',
+    resourceId: null,
+    detail: { jobId: AUTO_JOB },
+    occurredAt: ago(4),
+  });
+  await recordUserAction({
+    actorUserId: USER,
+    orgId: ORG,
+    action: 'video.deleted',
+    resourceType: 'proof',
+    resourceId: PROOF,
+    detail: { jobId: AUTO_JOB },
+    occurredAt: ago(1),
+  });
+
+  const first = await runAutoHoldSweep({ apply: true });
+  assert.equal(first.opened.length, 1);
+  const hold = first.opened[0];
+  assert.equal(hold.origin, 'automatic');
+  assert.equal(hold.autoRule, 'delete_after_outside_review');
+  assert.equal(hold.createdBy, null);
+  assert.ok(hold.reviewBy, 'an automatic hold carries a review date');
+  assert.ok(hold.caseNumber.startsWith('AUTO-'));
+  assert.equal(hold.subjects[0].subjectId, AUTO_JOB);
+
+  // Running it again must not open a second hold on the same job.
+  const second = await runAutoHoldSweep({ apply: true });
+  assert.equal(second.opened.length, 0);
+  assert.equal(second.alreadyHeld, 1);
+  assert.equal((await listLegalHolds()).filter((row) => row.origin === 'automatic').length, 1);
+
+  // And the sweep itself is in the trail, so counsel can see why it froze.
+  const trail = await listUserActivity({ action: 'legal.auto_hold_opened' });
+  assert.equal(trail.length, 1);
+  assert.equal(trail[0].resourceId, AUTO_JOB);
+});
+
+test('a dry-run sweep reports what would freeze without freezing it', async () => {
+  resetLegalStoreForTests();
+  for (const day of [3, 2, 1]) {
+    await recordUserAction({
+      actorUserId: USER,
+      orgId: ORG,
+      action: 'video.deleted',
+      resourceType: 'proof',
+      resourceId: PROOF,
+      detail: { jobId: AUTO_JOB },
+      occurredAt: ago(day),
+    });
+  }
+
+  const dry = await runAutoHoldSweep({ apply: false });
+  assert.equal(dry.applied, false);
+  assert.equal(dry.opened.length, 0);
+  assert.equal(dry.signals[0]?.rule, 'bulk_deletion');
+  assert.equal((await listLegalHolds()).length, 0);
+});
+
+test('ordinary work on a job freezes nothing', async () => {
+  resetLegalStoreForTests();
+  for (const action of ['video.uploaded', 'video.viewed', 'legal.job_portal_viewed']) {
+    await recordUserAction({
+      actorUserId: USER,
+      orgId: ORG,
+      action,
+      resourceType: 'proof',
+      resourceId: PROOF,
+      detail: { jobId: AUTO_JOB },
+      occurredAt: ago(1),
+    });
+  }
+  assert.deepEqual(await evaluateAutoHolds({}), []);
+});
+
+test('a delete with no job on the row still lands on the right file through the vault', async () => {
+  resetLegalStoreForTests();
+  resetMediaCatalogForTests();
+
+  const { session } = await beginMediaUpload({
+    orgId: ORG,
+    kind: 'field_day_video',
+    contentType: 'video/mp4',
+    durationSeconds: 20,
+    byteSize: 400,
+    driver: new MemoryMediaStorage(),
+  });
+  const ready = await completeMediaUpload({
+    orgId: ORG,
+    sessionId: session.id,
+    byteSize: 400,
+    contentHash: 'autohold99999',
+  });
+  await vaultFromMediaObject(ready, { jobId: AUTO_JOB, actorUserId: USER });
+
+  await recordUserAction({
+    orgId: ORG,
+    action: 'evidence.asked',
+    resourceType: 'media',
+    resourceId: ready.id,
+    occurredAt: ago(5),
+  });
+  await recordUserAction({
+    actorUserId: USER,
+    orgId: ORG,
+    action: 'video.deleted',
+    resourceType: 'media',
+    resourceId: ready.id,
+    occurredAt: ago(1),
+  });
+
+  const signals = await evaluateAutoHolds({});
+  assert.equal(signals[0]?.jobId, AUTO_JOB);
+  assert.equal(signals[0]?.rule, 'delete_after_outside_review');
+});
+
+test('an automatic hold past its review date is a queue, not an expiry', async () => {
+  const open = {
+    origin: 'automatic',
+    status: 'open',
+    reviewBy: ago(1),
+  } as unknown as Parameters<typeof unreviewedAutoHolds>[0][number];
+  const fresh = {
+    origin: 'automatic',
+    status: 'open',
+    reviewBy: new Date(Date.now() + 86_400_000).toISOString(),
+  } as unknown as Parameters<typeof unreviewedAutoHolds>[0][number];
+  const staff = { origin: 'staff', status: 'open', reviewBy: ago(9) } as unknown as Parameters<
+    typeof unreviewedAutoHolds
+  >[0][number];
+
+  assert.deepEqual(unreviewedAutoHolds([open, fresh, staff]), [open]);
 });

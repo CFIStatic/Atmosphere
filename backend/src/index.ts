@@ -9,6 +9,7 @@ import {
   stopCaptureAgent,
 } from './estimator/mitigation/capture/scheduler.js';
 import { startCyberScheduler, stopCyberScheduler } from './cyber/index.js';
+import { startAutoHoldScheduler, stopAutoHoldScheduler } from './legal/index.js';
 import { agentHub } from './computer/agentHub.js';
 import { assertProductionReady } from './lib/productionGuards.js';
 import { logger } from './lib/logger.js';
@@ -54,6 +55,11 @@ const server = app.listen(config.port, host, () => {
   // Rotates honeypot credentials and re-audits hardening on a timer. Safe to
   // start without the service role — the agent keeps state in-process.
   startCyberScheduler();
+
+  // Preservation. The rules already run off live signals; this is the floor
+  // under that, so a hold never depends on the process having been up when
+  // the delete happened. It only ever freezes — nothing here destroys.
+  startAutoHoldScheduler();
 });
 
 // Computer-use agents connect over WebSocket on the same port, so they inherit
@@ -72,6 +78,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     stopCaptureAgent();
     stopBackupScheduler();
     stopCyberScheduler();
+    stopAutoHoldScheduler();
     agentHub.close();
     void connections
       .closeAll()

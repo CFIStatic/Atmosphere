@@ -291,6 +291,7 @@ export interface RangeParams {
 export type LegalHoldKind = 'subpoena' | 'lawsuit' | 'preservation' | 'investigation' | 'other';
 export type LegalHoldStatus = 'open' | 'released';
 export type LegalSubjectType = 'org' | 'user' | 'job' | 'proof' | 'media';
+export type LegalHoldOrigin = 'staff' | 'automatic';
 
 export interface LegalHoldSubject {
   id: string;
@@ -310,6 +311,9 @@ export interface LegalHold {
   receivedAt: string;
   dueAt: string | null;
   status: LegalHoldStatus;
+  origin: LegalHoldOrigin;
+  autoRule: string | null;
+  reviewBy: string | null;
   createdBy: string | null;
   createdAt: string;
   releasedBy: string | null;
@@ -330,6 +334,50 @@ export interface UserActivityEvent {
   resourceId: string | null;
   path: string | null;
   status: number | null;
+}
+
+/** One preservation rule, as the desk lists it. */
+export interface AutoHoldRule {
+  key: string;
+  label: string;
+  kind: LegalHoldKind;
+  why: string;
+  reviewAfterDays: number;
+}
+
+/** A rule that has fired on a job, and whether the job is already frozen. */
+export interface AutoHoldSignal {
+  jobId: string;
+  orgId: string | null;
+  rule: string;
+  label: string;
+  kind: LegalHoldKind;
+  reason: string;
+  firedAt: string;
+  reviewBy: string;
+  evidence: Array<{
+    occurredAt: string;
+    action: string;
+    actor: string | null;
+    resourceId: string | null;
+  }>;
+  heldBy: { id: string; caseNumber: string; origin: string } | null;
+}
+
+export interface AutoHoldDesk {
+  rules: AutoHoldRule[];
+  signals: AutoHoldSignal[];
+  holds: LegalHold[];
+  counts: { firing: number; unfrozen: number; open: number; awaitingReview: number };
+}
+
+export interface AutoHoldSweep {
+  ranAt: string;
+  jobsEvaluated: number;
+  signals: AutoHoldSignal[];
+  opened: LegalHold[];
+  alreadyHeld: number;
+  applied: boolean;
 }
 
 export interface LegalProductionPackage {

@@ -1776,54 +1776,6 @@ export async function evidenceCustody(req: Request, res: Response, next: NextFun
 }
 
 /**
- * POST /api/operations/shared/:jobId/evidence/:proofId/hold
- * Put a file beyond the reach of retention, or let it go again.
- *
- * Both directions are logged, because "who released the hold on the file we
- * needed" is a question somebody eventually asks.
- */
-export async function setEvidenceHold(req: Request, res: Response, next: NextFunction) {
-  try {
-    const { orgId, userId, supabase } = await requireOrgContext(req);
-    const input = z
-      .object({ hold: z.boolean(), reason: z.string().trim().max(500).optional() })
-      .parse(req.body ?? {});
-
-    if (input.hold && !input.reason) {
-      throw new HttpError(
-        400,
-        'Say why it is on hold. A hold nobody can explain is one somebody lifts.',
-        'reason_required',
-      );
-    }
-
-    const { error } = await supabase
-      .from('job_proofs')
-      .update({
-        legal_hold: input.hold,
-        hold_reason: input.hold ? (input.reason ?? null) : null,
-      })
-      .eq('org_id', orgId)
-      .eq('id', req.params.proofId);
-    if (error) throw new HttpError(400, error.message, 'hold_failed');
-
-    const actor = await actorFor(supabase, userId);
-    await recordAccess(supabase, {
-      orgId,
-      jobId: req.params.jobId,
-      proofId: req.params.proofId,
-      action: input.hold ? 'held' : 'released',
-      detail: input.reason ?? null,
-      ...actor,
-    });
-
-    res.json({ ok: true });
-  } catch (err) {
-    next(err);
-  }
-}
-
-/**
  * DELETE /api/operations/shared/:jobId/evidence/:proofId
  * Hide a clip from the customer library. The vault keeps the file.
  */

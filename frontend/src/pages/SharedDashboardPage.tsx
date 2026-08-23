@@ -14,7 +14,6 @@ import { JobProgressDashboard } from '../components/shared/JobProgressDashboard'
 import { ShareJobProgressPanel } from '../components/shared/ShareJobProgressPanel';
 import { ScopeDocPanel } from '../components/shared/ScopeDocPanel';
 import { JobReadinessPanel } from '../components/shared/JobReadinessPanel';
-import { JobLegalHoldPortal } from '../components/shared/JobLegalHoldPortal';
 import { EvidenceLocker } from '../components/shared/EvidenceLocker';
 import { JOB_PARTY_TRADE_OPTIONS } from '../components/setup/verifierSetupOptions';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
@@ -375,7 +374,6 @@ export function SharedDashboardPage() {
             />
 
             <div className="mt-4 space-y-4">
-              <JobLegalHoldPortal jobId={record.job.id} jobTitle={record.job.title} />
               <EvidenceLocker jobId={record.job.id} />
             </div>
 

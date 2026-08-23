@@ -21,6 +21,17 @@ export type LegalHoldStatus = (typeof LEGAL_HOLD_STATUSES)[number];
 export const LEGAL_SUBJECT_TYPES = ['org', 'user', 'job', 'proof', 'media'] as const;
 export type LegalSubjectType = (typeof LEGAL_SUBJECT_TYPES)[number];
 
+/**
+ * Who opened the hold.
+ *
+ * `automatic` is Atmosphere's own preservation rules firing on a signal —
+ * evidence deleted after an outside party read the file, a burst of deletes
+ * on one job, a job being worked from the outside. Nobody in the customer's
+ * office decides this, and nobody has to remember to.
+ */
+export const LEGAL_HOLD_ORIGINS = ['staff', 'automatic'] as const;
+export type LegalHoldOrigin = (typeof LEGAL_HOLD_ORIGINS)[number];
+
 export const LEGAL_VAULT_SOURCES = ['job_proof', 'media_object'] as const;
 export type LegalVaultSource = (typeof LEGAL_VAULT_SOURCES)[number];
 
@@ -34,6 +45,11 @@ export type LegalHold = {
   receivedAt: string;
   dueAt: string | null;
   status: LegalHoldStatus;
+  origin: LegalHoldOrigin;
+  /** Which automatic rule fired, when origin is `automatic`. */
+  autoRule: string | null;
+  /** When staff should look at an automatic hold and decide to keep it. */
+  reviewBy: string | null;
   createdBy: string | null;
   createdAt: string;
   releasedBy: string | null;
@@ -145,6 +161,9 @@ export type CreateHoldInput = {
   counselName?: string | null;
   receivedAt?: string;
   dueAt?: string | null;
+  origin?: LegalHoldOrigin;
+  autoRule?: string | null;
+  reviewBy?: string | null;
   createdBy?: string | null;
   subjects: Array<{ subjectType: LegalSubjectType; subjectId: string }>;
 };

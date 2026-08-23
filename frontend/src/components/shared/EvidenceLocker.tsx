@@ -292,7 +292,6 @@ function EvidenceDetail({
   const [url, setUrl] = useState<string | null>(null);
   const [loadingVideo, setLoadingVideo] = useState(false);
   const [custody, setCustody] = useState<CustodyEntry[] | null>(null);
-  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     setUrl(null);
@@ -315,22 +314,6 @@ function EvidenceDetail({
       onChanged();
     } finally {
       setLoadingVideo(false);
-    }
-  }
-
-  async function toggleHold() {
-    const reason = item.legalHold
-      ? undefined
-      : window.prompt('Why is this going on hold?', 'Disputed day — mediation pending') ?? undefined;
-    if (!item.legalHold && !reason) return;
-    setBusy(true);
-    try {
-      await api.setEvidenceHold(jobId, item.id, { hold: !item.legalHold, reason });
-      const fresh = await api.evidenceCustody(jobId, item.id).catch(() => null);
-      if (fresh) setCustody(fresh.entries);
-      onChanged();
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -391,7 +374,7 @@ function EvidenceDetail({
           <Row label="Filed by">{item.company ?? '—'}</Row>
           <Row label="Retention">
             {item.legalHold ? (
-              <span className="text-caution-600">on hold — indefinite</span>
+              <span className="text-caution-600">frozen by Atmosphere — indefinite</span>
             ) : item.retentionUntil ? (
               new Date(item.retentionUntil).toLocaleDateString()
             ) : (
@@ -414,17 +397,18 @@ function EvidenceDetail({
             </div>
           )}
 
-          <button
-            onClick={() => void toggleHold()}
-            disabled={busy}
-            className={`!mt-3 w-full rounded-lg px-3 py-1.5 text-[11px] font-semibold transition disabled:opacity-50 ${
-              item.legalHold
-                ? 'glass-card text-ink-700'
-                : 'border border-caution-200 bg-caution-50 text-caution-600'
-            }`}
-          >
-            {item.legalHold ? 'Lift the hold' : 'Place on legal hold'}
-          </button>
+          {/* No button here on purpose. Freezing evidence for a dispute is
+              not a decision that belongs to a party in the dispute — and the
+              moment it matters most is the moment nobody in this office wants
+              to be the one who clicked it. Atmosphere freezes the file when
+              the record says it is about to be argued over, and a deleted
+              clip stays in the vault either way. */}
+          {item.legalHold && (
+            <p className="!mt-3 rounded-lg border border-caution-200 bg-caution-50 px-3 py-2 text-[11px] text-caution-700">
+              Atmosphere has frozen this file. It cannot age out of retention,
+              and deleting it here removes it from your library only.
+            </p>
+          )}
         </dl>
       </div>
 

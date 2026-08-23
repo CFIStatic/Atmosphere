@@ -81,9 +81,12 @@ export function JobLegalPage() {
         <StatTile label="On hold" value={String(data.counts.onHold)} />
       </div>
 
-      <SectionHeading title="Open holds" />
+      <SectionHeading title="Open holds" hint="Staff, or a preservation rule that fired on its own." />
       {data.holds.length === 0 ? (
-        <EmptyState title="No open hold" body="Open one from the job file or the Legal desk." />
+        <EmptyState
+          title="No open hold"
+          body="Open one from the Legal desk. The automatic rules will also freeze this job on their own if the record starts looking disputed."
+        />
       ) : (
         <ul className="grid gap-3">
           {data.holds.map((hold) => (
@@ -91,9 +94,19 @@ export function JobLegalPage() {
               <div className="flex flex-wrap items-center gap-3">
                 <h3 className="font-medium">{hold.title}</h3>
                 <StatusPill status={hold.status} />
+                {hold.origin === 'automatic' && (
+                  <span className="rounded-full bg-brand-500/10 px-2 py-0.5 text-[11px] font-semibold text-brand-600">
+                    automatic · {hold.autoRule}
+                  </span>
+                )}
                 <span className="font-mono text-xs text-ink-500">{hold.caseNumber}</span>
               </div>
               <p className="mt-2 text-sm text-ink-600">{hold.reason}</p>
+              {hold.origin === 'automatic' && hold.reviewBy && (
+                <p className="mt-1 text-xs text-ink-500">
+                  Review by {dateTime(hold.reviewBy)} — it stays shut until somebody releases it.
+                </p>
+              )}
             </li>
           ))}
         </ul>

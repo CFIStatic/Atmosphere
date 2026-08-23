@@ -1,16 +1,24 @@
 /**
- * Job-scoped legal hold portal.
+ * Job-scoped legal hold.
  *
- * The office puts a whole job on hold. Staff still produce the vault,
- * including clips the customer later hid. New uploads on an open job hold
- * inherit the freeze.
+ * Nobody in the customer's office opens one of these any more — the switch
+ * moved inside, to the legal desk and to the automatic preservation rules in
+ * `autoHold.ts`. What stays here is the mechanism: freeze a whole job file,
+ * and let every clip that arrives while the hold is open inherit the freeze.
+ * Staff produce the vault, including clips the customer later hid.
  */
 import { adminOrNull } from '../lib/adminClient.js';
 import { HttpError } from '../lib/errors.js';
 import { createLegalHold, jobHasOpenHold, openHoldsForJob, releaseLegalHold } from './holds.js';
 import { activityForSubjects, listUserActivity } from './monitor.js';
 import { listVaultedVideos } from './vault.js';
-import type { LegalHoldKind, LegalHoldRecord, LegalVaultEntry, UserActivityEvent } from './types.js';
+import type {
+  LegalHoldKind,
+  LegalHoldOrigin,
+  LegalHoldRecord,
+  LegalVaultEntry,
+  UserActivityEvent,
+} from './types.js';
 
 export type JobLegalClip = {
   id: string;
@@ -53,6 +61,9 @@ export async function openJobLegalHold(input: {
   caseNumber?: string | null;
   title?: string | null;
   counselName?: string | null;
+  origin?: LegalHoldOrigin;
+  autoRule?: string | null;
+  reviewBy?: string | null;
   createdBy?: string | null;
 }): Promise<LegalHoldRecord> {
   const existing = (await openHoldsForJob(input.jobId)).find((hold) =>
@@ -68,6 +79,9 @@ export async function openJobLegalHold(input: {
     title: input.title?.trim() || input.jobTitle?.trim() || `Legal hold · ${short}`,
     reason: input.reason.trim(),
     counselName: input.counselName ?? null,
+    origin: input.origin ?? 'staff',
+    autoRule: input.autoRule ?? null,
+    reviewBy: input.reviewBy ?? null,
     createdBy: input.createdBy ?? null,
     subjects: [{ subjectType: 'job', subjectId: input.jobId }],
   });
@@ -106,61 +120,6 @@ export async function applyOpenHoldToProof(input: {
     .from('job_proofs')
     .update({ legal_hold: true, hold_reason: hold.reason })
     .eq('id', input.proofId);
-}
-
-export async function buildOfficeJobLegalPortal(input: {
-  orgId: string;
-  jobId: string;
-  jobTitle?: string | null;
-  jobNumber?: number | null;
-  clips: Array<{
-    id: string;
-    title?: string | null;
-    workDate?: string | null;
-    phase?: string | null;
-    company?: string | null;
-    legalHold?: boolean;
-    contentHash?: string | null;
-    durationSeconds?: number | null;
-    byteSize?: number | null;
-    receivedAt?: string | null;
-  }>;
-}): Promise<JobLegalPortal> {
-  const holds = await openHoldsForJob(input.jobId, input.orgId);
-  const jobHold =
-    holds.find((hold) =>
-      hold.subjects.some((subject) => subject.subjectType === 'job' && subject.subjectId === input.jobId),
-    ) ?? null;
-  const clips: JobLegalClip[] = input.clips.map((clip) => ({
-    id: clip.id,
-    title: clip.title ?? null,
-    workDate: clip.workDate ?? null,
-    phase: clip.phase ?? null,
-    company: clip.company ?? null,
-    legalHold: Boolean(clip.legalHold),
-    userDeleted: false,
-    contentHash: clip.contentHash ?? null,
-    durationSeconds: clip.durationSeconds ?? null,
-    byteSize: clip.byteSize ?? null,
-    receivedAt: clip.receivedAt ?? null,
-  }));
-  return {
-    job: {
-      id: input.jobId,
-      title: input.jobTitle ?? null,
-      jobNumber: input.jobNumber ?? null,
-      orgId: input.orgId,
-    },
-    hold: jobHold,
-    holds,
-    clips,
-    counts: {
-      clips: clips.length,
-      onHold: clips.filter((clip) => clip.legalHold).length,
-      userDeleted: 0,
-      jobOnHold: Boolean(jobHold) || holds.length > 0,
-    },
-  };
 }
 
 export async function buildStaffJobLegalPortal(input: {

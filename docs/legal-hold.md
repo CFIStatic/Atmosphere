@@ -8,6 +8,7 @@ Install:
 
 ```bash
 psql "$DATABASE_URL" -f supabase/migrations/20260822183000_legal_hold_and_user_monitor.sql
+psql "$DATABASE_URL" -f supabase/migrations/20260823120000_automatic_legal_holds.sql
 ```
 
 Idempotent with the rest of the tree. Apply once — the file is mirrored under
@@ -33,6 +34,10 @@ Idempotent with the rest of the tree. Apply once — the file is mirrored under
 5. **Production.** `POST /api/legal/holds/:id/produce` returns vaulted videos
    (including customer-deleted) with short-lived signed URLs, plus the activity
    trail for the hold's subjects.
+6. **Automatic preservation.** Rules in `backend/src/legal/autoHold.ts` read the
+   monitor and freeze a job on their own when the activity says the record is
+   about to be argued over. Nobody in the customer's office decides this, and
+   nobody has to remember to.
 
 ## Who can read it
 
@@ -41,19 +46,57 @@ Customers cannot. The legal tables enable RLS and grant nothing to `anon` or
 analytics scope as the accounts file (`requireAuth` +
 `requireAnalytics('internal')`). The BFF uses the service role.
 
+## Automatic preservation
+
+Freezing evidence used to be a button on the customer's own job file — a
+job-level panel and a per-clip toggle. Both are gone, and the reason is not
+trust. The party most likely to want a clip gone is the party who was standing
+in front of the camera, and the moment a hold matters most is the moment nobody
+in that office wants to be the one who clicked it. Asking them to freeze the
+file for a dispute they are a side in is the wrong question, of the wrong
+person, at the wrong moment.
+
+So the switch is inside. The rules read `user_activity_events` — which already
+sees every signed-in delete and every outside read of the evidence portal — and
+open a `preservation` hold on the job when the shape of the activity fires one:
+
+| Rule | Fires when |
+| --- | --- |
+| `delete_after_outside_review` | Video deleted after an outside party read this job's evidence |
+| `bulk_deletion` | 3+ clips deleted from one job inside 72 hours |
+| `sustained_outside_review` | 5+ outside reads of one job inside 14 days |
+
+Two properties are deliberate:
+
+* **A rule only ever freezes.** Nothing here destroys anything, so a false
+  positive costs storage and a false negative costs the case.
+* **Nothing releases on its own.** `review_by` is a queue for the legal desk,
+  not an expiry. An automatic hold nobody looks at stays shut until a person
+  releases it with a reason.
+
+Holds carry `origin` (`staff` / `automatic`) and `auto_rule`, so the desk can
+always tell which is which. Rules run three ways, all idempotent against each
+other: debounced right after a triggering request, hourly from
+`startAutoHoldScheduler()`, and on demand from the desk.
+
+`AUTO_HOLD_DEBOUNCE_MS` (default 15s), `AUTO_HOLD_SWEEP_MS` (default 1h), and
+`AUTO_HOLD_LIVE=off` tune it.
+
+## What the customer sees
+
+Nothing to click. The evidence locker still shows that a file is frozen and
+that it cannot age out of retention, because a customer should know the state
+of their own record — but there is no control, in either direction. Deleting a
+clip still hides it from their library and still leaves it in the vault.
+
 ## Job portal
 
-The office job file has a Legal hold panel. Opening a hold freezes every
-clip on that job, and every clip that arrives while the hold is open.
-Customer delete still hides a file from the locker; staff open
-`/legal/jobs/:jobId` on the internal site (or `GET /api/legal/jobs/:jobId`)
-to produce it.
+Staff open `/legal/jobs/:jobId` on the internal site (or
+`GET /api/legal/jobs/:jobId`) to see the vault for one job, including the clips
+the customer hid, and every hold on it.
 
 | Method | Path | Who | Purpose |
 | --- | --- | --- | --- |
-| GET | `/api/operations/shared/:jobId/legal-hold` | Office | Job portal (visible clips only) |
-| POST | `/api/operations/shared/:jobId/legal-hold` | Office | Freeze the job |
-| POST | `/api/operations/shared/:jobId/legal-hold/release` | Office | Release with a reason |
 | GET | `/api/legal/jobs/:jobId` | Staff | Vault including customer-deleted clips |
 
 ## API
@@ -65,6 +108,8 @@ to produce it.
 | GET | `/api/legal/holds/:id` | One hold |
 | POST | `/api/legal/holds/:id/release` | Release with a reason |
 | POST | `/api/legal/holds/:id/produce` | Videos + activity for counsel |
+| GET | `/api/legal/auto-holds` | Rules, what is firing, what they froze |
+| POST | `/api/legal/auto-holds/sweep` | Run the rules (`{"apply": false}` to dry-run) |
 | GET | `/api/legal/videos/:vaultId/url` | Signed read of a vaulted clip |
 | GET | `/api/legal/activity` | User-action monitor |
 | GET | `/api/legal/users/:userId` | One person's trail |
