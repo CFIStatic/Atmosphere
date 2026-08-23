@@ -331,6 +331,13 @@ export function dateSearchPhrases(iso: string | null | undefined): string[] {
  * so "jack aug" finds Jack Cyganiak filmed on August 5, and a missing job
  * record cannot throw. Empty query matches everything.
  */
+function tokenMatchesHay(hay: string, token: string): boolean {
+  if (!token) return true;
+  if (hay.includes(token) && token.length >= 4) return true;
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`).test(hay);
+}
+
 export function matchesLibraryQuery(
   query: string | null | undefined,
   fields: Array<string | number | null | undefined>,
@@ -345,7 +352,8 @@ export function matchesLibraryQuery(
     .filter((part) => part && String(part).trim() && String(part).trim() !== '—')
     .join(' ')
     .toLowerCase();
-  return needle.split(/\s+/).every((token) => hay.includes(token));
+  if (hay.includes(needle)) return true;
+  return needle.split(/\s+/).every((token) => tokenMatchesHay(hay, token));
 }
 
 /* ------------------------------------------------------------------ *

@@ -1645,6 +1645,13 @@
    * Every whitespace-separated token must appear in the identifiers — job
    * name, company, date, address, id, hash. A missing job record cannot throw.
    */
+  function tokenMatchesHay(hay, token) {
+    if (!token) return true;
+    if (hay.indexOf(token) !== -1 && token.length >= 4) return true;
+    var escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp('(^|[^a-z0-9])' + escaped + '([^a-z0-9]|$)').test(hay);
+  }
+
   function matchesLibraryQuery(query, fields, dates) {
     var needle = String(query || '').trim().toLowerCase();
     if (!needle) return true;
@@ -1657,7 +1664,8 @@
       dateSearchPhrases(iso).forEach(function (p) { parts.push(p); });
     });
     var hay = parts.join(' ').toLowerCase();
-    return needle.split(/\s+/).every(function (token) { return hay.indexOf(token) !== -1; });
+    if (hay.indexOf(needle) !== -1) return true;
+    return needle.split(/\s+/).every(function (token) { return tokenMatchesHay(hay, token); });
   }
 
   function clipSearchFields(e) {
