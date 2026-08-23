@@ -687,6 +687,9 @@
     display: flex; align-items: center; gap: 10px; padding: 9px 11px; flex: none;
     border-top: 1px solid var(--stage-2); color: var(--stage-ink);
   }
+  /* Real footage carries its own bar; this one belongs to the frame strip.
+     Spelled out because `display: flex` above outranks the [hidden] default. */
+  .controls[hidden] { display: none; }
   .controls button {
     border: 0; background: var(--stage-2); color: var(--stage-ink); width: 30px; height: 30px;
     border-radius: 7px; cursor: pointer; display: grid; place-items: center; flex: none;
@@ -702,6 +705,149 @@
 
   .player video {
     display: block; width: 100%; height: 100%; max-height: none; object-fit: contain; background: #1A1815;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * The player chrome.
+   *
+   * A reviewer scrubbing footage is doing the same thing they do on
+   * YouTube every day, so the controls are the ones their hands already
+   * know: a full-width bar under the picture that thickens when reached
+   * for, buffered ahead of played, a time bubble that follows the cursor,
+   * and the keys — space, arrows, J K L, M, F — bound the way they are
+   * bound there.
+   *
+   * The ticks on the bar are the assistant's notes, placed at the second
+   * they describe. That is the part YouTube does not have and this needs:
+   * the timeline is also the index of what was seen, so "where does it
+   * say the tarp came off" is a click rather than a search.
+   * ------------------------------------------------------------------ */
+  .vp { position: relative; width: 100%; height: 100%; background: #100F0E; overflow: hidden; }
+  .vp video { display: block; width: 100%; height: 100%; object-fit: contain; background: #100F0E; }
+  .vp .vp-hit { position: absolute; inset: 0 0 46px; cursor: pointer; }
+  .vp[data-idle="1"] .vp-hit { cursor: none; }
+
+  /* The centre badge. Present only when paused, so the picture is never
+     covered while somebody is actually watching it. */
+  .vp .vp-big {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 62px; height: 62px; border-radius: 50%; border: 0; cursor: pointer;
+    background: rgba(16,15,14,.62); color: #fff; display: grid; place-items: center;
+    backdrop-filter: blur(2px); transition: opacity .16s ease, transform .16s ease;
+  }
+  .vp[data-paused="0"] .vp-big { opacity: 0; transform: translate(-50%, -50%) scale(.86); pointer-events: none; }
+  .vp .vp-big:hover { background: var(--accent); }
+
+  .vp .vp-chrome {
+    position: absolute; left: 0; right: 0; bottom: 0; padding: 26px 12px 9px;
+    background: linear-gradient(to top, rgba(0,0,0,.82) 0%, rgba(0,0,0,.55) 46%, rgba(0,0,0,0) 100%);
+    color: #F1EFEB; transition: opacity .18s ease; opacity: 1;
+  }
+  /* Hidden while playing and untouched — never while paused, and never
+     while the bar has keyboard focus. */
+  .vp[data-idle="1"][data-paused="0"] .vp-chrome { opacity: 0; pointer-events: none; }
+
+  .vp .vp-bar {
+    position: relative; height: 15px; display: flex; align-items: center;
+    cursor: pointer; touch-action: none;
+  }
+  .vp .vp-rail {
+    position: absolute; left: 0; right: 0; height: 3px; border-radius: 2px;
+    background: rgba(255,255,255,.28); transition: height .12s ease;
+  }
+  .vp .vp-buffered, .vp .vp-hover, .vp .vp-played {
+    position: absolute; left: 0; top: 0; height: 100%; border-radius: 2px;
+    transform-origin: left center; will-change: transform;
+  }
+  .vp .vp-buffered { width: 100%; background: rgba(255,255,255,.42); transform: scaleX(0); }
+  .vp .vp-hover { width: 100%; background: rgba(255,255,255,.58); transform: scaleX(0); opacity: 0; }
+  .vp .vp-played { width: 100%; background: var(--accent); transform: scaleX(0); }
+  .vp .vp-knob {
+    position: absolute; top: 50%; left: 0; width: 13px; height: 13px; margin-left: -6.5px;
+    border-radius: 50%; background: var(--accent);
+    transform: translateY(-50%) scale(0); transition: transform .12s ease;
+  }
+  .vp .vp-bar:hover .vp-rail,
+  .vp .vp-bar:focus-visible .vp-rail,
+  .vp[data-scrubbing="1"] .vp-rail { height: 5px; }
+  .vp .vp-bar:hover .vp-hover { opacity: 1; }
+  .vp .vp-bar:hover .vp-knob,
+  .vp .vp-bar:focus-visible .vp-knob,
+  .vp[data-scrubbing="1"] .vp-knob { transform: translateY(-50%) scale(1); }
+  .vp .vp-bar:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 3px; }
+
+  /* A note the assistant wrote, sitting at the second it describes. */
+  .vp .vp-tick {
+    position: absolute; top: 50%; width: 3px; height: 9px; margin-left: -1.5px;
+    transform: translateY(-50%); border-radius: 1px; background: rgba(255,255,255,.85);
+    pointer-events: none;
+  }
+  .vp .vp-tick[data-kind="action"] { background: #FFD27D; }
+
+  .vp .vp-bubble {
+    position: absolute; bottom: 46px; transform: translateX(-50%);
+    background: rgba(16,15,14,.92); color: #F1EFEB; border-radius: 5px;
+    border: 1px solid rgba(255,255,255,.16);
+    padding: 4px 7px; font-family: var(--mono); font-size: 11px; white-space: nowrap;
+    pointer-events: none; opacity: 0; transition: opacity .12s ease; max-width: 280px;
+  }
+  .vp .vp-bubble .lbl {
+    display: block; font-family: inherit; font-size: 10.5px; color: #C9C4BA;
+    max-width: 260px; overflow: hidden; text-overflow: ellipsis;
+  }
+  .vp .vp-bar:hover ~ .vp-bubble,
+  .vp[data-scrubbing="1"] .vp-bubble { opacity: 1; }
+
+  .vp .vp-row { display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+  .vp .vp-row button {
+    border: 0; background: none; color: #F1EFEB; width: 34px; height: 32px; padding: 0;
+    border-radius: 6px; cursor: pointer; display: grid; place-items: center; flex: none;
+  }
+  .vp .vp-row button:hover { color: #fff; background: rgba(255,255,255,.14); }
+  .vp .vp-row button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .vp .vp-clock {
+    font-family: var(--mono); font-size: 11.5px; color: #D6D1C7; margin: 0 4px;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .vp .vp-clock b { color: #fff; font-weight: 600; }
+  .vp .vp-spacer { flex: 1; }
+  .vp .vp-rate {
+    width: auto; min-width: 40px; padding: 0 8px; font: inherit; font-size: 11.5px;
+    font-weight: 650; font-variant-numeric: tabular-nums;
+  }
+
+  /* Volume opens on hover, the way it does on a desktop player. Kept at a
+     real width once focused so it is reachable from the keyboard. */
+  .vp .vp-vol { display: flex; align-items: center; }
+  .vp .vp-vol input {
+    width: 0; opacity: 0; margin: 0; height: 3px; accent-color: var(--accent);
+    transition: width .16s ease, opacity .16s ease; cursor: pointer;
+  }
+  .vp .vp-vol:hover input, .vp .vp-vol input:focus-visible { width: 62px; opacity: 1; margin: 0 6px 0 2px; }
+
+  /* On a phone the volume is a hardware key, and the slider is only in the
+     way. Speed stays — skimming a workday is exactly what a phone gets used
+     for. */
+  @media (max-width: 860px) {
+    .vp .vp-vol input { display: none; }
+  }
+
+  /* The preview cell.
+     A real clip previews as itself: the still the pipeline kept, or one
+     lifted out of the footage in the browser once the clip has been
+     opened. `.thumb.pending` is the honest gap — a clip whose still has
+     not been made yet says so instead of showing a drawing of a house
+     nobody filmed. */
+  .thumb video { width: 100%; height: 100%; object-fit: cover; display: block; background: var(--stage); }
+  .thumb.pending {
+    display: grid; place-items: center; color: var(--faint);
+    background: var(--stage); border: 1px solid var(--line-soft);
+  }
+  .thumb.pending svg { opacity: .5; }
+  .thumb .live {
+    position: absolute; left: 3px; top: 3px; padding: 1px 4px; border-radius: 3px;
+    background: rgba(0,0,0,.72); color: #fff; font-size: 9px; font-weight: 700;
+    letter-spacing: .05em; text-transform: uppercase;
   }
 
   .side { padding: 16px 18px 24px; overflow-y: auto; min-height: 0; }
@@ -1539,6 +1685,16 @@
       for (var i = 0; id && i < EVIDENCE.length; i++) {
         if (EVIDENCE[i].id === id) { item = EVIDENCE[i]; break; }
       }
+      // A real clip drops to the empty cell rather than to the drawing. The
+      // still it had has expired or gone; inventing one in its place would be
+      // the same lie, just later.
+      var host = img.parentNode;
+      if (item && item._remote && host) {
+        host.className = 'thumb pending';
+        host.setAttribute('title', 'The still for this clip could not be loaded.');
+        host.innerHTML = FILM_GLYPH + '<span class="dur">' + dur(item.duration) + '</span>';
+        return;
+      }
       img.src = drawnFrame(item);
     },
     true
@@ -1698,11 +1854,17 @@
   /**
    * The preview cell.
    *
-   * A real clip shows a still out of itself — the frame the pipeline kept,
-   * signed by the portal — because a column of identical drawn rectangles is
-   * a column nobody can scan. The drawn frame stays for the demo artifact,
-   * which has no footage behind it, and for a clip whose stills have not been
-   * extracted yet.
+   * A real clip previews as itself, and only as itself. Three places a real
+   * still can come from, in order: the frame the pipeline kept and the portal
+   * signed; a frame this browser lifted out of the footage the last time the
+   * clip was opened, kept for the tab's lifetime; and nothing.
+   *
+   * Nothing is drawn as nothing. The schematic below is a drawing of a
+   * generic house, and putting a drawing where a frame of somebody's roof
+   * belongs is the one thing an evidence list must never do — a reviewer who
+   * learns the picture is invented stops believing the column. So it is
+   * reserved for the demo artifact, which has no footage behind it at all,
+   * and a real clip whose still has not been made yet says so plainly.
    */
   function drawnFrame(item) {
     var after = item && item.after;
@@ -1710,8 +1872,59 @@
     return frameSVG({ wet: after.wet, cut: after.cut, gear: after.gear, night: false, label: null });
   }
 
+  /** Stills lifted from footage in this tab, by clip id. */
+  var SHOTS = {};
+
+  try {
+    var savedShots = sessionStorage.getItem('atmo.verifier.shots');
+    if (savedShots) SHOTS = JSON.parse(savedShots) || {};
+  } catch (err) { SHOTS = {}; }
+
+  function rememberShot(id, dataUrl) {
+    SHOTS[id] = dataUrl;
+    try {
+      sessionStorage.setItem('atmo.verifier.shots', JSON.stringify(SHOTS));
+    } catch (err) {
+      // Quota, or a private window that refuses storage. The still still
+      // works for this page; it just will not survive a reload.
+    }
+  }
+
+  /** A real frame of this clip, or null. Never a drawing. */
+  function stillFor(item) {
+    if (!item) return null;
+    return item.poster || item._shot || SHOTS[item.id] || null;
+  }
+
   function thumbFor(item) {
-    return item.poster || drawnFrame(item);
+    return stillFor(item) || drawnFrame(item);
+  }
+
+  var FILM_GLYPH =
+    '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.7" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="2"/>' +
+    '<path d="M7 5v14M17 5v14M2.5 12h19"/></svg>';
+
+  /**
+   * The cell itself.
+   *
+   * A row holding a real still also carries the clip's URL when the reviewer
+   * has already opened it, and hovering plays those seconds muted in place —
+   * the same gesture as every video list they use. Nothing is fetched to make
+   * that happen: opening a clip is what mints the URL and writes the custody
+   * line, and a hover must never be able to write one.
+   */
+  function thumbCell(e) {
+    var still = stillFor(e);
+    var dur_ = '<span class="dur">' + dur(e.duration) + '</span>';
+    if (!still && e._remote) {
+      return '<span class="thumb pending" title="The still for this clip has not been made yet.">' +
+        FILM_GLYPH + dur_ + '</span>';
+    }
+    var clip = e._videoUrl ? ' data-clip="' + esc(e._videoUrl) + '"' : '';
+    return '<span class="thumb"' + clip + '>' +
+      '<img class="shot" alt="" loading="lazy" decoding="async" src="' + esc(still || drawnFrame(e)) + '" />' +
+      dur_ + '</span>';
   }
 
   function clipRow(e) {
@@ -1721,7 +1934,7 @@
     phase = phase.charAt(0).toUpperCase() + phase.slice(1);
     return '' +
       '<tr tabindex="0" data-id="' + e.id + '">' +
-        '<td><span class="thumb"><img class="shot" alt="" loading="lazy" decoding="async" src="' + esc(thumbFor(e)) + '" /><span class="dur">' + dur(e.duration) + '</span></span></td>' +
+        '<td>' + thumbCell(e) + '</td>' +
         '<td class="titlecell">' +
           '<div class="t">' + esc(job.name) + '</div>' +
           '<div class="s">' + esc(phase) +
@@ -2657,23 +2870,11 @@
     // Prefer the real file when the portal minted a URL. Frames remain the
     // fallback for the demo artifact and for clips whose file URL expired.
     if (item._videoUrl) {
-      // The poster is the same still the list showed, so the player opens on
-      // the clip rather than on the black rectangle a browser picks.
-      var posterAttr = item.poster ? ' poster="' + esc(item.poster) + '"' : '';
-      $('#d-frame').innerHTML =
-        '<video controls playsinline preload="metadata"' + posterAttr +
-        ' src="' + esc(item._videoUrl) + '"></video>';
-      $('#d-scrub').innerHTML = '';
-      $('#d-time').textContent = 'full clip · ' + dur(item.duration);
-      var vid = $('#d-frame').querySelector('video');
-      if (vid) {
-        vid.addEventListener('timeupdate', function () { syncAnalysisLog(vid.currentTime); });
-        vid.addEventListener('seeked', function () { syncAnalysisLog(vid.currentTime); });
-        vid.addEventListener('play', function () { syncAnalysisLog(vid.currentTime); });
-        vid.addEventListener('pause', function () { syncAnalysisLog(vid.currentTime); });
-        vid.addEventListener('ended', function () { syncAnalysisLog(vid.currentTime); });
-      }
+      mountPlayer(item, item._videoUrl);
     } else {
+      unmountPlayer();
+      var strip = document.querySelector('.player .controls');
+      if (strip) strip.hidden = false;
       item._frames = item._remoteFrames && item._remoteFrames.length
         ? item._remoteFrames
         : frames(item.before || { wet: 0.3, cut: 0.1, gear: 0 },
@@ -2696,6 +2897,521 @@
     $('#d-close').focus();
     startLivePlayback(item);
   }
+
+  /* ------------------------------------------------------------------ *
+   * The player
+   *
+   * The browser's own <video controls> is a black bar with a line in it.
+   * That is enough for a cat video and not enough here: a reviewer arguing
+   * about a Tuesday needs to land on a second, see how much of the clip
+   * they have watched, and be able to say "at 1:12" and have the other
+   * side get there too.
+   *
+   * So the chrome is the one everybody already has muscle memory for —
+   * YouTube's. A full-width bar under the picture, buffered behind played,
+   * a bubble that follows the cursor with the time under it, drag to
+   * scrub, space to pause, arrows to nudge. Nothing here is novel on
+   * purpose; a player somebody has to learn is a player they use wrong.
+   *
+   * The one addition is the ticks. Every note the assistant wrote sits on
+   * the bar at the second it describes, so the timeline doubles as the
+   * index of the reading — hover a tick and it says what was seen there,
+   * click it and you are there.
+   * ------------------------------------------------------------------ */
+
+  var RATES = [0.5, 1, 1.25, 1.5, 2];
+
+  var ICON = {
+    play: '<svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>',
+    pause: '<svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="5" width="3.6" height="14" rx="1"/><rect x="13.9" y="5" width="3.6" height="14" rx="1"/></svg>',
+    loud: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.2L12 5.5v13L7.2 14.5H4z" fill="currentColor" stroke="none"/><path d="M15.6 9a4.3 4.3 0 0 1 0 6M18 6.4a8 8 0 0 1 0 11.2"/></svg>',
+    muted: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 9.5h3.2L12 5.5v13L7.2 14.5H4z" fill="currentColor" stroke="none"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>',
+    full: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
+    exit: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>'
+  };
+
+  /** m:ss, and h:mm:ss once a clip runs past the hour — a workday does. */
+  function clock(seconds) {
+    var t = Math.max(0, Math.floor(Number(seconds) || 0));
+    var h = Math.floor(t / 3600);
+    var m = Math.floor((t % 3600) / 60);
+    var s2 = t % 60;
+    return h > 0
+      ? h + ':' + String(m).padStart(2, '0') + ':' + String(s2).padStart(2, '0')
+      : m + ':' + String(s2).padStart(2, '0');
+  }
+
+  /** The live player, so keys and teardown have something to talk to. */
+  var vp = null;
+
+  function unmountPlayer() {
+    if (!vp) return;
+    if (vp.idleTimer) clearTimeout(vp.idleTimer);
+    try { vp.video.pause(); } catch (err) { /* already gone */ }
+    document.removeEventListener('keydown', vp.onKey, true);
+    document.removeEventListener('fullscreenchange', vp.onFull);
+    vp = null;
+  }
+
+  function mountPlayer(item, url) {
+    unmountPlayer();
+
+    // The frame strip below the picture belongs to the schematic player.
+    // Real footage carries its own bar, and two scrubbers for one clip is
+    // one scrubber too many.
+    var strip = document.querySelector('.player .controls');
+    if (strip) strip.hidden = true;
+    $('#d-scrub').innerHTML = '';
+    $('#d-time').textContent = 'full clip · ' + dur(item.duration);
+
+    var marks = analysisLog(item).filter(function (r) { return r.at > 0; });
+    var total = Number(item.duration) || 0;
+
+    // Ticks are only honest against a length we know. A clip whose length
+    // never got read gets a plain bar rather than notes pinned at guesses.
+    var tickHtml = total > 0
+      ? marks.map(function (r) {
+          var pctv = Math.min(100, Math.max(0, (r.at / total) * 100));
+          return '<span class="vp-tick" data-kind="' + esc(r.kind) + '" data-at="' + r.at +
+            '" style="left:' + pctv.toFixed(3) + '%"></span>';
+        }).join('')
+      : '';
+
+    var posterAttr = stillFor(item) ? ' poster="' + esc(stillFor(item)) + '"' : '';
+
+    $('#d-frame').innerHTML =
+      '<div class="vp" data-paused="1" data-idle="0" data-scrubbing="0">' +
+        '<video playsinline preload="metadata"' + posterAttr + ' src="' + esc(url) + '"></video>' +
+        '<div class="vp-hit"></div>' +
+        '<button class="vp-big" type="button" aria-label="Play">' + ICON.play + '</button>' +
+        '<div class="vp-chrome">' +
+          '<div class="vp-bar" role="slider" tabindex="0" aria-label="Seek through the clip"' +
+            ' aria-valuemin="0" aria-valuemax="' + (total || 0) + '" aria-valuenow="0" aria-valuetext="0:00">' +
+            '<div class="vp-rail">' +
+              '<div class="vp-buffered"></div>' +
+              '<div class="vp-hover"></div>' +
+              '<div class="vp-played"></div>' +
+            '</div>' +
+            tickHtml +
+            '<div class="vp-knob"></div>' +
+          '</div>' +
+          '<div class="vp-bubble"><span class="vp-bubble-t">0:00</span><span class="lbl"></span></div>' +
+          '<div class="vp-row">' +
+            '<button type="button" data-vp="play" aria-label="Play">' + ICON.play + '</button>' +
+            '<span class="vp-vol">' +
+              '<button type="button" data-vp="mute" aria-label="Mute">' + ICON.loud + '</button>' +
+              '<input type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume" />' +
+            '</span>' +
+            '<span class="vp-clock"><b>0:00</b> / ' + clock(total) + '</span>' +
+            '<span class="vp-spacer"></span>' +
+            '<button type="button" class="vp-rate" data-vp="rate" aria-label="Playback speed">1&times;</button>' +
+            '<button type="button" data-vp="full" aria-label="Full screen">' + ICON.full + '</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    var root = $('#d-frame').querySelector('.vp');
+    var video = root.querySelector('video');
+    var bar = root.querySelector('.vp-bar');
+    var railPlayed = root.querySelector('.vp-played');
+    var railBuffer = root.querySelector('.vp-buffered');
+    var railHover = root.querySelector('.vp-hover');
+    var knob = root.querySelector('.vp-knob');
+    var bubble = root.querySelector('.vp-bubble');
+    var bubbleT = root.querySelector('.vp-bubble-t');
+    var bubbleL = bubble.querySelector('.lbl');
+    var playBtns = root.querySelectorAll('[data-vp="play"], .vp-big');
+    var muteBtn = root.querySelector('[data-vp="mute"]');
+    var volInput = root.querySelector('.vp-vol input');
+    var clockEl = root.querySelector('.vp-clock b');
+    var clockTotal = root.querySelector('.vp-clock');
+    var rateBtn = root.querySelector('[data-vp="rate"]');
+    var fullBtn = root.querySelector('[data-vp="full"]');
+
+    vp = { root: root, video: video, item: item, idleTimer: null, rate: 1, scrubbing: false, resume: false };
+
+    function length() {
+      var d = Number(video.duration);
+      return isFinite(d) && d > 0 ? d : total;
+    }
+
+    function paint() {
+      var d = length();
+      var at = video.currentTime || 0;
+      var frac = d > 0 ? Math.min(1, Math.max(0, at / d)) : 0;
+      railPlayed.style.transform = 'scaleX(' + frac + ')';
+      knob.style.left = (frac * 100).toFixed(3) + '%';
+      clockEl.textContent = clock(at);
+      bar.setAttribute('aria-valuenow', String(Math.floor(at)));
+      bar.setAttribute('aria-valuetext', clock(at) + ' of ' + clock(d));
+      var buffered = 0;
+      try {
+        for (var i = 0; i < video.buffered.length; i++) {
+          if (video.buffered.start(i) <= at && video.buffered.end(i) >= at) {
+            buffered = video.buffered.end(i);
+            break;
+          }
+          buffered = Math.max(buffered, video.buffered.end(i));
+        }
+      } catch (err) { buffered = 0; }
+      railBuffer.style.transform = 'scaleX(' + (d > 0 ? Math.min(1, buffered / d) : 0) + ')';
+    }
+
+    function setPaused(paused) {
+      root.setAttribute('data-paused', paused ? '1' : '0');
+      Array.prototype.forEach.call(playBtns, function (b) {
+        b.innerHTML = paused ? ICON.play : ICON.pause;
+        b.setAttribute('aria-label', paused ? 'Play' : 'Pause');
+      });
+      if (paused) wake(true);
+    }
+
+    function toggle() {
+      if (video.paused || video.ended) video.play().catch(function () {});
+      else video.pause();
+    }
+
+    /** Controls come back on any movement and leave again once still. */
+    function wake(hold) {
+      root.setAttribute('data-idle', '0');
+      if (vp && vp.idleTimer) clearTimeout(vp.idleTimer);
+      if (hold || video.paused) return;
+      if (!vp) return;
+      vp.idleTimer = setTimeout(function () {
+        if (vp && !vp.scrubbing && !video.paused) root.setAttribute('data-idle', '1');
+      }, 2600);
+    }
+
+    function fracFromEvent(ev) {
+      var box = bar.getBoundingClientRect();
+      if (!box.width) return 0;
+      return Math.min(1, Math.max(0, (ev.clientX - box.left) / box.width));
+    }
+
+    /** The note nearest the cursor, so a tick says what it marks. */
+    function markNear(seconds) {
+      var d = length();
+      if (!d || !marks.length) return null;
+      var window_ = Math.max(1.5, d * 0.012);
+      var best = null;
+      var dist = Infinity;
+      marks.forEach(function (r) {
+        var gap = Math.abs(r.at - seconds);
+        if (gap < dist) { dist = gap; best = r; }
+      });
+      return dist <= window_ ? best : null;
+    }
+
+    function showBubble(frac) {
+      var d = length();
+      var at = frac * d;
+      var box = bar.getBoundingClientRect();
+      var chromeBox = bubble.parentNode.getBoundingClientRect();
+      // Positioned against the chrome, which is what it is absolute inside,
+      // and kept off both edges so the time is never half off the picture.
+      var x = (box.left - chromeBox.left) + frac * box.width;
+      var half = Math.max(28, bubble.offsetWidth / 2);
+      bubble.style.left = Math.round(Math.min(chromeBox.width - half, Math.max(half, x))) + 'px';
+      // Clear of the bar rather than sitting on it, whatever the chrome's
+      // height works out to.
+      bubble.style.bottom = Math.round(chromeBox.bottom - box.top + 9) + 'px';
+      bubbleT.textContent = clock(at);
+      var near = markNear(at);
+      bubbleL.textContent = near ? near.text : '';
+      bubbleL.hidden = !near;
+      railHover.style.transform = 'scaleX(' + frac + ')';
+    }
+
+    function seekFrac(frac) {
+      var d = length();
+      if (!d) return;
+      video.currentTime = frac * d;
+      paint();
+      syncAnalysisLog(video.currentTime);
+    }
+
+    function nudge(delta) {
+      var d = length();
+      if (!d) return;
+      video.currentTime = Math.min(d, Math.max(0, (video.currentTime || 0) + delta));
+      wake();
+      paint();
+      syncAnalysisLog(video.currentTime);
+    }
+
+    bar.addEventListener('pointerdown', function (ev) {
+      ev.preventDefault();
+      bar.setPointerCapture(ev.pointerId);
+      vp.scrubbing = true;
+      root.setAttribute('data-scrubbing', '1');
+      // Paused while the thumb is down, so the picture tracks the finger
+      // rather than running away underneath it.
+      vp.resume = !video.paused;
+      video.pause();
+      var frac = fracFromEvent(ev);
+      showBubble(frac);
+      seekFrac(frac);
+    });
+
+    bar.addEventListener('pointermove', function (ev) {
+      var frac = fracFromEvent(ev);
+      showBubble(frac);
+      if (vp.scrubbing) seekFrac(frac);
+    });
+
+    bar.addEventListener('pointerup', function (ev) {
+      if (!vp.scrubbing) return;
+      vp.scrubbing = false;
+      root.setAttribute('data-scrubbing', '0');
+      try { bar.releasePointerCapture(ev.pointerId); } catch (err) { /* already released */ }
+      if (vp.resume) video.play().catch(function () {});
+      wake();
+    });
+
+    bar.addEventListener('pointerleave', function () {
+      if (!vp.scrubbing) railHover.style.transform = 'scaleX(0)';
+    });
+
+    bar.addEventListener('keydown', function (ev) {
+      var d = length();
+      if (ev.key === 'ArrowLeft') { nudge(-5); ev.preventDefault(); }
+      else if (ev.key === 'ArrowRight') { nudge(5); ev.preventDefault(); }
+      else if (ev.key === 'Home') { seekFrac(0); ev.preventDefault(); }
+      else if (ev.key === 'End' && d) { seekFrac(0.999); ev.preventDefault(); }
+      else if (ev.key === ' ' || ev.key === 'Enter') { toggle(); ev.preventDefault(); }
+    });
+
+    Array.prototype.forEach.call(playBtns, function (b) {
+      b.addEventListener('click', function (ev) { ev.stopPropagation(); toggle(); });
+    });
+    root.querySelector('.vp-hit').addEventListener('click', toggle);
+    root.querySelector('.vp-hit').addEventListener('dblclick', function () { fullscreen(); });
+
+    muteBtn.addEventListener('click', function () {
+      video.muted = !video.muted;
+      if (!video.muted && video.volume === 0) video.volume = 1;
+      syncVolume();
+    });
+
+    volInput.addEventListener('input', function () {
+      video.volume = Number(volInput.value);
+      video.muted = video.volume === 0;
+      syncVolume();
+    });
+
+    function syncVolume() {
+      var off = video.muted || video.volume === 0;
+      muteBtn.innerHTML = off ? ICON.muted : ICON.loud;
+      muteBtn.setAttribute('aria-label', off ? 'Unmute' : 'Mute');
+      volInput.value = String(off ? 0 : video.volume);
+    }
+
+    rateBtn.addEventListener('click', function () {
+      var next = RATES[(RATES.indexOf(vp.rate) + 1) % RATES.length];
+      vp.rate = next;
+      video.playbackRate = next;
+      rateBtn.innerHTML = (next === 1 ? '1' : String(next)) + '&times;';
+    });
+
+    function fullscreen() {
+      if (document.fullscreenElement) {
+        if (document.exitFullscreen) document.exitFullscreen();
+      } else if (root.requestFullscreen) {
+        root.requestFullscreen().catch(function () {});
+      } else if (video.webkitEnterFullscreen) {
+        // iPhone Safari has no element fullscreen; the video's own is all
+        // there is, and it is better than nothing.
+        video.webkitEnterFullscreen();
+      }
+    }
+    fullBtn.addEventListener('click', fullscreen);
+
+    vp.onFull = function () {
+      var on = document.fullscreenElement === root;
+      fullBtn.innerHTML = on ? ICON.exit : ICON.full;
+      fullBtn.setAttribute('aria-label', on ? 'Leave full screen' : 'Full screen');
+    };
+    document.addEventListener('fullscreenchange', vp.onFull);
+
+    root.addEventListener('pointermove', function () { wake(); });
+    root.addEventListener('pointerleave', function () { if (!video.paused) wake(); });
+
+    video.addEventListener('loadedmetadata', function () {
+      var d = length();
+      // Only the trailing text changes; the <b> holding the playhead stays
+      // the same node, because paint() is holding a reference to it.
+      if (clockTotal && clockTotal.lastChild) clockTotal.lastChild.nodeValue = ' / ' + clock(d);
+      bar.setAttribute('aria-valuemax', String(Math.floor(d)));
+      // The list printed a length the server had; the file itself is the
+      // better authority once it is open.
+      if (d > 0 && Math.abs(d - (Number(item.duration) || 0)) > 1) {
+        item.duration = Math.round(d);
+        $('#d-time').textContent = 'full clip · ' + dur(item.duration);
+        refreshThumb(item);
+      }
+      paint();
+    });
+    video.addEventListener('timeupdate', function () { paint(); syncAnalysisLog(video.currentTime); });
+    video.addEventListener('progress', paint);
+    video.addEventListener('seeked', function () { paint(); syncAnalysisLog(video.currentTime); });
+    video.addEventListener('play', function () { setPaused(false); wake(); syncAnalysisLog(video.currentTime); });
+    video.addEventListener('pause', function () { setPaused(true); syncAnalysisLog(video.currentTime); });
+    video.addEventListener('ended', function () { setPaused(true); syncAnalysisLog(video.currentTime); });
+    video.addEventListener('volumechange', syncVolume);
+
+    /* The keys everybody already has. Skipped while somebody is typing —
+       a space bar in the filter box is a space, not a pause. */
+    vp.onKey = function (ev) {
+      if (!vp || !state.open) return;
+      var t = ev.target;
+      var tag = t && t.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+      if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+      // A focused tab or button elsewhere in the sheet keeps its own space
+      // and enter. The player only claims keys nobody else is holding.
+      if (tag === 'BUTTON' && !root.contains(t)) return;
+      var key = ev.key;
+      if (key === ' ' || key === 'k' || key === 'K') { toggle(); ev.preventDefault(); }
+      else if (key === 'ArrowLeft') { nudge(-5); ev.preventDefault(); }
+      else if (key === 'ArrowRight') { nudge(5); ev.preventDefault(); }
+      else if (key === 'j' || key === 'J') { nudge(-10); ev.preventDefault(); }
+      else if (key === 'l' || key === 'L') { nudge(10); ev.preventDefault(); }
+      else if (key === 'm' || key === 'M') { video.muted = !video.muted; syncVolume(); ev.preventDefault(); }
+      else if (key === 'f' || key === 'F') { fullscreen(); ev.preventDefault(); }
+      else if (key >= '0' && key <= '9') { seekFrac(Number(key) / 10); ev.preventDefault(); }
+    };
+    document.addEventListener('keydown', vp.onKey, true);
+
+    syncVolume();
+    setPaused(true);
+    paint();
+    harvestStill(item, url);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Stills out of the footage
+   *
+   * The list wants a frame of the clip, and the server's frame is not
+   * always there — an old upload filed before stills were extracted, or a
+   * box where the extractor fell over. Rather than showing a drawing in
+   * its place, the browser lifts one out of the file it has already been
+   * handed.
+   *
+   * Only ever from a clip the reviewer has opened: opening is what mints
+   * the URL and writes the custody line. A preview must never be able to
+   * write one, so nothing here fetches anything the reviewer has not
+   * already been given.
+   * ------------------------------------------------------------------ */
+  function harvestStill(item, url) {
+    if (!item || !url || stillFor(item) || item._harvesting) return;
+    item._harvesting = true;
+
+    // A second element, deliberately: the capture needs CORS credentials the
+    // player does not, and a player that refuses to load because the still
+    // wanted headers would be a bad trade.
+    var probe = document.createElement('video');
+    probe.crossOrigin = 'anonymous';
+    probe.preload = 'auto';
+    probe.muted = true;
+    probe.playsInline = true;
+    var settled = false;
+
+    function done() {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      probe.removeAttribute('src');
+      try { probe.load(); } catch (err) { /* nothing to unload */ }
+      item._harvesting = false;
+    }
+
+    function grab() {
+      if (settled) return;
+      try {
+        var w = 224;
+        var ratio = (probe.videoHeight || 9) / (probe.videoWidth || 16);
+        var canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = Math.max(1, Math.round(w * ratio));
+        canvas.getContext('2d').drawImage(probe, 0, 0, canvas.width, canvas.height);
+        var data = canvas.toDataURL('image/jpeg', 0.72);
+        if (data && data.length > 1024) {
+          item._shot = data;
+          rememberShot(item.id, data);
+          refreshThumb(item);
+        }
+      } catch (err) {
+        // A canvas the browser will not let us read — the storage host sent
+        // no CORS header. The cell stays empty, which is the truth.
+      }
+      done();
+    }
+
+    probe.addEventListener('loadeddata', function () {
+      // Not the first frame: the opening moment of a phone recording is
+      // usually a thumb over the lens or a swing to the ground.
+      var at = Math.min(1.5, (Number(probe.duration) || 4) * 0.12);
+      if (at > 0.05 && probe.seekable && probe.seekable.length) {
+        try { probe.currentTime = at; return; } catch (err) { /* fall through */ }
+      }
+      grab();
+    });
+    probe.addEventListener('seeked', grab);
+    probe.addEventListener('error', done);
+    var timer = setTimeout(done, 15000);
+    probe.src = url;
+  }
+
+  /** Repaint one preview cell in place — a full list repaint would fight
+      whatever the reviewer is doing in it. */
+  function refreshThumb(item) {
+    if (!item) return;
+    var row = rowsEl.querySelector('tr[data-id="' + (window.CSS && CSS.escape ? CSS.escape(item.id) : item.id) + '"]');
+    var cell = row && row.querySelector('td');
+    if (!cell) return;
+    cell.innerHTML = thumbCell(item);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Hover preview
+   *
+   * The gesture every video list has: point at a row and those seconds
+   * play, muted, in the cell. Only on a clip already opened in this tab,
+   * because that is the only one whose URL is already in hand.
+   * ------------------------------------------------------------------ */
+  rowsEl.addEventListener('mouseover', function (ev) {
+    var thumb = ev.target.closest ? ev.target.closest('.thumb[data-clip]') : null;
+    if (!thumb || thumb.querySelector('video')) return;
+    var clip = thumb.getAttribute('data-clip');
+    if (!clip) return;
+    var preview = document.createElement('video');
+    preview.src = clip;
+    preview.muted = true;
+    preview.loop = true;
+    preview.playsInline = true;
+    preview.preload = 'metadata';
+    thumb.insertBefore(preview, thumb.firstChild);
+    var badge = document.createElement('span');
+    badge.className = 'live';
+    badge.textContent = 'Clip';
+    thumb.appendChild(badge);
+    preview.play().catch(function () {
+      // Autoplay refused, or the URL has expired. The still underneath is
+      // still the right picture.
+      if (preview.parentNode) preview.parentNode.removeChild(preview);
+      if (badge.parentNode) badge.parentNode.removeChild(badge);
+    });
+  });
+
+  rowsEl.addEventListener('mouseout', function (ev) {
+    var thumb = ev.target.closest ? ev.target.closest('.thumb[data-clip]') : null;
+    if (!thumb) return;
+    if (ev.relatedTarget && thumb.contains(ev.relatedTarget)) return;
+    var preview = thumb.querySelector('video');
+    if (preview) { try { preview.pause(); } catch (err) { /* gone */ } preview.remove(); }
+    var badge = thumb.querySelector('.live');
+    if (badge) badge.remove();
+  });
 
   function renderDictation(item) {
     var a = item.analysis || {};
@@ -3753,6 +4469,11 @@
 
   $('#d-close').addEventListener('click', function () {
     stopPlay();
+    unmountPlayer();
+    // The row's preview keeps the still this session lifted out of the clip,
+    // and now carries the URL, so hovering it plays the real seconds back.
+    if (state.open) refreshThumb(state.open);
+    $('#d-frame').innerHTML = '';
     $('#detail').setAttribute('data-open', '0');
     state.open = null;
   });

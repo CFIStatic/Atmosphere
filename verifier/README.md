@@ -62,3 +62,32 @@ row; $25 by default), through an append-once ledger — no signed download URL
 exists until the ledger row reads paid or waived. The org's own members
 download their evidence free, but still through the ledger and the custody
 log, because "who holds a copy of this clip" should always be a query.
+
+## The preview and the player
+
+**A preview is a frame of the clip, or it is nothing.** The cell shows the
+still the pipeline kept and the portal signed; failing that, one this browser
+lifted out of the footage the last time somebody opened it, kept for the tab.
+Failing both, it shows an empty cell that says the still has not been made
+yet. What it never shows is a drawing — the schematic frames are the demo
+artifact's, which has no footage behind it, and a reviewer who works out that
+the picture in an evidence list is invented stops believing the column.
+
+Nothing in the preview path fetches a clip. Minting a video URL is what writes
+the `viewed` line in the chain of custody, so a hover, a scroll or a repaint
+must not be able to do it — hovering a row plays the real seconds back in the
+cell only for a clip already opened in this tab, whose URL is already in hand.
+
+**The player is YouTube's, because that is the one everybody already has.** A
+full-width bar under the picture that thickens when reached for, buffered
+behind played, a bubble that follows the cursor, drag to scrub, and the keys
+bound where they are bound there — space or K to pause, arrows for five
+seconds, J and L for ten, M, F, and the digits for tenths. A player somebody
+has to learn is a player they use wrong, and getting a second wrong is how two
+people end up arguing about different moments.
+
+The addition is the ticks. Every note the assistant wrote sits on the bar at
+the second it describes, so the timeline is also the index of the reading:
+hover one and it says what was seen there. They are only drawn against a
+length the file itself reports, because a note pinned at a guess is worse than
+no note.
