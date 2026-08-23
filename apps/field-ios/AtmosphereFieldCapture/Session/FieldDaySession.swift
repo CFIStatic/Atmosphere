@@ -19,6 +19,13 @@ final class FieldDaySession: ObservableObject {
     let locator = SiteLocator()
     let roomPlan = RoomPlanBridge()
 
+    /// Ask for camera, microphone, and location before the crew taps Start.
+    func requestCapturePermissions() async {
+        _ = try? await CapturePermissions.requestCamera()
+        _ = try? await CapturePermissions.requestMicrophone()
+        _ = await CapturePermissions.requestLocation()
+    }
+
     func loadToday(api: AtmosphereClient) async {
         loadingJobs = true
         lastError = nil
@@ -44,12 +51,14 @@ final class FieldDaySession: ObservableObject {
         if activeJobId == nil { activeJobId = jobs.first?.id }
         do {
             try await recorder.prepare()
+            _ = await CapturePermissions.requestLocation()
             locator.configure(jobs: jobs)
             locator.start()
             try recorder.startDay()
             phase = .recording
         } catch {
             lastError = error.localizedDescription
+            recorder.teardown()
         }
     }
 
@@ -59,6 +68,7 @@ final class FieldDaySession: ObservableObject {
     }
 
     func finishDay(api: AtmosphereClient) async {
+        guard recorder.isRecording else { return }
         lastError = nil
         do {
             let url = try await recorder.finishDay()

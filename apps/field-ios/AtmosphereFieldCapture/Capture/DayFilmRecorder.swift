@@ -41,7 +41,9 @@ final class DayFilmRecorder: NSObject, ObservableObject {
         let cam = try await CapturePermissions.requestCamera()
         let mic = try await CapturePermissions.requestMicrophone()
         guard cam, mic else {
-            status = .failed("Camera and microphone are both required for Field Capture.")
+            let message = CapturePermissions.missingPermissionsMessage(camera: cam, microphone: mic)
+                ?? "Camera and microphone are both required for Field Capture."
+            status = .failed(message)
             throw CaptureError.permissionDenied
         }
 
@@ -92,6 +94,9 @@ final class DayFilmRecorder: NSObject, ObservableObject {
 
         let preview = AVCaptureVideoPreviewLayer(session: session)
         preview.videoGravity = .resizeAspectFill
+        if let connection = preview.connection, connection.isVideoOrientationSupported {
+            connection.videoOrientation = .portrait
+        }
         previewLayer = preview
 
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in

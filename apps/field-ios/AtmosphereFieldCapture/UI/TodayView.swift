@@ -106,6 +106,9 @@ struct TodayView: View {
             .refreshable {
                 await session.loadToday(api: api)
             }
+            .task {
+                await session.requestCapturePermissions()
+            }
 
             Button {
                 Task { await session.startDay() }
