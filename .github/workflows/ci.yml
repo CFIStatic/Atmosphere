@@ -177,12 +177,16 @@ jobs:
             if curl -fsS http://127.0.0.1:18080/healthz >/dev/null 2>&1; then break; fi
             sleep 1
           done
+          # Capture before matching. `curl … | grep -q` races: grep -q exits on
+          # its first match, curl is still writing the page, takes EPIPE and
+          # exits 23, and pipefail fails the job. The assignment still
+          # propagates a curl failure under `set -e`.
           # Railway's deploy probe, and the two a mis-pointed Config File uses.
-          curl -fsS http://127.0.0.1:18080/healthz | grep -qx 'ok'
-          curl -fsS http://127.0.0.1:18080/health | grep -qx 'ok'
-          curl -fsS http://127.0.0.1:18080/api/health | grep -qx 'ok'
+          probe="$(curl -fsS http://127.0.0.1:18080/healthz)"; grep -qx 'ok' <<<"$probe"
+          probe="$(curl -fsS http://127.0.0.1:18080/health)"; grep -qx 'ok' <<<"$probe"
+          probe="$(curl -fsS http://127.0.0.1:18080/api/health)"; grep -qx 'ok' <<<"$probe"
           # The login shell itself must render, upstream or no upstream.
-          curl -fsS http://127.0.0.1:18080/ | grep -qi '<div id="root"'
+          page="$(curl -fsS http://127.0.0.1:18080/)"; grep -qi '<div id="root"' <<<"$page"
           curl -fsS -o /dev/null http://127.0.0.1:18080/login
 
   docker-website:
@@ -208,9 +212,9 @@ jobs:
             if curl -fsS http://127.0.0.1:18081/health >/dev/null 2>&1; then break; fi
             sleep 1
           done
-          curl -fsS http://127.0.0.1:18081/health | grep -qx 'ok'
-          curl -fsS http://127.0.0.1:18081/api/health | grep -qx 'ok'
-          curl -fsS http://127.0.0.1:18081/ | grep -q 'Atmosphere'
+          probe="$(curl -fsS http://127.0.0.1:18081/health)"; grep -qx 'ok' <<<"$probe"
+          probe="$(curl -fsS http://127.0.0.1:18081/api/health)"; grep -qx 'ok' <<<"$probe"
+          page="$(curl -fsS http://127.0.0.1:18081/)"; grep -q 'Atmosphere' <<<"$page"
 
   docker-internal:
     name: Internal site image

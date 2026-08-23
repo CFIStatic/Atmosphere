@@ -174,10 +174,14 @@ jobs:
           cleanup() { docker rm -f atmosphere-website-ci >/dev/null 2>&1 || true; }
           trap cleanup EXIT
           sleep 2
-          curl -fsS http://127.0.0.1:18080/health | grep -qx 'ok'
+          # Capture before matching. `curl … | grep -q` races: grep -q exits on
+          # its first match, curl is still writing the page, takes EPIPE and
+          # exits 23, and pipefail fails the job. The assignment still
+          # propagates a curl failure under `set -e`.
+          probe="$(curl -fsS http://127.0.0.1:18080/health)"; grep -qx 'ok' <<<"$probe"
           # Must be the nginx probe, not a proxied BFF JSON body.
-          curl -fsS http://127.0.0.1:18080/api/health | grep -qx 'ok'
-          curl -fsS http://127.0.0.1:18080/ | grep -q 'Atmosphere'
+          probe="$(curl -fsS http://127.0.0.1:18080/api/health)"; grep -qx 'ok' <<<"$probe"
+          page="$(curl -fsS http://127.0.0.1:18080/)"; grep -q 'Atmosphere' <<<"$page"
 
       - name: Deploy corporate site
         env:
