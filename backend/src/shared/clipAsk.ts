@@ -43,6 +43,8 @@ export type ClipAskRecord = {
   dictationEntries?: Array<{ atSeconds?: number | null; text?: string | null; note?: string | null; summary?: string | null }>;
   timeline?: Array<{ startSeconds?: number | null; summary?: string | null }> | null;
   scope?: Array<{ title?: string | null; verdict?: string | null; because?: string | null }>;
+  /** Notes written while the reviewer watched this clip. Same honesty: only what was on screen. */
+  watchNotes?: Array<{ atSeconds?: number | null; text?: string | null }>;
 };
 
 export type ClipAskTurn = { role: 'user' | 'assistant'; text: string };
@@ -133,6 +135,7 @@ export function clipRecordFromEvidenceItem(item: {
     dictationEntries: Array.isArray(analysis?.dictationEntries) ? analysis.dictationEntries : [],
     timeline: Array.isArray(analysis?.timeline) ? analysis.timeline : null,
     scope: Array.isArray(analysis?.scope) ? analysis.scope : [],
+    watchNotes: Array.isArray(analysis?.watchNotes) ? analysis.watchNotes : [],
   };
 }
 
@@ -185,6 +188,7 @@ function clipCorpus(record: ClipAskRecord): CorpusRow[] {
   }
   for (const concern of record.concerns ?? []) push(null, concern, 'concern');
   for (const gap of record.couldNotTell ?? []) push(null, gap, 'gap');
+  for (const note of record.watchNotes ?? []) push(note.atSeconds, note.text, 'watch');
   return rows;
 }
 
@@ -240,6 +244,10 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
     }
     if (actions.length) {
       return `Yes — the footage${date} shows: ${actions.slice(0, 4).join('; ')}.`;
+    }
+    const watched = (record.watchNotes ?? []).map((n) => String(n.text || '').trim()).filter(Boolean);
+    if (watched.length) {
+      return `Yes — the footage${date} shows: ${watched.slice(0, 4).join('; ')}.`;
     }
     const summary = (record.dictation || record.summary || '').trim();
     if (summary) return `The reading of this clip${date}: ${summary}`;
@@ -317,6 +325,11 @@ export function formatClipRecordForModel(record: ClipAskRecord): string {
   }
   if ((record.couldNotTell ?? []).length) lines.push(`Could not tell: ${record.couldNotTell!.join('; ')}`);
   if ((record.concerns ?? []).length) lines.push(`Concerns: ${record.concerns!.join('; ')}`);
+  for (const note of record.watchNotes ?? []) {
+    if (!note.text) continue;
+    const when = formatClipTime(note.atSeconds);
+    lines.push(`Watch${when ? ` @ ${when}` : ''}: ${note.text}`);
+  }
   return lines.join('\n');
 }
 

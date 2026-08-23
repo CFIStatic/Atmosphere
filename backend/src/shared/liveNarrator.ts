@@ -9,13 +9,14 @@ import {
 /**
  * The model, watching the filming itself.
  *
- * Two jobs, one vocabulary. **Observe** is live: a single frame sampled from
- * the camera while the crew records, answered with which stage of the capture
- * guide is on screen right now — so the person filming sees "you are on step
- * 2" while they can still do something about it. **Narrate** is the durable
- * half: after a video is filed, the model reads its frames in order and writes
- * the report that gets attached to that video — what stage each moment shows,
- * what work is visible, and what the walkthrough never covered.
+ * Three jobs, one honesty contract. **Observe** is live filming: a single
+ * frame sampled from the camera while the crew records, answered with which
+ * stage of the capture guide is on screen right now. **Watch** is live
+ * playback: a single frame from a clip somebody is playing, answered with
+ * one sentence of what is visible at that playhead — so the reviewer sees
+ * what is happening as the footage runs. **Narrate** is the durable half:
+ * after a video is filed, the model reads its frames in order and writes
+ * the report that gets attached to that video.
  *
  * The stage vocabulary is not the model's to invent. Stages are the capture
  * guide's own steps, passed in by index, and the model may only answer with an
@@ -76,6 +77,89 @@ export function parseObservation(text: string, stepCount: number): LiveObservati
       : 0;
 
   return { stageIndex, note: parsed.note.trim().slice(0, 300), confidence };
+}
+
+/* ------------------------------------------------------------------ *
+ * Watch observation — one frame, at the playhead
+ * ------------------------------------------------------------------ */
+
+export interface WatchObservation {
+  note: string;
+  confidence: number;
+}
+
+const WATCH_SYSTEM = `You are watching one frame from a proof-of-work video that someone is playing right now.
+
+Rules:
+1. One short sentence about what is visible on screen at this moment. Present tense. Only what is visible — never what is probably happening off screen.
+2. Prefer "unclear" over a guess. If the frame is dark, blurred, a thumb, or a ceiling, say so.
+3. Never estimate cost, hours, or whether work is worth paying for.
+4. Confidence is between 0 and 1 and should be honest.
+
+Reply with JSON only: {"note": string, "confidence": number}`;
+
+export function parseWatchObservation(text: string): WatchObservation | null {
+  const cleaned = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  let parsed: any;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object') return null;
+  if (typeof parsed.note !== 'string' || !parsed.note.trim()) return null;
+  const confidence =
+    typeof parsed.confidence === 'number' && Number.isFinite(parsed.confidence)
+      ? Math.min(1, Math.max(0, parsed.confidence))
+      : 0;
+  return { note: parsed.note.trim().slice(0, 280), confidence };
+}
+
+export async function observeWatchFrame(input: {
+  frameBase64: string;
+  atSeconds?: number | null;
+  phase?: string | null;
+  workDate?: string | null;
+}): Promise<WatchObservation | null> {
+  if (!isModelProviderConfigured()) return null;
+  if (!input.frameBase64 || input.frameBase64.length < 80) return null;
+
+  const when =
+    input.atSeconds != null && Number.isFinite(input.atSeconds)
+      ? ` at ${Math.max(0, Math.round(input.atSeconds))}s`
+      : '';
+  const context = [
+    input.phase ? `Phase: ${input.phase}` : '',
+    input.workDate ? `Work date: ${input.workDate}` : '',
+  ]
+    .filter(Boolean)
+    .join('. ');
+
+  const response = await anthropicClient().messages.create({
+    model: config.technician.assistant.liveModel,
+    max_tokens: 160,
+    system: [{ type: 'text', text: WATCH_SYSTEM, cache_control: { type: 'ephemeral' } }],
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text:
+              (context ? `${context}.\n` : '') +
+              `This is the frame on screen${when}. Describe only what is visible:`,
+          },
+          {
+            type: 'image',
+            source: { type: 'base64', media_type: 'image/jpeg', data: input.frameBase64 },
+          },
+        ],
+      },
+    ],
+  });
+
+  const text = response.content.find((b) => b.type === 'text');
+  return text && text.type === 'text' ? parseWatchObservation(text.text) : null;
 }
 
 export async function observeLiveFrame(input: {
