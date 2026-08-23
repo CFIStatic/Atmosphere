@@ -1,7 +1,9 @@
 <!doctype html>
+<!-- ask-panel 2026-08-23-live -->
 <html lang="en">
 <head>
 <meta charset="utf-8" />
+<meta http-equiv="Cache-Control" content="no-store" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Atmosphere Verifier — evidence review</title>
 <meta name="description" content="Every proof-of-work video on every job, with the analysis, the integrity checks, and the chain of custody behind it." />
@@ -683,8 +685,15 @@
   }
 
   .stage { padding: 16px 18px; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
-  .player { background: var(--stage); border-radius: 10px; overflow: hidden; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .player { position: relative; background: var(--stage); border-radius: 10px; overflow: hidden; flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .player .frame { flex: 1; min-height: 240px; display: grid; place-items: center; }
+  .livecap {
+    position: absolute; left: 12px; right: 12px; bottom: 52px; z-index: 2;
+    background: rgba(28, 25, 23, 0.82); color: #F5F0E8;
+    padding: 10px 12px; border-radius: 8px;
+    font-size: 14px; line-height: 1.45; pointer-events: none;
+  }
+  .livecap[hidden] { display: none; }
   .player .frame img { width: 100%; height: 100%; object-fit: contain; display: block; }
   .controls {
     display: flex; align-items: center; gap: 10px; padding: 9px 11px; flex: none;
@@ -1044,6 +1053,7 @@
       <section class="stage">
         <div class="player">
           <div class="frame" id="d-frame"></div>
+          <div class="livecap" id="d-livecap" hidden></div>
           <div class="controls">
             <button id="d-play" aria-label="Play frames">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
@@ -2661,9 +2671,7 @@
     stopPlay();
 
     $('#d-title').textContent = (JOBS[item.job] || { name: item.jobName || 'Job' }).name;
-    $('#d-meta').innerHTML =
-      '<span class="id">' + esc(item.id) + '</span> · ' + esc(item.phase) + ' · ' +
-      dayLabel(item.workDate) + ' · ' + esc(item.company) + ' · ' + dur(item.duration) + ' · ' + mb(item.bytes);
+    paintClipMeta(item);
 
     // Prefer the real file when the portal minted a URL. Frames remain the
     // fallback for the demo artifact and for clips whose file URL expired.
@@ -2678,9 +2686,26 @@
       $('#d-time').textContent = 'full clip · ' + dur(item.duration);
       var vid = $('#d-frame').querySelector('video');
       if (vid) {
+        function adoptVideoClock() {
+          if (vid.duration && isFinite(vid.duration) && vid.duration > 0) {
+            item.duration = vid.duration;
+            $('#d-time').textContent = 'full clip · ' + dur(item.duration);
+            paintClipMeta(item);
+          }
+          syncAnalysisLog(vid.currentTime || 0);
+          requestWatchNote(item, vid.currentTime || 0);
+        }
+        vid.addEventListener('loadeddata', adoptVideoClock);
+        vid.addEventListener('durationchange', adoptVideoClock);
         vid.addEventListener('timeupdate', function () { syncAnalysisLog(vid.currentTime); });
-        vid.addEventListener('seeked', function () { syncAnalysisLog(vid.currentTime); });
-        vid.addEventListener('play', function () { syncAnalysisLog(vid.currentTime); });
+        vid.addEventListener('seeked', function () {
+          syncAnalysisLog(vid.currentTime);
+          requestWatchNote(item, vid.currentTime || 0);
+        });
+        vid.addEventListener('play', function () {
+          syncAnalysisLog(vid.currentTime);
+          requestWatchNote(item, vid.currentTime || 0);
+        });
         vid.addEventListener('pause', function () { syncAnalysisLog(vid.currentTime); });
         vid.addEventListener('ended', function () { syncAnalysisLog(vid.currentTime); });
       }
@@ -2789,7 +2814,6 @@
 
   function startLivePlayback(item) {
     if (!item) return;
-    if ((item.duration || 0) > 600) return;
     var host = $('#d-frame');
     var vid = host && host.querySelector('video');
     if (vid) {
@@ -2802,6 +2826,7 @@
       }
       return;
     }
+    if ((item.duration || 0) > 600) return;
     if (item._frames && item._frames.length > 1) startFramePlayback();
   }
 
@@ -2892,6 +2917,7 @@
   }
 
   var ASK_THREADS = {};
+  var WATCH = { itemId: null, lastAt: -999, inflight: false, timer: null };
 
   function analysisLog(item) {
     var a = item.analysis || {};
@@ -2945,6 +2971,21 @@
     }
     rows.sort(function (x, y) { return x.at - y.at; });
     return rows;
+  }
+
+  function paintClipMeta(item) {
+    $('#d-meta').innerHTML =
+      '<span class="id">' + esc(item.id) + '</span> · ' + esc(item.phase) + ' · ' +
+      dayLabel(item.workDate) + ' · ' + esc(item.company) + ' · ' + dur(item.duration) + ' · ' + mb(item.bytes);
+  }
+
+  function paintLiveCaption(text) {
+    var el = document.getElementById('d-livecap');
+    if (!el) return;
+    var t = String(text || '').trim();
+    if (!t) { el.hidden = true; el.textContent = ''; return; }
+    el.hidden = false;
+    el.textContent = t;
   }
 
   function currentPlayhead() {
@@ -3025,11 +3066,13 @@
     });
     if (empty) empty.hidden = lastSeen >= 0;
     var cur = lastSeen >= 0 ? items[lastSeen] : null;
-    if (lastSeen < 0) setAnalysisPill(playing ? 'Writing…' : 'Ready');
+    if (lastSeen < 0) setAnalysisPill(playing || WATCH.inflight ? 'Writing…' : 'Ready');
     else if (cur && cur.classList.contains('writing')) setAnalysisPill('Writing…');
     else if (playing && lastSeen < items.length - 1) setAnalysisPill('Watching');
     else if (lastSeen === items.length - 1) setAnalysisPill('Caught up');
     else setAnalysisPill('Paused');
+    var caption = cur && cur.querySelector('[data-full]');
+    paintLiveCaption(caption ? caption.getAttribute('data-full') : '');
     if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
@@ -3287,8 +3330,6 @@
     syncAnalysisLog(currentPlayhead());
   }
 
-  var WATCH = { itemId: null, lastAt: -999, inflight: false, timer: null };
-
   function shouldWatch(item) {
     var s = (item.analysis || {}).state;
     if (s === 'paired' || s === 'skipped' || s === 'failed') return false;
@@ -3357,6 +3398,12 @@
     var rows = analysisLog(item);
     if (rows.some(function (r) { return Math.abs(r.at - at) < 5; })) return;
     WATCH.inflight = true;
+    setAnalysisPill('Writing…');
+    var empty = document.getElementById('alog-empty');
+    if (empty && !rows.length) {
+      empty.hidden = false;
+      empty.textContent = 'Reading this moment of the clip…';
+    }
     var url = ORG_MODE
       ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id) + '/watch'
       : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id) + '/watch';
@@ -3370,12 +3417,26 @@
       return r.json().then(function (body) { return { ok: r.ok, body: body }; });
     }).then(function (res) {
       WATCH.inflight = false;
-      if (!res.ok || !res.body || !res.body.note) return;
       if (!state.open || state.open.id !== item.id) return;
+      if (!res.ok || !res.body || !res.body.note) {
+        if (empty && !analysisLog(item).length) {
+          empty.hidden = false;
+          empty.textContent = (res.body && (res.body.error || res.body.message))
+            || 'The assistant could not read this moment yet. Keep playing — it will try again.';
+        }
+        setAnalysisPill(isFootagePlaying() ? 'Watching' : 'Ready');
+        return;
+      }
       var when = res.body.atSeconds != null ? Number(res.body.atSeconds) : at;
       WATCH.lastAt = when;
       appendWatchNote(item, when, res.body.note);
-    }).catch(function () { WATCH.inflight = false; });
+    }).catch(function () {
+      WATCH.inflight = false;
+      if (empty && state.open && state.open.id === item.id && !analysisLog(item).length) {
+        empty.hidden = false;
+        empty.textContent = 'The assistant could not reach this clip. Keep playing — it will try again.';
+      }
+    });
   }
 
   function startLiveWatch(item) {
