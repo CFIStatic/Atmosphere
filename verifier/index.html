@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- ask-panel 2026-08-23-bar2 -->
+<!-- ask-panel 2026-08-23-bar3 -->
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -715,19 +715,27 @@
   .progress {
     position: relative; flex: 1; height: 16px; cursor: pointer;
   }
-  .progress-track {
-    position: absolute; left: 0; right: 0; top: 6px; height: 4px;
-    background: rgba(255, 255, 255, 0.32); border-radius: 2px;
+  .progress-range {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 16px; margin: 0; padding: 0;
+    background: transparent; cursor: pointer;
   }
-  .progress-played {
-    position: absolute; left: 0; top: 0; bottom: 0; width: 0;
-    background: #FF0033; border-radius: 2px;
+  .progress-range:focus { outline: none; }
+  .progress-range::-webkit-slider-runnable-track {
+    height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.32);
   }
-  .progress-thumb {
-    position: absolute; top: 8px; left: 0; width: 12px; height: 12px;
-    margin: -6px 0 0 -6px; background: #FF0033; border-radius: 50%;
+  .progress-range::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 12px; height: 12px; margin-top: -4px;
+    background: #FF0033; border: 0; border-radius: 50%;
     box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
-    pointer-events: none;
+  }
+  .progress-range::-moz-range-track {
+    height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.32);
+  }
+  .progress-range::-moz-range-progress { height: 4px; border-radius: 2px; background: #FF0033; }
+  .progress-range::-moz-range-thumb {
+    width: 12px; height: 12px; background: #FF0033; border: 0; border-radius: 50%;
   }
   .controls .time { font-family: var(--mono); font-size: 11.5px; color: #E7E5E4; min-width: 86px; text-align: right; }
 
@@ -2710,6 +2718,7 @@
             paintClipMeta(item);
           }
           paintVideoProgress(vid, item);
+          if (!vid.paused && !vid.ended) startProgressTick(vid, item);
           syncAnalysisLog(vid.currentTime || 0);
           requestWatchNote(item, vid.currentTime || 0);
         }
@@ -2726,17 +2735,20 @@
         });
         vid.addEventListener('play', function () {
           setPlayIcon(true);
-          paintVideoProgress(vid, item);
+          startProgressTick(vid, item);
           syncAnalysisLog(vid.currentTime);
           requestWatchNote(item, vid.currentTime || 0);
         });
         vid.addEventListener('pause', function () {
           setPlayIcon(false);
+          stopProgressTick();
           paintVideoProgress(vid, item);
           syncAnalysisLog(vid.currentTime);
         });
         vid.addEventListener('ended', function () {
           setPlayIcon(false);
+          stopProgressTick();
+          if (!(item.duration > 0) && vid.currentTime > 0) item.duration = vid.currentTime;
           paintVideoProgress(vid, item);
           syncAnalysisLog(vid.currentTime);
         });
@@ -3019,69 +3031,74 @@
   }
 
   function clipLength(vid, item) {
-    if (vid && vid.duration && isFinite(vid.duration) && vid.duration > 0) return vid.duration;
-    return Number(item && item.duration) || 0;
+    var d = vid && vid.duration;
+    if (d && isFinite(d) && d > 0) return d;
+    try {
+      if (vid && vid.seekable && vid.seekable.length) {
+        var end = vid.seekable.end(vid.seekable.length - 1);
+        if (isFinite(end) && end > 0) return end;
+      }
+    } catch (err) {}
+    var fallback = Number(item && item.duration) || 0;
+    if (fallback > 0 && isFinite(fallback)) return fallback;
+    var t = vid ? (vid.currentTime || 0) : 0;
+    // Field-capture files often have no duration until they finish. Grow a
+    // moving end so the red fill advances with the playhead instead of
+    // jumping to 100% when the length finally appears.
+    return Math.max(t + 2, 1);
+  }
+
+  var PROGRESS_RAF = 0;
+
+  function stopProgressTick() {
+    if (PROGRESS_RAF) cancelAnimationFrame(PROGRESS_RAF);
+    PROGRESS_RAF = 0;
+  }
+
+  function startProgressTick(vid, item) {
+    stopProgressTick();
+    function tick() {
+      paintVideoProgress(vid, item);
+      if (vid && !vid.paused && !vid.ended) PROGRESS_RAF = requestAnimationFrame(tick);
+    }
+    PROGRESS_RAF = requestAnimationFrame(tick);
   }
 
   function paintVideoProgress(vid, item) {
     if (!vid) return;
     var length = clipLength(vid, item);
     var t = vid.currentTime || 0;
+    if (vid.ended && t > 0) length = Math.max(length, t);
     var pct = length > 0 ? Math.max(0, Math.min(100, (t / length) * 100)) : 0;
-    var played = document.getElementById('d-played');
-    var thumb = document.getElementById('d-thumb');
-    if (played) played.style.width = pct + '%';
-    if (thumb) thumb.style.left = pct + '%';
     var bar = document.getElementById('d-progress');
     if (bar) {
+      bar.value = String(Math.round(pct * 10));
+      bar.style.background =
+        'linear-gradient(to right, #FF0033 ' + pct + '%, rgba(255,255,255,0.32) ' + pct + '%)';
       bar.setAttribute('aria-valuenow', String(Math.round(t)));
       bar.setAttribute('aria-valuemax', String(Math.round(length) || 0));
     }
     $('#d-time').textContent = dur(t) + ' / ' + (length > 0 ? dur(length) : '—');
   }
 
-  function seekVideoFromEvent(ev, vid, item) {
-    var bar = document.getElementById('d-progress');
-    var length = clipLength(vid, item);
-    if (!bar || !vid || !(length > 0)) return;
-    var rect = bar.getBoundingClientRect();
-    var x = (ev.clientX - rect.left) / Math.max(rect.width, 1);
-    vid.currentTime = Math.max(0, Math.min(1, x)) * length;
-    paintVideoProgress(vid, item);
-  }
-
   function bindVideoProgress(vid, item) {
     var scrub = $('#d-scrub');
     setPlayIcon(false);
+    stopProgressTick();
     if (!scrub || !vid) {
       if (scrub) scrub.innerHTML = '';
       return;
     }
     scrub.innerHTML =
-      '<div class="progress" id="d-progress" role="slider" aria-label="Playback position" aria-valuemin="0" aria-valuenow="0" aria-valuemax="0">' +
-        '<div class="progress-track"><div class="progress-played" id="d-played"></div></div>' +
-        '<div class="progress-thumb" id="d-thumb"></div>' +
-      '</div>';
+      '<input type="range" class="progress-range" id="d-progress" min="0" max="1000" value="0" step="1" aria-label="Playback position" />';
     paintVideoProgress(vid, item);
     var bar = document.getElementById('d-progress');
-    var dragging = false;
-    function onMove(ev) {
-      if (!dragging) return;
-      ev.preventDefault();
-      seekVideoFromEvent(ev, vid, item);
-    }
-    function onUp() {
-      if (!dragging) return;
-      dragging = false;
-      document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup', onUp);
-    }
     if (bar) {
-      bar.addEventListener('pointerdown', function (ev) {
-        dragging = true;
-        seekVideoFromEvent(ev, vid, item);
-        document.addEventListener('pointermove', onMove);
-        document.addEventListener('pointerup', onUp);
+      bar.addEventListener('input', function () {
+        var length = clipLength(vid, item);
+        if (!(length > 0)) return;
+        vid.currentTime = (Number(bar.value) / 1000) * length;
+        paintVideoProgress(vid, item);
       });
     }
   }
@@ -3505,8 +3522,10 @@
       if (!res.ok || !res.body || !res.body.note) {
         if (empty && !analysisLog(item).length) {
           empty.hidden = false;
-          empty.textContent = (res.body && (res.body.error || res.body.message))
-            || 'The assistant could not read this moment yet. Keep playing — it will try again.';
+          var raw = res.body && (res.body.error || res.body.message);
+          empty.textContent = (raw && !/API_UPSTREAM|not reachable/i.test(raw))
+            ? raw
+            : 'The assistant could not read this moment yet. Keep playing — it will try again.';
         }
         setAnalysisPill(isFootagePlaying() ? 'Watching' : 'Ready');
         return;
