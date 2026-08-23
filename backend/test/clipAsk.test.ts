@@ -59,6 +59,11 @@ test('a specific question cites the timestamped beat it was drawn from', () => {
   assert.match(answer, /0:12/);
 });
 
+test('something the camera never showed is refused rather than inferred', () => {
+  const answer = groundedAnswerFromClip('Did they replace the water heater?', cedarAfter);
+  assert.equal(answer, 'The footage on file does not show that.');
+});
+
 test('a question about skylights cites the scope reading rather than inventing contact', () => {
   const answer = groundedAnswerFromClip('Did they touch the skylights?', cedarAfter);
   assert.match(answer, /skylight/i);

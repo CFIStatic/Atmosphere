@@ -251,13 +251,14 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
     return (record.dictation || record.summary || 'The footage on file does not show that.').trim();
   }
 
+  const need = Math.min(2, qTokens.length);
   const scored = rows
     .map((row) => {
       const hay = tokens(row.text);
       const hits = qTokens.filter((token) => hay.some((h) => h.includes(token) || token.includes(h)));
       return { row, score: hits.length };
     })
-    .filter((entry) => entry.score > 0)
+    .filter((entry) => entry.score >= need)
     .sort((a, b) => b.score - a.score || (a.row.at ?? 0) - (b.row.at ?? 0));
 
   if (!scored.length) return 'The footage on file does not show that.';

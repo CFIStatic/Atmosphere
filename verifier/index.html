@@ -3086,13 +3086,14 @@
     }
     var qTokens = askTokens(q);
     if (!qTokens.length) return (a.dictation || a.summary || 'The footage on file does not show that.');
+    var need = Math.min(2, qTokens.length);
     var scored = rows.map(function (row) {
       var hay = askTokens(row.text);
       var hits = qTokens.filter(function (t) {
         return hay.some(function (h) { return h.indexOf(t) !== -1 || t.indexOf(h) !== -1; });
       });
       return { row: row, score: hits.length };
-    }).filter(function (e) { return e.score > 0; }).sort(function (x, y) {
+    }).filter(function (e) { return e.score >= need; }).sort(function (x, y) {
       return y.score - x.score || (x.row.at || 0) - (y.row.at || 0);
     });
     if (!scored.length) return 'The footage on file does not show that.';
