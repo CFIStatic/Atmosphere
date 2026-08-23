@@ -1791,7 +1791,11 @@
     video.addEventListener('loadedmetadata', function () {
       var label = previewDurationLabel(video.duration);
       var el = video.parentNode && video.parentNode.querySelector('.dur');
-      if (el && label !== '—') el.textContent = label;
+      // Only fill a missing length. A short preview file must not overwrite
+      // a catalog duration the list already knew.
+      if (el && label !== '—' && (el.textContent === '—' || el.textContent === '0:00')) {
+        el.textContent = label;
+      }
       var id = video.closest && video.closest('tr') && video.closest('tr').getAttribute('data-id');
       if (id && Number.isFinite(video.duration) && video.duration > 0 && video.duration !== Infinity) {
         EVIDENCE.forEach(function (item) {

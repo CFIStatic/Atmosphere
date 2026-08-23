@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { JSDOM } from 'jsdom';
+import { afterEach, describe, expect, it } from 'vitest';
 
 const verifierHtml = readFileSync(
   resolve(dirname(fileURLToPath(import.meta.url)), '../../../../verifier/index.html'),
@@ -33,6 +34,10 @@ function extractPreviewFns() {
 }
 
 describe('verifier dashboard clip preview', () => {
+  afterEach(() => {
+    localStorage.clear();
+  });
+
   it('prints an em dash for a 0:00 header instead of claiming the clip is empty', () => {
     const { clipLength } = extractPreviewFns();
     expect(clipLength(null)).toBe('—');
@@ -76,5 +81,40 @@ describe('verifier dashboard clip preview', () => {
   it('gives demo rows a local file so the preview cell can play without a backend', () => {
     expect(verifierHtml).toContain("/verifier/demo-preview.mp4");
     expect(verifierHtml).toContain('if (!o.previewUrl) o.previewUrl = \'/verifier/demo-preview.mp4\'');
+  });
+
+  it('renders a muted video thumb on each demo clip row', async () => {
+    const dom = new JSDOM(verifierHtml, {
+      url: 'https://atmosphere.test/verifier/?demo=1',
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+      beforeParse(window) {
+        window.fetch = () => Promise.reject(new Error('offline'));
+        window.matchMedia = ((query: string) => ({
+          matches: false,
+          media: query,
+          addEventListener() {},
+          removeEventListener() {},
+          addListener() {},
+          removeListener() {},
+          dispatchEvent() {
+            return false;
+          },
+        })) as unknown as typeof window.matchMedia;
+      },
+    });
+
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+    const videos = Array.from(dom.window.document.querySelectorAll('tr[data-id] video.shot'));
+    expect(videos.length).toBeGreaterThan(0);
+    for (const video of videos) {
+      expect(video.getAttribute('muted')).not.toBeNull();
+      expect(video.getAttribute('data-src')).toBe('/verifier/demo-preview.mp4');
+      expect(video.closest('.thumb')?.getAttribute('data-preview')).toBe('1');
+    }
+    const overlay = videos[0]?.parentElement?.querySelector('.dur')?.textContent;
+    expect(overlay).not.toBe('0:00');
+    expect(overlay).toBeTruthy();
+    dom.window.close();
   });
 });
