@@ -28,7 +28,7 @@ describe('verifier clip Ask tab and live analysis', () => {
 
   it('writes analysis notes as the footage plays rather than dumping the log', () => {
     expect(verifierHtml).toContain('function startLivePlayback');
-    expect(verifierHtml).toContain('<!-- ask-panel 2026-08-23-bar -->');
+    expect(verifierHtml).toContain('<!-- ask-panel 2026-08-23-bar2 -->');
     expect(verifierHtml).toContain('function bindVideoProgress');
     expect(verifierHtml).toContain('id="d-progress"');
     expect(verifierHtml).not.toContain('<video controls');

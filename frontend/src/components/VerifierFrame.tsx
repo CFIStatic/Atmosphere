@@ -107,7 +107,7 @@ export function VerifierFrame({
   }, [logout, navigate, postSession]);
 
   const frameClass = 'h-full w-full border-0';
-  const frameSrc = srcDoc ? undefined : '/verifier/?embed=1&v=ask-panel-4';
+  const frameSrc = srcDoc ? undefined : '/verifier/?embed=1&v=ask-panel-5';
 
   return (
     <div className={className} style={style}>
