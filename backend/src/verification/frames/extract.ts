@@ -176,6 +176,69 @@ export async function extractThumbnail(opts: {
   if (code !== 0) throw new Error(`ffmpeg thumbnail failed: ${stderr.slice(0, 500)}`);
 }
 
+/** Seconds of the recorded file the list plays as a preview. */
+export const PREVIEW_CLIP_SECONDS = 4;
+
+/**
+ * Where to cut a preview out of the recorded file.
+ *
+ * Half a second in skips the opening thumb-over-the-lens. A clip shorter
+ * than that starts at zero. The span is capped so the list never loads
+ * the day film.
+ */
+export function previewClipWindow(
+  durationSeconds: number | null | undefined,
+): { start: number; span: number } {
+  const d = Number(durationSeconds);
+  if (!Number.isFinite(d) || d <= 0) return { start: 0.5, span: PREVIEW_CLIP_SECONDS };
+  const start = d > 2 ? Math.min(0.5, d * 0.1) : 0;
+  const span = Math.min(PREVIEW_CLIP_SECONDS, Math.max(0.75, d - start));
+  return { start, span };
+}
+
+/**
+ * Cut a short H.264 MP4 from the recorded file itself.
+ *
+ * Field Capture often lands WebM with no duration in the header. Browsers
+ * then show 0:00 and a black thumb. This transcode is the same footage,
+ * in a container the list can actually play.
+ */
+export async function extractPreviewClip(opts: {
+  filePath: string;
+  outPath: string;
+  startSeconds?: number;
+  durationSeconds?: number;
+  runner?: CommandRunner;
+}): Promise<void> {
+  const runner = opts.runner ?? defaultRunner;
+  const start = opts.startSeconds ?? 0.5;
+  const span = opts.durationSeconds ?? PREVIEW_CLIP_SECONDS;
+  const { code, stderr } = await runner(verificationConfig.ffmpegPath, [
+    '-y',
+    '-ss',
+    String(start),
+    '-i',
+    opts.filePath,
+    '-t',
+    String(span),
+    '-an',
+    '-vf',
+    `scale=${verificationConfig.thumbnailWidth}:-2`,
+    '-c:v',
+    'libx264',
+    '-preset',
+    'veryfast',
+    '-crf',
+    '28',
+    '-pix_fmt',
+    'yuv420p',
+    '-movflags',
+    '+faststart',
+    opts.outPath,
+  ]);
+  if (code !== 0) throw new Error(`ffmpeg preview clip failed: ${stderr.slice(0, 500)}`);
+}
+
 /** Pipeline stage: validate container via ffprobe after download. */
 export function createValidateVideoHandler(opts?: {
   downloadVideo: (ctx: PipelineContext) => Promise<string>;

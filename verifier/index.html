@@ -1168,13 +1168,7 @@
     camden: { key: 'camden', name: 'Camden Court — HOA clubhouse rebuild', number: 1044, address: '900 Camden Ct, Round Rock TX' }
   };
 
-  function ev(o) {
-    // Demo rows share one short file so the preview cell can play footage
-    // rather than a still. Live library rows replace this list and carry
-    // their own signed previewUrl from the portal.
-    if (!o.previewUrl) o.previewUrl = '/verifier/demo-preview.mp4';
-    return o;
-  }
+  function ev(o) { return o; }
 
   var EVIDENCE = [
     ev({
@@ -1737,8 +1731,8 @@
     return { start: start, span: span };
   }
 
-  function clipThumbHtml(previewUrl, poster, lengthLabel) {
-    if (previewUrl) {
+  function clipThumbHtml(previewUrl, poster, lengthLabel, previewId) {
+    if (previewUrl || previewId) {
       // A drawn SVG is not a frame of the file. Using it as poster makes a
       // real clip look like the placeholder even after the player is ready.
       var posterAttr = (poster && poster.indexOf('data:image/svg') !== 0)
@@ -1746,7 +1740,9 @@
         : '';
       return '<span class="thumb" data-preview="1">' +
         '<video class="shot" muted playsinline preload="metadata"' + posterAttr +
-        ' data-src="' + esc(previewUrl) + '"></video>' +
+        (previewUrl ? ' data-src="' + esc(previewUrl) + '"' : '') +
+        (previewId ? ' data-preview-id="' + esc(previewId) + '"' : '') +
+        '></video>' +
         '<span class="dur">' + lengthLabel + '</span></span>';
     }
     return '<span class="thumb"><img class="shot" alt="" loading="lazy" decoding="async" src="' +
@@ -1760,7 +1756,7 @@
     phase = phase.charAt(0).toUpperCase() + phase.slice(1);
     return '' +
       '<tr tabindex="0" data-id="' + e.id + '">' +
-        '<td>' + clipThumbHtml(e.previewUrl, thumbFor(e), clipLength(e.duration)) + '</td>' +
+        '<td>' + clipThumbHtml(e.previewUrl, thumbFor(e), clipLength(e.duration), e._remote && !e.previewUrl ? e.id : null) + '</td>' +
         '<td class="titlecell">' +
           '<div class="t">' + esc(job.name) + '</div>' +
           '<div class="s">' + esc(phase) +
@@ -1795,10 +1791,11 @@
     video.addEventListener('loadedmetadata', function () {
       var label = previewDurationLabel(video.duration);
       var el = video.parentNode && video.parentNode.querySelector('.dur');
-      // Only fill a missing length. A short preview file must not overwrite
-      // a catalog duration the list already knew.
-      if (el && label !== '—' && (el.textContent === '—' || el.textContent === '0:00')) {
-        el.textContent = label;
+      // The preview file is a few seconds cut from the day. Its duration
+      // is not the clip's length — only fill when the catalog is empty
+      // and the player is the original file, not a snippet.
+      if (el && label !== '—' && (el.textContent === '—' || el.textContent === '0:00') && video._sourceDuration) {
+        el.textContent = dur(video._sourceDuration);
       }
       var id = video.closest && video.closest('tr') && video.closest('tr').getAttribute('data-id');
       if (id && Number.isFinite(video.duration) && video.duration > 0 && video.duration !== Infinity) {
@@ -1816,27 +1813,58 @@
     });
   }
 
+  function previewApiUrl(proofId) {
+    if (ORG_MODE) return '/api/evidence-portal/evidence/' + encodeURIComponent(proofId) + '/preview';
+    if (SHARE_TOKEN) return '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(proofId) + '/preview';
+    return null;
+  }
+
+  function resolvePreviewSrc(video, done) {
+    if (video.getAttribute('src')) { done(); return; }
+    var ready = video.getAttribute('data-src');
+    if (ready) { video.src = ready; done(); return; }
+    var id = video.getAttribute('data-preview-id');
+    var api = id ? previewApiUrl(id) : null;
+    if (!api) { done(); return; }
+    if (video._previewFetch) { video._previewFetch.then(done); return; }
+    video._previewFetch = fetch(api, { credentials: 'include' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (body) {
+        if (!body || !body.url) return;
+        video.src = body.url;
+        if (Number(body.durationSeconds) > 0) {
+          video._sourceDuration = Number(body.durationSeconds);
+          var el = video.parentNode && video.parentNode.querySelector('.dur');
+          if (el && (el.textContent === '—' || el.textContent === '0:00')) {
+            el.textContent = dur(body.durationSeconds);
+          }
+        }
+      })
+      .catch(function () { /* a missing cut leaves the still */ })
+      .then(function () { done(); });
+  }
+
   function startPreview(video) {
     if (!video || video._previewing) return;
     wirePreviewVideo(video);
     if (previewPlaying && previewPlaying !== video) stopPreview(previewPlaying, true);
-    if (!video.getAttribute('src') && video.getAttribute('data-src')) {
-      video.src = video.getAttribute('data-src');
-    }
     video.muted = true;
     video.playsInline = true;
     video._previewing = true;
     previewPlaying = video;
     var play = function () {
+      if (!video.getAttribute('src')) return;
       var win = previewWindow(video.duration);
       if (Number.isFinite(video.duration) && video.duration > win.start) {
-        try { video.currentTime = win.start; } catch (err) { /* same WebM seek */ }
+        try { video.currentTime = 0; } catch (err) { /* snippet starts at the cut */ }
       }
       var run = video.play();
       if (run && run.catch) run.catch(function () { /* autoplay can be blocked; hover still works */ });
     };
-    if (video.readyState >= 1) play();
-    else video.addEventListener('loadedmetadata', play, { once: true });
+    resolvePreviewSrc(video, function () {
+      if (video.readyState >= 1) play();
+      else video.addEventListener('loadedmetadata', play, { once: true });
+    });
   }
 
   function stopPreview(video, unload) {
