@@ -1,0 +1,101 @@
+#!/bin/sh
+# vim:sw=2:ts=2:sts=2:et
+#
+# Sourced by the nginx image entrypoint before 20-envsubst-on-templates.sh,
+# which is why this is .envsh and not .sh: the entrypoint *executes* *.sh in a
+# child process (exports die with it) and *sources* *.envsh, so only a sourced
+# file can hand PORT / API_UPSTREAM / API_RESOLVERS to envsubst.
+#
+# Railway resolves ${{Service.VAR}} references before the container sees them.
+# A reference naming a service that is not on the canvas resolves to an empty
+# string instead of failing, so API_UPSTREAM arrives as "http://:", nginx exits
+# with `invalid port in upstream ":"` and the replica crash-loops until the
+# deploy fails its healthcheck. That takes the whole console down — login page
+# included — over a variable that only /api needs.
+#
+# So this never exits non-zero and never calls exit: the entrypoint runs with
+# `set -e`, and a failure here is a container that does not start. It repairs
+# what it can and falls back to something nginx will accept.
+
+office_log() { echo "office: $*" >&2; }
+
+# Reachable from anywhere, unlike *.railway.internal. Hairpinning through the
+# edge is slower than the private mesh, but a slow /api beats a dead origin.
+office_public_bff="https://atmosphere-production.up.railway.app"
+# The BFF image listens here unless Railway overrides PORT.
+office_default_api_port="4000"
+
+case "${PORT:-}" in
+  '' | *[!0-9]*)
+    office_log "PORT='${PORT:-}' is not a port number — binding 80."
+    PORT=80
+    ;;
+esac
+export PORT
+
+# Values pasted through the Railway dashboard often carry a trailing newline.
+# A trailing slash would make proxy_pass a *URI* rather than an upstream.
+office_upstream="$(printf '%s' "${API_UPSTREAM:-}" | tr -d ' \t\n\r' || true)"
+office_upstream="${office_upstream%/}"
+office_usable=''
+
+# Order matters: "http://:" ends with a colon *and* has an empty host, and only
+# the empty host is fatal in a way appending a port cannot fix.
+case "$office_upstream" in
+  '')
+    office_log 'API_UPSTREAM is unset.'
+    ;;
+  *'${{'* | *'}}'*)
+    office_log "API_UPSTREAM='${office_upstream}' still holds an unresolved Railway reference."
+    ;;
+  http://:* | https://:*)
+    office_log "API_UPSTREAM='${office_upstream}' has no host — check the service name"
+    office_log 'in the reference (the BFF service is "Atmosphere APIs").'
+    ;;
+  http://*: | https://*:)
+    # Host resolved, ${{Service.PORT}} did not. The host is the useful half.
+    office_usable="${office_upstream}${office_default_api_port}"
+    office_log "API_UPSTREAM='${office_upstream}' has no port — using ${office_usable}."
+    ;;
+  http://127.0.0.1* | http://localhost* | 'http://[::1]'*)
+    # Correct for docker compose, never right on Railway: nothing else listens
+    # in this container.
+    if [ -n "${RAILWAY_ENVIRONMENT:-}${RAILWAY_PRIVATE_DOMAIN:-}" ]; then
+      office_log "API_UPSTREAM='${office_upstream}' is loopback inside this container."
+    else
+      office_usable="$office_upstream"
+    fi
+    ;;
+  http://* | https://*)
+    office_usable="$office_upstream"
+    ;;
+  *)
+    office_log "API_UPSTREAM='${office_upstream}' is not an http(s) URL."
+    ;;
+esac
+
+if [ -z "$office_usable" ]; then
+  office_usable="$office_public_bff"
+  office_log "serving /api from ${office_usable} so this replica still starts."
+  office_log 'Set API_UPSTREAM on this service to the Atmosphere APIs private'
+  office_log 'HTTP URL to keep /api inside the mesh (see docs/production.md).'
+fi
+
+API_UPSTREAM="$office_usable"
+export API_UPSTREAM
+
+# nginx resolves a literal proxy_pass host once, at startup, and refuses to
+# start when it is not in DNS yet ("host not found in upstream") — a BFF that
+# is mid-redeploy would take the console with it. The template proxies through
+# a variable instead, which defers resolution to request time and needs a
+# resolver. Same list the image's own 15-local-resolvers.envsh builds, but
+# unconditional and with a fallback, because an empty one is a broken config.
+office_resolvers="$(awk 'BEGIN{ORS=" "} $1=="nameserver" {if ($2 ~ ":") {print "["$2"]"} else {print $2}}' /etc/resolv.conf 2>/dev/null || true)"
+office_resolvers="${office_resolvers% }"
+[ -n "$office_resolvers" ] || office_resolvers="127.0.0.11"
+API_RESOLVERS="${NGINX_RESOLVERS:-$office_resolvers}"
+export API_RESOLVERS
+
+office_log "listening on ${PORT}, proxying /api to ${API_UPSTREAM} via resolver ${API_RESOLVERS}"
+
+unset office_upstream office_usable office_resolvers office_public_bff office_default_api_port

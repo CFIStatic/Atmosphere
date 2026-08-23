@@ -19,13 +19,12 @@ describe('Railway office-app image', () => {
     const dockerfile = read('Dockerfile');
     expect(dockerfile).toContain('COPY verifier /verifier');
     expect(dockerfile).toContain('COPY fieldcapture /fieldcapture');
-    expect(dockerfile).toContain('NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM)$$');
+    expect(dockerfile).toContain('NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM|API_RESOLVERS)$$');
   });
 
   it('proxies /api and serves the static apps on one origin', () => {
     const nginx = read('nginx/default.conf.template');
     expect(nginx).toContain('location /api');
-    expect(nginx).toContain('proxy_pass ${API_UPSTREAM}');
     expect(nginx).toContain('proxy_set_header Host $proxy_host');
     expect(nginx).toContain('proxy_ssl_server_name on');
     expect(nginx).toContain('add_header Cache-Control "no-store"');
@@ -34,11 +33,72 @@ describe('Railway office-app image', () => {
     expect(nginx).toContain('location = /healthz');
   });
 
-  it('points API_UPSTREAM at the Atmosphere private domain, not the public URL', () => {
+  /**
+   * A literal proxy_pass host is resolved once, at startup, and nginx refuses
+   * to start when it is not in DNS. That turns a redeploying BFF into a dead
+   * console. Proxy through a variable so a miss is a request-time 502 that
+   * @api_down renders as JSON.
+   */
+  it('resolves the BFF per request, not once at startup', () => {
+    const nginx = read('nginx/default.conf.template');
+    expect(nginx).toContain('resolver ${API_RESOLVERS}');
+    expect(nginx).toContain('set $api_upstream ${API_UPSTREAM}');
+    expect(nginx).toContain('proxy_pass $api_upstream$request_uri');
+    // A bare ${API_UPSTREAM} in proxy_pass is the startup-resolution form.
+    expect(nginx).not.toContain('proxy_pass ${API_UPSTREAM}');
+    expect(nginx).toContain('error_page 502 503 504 = @api_down');
+    expect(nginx).toContain('backend_unreachable');
+  });
+
+  /**
+   * The office console is static files; only /api needs the BFF. Railway's
+   * probe must never depend on the upstream, or a cold API fails the deploy
+   * and takes the login page down with it.
+   */
+  it('answers every platform probe locally, ahead of the /api proxy', () => {
+    const nginx = read('nginx/default.conf.template');
+    const apiProxy = nginx.indexOf('location /api {');
+    for (const probe of ['location = /healthz', 'location = /health', 'location = /api/health']) {
+      expect(nginx).toContain(probe);
+      expect(nginx.indexOf(probe)).toBeLessThan(apiProxy);
+    }
+  });
+
+  /**
+   * Railway resolves ${{Service.VAR}} before the container starts. A reference
+   * naming a service that is not on the canvas resolves to an empty string, so
+   * API_UPSTREAM arrives as "http://:" and nginx exits with `invalid port in
+   * upstream ":"` — which is how the console went down on 2026-08-22.
+   */
+  it('never lets an unusable API_UPSTREAM stop nginx from starting', () => {
+    const dockerfile = read('Dockerfile');
+    // .envsh is sourced by the image entrypoint; a .sh is executed in a child
+    // process, so its exports would never reach envsubst.
+    expect(dockerfile).toContain(
+      'COPY frontend/nginx/15-validate-app-env.envsh /docker-entrypoint.d/15-validate-app-env.envsh',
+    );
+
+    const guard = read('nginx/15-validate-app-env.envsh');
+    expect(guard).toContain('http://:*');
+    expect(guard).toContain("*'${{'*");
+    expect(guard).toContain('export API_UPSTREAM');
+    expect(guard).toContain('export API_RESOLVERS');
+    // Exiting is what a crash-loop is made of: the entrypoint runs with set -e.
+    expect(guard).not.toMatch(/^\s*exit /m);
+  });
+
+  /**
+   * The BFF service is named "Atmosphere APIs". `${{Atmosphere.…}}` matched
+   * nothing, and Railway resolves an unmatched reference to an empty string
+   * rather than failing, which is what produced API_UPSTREAM=http://:.
+   */
+  it('points API_UPSTREAM at the Atmosphere APIs private domain, not the public URL', () => {
     const upstream = readRoot('api.upstream').trim();
     expect(upstream).toBe(
-      'http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}',
+      'http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}',
     );
+    expect(upstream).not.toMatch(/\$\{\{Atmosphere\./);
+    expect(upstream).not.toContain('https://');
   });
 
   it('points the Railway app service at this Dockerfile, not the backend one', () => {
@@ -75,6 +135,8 @@ describe('every front door proxies /api over the private mesh', () => {
 
   it('takes the office upstream from the shared root file', () => {
     expect(office).toContain("tr -d '\\n' < api.upstream");
+    // Preferred over the reference: a resolved literal cannot come out empty.
+    expect(office).toContain('scripts/resolveApiUpstream.mjs');
     const appJob = office.slice(office.indexOf('name: Deploy office app'));
     expect(appJob).toContain('resolveRailwayService.mjs');
     expect(appJob).toContain('Login & Dashboard');
@@ -100,7 +162,8 @@ describe('every front door proxies /api over the private mesh', () => {
 
   it('keeps the website proxy addressing its upstream by host', () => {
     const nginx = readRoot('website/nginx/default.conf.template');
-    expect(nginx).toContain('proxy_pass ${API_UPSTREAM}');
+    expect(nginx).toContain('set $api_upstream ${API_UPSTREAM}');
+    expect(nginx).toContain('proxy_pass $api_upstream$request_uri');
     expect(nginx).toContain('proxy_set_header Host $proxy_host');
   });
 });

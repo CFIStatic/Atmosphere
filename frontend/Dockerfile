@@ -8,7 +8,9 @@
 # so the SPA uses same-origin /api and httpOnly cookies just work.
 #
 # Railway: service Config File = /frontend/railway.toml
-#   API_UPSTREAM=http://${{backend.RAILWAY_PRIVATE_DOMAIN}}:${{backend.PORT}}
+#   API_UPSTREAM=http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}
+# The service name has to match what is on the Railway canvas exactly:
+# an unmatched reference resolves to an empty string, not an error.
 
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
@@ -26,8 +28,15 @@ RUN npm run build
 FROM nginx:1.27-alpine AS runtime
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY frontend/nginx/default.conf.template /etc/nginx/templates/default.conf.template
+# Normalises PORT / API_UPSTREAM and picks the resolver, before envsubst runs.
+# An upstream Railway could not resolve ("http://:") used to stop nginx from
+# starting at all, which took the login page down with the API proxy.
+# .envsh, not .sh: the image entrypoint sources the first and executes the
+# second, and an executed script cannot export anything to envsubst.
+COPY frontend/nginx/15-validate-app-env.envsh /docker-entrypoint.d/15-validate-app-env.envsh
+RUN chmod +x /docker-entrypoint.d/15-validate-app-env.envsh
 # Only substitute these; otherwise envsubst would empty nginx's $uri / $host.
-ENV NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM)$$
+ENV NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM|API_RESOLVERS)$$
 ENV PORT=80
 ENV API_UPSTREAM=http://127.0.0.1:4000
 EXPOSE 80

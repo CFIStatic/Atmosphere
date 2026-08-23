@@ -14,7 +14,10 @@ describe('Railway corporate-website image', () => {
     const dockerfile = read('website/Dockerfile');
     expect(dockerfile).toContain('ENTRYPOINT ["/docker-entrypoint.sh"]');
     expect(dockerfile).toContain('CMD ["nginx", "-g", "daemon off;"]');
-    expect(dockerfile).toContain('NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM)$$');
+    expect(dockerfile).toContain('NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM|API_RESOLVERS)$$');
+    expect(dockerfile).toContain(
+      'COPY website/nginx/15-validate-website-env.envsh /docker-entrypoint.d/15-validate-website-env.envsh',
+    );
     expect(dockerfile).toContain('SITE_ORIGIN=https://website-production-7e3f.up.railway.app');
     expect(dockerfile).not.toContain('ENTRYPOINT ["/usr/local/bin/website-start.sh"]');
 
@@ -31,7 +34,21 @@ describe('Railway corporate-website image', () => {
     expect(nginx).toContain('location = /healthz');
     expect(nginx).toContain('location = /api/health');
     expect(nginx).toContain('proxy_connect_timeout 5s');
-    expect(nginx).toContain('proxy_pass ${API_UPSTREAM}');
+    expect(nginx).toContain('proxy_pass $api_upstream$request_uri');
+  });
+
+  /**
+   * An API_UPSTREAM Railway resolved to "http://:" makes nginx exit with
+   * `invalid port in upstream`, taking every marketing page down with the
+   * /api proxy that is all the variable is for. Both boot paths run this.
+   */
+  it('never lets an unusable API_UPSTREAM stop nginx from starting', () => {
+    const guard = read('website/nginx/15-validate-website-env.envsh');
+    expect(guard).toContain('http://:*');
+    expect(guard).toContain("*'${{'*");
+    expect(guard).toContain('export API_UPSTREAM');
+    expect(guard).toContain('http://127.0.0.1:4000');
+    expect(guard).not.toMatch(/^\s*exit /m);
   });
 
   it('points the Railway website service at this Dockerfile, not the backend one', () => {
