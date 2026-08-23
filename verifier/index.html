@@ -1721,27 +1721,72 @@
     return best;
   }
 
-  /**
-   * Filming still in flight — not an uploaded file whose analysis is queued.
-   * A landed video is Recorded even when the model has not read it yet.
-   */
-  function isActiveRecording(e) {
-    var a = (e.analysis || {}).state;
-    if (a === 'queued' || a === 'done' || a === 'paired' || a === 'skipped' || a === 'failed') {
-      return false;
-    }
-    var t = clipInstant(e, ['uploadedAt', 'capturedAt']);
-    return Boolean(t && (Date.now() - t) < 30 * 60 * 1000);
+  /** Today in the browser's reckoning — work dates are site-local days. */
+  function todayKey() {
+    var d = new Date();
+    var m = d.getMonth() + 1;
+    var day = d.getDate();
+    return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
   }
 
+  /** Is there footage behind this row, or is the row all there is? */
+  function hasLandedFile(e) {
+    return Boolean(Number(e.duration) > 0 || Number(e.bytes) > 0 || e.hash);
+  }
+
+  /**
+   * A camera rolling right now: either the platform says so outright, or the
+   * row was filed ahead of its file and the upload is still climbing the wire.
+   * capturedAt is stamped when the file is written — the end of the take — so
+   * a clip with a landed file is finished however recently it arrived, and
+   * whatever the model still has queued. Recently uploaded is not live.
+   */
+  var UPLOAD_GRACE_MS = 15 * 60 * 1000;
+
+  function isActiveRecording(e) {
+    if (e.live === true) return true;
+    if (hasLandedFile(e)) return false;
+    var t = clipInstant(e, ['uploadedAt', 'capturedAt']);
+    return Boolean(t && (Date.now() - t) < UPLOAD_GRACE_MS);
+  }
+
+  /**
+   * A day still being filmed: a before clip filed today with no after against
+   * it. The crew is on site and the day is not closed out — which is what the
+   * Dashboard's yellow says. A stale unpaired before from last week is not
+   * live, so the day has to be today.
+   */
+  function isOpenRecordingDay(items, day) {
+    if (!day || day !== todayKey()) return false;
+    var onDay = items.filter(function (e) { return e.workDate === day; });
+    if (!onDay.length) return false;
+    return onDay.some(function (e) { return e.phase === 'before'; }) &&
+      !onDay.some(function (e) { return e.phase === 'after'; });
+  }
+
+  function hasOpenRecordingDay(items) {
+    var days = {};
+    items.forEach(function (e) { if (e.workDate) days[e.workDate] = true; });
+    return Object.keys(days).some(function (d) { return isOpenRecordingDay(items, d); });
+  }
+
+  /**
+   * The job file's recording state, and the only three answers the column has:
+   * red when there is no footage in the file, yellow while a camera is still
+   * rolling against it, green once the day is filmed and filed.
+   */
   function jobRecordingStatus(items) {
     if (!items.length) return { cls: 'red', text: 'No recording' };
-    if (items.some(isActiveRecording)) return { cls: 'yellow', text: 'Recording' };
+    if (items.some(isActiveRecording) || hasOpenRecordingDay(items)) {
+      return { cls: 'yellow', text: 'Recording' };
+    }
+    if (!items.some(hasLandedFile)) return { cls: 'red', text: 'No recording' };
     return { cls: 'green', text: 'Recorded' };
   }
 
   function clipStatus(e) {
     if (isActiveRecording(e)) return { cls: 'yellow', text: 'Recording' };
+    if (!hasLandedFile(e)) return { cls: 'red', text: 'No recording' };
     return { cls: 'green', text: 'Recorded' };
   }
 
@@ -1881,10 +1926,10 @@
       var onDay = items.filter(function (e) { return e.workDate === d; });
       if (onDay.some(function (e) { return integrityOf(e) === 'pass' && !isActiveRecording(e); })) verifiedDays += 1;
     });
-    var inProgress = items.some(isActiveRecording) ? 1 : 0;
+    var inProgress = (items.some(isActiveRecording) || hasOpenRecordingDay(items)) ? 1 : 0;
     var recent = dayKeys.slice(0, 5).map(function (d) {
       var onDay = items.filter(function (e) { return e.workDate === d; });
-      var active = onDay.some(isActiveRecording);
+      var active = onDay.some(isActiveRecording) || isOpenRecordingDay(items, d);
       var fail = onDay.some(function (e) { return integrityOf(e) === 'fail'; });
       var pass = onDay.some(function (e) { return integrityOf(e) === 'pass'; });
       return {
@@ -3774,6 +3819,9 @@
       device: null,
       gps: raw.gps ? { lat: raw.gps.lat, lon: raw.gps.lon, accuracy: raw.gps.accuracyM, distanceFt: null } : null,
       hash: raw.hash,
+      // The platform's own word that a camera is rolling. Absent today; read
+      // here so the chip is right the day the API starts sending it.
+      live: raw.live === true || raw.recordingState === 'recording',
       tier: raw.tier || 1,
       hold: raw.legalHold ? { on: true, reason: 'This clip is under legal hold. Retention cannot delete it while the hold stands.', by: '', at: '' } : null,
       checks: raw.checks || [],
