@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../config.js';
 import { HttpError } from './errors.js';
@@ -119,19 +120,75 @@ export function describeIterations(usage: any): string | null {
   return iterations.map((i: any) => i?.type ?? 'message').join(' → ');
 }
 
-let client: Anthropic | null = null;
+/**
+ * The organisation's own key, in scope for the duration of one job or request.
+ *
+ * An org can connect its own Anthropic key in the UI — that is the product's
+ * promise, and it puts their model spend on their own account. Until now only
+ * computer use read that key: every other model call in the system went
+ * straight to `ANTHROPIC_API_KEY` and reported "Model access is not configured
+ * on this server" when the env var was unset, however many keys the org had
+ * connected. That is a clip that never gets read on a server that could read
+ * it.
+ *
+ * Carried in AsyncLocalStorage rather than threaded through signatures because
+ * "which account pays for this call" is ambient to the work, not an argument
+ * to each of the thirteen call sites — and a parameter that thirteen callers
+ * have to remember to pass is a parameter twelve of them will eventually
+ * forget. Entry points that know the org wrap their work in `withOrgApiKey`;
+ * everything underneath keeps calling `anthropicClient()` unchanged.
+ */
+const orgKeyScope = new AsyncLocalStorage<string>();
+
+/**
+ * Run `fn` with this organisation's key in scope. A null key is not an error —
+ * it simply means the org has not connected one, and the work falls back to
+ * the server-wide key exactly as before.
+ */
+export function withOrgApiKey<T>(apiKey: string | null | undefined, fn: () => T): T {
+  const key = apiKey?.trim();
+  return key ? orgKeyScope.run(key, fn) : fn();
+}
+
+/** The key this call should bill: the org's if one is in scope, else the server's. */
+function activeApiKey(): string {
+  return orgKeyScope.getStore() || config.anthropic.apiKey;
+}
+
+let serverClient: Anthropic | null = null;
+/**
+ * One client per org key. Capped, because the SDK holds an agent and a
+ * connection pool, and an unbounded map keyed by secret would be both a leak
+ * and a pile of live credentials in memory.
+ */
+const orgClients = new Map<string, Anthropic>();
+const MAX_ORG_CLIENTS = 32;
 
 /** Lazily constructed so the server still boots without an upstream key. */
 export function anthropicClient(): Anthropic {
-  if (!config.anthropic.apiKey) {
+  const apiKey = activeApiKey();
+  if (!apiKey) {
     throw new HttpError(
       503,
       'Model access is not configured on this server.',
       'model_provider_unconfigured',
     );
   }
-  client ??= new Anthropic({ apiKey: config.anthropic.apiKey });
-  return client;
+  if (apiKey === config.anthropic.apiKey) {
+    serverClient ??= new Anthropic({ apiKey });
+    return serverClient;
+  }
+  let scoped = orgClients.get(apiKey);
+  if (!scoped) {
+    if (orgClients.size >= MAX_ORG_CLIENTS) {
+      // Oldest first — Map preserves insertion order.
+      const oldest = orgClients.keys().next().value;
+      if (oldest !== undefined) orgClients.delete(oldest);
+    }
+    scoped = new Anthropic({ apiKey });
+    orgClients.set(apiKey, scoped);
+  }
+  return scoped;
 }
 
-export const isModelProviderConfigured = (): boolean => Boolean(config.anthropic.apiKey);
+export const isModelProviderConfigured = (): boolean => Boolean(activeApiKey());

@@ -10,6 +10,8 @@ import {
   answerFromClip,
   clipRecordFromEvidenceItem,
 } from '../shared/clipAsk.js';
+import { withOrgApiKey } from '../lib/anthropic.js';
+import { getApiKey } from '../computer/credentials.js';
 import {
   downloadDecision,
   analysisReasonOf,
@@ -329,11 +331,17 @@ async function settleClipQuestion(opts: {
   actorRole: string;
 }): Promise<{ answer: string; model: string | null }> {
   const record = clipRecordFromEvidenceItem(opts.item);
-  const result = await answerFromClip({
-    question: opts.question,
-    record,
-    history: opts.history,
-  });
+  // The answer is written on the org's account when they have connected a key.
+  // A share holder asking through the outward door bills the org that issued
+  // the link, which is the org whose evidence is being read — not the reader.
+  const orgKey = await getApiKey(opts.orgId).catch(() => null);
+  const result = await withOrgApiKey(orgKey, () =>
+    answerFromClip({
+      question: opts.question,
+      record,
+      history: opts.history,
+    }),
+  );
 
   try {
     await opts.client.from('job_proof_questions').insert({

@@ -18,7 +18,8 @@ import {
 } from '../shared/proofAnalyst.js';
 import { RetryQueue } from '../shared/retryQueue.js';
 import { attachProofToEpisode } from '../episodes/attach.js';
-import { isModelProviderConfigured } from '../lib/anthropic.js';
+import { isModelProviderConfigured, withOrgApiKey } from '../lib/anthropic.js';
+import { getApiKey } from '../computer/credentials.js';
 import { config } from '../config.js';
 import { DailyBudget } from '../shared/liveBudget.js';
 import { labelsForProof } from '../verifier/library.js';
@@ -554,10 +555,15 @@ async function performAnalysis(admin: any, job: AnalysisJob, attempt: number): P
     .update({ analysis_status: 'running', analysis_attempts: attempt })
     .eq('id', job.afterId);
 
-  const result = await runDayAnalysis(
-    admin,
-    { id: job.partyId, org_id: job.orgId, job_id: job.jobId, trade: job.trade },
-    job.workDate,
+  // The org's own key if they connected one, the server's otherwise. Resolved
+  // here rather than inside the analyst so that one attempt bills one account.
+  const orgKey = await getApiKey(job.orgId).catch(() => null);
+  const result = await withOrgApiKey(orgKey, () =>
+    runDayAnalysis(
+      admin,
+      { id: job.partyId, org_id: job.orgId, job_id: job.jobId, trade: job.trade },
+      job.workDate,
+    ),
   );
 
   if (result.outcome === 'skipped') {
@@ -873,6 +879,14 @@ async function finishProofActions(
 }
 
 async function performNarration(admin: any, job: NarrationJob): Promise<void> {
+  // Same rule as the day analysis: the org's connected key wins, and it has to
+  // be in scope before the isModelProviderConfigured() check below, or a clip
+  // gets marked 'No model is configured' on a server whose org has one.
+  const orgKey = await getApiKey(job.orgId).catch(() => null);
+  return withOrgApiKey(orgKey, () => narrateProof(admin, job));
+}
+
+async function narrateProof(admin: any, job: NarrationJob): Promise<void> {
   await admin.from('job_proofs').update({ narration_status: 'running' }).eq('id', job.proofId);
 
   const write = async (patch: Record<string, unknown>) =>

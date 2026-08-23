@@ -40,6 +40,7 @@ import { locationsRouter } from './routes/locations.js';
 import { backupRouter } from './routes/backups.js';
 import { integrationsRouter } from './routes/integrations.js';
 import { computerRouter } from './routes/computer.js';
+import { modelCredentialsRouter } from './routes/modelCredentials.js';
 import { estimatorRouter } from './routes/estimator.js';
 import { financeRouter } from './routes/finance.js';
 import { healthRouter } from './routes/health.js';
@@ -299,6 +300,9 @@ export function createApp(): Express {
   app.use('/api/backups', backupRouter);
   app.use('/api/integrations', integrationsRouter);
   app.use('/api/computer', computerRouter);
+  // The org's model key, reachable whether or not computer use is enabled —
+  // clip analysis and dictation run on the same credential.
+  app.use('/api/ai', modelCredentialsRouter);
   app.use('/api/estimator', estimatorRouter);
   app.use('/api/sales', salesRouter);
   app.use('/api/email-marketing', emailMarketingRouter);

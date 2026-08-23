@@ -44,6 +44,14 @@ const KEY_SALT = 'atmosphere/ai-credentials/v1';
 
 let derivedKey: Buffer | null = null;
 function encryptionKey(): Buffer {
+  // An unset AI_CREDENTIALS_KEY derives a fixed, publicly reproducible key
+  // from the empty string — anyone holding the file could read every stored
+  // credential. Refuse rather than write ciphertext that is decoration.
+  // Reads still fail closed through decrypt()'s catch, so a store written
+  // under a real secret simply reports "no key installed" until it is set.
+  if (!config.computerUse.credentialKey) {
+    throw new Error('AI_CREDENTIALS_KEY is not set; refusing to store a model key.');
+  }
   if (!derivedKey) {
     derivedKey = scryptSync(config.computerUse.credentialKey, KEY_SALT, KEY_BYTES);
   }
