@@ -156,6 +156,102 @@ test('serialization: labels attached, integrity computed, flag derived', () => {
   assert.equal(item.analysis?.dictation, 'The slope is stripped.');
 });
 
+test('serialization: a before clip carries its own reading even with no day verdict', () => {
+  // The day comparison lives on the after clip, so `analysis` is null here by
+  // design. The reviewer watching the morning video still needs to know what
+  // is in it — that is what clipReading is for.
+  const item = serializeEvidence({
+    proof: {
+      id: 'p-before',
+      job_id: 'j1',
+      party_id: 'pt1',
+      phase: 'before',
+      work_date: '2026-08-14',
+      captured_at: '2026-08-14T13:00:00Z',
+      received_at: '2026-08-14T13:04:00Z',
+      duration_seconds: '96',
+      byte_size: '900',
+      lat: 30.44,
+      lon: -97.72,
+      accuracy_m: 6,
+      content_hash: 'bef',
+      state: 'checked',
+      checks: [{ key: 'on_site', verdict: 'pass', detail: 'on site' }],
+      ai_summary: 'Tarped slope, nothing started.',
+      ai_findings: {},
+      ai_material_change: null,
+      ai_model: 'claude-opus-5',
+      analysis_status: null,
+      narration_status: 'done',
+      narration_text: 'The clip opens on a tarped north slope with debris staged in the driveway.',
+      narration: {
+        entries: [{ frame: 0, atSeconds: 8, stageIndex: -1, note: 'Tarp still covering the slope.' }],
+        model: 'claude-opus-5',
+        source: 'clip_read',
+      },
+      actions: [{ atSeconds: 8, action: 'inspect', description: 'Camera pans the tarped slope.' }],
+      legal_hold: false,
+      retention_until: null,
+    },
+    jobName: 'Cedar Ridge',
+    jobNumber: 1038,
+    company: 'Delgado Roofing',
+    contactName: 'Hector Delgado',
+    tier: 1,
+    dayHasAfter: true,
+  });
+
+  assert.equal(item.analysisState, 'paired');
+  assert.equal(item.analysis, null);
+  assert.match(String(item.clipReading?.dictation), /tarped north slope/);
+  assert.equal(item.clipReading?.entries.length, 1);
+  assert.equal(item.clipReading?.actions.length, 1);
+  assert.equal(item.clipReading?.status, 'done');
+  assert.equal(item.clipReading?.model, 'claude-opus-5');
+});
+
+test('serialization: a read clip does not ship its dictation twice', () => {
+  const item = serializeEvidence({
+    proof: {
+      id: 'p-done',
+      job_id: 'j1',
+      party_id: 'pt1',
+      phase: 'after',
+      work_date: '2026-08-14',
+      captured_at: '2026-08-14T20:00:00Z',
+      received_at: '2026-08-14T20:05:00Z',
+      duration_seconds: '142',
+      byte_size: '1200',
+      lat: 30.44,
+      lon: -97.72,
+      accuracy_m: 6,
+      content_hash: 'aft',
+      state: 'checked',
+      checks: [{ key: 'on_site', verdict: 'pass', detail: 'on site' }],
+      ai_summary: 'Underlayment down across the north slope.',
+      ai_findings: {},
+      ai_material_change: null,
+      ai_model: 'claude-opus-5',
+      analysis_status: 'done',
+      narration_status: 'done',
+      narration_text: 'Underlayment is rolled out and fastened across the north slope.',
+      narration: { entries: [], model: 'claude-opus-5' },
+      legal_hold: false,
+      retention_until: null,
+    },
+    jobName: 'Cedar Ridge',
+    jobNumber: 1038,
+    company: 'Delgado Roofing',
+    contactName: 'Hector Delgado',
+    tier: 1,
+    dayHasAfter: true,
+  });
+
+  assert.equal(item.analysisState, 'done');
+  assert.match(String(item.analysis?.dictation), /Underlayment is rolled out/);
+  assert.equal(item.clipReading, null);
+});
+
 test('serialization: office dictation prefers narration_text over the day summary', () => {
   const item = serializeEvidence({
     proof: {

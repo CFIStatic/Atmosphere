@@ -1,0 +1,16 @@
+-- ---------------------------------------------------------------------------
+-- "Asked" is a custody event
+-- ---------------------------------------------------------------------------
+-- The Verifier's Ask tab puts a question to the footage: the model looks at
+-- the clip's frames and answers next to the player. That is somebody reading
+-- the evidence, and the rule the chain of custody is built on is that reading
+-- evidence is itself an event on the evidence.
+--
+-- The portal has been trying to write those rows since the Ask tab shipped;
+-- the enum had no value for them, so every insert was rejected and the ask
+-- went unlogged. Adding the value is what makes the log true again.
+--
+-- 'analysed' already covers the model reading the frames on its own. 'asked'
+-- is the narrower thing: a named person put a question to this clip, and the
+-- question itself is kept beside the answer in job_proof_questions.
+alter type public.job_evidence_action add value if not exists 'asked';

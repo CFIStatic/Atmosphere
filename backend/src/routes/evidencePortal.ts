@@ -9,7 +9,16 @@ import { proofVideoUrl, recordAccess } from './proofOfWork.js';
 import {
   answerFromClip,
   clipRecordFromEvidenceItem,
+  type ClipAskFrame,
 } from '../shared/clipAsk.js';
+import {
+  CLIP_ASK_MAX_FRAMES,
+  ensureClipFrames,
+  hasClipReading,
+  readClipFootage,
+  type ClipReading,
+  type ClipVisionProof,
+} from '../shared/clipVision.js';
 import {
   downloadDecision,
   serializeEvidence,
@@ -81,6 +90,21 @@ const askLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many questions. Wait a minute.', code: 'rate_limited' },
 });
+
+/**
+ * Reading a clip costs a model call over its frames, so the door is narrower
+ * than the question door. Wide enough that opening several clips in a row
+ * reads all of them; narrow enough that a loop cannot run up the bill.
+ */
+const readLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 12,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many clip reads. Wait a minute.', code: 'rate_limited' },
+});
+
+const analyzeBody = z.object({ force: z.boolean().optional() });
 
 const askBody = z.object({
   question: z.string().trim().min(3).max(1000),
@@ -209,7 +233,115 @@ async function actorLabelFor(supabase: any, userId: string): Promise<string> {
 }
 
 /**
- * Answer from the clip's reading, keep the question, log the ask.
+ * The scope this crew agreed to, as plain titles — context for a reading, so
+ * "the tarp came off the north slope" can be attached to a line somebody is
+ * being paid for. Never the amounts.
+ */
+async function scopeTitlesFor(client: any, jobId: string, partyId: string | null): Promise<string[]> {
+  if (!partyId) return [];
+  const { data } = await client
+    .from('job_scope_items')
+    .select('title, state, party_id')
+    .eq('job_id', jobId)
+    .order('created_at');
+  return ((data ?? []) as any[])
+    .filter((row) => !row.party_id || row.party_id === partyId)
+    .filter((row) => row.state !== 'declined' && row.state !== 'excluded')
+    .map((row) => String(row.title ?? '').trim())
+    .filter(Boolean)
+    .slice(0, 20);
+}
+
+/**
+ * Read this clip's footage with the model and write the reading onto it.
+ *
+ * The read itself is an event on the evidence, so it lands in the custody log
+ * under whoever asked for it — including "Atmosphere" when the panel asked on
+ * a reviewer's behalf. A record that says a machine watched this video at
+ * 09:14 is worth as much as the reading.
+ */
+async function readClipNow(opts: {
+  client: any;
+  admin: any;
+  orgId: string;
+  jobId: string;
+  proof: any;
+  item: any;
+  actorLabel: string;
+  actorRole: string;
+  actorId?: string | null;
+}): Promise<ClipReading> {
+  const scopeTitles = await scopeTitlesFor(opts.client, opts.jobId, opts.proof.party_id ?? null);
+  const reading = await readClipFootage(opts.admin, {
+    proof: opts.proof as ClipVisionProof,
+    jobName: opts.item?.jobName ?? null,
+    company: opts.item?.company ?? null,
+    scopeTitles,
+  });
+
+  await recordAccess(opts.admin, {
+    orgId: opts.orgId,
+    jobId: opts.jobId,
+    proofId: opts.proof.id,
+    action: 'analysed',
+    actorLabel: 'Atmosphere',
+    actorRole: 'ai',
+    detail:
+      `clip read · ${reading.frameCount} frames · ${reading.model}` +
+      ` · requested by ${opts.actorLabel}`,
+  });
+
+  return reading;
+}
+
+/** Stills for a question, capped — the model looks before it answers. */
+async function askFrames(admin: any, proof: any): Promise<ClipAskFrame[]> {
+  try {
+    const frames = await ensureClipFrames(admin, proof as ClipVisionProof, CLIP_ASK_MAX_FRAMES);
+    return frames.map((frame) => ({
+      atSeconds: frame.atSeconds,
+      base64: frame.jpeg.toString('base64'),
+    }));
+  } catch {
+    // No frames is a thinner answer, not a failed one.
+    return [];
+  }
+}
+
+/**
+ * Merge a fresh reading into the serialized item, so the caller renders the
+ * clip it just had read rather than the row as it was a second ago.
+ */
+function withReading(item: any, reading: ClipReading | null) {
+  if (!reading) return item;
+  const clipReading = {
+    dictation: reading.dictation,
+    summary: reading.summary,
+    entries: reading.entries,
+    actions: reading.actions,
+    status: 'done',
+    model: reading.model,
+  };
+  return {
+    ...item,
+    clipReading,
+    analysis: item.analysis
+      ? {
+          ...item.analysis,
+          dictation: reading.dictation,
+          summary: reading.summary ?? item.analysis.summary,
+          dictationEntries: reading.entries,
+          actions: reading.actions,
+          model: reading.model,
+        }
+      : item.analysis,
+  };
+}
+
+/**
+ * Answer from this clip — looking at its frames, with the reading beside
+ * them — keep the question, log the ask. A clip nobody has read yet gets read
+ * first: "what happened here" should not depend on which pipeline ran.
  * Persistence is best-effort: the reviewer still gets the answer if the
  * questions table or the custody insert cannot take a row.
  */
@@ -219,17 +351,54 @@ async function settleClipQuestion(opts: {
   jobId: string;
   proofId: string;
   item: any;
+  /** The proof row, when the caller can hand the footage to the model. */
+  proof?: any;
   question: string;
   history?: Array<{ role: 'user' | 'assistant'; text: string }>;
   askedBy?: string | null;
   actorLabel: string;
   actorRole: string;
-}): Promise<{ answer: string; model: string | null }> {
-  const record = clipRecordFromEvidenceItem(opts.item);
+}): Promise<{ answer: string; model: string | null; reading?: ClipReading | null }> {
+  const admin = opts.proof ? createAdminClient() : null;
+  let reading: ClipReading | null = null;
+  let item = opts.item;
+
+  // A question is a fair reason to read a clip nobody has read yet — that is
+  // the reviewer asking for the reading, in the only words they have.
+  if (admin && opts.proof && !hasClipReading(opts.proof)) {
+    try {
+      reading = await readClipNow({
+        client: opts.client,
+        admin,
+        orgId: opts.orgId,
+        jobId: opts.jobId,
+        proof: opts.proof,
+        item: opts.item,
+        actorLabel: opts.actorLabel,
+        actorRole: opts.actorRole,
+        actorId: opts.askedBy ?? null,
+      });
+      item = withReading(item, reading);
+    } catch {
+      // Unreadable footage still gets answered from whatever is on file.
+    }
+  }
+
+  const frames = admin && opts.proof ? await askFrames(admin, opts.proof) : [];
+  const record = clipRecordFromEvidenceItem(item);
+  if (reading) {
+    record.dictation = reading.dictation;
+    record.summary = reading.summary;
+    record.dictationEntries = reading.entries;
+    record.actions = reading.actions;
+    record.analysisState = 'done';
+  }
   const result = await answerFromClip({
     question: opts.question,
     record,
     history: opts.history,
+    frames,
+    maxFrames: CLIP_ASK_MAX_FRAMES,
   });
 
   try {
@@ -257,7 +426,7 @@ async function settleClipQuestion(opts: {
     detail: opts.question.slice(0, 240),
   });
 
-  return result;
+  return { ...result, reading };
 }
 
 /* ------------------------------------------------------------------ *
@@ -457,6 +626,7 @@ evidencePortalRouter.post(
         jobId: (proof as any).job_id,
         proofId: req.params.proofId,
         item,
+        proof,
         question: input.question,
         history: input.history,
         askedBy: userId,
@@ -464,7 +634,75 @@ evidencePortalRouter.post(
         actorRole: 'general_contractor',
       });
 
-      res.status(201).json({ answer: result.answer, model: result.model });
+      res.status(201).json({
+        answer: result.answer,
+        model: result.model,
+        // Present when the question is what caused this clip to be read, so
+        // the panel beside the answer fills in at the same moment.
+        item: result.reading ? withReading(item, result.reading) : null,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/evidence-portal/evidence/:proofId/analyze
+ *
+ * Read this clip's footage now. The panel calls it when a clip opens with
+ * nothing on file; a reviewer calls it with force to have the model look
+ * again. Either way the answer is a reading of what is in *this* video.
+ */
+evidencePortalRouter.post(
+  '/evidence/:proofId/analyze',
+  readLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { supabase, orgId, userId } = await requireOrgContext(req);
+      const input = analyzeBody.parse(req.body ?? {});
+      const { data: proof, error } = await supabase
+        .from('job_proofs')
+        .select(PORTAL_PROOF_SELECT)
+        .eq('org_id', orgId)
+        .eq('id', req.params.proofId)
+        .maybeSingle();
+      if (error) throw new HttpError(500, error.message, 'evidence_failed');
+      if (!proof) throw new HttpError(404, 'No such clip.', 'not_found');
+
+      const { data: siblings } = await supabase
+        .from('job_proofs')
+        .select('phase')
+        .eq('org_id', orgId)
+        .eq('job_id', (proof as any).job_id)
+        .eq('party_id', (proof as any).party_id)
+        .eq('work_date', (proof as any).work_date);
+      const items = await assembleLibrary(supabase, orgId, [proof]);
+      const item = fixPairing(items[0], (siblings ?? []) as any[]);
+
+      // Already read, and nobody asked for another look: hand back what is on
+      // file rather than spending a second read on the same frames.
+      if (hasClipReading(proof as any) && !input.force) {
+        res.json({ item, reading: null, alreadyRead: true });
+        return;
+      }
+
+      const admin = createAdminClient();
+      if (!admin) throw new HttpError(503, 'Storage is not configured.', 'no_admin');
+
+      const reading = await readClipNow({
+        client: supabase,
+        admin,
+        orgId,
+        jobId: (proof as any).job_id,
+        proof,
+        item,
+        actorLabel: await actorLabelFor(supabase, userId),
+        actorRole: 'general_contractor',
+        actorId: userId,
+      });
+
+      res.status(201).json({ item: withReading(item, reading), reading, alreadyRead: false });
     } catch (err) {
       next(err);
     }
@@ -1010,6 +1248,7 @@ evidenceShareRouter.post(
         jobId: share.job_id,
         proofId: req.params.proofId,
         item,
+        proof,
         question: input.question,
         history: input.history,
         askedBy: viewer.userId,
@@ -1017,7 +1256,67 @@ evidenceShareRouter.post(
         actorRole: 'external_reviewer',
       });
 
-      res.status(201).json({ answer: result.answer, model: result.model });
+      res.status(201).json({
+        answer: result.answer,
+        model: result.model,
+        item: result.reading ? withReading(item, result.reading) : null,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/verifier-share/:token/evidence/:proofId/analyze
+ *
+ * The outward door's version. An adjuster who opens a clip that was never
+ * read gets it read — that is the point of handing them the link — but only
+ * once: `force` belongs to the org that owns the footage, not to the reviewer
+ * it was shared with.
+ */
+evidenceShareRouter.post(
+  '/:token/evidence/:proofId/analyze',
+  readLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { share, admin, viewer } = await shareForToken(req.params.token, req);
+
+      const { data: proof } = await admin
+        .from('job_proofs')
+        .select(PORTAL_PROOF_SELECT)
+        .eq('job_id', share.job_id)
+        .eq('id', req.params.proofId)
+        .maybeSingle();
+      if (!proof) throw new HttpError(404, 'No such clip on this job.', 'not_found');
+
+      const { data: siblings } = await admin
+        .from('job_proofs')
+        .select('phase')
+        .eq('job_id', share.job_id)
+        .eq('party_id', (proof as any).party_id)
+        .eq('work_date', (proof as any).work_date);
+      const items = await assembleLibrary(admin, share.org_id, [proof]);
+      const item = fixPairing(items[0], (siblings ?? []) as any[]);
+
+      if (hasClipReading(proof as any)) {
+        res.json({ item, reading: null, alreadyRead: true });
+        return;
+      }
+
+      const reading = await readClipNow({
+        client: admin,
+        admin,
+        orgId: share.org_id,
+        jobId: share.job_id,
+        proof,
+        item,
+        actorLabel: viewer.custodyLabel,
+        actorRole: 'external_reviewer',
+        actorId: viewer.userId,
+      });
+
+      res.status(201).json({ item: withReading(item, reading), reading, alreadyRead: false });
     } catch (err) {
       next(err);
     }

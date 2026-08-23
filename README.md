@@ -220,6 +220,8 @@ against the API.
 | `POST` | `/api/field/claim/start` · `/verify` | OTP → field identity → My jobs |
 | `GET` | `/api/field/jobs` | Claimed jobs for a field session |
 | `GET` | `/api/evidence-portal/library` | Office clip library |
+| `POST` | `/api/evidence-portal/evidence/:id/analyze` | Read this clip's footage with the vision model |
+| `POST` | `/api/evidence-portal/evidence/:id/ask` | Ask a question; the model looks at the clip's frames |
 | `POST` | `/api/evidence-portal/shares` | Share evidence to an email (account-pinned) |
 
 ## Data the path depends on

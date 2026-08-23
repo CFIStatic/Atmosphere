@@ -223,6 +223,26 @@ export function serializeEvidence(input: {
     legalHold: Boolean(proof.legal_hold),
     retentionUntil: proof.retention_until ?? null,
     labels: Array.isArray(proof.labels) ? proof.labels : [],
+    /**
+     * This clip's own reading of itself, whatever the day pipeline made of
+     * the pair. `analysis` is the day's verdict and stays null on a before
+     * clip by design; this field is what the reviewer watching *this* video
+     * needs beside the player, and the Ask tab answers from it.
+     */
+    clipReading:
+      // Only where the day's verdict does not already carry the reading. A
+      // done clip ships it once, under `analysis`; the list would otherwise
+      // send every dictation twice.
+      analysis !== 'done' && (dictation || proof.narration_status)
+        ? {
+            dictation,
+            summary: proof.ai_summary ?? findings.summary ?? null,
+            entries: Array.isArray(proof.narration?.entries) ? proof.narration.entries : [],
+            actions,
+            status: proof.narration_status ?? (dictation ? 'done' : null),
+            model: proof.ai_model ?? proof.narration?.model ?? null,
+          }
+        : null,
     analysis:
       analysis === 'done'
         ? {

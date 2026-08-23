@@ -749,6 +749,12 @@
   @keyframes alog-caret { 50% { opacity: 0; } }
   .alog-wait { margin-top: 4px; }
   .alog-wait[hidden] { display: none; }
+  /* The reading in prose, above the timestamped stream. */
+  .alog-read {
+    margin: 10px 0 12px; font-size: 13px; line-height: 1.55; color: var(--ink-2);
+    padding: 11px 12px; border-radius: 9px; background: var(--accent-soft);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
 
   .ask-thread { display: flex; flex-direction: column; gap: 10px; min-height: 88px; }
   .ask-bubble {
@@ -2655,6 +2661,10 @@
     $('#detail').setAttribute('data-open', '1');
     $('#d-close').focus();
     startLivePlayback(item);
+    // A clip nobody has read yet gets read the moment somebody opens it. The
+    // panel that used to say "the assistant is reading this clip" while
+    // nothing was reading it now means it.
+    maybeReadClip(item);
   }
 
   function renderDictation(item) {
@@ -3001,32 +3011,55 @@
     setFrame(best);
   }
 
+  function readButton(item, label) {
+    if (!item._remote || (!ORG_MODE && !SHARE_TOKEN)) return '';
+    if (READING[item.id]) return '';
+    return '<p><button class="navitem" id="read-clip" style="width:auto;margin:8px 0 0;border:1px solid var(--line);font-weight:600">' +
+      esc(label) + '</button></p>';
+  }
+
   function renderScopeLog(item) {
     var a = item.analysis || {};
     var rows = analysisLog(item);
-    var pill = a.state === 'failed' ? 'Failed'
+    var reading = Boolean(READING[item.id]);
+    var pill = reading ? 'Watching…'
+      : a.state === 'failed' ? 'Failed'
       : (a.state === 'queued' || a.state === 'none' || !a.state) && !rows.length ? 'Writing…'
       : a.state === 'paired' || a.state === 'skipped' ? 'Not yet'
       : 'Ready';
     var html = '<div class="alog-head"><h4>AI analysis</h4><span class="livepill" id="alog-pill">' + pill + '</span></div>';
     if (!rows.length) {
       html += '<p class="footnote alog-wait">' +
-        esc(a.reason || (a.state === 'paired'
-          ? 'This is the before half of a day. Open the after clip for the dictation of what changed.'
-          : a.state === 'failed'
-            ? 'The dictation failed after retries. The footage itself is unaffected.'
-            : 'The assistant is reading this clip. Notes land here as the footage plays.')) +
+        esc(reading
+          ? 'Atmosphere is watching this clip now — reading the frames of the video itself. Notes land here as the footage plays.'
+          : a.reason || (a.state === 'failed'
+            ? 'The read of this clip failed. The footage itself is unaffected — try reading it again.'
+            : a.state === 'paired'
+              ? 'The day comparison lives on the after clip. This clip can still be read on its own.'
+              : 'The assistant is reading this clip. Notes land here as the footage plays.')) +
         '</p>';
+      html += readButton(item, a.state === 'failed' ? 'Try reading this clip again' : 'Read this clip now');
       if (a.pairedWith) {
         html += '<p><button class="navitem" style="width:auto;margin:6px 0 0;border:1px solid var(--line)" data-goto="' + a.pairedWith + '">Open ' + esc(a.pairedWith) + '</button></p>';
       }
       return html;
+    }
+    // What the footage shows, in prose, first — a reviewer who opens this
+    // panel should not have to play the clip to find out what happened. The
+    // timestamped stream below fills in beside the playhead.
+    if (a.dictation || a.summary) {
+      html += '<p class="alog-read">' + esc(a.dictation || a.summary) + '</p>';
     }
     html += '<p class="footnote alog-wait" id="alog-empty">Play the clip. Notes land here as the footage plays.</p>';
     html += '<ul class="alog" id="alog">' + rows.map(function (r) {
       return '<li data-at="' + r.at + '" class="soon">' +
         '<span class="t">' + dur(r.at) + '</span><span data-full="' + esc(r.text) + '"></span></li>';
     }).join('') + '</ul>';
+    if (ORG_MODE) html += readButton(item, 'Read this clip again');
+    if (a.model) {
+      html += '<p class="footnote" style="margin-top:8px">Read from the video by <span class="mono">' + esc(a.model) +
+        '</span>. This is a reading of footage, not an inspection, and never an acceptance.</p>';
+    }
     return html;
   }
 
@@ -3110,6 +3143,85 @@
     }).join('. ') + '.';
   }
 
+  /* Clips being read right now, by id — one read per clip, and the pill and
+     the button both take their word from here. */
+  var READING = {};
+
+  function clipEndpoint(item, suffix) {
+    return ORG_MODE
+      ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id) + suffix
+      : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id) + suffix;
+  }
+
+  function redrawOpenClip(item) {
+    if (!state.open || state.open.id !== item.id) return;
+    setTab(state.tab || 'integrity');
+  }
+
+  /**
+   * Have the model watch this clip now.
+   *
+   * The panel calls this the moment a clip opens with nothing on file, and a
+   * reviewer calls it again with force when they want a second look. What
+   * comes back is a reading of this video — timestamped, so every note can be
+   * clicked back to the frame it was made from.
+   */
+  function readClip(item, opts, cb) {
+    if (!item._remote || (!ORG_MODE && !SHARE_TOKEN)) {
+      if (cb) cb(new Error('This clip is not backed by the evidence portal.'));
+      return;
+    }
+    if (READING[item.id]) return;
+    READING[item.id] = true;
+    item._readAttempted = true;
+    setAnalysisPill('Watching…');
+    redrawOpenClip(item);
+
+    fetch(clipEndpoint(item, '/analyze'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ force: Boolean(opts && opts.force) })
+    }).then(function (r) {
+      return r.json().then(function (body) {
+        if (!r.ok) throw new Error((body && (body.error || body.message)) || 'The clip could not be read.');
+        return body;
+      });
+    }).then(function (body) {
+      delete READING[item.id];
+      if (body && body.item) {
+        var mapped = mapRemoteItem(body.item, item.job);
+        item.analysis = mapped.analysis;
+        item.clipReading = mapped.clipReading;
+        applyClipReading(item);
+      }
+      redrawOpenClip(item);
+      if (cb) cb(null, item);
+    }).catch(function (err) {
+      delete READING[item.id];
+      item.analysis = {
+        state: 'failed',
+        reason: (err && err.message) || 'The clip could not be read.'
+      };
+      redrawOpenClip(item);
+      if (cb) cb(err);
+    });
+  }
+
+  /**
+   * Read a clip that has never been read, once, when it is opened.
+   *
+   * A row left "queued" by a pipeline that never came back is the exact
+   * screen this feature exists to fix, so queued is not a reason to wait —
+   * only a read that is genuinely running right now is.
+   */
+  function maybeReadClip(item) {
+    if (!item || !item._remote || item._readAttempted) return;
+    if (clipIsRead(item)) return;
+    if (item.clipReading && item.clipReading.status === 'running') return;
+    readClip(item, null, null);
+  }
+
   function askClip(item, question, history, cb) {
     var local = answerClipLocally(item, question);
     if (!item._remote) {
@@ -3127,6 +3239,15 @@
     }).then(function (r) {
       return r.json().then(function (body) {
         if (!r.ok) throw new Error((body && (body.error || body.message)) || 'Could not answer.');
+        // A question about an unread clip reads it. The panel beside the
+        // answer fills in from the same response.
+        if (body && body.item) {
+          var mapped = mapRemoteItem(body.item, item.job);
+          item.analysis = mapped.analysis;
+          item.clipReading = mapped.clipReading;
+          applyClipReading(item);
+          item._readAttempted = true;
+        }
         cb(null, body.answer || local);
       });
     }).catch(function () { cb(null, local); });
@@ -3135,7 +3256,7 @@
   function renderAsk(item) {
     var thread = ASK_THREADS[item.id] || [];
     var html = '<div class="alog-head"><h4>Ask this clip</h4></div>' +
-      '<p class="footnote" style="margin:0 0 12px">Ask whether anything happened, or what the footage shows. The assistant answers from its reading of this clip.</p>' +
+      '<p class="footnote" style="margin:0 0 12px">Ask whether anything happened, or what the footage shows. The assistant looks at the frames of this clip to answer, and cites the timestamp it answered from.</p>' +
       '<div class="ask-thread" id="ask-thread">';
     if (!thread.length) {
       html += '<div class="ask-suggest">' +
@@ -3173,7 +3294,7 @@
       if (host) {
         var pending = document.createElement('div');
         pending.className = 'ask-bubble assistant pending';
-        pending.textContent = 'Reading the clip…';
+        pending.textContent = 'Watching the clip…';
         host.appendChild(pending);
       }
       askClip(item, q, history, function (_err, answer) {
@@ -3210,6 +3331,12 @@
       });
       var goto = el.querySelector('[data-goto]');
       if (goto) goto.addEventListener('click', function () { open(goto.dataset.goto); });
+      var readBtn = el.querySelector('#read-clip');
+      if (readBtn) {
+        readBtn.addEventListener('click', function () {
+          readClip(item, { force: clipIsRead(item) }, null);
+        });
+      }
       syncAnalysisLog(currentPlayhead());
       return;
     }
@@ -3803,9 +3930,68 @@
               : raw.analysisState === 'failed'
                 ? { state: 'failed' }
                 : { state: 'none' },
+      clipReading: raw.clipReading || null,
       custody: [],
       _loaded: false
     };
+  }
+
+  /**
+   * A clip's own reading, promoted to the analysis the panel renders.
+   *
+   * The day comparison lives on the after clip and is null on a before by
+   * design — but "what is happening in this video" is a question about this
+   * video, and the reading of it answers that whichever half of the day it is.
+   */
+  function applyClipReading(item) {
+    var r = item && item.clipReading;
+    if (!r) return item;
+    var read = (r.dictation || '').trim() || (r.summary || '').trim();
+    var beats = (r.entries || []).length || (r.actions || []).length;
+    if (!read && !beats) {
+      // Nothing read yet — carry the status so the panel says which kind of
+      // nothing this is instead of spinning forever.
+      if (r.status === 'running' || r.status === 'queued') {
+        item.analysis = { state: 'queued', reason: 'Atmosphere is reading this clip now.' };
+      } else if (r.status === 'failed' && (!item.analysis || item.analysis.state !== 'done')) {
+        item.analysis = { state: 'failed' };
+      }
+      return item;
+    }
+    var a = item.analysis && item.analysis.state === 'done' ? item.analysis : null;
+    item.analysis = {
+      state: 'done',
+      fromClipRead: !a,
+      pairedWith: item.analysis && item.analysis.pairedWith,
+      materialChange: a && a.materialChange,
+      materialBecause: a && a.materialBecause,
+      summary: (a && a.summary) || r.summary || '',
+      dictation: (r.dictation || (a && a.dictation) || r.summary || ''),
+      dictationEntries: (r.entries && r.entries.length ? r.entries : (a && a.dictationEntries)) || [],
+      actions: (r.actions && r.actions.length ? r.actions : (a && a.actions)) || [],
+      changes: (a && a.changes) || [],
+      scope: (a && a.scope) || [],
+      couldNotTell: (a && a.couldNotTell) || [],
+      longForm: Boolean(a && a.longForm),
+      timeline: (a && a.timeline) || null,
+      windowsTotal: a ? a.windowsTotal : null,
+      windowsRead: a ? a.windowsRead : null,
+      model: r.model || (a && a.model) || null
+    };
+    return item;
+  }
+
+  /** Has the model actually read this clip, or is the panel still empty? */
+  function clipIsRead(item) {
+    var a = (item && item.analysis) || {};
+    if (a.state !== 'done') return false;
+    return Boolean(
+      (a.dictation || '').trim() ||
+      (a.summary || '').trim() ||
+      (a.dictationEntries || []).length ||
+      (a.actions || []).length ||
+      (a.changes || []).length
+    );
   }
 
   function fetchRemoteDetail(item) {
@@ -3831,8 +4017,10 @@
         if (payload.item) {
           var mapped = mapRemoteItem(payload.item, item.job);
           item.analysis = mapped.analysis;
+          item.clipReading = mapped.clipReading;
           item.checks = mapped.checks;
           item.hold = mapped.hold;
+          applyClipReading(item);
         }
         item.custody = (payload.custody || []).map(function (c) {
           return {

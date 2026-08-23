@@ -1,15 +1,20 @@
 /**
- * Answer a question about one clip from the reading already on file.
+ * Answer a question about one clip.
  *
- * The office product is video + dictation. Re-reading the bytes for every
- * "did anything happen?" is slow and invites a second, looser inference pass.
- * The dictation, actions, timeline and scope verdicts were produced under
- * "describe only what is visible", so an answer built from them inherits that
- * discipline.
+ * Three answers, in descending order of what the caller gave us:
  *
- * When a model is configured it writes the prose; when it is not, a grounded
- * lookup still answers from the same record so the Ask tab works in demo and
- * in environments without a provider.
+ *   1. Frames in hand — the model looks at the footage again, with the
+ *      clip's reading beside it. "Is there a ladder against the north wall?"
+ *      is a question about pixels, and the dictation was never written to
+ *      answer it. This is the Ask tab's normal path.
+ *   2. No frames, model configured — the model writes prose from the reading.
+ *   3. No model — a grounded lookup over the same reading, so the tab still
+ *      works in demo and on a server without a provider key.
+ *
+ * All three inherit one discipline from the reading itself: describe what is
+ * visible, and say so plainly when the footage does not show it. An answer
+ * that guesses is worse than no answer here, because these answers get quoted
+ * into payment disputes.
  */
 import { anthropicClient, isModelProviderConfigured } from '../lib/anthropic.js';
 import { config } from '../config.js';
@@ -105,6 +110,24 @@ Rules:
 4. Two or three sentences. This is read next to the player.
 5. Never estimate cost, hours, or whether work was worth paying for.`;
 
+const CLIP_QA_VISION_SYSTEM = `You answer questions about one proof-of-work video by looking at stills taken from it.
+
+Rules:
+1. Answer from the stills first. They are frames of the clip being asked about, given in order with their timestamps.
+2. The written reading of the clip is given as well; use it for context and for anything between the stills.
+3. If neither the stills nor the reading shows the answer, say "The footage on file does not show that" and stop. Never infer what was probably true off camera.
+4. Quote the timestamp of the still you are answering from, so the answer can be checked against the playhead.
+5. Two or three sentences. This is read next to the player.
+6. Never estimate cost, hours, or whether work was worth paying for.`;
+
+/** A still from the clip, ready to hand to the model. */
+export type ClipAskFrame = { atSeconds: number; base64: string };
+
+/** One block of the turn a question makes: a line of text, or a still. */
+export type ClipVisionBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: 'image/jpeg'; data: string } };
+
 type CorpusRow = { at: number | null; text: string; kind: string };
 
 export function clipRecordFromEvidenceItem(item: {
@@ -114,23 +137,44 @@ export function clipRecordFromEvidenceItem(item: {
   durationSeconds?: number | null;
   analysisState?: ClipAskAnalysisState;
   analysis?: ClipAskRecord | null;
+  /** This clip's own reading — present even when the day's verdict is not. */
+  clipReading?: {
+    dictation?: string | null;
+    summary?: string | null;
+    entries?: ClipAskRecord['dictationEntries'];
+    actions?: ClipAskRecord['actions'];
+    status?: string | null;
+  } | null;
 }): ClipAskRecord {
   const analysis = item.analysis ?? null;
+  const own = item.clipReading ?? null;
+  // A before clip carries no day verdict by design. Its own reading is still
+  // the answer to "what is happening in this video", so it wins where the
+  // day comparison has nothing to say.
+  const ownEntries = Array.isArray(own?.entries) ? own.entries : [];
+  const ownActions = Array.isArray(own?.actions) ? own.actions : [];
+  const readable = Boolean(own?.dictation || own?.summary || ownEntries.length || ownActions.length);
   return {
     workDate: item.workDate ?? null,
     phase: item.phase ?? null,
     company: item.company ?? null,
     durationSeconds: item.durationSeconds ?? null,
-    analysisState: item.analysisState ?? analysis?.analysisState ?? null,
-    dictation: analysis?.dictation ?? null,
-    summary: analysis?.summary ?? null,
+    analysisState:
+      readable && item.analysisState !== 'done'
+        ? 'done'
+        : (item.analysisState ?? analysis?.analysisState ?? null),
+    dictation: analysis?.dictation ?? own?.dictation ?? null,
+    summary: analysis?.summary ?? own?.summary ?? null,
     materialChange: analysis?.materialChange ?? null,
     materialBecause: analysis?.materialBecause ?? null,
     changes: Array.isArray(analysis?.changes) ? analysis.changes : [],
     concerns: Array.isArray(analysis?.concerns) ? analysis.concerns : [],
     couldNotTell: Array.isArray(analysis?.couldNotTell) ? analysis.couldNotTell : [],
-    actions: Array.isArray(analysis?.actions) ? analysis.actions : [],
-    dictationEntries: Array.isArray(analysis?.dictationEntries) ? analysis.dictationEntries : [],
+    actions: Array.isArray(analysis?.actions) && analysis.actions.length ? analysis.actions : ownActions,
+    dictationEntries:
+      Array.isArray(analysis?.dictationEntries) && analysis.dictationEntries.length
+        ? analysis.dictationEntries
+        : ownEntries,
     timeline: Array.isArray(analysis?.timeline) ? analysis.timeline : null,
     scope: Array.isArray(analysis?.scope) ? analysis.scope : [],
   };
@@ -320,19 +364,70 @@ export function formatClipRecordForModel(record: ClipAskRecord): string {
   return lines.join('\n');
 }
 
+/** Evenly spaced stills, so a long clip still answers from end to end. */
+export function spaceAskFrames(frames: ClipAskFrame[], max: number): ClipAskFrame[] {
+  if (frames.length <= max) return frames.slice();
+  if (max <= 1) return frames.slice(0, 1);
+  const out: ClipAskFrame[] = [];
+  for (let i = 0; i < max; i += 1) {
+    out.push(frames[Math.round((i * (frames.length - 1)) / (max - 1))]!);
+  }
+  return out;
+}
+
 /**
- * Answer from the clip reading, with a model when one is configured.
+ * Build the model turn for a question asked against the footage itself.
+ *
+ * Exported so a test can assert the stills arrive in order, each labelled
+ * with the timestamp the answer is expected to cite.
+ */
+export function clipVisionContent(input: {
+  question: string;
+  reading: string;
+  frames: ClipAskFrame[];
+  history?: string;
+}): ClipVisionBlock[] {
+  return [
+    {
+      type: 'text',
+      text: [
+        `Stills from this clip: ${input.frames.length}, in order.`,
+        input.reading ? `Reading of this clip:\n${input.reading}` : 'Reading of this clip: (none on file)',
+        input.history ? `Earlier questions on this clip:\n${input.history}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
+    },
+    ...input.frames.flatMap((frame): ClipVisionBlock[] => [
+      { type: 'text', text: `frame at ${formatClipTime(frame.atSeconds) ?? '0:00'}:` },
+      {
+        type: 'image',
+        source: { type: 'base64', media_type: 'image/jpeg', data: frame.base64 },
+      },
+    ]),
+    { type: 'text', text: `Question: ${input.question}` },
+  ];
+}
+
+/**
+ * Answer from the clip reading — looking at the footage when stills are given,
+ * and with a model when one is configured.
  */
 export async function answerFromClip(input: {
   question: string;
   record: ClipAskRecord;
   history?: ClipAskTurn[];
+  /** Stills from this clip. When present the model looks before it answers. */
+  frames?: ClipAskFrame[];
+  /** Cap on stills sent to the model. */
+  maxFrames?: number;
 }): Promise<{ answer: string; model: string | null }> {
   const grounded = groundedAnswerFromClip(input.question, input.record);
   if (!isModelProviderConfigured()) return { answer: grounded, model: null };
 
   const reading = formatClipRecordForModel(input.record).trim();
-  if (!reading) return { answer: grounded, model: null };
+  const frames = spaceAskFrames(input.frames ?? [], Math.max(1, input.maxFrames ?? 12));
+  if (!reading && !frames.length) return { answer: grounded, model: null };
 
   const history = (input.history ?? [])
     .filter((turn) => turn.text.trim())
@@ -344,14 +439,20 @@ export async function answerFromClip(input: {
     const response = await anthropicClient().messages.create({
       model: config.technician.assistant.model,
       max_tokens: 500,
-      system: CLIP_QA_SYSTEM,
+      system: frames.length ? CLIP_QA_VISION_SYSTEM : CLIP_QA_SYSTEM,
       messages: [
         {
           role: 'user',
-          content:
-            `Reading of this clip:\n\n${reading}` +
-            (history ? `\n\nEarlier questions on this clip:\n${history}` : '') +
-            `\n\nQuestion: ${input.question}`,
+          content: frames.length
+            ? clipVisionContent({
+                question: input.question,
+                reading,
+                frames,
+                history,
+              })
+            : `Reading of this clip:\n\n${reading}` +
+              (history ? `\n\nEarlier questions on this clip:\n${history}` : '') +
+              `\n\nQuestion: ${input.question}`,
         },
       ],
     });
