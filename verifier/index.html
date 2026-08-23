@@ -687,6 +687,7 @@
     display: flex; align-items: center; gap: 10px; padding: 9px 11px; flex: none;
     border-top: 1px solid var(--stage-2); color: var(--stage-ink);
   }
+  .controls[hidden] { display: none; }
   .controls button {
     border: 0; background: var(--stage-2); color: var(--stage-ink); width: 30px; height: 30px;
     border-radius: 7px; cursor: pointer; display: grid; place-items: center; flex: none;
@@ -707,7 +708,7 @@
   /* ------------------------------------------------------------------ *
    * YouTube's red progress line, copied with no substitutions.
    *
-   * The browser's own <video controls> draws a thick capsule in a red-ish
+   * The browser's own video controls draw a thick capsule in a red-ish
    * accent. That is not the line a reviewer's hand already knows. YouTube's
    * bar is a 3px #f00 strip on a translucent white rail, a slightly paler
    * load layer behind it, and a 13px red disc that only appears when the
@@ -2812,7 +2813,7 @@
   /* ------------------------------------------------------------------ *
    * The player
    *
-   * Native <video controls> is a thick red capsule. The line a reviewer
+   * Native video controls are a thick red capsule. The line a reviewer
    * already has muscle memory for is YouTube's: 3px #f00 on a translucent
    * white rail, load behind played, a 13px red disc on hover, drag to
    * scrub. Nothing about the line is restyled — the numbers are YouTube's.

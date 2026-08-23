@@ -25,7 +25,7 @@ describe('verifier YouTube progress line', () => {
     expect(verifierHtml).toMatch(/\.vp \.vp-played \{[^}]*background: var\(--yt-progress\)/);
     expect(verifierHtml).toMatch(/\.vp \.vp-knob \{[\s\S]*?border-radius: 50%;[\s\S]*?background: var\(--yt-progress\)/);
     expect(verifierHtml).toContain('height: var(--yt-rail-h-hot)');
-    expect(verifierHtml).not.toMatch(/<video controls/);
+    expect(verifierHtml).not.toMatch(/<video\s+controls\b/);
   });
 
   it('mounts a custom player on a real clip instead of the browser chrome', () => {
@@ -35,6 +35,7 @@ describe('verifier YouTube progress line', () => {
     expect(verifierHtml).toContain("class=\"vp-knob\"");
     expect(verifierHtml).toContain("class=\"vp-buffered\"");
     expect(verifierHtml).toContain('mountPlayer(item, item._videoUrl)');
+    expect(verifierHtml).toContain('.controls[hidden] { display: none; }');
   });
 
   it('still opens a demo clip on the schematic path and writes analysis notes', async () => {
