@@ -1,0 +1,68 @@
+#!/bin/sh
+# vim:sw=2:ts=2:sts=2:et
+#
+# Sourced by the nginx image entrypoint before 20-envsubst-on-templates.sh, on
+# both boot paths: the Railway startCommand (website-start.sh) and a bare
+# `docker run` that inherits the image ENTRYPOINT. .envsh, not .sh: the
+# entrypoint *executes* *.sh in a child process, so an exported API_UPSTREAM
+# would never reach envsubst — only *.envsh is sourced.
+#
+# A Railway reference to a service that is not on the canvas resolves to an
+# empty string rather than failing, so API_UPSTREAM can arrive as "http://:".
+# nginx then refuses to start ("invalid port in upstream") and every marketing
+# page goes down with the /api proxy that is all the variable is for.
+# Never exit and never fail here: the entrypoint runs with `set -e`, so an
+# error is a container that does not start. A site with broken forms still
+# beats no site.
+
+website_log() { echo "website: $*" >&2; }
+
+case "${PORT:-}" in
+  '' | *[!0-9]*)
+    website_log "PORT='${PORT:-}' is not a port number — binding 8080."
+    PORT=8080
+    ;;
+esac
+export PORT
+
+# Never default to the public https host: that hairpins /api out of the mesh
+# and 502s the careers and contact forms. The deploy job writes the real one.
+website_upstream="$(printf '%s' "${API_UPSTREAM:-}" | tr -d ' \t\n\r' || true)"
+website_upstream="${website_upstream%/}"
+
+# Order matters: "http://:" ends with a colon *and* has an empty host, and
+# only the empty host is fatal in a way appending a port cannot fix.
+case "$website_upstream" in
+  http://:* | https://:* | *'${{'* | *'}}'*)
+    website_log "API_UPSTREAM='${website_upstream}' is unusable — serving with the local default."
+    website_upstream="http://127.0.0.1:4000"
+    ;;
+  http://*: | https://*:)
+    # Host resolved, ${{Service.PORT}} did not. The BFF image listens on 4000.
+    website_upstream="${website_upstream}4000"
+    website_log "API_UPSTREAM had no port — using ${website_upstream}."
+    ;;
+  http://* | https://*) ;;
+  *)
+    website_log "API_UPSTREAM='${website_upstream}' is not an http(s) URL — serving with the local default."
+    website_upstream="http://127.0.0.1:4000"
+    ;;
+esac
+
+API_UPSTREAM="$website_upstream"
+export API_UPSTREAM
+# nginx resolves a literal proxy_pass host once, at startup, and refuses to
+# start when it is not in DNS yet ("host not found in upstream") — a BFF that
+# is mid-redeploy would take this site down with it. The template proxies
+# through a variable instead, which defers resolution to request time and
+# needs a resolver. Same list the image's own 15-local-resolvers.envsh builds,
+# but unconditional and with a fallback: an empty one is a broken config.
+website_resolvers="$(awk 'BEGIN{ORS=" "} $1=="nameserver" {if ($2 ~ ":") {print "["$2"]"} else {print $2}}' /etc/resolv.conf 2>/dev/null || true)"
+website_resolvers="${website_resolvers% }"
+[ -n "$website_resolvers" ] || website_resolvers="127.0.0.11"
+API_RESOLVERS="${NGINX_RESOLVERS:-$website_resolvers}"
+export API_RESOLVERS
+
+website_log "listening on ${PORT}, proxying /api to ${API_UPSTREAM} via resolver ${API_RESOLVERS}"
+
+unset website_upstream website_resolvers

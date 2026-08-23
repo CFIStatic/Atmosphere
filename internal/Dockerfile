@@ -19,8 +19,10 @@ RUN npm run build
 FROM nginx:1.27-alpine AS runtime
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY internal/nginx/default.conf.template /etc/nginx/templates/default.conf.template
-COPY internal/nginx/15-validate-internal-env.sh /docker-entrypoint.d/15-validate-internal-env.sh
-RUN chmod +x /docker-entrypoint.d/15-validate-internal-env.sh
+# .envsh, not .sh: the image entrypoint sources the first and executes the
+# second, and an executed script cannot export API_UPSTREAM to envsubst.
+COPY internal/nginx/15-validate-internal-env.envsh /docker-entrypoint.d/15-validate-internal-env.envsh
+RUN chmod +x /docker-entrypoint.d/15-validate-internal-env.envsh
 ENV NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM)$$
 ENV PORT=80
 EXPOSE 80

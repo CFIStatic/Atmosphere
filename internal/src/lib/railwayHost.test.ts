@@ -68,11 +68,13 @@ describe('Railway internal-site image', () => {
 
   it('validates PORT and API_UPSTREAM before nginx binds', () => {
     const dockerfile = read('Dockerfile');
-    expect(dockerfile).toContain('15-validate-internal-env.sh');
+    // .envsh, not .sh: the image entrypoint sources the first and executes the
+    // second, so a .sh guard's exports never reached envsubst.
+    expect(dockerfile).toContain('15-validate-internal-env.envsh');
     expect(dockerfile).toContain('CMD ["nginx", "-g", "daemon off;"]');
     expect(dockerfile).not.toMatch(/VITE_DEMO/);
 
-    const script = read('nginx/15-validate-internal-env.sh');
+    const script = read('nginx/15-validate-internal-env.envsh');
     expect(script).toContain('PORT');
     expect(script).toContain('API_UPSTREAM');
     expect(script).toContain('127.0.0.1');
@@ -80,6 +82,10 @@ describe('Railway internal-site image', () => {
     expect(script).not.toContain('wget');
     expect(script).not.toContain('NGINX_RESOLVER');
     expect(dockerfile).not.toMatch(/API_UPSTREAM=http:\/\/127\.0\.0\.1/);
+    // A guard that exits is a container that never starts: the nginx image
+    // entrypoint runs with set -e. Repair the value instead.
+    expect(script).not.toMatch(/^\s*exit /m);
+    expect(script).toContain('export API_UPSTREAM');
   });
 
   it('does not exclude internal sources from the repo-root Docker context', () => {

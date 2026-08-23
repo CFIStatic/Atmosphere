@@ -156,10 +156,34 @@ jobs:
   docker-app:
     name: Office app image
     runs-on: ubuntu-latest
+    # Building is not enough. nginx resolves its /api proxy target at startup,
+    # so an API_UPSTREAM Railway could not resolve ("http://:") used to stop the
+    # container from starting at all — the login page and the dashboard went
+    # down with the API proxy, and the deploy failed its healthcheck. Boot the
+    # image on that exact value here, where it costs a branch check instead of
+    # production.
     steps:
       - uses: actions/checkout@v4
       - name: Build office app image
         run: docker build -f frontend/Dockerfile -t atmosphere-app:ci .
+      - name: Serve the office app with an unusable API_UPSTREAM
+        run: |
+          set -euo pipefail
+          docker run -d --name atmosphere-app-ci \
+            -e PORT=8080 -e API_UPSTREAM='http://:' -e RAILWAY_ENVIRONMENT=production \
+            -p 18080:8080 atmosphere-app:ci
+          trap 'docker logs atmosphere-app-ci || true; docker rm -f atmosphere-app-ci >/dev/null 2>&1 || true' EXIT
+          for _ in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:18080/healthz >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          # Railway's deploy probe, and the two a mis-pointed Config File uses.
+          curl -fsS http://127.0.0.1:18080/healthz | grep -qx 'ok'
+          curl -fsS http://127.0.0.1:18080/health | grep -qx 'ok'
+          curl -fsS http://127.0.0.1:18080/api/health | grep -qx 'ok'
+          # The login shell itself must render, upstream or no upstream.
+          curl -fsS http://127.0.0.1:18080/ | grep -qi '<div id="root"'
+          curl -fsS -o /dev/null http://127.0.0.1:18080/login
 
   docker-website:
     name: Marketing site image
@@ -174,12 +198,19 @@ jobs:
         run: |
           set -euo pipefail
           docker build -f website/Dockerfile -t atmosphere-website:ci .
-          docker run -d --name atmosphere-website-ci -e PORT=8080 -p 18080:8080 atmosphere-website:ci
-          trap 'docker rm -f atmosphere-website-ci >/dev/null 2>&1 || true' EXIT
-          sleep 2
-          curl -fsS http://127.0.0.1:18080/health | grep -qx 'ok'
-          curl -fsS http://127.0.0.1:18080/api/health | grep -qx 'ok'
-          curl -fsS http://127.0.0.1:18080/ | grep -q 'Atmosphere'
+          # Same unresolved-reference value the office app is booted on: a
+          # Railway reference that matches no service resolves to an empty
+          # string, so the container receives "http://:".
+          docker run -d --name atmosphere-website-ci \
+            -e PORT=8080 -e API_UPSTREAM='http://:' -p 18081:8080 atmosphere-website:ci
+          trap 'docker logs atmosphere-website-ci || true; docker rm -f atmosphere-website-ci >/dev/null 2>&1 || true' EXIT
+          for _ in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:18081/health >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:18081/health | grep -qx 'ok'
+          curl -fsS http://127.0.0.1:18081/api/health | grep -qx 'ok'
+          curl -fsS http://127.0.0.1:18081/ | grep -q 'Atmosphere'
 
   docker-internal:
     name: Internal site image

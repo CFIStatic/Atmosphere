@@ -78,7 +78,7 @@ The office image reverse-proxies `/api` at runtime. Set this on the office
 service **before** the first Autodeploy:
 
 ```text
-API_UPSTREAM=http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}
+API_UPSTREAM=http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}
 ```
 
 Leave `VITE_API_BASE_URL` empty so the SPA uses same-origin `/api` and
@@ -102,7 +102,7 @@ repo root:
 
 ```bash
 cat api.upstream
-# http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}
+# http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}
 ```
 
 Plain `http://`, private domain, no public host. Set to
@@ -112,6 +112,37 @@ which 502s for a few seconds. What that looks like from the outside is a front
 door reporting the Atmosphere API as unreachable while the BFF is perfectly
 healthy — the office console spinning on `/login`, the site’s careers and
 contact forms failing to post.
+
+**The service name in that reference must match the Railway canvas exactly.**
+Railway resolves a reference to a service that is not there as an *empty
+string* rather than failing, so the container receives `API_UPSTREAM=http://:`.
+The BFF is `Atmosphere APIs`; `${{Atmosphere.…}}` matched nothing, and on
+2026-08-22 the office app came up with
+
+```text
+[emerg] invalid port in upstream ":" in /etc/nginx/conf.d/default.conf:27
+```
+
+crash-looping until the deploy failed its healthcheck — the login page and
+dashboard down over a variable only `/api` needs. Two things stop that from
+recurring, and neither replaces setting the variable correctly:
+
+- Each nginx image normalises the value before nginx sees it
+  (`frontend/nginx/15-validate-app-env.envsh` and its siblings): an empty,
+  unresolved or host-less upstream falls back to something nginx accepts, and
+  the replica serves its static pages with `/api` answering
+  `503 backend_unreachable` until the variable is fixed. These are `.envsh`
+  because the nginx entrypoint *sources* those and *executes* `.sh` in a child
+  process, where an exported value would never reach `envsubst`.
+- The office and marketing images proxy through a variable
+  (`set $api_upstream …; proxy_pass $api_upstream$request_uri;`) with a
+  `resolver`, so the BFF is resolved per request. A literal `proxy_pass` host
+  is resolved once at startup and nginx refuses to start when it is not in DNS
+  yet — a redeploying BFF would otherwise take the console with it.
+
+The office deploy job also prefers the BFF's *resolved* private domain
+(`scripts/resolveApiUpstream.mjs`) over the reference, because a literal that
+was read back from the BFF's own variables cannot come out empty.
 
 The staff site (`internal/`, Railway service `Internal Growth Metrics`) is
 the exception: its nginx 504s on the private mesh, so the deploy job points
@@ -292,7 +323,7 @@ In the Railway project that already runs the BFF (`Atmosphere`):
 
    | Variable | Value |
    | --- | --- |
-   | `API_UPSTREAM` | `http://${{Atmosphere.RAILWAY_PRIVATE_DOMAIN}}:${{Atmosphere.PORT}}` |
+   | `API_UPSTREAM` | `http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}` |
 
    Replace `Atmosphere` with the BFF service name if you overrode
    `RAILWAY_SERVICE`. Same value on every front door — see

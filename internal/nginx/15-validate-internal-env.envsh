@@ -1,0 +1,63 @@
+#!/bin/sh
+# vim:sw=2:ts=2:sts=2:et
+#
+# Sourced by the nginx image entrypoint before 20-envsubst-on-templates.sh.
+# .envsh, not .sh: the entrypoint *executes* *.sh in a child process, so an
+# exported API_UPSTREAM never reached envsubst — only *.envsh is sourced.
+# Keep this fast: Railway probes /healthz only after nginx binds.
+#
+# Never exit, and never fail: the entrypoint runs with `set -e`, so a failure
+# here is a container that does not start. Every value this repairs used to
+# stop nginx dead, and a staff console that cannot serve its login page is a
+# worse outcome than one whose /api answers 503 until the variable is fixed.
+
+internal_log() { echo "internal: $*" >&2; }
+
+# Public on purpose: this nginx 504s on the private mesh (docs/production.md).
+internal_public_bff="https://atmosphere-production.up.railway.app"
+
+case "${PORT:-}" in
+  '' | *[!0-9]*)
+    internal_log "PORT='${PORT:-}' is not a port number — binding 80."
+    PORT=80
+    ;;
+esac
+export PORT
+
+internal_upstream="$(printf '%s' "${API_UPSTREAM:-}" | tr -d ' \t\n\r' || true)"
+internal_upstream="${internal_upstream%/}"
+
+# Order matters: "http://:" ends with a colon *and* has an empty host, and
+# only the empty host is fatal in a way appending a port cannot fix.
+case "$internal_upstream" in
+  '' | http://:* | https://:* | *'${{'* | *'}}'*)
+    internal_log "API_UPSTREAM='${internal_upstream}' is unset or unresolved."
+    internal_upstream="$internal_public_bff"
+    ;;
+  http://127.0.0.1:* | http://localhost:* | 'http://[::1]:'*)
+    internal_log "API_UPSTREAM='${internal_upstream}' is loopback inside this container."
+    internal_upstream="$internal_public_bff"
+    ;;
+  "$internal_public_bff") ;;
+  https://*)
+    internal_log "API_UPSTREAM='${internal_upstream}' is not the Atmosphere APIs host."
+    internal_upstream="$internal_public_bff"
+    ;;
+  http://*:)
+    # Host resolved, ${{Service.PORT}} did not. The BFF image listens on 4000.
+    internal_upstream="${internal_upstream}4000"
+    internal_log "API_UPSTREAM had no port — using ${internal_upstream}."
+    ;;
+  http://*) ;;
+  *)
+    internal_log "API_UPSTREAM='${internal_upstream}' is not an http(s) URL."
+    internal_upstream="$internal_public_bff"
+    ;;
+esac
+
+API_UPSTREAM="$internal_upstream"
+export API_UPSTREAM
+
+internal_log "listening on ${PORT}, proxying /api to ${API_UPSTREAM}"
+
+unset internal_upstream internal_public_bff

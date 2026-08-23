@@ -199,6 +199,7 @@ jobs:
           RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || vars.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
           RAILWAY_APP_SERVICE: ${{ secrets.RAILWAY_APP_SERVICE || vars.RAILWAY_APP_SERVICE }}
           RAILWAY_WEB_SERVICE: ${{ secrets.RAILWAY_WEB_SERVICE || vars.RAILWAY_WEB_SERVICE }}
+          RAILWAY_BACKEND_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere APIs' }}
           RAILWAY_ENVIRONMENT: production
         run: |
           set -euo pipefail
@@ -220,7 +221,22 @@ jobs:
           # Private HTTP to the BFF. The public https://atmosphere-production URL
           # hairpins out of the mesh (jfk1 → ams1 hops) and 502s /api for ~3s,
           # which is the spinner on /login (api.me() before the form).
-          tr -d '\n' < api.upstream | railway variable set API_UPSTREAM --stdin --skip-deploys --service "$service"
+          #
+          # Prefer the BFF's *resolved* private domain. api.upstream holds a
+          # Railway reference, and a reference whose service name no longer
+          # matches resolves to an empty string rather than failing: the app
+          # then boots with API_UPSTREAM=http://: and nginx dies with
+          # "invalid port in upstream". Writing the literal cannot do that.
+          upstream=""
+          if backend_id="$(node backend/scripts/resolveRailwayService.mjs "${RAILWAY_BACKEND_SERVICE:-Atmosphere APIs}")"; then
+            upstream="$(node scripts/resolveApiUpstream.mjs "$backend_id" || true)"
+          fi
+          if [ -z "$upstream" ]; then
+            upstream="$(tr -d '\n' < api.upstream)"
+            echo "Falling back to the api.upstream reference; Railway resolves it on its side."
+          fi
+          echo "API_UPSTREAM=$upstream"
+          printf '%s' "$upstream" | railway variable set API_UPSTREAM --stdin --skip-deploys --service "$service"
           # railway up reads /railway.toml from the upload root. Without this copy
           # the CLI builds the backend Dockerfile and probes /api/health on nginx.
           cp frontend/railway.toml railway.toml
