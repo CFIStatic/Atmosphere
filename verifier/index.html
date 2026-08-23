@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- ask-panel 2026-08-23-live3 -->
+<!-- ask-panel 2026-08-23-bar -->
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -688,7 +688,7 @@
   .player { position: relative; background: var(--stage); border-radius: 10px; overflow: hidden; flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .player .frame { flex: 1; min-height: 240px; display: grid; place-items: center; }
   .livecap {
-    position: absolute; left: 12px; right: 12px; bottom: 52px; z-index: 2;
+    position: absolute; left: 12px; right: 12px; bottom: 58px; z-index: 3;
     background: rgba(28, 25, 23, 0.82); color: #F5F0E8;
     padding: 10px 12px; border-radius: 8px;
     font-size: 14px; line-height: 1.45; pointer-events: none;
@@ -696,21 +696,40 @@
   .livecap[hidden] { display: none; }
   .player .frame img { width: 100%; height: 100%; object-fit: contain; display: block; }
   .controls {
-    display: flex; align-items: center; gap: 10px; padding: 9px 11px; flex: none;
-    border-top: 1px solid var(--stage-2); color: var(--stage-ink);
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 4;
+    display: flex; align-items: center; gap: 10px; padding: 18px 12px 10px;
+    background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.78));
+    color: #F5F0E8; flex: none;
   }
   .controls button {
     border: 0; background: var(--stage-2); color: var(--stage-ink); width: 30px; height: 30px;
     border-radius: 7px; cursor: pointer; display: grid; place-items: center; flex: none;
   }
   .controls button:hover { background: var(--accent); color: #FFFFFF; }
-  .scrub { flex: 1; display: flex; gap: 3px; }
+  .scrub { flex: 1; display: flex; gap: 3px; align-items: center; min-width: 0; }
   .scrub button {
     flex: 1; height: 6px; border-radius: 3px; background: var(--stage-2); width: auto;
     padding: 0; border: 0; cursor: pointer;
   }
   .scrub button[aria-pressed="true"] { background: var(--accent); }
-  .controls .time { font-family: var(--mono); font-size: 11.5px; color: var(--faint); min-width: 74px; text-align: right; }
+  .progress {
+    position: relative; flex: 1; height: 16px; cursor: pointer;
+  }
+  .progress-track {
+    position: absolute; left: 0; right: 0; top: 6px; height: 4px;
+    background: rgba(255, 255, 255, 0.32); border-radius: 2px;
+  }
+  .progress-played {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 0;
+    background: #FF0033; border-radius: 2px;
+  }
+  .progress-thumb {
+    position: absolute; top: 8px; left: 0; width: 12px; height: 12px;
+    margin: -6px 0 0 -6px; background: #FF0033; border-radius: 50%;
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
+    pointer-events: none;
+  }
+  .controls .time { font-family: var(--mono); font-size: 11.5px; color: #E7E5E4; min-width: 86px; text-align: right; }
 
   .player video {
     display: block; width: 100%; height: 100%; max-height: none; object-fit: contain; background: #1A1815;
@@ -2680,34 +2699,47 @@
       // the clip rather than on the black rectangle a browser picks.
       var posterAttr = item.poster ? ' poster="' + esc(item.poster) + '"' : '';
       $('#d-frame').innerHTML =
-        '<video controls playsinline preload="metadata" crossorigin="anonymous"' + posterAttr +
+        '<video playsinline preload="metadata" crossorigin="anonymous"' + posterAttr +
         ' src="' + esc(item._videoUrl) + '"></video>';
-      $('#d-scrub').innerHTML = '';
-      $('#d-time').textContent = 'full clip · ' + dur(item.duration);
       var vid = $('#d-frame').querySelector('video');
+      bindVideoProgress(vid, item);
       if (vid) {
         function adoptVideoClock() {
           if (vid.duration && isFinite(vid.duration) && vid.duration > 0) {
             item.duration = vid.duration;
-            $('#d-time').textContent = 'full clip · ' + dur(item.duration);
             paintClipMeta(item);
           }
+          paintVideoProgress(vid, item);
           syncAnalysisLog(vid.currentTime || 0);
           requestWatchNote(item, vid.currentTime || 0);
         }
         vid.addEventListener('loadeddata', adoptVideoClock);
         vid.addEventListener('durationchange', adoptVideoClock);
-        vid.addEventListener('timeupdate', function () { syncAnalysisLog(vid.currentTime); });
+        vid.addEventListener('timeupdate', function () {
+          paintVideoProgress(vid, item);
+          syncAnalysisLog(vid.currentTime);
+        });
         vid.addEventListener('seeked', function () {
+          paintVideoProgress(vid, item);
           syncAnalysisLog(vid.currentTime);
           requestWatchNote(item, vid.currentTime || 0);
         });
         vid.addEventListener('play', function () {
+          setPlayIcon(true);
+          paintVideoProgress(vid, item);
           syncAnalysisLog(vid.currentTime);
           requestWatchNote(item, vid.currentTime || 0);
         });
-        vid.addEventListener('pause', function () { syncAnalysisLog(vid.currentTime); });
-        vid.addEventListener('ended', function () { syncAnalysisLog(vid.currentTime); });
+        vid.addEventListener('pause', function () {
+          setPlayIcon(false);
+          paintVideoProgress(vid, item);
+          syncAnalysisLog(vid.currentTime);
+        });
+        vid.addEventListener('ended', function () {
+          setPlayIcon(false);
+          paintVideoProgress(vid, item);
+          syncAnalysisLog(vid.currentTime);
+        });
       }
     } else {
       item._frames = item._remoteFrames && item._remoteFrames.length
@@ -2799,10 +2831,14 @@
 
   function stopPlay() {
     if (state.playing) { clearInterval(state.playing); state.playing = null; }
+    var host = $('#d-frame');
+    var vid = host && host.querySelector('video');
+    if (!vid) setPlayIcon(false);
   }
 
   function startFramePlayback() {
     if (state.playing) return;
+    setPlayIcon(true);
     state.playing = setInterval(function () {
       var item = state.open;
       if (!item || !item._frames) return stopPlay();
@@ -2971,6 +3007,83 @@
     }
     rows.sort(function (x, y) { return x.at - y.at; });
     return rows;
+  }
+
+  function setPlayIcon(playing) {
+    var btn = $('#d-play');
+    if (!btn) return;
+    btn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+    btn.innerHTML = playing
+      ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>'
+      : '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+  }
+
+  function clipLength(vid, item) {
+    if (vid && vid.duration && isFinite(vid.duration) && vid.duration > 0) return vid.duration;
+    return Number(item && item.duration) || 0;
+  }
+
+  function paintVideoProgress(vid, item) {
+    if (!vid) return;
+    var length = clipLength(vid, item);
+    var t = vid.currentTime || 0;
+    var pct = length > 0 ? Math.max(0, Math.min(100, (t / length) * 100)) : 0;
+    var played = document.getElementById('d-played');
+    var thumb = document.getElementById('d-thumb');
+    if (played) played.style.width = pct + '%';
+    if (thumb) thumb.style.left = pct + '%';
+    var bar = document.getElementById('d-progress');
+    if (bar) {
+      bar.setAttribute('aria-valuenow', String(Math.round(t)));
+      bar.setAttribute('aria-valuemax', String(Math.round(length) || 0));
+    }
+    $('#d-time').textContent = dur(t) + ' / ' + (length > 0 ? dur(length) : '—');
+  }
+
+  function seekVideoFromEvent(ev, vid, item) {
+    var bar = document.getElementById('d-progress');
+    var length = clipLength(vid, item);
+    if (!bar || !vid || !(length > 0)) return;
+    var rect = bar.getBoundingClientRect();
+    var x = (ev.clientX - rect.left) / Math.max(rect.width, 1);
+    vid.currentTime = Math.max(0, Math.min(1, x)) * length;
+    paintVideoProgress(vid, item);
+  }
+
+  function bindVideoProgress(vid, item) {
+    var scrub = $('#d-scrub');
+    setPlayIcon(false);
+    if (!scrub || !vid) {
+      if (scrub) scrub.innerHTML = '';
+      return;
+    }
+    scrub.innerHTML =
+      '<div class="progress" id="d-progress" role="slider" aria-label="Playback position" aria-valuemin="0" aria-valuenow="0" aria-valuemax="0">' +
+        '<div class="progress-track"><div class="progress-played" id="d-played"></div></div>' +
+        '<div class="progress-thumb" id="d-thumb"></div>' +
+      '</div>';
+    paintVideoProgress(vid, item);
+    var bar = document.getElementById('d-progress');
+    var dragging = false;
+    function onMove(ev) {
+      if (!dragging) return;
+      ev.preventDefault();
+      seekVideoFromEvent(ev, vid, item);
+    }
+    function onUp() {
+      if (!dragging) return;
+      dragging = false;
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+    }
+    if (bar) {
+      bar.addEventListener('pointerdown', function (ev) {
+        dragging = true;
+        seekVideoFromEvent(ev, vid, item);
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
+      });
+    }
   }
 
   function paintClipMeta(item) {
