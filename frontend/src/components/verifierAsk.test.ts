@@ -28,8 +28,8 @@ describe('verifier clip Ask tab and live analysis', () => {
 
   it('writes analysis notes as the footage plays rather than dumping the log', () => {
     expect(verifierHtml).toContain('function startLivePlayback');
-    expect(verifierHtml).toContain('<!-- ask-panel 2026-08-23-see -->');
-    expect(verifierHtml).toContain('8:00p 23 Aug');
+    expect(verifierHtml).toContain('<!-- ask-panel 2026-08-23-happening -->');
+    expect(verifierHtml).toContain('8:25p 23 Aug');
     expect(verifierHtml).toContain('function startProgressTick');
     expect(verifierHtml).toContain('Math.max(t + 2, 1)');
     expect(verifierHtml).toContain('function bindVideoProgress');
@@ -40,6 +40,10 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(verifierHtml).toContain('function startLiveWatch');
     expect(verifierHtml).toContain("setAnalysisPill('Writing…')");
     expect(verifierHtml).toContain('as you watch');
+    expect(verifierHtml).toContain('Looking at what’s on screen…');
+    expect(verifierHtml).toContain('new AbortController');
+    expect(verifierHtml).toContain('12000');
+    expect(verifierHtml).toContain("li.className = 'on'");
     expect(verifierHtml).toContain('data-full=');
     expect(verifierHtml).not.toContain('Ask this clip');
     expect(verifierHtml).not.toMatch(/>Did anything happen\?</);

@@ -88,31 +88,48 @@ export interface WatchObservation {
   confidence: number;
 }
 
-const WATCH_SYSTEM = `You are watching one frame from a proof-of-work video that someone is playing right now.
+const WATCH_SYSTEM = `You are watching one frame from a video someone is playing right now. Tell them what is happening on screen.
+
+Write one or two plain spoken sentences, the way a person next to the player would say it. Name what you can see: people, screens, rooms, tools, movement. Examples: "The recording just started — someone is looking at a computer with YouTube open." or "The camera pans toward a stairwell that looks like a basement."
 
 Rules:
-1. One short sentence about what is visible on screen at this moment. Present tense. Only what is visible — never what is probably happening off screen.
-2. Prefer "unclear" over a guess. If the frame is dark, blurred, a thumb, or a ceiling, say so.
-3. Never estimate cost, hours, or whether work is worth paying for.
+1. Present tense. Concrete. Only what is visible — never what is probably happening off screen.
+2. If the frame is dark, blurred, a thumb, or a ceiling, say that.
+3. Never estimate cost, hours, or whether work is worth paying for. Do not invent names.
 4. Confidence is between 0 and 1 and should be honest.
 
 Reply with JSON only: {"note": string, "confidence": number}`;
 
 export function parseWatchObservation(text: string): WatchObservation | null {
   const cleaned = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-  let parsed: any;
+  if (!cleaned) return null;
   try {
-    parsed = JSON.parse(cleaned);
+    const parsed = JSON.parse(cleaned);
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (typeof parsed.note !== 'string' || !parsed.note.trim()) return null;
+    const confidence =
+      typeof parsed.confidence === 'number' && Number.isFinite(parsed.confidence)
+        ? Math.min(1, Math.max(0, parsed.confidence))
+        : 0;
+    return { note: parsed.note.trim().slice(0, 280), confidence };
   } catch {
-    return null;
+    // Haiku sometimes answers with the sentence itself. A bare reading of
+    // the frame is still a reading — refuse only empty or leftover JSON.
+    const note = cleaned.replace(/^["']|["']$/g, '').trim();
+    if (note.length < 4 || /^[[{]/.test(note)) return null;
+    return { note: note.slice(0, 280), confidence: 0.5 };
   }
-  if (!parsed || typeof parsed !== 'object') return null;
-  if (typeof parsed.note !== 'string' || !parsed.note.trim()) return null;
-  const confidence =
-    typeof parsed.confidence === 'number' && Number.isFinite(parsed.confidence)
-      ? Math.min(1, Math.max(0, parsed.confidence))
-      : 0;
-  return { note: parsed.note.trim().slice(0, 280), confidence };
+}
+
+/**
+ * A watch note is about the playhead. A still pulled from elsewhere is only
+ * the picture; stamping it with that other second hides the note until the
+ * reviewer gets there, which looks like the assistant never wrote.
+ */
+export function watchNoteAtSeconds(playheadSeconds: number, frameSeconds: number): number {
+  const play = Math.max(0, Number(playheadSeconds) || 0);
+  const frame = Math.max(0, Number(frameSeconds) || 0);
+  return Math.abs(frame - play) <= 3 ? frame : play;
 }
 
 export async function observeWatchFrame(input: {
@@ -137,7 +154,7 @@ export async function observeWatchFrame(input: {
 
   const response = await anthropicClient().messages.create({
     model: config.technician.assistant.liveModel,
-    max_tokens: 160,
+    max_tokens: 220,
     system: [{ type: 'text', text: WATCH_SYSTEM, cache_control: { type: 'ephemeral' } }],
     messages: [
       {

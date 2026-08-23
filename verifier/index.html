@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- ask-panel 2026-08-23-see -->
+<!-- ask-panel 2026-08-23-happening -->
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -1091,7 +1091,7 @@
             </button>
             <div class="scrub" id="d-scrub"></div>
             <span class="time" id="d-time">frame 1 / 6</span>
-            <span class="buildstamp" id="d-build">8:00p 23 Aug</span>
+            <span class="buildstamp" id="d-build">8:25p 23 Aug</span>
           </div>
         </div>
       </section>
@@ -3112,7 +3112,7 @@
     var parts = [dayLabel(item.workDate), esc(item.company)];
     if (item.duration && item.duration > 0) parts.push(dur(item.duration));
     if (item.bytes) parts.push(mb(item.bytes));
-    parts.push('8:00p 23 Aug');
+    parts.push('8:25p 23 Aug');
     $('#d-meta').innerHTML = parts.join(' · ');
   }
 
@@ -3241,7 +3241,7 @@
     var rows = analysisLog(item);
     var pill = rows.length ? 'Ready' : 'Writing…';
     var wait = 'The assistant writes what is on screen as you watch.';
-    var html = '<div class="alog-head"><h4>AI analysis · 8:00p 23 Aug</h4><span class="livepill" id="alog-pill">' + pill + '</span></div>';
+    var html = '<div class="alog-head"><h4>AI analysis · 8:25p 23 Aug</h4><span class="livepill" id="alog-pill">' + pill + '</span></div>';
     html += '<p class="footnote alog-wait" id="alog-empty">' + esc(wait) + '</p>';
     if (a.pairedWith) {
       html += '<p><button class="navitem" style="width:auto;margin:6px 0 0;border:1px solid var(--line)" data-goto="' + a.pairedWith + '">Open ' + esc(a.pairedWith) + '</button></p>';
@@ -3483,7 +3483,7 @@
     if (!list) return;
     var li = document.createElement('li');
     li.setAttribute('data-at', String(at));
-    li.className = 'soon';
+    li.className = 'on';
     li.innerHTML = '<span class="t">' + dur(at) + '</span><span data-full="' + esc(t) + '"></span>';
     li.addEventListener('click', function () { seekTo(at); });
     var placed = false;
@@ -3495,6 +3495,10 @@
       }
     });
     if (!placed) list.appendChild(li);
+    var empty = document.getElementById('alog-empty');
+    if (empty) empty.hidden = true;
+    fillNote(li, true);
+    paintLiveCaption(t);
     syncAnalysisLog(currentPlayhead());
   }
 
@@ -3504,25 +3508,34 @@
     if (WATCH.lastAt >= 0 && Math.abs(at - WATCH.lastAt) < 5) return;
     var rows = analysisLog(item);
     if (rows.some(function (r) { return Math.abs(r.at - at) < 5; })) return;
+    var frame = capturePlayheadFrame();
+    var host = $('#d-frame');
+    var vid = host && host.querySelector('video');
+    // Wait for a decoded picture before the first tick. Sending an empty
+    // body used to kick a full-day FFmpeg extract and freeze the panel.
+    if (vid && !vid.videoWidth && !frame && !rows.length) return;
     WATCH.inflight = true;
     setAnalysisPill('Writing…');
     var empty = document.getElementById('alog-empty');
     if (empty && !rows.length) {
       empty.hidden = false;
-      empty.textContent = 'Reading this moment of the clip…';
+      empty.textContent = 'Looking at what’s on screen…';
     }
     var url = ORG_MODE
       ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id) + '/watch'
       : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id) + '/watch';
-    var frame = capturePlayheadFrame();
+    var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+    var abortTimer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 12000);
     fetch(url, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ atSeconds: Math.max(0, at), frameBase64: frame || undefined })
+      body: JSON.stringify({ atSeconds: Math.max(0, at), frameBase64: frame || undefined }),
+      signal: ctrl ? ctrl.signal : undefined
     }).then(function (r) {
       return r.json().then(function (body) { return { ok: r.ok, body: body }; });
     }).then(function (res) {
+      clearTimeout(abortTimer);
       WATCH.inflight = false;
       if (!state.open || state.open.id !== item.id) return;
       if (!res.ok || !res.body || !res.body.note) {
@@ -3537,14 +3550,17 @@
         return;
       }
       var when = res.body.atSeconds != null ? Number(res.body.atSeconds) : at;
+      if (Math.abs(when - at) > 3) when = at;
       WATCH.lastAt = when;
       appendWatchNote(item, when, res.body.note);
     }).catch(function () {
+      clearTimeout(abortTimer);
       WATCH.inflight = false;
       if (empty && state.open && state.open.id === item.id && !analysisLog(item).length) {
         empty.hidden = false;
         empty.textContent = 'The assistant could not reach this clip. Keep playing — it will try again.';
       }
+      setAnalysisPill(isFootagePlaying() ? 'Watching' : 'Ready');
     });
   }
 
@@ -3558,7 +3574,7 @@
       if (!isFootagePlaying() && analysisLog(item).length) return;
       requestWatchNote(item, currentPlayhead());
     }
-    WATCH.timer = setInterval(tick, 2800);
+    WATCH.timer = setInterval(tick, 2200);
     tick();
   }
 

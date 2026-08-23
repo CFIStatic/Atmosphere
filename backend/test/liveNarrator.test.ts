@@ -5,6 +5,7 @@ import {
   parseObservation,
   parseWatchObservation,
   stepsForNarration,
+  watchNoteAtSeconds,
   type StageStep,
 } from '../src/shared/liveNarrator.js';
 
@@ -42,7 +43,11 @@ test('a watch observation is a note about the playhead, not a stage', () => {
   const good = parseWatchObservation('{"note": "Tarp coming off the north slope.", "confidence": 0.8}');
   assert.deepEqual(good, { note: 'Tarp coming off the north slope.', confidence: 0.8 });
   assert.equal(parseWatchObservation('{"confidence": 0.9}'), null, 'no note, no watch beat');
-  assert.equal(parseWatchObservation('the tarp is gone'), null);
+  const prose = parseWatchObservation('Someone is looking at a computer with YouTube open.');
+  assert.equal(prose?.note, 'Someone is looking at a computer with YouTube open.');
+  assert.equal(parseWatchObservation('{'), null, 'broken JSON is not a sentence');
+  assert.equal(watchNoteAtSeconds(8, 8.4), 8.4, 'a still from this second keeps its stamp');
+  assert.equal(watchNoteAtSeconds(8, 40), 8, 'a still from later must not hide the note');
 });
 
 test('confidence is clamped and garbage is refused whole', () => {

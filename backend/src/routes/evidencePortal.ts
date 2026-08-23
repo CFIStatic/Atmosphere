@@ -11,7 +11,7 @@ import {
   clipRecordFromEvidenceItem,
   type ClipAskRecord,
 } from '../shared/clipAsk.js';
-import { observeWatchFrame } from '../shared/liveNarrator.js';
+import { observeWatchFrame, watchNoteAtSeconds } from '../shared/liveNarrator.js';
 import { extractJpegAtSeconds } from '../shared/sparseExtract.js';
 import { DailyBudget } from '../shared/liveBudget.js';
 import {
@@ -389,7 +389,12 @@ async function settleClipQuestion(opts: {
   return result;
 }
 
-async function nearestStoredFrame(admin: any, proofId: string, atSeconds: number) {
+async function nearestStoredFrame(
+  admin: any,
+  proofId: string,
+  atSeconds: number,
+  maxDistSeconds = 12,
+) {
   const { data: rows } = await admin
     .from('job_proof_frames')
     .select('at_seconds, storage_path')
@@ -406,14 +411,29 @@ async function nearestStoredFrame(admin: any, proofId: string, atSeconds: number
       dist = d;
     }
   }
-  // A still from a minute away is not "this moment".
-  if (dist > 45) return null;
+  // A still from half a minute away is not "this moment".
+  if (dist > maxDistSeconds) return null;
   const { data: blob } = await admin.storage.from(PROOF_BUCKET).download(best.storage_path);
   if (!blob) return null;
   return {
     atSeconds: Number(best.at_seconds),
     base64: Buffer.from(await blob.arrayBuffer()).toString('base64'),
   };
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), ms);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch(() => {
+        clearTimeout(timer);
+        resolve(null);
+      });
+  });
 }
 
 async function grabPlayheadJpeg(
@@ -459,9 +479,12 @@ function groundedWatchFromItem(item: any, atSeconds: number): string | null {
 }
 
 /**
- * One playhead tick: describe the frame on screen. Uses the still the
- * reviewer captured, or the nearest stored frame, and falls back to the
- * clip's existing reading when no model is configured.
+ * One playhead tick: describe the frame on screen.
+ *
+ * Fast path only. A live tick that first extracts the whole day of stills
+ * sits on "Reading this moment…" until FFmpeg finishes — which is the
+ * failure the reviewer sees. Grab one JPEG at the playhead, or a nearby
+ * stored still, and write the note against the playhead so it lands now.
  */
 async function settleWatchFrame(opts: {
   admin: any;
@@ -471,29 +494,23 @@ async function settleWatchFrame(opts: {
   atSeconds: number;
   frameBase64?: string;
 }): Promise<{ atSeconds: number; note: string; model: string | null }> {
-  let frameB64 = opts.frameBase64 ?? null;
+  let frameB64 = opts.frameBase64 && opts.frameBase64.length >= 80 ? opts.frameBase64 : null;
   let at = opts.atSeconds;
   if (!frameB64) {
-    let stored = await nearestStoredFrame(opts.admin, opts.proof.id, opts.atSeconds);
-    if (!stored) {
-      // Field-capture uploads often arrive with no duration and no stills.
-      // Extract them now so a live watch tick has something to look at.
-      try {
-        await ensureStillsAndDuration(opts.admin, opts.proof.id);
-      } catch {
-        /* best-effort — the client frame, if any, is the other door */
-      }
-      stored = await nearestStoredFrame(opts.admin, opts.proof.id, opts.atSeconds);
-    }
+    const stored = await nearestStoredFrame(opts.admin, opts.proof.id, opts.atSeconds, 12);
     if (stored) {
       frameB64 = stored.base64;
       at = stored.atSeconds;
+    }
+  }
+  if (!frameB64) {
+    const grabbed = await withTimeout(grabPlayheadJpeg(opts.admin, opts.proof, opts.atSeconds), 8_000);
+    if (grabbed) {
+      frameB64 = grabbed.base64;
+      at = grabbed.atSeconds;
     } else {
-      const grabbed = await grabPlayheadJpeg(opts.admin, opts.proof, opts.atSeconds);
-      if (grabbed) {
-        frameB64 = grabbed.base64;
-        at = grabbed.atSeconds;
-      }
+      // Heal the library later. Do not hold this tick on a full extract.
+      void ensureStillsAndDuration(opts.admin, opts.proof.id).catch(() => undefined);
     }
   }
 
@@ -508,14 +525,22 @@ async function settleWatchFrame(opts: {
         'live_budget_exhausted',
       );
     }
-    const observation = await observeWatchFrame({
-      frameBase64: frameB64,
-      atSeconds: at,
-      phase: opts.item.phase ?? opts.proof.phase,
-      workDate: opts.item.workDate ?? opts.proof.work_date,
-    });
-    if (observation?.note) {
-      return { atSeconds: at, note: observation.note, model: config.technician.assistant.liveModel };
+    try {
+      const observation = await observeWatchFrame({
+        frameBase64: frameB64,
+        atSeconds: at,
+        phase: opts.item.phase ?? opts.proof.phase,
+        workDate: opts.item.workDate ?? opts.proof.work_date,
+      });
+      if (observation?.note) {
+        return {
+          atSeconds: watchNoteAtSeconds(opts.atSeconds, at),
+          note: observation.note,
+          model: config.technician.assistant.liveModel,
+        };
+      }
+    } catch {
+      /* fall through to the filed reading — a hung model must not blank the panel */
     }
   }
 
