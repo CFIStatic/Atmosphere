@@ -677,7 +677,10 @@
   .closebtn:hover { background: var(--line-soft); color: var(--ink); }
 
   .sheetbody { flex: 1; min-height: 0; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(300px, 0.85fr); }
-  @media (max-width: 860px) { .sheetbody { grid-template-columns: 1fr; overflow-y: auto; } }
+  @media (max-width: 860px) {
+    .sheetbody { grid-template-columns: 1fr; overflow-y: auto; }
+    .side { overflow: visible; min-height: 420px; }
+  }
 
   .stage { padding: 16px 18px; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
   .player { background: var(--stage); border-radius: 10px; overflow: hidden; flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -704,8 +707,9 @@
     display: block; width: 100%; height: 100%; max-height: none; object-fit: contain; background: #1A1815;
   }
 
-  .side { padding: 16px 18px 24px; overflow-y: auto; min-height: 0; }
-  .tabs { display: flex; gap: 3px; background: var(--line-soft); padding: 3px; border-radius: 8px; }
+  .side { padding: 16px 18px 16px; overflow: hidden; min-height: 0; display: flex; flex-direction: column; }
+  #d-panel { flex: 1; min-height: 0; margin-top: 14px; display: flex; flex-direction: column; overflow-y: auto; }
+  .tabs { display: flex; gap: 3px; background: var(--line-soft); padding: 3px; border-radius: 8px; flex: none; }
   .tabs button {
     flex: 1; min-width: 0; border: 0; background: none; padding: 7px 4px; border-radius: 6px;
     font-size: 12px; cursor: pointer; color: var(--muted); font-weight: 550;
@@ -750,7 +754,15 @@
   .alog-wait { margin-top: 4px; }
   .alog-wait[hidden] { display: none; }
 
-  .ask-thread { display: flex; flex-direction: column; gap: 10px; min-height: 88px; }
+  .ask-panel {
+    flex: 1; min-height: 0; display: flex; flex-direction: column;
+  }
+  .ask-live { flex: 1 1 48%; min-height: 110px; overflow-y: auto; }
+  .ask-chat {
+    flex: 1 1 42%; min-height: 168px; display: flex; flex-direction: column;
+    border-top: 1px solid var(--line-soft); padding-top: 12px; margin-top: 6px;
+  }
+  .ask-thread { display: flex; flex-direction: column; gap: 10px; min-height: 72px; flex: 1; overflow-y: auto; }
   .ask-bubble {
     max-width: 100%; padding: 8px 10px; border-radius: 10px;
     font-size: 13px; line-height: 1.45; white-space: pre-wrap;
@@ -1044,12 +1056,11 @@
 
       <section class="side">
         <div class="tabs" role="tablist">
-          <button role="tab" data-tab="integrity" aria-selected="true">Scope of work</button>
+          <button role="tab" data-tab="ask" aria-selected="true">Ask</button>
           <button role="tab" data-tab="custody" aria-selected="false">Chain of custody</button>
           <button role="tab" data-tab="details" aria-selected="false">Details</button>
-          <button role="tab" data-tab="ask" aria-selected="false">Ask</button>
         </div>
-        <div id="d-panel" style="margin-top:14px"></div>
+        <div id="d-panel"></div>
       </section>
     </div>
   </div>
@@ -2661,7 +2672,7 @@
       // the clip rather than on the black rectangle a browser picks.
       var posterAttr = item.poster ? ' poster="' + esc(item.poster) + '"' : '';
       $('#d-frame').innerHTML =
-        '<video controls playsinline preload="metadata"' + posterAttr +
+        '<video controls playsinline preload="metadata" crossorigin="anonymous"' + posterAttr +
         ' src="' + esc(item._videoUrl) + '"></video>';
       $('#d-scrub').innerHTML = '';
       $('#d-time').textContent = 'full clip · ' + dur(item.duration);
@@ -2691,10 +2702,11 @@
 
     renderDictation(item);
     renderAnalysis(item);
-    setTab(tab || 'integrity');
+    setTab(tab || 'ask');
     $('#detail').setAttribute('data-open', '1');
     $('#d-close').focus();
     startLivePlayback(item);
+    startLiveWatch(item);
   }
 
   function renderDictation(item) {
@@ -2903,6 +2915,9 @@
     (a.timeline || []).forEach(function (t) {
       add(t.startSeconds, t.summary, 'window');
     });
+    (a.watchNotes || []).forEach(function (e) {
+      add(e.atSeconds, e.text, 'watch');
+    });
     if (rows.length < 6 && a.changes && a.changes.length) {
       var d = item.duration || 120;
       a.changes.forEach(function (c, i) {
@@ -3048,21 +3063,16 @@
       : (a.state === 'queued' || a.state === 'none' || !a.state) && !rows.length ? 'Writing…'
       : a.state === 'paired' || a.state === 'skipped' ? 'Not yet'
       : 'Ready';
+    var wait = a.reason || (a.state === 'paired'
+      ? 'This is the before half of a day. Open the after clip for the dictation of what changed.'
+      : a.state === 'failed'
+        ? 'The dictation failed after retries. The footage itself is unaffected.'
+        : 'Play the clip. The assistant writes what is on screen as you watch.');
     var html = '<div class="alog-head"><h4>AI analysis</h4><span class="livepill" id="alog-pill">' + pill + '</span></div>';
-    if (!rows.length) {
-      html += '<p class="footnote alog-wait">' +
-        esc(a.reason || (a.state === 'paired'
-          ? 'This is the before half of a day. Open the after clip for the dictation of what changed.'
-          : a.state === 'failed'
-            ? 'The dictation failed after retries. The footage itself is unaffected.'
-            : 'The assistant is reading this clip. Notes land here as the footage plays.')) +
-        '</p>';
-      if (a.pairedWith) {
-        html += '<p><button class="navitem" style="width:auto;margin:6px 0 0;border:1px solid var(--line)" data-goto="' + a.pairedWith + '">Open ' + esc(a.pairedWith) + '</button></p>';
-      }
-      return html;
+    html += '<p class="footnote alog-wait" id="alog-empty">' + esc(wait) + '</p>';
+    if (a.pairedWith) {
+      html += '<p><button class="navitem" style="width:auto;margin:6px 0 0;border:1px solid var(--line)" data-goto="' + a.pairedWith + '">Open ' + esc(a.pairedWith) + '</button></p>';
     }
-    html += '<p class="footnote alog-wait" id="alog-empty">Play the clip. Notes land here as the footage plays.</p>';
     html += '<ul class="alog" id="alog">' + rows.map(function (r) {
       return '<li data-at="' + r.at + '" class="soon">' +
         '<span class="t">' + dur(r.at) + '</span><span data-full="' + esc(r.text) + '"></span></li>';
@@ -3104,20 +3114,23 @@
       push(null, [s.title, s.verdict, s.because].filter(Boolean).join(' — '));
     });
     (a.couldNotTell || []).forEach(function (c) { push(null, c); });
+    (a.watchNotes || []).forEach(function (e) { push(e.atSeconds, e.text); });
     return rows;
   }
 
   function answerClipLocally(item, question) {
     var a = item.analysis || {};
     var q = String(question || '').trim();
-    if (a.state === 'paired' || a.state === 'waiting_on_after') {
-      return 'This is the before half of the day. Open the after clip — that is where the reading of what changed lives.';
-    }
-    if (a.state === 'queued') return 'This clip is still being read. Ask again once the dictation lands.';
-    if (a.state === 'failed') return 'The reading of this clip failed. The footage itself is unaffected.';
-    if (a.state === 'skipped') return 'There is no after video on file for this day, so there is nothing to compare against.';
     var rows = clipAskCorpus(item);
-    if (!rows.length) return 'This clip has not been read yet, so there is nothing to answer from.';
+    if (!rows.length) {
+      if (a.state === 'paired' || a.state === 'waiting_on_after') {
+        return 'This is the before half of the day. Open the after clip — that is where the reading of what changed lives.';
+      }
+      if (a.state === 'queued') return 'This clip is still being read. Ask again once the dictation lands.';
+      if (a.state === 'failed') return 'The reading of this clip failed. The footage itself is unaffected.';
+      if (a.state === 'skipped') return 'There is no after video on file for this day, so there is nothing to compare against.';
+      return 'This clip has not been read yet, so there is nothing to answer from.';
+    }
     if (/what (happened|did|work)|did anything|anything happen|what('s| is) (visible|going on)|any work/i.test(q)) {
       var changes = (a.changes || []).filter(Boolean);
       var actions = (a.actions || []).map(function (act) { return act.description; }).filter(Boolean);
@@ -3150,6 +3163,13 @@
     }).join('. ') + '.';
   }
 
+  function watchNotesPayload(item) {
+    var notes = ((item.analysis || {}).watchNotes) || [];
+    return notes.filter(function (n) { return n && n.text; }).slice(-24).map(function (n) {
+      return { atSeconds: n.atSeconds, text: n.text };
+    });
+  }
+
   function askClip(item, question, history, cb) {
     var local = answerClipLocally(item, question);
     if (!item._remote) {
@@ -3163,7 +3183,7 @@
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: question, history: history || [] })
+      body: JSON.stringify({ question: question, history: history || [], watchNotes: watchNotesPayload(item) })
     }).then(function (r) {
       return r.json().then(function (body) {
         if (!r.ok) throw new Error((body && (body.error || body.message)) || 'Could not answer.');
@@ -3172,17 +3192,21 @@
     }).catch(function () { cb(null, local); });
   }
 
+  function askSuggestionsHtml() {
+    return '<div class="ask-suggest">' +
+      '<button type="button" data-ask="Did anything happen in this clip?">Did anything happen?</button>' +
+      '<button type="button" data-ask="What work is visible?">What work is visible?</button>' +
+      '<button type="button" data-ask="Is anything in this footage unfinished?">Anything unfinished?</button>' +
+      '</div>';
+  }
+
   function renderAsk(item) {
     var thread = ASK_THREADS[item.id] || [];
     var html = '<div class="alog-head"><h4>Ask this clip</h4></div>' +
-      '<p class="footnote" style="margin:0 0 12px">Ask whether anything happened, or what the footage shows. The assistant answers from its reading of this clip.</p>' +
+      '<p class="footnote" style="margin:0 0 12px">Ask what the footage shows. The assistant answers from its reading of this clip — including notes written as you watch.</p>' +
       '<div class="ask-thread" id="ask-thread">';
     if (!thread.length) {
-      html += '<div class="ask-suggest">' +
-        '<button type="button" data-ask="Did anything happen in this clip?">Did anything happen?</button>' +
-        '<button type="button" data-ask="What work is visible?">What work is visible?</button>' +
-        '<button type="button" data-ask="Is anything in this footage unfinished?">Anything unfinished?</button>' +
-        '</div>';
+      html += askSuggestionsHtml();
     } else {
       thread.forEach(function (m) {
         html += '<div class="ask-bubble ' + esc(m.role) + '">' + esc(m.text) + '</div>';
@@ -3196,42 +3220,176 @@
     return html;
   }
 
+  function renderAskPanel(item) {
+    return '<div class="ask-panel">' +
+      '<div class="ask-live">' + renderScopeLog(item) + '</div>' +
+      '<div class="ask-chat">' + renderAsk(item) + '</div>' +
+      '</div>';
+  }
+
+  function paintAskThread(item, pending) {
+    var host = document.getElementById('ask-thread');
+    if (!host) return;
+    var thread = ASK_THREADS[item.id] || [];
+    if (!thread.length) {
+      host.innerHTML = askSuggestionsHtml();
+      Array.prototype.forEach.call(host.querySelectorAll('[data-ask]'), function (btn) {
+        btn.addEventListener('click', function () { sendAsk(item, btn.getAttribute('data-ask')); });
+      });
+      return;
+    }
+    host.innerHTML = thread.map(function (m) {
+      return '<div class="ask-bubble ' + esc(m.role) + '">' + esc(m.text) + '</div>';
+    }).join('') + (pending ? '<div class="ask-bubble assistant pending">Watching the clip…</div>' : '');
+    host.scrollTop = host.scrollHeight;
+  }
+
+  function sendAsk(item, text) {
+    var q = String(text || '').trim();
+    if (q.length < 3) return;
+    var thread = ASK_THREADS[item.id] || [];
+    thread.push({ role: 'user', text: q });
+    ASK_THREADS[item.id] = thread;
+    var history = thread.slice(0, -1).map(function (m) {
+      return { role: m.role === 'assistant' ? 'assistant' : 'user', text: m.text };
+    });
+    var input = document.getElementById('ask-input');
+    if (input) input.value = '';
+    paintAskThread(item, true);
+    askClip(item, q, history, function (_err, answer) {
+      thread.push({ role: 'assistant', text: answer });
+      ASK_THREADS[item.id] = thread;
+      if (state.open && state.open.id === item.id) paintAskThread(item, false);
+    });
+  }
+
   function bindAsk(item) {
     var form = document.getElementById('ask-form');
     var input = document.getElementById('ask-input');
-    function send(text) {
-      var q = String(text || '').trim();
-      if (q.length < 3) return;
-      var thread = ASK_THREADS[item.id] || [];
-      thread.push({ role: 'user', text: q });
-      ASK_THREADS[item.id] = thread;
-      var history = thread.slice(0, -1).map(function (m) {
-        return { role: m.role === 'assistant' ? 'assistant' : 'user', text: m.text };
-      });
-      setTab('ask');
-      var host = document.getElementById('ask-thread');
-      if (host) {
-        var pending = document.createElement('div');
-        pending.className = 'ask-bubble assistant pending';
-        pending.textContent = 'Reading the clip…';
-        host.appendChild(pending);
-      }
-      askClip(item, q, history, function (_err, answer) {
-        thread.push({ role: 'assistant', text: answer });
-        ASK_THREADS[item.id] = thread;
-        if (state.open && state.open.id === item.id && state.tab === 'ask') setTab('ask');
-      });
-    }
     if (form) {
       form.addEventListener('submit', function (ev) {
         ev.preventDefault();
-        send(input && input.value);
+        sendAsk(item, input && input.value);
       });
     }
     Array.prototype.forEach.call(document.querySelectorAll('[data-ask]'), function (btn) {
-      btn.addEventListener('click', function () { send(btn.getAttribute('data-ask')); });
+      btn.addEventListener('click', function () { sendAsk(item, btn.getAttribute('data-ask')); });
     });
-    if (input) setTimeout(function () { input.focus(); }, 0);
+  }
+
+  function bindAnalysisLog(item) {
+    var el = $('#d-panel');
+    Array.prototype.forEach.call(el.querySelectorAll('#alog [data-at]'), function (li) {
+      li.addEventListener('click', function () { seekTo(Number(li.getAttribute('data-at'))); });
+    });
+    var goto = el.querySelector('[data-goto]');
+    if (goto) goto.addEventListener('click', function () { open(goto.dataset.goto); });
+    syncAnalysisLog(currentPlayhead());
+  }
+
+  var WATCH = { itemId: null, lastAt: -999, inflight: false, timer: null };
+
+  function shouldWatch(item) {
+    var s = (item.analysis || {}).state;
+    if (s === 'paired' || s === 'skipped' || s === 'failed') return false;
+    return true;
+  }
+
+  function stopLiveWatch() {
+    if (WATCH.timer) clearInterval(WATCH.timer);
+    WATCH.timer = null;
+    WATCH.inflight = false;
+    WATCH.itemId = null;
+  }
+
+  function capturePlayheadFrame() {
+    var host = $('#d-frame');
+    var vid = host && host.querySelector('video');
+    if (!vid || !vid.videoWidth) return null;
+    try {
+      var canvas = document.createElement('canvas');
+      var w = Math.min(640, vid.videoWidth);
+      var h = Math.round(vid.videoHeight * (w / vid.videoWidth));
+      if (w < 8 || h < 8) return null;
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(vid, 0, 0, w, h);
+      return canvas.toDataURL('image/jpeg', 0.68).replace(/^data:image\/jpeg;base64,/, '');
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function appendWatchNote(item, at, text) {
+    var t = String(text || '').trim();
+    if (!t) return;
+    item.analysis = item.analysis || { state: 'watching' };
+    item.analysis.watchNotes = item.analysis.watchNotes || [];
+    var last = item.analysis.watchNotes[item.analysis.watchNotes.length - 1];
+    if (last && String(last.text || '').toLowerCase() === t.toLowerCase()) return;
+    if (item.analysis.watchNotes.some(function (n) {
+      return Math.abs((n.atSeconds || 0) - at) < 2 && String(n.text || '').toLowerCase() === t.toLowerCase();
+    })) return;
+    item.analysis.watchNotes.push({ atSeconds: at, text: t });
+    var list = document.getElementById('alog');
+    if (!list) return;
+    var li = document.createElement('li');
+    li.setAttribute('data-at', String(at));
+    li.className = 'soon';
+    li.innerHTML = '<span class="t">' + dur(at) + '</span><span data-full="' + esc(t) + '"></span>';
+    li.addEventListener('click', function () { seekTo(at); });
+    var placed = false;
+    Array.prototype.forEach.call(list.querySelectorAll('[data-at]'), function (row) {
+      if (placed) return;
+      if (Number(row.getAttribute('data-at')) > at) {
+        list.insertBefore(li, row);
+        placed = true;
+      }
+    });
+    if (!placed) list.appendChild(li);
+    syncAnalysisLog(currentPlayhead());
+  }
+
+  function requestWatchNote(item, at) {
+    if (!item || !item._remote || !shouldWatch(item)) return;
+    if (WATCH.inflight) return;
+    if (WATCH.lastAt >= 0 && Math.abs(at - WATCH.lastAt) < 5) return;
+    var rows = analysisLog(item);
+    if (rows.some(function (r) { return Math.abs(r.at - at) < 5; })) return;
+    WATCH.inflight = true;
+    var url = ORG_MODE
+      ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id) + '/watch'
+      : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id) + '/watch';
+    var frame = capturePlayheadFrame();
+    fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ atSeconds: Math.max(0, at), frameBase64: frame || undefined })
+    }).then(function (r) {
+      return r.json().then(function (body) { return { ok: r.ok, body: body }; });
+    }).then(function (res) {
+      WATCH.inflight = false;
+      if (!res.ok || !res.body || !res.body.note) return;
+      if (!state.open || state.open.id !== item.id) return;
+      var when = res.body.atSeconds != null ? Number(res.body.atSeconds) : at;
+      WATCH.lastAt = when;
+      appendWatchNote(item, when, res.body.note);
+    }).catch(function () { WATCH.inflight = false; });
+  }
+
+  function startLiveWatch(item) {
+    stopLiveWatch();
+    if (!item || !shouldWatch(item)) return;
+    WATCH.itemId = item.id;
+    WATCH.lastAt = -999;
+    function tick() {
+      if (!state.open || state.open.id !== item.id) return stopLiveWatch();
+      if (!isFootagePlaying() && analysisLog(item).length) return;
+      requestWatchNote(item, currentPlayhead());
+    }
+    WATCH.timer = setInterval(tick, 2800);
+    tick();
   }
 
   function setTab(tab) {
@@ -3243,14 +3401,10 @@
     if (!item) return;
     var el = $('#d-panel');
 
-    if (tab === 'integrity') {
-      el.innerHTML = renderScopeLog(item);
-      Array.prototype.forEach.call(el.querySelectorAll('#alog [data-at]'), function (li) {
-        li.addEventListener('click', function () { seekTo(Number(li.getAttribute('data-at'))); });
-      });
-      var goto = el.querySelector('[data-goto]');
-      if (goto) goto.addEventListener('click', function () { open(goto.dataset.goto); });
-      syncAnalysisLog(currentPlayhead());
+    if (tab === 'ask' || tab === 'integrity') {
+      el.innerHTML = renderAskPanel(item);
+      bindAnalysisLog(item);
+      bindAsk(item);
       return;
     }
 
@@ -3263,12 +3417,6 @@
       '<p class="footnote">Every access is logged at the moment a viewing link is minted, including external ' +
       'shares. The log is append-only: entries cannot be edited or removed, by anyone, including the account ' +
       'that owns the job.</p>';
-      return;
-    }
-
-    if (tab === 'ask') {
-      el.innerHTML = renderAsk(item);
-      bindAsk(item);
       return;
     }
 
@@ -3753,6 +3901,7 @@
 
   $('#d-close').addEventListener('click', function () {
     stopPlay();
+    stopLiveWatch();
     $('#detail').setAttribute('data-open', '0');
     state.open = null;
   });
@@ -3798,6 +3947,33 @@
   var ORG_MODE = false;
 
   function mapRemoteItem(raw, jobKey) {
+    var analysis = raw.analysisState === 'done'
+      ? {
+          state: 'done',
+          materialChange: raw.analysis && raw.analysis.materialChange,
+          materialBecause: raw.analysis && raw.analysis.materialBecause,
+          summary: (raw.analysis && raw.analysis.summary) || '',
+          dictation: (raw.analysis && (raw.analysis.dictation || raw.analysis.summary)) || '',
+          dictationEntries: (raw.analysis && raw.analysis.dictationEntries) || [],
+          actions: (raw.analysis && raw.analysis.actions) || [],
+          changes: (raw.analysis && raw.analysis.changes) || [],
+          scope: (raw.analysis && raw.analysis.scope) || [],
+          couldNotTell: (raw.analysis && raw.analysis.couldNotTell) || [],
+          longForm: Boolean(raw.analysis && raw.analysis.longForm),
+          timeline: (raw.analysis && raw.analysis.timeline) || null,
+          windowsTotal: raw.analysis ? raw.analysis.windowsTotal : null,
+          windowsRead: raw.analysis ? raw.analysis.windowsRead : null
+        }
+      : raw.analysisState === 'paired'
+        ? { state: 'paired' }
+        : raw.analysisState === 'waiting_on_after'
+          ? { state: 'skipped', reason: 'No after video has been filed for this day, so there is nothing to compare against.' }
+          : raw.analysisState === 'queued'
+            ? { state: 'queued', reason: 'Queued for analysis. The model has not read the day yet.' }
+            : raw.analysisState === 'failed'
+              ? { state: 'failed' }
+              : { state: raw.analysisState || 'none' };
+    analysis.watchNotes = [];
     return {
       _remote: true,
       id: raw.id,
@@ -3819,32 +3995,7 @@
       tier: raw.tier || 1,
       hold: raw.legalHold ? { on: true, reason: 'This clip is under legal hold. Retention cannot delete it while the hold stands.', by: '', at: '' } : null,
       checks: raw.checks || [],
-      analysis: raw.analysisState === 'done'
-        ? {
-            state: 'done',
-            materialChange: raw.analysis && raw.analysis.materialChange,
-            materialBecause: raw.analysis && raw.analysis.materialBecause,
-            summary: (raw.analysis && raw.analysis.summary) || '',
-            dictation: (raw.analysis && (raw.analysis.dictation || raw.analysis.summary)) || '',
-            dictationEntries: (raw.analysis && raw.analysis.dictationEntries) || [],
-            actions: (raw.analysis && raw.analysis.actions) || [],
-            changes: (raw.analysis && raw.analysis.changes) || [],
-            scope: (raw.analysis && raw.analysis.scope) || [],
-            couldNotTell: (raw.analysis && raw.analysis.couldNotTell) || [],
-            longForm: Boolean(raw.analysis && raw.analysis.longForm),
-            timeline: (raw.analysis && raw.analysis.timeline) || null,
-            windowsTotal: raw.analysis ? raw.analysis.windowsTotal : null,
-            windowsRead: raw.analysis ? raw.analysis.windowsRead : null
-          }
-        : raw.analysisState === 'paired'
-          ? { state: 'paired' }
-          : raw.analysisState === 'waiting_on_after'
-            ? { state: 'skipped', reason: 'No after video has been filed for this day, so there is nothing to compare against.' }
-            : raw.analysisState === 'queued'
-              ? { state: 'queued', reason: 'Queued for analysis. The model has not read the day yet.' }
-              : raw.analysisState === 'failed'
-                ? { state: 'failed' }
-                : { state: 'none' },
+      analysis: analysis,
       custody: [],
       _loaded: false
     };
@@ -3872,7 +4023,9 @@
         // Prefer the freshest analysis/dictation from the detail payload.
         if (payload.item) {
           var mapped = mapRemoteItem(payload.item, item.job);
+          var keptWatch = ((item.analysis || {}).watchNotes) || [];
           item.analysis = mapped.analysis;
+          item.analysis.watchNotes = keptWatch;
           item.checks = mapped.checks;
           item.hold = mapped.hold;
         }

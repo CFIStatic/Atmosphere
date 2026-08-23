@@ -14,19 +14,23 @@ describe('verifier clip Ask tab and live analysis', () => {
     localStorage.clear();
   });
 
-  it('puts Ask next to Details on the evidence sheet', () => {
+  it('merges live analysis and Ask into one panel on the evidence sheet', () => {
     const tabs = verifierHtml.match(/<div class="tabs" role="tablist">[\s\S]*?<\/div>/);
     expect(tabs).not.toBeNull();
-    expect(tabs![0]).toContain('data-tab="details"');
     expect(tabs![0]).toContain('data-tab="ask"');
-    expect(tabs![0].indexOf('data-tab="details"')).toBeLessThan(tabs![0].indexOf('data-tab="ask"'));
+    expect(tabs![0]).toContain('data-tab="details"');
+    expect(tabs![0]).toContain('data-tab="custody"');
+    expect(tabs![0]).not.toContain('data-tab="integrity"');
+    expect(tabs![0]).not.toMatch(/>Scope of work</);
+    expect(tabs![0].indexOf('data-tab="ask"')).toBeLessThan(tabs![0].indexOf('data-tab="details"'));
     expect(tabs![0]).toMatch(/>Ask</);
   });
 
   it('writes analysis notes as the footage plays rather than dumping the log', () => {
     expect(verifierHtml).toContain('function startLivePlayback');
+    expect(verifierHtml).toContain('function startLiveWatch');
     expect(verifierHtml).toContain("setAnalysisPill('Writing…')");
-    expect(verifierHtml).toContain('Notes land here as the footage plays');
+    expect(verifierHtml).toContain('as you watch');
     expect(verifierHtml).toContain('data-full=');
   });
 
@@ -35,9 +39,10 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(verifierHtml).toContain('Did anything happen');
     expect(verifierHtml).toContain('/api/evidence-portal/evidence/');
     expect(verifierHtml).toContain('/ask');
+    expect(verifierHtml).toContain('/watch');
   });
 
-  it('opens a demo clip, lands notes as frames play, and answers from the reading', async () => {
+  it('opens a demo clip, lands notes as frames play, and answers from the same panel', async () => {
     const dom = new JSDOM(verifierHtml, {
       url: 'https://atmosphere.test/verifier/?demo=1',
       runScripts: 'dangerously',
@@ -66,14 +71,11 @@ describe('verifier clip Ask tab and live analysis', () => {
 
     expect(document.getElementById('detail')?.getAttribute('data-open')).toBe('1');
     expect(document.getElementById('alog')).not.toBeNull();
+    expect(document.getElementById('ask-form')).not.toBeNull();
 
     await new Promise((resolveWait) => setTimeout(resolveWait, 900));
     const notes = Array.from(document.querySelectorAll('#alog li:not(.soon) [data-full]'));
     expect(notes.length).toBeGreaterThan(0);
-
-    const askTab = document.querySelector('[data-tab="ask"]') as HTMLElement | null;
-    expect(askTab).not.toBeNull();
-    askTab!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 
     const suggest = document.querySelector(
       '[data-ask="Did anything happen in this clip?"]',
@@ -86,6 +88,8 @@ describe('verifier clip Ask tab and live analysis', () => {
       .map((el) => el.textContent || '')
       .join('\n');
     expect(reply).toMatch(/Tarp removed|footage/i);
+    expect(document.getElementById('alog')).not.toBeNull();
+    expect(document.querySelectorAll('#alog li:not(.soon) [data-full]').length).toBeGreaterThan(0);
     dom.window.close();
   });
 });
