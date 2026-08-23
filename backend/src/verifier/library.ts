@@ -106,6 +106,52 @@ export function analysisStateOf(input: {
 }
 
 /**
+ * Why a clip carries no reading, in the words the portal prints.
+ *
+ * The old code had the client guess this from the state alone, and guessed
+ * wrong: every `skipped` clip was told "no after video on file for this day",
+ * including the ones skipped because frames would not extract or because the
+ * server has no model key. A reviewer looking at a perfectly good two-second
+ * clip was being handed an explanation about a video that does exist.
+ *
+ * So the reason the pipeline actually recorded wins, and the state-derived
+ * sentence is only the fallback for a row that never got one.
+ */
+function endSentence(value: string): string {
+  const text = value.trim();
+  // The pipeline's reasons are written as sentences, but an error surfaced
+  // from a driver or a shell may not be. The portal prints these next to
+  // prose, so terminate them rather than letting one run into the next clause.
+  if (!text || /[.!?]$/.test(text)) return text;
+  return `${text}.`;
+}
+
+export function analysisReasonOf(input: {
+  state: AnalysisState;
+  analysisError?: string | null;
+  narrationError?: string | null;
+}): string | null {
+  if (input.state === 'done') return null;
+  if (input.state === 'paired') {
+    return 'This is the before half of the day. The reading of what changed lives on the after clip.';
+  }
+  if (input.state === 'waiting_on_after') {
+    return 'No after clip has been filed for this day yet, so there is nothing to compare against.';
+  }
+  const recorded = endSentence(input.analysisError ?? input.narrationError ?? '');
+  if (input.state === 'queued') {
+    return recorded || 'Queued. The assistant has not read this clip yet.';
+  }
+  if (input.state === 'failed') {
+    return recorded || 'The reading of this clip failed after retries. The footage itself is unaffected.';
+  }
+  if (input.state === 'skipped') {
+    return recorded || 'The assistant did not read this clip, and no reason was recorded.';
+  }
+  return recorded || 'Nothing has been read from this clip yet.';
+}
+
+/**
  * Should this clip surface in the Flagged view.
  *
  * Flagged means "a person should look", and three things earn it: integrity
@@ -183,6 +229,11 @@ export function serializeEvidence(input: {
     narrationStatus: proof.narration_status ?? null,
   });
   const integrity = integrityOf(checks);
+  const analysisReason = analysisReasonOf({
+    state: analysis,
+    analysisError: proof.analysis_error ?? null,
+    narrationError: proof.narration_error ?? null,
+  });
   const materialChange = proof.ai_material_change ?? findings.materialChange ?? null;
   // The office product is video + AI dictation. Dictation is the per-clip
   // narrated report; summary is the shorter day-comparison headline.
@@ -227,6 +278,11 @@ export function serializeEvidence(input: {
     // Labels attached here so every consumer prints the same sentence.
     checks: checks.map((c) => ({ verdict: c.verdict, what: labelForCheck(c.key), detail: c.detail })),
     analysisState: analysis,
+    /**
+     * Why there is no reading, when there is none. Null on a clip that was
+     * read. The portal prints this instead of inventing an explanation.
+     */
+    analysisReason,
     materialChange,
     flagged: needsAttention({ integrity, analysis, materialChange }),
     legalHold: Boolean(proof.legal_hold),

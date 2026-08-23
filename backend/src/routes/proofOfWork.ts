@@ -413,9 +413,23 @@ async function runDayAnalysis(admin: any, party: any, workDate: string): Promise
     if (!row) return [];
     const frames = await framesFor(admin, row.id);
     if (frames.length) return frames.slice(0, 12);
-    const durationSeconds = Number(row.duration_seconds ?? 0);
-    await ensureSparseFramesFromStorage(admin, row.id, durationSeconds || 60);
-    return (await framesFor(admin, row.id)).slice(0, 12);
+    // Settle the real length before sampling anything.
+    //
+    // A phone filming into MediaRecorder uploads WebM with no duration in the
+    // header, so the row says 0. The old fallback here was "call it 60
+    // seconds", which is how a genuine two-second clip ended up sampled at
+    // 0:15 and 0:45 — past its own end. FFmpeg returned nothing, the day was
+    // recorded 'skipped', and the portal told the reviewer their footage
+    // could not be read. FFprobe over the stored file settles it first, and
+    // the sparse extractor then samples inside the clip that actually exists.
+    const settled = await ensureStillsAndDuration(admin, row.id).catch(() => null);
+    let filled = await framesFor(admin, row.id);
+    if (!filled.length) {
+      const durationSeconds = Number(settled?.durationSeconds ?? row.duration_seconds ?? 0);
+      await ensureSparseFramesFromStorage(admin, row.id, durationSeconds > 0 ? durationSeconds : 60);
+      filled = await framesFor(admin, row.id);
+    }
+    return filled.slice(0, 12);
   };
 
   const [beforeFrames, afterFrames] = await Promise.all([
@@ -426,7 +440,9 @@ async function runDayAnalysis(admin: any, party: any, workDate: string): Promise
   if (!filmFrames.length) {
     return {
       outcome: 'skipped',
-      reason: 'Could not extract frames from the day film for analysis.',
+      reason:
+        'No frames could be read out of the day film, so there was nothing for the ' +
+        'assistant to look at. The file itself is still on record.',
     };
   }
 

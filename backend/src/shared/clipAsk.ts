@@ -32,6 +32,8 @@ export type ClipAskRecord = {
   company?: string | null;
   durationSeconds?: number | null;
   analysisState?: ClipAskAnalysisState;
+  /** Why there is no reading, as the pipeline recorded it. */
+  analysisReason?: string | null;
   dictation?: string | null;
   summary?: string | null;
   materialChange?: string | null;
@@ -113,6 +115,7 @@ export function clipRecordFromEvidenceItem(item: {
   company?: string | null;
   durationSeconds?: number | null;
   analysisState?: ClipAskAnalysisState;
+  analysisReason?: string | null;
   analysis?: ClipAskRecord | null;
 }): ClipAskRecord {
   const analysis = item.analysis ?? null;
@@ -122,6 +125,7 @@ export function clipRecordFromEvidenceItem(item: {
     company: item.company ?? null,
     durationSeconds: item.durationSeconds ?? null,
     analysisState: item.analysisState ?? analysis?.analysisState ?? null,
+    analysisReason: item.analysisReason ?? null,
     dictation: analysis?.dictation ?? null,
     summary: analysis?.summary ?? null,
     materialChange: analysis?.materialChange ?? null,
@@ -198,21 +202,51 @@ function isWhatHappened(question: string): boolean {
   );
 }
 
-function unreadAnswer(state: ClipAskAnalysisState): string | null {
+function unreadAnswer(record: ClipAskRecord): string | null {
+  const state = record.analysisState;
   if (!state || state === 'done') return null;
   if (state === 'paired' || state === 'waiting_on_after') {
     return 'This is the before half of the day. Open the after clip — that is where the reading of what changed lives.';
   }
+  // The pipeline records why it stopped. Prefer it over a guess: "skipped" is
+  // not a synonym for "no after video", and telling a reviewer their existing
+  // clip does not exist is worse than saying nothing.
+  const recorded = endSentence(record.analysisReason ?? '');
   if (state === 'queued') {
-    return 'This clip is still being read. Ask again once the dictation lands.';
+    return recorded
+      ? `This clip has not been read yet — ${lowerFirst(recorded)}`
+      : 'This clip is still being read. Ask again once the dictation lands.';
   }
   if (state === 'failed') {
-    return 'The reading of this clip failed. The footage itself is unaffected; re-run the analysis from the platform.';
+    return recorded
+      ? `The reading of this clip failed — ${lowerFirst(recorded)} The footage itself is unaffected.`
+      : 'The reading of this clip failed. The footage itself is unaffected; re-run the analysis from the platform.';
   }
   if (state === 'skipped') {
-    return 'There is no after video on file for this day, so there is nothing to compare against.';
+    return recorded
+      ? `The assistant has not read this clip — ${lowerFirst(recorded)}`
+      : 'The assistant has not read this clip, and no reason was recorded. Re-run the analysis from the platform.';
   }
-  return 'This clip has not been read yet, so there is nothing to answer from.';
+  return recorded
+    ? `This clip has not been read yet — ${lowerFirst(recorded)}`
+    : 'This clip has not been read yet, so there is nothing to answer from.';
+}
+
+/** Terminate a reason that arrived without punctuation, so clauses do not run on. */
+function endSentence(value: string): string {
+  const text = value.trim();
+  if (!text || /[.!?]$/.test(text)) return text;
+  return `${text}.`;
+}
+
+/** Join a recorded sentence onto a clause without a capital letter mid-line. */
+function lowerFirst(value: string): string {
+  const text = value.trim();
+  if (!text) return text;
+  // Leave an acronym or a proper noun alone: only a plain capitalised word is
+  // being folded into the middle of a sentence.
+  if (/^[A-Z][A-Z]/.test(text)) return text;
+  return text.charAt(0).toLowerCase() + text.slice(1);
 }
 
 /**
@@ -220,7 +254,7 @@ function unreadAnswer(state: ClipAskAnalysisState): string | null {
  * configured, and as a fallback if the model call fails.
  */
 export function groundedAnswerFromClip(question: string, record: ClipAskRecord): string {
-  const unread = unreadAnswer(record.analysisState);
+  const unread = unreadAnswer(record);
   if (unread && !hasReading(record)) return unread;
 
   const rows = clipCorpus(record);
@@ -330,6 +364,11 @@ export async function answerFromClip(input: {
 }): Promise<{ answer: string; model: string | null }> {
   const grounded = groundedAnswerFromClip(input.question, input.record);
   if (!isModelProviderConfigured()) return { answer: grounded, model: null };
+  // Nothing was read from this clip. The record still carries a work date and
+  // a crew name, which is enough for the model to write a confident-sounding
+  // paragraph about footage nobody looked at. The grounded sentence says why
+  // there is no reading, which is the honest answer.
+  if (!hasReading(input.record)) return { answer: grounded, model: null };
 
   const reading = formatClipRecordForModel(input.record).trim();
   if (!reading) return { answer: grounded, model: null };

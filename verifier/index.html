@@ -704,8 +704,28 @@
     display: block; width: 100%; height: 100%; max-height: none; object-fit: contain; background: #1A1815;
   }
 
-  .side { padding: 16px 18px 24px; overflow-y: auto; min-height: 0; }
-  .tabs { display: flex; gap: 3px; background: var(--line-soft); padding: 3px; border-radius: 8px; }
+  /* A column: tabs fixed at the top, one scrolling panel, composer on the
+     bottom edge. The composer used to sit inline under the thread, which put
+     it halfway up the sheet whenever the thread was short. */
+  .side { padding: 16px 18px 0; min-height: 0; display: flex; flex-direction: column; }
+  .side > #d-panel { flex: 1 1 auto; min-height: 0; overflow-y: auto; margin-top: 14px; padding-bottom: 16px; }
+  .sidefoot {
+    flex: none; margin: 0 -18px; padding: 10px 18px 14px;
+    border-top: 1px solid var(--line); background: var(--panel);
+  }
+  .sidefoot[hidden] { display: none; }
+  @media (max-width: 860px) {
+    /* One column, and .sheetbody is the scroller. The side must stop being a
+       fixed-height flex column here: a flex-sized panel keeps the box it was
+       given and spills the rest of the reading out below it, which put the
+       overflow underneath the composer instead of behind it. As an ordinary
+       block it grows to its content, the sheet scrolls, and the composer
+       sticks to the bottom of the scrollport. */
+    .side { display: block; padding-bottom: 0; }
+    .side > #d-panel { overflow: visible; }
+    .sidefoot { position: sticky; bottom: 0; }
+  }
+  .tabs { display: flex; gap: 3px; background: var(--line-soft); padding: 3px; border-radius: 8px; flex: none; }
   .tabs button {
     flex: 1; min-width: 0; border: 0; background: none; padding: 7px 4px; border-radius: 6px;
     font-size: 12px; cursor: pointer; color: var(--muted); font-weight: 550;
@@ -750,7 +770,8 @@
   .alog-wait { margin-top: 4px; }
   .alog-wait[hidden] { display: none; }
 
-  .ask-thread { display: flex; flex-direction: column; gap: 10px; min-height: 88px; }
+  .ask-thread { display: flex; flex-direction: column; gap: 10px; }
+  .askblock { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
   .ask-bubble {
     max-width: 100%; padding: 8px 10px; border-radius: 10px;
     font-size: 13px; line-height: 1.45; white-space: pre-wrap;
@@ -770,7 +791,7 @@
     border-radius: 999px; padding: 6px 10px; font-size: 12px; cursor: pointer;
   }
   .ask-suggest button:hover { border-color: var(--accent); color: var(--accent); }
-  .ask-form { display: flex; gap: 6px; margin-top: 12px; }
+  .ask-form { display: flex; gap: 6px; }
   .ask-form input {
     flex: 1; min-width: 0; height: 36px; border: 1px solid var(--line); border-radius: 8px;
     padding: 0 10px; background: var(--bg); color: var(--ink); font: inherit; outline: none;
@@ -1047,9 +1068,11 @@
           <button role="tab" data-tab="integrity" aria-selected="true">Scope of work</button>
           <button role="tab" data-tab="custody" aria-selected="false">Chain of custody</button>
           <button role="tab" data-tab="details" aria-selected="false">Details</button>
-          <button role="tab" data-tab="ask" aria-selected="false">Ask</button>
         </div>
-        <div id="d-panel" style="margin-top:14px"></div>
+        <div id="d-panel"></div>
+        <!-- The composer lives outside the scrolling panel so it stays on the
+             bottom edge of the sheet however long the reading gets. -->
+        <div class="sidefoot" id="d-foot" hidden></div>
       </section>
     </div>
   </div>
@@ -1370,7 +1393,7 @@
         { verdict: 'pass', what: 'Not filed before', detail: 'This file has not appeared on any other day or job.' },
         { verdict: 'unknown', what: 'Long enough to show the work', detail: '52 s is short for a walkthrough; not a failure on its own.' }
       ],
-      analysis: { state: 'skipped', reason: 'No after video has been filed for this day, so there is nothing to compare against.' },
+      analysis: { state: 'waiting_on_after', reason: 'No after video has been filed for this day, so there is nothing to compare against.' },
       custody: [
         { action: 'uploaded', by: 'Marisol Vega, Brightline Electric', role: 'subcontractor', at: '2026-08-06T08:05', detail: 'before · 2026-08-06' }
       ],
@@ -1513,7 +1536,10 @@
     sortKey: 'recorded',
     /** asc | desc — toggle on repeated clicks of the same header */
     sortDir: 'desc',
-    groupByJob: true, collapsed: {}, open: null, frame: 0, playing: null, tab: 'integrity'
+    groupByJob: true, collapsed: {}, open: null, frame: 0, playing: null, tab: 'integrity',
+    // Is the reader down in the conversation? While they are, the analysis
+    // log stops dragging the shared scroller back to the playhead.
+    askEngaged: false
   };
 
   var $ = function (sel) { return document.querySelector(sel); };
@@ -2644,15 +2670,24 @@
     openLoaded(item, tab);
   }
 
+  /**
+   * The line under the title. Its own function because the duration in it can
+   * be settled after the sheet is already open — a browser recording carries
+   * no length, and the server probes the file the first time it reads one.
+   */
+  function renderSheetMeta(item) {
+    $('#d-meta').innerHTML =
+      '<span class="id">' + esc(item.id) + '</span> · ' + esc(item.phase) + ' · ' +
+      dayLabel(item.workDate) + ' · ' + esc(item.company) + ' · ' + dur(item.duration) + ' · ' + mb(item.bytes);
+  }
+
   function openLoaded(item, tab) {
     state.open = item;
     state.frame = 0;
     stopPlay();
 
     $('#d-title').textContent = (JOBS[item.job] || { name: item.jobName || 'Job' }).name;
-    $('#d-meta').innerHTML =
-      '<span class="id">' + esc(item.id) + '</span> · ' + esc(item.phase) + ' · ' +
-      dayLabel(item.workDate) + ' · ' + esc(item.company) + ' · ' + dur(item.duration) + ' · ' + mb(item.bytes);
+    renderSheetMeta(item);
 
     // Prefer the real file when the portal minted a URL. Frames remain the
     // fallback for the demo artifact and for clips whose file URL expired.
@@ -2691,6 +2726,7 @@
 
     renderDictation(item);
     renderAnalysis(item);
+    state.askEngaged = false;
     setTab(tab || 'integrity');
     $('#detail').setAttribute('data-open', '1');
     $('#d-close').focus();
@@ -2953,6 +2989,28 @@
     if (pill) pill.textContent = text;
   }
 
+  /**
+   * Hold the bottom of the shared scroller across a change that makes the
+   * notes above it taller.
+   *
+   * The reading types itself in, and a note becoming due adds a whole row at
+   * once. With the thread underneath in the same scroller, that pushes the
+   * answer somebody just asked for below the fold. Measured *before* the
+   * mutation, because after it the reader already looks like somebody who
+   * scrolled up. Returns the release; call it once the DOM has changed.
+   *
+   * Only re-pins a reader who was at the bottom — scroll up to re-read an
+   * older answer and it leaves you there.
+   */
+  function threadAnchor() {
+    var panel = $('#d-panel');
+    if (!state.askEngaged || !panel) return function () {};
+    var atBottom = panel.scrollHeight - panel.scrollTop - panel.clientHeight <= 8;
+    return function () {
+      if (atBottom) panel.scrollTop = panel.scrollHeight;
+    };
+  }
+
   function fillNote(li, animate) {
     var span = li.querySelector('[data-full]');
     if (!span) {
@@ -2973,8 +3031,10 @@
     li.classList.add('writing');
     var i = 0;
     function tick() {
+      var release = threadAnchor();
       i += Math.max(2, Math.ceil(full.length / 40));
       span.textContent = full.slice(0, i);
+      release();
       if (i >= full.length) {
         li.classList.remove('writing');
         li.setAttribute('data-written', '1');
@@ -2993,6 +3053,7 @@
     if (!list) return;
     var items = list.querySelectorAll('[data-at]');
     if (!items.length) return;
+    var releaseAnchor = threadAnchor();
     var lastSeen = -1;
     Array.prototype.forEach.call(items, function (li, i) {
       if (seconds + 0.15 >= Number(li.getAttribute('data-at'))) lastSeen = i;
@@ -3015,7 +3076,14 @@
     else if (playing && lastSeen < items.length - 1) setAnalysisPill('Watching');
     else if (lastSeen === items.length - 1) setAnalysisPill('Caught up');
     else setAnalysisPill('Paused');
-    if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    // Following the playhead is right until somebody is reading the thread
+    // underneath it. Now that the notes and the conversation share one
+    // scroller, an unguarded scrollIntoView yanks a reader off the answer
+    // they asked for every time the next note lands.
+    if (cur && cur.scrollIntoView && !state.askEngaged) {
+      cur.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+    releaseAnchor();
   }
 
   function seekTo(seconds) {
@@ -3041,24 +3109,68 @@
     setFrame(best);
   }
 
+  /**
+   * The pill is a claim about the assistant, so it may not say "Writing…"
+   * for a clip nobody is writing about. A day that was skipped, failed, or
+   * never queued reads as "Not read" — which is what sends somebody to the
+   * sentence underneath instead of waiting for notes that are not coming.
+   */
+  function analysisPill(item, rowCount) {
+    var a = item.analysis || {};
+    if (rowCount) return 'Ready';
+    if (a.state === 'failed') return 'Failed';
+    if (a.state === 'queued') return 'Queued';
+    if (a.state === 'paired') return 'On the after';
+    if (a.state === 'done') return 'Ready';
+    return 'Not read';
+  }
+
+  /**
+   * What to say when the clip carries no reading.
+   *
+   * The server records why — no frames came out of the file, no model key on
+   * the box, no film filed yet — and that sentence arrives as
+   * `analysisReason`. The page used to ignore it and print "The assistant is
+   * reading this clip" forever, so a clip that was never going to be read
+   * looked like one that was seconds away.
+   */
+  function analysisReasonText(item) {
+    var a = item.analysis || {};
+    if (a.reason) return a.reason;
+    if (a.state === 'paired') {
+      return 'This is the before half of a day. Open the after clip for the dictation of what changed.';
+    }
+    if (a.state === 'queued') return 'Queued. The assistant has not read this clip yet.';
+    if (a.state === 'failed') {
+      return 'The reading of this clip failed after retries. The footage itself is unaffected.';
+    }
+    if (a.state === 'skipped') {
+      return 'The assistant has not read this clip, and no reason was recorded.';
+    }
+    return 'The assistant has not read this clip yet.';
+  }
+
+  /** Can this viewer set a reading going? The org can; a link holder cannot. */
+  function canRunAnalysis(item) {
+    var a = item.analysis || {};
+    if (!ORG_MODE || !item._remote) return false;
+    if (a.state === 'done' || a.state === 'queued' || a.state === 'paired') return false;
+    return Boolean(item.jobId && item.partyId && item.workDate);
+  }
+
   function renderScopeLog(item) {
     var a = item.analysis || {};
     var rows = analysisLog(item);
-    var pill = a.state === 'failed' ? 'Failed'
-      : (a.state === 'queued' || a.state === 'none' || !a.state) && !rows.length ? 'Writing…'
-      : a.state === 'paired' || a.state === 'skipped' ? 'Not yet'
-      : 'Ready';
-    var html = '<div class="alog-head"><h4>AI analysis</h4><span class="livepill" id="alog-pill">' + pill + '</span></div>';
+    var html = '<div class="alog-head"><h4>AI analysis</h4><span class="livepill" id="alog-pill">' +
+      analysisPill(item, rows.length) + '</span></div>';
     if (!rows.length) {
-      html += '<p class="footnote alog-wait">' +
-        esc(a.reason || (a.state === 'paired'
-          ? 'This is the before half of a day. Open the after clip for the dictation of what changed.'
-          : a.state === 'failed'
-            ? 'The dictation failed after retries. The footage itself is unaffected.'
-            : 'The assistant is reading this clip. Notes land here as the footage plays.')) +
-        '</p>';
+      html += '<p class="footnote alog-wait">' + esc(analysisReasonText(item)) + '</p>';
       if (a.pairedWith) {
         html += '<p><button class="navitem" style="width:auto;margin:6px 0 0;border:1px solid var(--line)" data-goto="' + a.pairedWith + '">Open ' + esc(a.pairedWith) + '</button></p>';
+      }
+      if (canRunAnalysis(item)) {
+        html += '<p><button class="navitem" id="read-clip" style="width:auto;margin:10px 0 0;border:1px solid var(--line);font-weight:600">Read this clip now</button></p>' +
+          '<p class="footnote" id="read-clip-msg" hidden></p>';
       }
       return html;
     }
@@ -3068,6 +3180,68 @@
         '<span class="t">' + dur(r.at) + '</span><span data-full="' + esc(r.text) + '"></span></li>';
     }).join('') + '</ul>';
     return html;
+  }
+
+  /**
+   * Ask the platform to read a clip that carries no reading.
+   *
+   * The same endpoint the operations screen uses, so there is one account of
+   * what an attempt does. Only in org mode: a share holder is a reviewer of
+   * evidence, not somebody who gets to spend the org's model budget.
+   */
+  function runAnalysis(item) {
+    var btn = document.getElementById('read-clip');
+    var msg = document.getElementById('read-clip-msg');
+    function say(text) {
+      if (!msg) return;
+      msg.hidden = false;
+      msg.textContent = text;
+    }
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Reading…';
+    }
+    say('The assistant is watching the clip. This takes a few seconds.');
+    fetch('/api/operations/shared/' + encodeURIComponent(item.jobId) + '/proof/' +
+      encodeURIComponent(item.workDate) + '/analyse', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ partyId: item.partyId })
+    })
+      .then(function (r) {
+        return r.json().then(function (body) {
+          if (!r.ok) throw new Error((body && (body.error || body.message)) || 'Could not read this clip.');
+          return body;
+        });
+      })
+      .then(function (body) {
+        if (body.outcome === 'skipped') {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Try again';
+          }
+          say(body.skippedBecause || 'The assistant could not read this clip.');
+          return;
+        }
+        // Re-fetch rather than patching in place: the reading brings a
+        // dictation, actions and a timeline, and half of them applied by hand
+        // is how two surfaces start disagreeing about one clip.
+        item._loaded = false;
+        say('Read. Loading the notes…');
+        return fetchRemoteDetail(item).then(function () {
+          if (!state.open || state.open.id !== item.id) return;
+          renderSheetMeta(item);
+          setTab('integrity');
+        });
+      })
+      .catch(function (err) {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Try again';
+        }
+        say(err && err.message ? err.message : 'Could not read this clip.');
+      });
   }
 
   var ASK_STOP = {
@@ -3110,14 +3284,26 @@
   function answerClipLocally(item, question) {
     var a = item.analysis || {};
     var q = String(question || '').trim();
-    if (a.state === 'paired' || a.state === 'waiting_on_after') {
-      return 'This is the before half of the day. Open the after clip — that is where the reading of what changed lives.';
-    }
-    if (a.state === 'queued') return 'This clip is still being read. Ask again once the dictation lands.';
-    if (a.state === 'failed') return 'The reading of this clip failed. The footage itself is unaffected.';
-    if (a.state === 'skipped') return 'There is no after video on file for this day, so there is nothing to compare against.';
     var rows = clipAskCorpus(item);
-    if (!rows.length) return 'This clip has not been read yet, so there is nothing to answer from.';
+    if (!rows.length) {
+      if (a.state === 'paired' || a.state === 'waiting_on_after') {
+        return 'This is the before half of the day. Open the after clip — that is where the reading of what changed lives.';
+      }
+      // Whatever the pipeline recorded beats anything this page could guess.
+      // "Skipped" is not a synonym for "no after video on file", and saying
+      // so about a clip the reviewer is looking at reads as a bug.
+      if (a.reason) {
+        // Terminate a reason that arrived without punctuation, so it does not
+        // run into the clause that follows it.
+        var why = /[.!?]$/.test(a.reason.trim()) ? a.reason.trim() : a.reason.trim() + '.';
+        return a.state === 'failed'
+          ? 'The reading of this clip failed — ' + why + ' The footage itself is unaffected.'
+          : 'The assistant has not read this clip — ' + why;
+      }
+      if (a.state === 'queued') return 'This clip is still being read. Ask again once the dictation lands.';
+      if (a.state === 'failed') return 'The reading of this clip failed. The footage itself is unaffected.';
+      return 'This clip has not been read yet, so there is nothing to answer from.';
+    }
     if (/what (happened|did|work)|did anything|anything happen|what('s| is) (visible|going on)|any work/i.test(q)) {
       var changes = (a.changes || []).filter(Boolean);
       var actions = (a.actions || []).map(function (act) { return act.description; }).filter(Boolean);
@@ -3172,7 +3358,15 @@
     }).catch(function () { cb(null, local); });
   }
 
-  function renderAsk(item) {
+  /**
+   * The conversation, under the reading it draws on.
+   *
+   * Ask used to be its own tab, which made "what does the assistant say
+   * happened here" and "let me ask the assistant what happened here" two
+   * different screens. They are one question, so they are one panel: the
+   * notes on top, the thread underneath, the box on the bottom edge.
+   */
+  function renderAskBlock(item) {
     var thread = ASK_THREADS[item.id] || [];
     var html = '<div class="alog-head"><h4>Ask this clip</h4></div>' +
       '<p class="footnote" style="margin:0 0 12px">Ask whether anything happened, or what the footage shows. The assistant answers from its reading of this clip.</p>' +
@@ -3188,53 +3382,90 @@
         html += '<div class="ask-bubble ' + esc(m.role) + '">' + esc(m.text) + '</div>';
       });
     }
-    html += '</div>' +
-      '<form id="ask-form" class="ask-form">' +
+    return html + '</div>';
+  }
+
+  /** The whole right-hand reading: notes, then the thread about them. */
+  function renderWorkPanel(item) {
+    return renderScopeLog(item) +
+      '<div class="askblock" id="ask-block">' + renderAskBlock(item) + '</div>';
+  }
+
+  function askComposerHTML() {
+    return '<form id="ask-form" class="ask-form">' +
       '<input id="ask-input" maxlength="1000" autocomplete="off" placeholder="Ask about this clip…" />' +
       '<button type="submit">Ask</button>' +
       '</form>';
-    return html;
   }
 
-  function bindAsk(item) {
+  /**
+   * Redraw only the thread.
+   *
+   * Redrawing the whole panel would wipe the analysis log's typing state and
+   * restart every note from the top, so a question asked at 0:40 would rewind
+   * the reading the answer is about.
+   */
+  function refreshAskBlock(item) {
+    var block = document.getElementById('ask-block');
+    if (!block) return;
+    block.innerHTML = renderAskBlock(item);
+    bindAskSuggestions(item);
+    var panel = $('#d-panel');
+    if (panel) panel.scrollTop = panel.scrollHeight;
+  }
+
+  function sendAsk(item, text) {
+    var q = String(text || '').trim();
+    if (q.length < 3) return;
+    state.askEngaged = true;
+    var thread = ASK_THREADS[item.id] || [];
+    thread.push({ role: 'user', text: q });
+    ASK_THREADS[item.id] = thread;
+    var history = thread.slice(0, -1).map(function (m) {
+      return { role: m.role === 'assistant' ? 'assistant' : 'user', text: m.text };
+    });
+    refreshAskBlock(item);
+    var host = document.getElementById('ask-thread');
+    if (host) {
+      var pending = document.createElement('div');
+      pending.className = 'ask-bubble assistant pending';
+      pending.textContent = 'Reading the clip…';
+      host.appendChild(pending);
+      var panel = $('#d-panel');
+      if (panel) panel.scrollTop = panel.scrollHeight;
+    }
+    askClip(item, q, history, function (_err, answer) {
+      thread.push({ role: 'assistant', text: answer });
+      ASK_THREADS[item.id] = thread;
+      if (state.open && state.open.id === item.id) refreshAskBlock(item);
+    });
+  }
+
+  function bindAskSuggestions(item) {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-ask]'), function (btn) {
+      btn.addEventListener('click', function () { sendAsk(item, btn.getAttribute('data-ask')); });
+    });
+  }
+
+  /** Bind the composer once, in the footer, where it outlives every redraw. */
+  function bindAskComposer(item) {
     var form = document.getElementById('ask-form');
     var input = document.getElementById('ask-input');
-    function send(text) {
-      var q = String(text || '').trim();
-      if (q.length < 3) return;
-      var thread = ASK_THREADS[item.id] || [];
-      thread.push({ role: 'user', text: q });
-      ASK_THREADS[item.id] = thread;
-      var history = thread.slice(0, -1).map(function (m) {
-        return { role: m.role === 'assistant' ? 'assistant' : 'user', text: m.text };
-      });
-      setTab('ask');
-      var host = document.getElementById('ask-thread');
-      if (host) {
-        var pending = document.createElement('div');
-        pending.className = 'ask-bubble assistant pending';
-        pending.textContent = 'Reading the clip…';
-        host.appendChild(pending);
-      }
-      askClip(item, q, history, function (_err, answer) {
-        thread.push({ role: 'assistant', text: answer });
-        ASK_THREADS[item.id] = thread;
-        if (state.open && state.open.id === item.id && state.tab === 'ask') setTab('ask');
-      });
-    }
     if (form) {
       form.addEventListener('submit', function (ev) {
         ev.preventDefault();
-        send(input && input.value);
+        sendAsk(item, input && input.value);
+        if (input) input.value = '';
       });
     }
-    Array.prototype.forEach.call(document.querySelectorAll('[data-ask]'), function (btn) {
-      btn.addEventListener('click', function () { send(btn.getAttribute('data-ask')); });
-    });
-    if (input) setTimeout(function () { input.focus(); }, 0);
+    bindAskSuggestions(item);
   }
 
   function setTab(tab) {
+    // 'ask' is no longer a tab of its own — the thread lives under the
+    // reading it is about. Anything still asking for it lands on the merged
+    // panel rather than on a blank one.
+    if (tab === 'ask') tab = 'integrity';
     state.tab = tab;
     Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
       b.setAttribute('aria-selected', String(b.dataset.tab === tab));
@@ -3242,14 +3473,33 @@
     var item = state.open;
     if (!item) return;
     var el = $('#d-panel');
+    var foot = document.getElementById('d-foot');
+    // The composer belongs to the reading panel only; Details and the custody
+    // log have nothing to ask about.
+    if (foot) {
+      if (tab === 'integrity') {
+        foot.hidden = false;
+        foot.innerHTML = askComposerHTML();
+      } else {
+        foot.hidden = true;
+        foot.innerHTML = '';
+      }
+    }
 
     if (tab === 'integrity') {
-      el.innerHTML = renderScopeLog(item);
+      el.innerHTML = renderWorkPanel(item);
       Array.prototype.forEach.call(el.querySelectorAll('#alog [data-at]'), function (li) {
-        li.addEventListener('click', function () { seekTo(Number(li.getAttribute('data-at'))); });
+        li.addEventListener('click', function () {
+          // Clicking a note is asking to follow the reading again.
+          state.askEngaged = false;
+          seekTo(Number(li.getAttribute('data-at')));
+        });
       });
       var goto = el.querySelector('[data-goto]');
       if (goto) goto.addEventListener('click', function () { open(goto.dataset.goto); });
+      var read = el.querySelector('#read-clip');
+      if (read) read.addEventListener('click', function () { runAnalysis(item); });
+      bindAskComposer(item);
       syncAnalysisLog(currentPlayhead());
       return;
     }
@@ -3263,12 +3513,6 @@
       '<p class="footnote">Every access is logged at the moment a viewing link is minted, including external ' +
       'shares. The log is append-only: entries cannot be edited or removed, by anyone, including the account ' +
       'that owns the job.</p>';
-      return;
-    }
-
-    if (tab === 'ask') {
-      el.innerHTML = renderAsk(item);
-      bindAsk(item);
       return;
     }
 
@@ -3819,6 +4063,8 @@
       tier: raw.tier || 1,
       hold: raw.legalHold ? { on: true, reason: 'This clip is under legal hold. Retention cannot delete it while the hold stands.', by: '', at: '' } : null,
       checks: raw.checks || [],
+      jobId: raw.jobId || null,
+      partyId: raw.partyId || null,
       analysis: raw.analysisState === 'done'
         ? {
             state: 'done',
@@ -3836,15 +4082,14 @@
             windowsTotal: raw.analysis ? raw.analysis.windowsTotal : null,
             windowsRead: raw.analysis ? raw.analysis.windowsRead : null
           }
-        : raw.analysisState === 'paired'
-          ? { state: 'paired' }
-          : raw.analysisState === 'waiting_on_after'
-            ? { state: 'skipped', reason: 'No after video has been filed for this day, so there is nothing to compare against.' }
-            : raw.analysisState === 'queued'
-              ? { state: 'queued', reason: 'Queued for analysis. The model has not read the day yet.' }
-              : raw.analysisState === 'failed'
-                ? { state: 'failed' }
-                : { state: 'none' },
+        // Every unread state keeps its own name and carries the server's
+        // recorded reason. The old shape folded 'waiting_on_after' into
+        // 'skipped' and dropped 'skipped' on the floor entirely, so a clip
+        // the pipeline could not read rendered as one nobody had asked about.
+        : {
+            state: raw.analysisState || 'none',
+            reason: raw.analysisReason || null
+          },
       custody: [],
       _loaded: false
     };
@@ -3875,6 +4120,13 @@
           item.analysis = mapped.analysis;
           item.checks = mapped.checks;
           item.hold = mapped.hold;
+          item.jobId = mapped.jobId;
+          item.partyId = mapped.partyId;
+          // A browser recording uploads with no duration in its header, so
+          // the list row can say 0:00. The server settles it by probing the
+          // file; take the settled answer when there is one, or the sheet
+          // keeps claiming a real clip is zero seconds long.
+          if (mapped.duration) item.duration = mapped.duration;
         }
         item.custody = (payload.custody || []).map(function (c) {
           return {

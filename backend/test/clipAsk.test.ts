@@ -83,6 +83,77 @@ test('a clip still being read says so instead of inventing work', () => {
   assert.match(answer, /still being read/);
 });
 
+/**
+ * The bug this pins: every skipped clip used to be told "there is no after
+ * video on file for this day". Said to somebody looking at a perfectly good
+ * after clip, that is not a hedge — it is the product claiming their footage
+ * does not exist. The pipeline records why it stopped; that sentence wins.
+ */
+test('a skipped clip gives the reason the pipeline recorded, not a guess about pairing', () => {
+  const answer = groundedAnswerFromClip('What happened in this clip?', {
+    analysisState: 'skipped',
+    phase: 'after',
+    analysisReason: 'Model access is not configured on this server.',
+  });
+  assert.match(answer, /model access is not configured/i);
+  assert.doesNotMatch(answer, /no after video/i);
+});
+
+test('a skipped clip with no recorded reason says that, rather than blaming pairing', () => {
+  const answer = groundedAnswerFromClip('What happened in this clip?', {
+    analysisState: 'skipped',
+    phase: 'after',
+  });
+  assert.doesNotMatch(answer, /no after video/i);
+  assert.match(answer, /has not read this clip/);
+});
+
+test('a failed reading keeps the footage above suspicion', () => {
+  const answer = groundedAnswerFromClip('What happened?', {
+    analysisState: 'failed',
+    phase: 'after',
+    analysisReason: 'The model reply was not usable.',
+  });
+  assert.match(answer, /model reply was not usable/i);
+  assert.match(answer, /footage itself is unaffected/);
+});
+
+test('the reason survives the trip from the serialized list item', () => {
+  const record = clipRecordFromEvidenceItem({
+    workDate: '2026-08-22',
+    phase: 'after',
+    analysisState: 'skipped',
+    analysisReason: 'No frames could be read out of the day film.',
+    analysis: null,
+  });
+  assert.equal(record.analysisReason, 'No frames could be read out of the day film.');
+  assert.match(
+    groundedAnswerFromClip('what happened in this clip', record),
+    /no frames could be read/i,
+  );
+});
+
+/**
+ * A clip with no reading still carries a work date and a crew name — enough
+ * for a model to write a confident paragraph about footage nobody looked at.
+ * The unread sentence is the honest answer, so the model is never asked.
+ */
+test('an unread clip is answered without a model round trip', async () => {
+  const result = await answerFromClip({
+    question: 'What work is visible?',
+    record: {
+      workDate: '2026-08-22',
+      phase: 'after',
+      company: 'Brightline Electric',
+      durationSeconds: 2,
+      analysisState: 'skipped',
+      analysisReason: 'No frames could be read out of the day film.',
+    },
+  });
+  assert.equal(result.model, null);
+  assert.match(result.answer, /no frames could be read/i);
+});
+
 test('clipRecordFromEvidenceItem copies the office reading, not the list chrome', () => {
   const record = clipRecordFromEvidenceItem({
     workDate: '2026-08-05',

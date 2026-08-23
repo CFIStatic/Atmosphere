@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  analysisReasonOf,
   analysisStateOf,
   downloadDecision,
   labelsForProof,
@@ -157,6 +158,67 @@ test('serialization: labels attached, integrity computed, flag derived', () => {
   // No still was passed, so the row carries no poster and the portal draws
   // its placeholder rather than pointing an <img> at nothing.
   assert.equal(item.posterUrl, null);
+});
+
+/**
+ * "Why is there nothing here" is the question a blank Scope of work panel
+ * puts in a reviewer's head, and the portal used to answer it by guessing.
+ * The guess was wrong in the worst direction: every skip claimed the day had
+ * no after video, including days whose after clip was on the screen.
+ */
+test('an unread clip carries the reason the pipeline recorded', () => {
+  assert.equal(analysisReasonOf({ state: 'done' }), null);
+
+  assert.match(
+    analysisReasonOf({ state: 'skipped', analysisError: 'No frames could be read out of the day film.' })!,
+    /No frames could be read/,
+  );
+  // A skip with nothing recorded says so — it does not borrow the pairing
+  // sentence, which would be a claim about a file rather than about a run.
+  assert.doesNotMatch(analysisReasonOf({ state: 'skipped' })!, /after clip|after video/i);
+
+  assert.match(analysisReasonOf({ state: 'waiting_on_after' })!, /No after clip has been filed/);
+  assert.match(analysisReasonOf({ state: 'paired' })!, /after clip/);
+  // A before's sentence is about pairing, never about a stale error left on
+  // the row by an earlier run.
+  assert.match(
+    analysisReasonOf({ state: 'paired', analysisError: 'Model access is not configured.' })!,
+    /after clip/,
+  );
+  assert.match(analysisReasonOf({ state: 'failed' })!, /footage itself is unaffected/);
+  assert.match(
+    analysisReasonOf({ state: 'none', narrationError: 'FFprobe could not open the file.' })!,
+    /FFprobe/,
+  );
+});
+
+test('serialization hands the portal the recorded reason for a skipped read', () => {
+  const item = serializeEvidence({
+    proof: {
+      id: 'p2',
+      job_id: 'j1',
+      party_id: 'pt1',
+      phase: 'after',
+      work_date: '2026-08-22',
+      received_at: '2026-08-22T20:03:00Z',
+      duration_seconds: null,
+      byte_size: '13000000',
+      checks: [],
+      analysis_status: 'skipped',
+      analysis_error: 'No frames could be read out of the day film.',
+      legal_hold: false,
+    },
+    jobName: 'Cedar Ridge',
+    jobNumber: 1038,
+    company: 'Delgado Roofing',
+    contactName: 'Hector Delgado',
+    tier: 1,
+    dayHasAfter: true,
+  });
+
+  assert.equal(item.analysisState, 'skipped');
+  assert.equal(item.analysis, null);
+  assert.match(item.analysisReason!, /No frames could be read/);
 });
 
 test('serialization: a still out of the clip rides along as the poster', () => {

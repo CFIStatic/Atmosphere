@@ -12,6 +12,7 @@ import {
 } from '../shared/clipAsk.js';
 import {
   downloadDecision,
+  analysisReasonOf,
   serializeEvidence,
   shareRecipientAllowed,
   shareState,
@@ -50,7 +51,8 @@ const PROOF_BUCKET = 'job-proofs';
 const PORTAL_PROOF_SELECT =
   'id, org_id, job_id, party_id, work_date, phase, storage_path, byte_size, duration_seconds, ' +
   'content_hash, captured_at, received_at, lat, lon, accuracy_m, state, checks, ai_summary, ' +
-  'ai_findings, ai_model, ai_material_change, analysis_status, legal_hold, retention_until, labels, ' +
+  'ai_findings, ai_model, ai_material_change, analysis_status, analysis_error, legal_hold, ' +
+  'retention_until, labels, ' +
   'narration, narration_text, narration_status, narration_error, actions';
 
 export const evidencePortalRouter = Router();
@@ -161,6 +163,10 @@ async function assembleLibrary(client: any, orgId: string, proofs: any[]) {
 function fixPairing(item: any, siblings: Array<{ phase: string }>) {
   if (item.phase === 'before') {
     item.analysisState = siblings.some((s) => s.phase === 'after') ? 'paired' : 'waiting_on_after';
+    // The reason travels with the state. Recomputing it here keeps the
+    // sentence the portal prints from describing the state this row had
+    // before its siblings were loaded.
+    item.analysisReason = analysisReasonOf({ state: item.analysisState });
   }
   return item;
 }
