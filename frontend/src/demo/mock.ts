@@ -2837,6 +2837,32 @@ const routes: Array<[string, RegExp, Handler]> = [
     }
     return { body: { ok: true } };
   }],
+  ['POST', /^\/api\/evidence-portal\/evidence\/([^/]+)\/ask$/, (m, b) => {
+    const question = String(b.question ?? '').trim();
+    let found: { aiSummary?: string | null; workDate?: string } | undefined;
+    for (const items of Object.values(EVIDENCE)) {
+      found = (items as any[]).find((i) => i.id === m[1]);
+      if (found) break;
+    }
+    const summary = found?.aiSummary;
+    const happen = /did anything|anything happen|what (happened|work)|what is visible/i.test(question);
+    const answer = !summary
+      ? 'This clip has not been read yet, so there is nothing to answer from.'
+      : happen
+        ? `Yes — the footage${found?.workDate ? ` on ${found.workDate}` : ''} shows: ${summary}`
+        : summary.toLowerCase().includes(question.toLowerCase().slice(0, 12))
+          ? summary
+          : 'The footage on file does not show that.';
+    return { status: 201, body: { answer, model: null } };
+  }],
+  ['POST', /^\/api\/verifier-share\/([^/]+)\/evidence\/([^/]+)\/ask$/, (_m, b) => {
+    const question = String(b.question ?? '').trim();
+    const happen = /did anything|anything happen|what (happened|work)|what is visible/i.test(question);
+    const answer = happen
+      ? 'Yes — the footage on this shared clip shows the work described in the reading.'
+      : 'The footage on file does not show that.';
+    return { status: 201, body: { answer, model: null } };
+  }],
 
   /* ------------------------------------------- progress shares (guest) */
   ['GET', /^\/api\/progress-share\/([\w-]+)$/, (m) => {

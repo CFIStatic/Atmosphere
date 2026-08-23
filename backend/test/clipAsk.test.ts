@@ -1,0 +1,104 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  answerFromClip,
+  clipRecordFromEvidenceItem,
+  formatClipTime,
+  groundedAnswerFromClip,
+  type ClipAskRecord,
+} from '../src/shared/clipAsk.js';
+
+const cedarAfter: ClipAskRecord = {
+  workDate: '2026-08-05',
+  phase: 'after',
+  company: 'Delgado Roofing',
+  durationSeconds: 143,
+  analysisState: 'done',
+  dictation:
+    'Looking at the after clip against the morning before: the temporary tarp is gone from the north slope, the decking is bare and dry, and new underlayment covers roughly two thirds of what was filmed. Debris is bagged at the driveway. The camera never gets close enough to judge sheathing replacement or the ridge.',
+  summary: 'The north slope is stripped to decking and the temporary tarp has been removed.',
+  changes: [
+    'Tarp removed from the north slope',
+    'Decking exposed, no visible sheathing damage',
+    'Underlayment laid across approximately two thirds of the slope',
+  ],
+  actions: [
+    { atSeconds: 12, action: 'remove', description: 'Temporary tarp pulled off the north slope; decking exposed.' },
+    { atSeconds: 48, action: 'position', description: 'Synthetic underlayment being laid across mid-slope.' },
+  ],
+  dictationEntries: [
+    { atSeconds: 12, text: 'Opens on the north slope — tarp gone, deck exposed.' },
+    { atSeconds: 48, text: 'Underlayment rows visible mid-slope; debris staged below.' },
+    { atSeconds: 110, text: 'Driveway bags and ladder; no close pass on the ridge.' },
+  ],
+  scope: [
+    { title: 'Remove temporary tarp', verdict: 'appears_complete' },
+    { title: 'DO NOT touch the skylights', verdict: 'not_visible', because: 'Passed in four windows, worked in none.' },
+  ],
+  couldNotTell: ['Whether any decking was replaced — no close footage of the sheathing.'],
+};
+
+test('formatClipTime: minutes for short clips, hours for a workday', () => {
+  assert.equal(formatClipTime(12), '0:12');
+  assert.equal(formatClipTime(110), '1:50');
+  assert.equal(formatClipTime(4620), '1:17:00');
+  assert.equal(formatClipTime(null), null);
+});
+
+test('did anything happen cites the changes on the clip, with the work date', () => {
+  const answer = groundedAnswerFromClip('Did anything happen?', cedarAfter);
+  assert.match(answer, /Yes/);
+  assert.match(answer, /2026-08-05/);
+  assert.match(answer, /Tarp removed/);
+  assert.match(answer, /Underlayment/);
+});
+
+test('a specific question cites the timestamped beat it was drawn from', () => {
+  const answer = groundedAnswerFromClip('Was the tarp removed?', cedarAfter);
+  assert.match(answer, /tarp/i);
+  assert.match(answer, /0:12/);
+});
+
+test('a question about skylights cites the scope reading rather than inventing contact', () => {
+  const answer = groundedAnswerFromClip('Did they touch the skylights?', cedarAfter);
+  assert.match(answer, /skylight/i);
+  assert.doesNotMatch(answer, /does not show that/);
+});
+
+test('a before clip without a reading points at the after', () => {
+  const answer = groundedAnswerFromClip('Did anything happen?', {
+    analysisState: 'paired',
+    phase: 'before',
+  });
+  assert.match(answer, /after clip/);
+});
+
+test('a clip still being read says so instead of inventing work', () => {
+  const answer = groundedAnswerFromClip('Did anything happen?', { analysisState: 'queued' });
+  assert.match(answer, /still being read/);
+});
+
+test('clipRecordFromEvidenceItem copies the office reading, not the list chrome', () => {
+  const record = clipRecordFromEvidenceItem({
+    workDate: '2026-08-05',
+    phase: 'after',
+    company: 'Delgado Roofing',
+    durationSeconds: 143,
+    analysisState: 'done',
+    analysis: {
+      dictation: 'Tarp is gone.',
+      summary: 'North slope stripped.',
+      changes: ['Tarp removed'],
+      dictationEntries: [{ atSeconds: 12, text: 'Tarp gone.' }],
+    },
+  });
+  assert.equal(record.dictation, 'Tarp is gone.');
+  assert.equal(record.changes?.[0], 'Tarp removed');
+  assert.equal(record.dictationEntries?.[0]?.text, 'Tarp gone.');
+});
+
+test('answerFromClip falls back to the grounded reading when no model is configured', async () => {
+  const result = await answerFromClip({ question: 'Did anything happen?', record: cedarAfter });
+  assert.equal(result.model, null);
+  assert.match(result.answer, /Tarp removed/);
+});

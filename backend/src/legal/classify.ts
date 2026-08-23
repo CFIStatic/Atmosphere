@@ -108,6 +108,20 @@ const RULES: Rule[] = [
   },
   {
     method: 'POST',
+    pattern: new RegExp(`^/api/evidence-portal/evidence/([^/]+)/ask/?$`),
+    action: 'evidence.asked',
+    resourceType: 'proof',
+    resourceParam: 1,
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/verifier-share\/[^/]+\/evidence\/([^/]+)\/ask\/?$/,
+    action: 'evidence.asked',
+    resourceType: 'proof',
+    resourceParam: 1,
+  },
+  {
+    method: 'POST',
     pattern: new RegExp(`^/api/legal/holds/?$`),
     action: 'legal.hold_created',
     resourceType: 'legal_hold',

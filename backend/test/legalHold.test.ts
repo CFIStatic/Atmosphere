@@ -60,6 +60,21 @@ test('classifyRequest names video delete and upload', () => {
   assert.equal(uploaded.action, 'video.uploaded');
 });
 
+test('classifyRequest names asking a clip in the evidence portal', () => {
+  const orgAsk = classifyRequest(
+    fakeReq('POST', `/api/evidence-portal/evidence/${ORG}/ask`),
+  );
+  assert.equal(orgAsk.action, 'evidence.asked');
+  assert.equal(orgAsk.resourceType, 'proof');
+  assert.equal(orgAsk.resourceId, ORG);
+
+  const shareAsk = classifyRequest(
+    fakeReq('POST', `/api/verifier-share/share-token/evidence/${ORG}/ask`),
+  );
+  assert.equal(shareAsk.action, 'evidence.asked');
+  assert.equal(shareAsk.resourceId, ORG);
+});
+
 test('user delete hides the catalog object and the vault keeps it', async () => {
   resetLegalStoreForTests();
   resetMediaCatalogForTests();

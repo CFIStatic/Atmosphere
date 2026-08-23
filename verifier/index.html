@@ -707,8 +707,8 @@
   .side { padding: 16px 18px 24px; overflow-y: auto; min-height: 0; }
   .tabs { display: flex; gap: 3px; background: var(--line-soft); padding: 3px; border-radius: 8px; }
   .tabs button {
-    flex: 1; border: 0; background: none; padding: 7px 6px; border-radius: 6px;
-    font-size: 12.5px; cursor: pointer; color: var(--muted); font-weight: 550;
+    flex: 1; min-width: 0; border: 0; background: none; padding: 7px 4px; border-radius: 6px;
+    font-size: 12px; cursor: pointer; color: var(--muted); font-weight: 550;
   }
   .tabs button[aria-selected="true"] { background: var(--panel); color: var(--ink); font-weight: 650; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
 
@@ -741,6 +741,46 @@
   }
   .alog .t { font-family: var(--mono); font-size: 11px; color: var(--faint); padding-top: 2px; }
   .alog li.on .t { color: var(--accent); font-weight: 700; }
+  .alog li.writing [data-full]::after {
+    content: ''; display: inline-block; width: 6px; height: 12px; margin-left: 3px;
+    background: var(--accent); vertical-align: text-bottom;
+    animation: alog-caret 1s step-end infinite;
+  }
+  @keyframes alog-caret { 50% { opacity: 0; } }
+  .alog-wait { margin-top: 4px; }
+  .alog-wait[hidden] { display: none; }
+
+  .ask-thread { display: flex; flex-direction: column; gap: 10px; min-height: 88px; }
+  .ask-bubble {
+    max-width: 100%; padding: 8px 10px; border-radius: 10px;
+    font-size: 13px; line-height: 1.45; white-space: pre-wrap;
+  }
+  .ask-bubble.user {
+    align-self: flex-end; background: var(--accent); color: #fff;
+    border-bottom-right-radius: 4px;
+  }
+  .ask-bubble.assistant {
+    align-self: flex-start; background: var(--line-soft); color: var(--ink);
+    border-bottom-left-radius: 4px;
+  }
+  .ask-bubble.pending { color: var(--muted); font-style: italic; }
+  .ask-suggest { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ask-suggest button {
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink-2);
+    border-radius: 999px; padding: 6px 10px; font-size: 12px; cursor: pointer;
+  }
+  .ask-suggest button:hover { border-color: var(--accent); color: var(--accent); }
+  .ask-form { display: flex; gap: 6px; margin-top: 12px; }
+  .ask-form input {
+    flex: 1; min-width: 0; height: 36px; border: 1px solid var(--line); border-radius: 8px;
+    padding: 0 10px; background: var(--bg); color: var(--ink); font: inherit; outline: none;
+  }
+  .ask-form input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .ask-form button[type="submit"] {
+    border: 0; background: var(--accent); color: #fff; border-radius: 8px;
+    padding: 0 14px; font-weight: 650; cursor: pointer; flex: none;
+  }
+  .ask-form button[type="submit"]:disabled { opacity: .55; cursor: default; }
 
   .kv { display: grid; grid-template-columns: 116px minmax(0,1fr); gap: 6px 12px; font-size: 12.5px; }
   .kv dt { color: var(--muted); }
@@ -1007,6 +1047,7 @@
           <button role="tab" data-tab="integrity" aria-selected="true">Scope of work</button>
           <button role="tab" data-tab="custody" aria-selected="false">Chain of custody</button>
           <button role="tab" data-tab="details" aria-selected="false">Details</button>
+          <button role="tab" data-tab="ask" aria-selected="false">Ask</button>
         </div>
         <div id="d-panel" style="margin-top:14px"></div>
       </section>
@@ -1150,7 +1191,9 @@
         dictation: 'Looking at the after clip against the morning before: the temporary tarp is gone from the north slope, the decking is bare and dry, and new underlayment covers roughly two thirds of what was filmed. Debris is bagged at the driveway. The camera never gets close enough to judge sheathing replacement or the ridge.',
         dictationEntries: [
           { atSeconds: 12, text: 'Opens on the north slope — tarp gone, deck exposed.' },
+          { atSeconds: 28, text: 'Walking the eave; old felt still showing at the edges.' },
           { atSeconds: 48, text: 'Underlayment rows visible mid-slope; debris staged below.' },
+          { atSeconds: 78, text: 'Valley in frame; no close pass on fastener pattern.' },
           { atSeconds: 110, text: 'Driveway bags and ladder; no close pass on the ridge.' }
         ],
         actions: [
@@ -1470,7 +1513,7 @@
     sortKey: 'recorded',
     /** asc | desc — toggle on repeated clicks of the same header */
     sortDir: 'desc',
-    groupByJob: true, collapsed: {}, open: null, frame: 0, playing: null
+    groupByJob: true, collapsed: {}, open: null, frame: 0, playing: null, tab: 'integrity'
   };
 
   var $ = function (sel) { return document.querySelector(sel); };
@@ -2584,6 +2627,8 @@
         vid.addEventListener('timeupdate', function () { syncAnalysisLog(vid.currentTime); });
         vid.addEventListener('seeked', function () { syncAnalysisLog(vid.currentTime); });
         vid.addEventListener('play', function () { syncAnalysisLog(vid.currentTime); });
+        vid.addEventListener('pause', function () { syncAnalysisLog(vid.currentTime); });
+        vid.addEventListener('ended', function () { syncAnalysisLog(vid.currentTime); });
       }
     } else {
       item._frames = item._remoteFrames && item._remoteFrames.length
@@ -2606,6 +2651,7 @@
     setTab(tab || 'integrity');
     $('#detail').setAttribute('data-open', '1');
     $('#d-close').focus();
+    startLivePlayback(item);
   }
 
   function renderDictation(item) {
@@ -2673,6 +2719,35 @@
 
   function stopPlay() {
     if (state.playing) { clearInterval(state.playing); state.playing = null; }
+  }
+
+  function startFramePlayback() {
+    if (state.playing) return;
+    state.playing = setInterval(function () {
+      var item = state.open;
+      if (!item || !item._frames) return stopPlay();
+      var next = state.frame + 1;
+      if (next >= item._frames.length) { stopPlay(); syncAnalysisLog(currentPlayhead()); return; }
+      setFrame(next);
+    }, 700);
+  }
+
+  function startLivePlayback(item) {
+    if (!item) return;
+    if ((item.duration || 0) > 600) return;
+    var host = $('#d-frame');
+    var vid = host && host.querySelector('video');
+    if (vid) {
+      var attempt = vid.play();
+      if (attempt && attempt.catch) {
+        attempt.catch(function () {
+          vid.muted = true;
+          vid.play().catch(function () {});
+        });
+      }
+      return;
+    }
+    if (item._frames && item._frames.length > 1) startFramePlayback();
   }
 
   function renderAnalysis(item) {
@@ -2761,6 +2836,8 @@
     el.innerHTML = html;
   }
 
+  var ASK_THREADS = {};
+
   function analysisLog(item) {
     var a = item.analysis || {};
     var rows = [];
@@ -2789,6 +2866,14 @@
         add(Math.round((i + 1) * d / (a.changes.length + 1)), c, 'change');
       });
     }
+    if (rows.length < 5) {
+      var prose = a.dictation || a.summary || '';
+      String(prose).split(/(?<=[.!?])\s+/).forEach(function (sentence, i, all) {
+        var s = String(sentence || '').trim();
+        if (!s) return;
+        add(Math.round((i + 0.5) * (item.duration || 120) / Math.max(all.length, 1)), s, 'read');
+      });
+    }
     if (rows.length < 2 && a.scope && a.scope.length) {
       var d2 = item.duration || 120;
       a.scope.forEach(function (s, i) {
@@ -2800,8 +2885,6 @@
         );
       });
     }
-    if (!rows.length && (a.dictation || a.summary)) add(0, a.dictation || a.summary, 'read');
-    if (!rows.length && a.reason) add(0, a.reason, 'note');
     rows.sort(function (x, y) { return x.at - y.at; });
     return rows;
   }
@@ -2815,6 +2898,53 @@
     return 0;
   }
 
+  function isFootagePlaying() {
+    if (state.playing) return true;
+    var host = $('#d-frame');
+    var vid = host && host.querySelector('video');
+    return Boolean(vid && !vid.paused && !vid.ended);
+  }
+
+  function setAnalysisPill(text) {
+    var pill = document.getElementById('alog-pill');
+    if (pill) pill.textContent = text;
+  }
+
+  function fillNote(li, animate) {
+    var span = li.querySelector('[data-full]');
+    if (!span) {
+      li.setAttribute('data-written', '1');
+      return;
+    }
+    var full = span.getAttribute('data-full') || '';
+    if (li._typeTimer) {
+      clearTimeout(li._typeTimer);
+      li._typeTimer = null;
+    }
+    if (!animate || li.getAttribute('data-written')) {
+      span.textContent = full;
+      li.classList.remove('writing');
+      li.setAttribute('data-written', '1');
+      return;
+    }
+    li.classList.add('writing');
+    var i = 0;
+    function tick() {
+      i += Math.max(2, Math.ceil(full.length / 40));
+      span.textContent = full.slice(0, i);
+      if (i >= full.length) {
+        li.classList.remove('writing');
+        li.setAttribute('data-written', '1');
+        li._typeTimer = null;
+        setAnalysisPill(isFootagePlaying() ? 'Watching' : 'Paused');
+        return;
+      }
+      li._typeTimer = setTimeout(tick, 18);
+    }
+    span.textContent = '';
+    tick();
+  }
+
   function syncAnalysisLog(seconds) {
     var list = document.getElementById('alog');
     if (!list) return;
@@ -2822,15 +2952,26 @@
     if (!items.length) return;
     var lastSeen = -1;
     Array.prototype.forEach.call(items, function (li, i) {
-      if (seconds >= Number(li.getAttribute('data-at'))) lastSeen = i;
+      if (seconds + 0.15 >= Number(li.getAttribute('data-at'))) lastSeen = i;
     });
-    if (lastSeen < 0) lastSeen = 0;
+    var empty = document.getElementById('alog-empty');
+    var playing = isFootagePlaying();
     Array.prototype.forEach.call(items, function (li, i) {
-      li.classList.toggle('on', i === lastSeen);
+      var due = i <= lastSeen;
+      li.classList.toggle('on', i === lastSeen && lastSeen >= 0);
       li.classList.toggle('seen', i < lastSeen);
-      li.classList.toggle('soon', i > lastSeen);
+      li.classList.toggle('soon', !due);
+      if (!due) return;
+      if (li.getAttribute('data-written') || li.classList.contains('writing')) return;
+      fillNote(li, playing && i === lastSeen);
     });
-    var cur = items[lastSeen];
+    if (empty) empty.hidden = lastSeen >= 0;
+    var cur = lastSeen >= 0 ? items[lastSeen] : null;
+    if (lastSeen < 0) setAnalysisPill(playing ? 'Writing…' : 'Ready');
+    else if (cur && cur.classList.contains('writing')) setAnalysisPill('Writing…');
+    else if (playing && lastSeen < items.length - 1) setAnalysisPill('Watching');
+    else if (lastSeen === items.length - 1) setAnalysisPill('Caught up');
+    else setAnalysisPill('Paused');
     if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
@@ -2860,28 +3001,197 @@
   function renderScopeLog(item) {
     var a = item.analysis || {};
     var rows = analysisLog(item);
-    var writing = a.state === 'queued' || a.state === 'none';
-    var html = '<div class="alog-head"><h4>AI analysis</h4>' +
-      (writing
-        ? '<span class="livepill">Writing…</span>'
-        : a.state === 'failed'
-          ? '<span class="livepill">Failed</span>'
-          : '<span class="livepill">Reading the footage</span>') +
-      '</div>';
+    var pill = a.state === 'failed' ? 'Failed'
+      : (a.state === 'queued' || a.state === 'none' || !a.state) && !rows.length ? 'Writing…'
+      : a.state === 'paired' || a.state === 'skipped' ? 'Not yet'
+      : 'Ready';
+    var html = '<div class="alog-head"><h4>AI analysis</h4><span class="livepill" id="alog-pill">' + pill + '</span></div>';
     if (!rows.length) {
-      html += '<p class="footnote" style="margin-top:4px">' +
-        esc(a.reason || 'The assistant is reading this clip. Notes land here as the footage plays.') +
+      html += '<p class="footnote alog-wait">' +
+        esc(a.reason || (a.state === 'paired'
+          ? 'This is the before half of a day. Open the after clip for the dictation of what changed.'
+          : a.state === 'failed'
+            ? 'The dictation failed after retries. The footage itself is unaffected.'
+            : 'The assistant is reading this clip. Notes land here as the footage plays.')) +
         '</p>';
+      if (a.pairedWith) {
+        html += '<p><button class="navitem" style="width:auto;margin:6px 0 0;border:1px solid var(--line)" data-goto="' + a.pairedWith + '">Open ' + esc(a.pairedWith) + '</button></p>';
+      }
       return html;
     }
-    html += '<ul class="alog" id="alog">' + rows.map(function (r, i) {
-      return '<li data-at="' + r.at + '" class="' + (i === 0 ? 'on' : 'soon') + '">' +
-        '<span class="t">' + dur(r.at) + '</span><span>' + esc(r.text) + '</span></li>';
+    html += '<p class="footnote alog-wait" id="alog-empty">Play the clip. Notes land here as the footage plays.</p>';
+    html += '<ul class="alog" id="alog">' + rows.map(function (r) {
+      return '<li data-at="' + r.at + '" class="soon">' +
+        '<span class="t">' + dur(r.at) + '</span><span data-full="' + esc(r.text) + '"></span></li>';
     }).join('') + '</ul>';
     return html;
   }
 
+  var ASK_STOP = {
+    the: 1, a: 1, an: 1, in: 1, on: 1, of: 1, to: 1, and: 1, or: 1, did: 1, does: 1, do: 1,
+    is: 1, was: 1, are: 1, were: 1, this: 1, that: 1, it: 1, any: 1, anything: 1, something: 1,
+    what: 1, when: 1, where: 1, how: 1, who: 1, why: 1, clip: 1, video: 1, footage: 1, they: 1,
+    them: 1, their: 1, there: 1, for: 1, with: 1, from: 1, about: 1, have: 1, has: 1, been: 1,
+    show: 1, shows: 1, seen: 1, visible: 1
+  };
+
+  function askTokens(s) {
+    return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(/\s+/).filter(function (t) {
+      return t.length > 2 && !ASK_STOP[t];
+    });
+  }
+
+  function clipAskCorpus(item) {
+    var a = item.analysis || {};
+    var rows = [];
+    function push(at, text) {
+      var t = String(text || '').trim();
+      if (t) rows.push({ at: at == null ? null : Number(at), text: t });
+    }
+    push(null, a.dictation);
+    if (a.summary && a.summary !== a.dictation) push(null, a.summary);
+    (a.dictationEntries || []).forEach(function (e) { push(e.atSeconds, e.text || e.note || e.summary); });
+    (a.actions || []).forEach(function (act) {
+      var verb = String(act.action || '').replace(/_/g, ' ');
+      push(act.atSeconds, (verb ? verb + ' — ' : '') + (act.description || ''));
+    });
+    (a.timeline || []).forEach(function (t) { push(t.startSeconds, t.summary); });
+    (a.changes || []).forEach(function (c) { push(null, c); });
+    (a.scope || []).forEach(function (s) {
+      push(null, [s.title, s.verdict, s.because].filter(Boolean).join(' — '));
+    });
+    (a.couldNotTell || []).forEach(function (c) { push(null, c); });
+    return rows;
+  }
+
+  function answerClipLocally(item, question) {
+    var a = item.analysis || {};
+    var q = String(question || '').trim();
+    if (a.state === 'paired' || a.state === 'waiting_on_after') {
+      return 'This is the before half of the day. Open the after clip — that is where the reading of what changed lives.';
+    }
+    if (a.state === 'queued') return 'This clip is still being read. Ask again once the dictation lands.';
+    if (a.state === 'failed') return 'The reading of this clip failed. The footage itself is unaffected.';
+    if (a.state === 'skipped') return 'There is no after video on file for this day, so there is nothing to compare against.';
+    var rows = clipAskCorpus(item);
+    if (!rows.length) return 'This clip has not been read yet, so there is nothing to answer from.';
+    if (/what (happened|did|work)|did anything|anything happen|what('s| is) (visible|going on)|any work/i.test(q)) {
+      var changes = (a.changes || []).filter(Boolean);
+      var actions = (a.actions || []).map(function (act) { return act.description; }).filter(Boolean);
+      var date = item.workDate ? ' on ' + item.workDate : '';
+      if (changes.length) return 'Yes — the footage' + date + ' shows: ' + changes.slice(0, 4).join('; ') + '.';
+      if (actions.length) return 'Yes — the footage' + date + ' shows: ' + actions.slice(0, 4).join('; ') + '.';
+      if (a.dictation || a.summary) return 'The reading of this clip' + date + ': ' + (a.dictation || a.summary);
+      return 'The footage on file does not show work happening.';
+    }
+    var qTokens = askTokens(q);
+    if (!qTokens.length) return (a.dictation || a.summary || 'The footage on file does not show that.');
+    var scored = rows.map(function (row) {
+      var hay = askTokens(row.text);
+      var hits = qTokens.filter(function (t) {
+        return hay.some(function (h) { return h.indexOf(t) !== -1 || t.indexOf(h) !== -1; });
+      });
+      return { row: row, score: hits.length };
+    }).filter(function (e) { return e.score > 0; }).sort(function (x, y) {
+      return y.score - x.score || (x.row.at || 0) - (y.row.at || 0);
+    });
+    if (!scored.length) return 'The footage on file does not show that.';
+    var best = scored[0];
+    var timed = scored.filter(function (e) { return e.row.at != null; })[0];
+    var top = timed && timed !== best ? [best, timed] : scored.slice(0, 2);
+    return top.map(function (e) {
+      var when = e.row.at != null ? dur(e.row.at) : '';
+      var text = e.row.text.replace(/\.$/, '');
+      return when ? 'At ' + when + ', ' + text.charAt(0).toLowerCase() + text.slice(1) : text;
+    }).join('. ') + '.';
+  }
+
+  function askClip(item, question, history, cb) {
+    var local = answerClipLocally(item, question);
+    if (!item._remote) {
+      cb(null, local);
+      return;
+    }
+    var url = ORG_MODE
+      ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id) + '/ask'
+      : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id) + '/ask';
+    fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: question, history: history || [] })
+    }).then(function (r) {
+      return r.json().then(function (body) {
+        if (!r.ok) throw new Error((body && (body.error || body.message)) || 'Could not answer.');
+        cb(null, body.answer || local);
+      });
+    }).catch(function () { cb(null, local); });
+  }
+
+  function renderAsk(item) {
+    var thread = ASK_THREADS[item.id] || [];
+    var html = '<div class="alog-head"><h4>Ask this clip</h4></div>' +
+      '<p class="footnote" style="margin:0 0 12px">Ask whether anything happened, or what the footage shows. The assistant answers from its reading of this clip.</p>' +
+      '<div class="ask-thread" id="ask-thread">';
+    if (!thread.length) {
+      html += '<div class="ask-suggest">' +
+        '<button type="button" data-ask="Did anything happen in this clip?">Did anything happen?</button>' +
+        '<button type="button" data-ask="What work is visible?">What work is visible?</button>' +
+        '<button type="button" data-ask="Is anything in this footage unfinished?">Anything unfinished?</button>' +
+        '</div>';
+    } else {
+      thread.forEach(function (m) {
+        html += '<div class="ask-bubble ' + esc(m.role) + '">' + esc(m.text) + '</div>';
+      });
+    }
+    html += '</div>' +
+      '<form id="ask-form" class="ask-form">' +
+      '<input id="ask-input" maxlength="1000" autocomplete="off" placeholder="Ask about this clip…" />' +
+      '<button type="submit">Ask</button>' +
+      '</form>';
+    return html;
+  }
+
+  function bindAsk(item) {
+    var form = document.getElementById('ask-form');
+    var input = document.getElementById('ask-input');
+    function send(text) {
+      var q = String(text || '').trim();
+      if (q.length < 3) return;
+      var thread = ASK_THREADS[item.id] || [];
+      thread.push({ role: 'user', text: q });
+      ASK_THREADS[item.id] = thread;
+      var history = thread.slice(0, -1).map(function (m) {
+        return { role: m.role === 'assistant' ? 'assistant' : 'user', text: m.text };
+      });
+      setTab('ask');
+      var host = document.getElementById('ask-thread');
+      if (host) {
+        var pending = document.createElement('div');
+        pending.className = 'ask-bubble assistant pending';
+        pending.textContent = 'Reading the clip…';
+        host.appendChild(pending);
+      }
+      askClip(item, q, history, function (_err, answer) {
+        thread.push({ role: 'assistant', text: answer });
+        ASK_THREADS[item.id] = thread;
+        if (state.open && state.open.id === item.id && state.tab === 'ask') setTab('ask');
+      });
+    }
+    if (form) {
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        send(input && input.value);
+      });
+    }
+    Array.prototype.forEach.call(document.querySelectorAll('[data-ask]'), function (btn) {
+      btn.addEventListener('click', function () { send(btn.getAttribute('data-ask')); });
+    });
+    if (input) setTimeout(function () { input.focus(); }, 0);
+  }
+
   function setTab(tab) {
+    state.tab = tab;
     Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
       b.setAttribute('aria-selected', String(b.dataset.tab === tab));
     });
@@ -2894,6 +3204,8 @@
       Array.prototype.forEach.call(el.querySelectorAll('#alog [data-at]'), function (li) {
         li.addEventListener('click', function () { seekTo(Number(li.getAttribute('data-at'))); });
       });
+      var goto = el.querySelector('[data-goto]');
+      if (goto) goto.addEventListener('click', function () { open(goto.dataset.goto); });
       syncAnalysisLog(currentPlayhead());
       return;
     }
@@ -2910,11 +3222,18 @@
       return;
     }
 
+    if (tab === 'ask') {
+      el.innerHTML = renderAsk(item);
+      bindAsk(item);
+      return;
+    }
+
     var g = item.gps;
+    var job = JOBS[item.job] || { name: item.jobName || 'Job', address: '' };
     el.innerHTML = '<dl class="kv">' +
       '<dt>Evidence ID</dt><dd class="mono">' + esc(item.id) + '</dd>' +
-      '<dt>Job</dt><dd>' + esc(JOBS[item.job].name) + '</dd>' +
-      '<dt>Address</dt><dd>' + esc(JOBS[item.job].address) + '</dd>' +
+      '<dt>Job</dt><dd>' + esc(job.name) + '</dd>' +
+      '<dt>Address</dt><dd>' + esc(job.address) + '</dd>' +
       '<dt>Capture</dt><dd>' + esc(item.phase) + ' · ' + dayLabel(item.workDate) + '</dd>' +
       '<dt>Filmed</dt><dd>' + (item.capturedAt ? stamp(item.capturedAt) : 'not reported by the device') + '</dd>' +
       '<dt>Received</dt><dd>' + stamp(item.uploadedAt) + '</dd>' +
@@ -3401,14 +3720,15 @@
   });
 
   $('#d-play').addEventListener('click', function () {
-    if (state.playing) { stopPlay(); return; }
-    state.playing = setInterval(function () {
-      var item = state.open;
-      if (!item) return stopPlay();
-      var next = state.frame + 1;
-      if (next >= item._frames.length) { stopPlay(); return; }
-      setFrame(next);
-    }, 700);
+    var host = $('#d-frame');
+    var vid = host && host.querySelector('video');
+    if (vid) {
+      if (vid.paused) vid.play().catch(function () {});
+      else vid.pause();
+      return;
+    }
+    if (state.playing) { stopPlay(); syncAnalysisLog(currentPlayhead()); return; }
+    startFramePlayback();
   });
 
   function boot() {

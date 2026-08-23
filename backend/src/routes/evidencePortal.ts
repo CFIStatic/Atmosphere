@@ -7,6 +7,10 @@ import { createAdminClient } from '../lib/supabase.js';
 import { HttpError } from '../lib/errors.js';
 import { proofVideoUrl, recordAccess } from './proofOfWork.js';
 import {
+  answerFromClip,
+  clipRecordFromEvidenceItem,
+} from '../shared/clipAsk.js';
+import {
   downloadDecision,
   serializeEvidence,
   shareRecipientAllowed,
@@ -69,6 +73,27 @@ const shareLimiter = rateLimit({
   message: { error: 'Too many requests.', code: 'rate_limited' },
 });
 evidenceShareRouter.use(shareLimiter);
+
+const askLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many questions. Wait a minute.', code: 'rate_limited' },
+});
+
+const askBody = z.object({
+  question: z.string().trim().min(3).max(1000),
+  history: z
+    .array(
+      z.object({
+        role: z.enum(['user', 'assistant']),
+        text: z.string().trim().max(4000),
+      }),
+    )
+    .max(20)
+    .optional(),
+});
 
 /* ------------------------------------------------------------------ *
  * Shared assembly
@@ -181,6 +206,58 @@ async function actorLabelFor(supabase: any, userId: string): Promise<string> {
     .eq('id', userId)
     .maybeSingle();
   return (data as any)?.full_name ?? (data as any)?.email ?? 'Office';
+}
+
+/**
+ * Answer from the clip's reading, keep the question, log the ask.
+ * Persistence is best-effort: the reviewer still gets the answer if the
+ * questions table or the custody insert cannot take a row.
+ */
+async function settleClipQuestion(opts: {
+  client: any;
+  orgId: string;
+  jobId: string;
+  proofId: string;
+  item: any;
+  question: string;
+  history?: Array<{ role: 'user' | 'assistant'; text: string }>;
+  askedBy?: string | null;
+  actorLabel: string;
+  actorRole: string;
+}): Promise<{ answer: string; model: string | null }> {
+  const record = clipRecordFromEvidenceItem(opts.item);
+  const result = await answerFromClip({
+    question: opts.question,
+    record,
+    history: opts.history,
+  });
+
+  try {
+    await opts.client.from('job_proof_questions').insert({
+      org_id: opts.orgId,
+      job_id: opts.jobId,
+      question: opts.question,
+      answer: result.answer,
+      model: result.model,
+      grounded_on: opts.item.workDate ? [opts.item.workDate] : [],
+      asked_by: opts.askedBy ?? null,
+    });
+  } catch {
+    /* see above */
+  }
+
+  await recordAccess(opts.client, {
+    orgId: opts.orgId,
+    jobId: opts.jobId,
+    proofId: opts.proofId,
+    action: 'asked',
+    actorLabel: opts.actorLabel,
+    actorRole: opts.actorRole,
+    actorId: opts.askedBy ?? null,
+    detail: opts.question.slice(0, 240),
+  });
+
+  return result;
 }
 
 /* ------------------------------------------------------------------ *
@@ -341,6 +418,58 @@ evidencePortalRouter.get(
 
 /** GET /api/evidence-portal/evidence/:proofId/video — minted and logged. */
 evidencePortalRouter.get('/evidence/:proofId/video', proofVideoUrl);
+
+/**
+ * POST /api/evidence-portal/evidence/:proofId/ask
+ * Ask whether anything happened in this clip. Answers from the reading
+ * already on file — dictation, actions, timeline — not a fresh inference.
+ */
+evidencePortalRouter.post(
+  '/evidence/:proofId/ask',
+  askLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { supabase, orgId, userId } = await requireOrgContext(req);
+      const input = askBody.parse(req.body ?? {});
+      const { data: proof, error } = await supabase
+        .from('job_proofs')
+        .select(PORTAL_PROOF_SELECT)
+        .eq('org_id', orgId)
+        .eq('id', req.params.proofId)
+        .maybeSingle();
+      if (error) throw new HttpError(500, error.message, 'evidence_failed');
+      if (!proof) throw new HttpError(404, 'No such clip.', 'not_found');
+
+      const { data: siblings } = await supabase
+        .from('job_proofs')
+        .select('phase')
+        .eq('org_id', orgId)
+        .eq('job_id', (proof as any).job_id)
+        .eq('party_id', (proof as any).party_id)
+        .eq('work_date', (proof as any).work_date);
+
+      const items = await assembleLibrary(supabase, orgId, [proof]);
+      const item = fixPairing(items[0], (siblings ?? []) as any[]);
+
+      const result = await settleClipQuestion({
+        client: supabase,
+        orgId,
+        jobId: (proof as any).job_id,
+        proofId: req.params.proofId,
+        item,
+        question: input.question,
+        history: input.history,
+        askedBy: userId,
+        actorLabel: await actorLabelFor(supabase, userId),
+        actorRole: 'general_contractor',
+      });
+
+      res.status(201).json({ answer: result.answer, model: result.model });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 /**
  * GET /api/evidence-portal/evidence/:proofId/download
@@ -838,6 +967,57 @@ evidenceShareRouter.get(
       });
 
       res.json({ url: (data as any).signedUrl, expiresInSeconds: 600 });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/verifier-share/:token/evidence/:proofId/ask
+ * Same question, through the outward door. The reading is the same record
+ * the org sees; the custody line is the signed-in reviewer the share named.
+ */
+evidenceShareRouter.post(
+  '/:token/evidence/:proofId/ask',
+  askLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { share, admin, viewer } = await shareForToken(req.params.token, req);
+      const input = askBody.parse(req.body ?? {});
+
+      const { data: proof } = await admin
+        .from('job_proofs')
+        .select(PORTAL_PROOF_SELECT)
+        .eq('job_id', share.job_id)
+        .eq('id', req.params.proofId)
+        .maybeSingle();
+      if (!proof) throw new HttpError(404, 'No such clip on this job.', 'not_found');
+
+      const { data: siblings } = await admin
+        .from('job_proofs')
+        .select('phase')
+        .eq('job_id', share.job_id)
+        .eq('party_id', (proof as any).party_id)
+        .eq('work_date', (proof as any).work_date);
+
+      const items = await assembleLibrary(admin, share.org_id, [proof]);
+      const item = fixPairing(items[0], (siblings ?? []) as any[]);
+
+      const result = await settleClipQuestion({
+        client: admin,
+        orgId: share.org_id,
+        jobId: share.job_id,
+        proofId: req.params.proofId,
+        item,
+        question: input.question,
+        history: input.history,
+        askedBy: viewer.userId,
+        actorLabel: viewer.custodyLabel,
+        actorRole: 'external_reviewer',
+      });
+
+      res.status(201).json({ answer: result.answer, model: result.model });
     } catch (err) {
       next(err);
     }
