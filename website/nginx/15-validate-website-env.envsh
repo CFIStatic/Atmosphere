@@ -2,7 +2,7 @@
 # vim:sw=2:ts=2:sts=2:et
 #
 # Sourced by the nginx image entrypoint before 20-envsubst-on-templates.sh, on
-# both boot paths: the Railway startCommand (website-start.sh) and a bare
+# both boot paths: the Railway startCommand (nginx entrypoint) and a bare
 # `docker run` that inherits the image ENTRYPOINT. .envsh, not .sh: the
 # entrypoint *executes* *.sh in a child process, so an exported API_UPSTREAM
 # would never reach envsubst — only *.envsh is sourced.

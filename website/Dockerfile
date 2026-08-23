@@ -45,7 +45,9 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD wget -qO- http://127.0.0.1:8080/health >/dev/null || exit 1
 
-# Official nginx entrypoint (envsubst + IPv6). website-start.sh is kept as the
-# Railway startCommand so a leftover `node dist/index.js` cannot take over.
+# Official nginx entrypoint (envsubst + IPv6). Railway startCommand is the
+# same invocation so a leftover `node dist/index.js` cannot take over, and
+# so Create container does not depend on website-start.sh being in the image.
+# That script is still copied above for a manual `docker run` / rollback.
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]

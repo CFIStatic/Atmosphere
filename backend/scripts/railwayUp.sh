@@ -63,6 +63,15 @@ while [ "$attempt" -le "$max_attempts" ]; do
     echo "railway up reached a failed healthcheck."
     status=1
   fi
+  # Create container dies in ~5s when startCommand is a file the image does
+  # not have (Corporate Website + leftover BFF image + website-start.sh).
+  # Retrying the same upload will not grow that file; fail now.
+  if grep -qiE 'could not be found' "$log"; then
+    echo "railway up: start command is missing from the image. Not retrying."
+    dump_build_logs
+    rm -f "$log"
+    exit 1
+  fi
   if [ "$status" -eq 0 ]; then
     if grep -qi 'no changes detected in watch paths' "$log"; then
       if [ -n "${RAILWAY_UP_STAMP_FILE:-}" ]; then

@@ -285,9 +285,11 @@ A second, later failure mode: `railwayUp.sh` treated Railway's in-window
 `Attempt #N failed with service unavailable. Continuing to retry` lines as a
 finished failure, aborted, then retried and hit `no changes detected in
 watch paths` and marked the job green. The replica never took the new image.
-The script now ignores those retry lines, website deploys stamp
-`website/.railway-up-stamp` so a retry rebuilds, and `website-start.sh`
-boots through the nginx image entrypoint (same as the staff site).
+The script now ignores those retry lines, website deploys stamp the
+tracked `website/railway-rebuild.stamp` so a retry rebuilds (a gitignored
+`.railway-up-stamp` never reached Railway), and startCommand is the official
+nginx entrypoint (same as the staff site) so Create container does not
+depend on `website-start.sh` being in the image.
 
 Fix, once, on the `website` service:
 
