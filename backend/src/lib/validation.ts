@@ -351,13 +351,31 @@ export const fieldOfficePreviewSchema = z.object({
 export type FieldOfficePreviewInput = z.infer<typeof fieldOfficePreviewSchema>;
 
 /**
- * Field Capture crew connect: first and last name plus the office join code.
- * No email or password — the office assigns work to that name.
+ * Stable id this phone mints on first launch. Same device + company code
+ * reopens the same Field Capture login so the phone stays linked.
  */
-export const fieldJoinSchema = z.object({
-  fullName: crewFullNameField,
-  joinCode: officeJoinCodeField,
-});
+export const fieldDeviceIdField = z
+  .string({ required_error: 'This phone is missing a stored device id.' })
+  .trim()
+  .min(16, 'This phone is missing a stored device id.')
+  .max(64, 'This phone is missing a stored device id.')
+  .regex(/^[A-Za-z0-9-]+$/, 'This phone is missing a stored device id.');
+
+/**
+ * Field Capture connect: the company (office join) code, plus a device id
+ * so this phone stays linked. A first-and-last name still works for older
+ * clients that identified the person that way.
+ */
+export const fieldJoinSchema = z
+  .object({
+    joinCode: officeJoinCodeField,
+    deviceId: fieldDeviceIdField.optional(),
+    fullName: crewFullNameField.optional(),
+  })
+  .refine((value) => Boolean(value.deviceId || value.fullName), {
+    message: 'Enter the company code on this phone.',
+    path: ['deviceId'],
+  });
 
 export type FieldJoinInput = z.infer<typeof fieldJoinSchema>;
 

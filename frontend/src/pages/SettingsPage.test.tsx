@@ -129,6 +129,17 @@ describe('Settings profile photo', () => {
   });
 });
 
+describe('Settings Field Capture app', () => {
+  it('tells the office the crew enter the company code once', () => {
+    renderSettings('/settings?section=organization');
+
+    expect(screen.getByText('Field Capture app')).toBeInTheDocument();
+    expect(screen.getByText(/enter this company code once/i)).toBeInTheDocument();
+    expect(screen.getByText(/The phone stores it and stays linked/i)).toBeInTheDocument();
+    expect(screen.queryByText(/first and last name/i)).toBeNull();
+  });
+});
+
 describe('Settings preferences', () => {
   it('no longer offers a product walkthrough replay', () => {
     renderSettings('/settings?section=preferences');

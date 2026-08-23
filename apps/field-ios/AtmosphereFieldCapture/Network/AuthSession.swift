@@ -3,9 +3,9 @@ import Foundation
 /**
  * One-time platform account link for Field Capture.
  *
- * Connect when the app is first installed; tokens live in Keychain and the
- * phone stays signed in across launches. Crew connect with name + office
- * invite code — only again if they explicitly disconnect.
+ * Connect when the app is first installed; the company code and tokens
+ * live on this phone and stay signed in across launches. Crew enter the
+ * company code once — only again if they explicitly disconnect.
  */
 @MainActor
 final class AuthSession: ObservableObject {
@@ -31,8 +31,10 @@ final class AuthSession: ObservableObject {
     private let accessAccount = "accessToken"
     private let refreshAccount = "refreshToken"
     private let emailAccount = "email"
+    private let deviceAccount = "deviceId"
     private let orgAccount = "orgName"
     private let nameAccount = "fullName"
+    private let companyCodeKey = "atmosphere.field.companyCode"
     private let linkedFlagKey = "atmosphere.field.accountLinked"
 
     let api: AtmosphereClient
@@ -55,8 +57,11 @@ final class AuthSession: ObservableObject {
 
     /// Call on every cold start. Never clears the link for a network blip.
     func restore() async {
-        guard isLinked else { return }
         restoreWarning = nil
+        if !isLinked {
+            _ = await relinkWithStoredCompanyCode()
+            return
+        }
         do {
             try await ensureFreshAccess()
             let me = try await api.fieldMe()
@@ -81,9 +86,10 @@ final class AuthSession: ObservableObject {
                         needsOfficeLink = true
                         lastError = nil
                     } else if isUnauthorized(error) {
+                        if await relinkWithStoredCompanyCode() { return }
                         // Session truly dead — only then ask to connect again.
                         clearLink()
-        lastError = "This phone was disconnected. Connect with your name and the office invite code to continue."
+                        lastError = "This phone was disconnected. Enter the company code to continue."
                     } else {
                         restoreWarning = "Couldn’t refresh jobs right now. You’re still connected — try again when you have signal."
                     }
@@ -94,43 +100,65 @@ final class AuthSession: ObservableObject {
         }
     }
 
-    /// First-install crew connect — name + office invite code.
-    func joinCrew(fullName: String, joinCode: String) async {
+    /// First-install crew connect — company code on this phone.
+    func joinCrew(joinCode: String) async {
         lastError = nil
         confirmationNotice = nil
         do {
-            let result = try await api.joinCrew(fullName: fullName, joinCode: joinCode)
-            guard let session = result.session else {
-                throw APIError.http(
-                    status: 0,
-                    body: "Connected, but no session came back. Try again in a moment."
-                )
-            }
-            persist(session: session, email: result.user?.email ?? "")
-            UserDefaults.standard.set(true, forKey: linkedFlagKey)
-            isLinked = true
-            let trimmedName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmedName.isEmpty {
-                self.fullName = trimmedName
-                UserDefaults.standard.set(trimmedName, forKey: nameAccount)
-            }
-            if let org = result.org {
-                self.orgName = org.name
-                UserDefaults.standard.set(org.name, forKey: orgAccount)
-                needsOfficeLink = false
-                showOfficeLink = false
-                pendingJoinCode = nil
-                officePreviewName = nil
-                lastError = nil
-            } else if let orgError = result.orgError, !orgError.isEmpty {
-                needsOfficeLink = true
-                lastError = orgError
-            } else {
-                await refreshProfileOrMarkOffice()
-            }
+            try await applyJoinedSession(
+                result: try await api.joinCrew(joinCode: joinCode, deviceId: ensureDeviceId()),
+                joinCode: joinCode
+            )
         } catch {
             lastError = Self.friendlyCreateError(error)
             isLinked = KeychainStore.get(account: refreshAccount) != nil
+        }
+    }
+
+    /// Reopen the stored company code when the session expired.
+    @discardableResult
+    private func relinkWithStoredCompanyCode() async -> Bool {
+        let code = UserDefaults.standard.string(forKey: companyCodeKey)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased() ?? ""
+        guard (6 ... 12).contains(code.count) else { return false }
+        do {
+            try await applyJoinedSession(
+                result: try await api.joinCrew(joinCode: code, deviceId: ensureDeviceId()),
+                joinCode: code
+            )
+            lastError = nil
+            restoreWarning = nil
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func applyJoinedSession(result: AtmosphereClient.AuthResponse, joinCode: String) async throws {
+        guard let session = result.session else {
+            throw APIError.http(
+                status: 0,
+                body: "Connected, but no session came back. Try again in a moment."
+            )
+        }
+        persist(session: session, email: result.user?.email ?? "")
+        UserDefaults.standard.set(true, forKey: linkedFlagKey)
+        UserDefaults.standard.set(joinCode.uppercased(), forKey: companyCodeKey)
+        isLinked = true
+        if let org = result.org {
+            self.orgName = org.name
+            UserDefaults.standard.set(org.name, forKey: orgAccount)
+            needsOfficeLink = false
+            showOfficeLink = false
+            pendingJoinCode = nil
+            officePreviewName = nil
+            lastError = nil
+        } else if let orgError = result.orgError, !orgError.isEmpty {
+            needsOfficeLink = true
+            lastError = orgError
+        } else {
+            await refreshProfileOrMarkOffice()
         }
     }
 
@@ -267,6 +295,9 @@ final class AuthSession: ObservableObject {
             let org = try await api.linkOffice(joinCode: joinCode, orgName: orgName, fullName: fullName)
             self.orgName = org.name
             UserDefaults.standard.set(org.name, forKey: orgAccount)
+            if let joinCode, !joinCode.isEmpty {
+                UserDefaults.standard.set(joinCode.uppercased(), forKey: companyCodeKey)
+            }
             needsOfficeLink = false
             showOfficeLink = false
             pendingJoinCode = nil
@@ -389,6 +420,15 @@ final class AuthSession: ObservableObject {
         UserDefaults.standard.set(me.org.name, forKey: orgAccount)
     }
 
+    private func ensureDeviceId() -> String {
+        if let existing = KeychainStore.get(account: deviceAccount), existing.count >= 16 {
+            return existing
+        }
+        let id = UUID().uuidString
+        KeychainStore.set(id, account: deviceAccount)
+        return id
+    }
+
     private func persist(session: AtmosphereClient.SessionTokens, email: String) {
         KeychainStore.set(session.accessToken, account: accessAccount)
         KeychainStore.set(session.refreshToken, account: refreshAccount)
@@ -403,6 +443,7 @@ final class AuthSession: ObservableObject {
         KeychainStore.delete(account: emailAccount)
         UserDefaults.standard.removeObject(forKey: orgAccount)
         UserDefaults.standard.removeObject(forKey: nameAccount)
+        UserDefaults.standard.removeObject(forKey: companyCodeKey)
         UserDefaults.standard.set(false, forKey: linkedFlagKey)
         api.accessToken = nil
         api.refreshToken = nil

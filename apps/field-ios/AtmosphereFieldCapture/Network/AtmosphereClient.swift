@@ -3,10 +3,11 @@ import Foundation
 /**
  * REST client for Atmosphere Field Capture.
  *
- * Crew connect with name + office invite code (`/api/field-app/join`).
- * A dashboard email/password login still works. Today’s jobs are loaded
- * from that office. A local Express BFF is used when one is actually
- * reachable (Xcode simulator + `npm run dev`).
+ * Crew connect with the company code (`/api/field-app/join`). We store
+ * it on this phone and stay linked. A dashboard email/password login
+ * still works. Today’s jobs are loaded from that office. A local
+ * Express BFF is used when one is actually reachable (Xcode simulator
+ * + `npm run dev`).
  */
 @MainActor
 final class AtmosphereClient: ObservableObject {
@@ -172,13 +173,14 @@ final class AtmosphereClient: ObservableObject {
     }
 
     private struct JoinCrewBody: Encodable {
-        let fullName: String
         let joinCode: String
+        let deviceId: String
+        let fullName: String?
     }
 
-    /// Crew connect: name + office invite code. No email or password.
-    func joinCrew(fullName: String, joinCode: String) async throws -> AuthResponse {
-        let body = JoinCrewBody(fullName: fullName, joinCode: joinCode)
+    /// Crew connect: company code + this phone. No email or password.
+    func joinCrew(joinCode: String, deviceId: String, fullName: String? = nil) async throws -> AuthResponse {
+        let body = JoinCrewBody(joinCode: joinCode, deviceId: deviceId, fullName: fullName)
         return try await post(path: "/api/field-app/join", body: body, authed: false)
     }
 

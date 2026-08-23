@@ -830,8 +830,8 @@ const TOGGLES: { key: BooleanPreference; label: string; description: string }[] 
 ];
 
 /**
- * How a Field Capture iPhone login attaches to this office account.
- * The join code is the same one teammates type on the website.
+ * How a Field Capture phone attaches to this office account.
+ * The company code is the same join code teammates type on the website.
  */
 function FieldCaptureAppSection() {
   const { membership } = useAuth();
@@ -845,17 +845,17 @@ function FieldCaptureAppSection() {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
-      window.prompt('Office join code for Field Capture', joinCode);
+      window.prompt('Company code for Field Capture', joinCode);
     }
   }
 
   return (
     <Card
       title="Field Capture app"
-      description="Crew open the app, type their name and this office code, and they show up on the team — ready to be put on jobs."
+      description="Crew open the app, enter this company code once, and the phone stays linked — day films land here."
     >
       <div className="rounded-lg border border-line bg-paper-50 px-4 py-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Office join code</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Company code</p>
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <code className="rounded-md border border-line bg-paper-0 px-2.5 py-1 font-mono tracking-widest text-brand-700">
             {joinCode ?? '—'}
@@ -880,19 +880,18 @@ function FieldCaptureAppSection() {
       <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm text-ink-700">
         <li>Install Field Capture on the phone.</li>
         <li>
-          They type their <strong className="font-semibold text-ink-900">first and last name</strong>{' '}
-          (so the office can assign work to them) and this code
+          They enter this <strong className="font-semibold text-ink-900">company code</strong> once
           {joinCode ? (
             <>
               {' '}
               (or open <code className="font-mono text-xs">atmosphere-field://join?code={joinCode}</code>)
             </>
           ) : null}
-          .
+          . The phone stores it and stays linked.
         </li>
         <li>
-          They appear under Team as a field technician. Put them on a job from the job’s Crew tab —
-          that job then shows in the app.
+          That phone appears under Team as a field technician. Put it on a job from the job’s Crew
+          tab — that job then shows in the app.
         </li>
       </ol>
       <p className="mt-4 text-sm text-ink-600">

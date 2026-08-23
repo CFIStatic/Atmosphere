@@ -3,23 +3,16 @@ import SwiftUI
 /**
  * First-install crew connect.
  *
- * Name + the office join code from Atmosphere Settings. No email, no
- * password — the office assigns jobs to that name.
+ * The company code from Atmosphere Settings. No name, email, or
+ * password — we store the code on this phone and stay linked.
  */
 struct JoinCrewView: View {
     @EnvironmentObject private var auth: AuthSession
     var onDashboardLogin: () -> Void = {}
 
-    @State private var fullName = ""
     @State private var joinCode = ""
     @State private var previewTask: Task<Void, Never>?
     @State private var busy = false
-
-    private var nameValid: Bool {
-        fullName.trimmingCharacters(in: .whitespacesAndNewlines)
-            .split(whereSeparator: { $0.isWhitespace })
-            .count >= 2
-    }
 
     private var codeValid: Bool {
         let code = joinCode.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -47,40 +40,30 @@ struct JoinCrewView: View {
                     .padding(.top, 10)
 
                 Text(
-                    "Type your name and the office invite code. The office puts you on jobs; those jobs show up here."
+                    "Enter the company code from the office. We store it here — you will not be asked again."
                 )
                 .font(.system(size: 14))
                 .foregroundStyle(FieldTheme.muted)
 
-                VStack(spacing: 10) {
-                    TextField("First and last name", text: $fullName)
-                        .textContentType(.name)
-                        .textInputAutocapitalization(.words)
-                        .padding(12)
-                        .background(FieldTheme.panel)
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
-                        .cornerRadius(10)
-
-                    TextField("Office invite code", text: Binding(
-                        get: { joinCode },
-                        set: { value in
-                            joinCode = value
-                            previewTask?.cancel()
-                            previewTask = Task {
-                                try? await Task.sleep(nanoseconds: 350_000_000)
-                                guard !Task.isCancelled else { return }
-                                await auth.previewOffice(joinCode: value)
-                            }
+                TextField("Company code", text: Binding(
+                    get: { joinCode },
+                    set: { value in
+                        joinCode = value
+                        previewTask?.cancel()
+                        previewTask = Task {
+                            try? await Task.sleep(nanoseconds: 350_000_000)
+                            guard !Task.isCancelled else { return }
+                            await auth.previewOffice(joinCode: value)
                         }
-                    ))
-                        .textInputAutocapitalization(.characters)
-                        .autocorrectionDisabled()
-                        .padding(12)
-                        .background(FieldTheme.panel)
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
-                        .cornerRadius(10)
-                }
-                .padding(.top, 4)
+                    }
+                ))
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                    .padding(12)
+                    .background(FieldTheme.panel)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
+                    .cornerRadius(10)
+                    .padding(.top, 4)
 
                 if let name = auth.officePreviewName {
                     Text("This code belongs to \(name).")
@@ -102,7 +85,6 @@ struct JoinCrewView: View {
                     busy = true
                     Task {
                         await auth.joinCrew(
-                            fullName: fullName.trimmingCharacters(in: .whitespacesAndNewlines),
                             joinCode: joinCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
                         )
                         busy = false
@@ -122,7 +104,7 @@ struct JoinCrewView: View {
                     .foregroundStyle(FieldTheme.bg)
                     .cornerRadius(12)
                 }
-                .disabled(busy || !nameValid || !codeValid)
+                .disabled(busy || !codeValid)
                 .padding(.top, 6)
 
                 Button(action: onDashboardLogin) {

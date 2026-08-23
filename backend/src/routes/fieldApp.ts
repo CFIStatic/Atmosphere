@@ -15,7 +15,7 @@ import {
 } from '../lib/validation.js';
 import { createPasswordAccount, publicUser, sessionTokens } from '../auth/passwordAccount.js';
 import { linkFieldOffice } from '../field/officeLink.js';
-import { joinCrewByName, previewOfficePublic } from '../field/crewJoin.js';
+import { joinCrew, previewOfficePublic } from '../field/crewJoin.js';
 import { authLimiter } from './auth.js';
 import { createUploadUrl, recordProof } from './proofOfWork.js';
 import {
@@ -29,9 +29,9 @@ import {
 /**
  * Field Capture (App Store) ↔ platform account bridge.
  *
- * Crew connect is name + office join code. That creates (or reopens) a
- * field-technician membership so the dashboard can assign jobs to that name.
- * Day films land in `job_proofs` on the office record. A dashboard
+ * Crew connect is the company (office join) code, entered once. That
+ * creates (or reopens) a field-technician membership for this phone so
+ * day films land in `job_proofs` on the office record. A dashboard
  * email/password login still works for people who already have one.
  */
 export const fieldAppRouter = Router();
@@ -111,9 +111,9 @@ fieldAppRouter.post(
 /**
  * POST /api/field-app/join
  *
- * Crew connect: first and last name plus the office join code from Settings.
- * Public — there is no session yet. The same name + code on another phone
- * reopens this person so assignments stay on Nick Smith.
+ * Crew connect: the company code from Settings. Public — there is no
+ * session yet. The same phone + code reopens this login so the crew
+ * never enter the code again.
  */
 fieldAppRouter.post(
   '/join',
@@ -121,7 +121,7 @@ fieldAppRouter.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const input = fieldJoinSchema.parse(req.body);
-      const joined = await joinCrewByName(input);
+      const joined = await joinCrew(input);
       writeFieldSession(res, joined.created ? 201 : 200, joined.user, joined.session, {
         org: joined.org,
       });

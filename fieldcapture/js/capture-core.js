@@ -351,11 +351,22 @@
     return (apiBase || '').replace(/\/$/, '');
   }
 
-  /** Name + office invite code. No email or password. */
-  function joinCrew(fullName, joinCode, apiBase) {
+  /** Company code on this phone. No email or password. */
+  function joinCrew(input, apiBase) {
     return apiJson(origin(apiBase) + '/api/field-app/join', {
       method: 'POST',
-      body: { fullName: fullName, joinCode: joinCode },
+      body: {
+        joinCode: input.joinCode,
+        deviceId: input.deviceId,
+        fullName: input.fullName,
+      },
+    });
+  }
+
+  function refreshSession(refreshToken, apiBase) {
+    return apiJson(origin(apiBase) + '/api/auth/refresh', {
+      method: 'POST',
+      body: { refreshToken: refreshToken },
     });
   }
 
@@ -497,6 +508,7 @@
     recordDayFilm: recordDayFilm,
     uploadDayFilm: uploadDayFilm,
     joinCrew: joinCrew,
+    refreshSession: refreshSession,
     loginWithPassword: loginWithPassword,
     loadFieldMe: loadFieldMe,
     loadTodayJobs: loadTodayJobs,

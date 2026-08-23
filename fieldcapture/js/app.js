@@ -3,7 +3,7 @@
  *
  * Modes:
  *   ?token=<job-share>  → live MediaRecorder + proof upload (no office login)
- *   signed in           → name + office invite code, jobs from that office
+ *   signed in           → company code once, then jobs from that office
  *   ?demo=1             → scripted demo only (explicit)
  */
 (function () {
@@ -18,6 +18,8 @@
   var DEMO = FORCE_DEMO || (!TOKEN && params.get('allowDemo') === '1');
   var ACCESS_KEY = 'atm.field.accessToken';
   var REFRESH_KEY = 'atm.field.refreshToken';
+  var DEVICE_KEY = 'atm.field.deviceId';
+  var CODE_KEY = 'atm.field.companyCode';
 
   var Core = window.FieldCaptureCore;
   if (!Core) {
@@ -89,27 +91,53 @@
     account: false,
   };
 
-  function readStoredSession() {
+  function storeGet(key) {
     try {
-      state.accessToken = sessionStorage.getItem(ACCESS_KEY);
-      state.refreshToken = sessionStorage.getItem(REFRESH_KEY);
+      return localStorage.getItem(key) || sessionStorage.getItem(key);
     } catch (e) {
-      state.accessToken = null;
-      state.refreshToken = null;
+      return null;
     }
+  }
+
+  function storeSet(key, value) {
+    try {
+      if (value) localStorage.setItem(key, value);
+      else localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
+    } catch (e) {
+      /* private mode — stay signed in for this page only */
+    }
+  }
+
+  function ensureDeviceId() {
+    var existing = storeGet(DEVICE_KEY);
+    if (existing && existing.length >= 16) return existing;
+    var id =
+      (typeof crypto !== 'undefined' && crypto.randomUUID && crypto.randomUUID()) ||
+      'web-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12) + 'xxxx';
+    storeSet(DEVICE_KEY, id);
+    return id;
+  }
+
+  function readStoredSession() {
+    state.accessToken = storeGet(ACCESS_KEY);
+    state.refreshToken = storeGet(REFRESH_KEY);
   }
 
   function writeStoredSession(accessToken, refreshToken) {
     state.accessToken = accessToken || null;
     state.refreshToken = refreshToken || null;
-    try {
-      if (accessToken) sessionStorage.setItem(ACCESS_KEY, accessToken);
-      else sessionStorage.removeItem(ACCESS_KEY);
-      if (refreshToken) sessionStorage.setItem(REFRESH_KEY, refreshToken);
-      else sessionStorage.removeItem(REFRESH_KEY);
-    } catch (e) {
-      /* private mode — stay signed in for this page only */
-    }
+    storeSet(ACCESS_KEY, accessToken || null);
+    storeSet(REFRESH_KEY, refreshToken || null);
+  }
+
+  function storedCompanyCode() {
+    return (storeGet(CODE_KEY) || '').trim().toUpperCase();
+  }
+
+  function writeCompanyCode(code) {
+    var next = (code || '').trim().toUpperCase();
+    storeSet(CODE_KEY, next || null);
   }
 
   /* ---------- home hydration ---------- */
@@ -211,7 +239,7 @@
       who.innerHTML = '';
     }
     $('#blocked-msg').textContent =
-      'Type your name and the office invite code from Atmosphere Settings.';
+      'Enter the company code from Atmosphere Settings. This phone stays linked after that.';
   }
 
   function showLoginError(message) {
@@ -267,45 +295,65 @@
     });
   }
 
+  function connectWithCode(joinCode, playMotion) {
+    var code = (joinCode || '').trim().toUpperCase();
+    return Core.joinCrew({ joinCode: code, deviceId: ensureDeviceId() }, API_BASE).then(function (res) {
+      var session = res.session || {};
+      if (!session.accessToken) {
+        throw new Error('Connected, but no session came back. Try again in a moment.');
+      }
+      writeStoredSession(session.accessToken, session.refreshToken);
+      writeCompanyCode(code);
+      var opened = bootAccountSession();
+      return playMotion ? Promise.all([opened, playElevate()]) : opened;
+    });
+  }
+
+  function restoreLinkedPhone() {
+    readStoredSession();
+    var resume = state.accessToken
+      ? bootAccountSession().catch(function () {
+          if (!state.refreshToken) return Promise.reject(new Error('signed out'));
+          return Core.refreshSession(state.refreshToken, API_BASE).then(function (res) {
+            var session = res.session || {};
+            if (!session.accessToken) throw new Error('signed out');
+            writeStoredSession(session.accessToken, session.refreshToken);
+            return bootAccountSession();
+          });
+        })
+      : Promise.reject(new Error('signed out'));
+    return resume.catch(function () {
+      var code = storedCompanyCode();
+      if (!code) throw new Error('signed out');
+      return connectWithCode(code, false);
+    });
+  }
+
   function bootAccount() {
     document.body.setAttribute('data-mode', 'account');
+    ensureDeviceId();
     readStoredSession();
     $('#daybtn').addEventListener('click', startLiveDay);
     var form = $('#login-form');
     if (form) {
       form.addEventListener('submit', function (event) {
         event.preventDefault();
-        var fullName = ($('#login-name') && $('#login-name').value || '').trim();
         var joinCode = ($('#login-code') && $('#login-code').value || '').trim().toUpperCase();
         var btn = $('#login-btn');
         showLoginError('');
         btn.disabled = true;
-        Core.joinCrew(fullName, joinCode, API_BASE)
-          .then(function (res) {
-            var session = res.session || {};
-            if (!session.accessToken) {
-              throw new Error('Connected, but no session came back. Try again in a moment.');
-            }
-            writeStoredSession(session.accessToken, session.refreshToken);
-            return Promise.all([bootAccountSession(), playElevate()]);
-          })
+        connectWithCode(joinCode, true)
           .catch(function (err) {
-            writeStoredSession(null, null);
-            showLoginError(err.message || 'Could not connect. Check your name and the office invite code.');
+            showLoginError(err.message || 'Could not connect. Check the company code.');
           })
           .then(function () {
             btn.disabled = false;
           });
       });
     }
-    if (state.accessToken) {
-      bootAccountSession().catch(function () {
-        writeStoredSession(null, null);
-        bootBlocked();
-      });
-      return;
-    }
-    bootBlocked();
+    restoreLinkedPhone().catch(function () {
+      bootBlocked();
+    });
   }
 
   /* ---------- recording ---------- */
