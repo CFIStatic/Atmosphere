@@ -326,10 +326,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AtmosphereFieldCapture/FieldCapture.entitlements;
-				CODE_SIGN_IDENTITY[sdk=iphonesimulator*] = "-";
+				"CODE_SIGN_IDENTITY[sdk=iphonesimulator*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
-				CODE_SIGNING_ALLOWED[sdk=iphonesimulator*] = NO;
-				CODE_SIGNING_REQUIRED[sdk=iphonesimulator*] = NO;
+				"CODE_SIGNING_ALLOWED[sdk=iphonesimulator*]" = NO;
+				"CODE_SIGNING_REQUIRED[sdk=iphonesimulator*]" = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
@@ -358,10 +358,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AtmosphereFieldCapture/FieldCapture.entitlements;
-				CODE_SIGN_IDENTITY[sdk=iphonesimulator*] = "-";
+				"CODE_SIGN_IDENTITY[sdk=iphonesimulator*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
-				CODE_SIGNING_ALLOWED[sdk=iphonesimulator*] = NO;
-				CODE_SIGNING_REQUIRED[sdk=iphonesimulator*] = NO;
+				"CODE_SIGNING_ALLOWED[sdk=iphonesimulator*]" = NO;
+				"CODE_SIGNING_REQUIRED[sdk=iphonesimulator*]" = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
