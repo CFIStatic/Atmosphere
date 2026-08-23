@@ -704,6 +704,130 @@
     display: block; width: 100%; height: 100%; max-height: none; object-fit: contain; background: #1A1815;
   }
 
+  /* ------------------------------------------------------------------ *
+   * YouTube's red progress line, copied with no substitutions.
+   *
+   * The browser's own <video controls> draws a thick capsule in a red-ish
+   * accent. That is not the line a reviewer's hand already knows. YouTube's
+   * bar is a 3px #f00 strip on a translucent white rail, a slightly paler
+   * load layer behind it, and a 13px red disc that only appears when the
+   * bar is reached for — then the rail grows to 5px. Those numbers are not
+   * a mood: they are the published ytp-progress-bar values, used here as-is.
+   * ------------------------------------------------------------------ */
+  .vp {
+    --yt-progress: #f00;
+    --yt-track: rgba(255, 255, 255, 0.2);
+    --yt-buffered: rgba(255, 255, 255, 0.4);
+    --yt-hover: rgba(255, 255, 255, 0.5);
+    --yt-rail-h: 3px;
+    --yt-rail-h-hot: 5px;
+    --yt-knob: 13px;
+    position: relative; width: 100%; height: 100%; background: #000; overflow: hidden;
+  }
+  .vp video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
+  .vp .vp-hit { position: absolute; inset: 0 0 46px; cursor: pointer; }
+  .vp[data-idle="1"] .vp-hit { cursor: none; }
+
+  .vp .vp-big {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 64px; height: 64px; border-radius: 50%; border: 0; cursor: pointer;
+    background: rgba(0, 0, 0, .6); color: #fff; display: grid; place-items: center;
+    transition: opacity .16s ease, transform .16s ease;
+  }
+  .vp[data-paused="0"] .vp-big { opacity: 0; transform: translate(-50%, -50%) scale(.86); pointer-events: none; }
+  .vp .vp-big:hover { background: rgba(0, 0, 0, .78); }
+
+  .vp .vp-chrome {
+    position: absolute; left: 0; right: 0; bottom: 0; padding: 28px 12px 8px;
+    background: linear-gradient(to top, rgba(0,0,0,.75) 0%, rgba(0,0,0,.45) 42%, rgba(0,0,0,0) 100%);
+    color: #fff; transition: opacity .18s ease; opacity: 1;
+  }
+  .vp[data-idle="1"][data-paused="0"] .vp-chrome { opacity: 0; pointer-events: none; }
+
+  /* Hit target is 5px tall like ytp-progress-bar-container. The visible rail
+     inside it is 3px until hover, then 5px — YouTube's scale, not ours. */
+  .vp .vp-bar {
+    position: relative; height: 5px; display: flex; align-items: flex-end;
+    cursor: pointer; touch-action: none; margin: 0 0 8px;
+  }
+  .vp .vp-rail {
+    position: absolute; left: 0; right: 0; bottom: 0; height: var(--yt-rail-h);
+    border-radius: 1.5px; background: var(--yt-track);
+    transform-origin: left bottom; transition: height .08s linear;
+  }
+  .vp .vp-buffered, .vp .vp-hover, .vp .vp-played {
+    position: absolute; left: 0; top: 0; height: 100%; width: 100%;
+    border-radius: inherit; transform-origin: left center; will-change: transform;
+  }
+  .vp .vp-buffered { background: var(--yt-buffered); transform: scaleX(0); }
+  .vp .vp-hover { background: var(--yt-hover); transform: scaleX(0); opacity: 0; }
+  .vp .vp-played { background: var(--yt-progress); transform: scaleX(0); }
+
+  /* ytp-scrubber-button: 13×13 disc, #f00, hidden until the bar is hot.
+     Centered on the 5px container the way YouTube centers ytp-scrubber. */
+  .vp .vp-knob {
+    position: absolute; top: 50%; left: 0;
+    width: var(--yt-knob); height: var(--yt-knob);
+    border-radius: 50%; background: var(--yt-progress);
+    transform: translate(-50%, -50%) scale(0);
+    transition: transform .08s linear;
+    pointer-events: none;
+  }
+  .vp .vp-bar:hover .vp-rail,
+  .vp .vp-bar:focus-visible .vp-rail,
+  .vp[data-scrubbing="1"] .vp-rail { height: var(--yt-rail-h-hot); }
+  .vp .vp-bar:hover .vp-hover { opacity: 1; }
+  .vp .vp-bar:hover .vp-knob,
+  .vp .vp-bar:focus-visible .vp-knob,
+  .vp[data-scrubbing="1"] .vp-knob { transform: translate(-50%, -50%) scale(1); }
+  .vp .vp-bar:focus-visible { outline: 2px solid #fff; outline-offset: 3px; border-radius: 2px; }
+
+  .vp .vp-tick {
+    position: absolute; bottom: 0; width: 2px; height: 9px; margin-left: -1px;
+    background: rgba(255,255,255,.85); pointer-events: none;
+  }
+  .vp .vp-tick[data-kind="action"] { background: #ffd54f; }
+
+  .vp .vp-bubble {
+    position: absolute; bottom: 52px; transform: translateX(-50%);
+    background: rgba(0,0,0,.9); color: #fff; border-radius: 2px;
+    padding: 3px 6px; font-family: var(--mono); font-size: 12px; white-space: nowrap;
+    pointer-events: none; opacity: 0; transition: opacity .08s linear; max-width: 280px;
+  }
+  .vp .vp-bubble .lbl {
+    display: block; font-size: 11px; color: #ddd;
+    max-width: 260px; overflow: hidden; text-overflow: ellipsis;
+  }
+  .vp .vp-bar:hover ~ .vp-bubble,
+  .vp[data-scrubbing="1"] .vp-bubble { opacity: 1; }
+
+  .vp .vp-row { display: flex; align-items: center; gap: 2px; }
+  .vp .vp-row button {
+    border: 0; background: none; color: #fff; width: 36px; height: 36px; padding: 0;
+    border-radius: 0; cursor: pointer; display: grid; place-items: center; flex: none;
+  }
+  .vp .vp-row button:hover { color: #fff; opacity: .9; }
+  .vp .vp-row button:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
+  .vp .vp-clock {
+    font-family: var(--mono); font-size: 13px; color: #ddd; margin: 0 8px;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .vp .vp-clock b { color: #fff; font-weight: 500; }
+  .vp .vp-spacer { flex: 1; }
+  .vp .vp-rate {
+    width: auto; min-width: 40px; padding: 0 8px; font: inherit; font-size: 13px;
+    font-weight: 650; font-variant-numeric: tabular-nums;
+  }
+  .vp .vp-vol { display: flex; align-items: center; }
+  .vp .vp-vol input {
+    width: 0; opacity: 0; margin: 0; height: 3px; accent-color: #f00;
+    transition: width .16s ease, opacity .16s ease; cursor: pointer;
+  }
+  .vp .vp-vol:hover input, .vp .vp-vol input:focus-visible { width: 52px; opacity: 1; margin: 0 8px 0 4px; }
+  @media (max-width: 860px) {
+    .vp .vp-vol input { display: none; }
+  }
+
   .side { padding: 16px 18px 24px; overflow-y: auto; min-height: 0; }
   .tabs { display: flex; gap: 3px; background: var(--line-soft); padding: 3px; border-radius: 8px; }
   .tabs button {
@@ -2648,6 +2772,7 @@
     state.open = item;
     state.frame = 0;
     stopPlay();
+    unmountPlayer();
 
     $('#d-title').textContent = (JOBS[item.job] || { name: item.jobName || 'Job' }).name;
     $('#d-meta').innerHTML =
@@ -2656,24 +2781,11 @@
 
     // Prefer the real file when the portal minted a URL. Frames remain the
     // fallback for the demo artifact and for clips whose file URL expired.
+    var strip = document.querySelector('.player .controls');
     if (item._videoUrl) {
-      // The poster is the same still the list showed, so the player opens on
-      // the clip rather than on the black rectangle a browser picks.
-      var posterAttr = item.poster ? ' poster="' + esc(item.poster) + '"' : '';
-      $('#d-frame').innerHTML =
-        '<video controls playsinline preload="metadata"' + posterAttr +
-        ' src="' + esc(item._videoUrl) + '"></video>';
-      $('#d-scrub').innerHTML = '';
-      $('#d-time').textContent = 'full clip · ' + dur(item.duration);
-      var vid = $('#d-frame').querySelector('video');
-      if (vid) {
-        vid.addEventListener('timeupdate', function () { syncAnalysisLog(vid.currentTime); });
-        vid.addEventListener('seeked', function () { syncAnalysisLog(vid.currentTime); });
-        vid.addEventListener('play', function () { syncAnalysisLog(vid.currentTime); });
-        vid.addEventListener('pause', function () { syncAnalysisLog(vid.currentTime); });
-        vid.addEventListener('ended', function () { syncAnalysisLog(vid.currentTime); });
-      }
+      mountPlayer(item, item._videoUrl);
     } else {
+      if (strip) strip.hidden = false;
       item._frames = item._remoteFrames && item._remoteFrames.length
         ? item._remoteFrames
         : frames(item.before || { wet: 0.3, cut: 0.1, gear: 0 },
@@ -2695,6 +2807,357 @@
     $('#detail').setAttribute('data-open', '1');
     $('#d-close').focus();
     startLivePlayback(item);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * The player
+   *
+   * Native <video controls> is a thick red capsule. The line a reviewer
+   * already has muscle memory for is YouTube's: 3px #f00 on a translucent
+   * white rail, load behind played, a 13px red disc on hover, drag to
+   * scrub. Nothing about the line is restyled — the numbers are YouTube's.
+   * ------------------------------------------------------------------ */
+
+  var RATES = [0.5, 1, 1.25, 1.5, 2];
+
+  var ICON = {
+    play: '<svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>',
+    pause: '<svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="5" width="3.6" height="14" rx="1"/><rect x="13.9" y="5" width="3.6" height="14" rx="1"/></svg>',
+    loud: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.2L12 5.5v13L7.2 14.5H4z" fill="currentColor" stroke="none"/><path d="M15.6 9a4.3 4.3 0 0 1 0 6M18 6.4a8 8 0 0 1 0 11.2"/></svg>',
+    muted: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 9.5h3.2L12 5.5v13L7.2 14.5H4z" fill="currentColor" stroke="none"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>',
+    full: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
+    exit: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>'
+  };
+
+  function clock(seconds) {
+    var t = Math.max(0, Math.floor(Number(seconds) || 0));
+    var h = Math.floor(t / 3600);
+    var m = Math.floor((t % 3600) / 60);
+    var s2 = t % 60;
+    return h > 0
+      ? h + ':' + String(m).padStart(2, '0') + ':' + String(s2).padStart(2, '0')
+      : m + ':' + String(s2).padStart(2, '0');
+  }
+
+  var vp = null;
+
+  function unmountPlayer() {
+    if (!vp) return;
+    if (vp.idleTimer) clearTimeout(vp.idleTimer);
+    try { vp.video.pause(); } catch (err) { /* already gone */ }
+    document.removeEventListener('keydown', vp.onKey, true);
+    document.removeEventListener('fullscreenchange', vp.onFull);
+    vp = null;
+  }
+
+  function mountPlayer(item, url) {
+    unmountPlayer();
+
+    // The frame strip belongs to the schematic player. Real footage has
+    // its own YouTube bar; two scrubbers for one clip is one too many.
+    var strip = document.querySelector('.player .controls');
+    if (strip) strip.hidden = true;
+    $('#d-scrub').innerHTML = '';
+    $('#d-time').textContent = 'full clip · ' + dur(item.duration);
+
+    var marks = analysisLog(item).filter(function (r) { return r.at > 0; });
+    var total = Number(item.duration) || 0;
+    var tickHtml = total > 0
+      ? marks.map(function (r) {
+          var pctv = Math.min(100, Math.max(0, (r.at / total) * 100));
+          return '<span class="vp-tick" data-kind="' + esc(r.kind) + '" data-at="' + r.at +
+            '" style="left:' + pctv.toFixed(3) + '%"></span>';
+        }).join('')
+      : '';
+
+    var posterAttr = item.poster ? ' poster="' + esc(item.poster) + '"' : '';
+
+    $('#d-frame').innerHTML =
+      '<div class="vp" data-paused="1" data-idle="0" data-scrubbing="0">' +
+        '<video playsinline preload="metadata"' + posterAttr + ' src="' + esc(url) + '"></video>' +
+        '<div class="vp-hit"></div>' +
+        '<button class="vp-big" type="button" aria-label="Play">' + ICON.play + '</button>' +
+        '<div class="vp-chrome">' +
+          '<div class="vp-bar" role="slider" tabindex="0" aria-label="Seek"' +
+            ' aria-valuemin="0" aria-valuemax="' + (total || 0) + '" aria-valuenow="0" aria-valuetext="0:00">' +
+            '<div class="vp-rail">' +
+              '<div class="vp-buffered"></div>' +
+              '<div class="vp-hover"></div>' +
+              '<div class="vp-played"></div>' +
+            '</div>' +
+            tickHtml +
+            '<div class="vp-knob"></div>' +
+          '</div>' +
+          '<div class="vp-bubble"><span class="vp-bubble-t">0:00</span><span class="lbl"></span></div>' +
+          '<div class="vp-row">' +
+            '<button type="button" data-vp="play" aria-label="Play">' + ICON.play + '</button>' +
+            '<span class="vp-vol">' +
+              '<button type="button" data-vp="mute" aria-label="Mute">' + ICON.loud + '</button>' +
+              '<input type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume" />' +
+            '</span>' +
+            '<span class="vp-clock"><b>0:00</b> / ' + clock(total) + '</span>' +
+            '<span class="vp-spacer"></span>' +
+            '<button type="button" class="vp-rate" data-vp="rate" aria-label="Playback speed">1&times;</button>' +
+            '<button type="button" data-vp="full" aria-label="Full screen">' + ICON.full + '</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    var root = $('#d-frame').querySelector('.vp');
+    var video = root.querySelector('video');
+    var bar = root.querySelector('.vp-bar');
+    var railPlayed = root.querySelector('.vp-played');
+    var railBuffer = root.querySelector('.vp-buffered');
+    var railHover = root.querySelector('.vp-hover');
+    var knob = root.querySelector('.vp-knob');
+    var bubble = root.querySelector('.vp-bubble');
+    var bubbleT = root.querySelector('.vp-bubble-t');
+    var bubbleL = bubble.querySelector('.lbl');
+    var playBtns = root.querySelectorAll('[data-vp="play"], .vp-big');
+    var muteBtn = root.querySelector('[data-vp="mute"]');
+    var volInput = root.querySelector('.vp-vol input');
+    var clockEl = root.querySelector('.vp-clock b');
+    var clockTotal = root.querySelector('.vp-clock');
+    var rateBtn = root.querySelector('[data-vp="rate"]');
+    var fullBtn = root.querySelector('[data-vp="full"]');
+
+    vp = { root: root, video: video, item: item, idleTimer: null, rate: 1, scrubbing: false, resume: false };
+
+    function length() {
+      var d = Number(video.duration);
+      return isFinite(d) && d > 0 ? d : total;
+    }
+
+    function paint() {
+      var d = length();
+      var at = video.currentTime || 0;
+      var frac = d > 0 ? Math.min(1, Math.max(0, at / d)) : 0;
+      railPlayed.style.transform = 'scaleX(' + frac + ')';
+      knob.style.left = (frac * 100).toFixed(3) + '%';
+      clockEl.textContent = clock(at);
+      bar.setAttribute('aria-valuenow', String(Math.floor(at)));
+      bar.setAttribute('aria-valuetext', clock(at) + ' of ' + clock(d));
+      var buffered = 0;
+      try {
+        for (var i = 0; i < video.buffered.length; i++) {
+          if (video.buffered.start(i) <= at && video.buffered.end(i) >= at) {
+            buffered = video.buffered.end(i);
+            break;
+          }
+          buffered = Math.max(buffered, video.buffered.end(i));
+        }
+      } catch (err) { buffered = 0; }
+      railBuffer.style.transform = 'scaleX(' + (d > 0 ? Math.min(1, buffered / d) : 0) + ')';
+    }
+
+    function setPaused(paused) {
+      root.setAttribute('data-paused', paused ? '1' : '0');
+      Array.prototype.forEach.call(playBtns, function (b) {
+        b.innerHTML = paused ? ICON.play : ICON.pause;
+        b.setAttribute('aria-label', paused ? 'Play' : 'Pause');
+      });
+      if (paused) wake(true);
+    }
+
+    function toggle() {
+      if (video.paused || video.ended) video.play().catch(function () {});
+      else video.pause();
+    }
+
+    function wake(hold) {
+      root.setAttribute('data-idle', '0');
+      if (vp && vp.idleTimer) clearTimeout(vp.idleTimer);
+      if (hold || video.paused) return;
+      if (!vp) return;
+      vp.idleTimer = setTimeout(function () {
+        if (vp && !vp.scrubbing && !video.paused) root.setAttribute('data-idle', '1');
+      }, 2600);
+    }
+
+    function fracFromEvent(ev) {
+      var box = bar.getBoundingClientRect();
+      if (!box.width) return 0;
+      return Math.min(1, Math.max(0, (ev.clientX - box.left) / box.width));
+    }
+
+    function markNear(seconds) {
+      var d = length();
+      if (!d || !marks.length) return null;
+      var window_ = Math.max(1.5, d * 0.012);
+      var best = null;
+      var dist = Infinity;
+      marks.forEach(function (r) {
+        var gap = Math.abs(r.at - seconds);
+        if (gap < dist) { dist = gap; best = r; }
+      });
+      return dist <= window_ ? best : null;
+    }
+
+    function showBubble(frac) {
+      var d = length();
+      var at = frac * d;
+      var box = bar.getBoundingClientRect();
+      var chromeBox = bubble.parentNode.getBoundingClientRect();
+      var x = (box.left - chromeBox.left) + frac * box.width;
+      var half = Math.max(28, bubble.offsetWidth / 2);
+      bubble.style.left = Math.round(Math.min(chromeBox.width - half, Math.max(half, x))) + 'px';
+      bubble.style.bottom = Math.round(chromeBox.bottom - box.top + 9) + 'px';
+      bubbleT.textContent = clock(at);
+      var near = markNear(at);
+      bubbleL.textContent = near ? near.text : '';
+      bubbleL.hidden = !near;
+      railHover.style.transform = 'scaleX(' + frac + ')';
+    }
+
+    function seekFrac(frac) {
+      var d = length();
+      if (!d) return;
+      video.currentTime = frac * d;
+      paint();
+      syncAnalysisLog(video.currentTime);
+    }
+
+    function nudge(delta) {
+      var d = length();
+      if (!d) return;
+      video.currentTime = Math.min(d, Math.max(0, (video.currentTime || 0) + delta));
+      wake();
+      paint();
+      syncAnalysisLog(video.currentTime);
+    }
+
+    bar.addEventListener('pointerdown', function (ev) {
+      ev.preventDefault();
+      if (bar.setPointerCapture) bar.setPointerCapture(ev.pointerId);
+      vp.scrubbing = true;
+      root.setAttribute('data-scrubbing', '1');
+      vp.resume = !video.paused;
+      video.pause();
+      var frac = fracFromEvent(ev);
+      showBubble(frac);
+      seekFrac(frac);
+    });
+
+    bar.addEventListener('pointermove', function (ev) {
+      var frac = fracFromEvent(ev);
+      showBubble(frac);
+      if (vp.scrubbing) seekFrac(frac);
+    });
+
+    bar.addEventListener('pointerup', function (ev) {
+      if (!vp.scrubbing) return;
+      vp.scrubbing = false;
+      root.setAttribute('data-scrubbing', '0');
+      try { if (bar.releasePointerCapture) bar.releasePointerCapture(ev.pointerId); } catch (err) { /* already released */ }
+      if (vp.resume) video.play().catch(function () {});
+      wake();
+    });
+
+    bar.addEventListener('pointerleave', function () {
+      if (!vp.scrubbing) railHover.style.transform = 'scaleX(0)';
+    });
+
+    bar.addEventListener('keydown', function (ev) {
+      if (ev.key === 'ArrowLeft') { nudge(-5); ev.preventDefault(); }
+      else if (ev.key === 'ArrowRight') { nudge(5); ev.preventDefault(); }
+      else if (ev.key === 'Home') { seekFrac(0); ev.preventDefault(); }
+      else if (ev.key === 'End' && length()) { seekFrac(0.999); ev.preventDefault(); }
+      else if (ev.key === ' ' || ev.key === 'Enter') { toggle(); ev.preventDefault(); }
+    });
+
+    Array.prototype.forEach.call(playBtns, function (b) {
+      b.addEventListener('click', function (ev) { ev.stopPropagation(); toggle(); });
+    });
+    root.querySelector('.vp-hit').addEventListener('click', toggle);
+    root.querySelector('.vp-hit').addEventListener('dblclick', function () { fullscreen(); });
+
+    muteBtn.addEventListener('click', function () {
+      video.muted = !video.muted;
+      if (!video.muted && video.volume === 0) video.volume = 1;
+      syncVolume();
+    });
+
+    volInput.addEventListener('input', function () {
+      video.volume = Number(volInput.value);
+      video.muted = video.volume === 0;
+      syncVolume();
+    });
+
+    function syncVolume() {
+      var off = video.muted || video.volume === 0;
+      muteBtn.innerHTML = off ? ICON.muted : ICON.loud;
+      muteBtn.setAttribute('aria-label', off ? 'Unmute' : 'Mute');
+      volInput.value = String(off ? 0 : video.volume);
+    }
+
+    rateBtn.addEventListener('click', function () {
+      var next = RATES[(RATES.indexOf(vp.rate) + 1) % RATES.length];
+      vp.rate = next;
+      video.playbackRate = next;
+      rateBtn.innerHTML = (next === 1 ? '1' : String(next)) + '&times;';
+    });
+
+    function fullscreen() {
+      if (document.fullscreenElement) {
+        if (document.exitFullscreen) document.exitFullscreen();
+      } else if (root.requestFullscreen) {
+        root.requestFullscreen().catch(function () {});
+      } else if (video.webkitEnterFullscreen) {
+        video.webkitEnterFullscreen();
+      }
+    }
+    fullBtn.addEventListener('click', fullscreen);
+
+    vp.onFull = function () {
+      var on = document.fullscreenElement === root;
+      fullBtn.innerHTML = on ? ICON.exit : ICON.full;
+      fullBtn.setAttribute('aria-label', on ? 'Leave full screen' : 'Full screen');
+    };
+    document.addEventListener('fullscreenchange', vp.onFull);
+
+    root.addEventListener('pointermove', function () { wake(); });
+    root.addEventListener('pointerleave', function () { if (!video.paused) wake(); });
+
+    video.addEventListener('loadedmetadata', function () {
+      var d = length();
+      if (clockTotal && clockTotal.lastChild) clockTotal.lastChild.nodeValue = ' / ' + clock(d);
+      bar.setAttribute('aria-valuemax', String(Math.floor(d)));
+      if (d > 0 && Math.abs(d - (Number(item.duration) || 0)) > 1) {
+        item.duration = Math.round(d);
+        $('#d-time').textContent = 'full clip · ' + dur(item.duration);
+      }
+      paint();
+    });
+    video.addEventListener('timeupdate', function () { paint(); syncAnalysisLog(video.currentTime); });
+    video.addEventListener('progress', paint);
+    video.addEventListener('seeked', function () { paint(); syncAnalysisLog(video.currentTime); });
+    video.addEventListener('play', function () { setPaused(false); wake(); syncAnalysisLog(video.currentTime); });
+    video.addEventListener('pause', function () { setPaused(true); syncAnalysisLog(video.currentTime); });
+    video.addEventListener('ended', function () { setPaused(true); syncAnalysisLog(video.currentTime); });
+    video.addEventListener('volumechange', syncVolume);
+
+    vp.onKey = function (ev) {
+      if (!vp || !state.open) return;
+      var t = ev.target;
+      var tag = t && t.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+      if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+      if (tag === 'BUTTON' && !root.contains(t)) return;
+      var key = ev.key;
+      if (key === ' ' || key === 'k' || key === 'K') { toggle(); ev.preventDefault(); }
+      else if (key === 'ArrowLeft') { nudge(-5); ev.preventDefault(); }
+      else if (key === 'ArrowRight') { nudge(5); ev.preventDefault(); }
+      else if (key === 'j' || key === 'J') { nudge(-10); ev.preventDefault(); }
+      else if (key === 'l' || key === 'L') { nudge(10); ev.preventDefault(); }
+      else if (key === 'm' || key === 'M') { video.muted = !video.muted; syncVolume(); ev.preventDefault(); }
+      else if (key === 'f' || key === 'F') { fullscreen(); ev.preventDefault(); }
+      else if (key >= '0' && key <= '9') { seekFrac(Number(key) / 10); ev.preventDefault(); }
+    };
+    document.addEventListener('keydown', vp.onKey, true);
+
+    syncVolume();
+    setPaused(true);
+    paint();
   }
 
   function renderDictation(item) {
@@ -3753,6 +4216,7 @@
 
   $('#d-close').addEventListener('click', function () {
     stopPlay();
+    unmountPlayer();
     $('#detail').setAttribute('data-open', '0');
     state.open = null;
   });
