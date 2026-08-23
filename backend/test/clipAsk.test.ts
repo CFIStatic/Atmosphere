@@ -83,6 +83,18 @@ test('a clip still being read says so instead of inventing work', () => {
   assert.match(answer, /still being read/);
 });
 
+test('live watch notes are enough to answer while the official reading is still landing', () => {
+  const answer = groundedAnswerFromClip('Did anything happen?', {
+    analysisState: 'queued',
+    watchNotes: [
+      { atSeconds: 8, text: 'Crew walking the north eave; tarp half rolled.' },
+      { atSeconds: 22, text: 'Decking exposed under the rolled tarp.' },
+    ],
+  });
+  assert.match(answer, /Yes/);
+  assert.match(answer, /tarp/i);
+});
+
 test('clipRecordFromEvidenceItem copies the office reading, not the list chrome', () => {
   const record = clipRecordFromEvidenceItem({
     workDate: '2026-08-05',
