@@ -1739,9 +1739,13 @@
 
   function clipThumbHtml(previewUrl, poster, lengthLabel) {
     if (previewUrl) {
+      // A drawn SVG is not a frame of the file. Using it as poster makes a
+      // real clip look like the placeholder even after the player is ready.
+      var posterAttr = (poster && poster.indexOf('data:image/svg') !== 0)
+        ? ' poster="' + esc(poster) + '"'
+        : '';
       return '<span class="thumb" data-preview="1">' +
-        '<video class="shot" muted playsinline preload="none"' +
-        (poster ? ' poster="' + esc(poster) + '"' : '') +
+        '<video class="shot" muted playsinline preload="metadata"' + posterAttr +
         ' data-src="' + esc(previewUrl) + '"></video>' +
         '<span class="dur">' + lengthLabel + '</span></span>';
     }
@@ -1819,6 +1823,8 @@
     if (!video.getAttribute('src') && video.getAttribute('data-src')) {
       video.src = video.getAttribute('data-src');
     }
+    video.muted = true;
+    video.playsInline = true;
     video._previewing = true;
     previewPlaying = video;
     var play = function () {
@@ -2789,15 +2795,19 @@
       '<span class="id">' + esc(item.id) + '</span> · ' + esc(item.phase) + ' · ' +
       dayLabel(item.workDate) + ' · ' + esc(item.company) + ' · ' + dur(item.duration) + ' · ' + mb(item.bytes);
 
-    // Prefer the real file when the portal minted a URL. Frames remain the
-    // fallback for the demo artifact and for clips whose file URL expired.
-    if (item._videoUrl) {
-      // The poster is the same still the list showed, so the player opens on
-      // the clip rather than on the black rectangle a browser picks.
-      var posterAttr = item.poster ? ' poster="' + esc(item.poster) + '"' : '';
+    // Prefer the real file — the list preview URL or the portal-minted one.
+    // Frames remain the fallback for a clip that has neither.
+    var playUrl = item._videoUrl || item.previewUrl;
+    if (playUrl) {
+      // The poster is a still out of the file when we have one, never the
+      // drawn placeholder — that reads as "no footage" on a player that
+      // is about to play the clip.
+      var posterAttr = (item.poster && item.poster.indexOf('data:image/svg') !== 0)
+        ? ' poster="' + esc(item.poster) + '"'
+        : '';
       $('#d-frame').innerHTML =
         '<video controls playsinline preload="metadata"' + posterAttr +
-        ' src="' + esc(item._videoUrl) + '"></video>';
+        ' src="' + esc(playUrl) + '"></video>';
       $('#d-scrub').innerHTML = '';
       $('#d-time').textContent = 'full clip · ' + dur(item.duration);
       var vid = $('#d-frame').querySelector('video');

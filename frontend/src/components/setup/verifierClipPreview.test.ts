@@ -59,7 +59,7 @@ describe('verifier dashboard clip preview', () => {
       'https://storage.example/sign/frame.jpg',
       '—',
     );
-    expect(withFile).toContain('<video class="shot" muted playsinline preload="none"');
+    expect(withFile).toContain('<video class="shot" muted playsinline preload="metadata"');
     expect(withFile).toContain('data-src="https://storage.example/sign/clip.webm?token=abc"');
     expect(withFile).toContain('poster="https://storage.example/sign/frame.jpg"');
     expect(withFile).toContain('data-preview="1"');
@@ -69,6 +69,14 @@ describe('verifier dashboard clip preview', () => {
     expect(stillOnly).toContain('<img class="shot"');
     expect(stillOnly).not.toContain('<video');
     expect(stillOnly).toContain('1:36');
+
+    const noDrawnPoster = clipThumbHtml(
+      'https://storage.example/sign/clip.webm?token=abc',
+      'data:image/svg+xml;charset=utf-8,x',
+      '—',
+    );
+    expect(noDrawnPoster).toContain('<video');
+    expect(noDrawnPoster).not.toContain('poster=');
   });
 
   it('wires live rows to the signed file URL and starts the snippet on screen', () => {
@@ -115,6 +123,13 @@ describe('verifier dashboard clip preview', () => {
     const overlay = videos[0]?.parentElement?.querySelector('.dur')?.textContent;
     expect(overlay).not.toBe('0:00');
     expect(overlay).toBeTruthy();
+
+    const row = dom.window.document.querySelector('tr[data-id="EV-1038-0805-A"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    const player = dom.window.document.querySelector('#d-frame video') as HTMLVideoElement | null;
+    expect(player).not.toBeNull();
+    expect(player!.getAttribute('src')).toBe('/verifier/demo-preview.mp4');
     dom.window.close();
   });
 });
