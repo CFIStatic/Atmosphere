@@ -533,18 +533,18 @@
     </div>
   </div>
 
-  <!-- ================= SIGN IN: dashboard credentials, or a job link ================= -->
+  <!-- ================= CONNECT: company code once, then this phone stays linked ================= -->
   <div class="screen" id="s-blocked">
     <div class="pad" style="padding-top:36px">
       <h1 class="h1">Connect Field Capture</h1>
       <p class="lede" id="blocked-msg">
-        Type your name and the office invite code from Atmosphere Settings. Job share links still work without signing in.
+        Type your name and the company code from Atmosphere Settings. We store them on this phone — you will not be asked again. Job share links still work without signing in.
       </p>
       <form class="auth-form" id="login-form" novalidate>
         <label for="login-name">First and last name
           <input id="login-name" name="fullName" type="text" autocomplete="name" autocapitalize="words" required />
         </label>
-        <label for="login-code">Office invite code
+        <label for="login-code">Company code
           <input id="login-code" name="joinCode" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" required minlength="6" maxlength="12" />
         </label>
         <p class="auth-err" id="login-err" hidden></p>

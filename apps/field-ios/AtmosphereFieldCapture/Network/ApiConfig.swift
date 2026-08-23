@@ -34,7 +34,7 @@ enum ApiConfig {
         let raw = (plist?.isEmpty == false ? plist : nil)
             ?? (env?.isEmpty == false ? env : nil)
             ?? (isSimulator ? "http://127.0.0.1:4000" : productionBffURL.absoluteString)
-        guard let raw, let url = URL(string: stripTrailingSlash(raw)),
+        guard let url = URL(string: stripTrailingSlash(raw)),
               let scheme = url.scheme?.lowercased(),
               scheme == "http" || scheme == "https",
               let host = url.host, !host.isEmpty

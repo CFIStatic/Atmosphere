@@ -78,13 +78,11 @@ bash scripts/host-phone.sh
 
 Open the printed `/fieldcapture/` URL in Safari, then Share → Add to Home Screen.
 
-**Create an account or sign in** on first install (same email/password as the
-Atmosphere website). Link the phone to the office with the join code from
-Atmosphere → Settings → Organization (**Link to office account**), or start a
-new office from the phone. A join link `atmosphere-field://join?code=…` opens
-that screen. Tokens stay in Keychain — later launches skip connect and open
-Today. Day films file into `job_proofs` for that org. Disconnect only from
-Account → Disconnect.
+**Enter your name and the company code** on first install (Atmosphere →
+Settings → Organization). We store both on this phone; later launches skip
+connect and open Today. A join link `atmosphere-field://join?code=…`
+prefills the code. Tokens stay in Keychain. Day films file into
+`job_proofs` for that org. Disconnect only from Account → Disconnect.
 
 **Requirements:** iOS 16+, camera + mic + location when-in-use. RoomPlan
 twin capture additionally needs a LiDAR iPhone.
@@ -109,7 +107,7 @@ AtmosphereFieldCapture/
 
 ## Crew flow
 
-1. **First launch only:** Create an Atmosphere account or sign in (same as the website), then **Link to office account** with the office join code.
+1. **First launch only:** Enter your name and the company code from Atmosphere Settings.
 2. Later launches open Today already connected.
 3. Confirm today’s jobs (tap one if several) → **Start the day**.
 4. Hold **Finish the day** — proof upload into that job → optional RoomPlan twin.
@@ -123,11 +121,10 @@ On a physical iPhone the app talks to the Atmosphere office BFF
 day films enqueue server-side vision: sparse frames, action log, and
 Verifier dictation. A local BFF is used in Simulator when one is running.
 
-1. Create account: BFF `POST /api/field-app/register` (email + password + join code or new office name), or Supabase `POST /auth/v1/signup` plus `create_org` / `join_org`
-2. Sign-in: `POST /auth/v1/token?grant_type=password` (or BFF `POST /api/auth/login`)
-3. Profile + today’s jobs: `my_org_membership` + `crm_jobs` / `job_proofs` (or BFF `/api/field-app/*`)
-4. Day film: upload into the `job-proofs` bucket, then insert `job_proofs`
-5. Optional RoomPlan twin still uses the BFF geometry routes when one is running
+1. Connect: BFF `POST /api/field-app/join` (name + company code + this phone’s device id)
+2. Profile + today’s jobs: `my_org_membership` + `crm_jobs` / `job_proofs` (or BFF `/api/field-app/*`)
+3. Day film: upload into the `job-proofs` bucket, then insert `job_proofs`
+4. Optional RoomPlan twin still uses the BFF geometry routes when one is running
 
 See also `docs/media-storage.md` and `backend/src/geometry/`.
 

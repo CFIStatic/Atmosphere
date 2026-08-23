@@ -4,7 +4,7 @@ import SwiftUI
  * Dashboard email + password connect.
  *
  * Secondary path for people who already have an Atmosphere website login.
- * Crew connect with name + invite code on JoinCrewView.
+ * Crew connect with their name and the company code on JoinCrewView.
  */
 struct SignInView: View {
     @EnvironmentObject private var auth: AuthSession
@@ -35,7 +35,7 @@ struct SignInView: View {
                     .padding(.top, 10)
 
                 Text(
-                    "Use this only if you already have an Atmosphere website login. Crew usually connect with their name and the office invite code."
+                    "Use this only if you already have an Atmosphere website login. Crew usually connect with their name and the company code from the office."
                 )
                 .font(.system(size: 14))
                 .foregroundStyle(FieldTheme.muted)

@@ -3,8 +3,8 @@ import SwiftUI
 /**
  * First-install crew connect.
  *
- * Name + the office join code from Atmosphere Settings. No email, no
- * password — the office assigns jobs to that name.
+ * The person's name plus the company code from Atmosphere Settings.
+ * We store both on this phone and stay linked.
  */
 struct JoinCrewView: View {
     @EnvironmentObject private var auth: AuthSession
@@ -47,40 +47,39 @@ struct JoinCrewView: View {
                     .padding(.top, 10)
 
                 Text(
-                    "Type your name and the office invite code. The office puts you on jobs; those jobs show up here."
+                    "Type your name and the company code from the office. We store them here — you will not be asked again."
                 )
                 .font(.system(size: 14))
                 .foregroundStyle(FieldTheme.muted)
 
-                VStack(spacing: 10) {
-                    TextField("First and last name", text: $fullName)
-                        .textContentType(.name)
-                        .textInputAutocapitalization(.words)
-                        .padding(12)
-                        .background(FieldTheme.panel)
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
-                        .cornerRadius(10)
+                TextField("First and last name", text: $fullName)
+                    .textContentType(.name)
+                    .textInputAutocapitalization(.words)
+                    .padding(12)
+                    .background(FieldTheme.panel)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
+                    .cornerRadius(10)
+                    .padding(.top, 4)
 
-                    TextField("Office invite code", text: Binding(
-                        get: { joinCode },
-                        set: { value in
-                            joinCode = value
-                            previewTask?.cancel()
-                            previewTask = Task {
-                                try? await Task.sleep(nanoseconds: 350_000_000)
-                                guard !Task.isCancelled else { return }
-                                await auth.previewOffice(joinCode: value)
-                            }
+                TextField("Company code", text: Binding(
+                    get: { joinCode },
+                    set: { value in
+                        joinCode = value
+                        previewTask?.cancel()
+                        previewTask = Task {
+                            try? await Task.sleep(nanoseconds: 350_000_000)
+                            guard !Task.isCancelled else { return }
+                            await auth.previewOffice(joinCode: value)
                         }
-                    ))
-                        .textInputAutocapitalization(.characters)
-                        .autocorrectionDisabled()
-                        .padding(12)
-                        .background(FieldTheme.panel)
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
-                        .cornerRadius(10)
-                }
-                .padding(.top, 4)
+                    }
+                ))
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                    .padding(12)
+                    .background(FieldTheme.panel)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(FieldTheme.line))
+                    .cornerRadius(10)
+                    .padding(.top, 4)
 
                 if let name = auth.officePreviewName {
                     Text("This code belongs to \(name).")

@@ -183,7 +183,8 @@ Serve `fieldcapture/` and open with a live token:
 /fieldcapture/index.html?token=<access_token>&api=http://localhost:4000
 ```
 
-Without `token`, live upload is refused (no invented demo day unless `demo=1`).
+Without `token`, enter your name and the company code once; the phone stays
+linked to that office (no invented demo day unless `demo=1`).
 
 ### Open on your phone
 

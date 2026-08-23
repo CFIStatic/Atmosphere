@@ -31,22 +31,29 @@ const apiMocks = vi.hoisted(() => ({
   uploadAvatar: vi.fn(),
   removeAvatar: vi.fn(),
   getMembers: vi.fn().mockResolvedValue({ members: [] }),
+  orgInvites: vi.fn().mockResolvedValue({ invites: [] }),
+  createOrgInvite: vi.fn(),
+  revokeOrgInvite: vi.fn(),
 }));
 
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => authState,
 }));
 
-vi.mock('../lib/api', () => ({
-  api: apiMocks,
-  ApiError: class ApiError extends Error {
-    status = 400;
-    code = 'failed';
-  },
-  ROLE_LABELS: {},
-  WORK_TYPE_LABELS: {},
-  CONTRACTOR_TYPE_LABELS: {},
-}));
+vi.mock('../lib/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/api')>();
+  return {
+    ...actual,
+    api: {
+      ...actual.api,
+      ...apiMocks,
+    },
+    ApiError: class ApiError extends Error {
+      status = 400;
+      code = 'failed';
+    },
+  };
+});
 
 vi.mock('../hooks/useFeatureTimer', () => ({
   useFeatureTimer: () => undefined,
@@ -126,6 +133,17 @@ describe('Settings profile photo', () => {
     await user.upload(screen.getByLabelText('Upload a profile photo or icon'), file);
 
     expect(apiMocks.uploadAvatar).toHaveBeenCalled();
+  });
+});
+
+describe('Settings Field Capture app', () => {
+  it('tells the office the crew enter their name and the company code once', () => {
+    renderSettings('/settings?section=organization');
+
+    expect(screen.getByText('Field Capture app')).toBeInTheDocument();
+    expect(screen.getByText(/type their name and this company code once/i)).toBeInTheDocument();
+    expect(screen.getByText(/first and last name/i)).toBeInTheDocument();
+    expect(screen.getByText(/The phone stores both and stays linked/i)).toBeInTheDocument();
   });
 });
 

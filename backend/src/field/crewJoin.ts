@@ -32,6 +32,18 @@ export function fieldCaptureEmail(orgId: string, name: string): string {
   return `${slug || 'crew'}.${org}@${FIELD_CAPTURE_EMAIL_DOMAIN}`;
 }
 
+/** Stable per-phone address inside one office. */
+export function fieldCaptureDeviceEmail(orgId: string, deviceId: string): string {
+  const slug = deviceId.replace(/[^a-z0-9]+/gi, '').toLowerCase().slice(0, 32);
+  const org = orgId.replace(/-/g, '').slice(0, 12);
+  return `phone.${slug || 'device'}.${org}@${FIELD_CAPTURE_EMAIL_DOMAIN}`;
+}
+
+export function fieldCaptureDeviceName(deviceId: string): string {
+  const short = deviceId.replace(/[^a-zA-Z0-9]/g, '').slice(-4).toUpperCase() || 'PHONE';
+  return `Field phone ${short}`;
+}
+
 type OrgRow = {
   id: string;
   name: string;
@@ -82,6 +94,22 @@ async function loadOffice(joinCode: string): Promise<OrgRow> {
     throw new HttpError(400, 'That join code did not match any organization.', 'join_org_failed');
   }
   return data as OrgRow;
+}
+
+async function findCrewByEmail(
+  email: string,
+): Promise<{ userId: string; email: string | null } | null> {
+  const admin = adminOrThrow();
+  const { data, error } = await admin
+    .from('profiles')
+    .select('id, email')
+    .eq('email', email)
+    .maybeSingle();
+  if (error) {
+    throw new HttpError(500, error.message, 'crew_lookup_failed');
+  }
+  if (!data?.id) return null;
+  return { userId: data.id as string, email: (data.email as string | null) ?? email };
 }
 
 async function findCrewMember(
@@ -160,9 +188,13 @@ async function mintSession(userId: string, email: string): Promise<{ user: User;
   return { user: signedIn.data.user, session: signedIn.data.session };
 }
 
-async function createCrewUser(orgId: string, name: string): Promise<{ user: User; session: Session; email: string }> {
+async function createCrewUser(
+  orgId: string,
+  name: string,
+  emailOverride?: string,
+): Promise<{ user: User; session: Session; email: string }> {
   const admin = adminOrThrow();
-  const email = fieldCaptureEmail(orgId, name);
+  const email = emailOverride ?? fieldCaptureEmail(orgId, name);
   const password = randomBytes(24).toString('base64url');
 
   const created = await admin.auth.admin.createUser({
@@ -212,6 +244,40 @@ async function authEmailFor(userId: string, profileEmail: string | null): Promis
 }
 
 /**
+ * Company code + this phone's stored device id → Atmosphere session on
+ * that company. The same phone and code reopen the same login so the
+ * crew never enter the code again.
+ */
+export async function joinCrewByDevice(input: { deviceId: string; joinCode: string }) {
+  const org = await loadOffice(input.joinCode);
+  const email = fieldCaptureDeviceEmail(org.id, input.deviceId);
+  const fullName = fieldCaptureDeviceName(input.deviceId);
+
+  const existing = await findCrewByEmail(email);
+  if (existing) {
+    const authEmail = await authEmailFor(existing.userId, existing.email);
+    const { user, session } = await mintSession(existing.userId, authEmail);
+    await linkFieldOffice(session.access_token, user, {
+      fullName,
+      joinCode: input.joinCode,
+    });
+    return { user, session, org: serializeFieldOrg(org), created: false };
+  }
+
+  const created = await createCrewUser(org.id, fullName, email);
+  const linked = await linkFieldOffice(created.session.access_token, created.user, {
+    fullName,
+    joinCode: input.joinCode,
+  });
+  return {
+    user: created.user,
+    session: created.session,
+    org: linked ?? serializeFieldOrg(org),
+    created: true,
+  };
+}
+
+/**
  * Name + office join code → Atmosphere session on that company.
  *
  * Returning the same name and code on a new phone reopens the same
@@ -243,4 +309,15 @@ export async function joinCrewByName(input: { fullName: string; joinCode: string
     org: linked ?? serializeFieldOrg(org),
     created: true,
   };
+}
+
+/** Name of the person plus the company code. Device id is optional persistence. */
+export async function joinCrew(input: { fullName?: string; joinCode: string; deviceId?: string }) {
+  if (input.fullName) {
+    return joinCrewByName({ fullName: input.fullName, joinCode: input.joinCode });
+  }
+  if (input.deviceId) {
+    return joinCrewByDevice({ deviceId: input.deviceId, joinCode: input.joinCode });
+  }
+  throw new HttpError(400, 'Enter your first and last name.', 'validation_error');
 }
