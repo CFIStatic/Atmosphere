@@ -239,7 +239,7 @@
       who.innerHTML = '';
     }
     $('#blocked-msg').textContent =
-      'Enter the company code from Atmosphere Settings. This phone stays linked after that.';
+      'Enter the company code from Atmosphere Settings. We store it on this phone — you will not be asked again. Job share links still work without a code.';
   }
 
   function showLoginError(message) {
