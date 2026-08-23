@@ -5,7 +5,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { HttpError } from '../lib/errors.js';
-import { proofVideoUrl, recordAccess } from './proofOfWork.js';
+import { ensureStillsAndDuration, proofVideoUrl, recordAccess } from './proofOfWork.js';
 import {
   answerFromClip,
   clipRecordFromEvidenceItem,
@@ -166,6 +166,32 @@ function fixPairing(item: any, siblings: Array<{ phase: string }>) {
 }
 
 /**
+ * Fill in stills for clips that have none, one at a time and in the background.
+ *
+ * Serial on purpose. This is FFmpeg over stored video, and a library opened on
+ * an org with a backlog would otherwise start fifty extractions at once on the
+ * same box that is serving the request that triggered them.
+ */
+let backfilling = false;
+async function backfillStills(proofIds: string[]): Promise<void> {
+  if (backfilling) return;
+  const admin = createAdminClient();
+  if (!admin) return;
+  backfilling = true;
+  try {
+    for (const proofId of proofIds) {
+      try {
+        await ensureStillsAndDuration(admin, proofId);
+      } catch (err) {
+        console.warn('[library] still backfill failed:', err instanceof Error ? err.message : err);
+      }
+    }
+  } finally {
+    backfilling = false;
+  }
+}
+
+/**
  * One still per clip, for the library's preview cell.
  *
  * The earliest frame the pipeline kept, which is deliberately not the file's
@@ -202,6 +228,14 @@ async function posterUrls(proofIds: string[]): Promise<Map<string, string>> {
       if (!frame.storage_path) continue;
       if (!pathByProof.has(frame.proof_id)) pathByProof.set(frame.proof_id, frame.storage_path);
     }
+
+    // Clips filed before stills were extracted independently of the model have
+    // no frame to sign. Backfilling them here is what makes an old row heal
+    // itself the next time somebody opens the library, rather than waiting for
+    // a re-upload. Off the response: the list must not wait on FFmpeg.
+    const missing = proofIds.filter((id) => !pathByProof.has(id));
+    if (missing.length) void backfillStills(missing);
+
     if (!pathByProof.size) return out;
 
     const paths = [...pathByProof.values()];
