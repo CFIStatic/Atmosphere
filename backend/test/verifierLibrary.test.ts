@@ -154,6 +154,49 @@ test('serialization: labels attached, integrity computed, flag derived', () => {
   // Without a separate narration_text, dictation falls back to the summary —
   // the office always has something to read next to the video.
   assert.equal(item.analysis?.dictation, 'The slope is stripped.');
+  // No still was passed, so the row carries no poster and the portal draws
+  // its placeholder rather than pointing an <img> at nothing.
+  assert.equal(item.posterUrl, null);
+});
+
+test('serialization: a still out of the clip rides along as the poster', () => {
+  const base = {
+    id: 'p-poster',
+    job_id: 'j1',
+    party_id: 'pt1',
+    phase: 'after',
+    work_date: '2026-08-09',
+    captured_at: '2026-08-09T15:00:00Z',
+    received_at: '2026-08-09T15:04:00Z',
+    duration_seconds: '96',
+    byte_size: '1200',
+    lat: null,
+    lon: null,
+    accuracy_m: null,
+    content_hash: 'ghi',
+    state: 'checked',
+    checks: [],
+  };
+  const named = {
+    jobName: 'Cedar Ridge',
+    jobNumber: 1038,
+    company: 'Delgado Roofing',
+    contactName: 'Hector Delgado',
+    tier: 1,
+    dayHasAfter: true,
+  };
+
+  const withPoster = serializeEvidence({
+    proof: base,
+    ...named,
+    posterUrl: 'https://storage.example/sign/frame.jpg?token=abc',
+  });
+  assert.equal(withPoster.posterUrl, 'https://storage.example/sign/frame.jpg?token=abc');
+
+  // A clip whose stills have not been extracted yet is null, never undefined:
+  // the portal tests the field to decide between a real frame and a drawing.
+  const withoutPoster = serializeEvidence({ proof: base, ...named, posterUrl: null });
+  assert.equal(withoutPoster.posterUrl, null);
 });
 
 test('serialization: office dictation prefers narration_text over the day summary', () => {

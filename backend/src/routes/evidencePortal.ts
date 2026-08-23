@@ -5,7 +5,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { HttpError } from '../lib/errors.js';
-import { proofVideoUrl, recordAccess } from './proofOfWork.js';
+import { ensureStillsAndDuration, proofVideoUrl, recordAccess } from './proofOfWork.js';
 import {
   answerFromClip,
   clipRecordFromEvidenceItem,
@@ -109,7 +109,7 @@ async function assembleLibrary(client: any, orgId: string, proofs: any[]) {
   const jobIds = [...new Set(proofs.map((p) => p.job_id))];
   const partyIds = [...new Set(proofs.map((p) => p.party_id).filter(Boolean))];
 
-  const [jobs, parties, episodes] = await Promise.all([
+  const [jobs, parties, episodes, posters] = await Promise.all([
     jobIds.length
       ? client.from('crm_jobs').select('id, title, job_number').in('id', jobIds)
       : Promise.resolve({ data: [] }),
@@ -123,6 +123,7 @@ async function assembleLibrary(client: any, orgId: string, proofs: any[]) {
           .eq('org_id', orgId)
           .in('job_id', jobIds)
       : Promise.resolve({ data: [] }),
+    posterUrls(proofs.map((p) => p.id)),
   ]);
 
   const jobById = new Map<string, any>((jobs.data ?? []).map((j: any) => [j.id, j]));
@@ -148,6 +149,7 @@ async function assembleLibrary(client: any, orgId: string, proofs: any[]) {
       contactName: party?.contact_name ?? null,
       tier: tierByDay.get(dayKey) ?? null,
       dayHasAfter: daysWithAfter.has(dayKey),
+      posterUrl: posters.get(proof.id) ?? null,
     });
   });
 }
@@ -161,6 +163,101 @@ function fixPairing(item: any, siblings: Array<{ phase: string }>) {
     item.analysisState = siblings.some((s) => s.phase === 'after') ? 'paired' : 'waiting_on_after';
   }
   return item;
+}
+
+/**
+ * Fill in stills for clips that have none, one at a time and in the background.
+ *
+ * Serial on purpose. This is FFmpeg over stored video, and a library opened on
+ * an org with a backlog would otherwise start fifty extractions at once on the
+ * same box that is serving the request that triggered them.
+ */
+let backfilling = false;
+async function backfillStills(proofIds: string[]): Promise<void> {
+  if (backfilling) return;
+  const admin = createAdminClient();
+  if (!admin) return;
+  backfilling = true;
+  try {
+    for (const proofId of proofIds) {
+      try {
+        await ensureStillsAndDuration(admin, proofId);
+      } catch (err) {
+        console.warn('[library] still backfill failed:', err instanceof Error ? err.message : err);
+      }
+    }
+  } finally {
+    backfilling = false;
+  }
+}
+
+/**
+ * One still per clip, for the library's preview cell.
+ *
+ * The earliest frame the pipeline kept, which is deliberately not the file's
+ * first frame: both the device extractor and the server one start half a
+ * sample in, because the opening moment of a phone recording is usually a
+ * thumb over the lens.
+ *
+ * Batched on purpose. The library returns up to 500 rows, and a signed URL per
+ * row minted one at a time would make the list wait on the storage API 500
+ * times. One select, one sign call, and a clip with no frame simply has no
+ * poster.
+ *
+ * A poster is not an opening. Seeing a thumbnail in a list is not seeing the
+ * footage, so nothing here writes to the custody trail — that stays for the
+ * routes that hand over frames, the analysis, or the file itself.
+ */
+async function posterUrls(proofIds: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!proofIds.length) return out;
+  const admin = createAdminClient();
+  if (!admin) return out;
+
+  try {
+    const { data: frames } = await admin
+      .from('job_proof_frames')
+      .select('proof_id, at_seconds, storage_path')
+      .in('proof_id', proofIds)
+      .order('at_seconds');
+
+    // First row wins per clip: the select is ordered by time, so the earliest
+    // kept frame is the one that lands.
+    const pathByProof = new Map<string, string>();
+    for (const frame of (frames ?? []) as any[]) {
+      if (!frame.storage_path) continue;
+      if (!pathByProof.has(frame.proof_id)) pathByProof.set(frame.proof_id, frame.storage_path);
+    }
+
+    // Clips filed before stills were extracted independently of the model have
+    // no frame to sign. Backfilling them here is what makes an old row heal
+    // itself the next time somebody opens the library, rather than waiting for
+    // a re-upload. Off the response: the list must not wait on FFmpeg.
+    const missing = proofIds.filter((id) => !pathByProof.has(id));
+    if (missing.length) void backfillStills(missing);
+
+    if (!pathByProof.size) return out;
+
+    const paths = [...pathByProof.values()];
+    // An hour, rather than the file's ten minutes. A poster is a single JPEG
+    // of a frame the reviewer is already entitled to see, and a list that goes
+    // blank while somebody is still reading it looks broken.
+    const { data: signed } = await admin.storage
+      .from(PROOF_BUCKET)
+      .createSignedUrls(paths, 3600);
+
+    const urlByPath = new Map<string, string>();
+    for (const row of (signed ?? []) as any[]) {
+      if (row?.path && row?.signedUrl) urlByPath.set(row.path, row.signedUrl);
+    }
+    for (const [proofId, path] of pathByProof) {
+      const url = urlByPath.get(path);
+      if (url) out.set(proofId, url);
+    }
+  } catch {
+    // Best-effort. A storage hiccup costs the previews, never the list.
+  }
+  return out;
 }
 
 /** Signed URLs for the frames the model read. Ten minutes, like the video. */

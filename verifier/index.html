@@ -1519,6 +1519,31 @@
   var $ = function (sel) { return document.querySelector(sel); };
   var rowsEl = $('#rows');
 
+  /**
+   * A poster that will not load — the signature aged out, storage blinked, the
+   * frame was swept — falls back to the drawn one. A broken-image glyph in an
+   * evidence list reads as missing evidence, which is a far worse lie than a
+   * schematic. Registered once, in the capture phase, because `error` on an
+   * <img> does not bubble.
+   */
+  rowsEl.addEventListener(
+    'error',
+    function (ev) {
+      var img = ev.target;
+      if (!img || img.tagName !== 'IMG' || !img.classList.contains('shot')) return;
+      if (img.getAttribute('data-fellback')) return;
+      img.setAttribute('data-fellback', '1');
+      var tr = img.closest('tr');
+      var id = tr && tr.getAttribute('data-id');
+      var item = null;
+      for (var i = 0; id && i < EVIDENCE.length; i++) {
+        if (EVIDENCE[i].id === id) { item = EVIDENCE[i]; break; }
+      }
+      img.src = drawnFrame(item);
+    },
+    true
+  );
+
   function money(n) { return n.toLocaleString('en-US'); }
   function mb(bytes) { return bytes == null ? '—' : (bytes / 1048576).toFixed(0) + ' MB'; }
   function dur(s) {
@@ -1670,12 +1695,23 @@
     render();
   }
 
+  /**
+   * The preview cell.
+   *
+   * A real clip shows a still out of itself — the frame the pipeline kept,
+   * signed by the portal — because a column of identical drawn rectangles is
+   * a column nobody can scan. The drawn frame stays for the demo artifact,
+   * which has no footage behind it, and for a clip whose stills have not been
+   * extracted yet.
+   */
+  function drawnFrame(item) {
+    var after = item && item.after;
+    if (!after) return frameSVG({ wet: 0.3, cut: 0.2, gear: 0, night: false, label: null });
+    return frameSVG({ wet: after.wet, cut: after.cut, gear: after.gear, night: false, label: null });
+  }
+
   function thumbFor(item) {
-    if (!item.after) return frameSVG({ wet: 0.3, cut: 0.2, gear: 0, night: false, label: null });
-    return frameSVG({
-      wet: item.after.wet, cut: item.after.cut, gear: item.after.gear,
-      night: false, label: null
-    });
+    return item.poster || drawnFrame(item);
   }
 
   function clipRow(e) {
@@ -1685,7 +1721,7 @@
     phase = phase.charAt(0).toUpperCase() + phase.slice(1);
     return '' +
       '<tr tabindex="0" data-id="' + e.id + '">' +
-        '<td><span class="thumb"><img alt="" src="' + thumbFor(e) + '" /><span class="dur">' + dur(e.duration) + '</span></span></td>' +
+        '<td><span class="thumb"><img class="shot" alt="" loading="lazy" decoding="async" src="' + esc(thumbFor(e)) + '" /><span class="dur">' + dur(e.duration) + '</span></span></td>' +
         '<td class="titlecell">' +
           '<div class="t">' + esc(job.name) + '</div>' +
           '<div class="s">' + esc(phase) +
@@ -2621,8 +2657,12 @@
     // Prefer the real file when the portal minted a URL. Frames remain the
     // fallback for the demo artifact and for clips whose file URL expired.
     if (item._videoUrl) {
+      // The poster is the same still the list showed, so the player opens on
+      // the clip rather than on the black rectangle a browser picks.
+      var posterAttr = item.poster ? ' poster="' + esc(item.poster) + '"' : '';
       $('#d-frame').innerHTML =
-        '<video controls playsinline preload="metadata" src="' + esc(item._videoUrl) + '"></video>';
+        '<video controls playsinline preload="metadata"' + posterAttr +
+        ' src="' + esc(item._videoUrl) + '"></video>';
       $('#d-scrub').innerHTML = '';
       $('#d-time').textContent = 'full clip · ' + dur(item.duration);
       var vid = $('#d-frame').querySelector('video');
@@ -3771,6 +3811,8 @@
       uploadedAt: raw.uploadedAt,
       duration: raw.durationSeconds,
       bytes: raw.byteSize,
+      // A signed still out of the clip itself, minted with the list.
+      poster: raw.posterUrl || null,
       device: null,
       gps: raw.gps ? { lat: raw.gps.lat, lon: raw.gps.lon, accuracy: raw.gps.accuracyM, distanceFt: null } : null,
       hash: raw.hash,

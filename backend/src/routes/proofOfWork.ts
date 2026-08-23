@@ -26,6 +26,7 @@ import { buildCaptureGuide } from '../shared/captureGuide.js';
 import { scopeForParty } from '../shared/jobRecord.js';
 import { analyseLongRecording } from '../shared/longAnalyst.js';
 import { prepareVideoFrames } from '../shared/videoIntelligence.js';
+import { probeMetadata } from '../verification/frames/extract.js';
 import {
   narrateProofVideo,
   observeLiveFrame,
@@ -281,6 +282,13 @@ export async function recordProof(party: any, admin: any, body: unknown) {
   await queueNarration(admin, party, (proof as any).id, input.phase, input.workDate);
   const analysis = await queueDayAnalysis(admin, party, input.workDate);
 
+  // The clip's own length and stills, settled off the critical path. Neither
+  // needs a model, and a crew standing in a doorway must not wait on FFmpeg
+  // to be told their video is filed.
+  void ensureStillsAndDuration(admin, (proof as any).id).catch((err) => {
+    console.warn('[proof] stills failed:', err instanceof Error ? err.message : err);
+  });
+
   // The same upload, seen as an episode. Additive and non-blocking: it never
   // throws into this path, because a crew in a doorway must not get an error
   // from a table that enriches a record which is already complete without it.
@@ -403,22 +411,10 @@ async function runDayAnalysis(admin: any, party: any, workDate: string): Promise
 
   const loadFrames = async (row: any): Promise<ProofFrame[]> => {
     if (!row) return [];
-    let frames = await framesFor(admin, row.id);
+    const frames = await framesFor(admin, row.id);
     if (frames.length) return frames.slice(0, 12);
     const durationSeconds = Number(row.duration_seconds ?? 0);
-    await ensureSparseFramesFromStorage(
-      admin,
-      {
-        key: row.id,
-        proofId: row.id,
-        orgId: party.org_id,
-        jobId: party.job_id,
-        partyId: party.id,
-        phase: row.phase,
-        workDate,
-      },
-      durationSeconds || 60,
-    );
+    await ensureSparseFramesFromStorage(admin, row.id, durationSeconds || 60);
     return (await framesFor(admin, row.id)).slice(0, 12);
   };
 
@@ -691,13 +687,13 @@ async function framesFor(admin: any, proofId: string) {
  */
 async function ensureSparseFramesFromStorage(
   admin: any,
-  job: NarrationJob,
+  proofId: string,
   durationSeconds: number,
 ): Promise<number> {
   const { data: existing } = await admin
     .from('job_proof_frames')
     .select('id')
-    .eq('proof_id', job.proofId);
+    .eq('proof_id', proofId);
   const have = (existing ?? []).length;
   // A short guided clip with a handful of device frames is already enough.
   // A workday needs a real sample across the timeline.
@@ -710,7 +706,7 @@ async function ensureSparseFramesFromStorage(
   const { data: proof } = await admin
     .from('job_proofs')
     .select('storage_path, org_id, job_id, party_id, work_date, phase')
-    .eq('id', job.proofId)
+    .eq('id', proofId)
     .maybeSingle();
   if (!proof?.storage_path) return have;
 
@@ -724,7 +720,7 @@ async function ensureSparseFramesFromStorage(
   // Same prepareVideoFrames call used by /api/media/video — proof is just
   // one source kind among several.
   const prepared = await prepareVideoFrames({
-    id: job.proofId,
+    id: proofId,
     source: 'proof_of_work',
     url: signed.signedUrl,
     durationSeconds,
@@ -733,7 +729,7 @@ async function ensureSparseFramesFromStorage(
 
   // Replace device samples with the diversity-filtered server timeline.
   if (have >= minWanted) {
-    await admin.from('job_proof_frames').delete().eq('proof_id', job.proofId);
+    await admin.from('job_proof_frames').delete().eq('proof_id', proofId);
   }
 
   for (const frame of prepared.frames) {
@@ -745,7 +741,7 @@ async function ensureSparseFramesFromStorage(
     await admin.from('job_proof_frames').upsert(
       {
         org_id: (proof as any).org_id,
-        proof_id: job.proofId,
+        proof_id: proofId,
         at_seconds: frame.atSeconds,
         storage_path: path,
       },
@@ -753,6 +749,97 @@ async function ensureSparseFramesFromStorage(
     );
   }
   return prepared.frames.length;
+}
+
+/**
+ * Settle the two facts about a recording that need no model: how long it is,
+ * and what it looks like.
+ *
+ * Both were trapped behind the narration until now, and the narration bails
+ * the moment no model is configured — so a server without a key ended up with
+ * clips that claimed to be 0:00 and had not one still between them. That is
+ * the office list showing a drawn placeholder for real footage.
+ *
+ * The length matters because a browser recording does not carry one. A phone
+ * filming into MediaRecorder produces WebM with no duration in the header, so
+ * the page reads 0, uploads 0, and — because the client extractor gives up on
+ * a clip it cannot measure — sends no frames either. FFprobe over the stored
+ * file settles it, and the answer is written back: the list, the length check
+ * and retention all read that column.
+ *
+ * Idempotent and safe to call from anywhere. A clip that already has both is
+ * two cheap selects, and a clip FFmpeg cannot open is attempted once per
+ * process rather than on every list render.
+ */
+const stillsAttempted = new Set<string>();
+
+export async function ensureStillsAndDuration(
+  admin: any,
+  proofId: string,
+): Promise<{ durationSeconds: number; longForm: boolean; error: string | null }> {
+  const { data: proofRow } = await admin
+    .from('job_proofs')
+    .select('duration_seconds, byte_size, storage_path')
+    .eq('id', proofId)
+    .maybeSingle();
+
+  let durationSeconds = Number((proofRow as any)?.duration_seconds ?? 0);
+  const byteSize = Number((proofRow as any)?.byte_size ?? 0);
+  const storagePath = (proofRow as any)?.storage_path ?? null;
+  let error: string | null = null;
+
+  if (!(durationSeconds > 0) && storagePath) {
+    try {
+      const { data: signed } = await admin.storage
+        .from(PROOF_BUCKET)
+        .createSignedUrl(storagePath, 600);
+      if (signed?.signedUrl) {
+        // FFprobe reads over HTTP, so the multi-GB case never lands on disk.
+        const meta = await probeMetadata(signed.signedUrl);
+        const probed = Number(meta.durationSeconds ?? 0);
+        if (Number.isFinite(probed) && probed > 0) {
+          durationSeconds = Math.round(probed * 100) / 100;
+          await admin
+            .from('job_proofs')
+            .update({ duration_seconds: durationSeconds })
+            .eq('id', proofId);
+        }
+      }
+    } catch (err) {
+      // A length nobody could read stays unknown. It never blocks the stills.
+      error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  const longForm = durationSeconds > config.verification.longFormSeconds || byteSize > 80_000_000;
+
+  const { count } = await admin
+    .from('job_proof_frames')
+    .select('id', { count: 'exact', head: true })
+    .eq('proof_id', proofId);
+  const have = count ?? 0;
+
+  // A workday always gets the server's spread — a handful of device stills
+  // does not cover eight hours. Anything else only needs filling when the
+  // device sent nothing.
+  const wanted = longForm || have === 0;
+  if (wanted && storagePath && !stillsAttempted.has(proofId)) {
+    stillsAttempted.add(proofId);
+    try {
+      await ensureSparseFramesFromStorage(
+        admin,
+        proofId,
+        durationSeconds || (longForm ? 24 * 60 * 60 : 60),
+      );
+      // A clip that yielded stills is worth retrying later if it is asked for
+      // again; only a genuine failure needs the once-per-process brake.
+      stillsAttempted.delete(proofId);
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  return { durationSeconds, longForm, error };
 }
 
 async function finishProofActions(
@@ -775,36 +862,28 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
   const write = async (patch: Record<string, unknown>) =>
     admin.from('job_proofs').update(patch).eq('id', job.proofId);
 
+  // Length and stills first, and deliberately before the model check. Both are
+  // facts about the file rather than readings of it — the office list prints
+  // the length, the preview and the scrubber are the stills — and a server
+  // with no model key should still leave a clip looking like itself.
+  const settled = await ensureStillsAndDuration(admin, job.proofId);
+
   if (!isModelProviderConfigured()) {
     await write({ narration_status: 'skipped', narration_error: 'No model is configured.' });
     return;
   }
 
-  const { data: proofRow } = await admin
-    .from('job_proofs')
-    .select('duration_seconds, byte_size')
-    .eq('id', job.proofId)
-    .maybeSingle();
-  const durationSeconds = Number((proofRow as any)?.duration_seconds ?? 0);
-  const longForm =
-    durationSeconds > config.verification.longFormSeconds ||
-    Number((proofRow as any)?.byte_size ?? 0) > 80_000_000;
+  const durationSeconds = settled.durationSeconds;
+  const longForm = settled.longForm;
 
-  if (longForm) {
-    await ensureSparseFramesFromStorage(admin, job, durationSeconds || 24 * 60 * 60);
-  }
-
-  const frames = await framesFor(admin, job.proofId);
-  if (!frames.length) {
-    await ensureSparseFramesFromStorage(admin, job, durationSeconds || 60);
-  }
-
-  const ready = frames.length ? frames : await framesFor(admin, job.proofId);
+  const ready = await framesFor(admin, job.proofId);
   if (!ready.length) {
     // Honest and terminal after FFmpeg had a chance at the stored file.
     await write({
       narration_status: 'skipped',
-      narration_error: 'Could not extract frames from this recording for analysis.',
+      narration_error: settled.error
+        ? `Could not extract frames from this recording: ${settled.error}`
+        : 'Could not extract frames from this recording for analysis.',
     });
     return;
   }

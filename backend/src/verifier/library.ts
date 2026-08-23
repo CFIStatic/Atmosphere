@@ -165,6 +165,12 @@ export function serializeEvidence(input: {
   contactName: string | null;
   tier: number | null;
   dayHasAfter: boolean;
+  /**
+   * A signed still from this clip, for the list's preview cell. Null when the
+   * pipeline has not kept a frame yet — the portal draws a placeholder rather
+   * than showing a broken one.
+   */
+  posterUrl?: string | null;
 }) {
   const proof = input.proof;
   const checks: StoredCheck[] = Array.isArray(proof.checks) ? proof.checks : [];
@@ -207,6 +213,9 @@ export function serializeEvidence(input: {
     uploadedAt: proof.received_at,
     durationSeconds: proof.duration_seconds === null ? null : Number(proof.duration_seconds),
     byteSize: proof.byte_size === null ? null : Number(proof.byte_size),
+    // What the clip looks like, not what the file is called. A list of videos
+    // that all render the same drawn rectangle is a list nobody can scan.
+    posterUrl: input.posterUrl ?? null,
     gps:
       proof.lat === null || proof.lat === undefined
         ? null
