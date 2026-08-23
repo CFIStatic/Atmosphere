@@ -48,6 +48,7 @@ on:
       - cursor/fix-job-create-memory-fk-51c8
       - cursor/fix-railway-office-deploy-157d
       - cursor/internal-data-platform-e19d
+      - cursor/verifier-live-ask-b893
     paths:
       - 'backend/**'
       - 'supabase/migrations/**'
