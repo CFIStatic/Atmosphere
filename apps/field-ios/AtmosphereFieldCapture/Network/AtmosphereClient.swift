@@ -81,7 +81,8 @@ final class AtmosphereClient: ObservableObject {
         let body = PasswordLoginBody(email: email, password: password)
         if usesBFF {
             do {
-                return try await post(path: "/api/auth/login", body: body, authed: false)
+                let result: AuthResponse = try await post(path: "/api/auth/login", body: body, authed: false)
+                return result
             } catch {
                 if Self.isUnreachable(error) {
                     return try await loginViaSupabase(email: email, password: password)
@@ -117,7 +118,8 @@ final class AtmosphereClient: ObservableObject {
         )
         if usesBFF {
             do {
-                return try await post(path: "/api/field-app/register", body: body, authed: false)
+                let result: AuthResponse = try await post(path: "/api/field-app/register", body: body, authed: false)
+                return result
             } catch {
                 if Self.isUnreachable(error) {
                     return try await registerViaSupabase(
@@ -213,11 +215,12 @@ final class AtmosphereClient: ObservableObject {
     func refresh(refreshToken: String) async throws -> AuthResponse {
         if usesBFF {
             do {
-                return try await post(
+                let result: AuthResponse = try await post(
                     path: "/api/auth/refresh",
                     body: RefreshBody(refreshToken: refreshToken),
                     authed: false
                 )
+                return result
             } catch {
                 if Self.isUnreachable(error) {
                     return try await refreshViaSupabase(refreshToken: refreshToken)
@@ -308,10 +311,11 @@ final class AtmosphereClient: ObservableObject {
         }
         if usesBFF {
             do {
-                return try await post(
+                let result: ProofUploadUrlResponse = try await post(
                     path: "/api/field-app/jobs/\(jobId)/proof/upload-url",
                     body: Body(workDate: workDate, phase: phase, extension: fileExtension)
                 )
+                return result
             } catch {
                 if !Self.isUnreachable(error) { throw error }
             }
@@ -369,7 +373,8 @@ final class AtmosphereClient: ObservableObject {
     func completeJobProof(jobId: String, body: ProofRecordBody) async throws -> ProofRecordResponse {
         if usesBFF {
             do {
-                return try await post(path: "/api/field-app/jobs/\(jobId)/proof", body: body)
+                let result: ProofRecordResponse = try await post(path: "/api/field-app/jobs/\(jobId)/proof", body: body)
+                return result
             } catch {
                 if !Self.isUnreachable(error) { throw error }
             }
@@ -399,7 +404,7 @@ final class AtmosphereClient: ObservableObject {
         label: String?,
         videoRef: String?
     ) async throws -> GeometrySessionResponse {
-        try await post(
+        let result: GeometrySessionResponse = try await post(
             path: "/api/geometry/sessions",
             body: OpenGeometrySessionBody(
                 lidarAvailable: lidarAvailable,
@@ -407,6 +412,7 @@ final class AtmosphereClient: ObservableObject {
                 videoRef: videoRef
             )
         )
+        return result
     }
 
     struct IngestBody: Encodable {
@@ -571,7 +577,7 @@ final class AtmosphereClient: ObservableObject {
         joinCode: String?,
         orgName: String?
     ) async throws -> AuthResponse {
-        let result = try await post(
+        let result: AuthResponse = try await post(
             path: "/api/auth/signup",
             body: PasswordLoginBody(email: email, password: password),
             authed: false
