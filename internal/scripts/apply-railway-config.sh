@@ -65,4 +65,14 @@ if [ -f "$here/api.upstream" ]; then
     || echo "warn: could not set API_UPSTREAM"
 fi
 
+# Config-as-code outranks every stamp above, so a service whose Config File
+# was never set still reads the repo-root /railway.toml and still builds the
+# backend image. This is the one setting `railway environment edit` cannot
+# reach. See docs/production.md.
+if ! RAILWAY_SERVICE="$service" node "$repo/backend/scripts/applyRailwayConfigFile.mjs" \
+  "$service" "internal/railway.json"
+then
+  echo "  warn: could not set the Config File. Set it by hand: Settings → Config-as-code → /internal/railway.json"
+fi
+
 echo "Service $service now uses nginx + GET /healthz (not node dist/index.js / /api/health)."

@@ -1,5 +1,12 @@
 # Railway service config for the Work Verification BFF.
-# Root directory in Railway must be `backend` (this folder).
+#
+# Point the service's Config File at /backend/railway.toml with Root Directory
+# `/`: dockerfilePath then resolves to the repo-root Dockerfile (the backend
+# image, which needs sibling paths in its context) and the watch paths below
+# are matched from the repo root. Setting it is what keeps this service off
+# the inert repo-root /railway.toml — see railway.toml and docs/production.md.
+# deploy-production.yml copies this file over the root one before `railway up`,
+# so the CLI path works either way.
 #
 # Variables are NOT stored here. GitHub Actions copies them from the
 # `Keys` environment — see .github/workflows/deploy-production.yml

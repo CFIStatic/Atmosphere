@@ -1,26 +1,43 @@
-# Backend service only — used when Railway deploys the repo root with the
-# default Config File (/railway.toml). The office app is a second service
-# whose Config File must be /frontend/railway.toml (see docs/production.md).
-# Variables still come from GitHub Keys via Actions, or Railway Variables.
+# Inert fallback. Nothing is supposed to build from this file.
 #
-# Deploy probe is liveness (/api/health), not readiness (/api/ready).
-# /api/ready talks to Supabase; a paused project or egress blip would
-# fail the Railway replica even when Node is serving.
+# Railway resolves THIS file for any service whose Config File was never
+# pointed at its own railway.toml — the marketing site, the office app, the
+# staff site. It used to carry the backend's `dockerfilePath` and `backend/**`
+# watch paths, so a backend-only merge autodeployed the Work Verification BFF
+# image onto Corporate Website: Build passed (tsc, ffmpeg, node:22), then
+# Railway could not find `/usr/local/bin/website-start.sh` in a Node image and
+# the deploy died at Create container. Dropping `startCommand` here in an
+# earlier fix narrowed that, but `dockerfilePath` and `watchPatterns` reach an
+# inheriting service exactly the same way, and config-as-code outranks
+# whatever `railway environment edit` stamped onto it.
+#
+# So this file no longer names a Dockerfile and no longer matches a path.
+# Every surface ships through GitHub Actions, which copies that surface's own
+# config over this one before `railway up`:
+#
+#   backend   deploy-production.yml → backend/railway.toml
+#   office    deploy-production.yml → frontend/railway.toml
+#   staff     deploy-production.yml → internal/railway.{toml,json}
+#   website   deploy-website.yml    → website/railway.{toml,json}
+#
+# A service that still resolves this file now *skips* the autodeploy ("no
+# changes detected in watch paths") instead of shipping the wrong image. That
+# is the safe failure, and it needs nothing set in the dashboard.
+#
+# `builder` stays so the Dockerfile builder is still chosen; the path itself
+# comes from each service's RAILWAY_DOCKERFILE_PATH, which CI stamps for all
+# four (Dockerfile, frontend/Dockerfile, website/Dockerfile,
+# internal/Dockerfile). That is what makes a manual Redeploy — which ignores
+# watch paths — build the right image too.
+#
+# Deploy settings are deliberately absent: an inheriting service keeps its own
+# probe instead of the backend's 300s /api/health.
+#
+# Do not add a startCommand, a dockerfilePath, or a real watch path here.
+# Per-service config belongs in that service's own railway.toml.
 
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile"
-# GitHub autodeploy / PR environments skip this service unless these paths change.
-watchPatterns = ["backend/**", "Dockerfile", "railway.toml"]
-
-[deploy]
-healthcheckPath = "/api/health"
-healthcheckTimeout = 300
-restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 5
-# No startCommand here on purpose. The root Dockerfile's CMD is already
-# `node dist/index.js`, so the backend behaves identically — but a service
-# whose Config File was never pointed at its own railway.toml (website,
-# office app) resolves THIS file on GitHub autodeploys. With a startCommand
-# here, those nginx images tried to run Node, crash-looped, and failed the
-# healthcheck. Without it they fall back to their image's own entrypoint.
+# Deliberately unmatchable. This path does not exist and must never be
+# created — it is what makes an inherited autodeploy skip instead of build.
+watchPatterns = [".railway-root-config-is-inert"]
