@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import {
   isHealthProbePath,
   listenHost,
+  misresolvedServiceHint,
   resolveBackupsEnabled,
   resolveComputerUseEnabled,
 } from './bootFlags.js';
@@ -84,5 +85,37 @@ describe('isHealthProbePath', () => {
     assert.equal(isHealthProbePath('/api/health'), true);
     assert.equal(isHealthProbePath('/api/ready'), true);
     assert.equal(isHealthProbePath('/api/auth/login'), false);
+  });
+});
+
+describe('misresolvedServiceHint', () => {
+  it('names the Config File when the BFF boots on a static-site service', () => {
+    const hint = misresolvedServiceHint({ RAILWAY_SERVICE_NAME: 'Corporate Website' });
+    assert.match(hint, /Corporate Website/);
+    assert.match(hint, /\/website\/railway\.toml/);
+    assert.match(hint, /Do NOT add backend secrets/);
+  });
+
+  it('covers the office app and the staff site, live names and old aliases', () => {
+    for (const [service, configFile] of [
+      ['Login & Dashboard', '/frontend/railway.toml'],
+      ['Atmosphere-web', '/frontend/railway.toml'],
+      ['Internal Growth Metrics', '/internal/railway.json'],
+      ['melodious-inspiration', '/internal/railway.json'],
+      ['website', '/website/railway.toml'],
+      ['Atmosphere-website', '/website/railway.toml'],
+    ] as const) {
+      assert.ok(
+        misresolvedServiceHint({ RAILWAY_SERVICE_NAME: service }).includes(configFile),
+        `${service} should point at ${configFile}`,
+      );
+    }
+  });
+
+  // A genuinely missing variable on the API service must still read as one.
+  it('stays quiet on the backend service and off Railway', () => {
+    assert.equal(misresolvedServiceHint({ RAILWAY_SERVICE_NAME: 'Atmosphere APIs' }), '');
+    assert.equal(misresolvedServiceHint({ RAILWAY_SERVICE_NAME: '  ' }), '');
+    assert.equal(misresolvedServiceHint({}), '');
   });
 });

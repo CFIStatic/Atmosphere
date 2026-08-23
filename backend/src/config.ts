@@ -1,5 +1,9 @@
 import 'dotenv/config';
-import { resolveBackupsEnabled, resolveComputerUseEnabled } from './bootFlags.js';
+import {
+  misresolvedServiceHint,
+  resolveBackupsEnabled,
+  resolveComputerUseEnabled,
+} from './bootFlags.js';
 
 /**
  * Centralised, validated configuration for the Atmosphere backend.
@@ -17,7 +21,13 @@ import { resolveBackupsEnabled, resolveComputerUseEnabled } from './bootFlags.js
 function required(name: string, fallback?: string): string {
   const value = process.env[name] ?? fallback;
   if (value === undefined || value === '') {
-    throw new Error(`Missing required environment variable: ${name}`);
+    // On a Railway service that is not the API, this is not a missing secret —
+    // it is the backend image booting somewhere it was never meant to run.
+    // Say which, or the next reader adds SUPABASE_URL to the marketing site.
+    const hint = misresolvedServiceHint();
+    throw new Error(
+      `Missing required environment variable: ${name}${hint ? `\n\n${hint}` : ''}`,
+    );
   }
   return value;
 }

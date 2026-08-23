@@ -260,14 +260,32 @@ service is the production host.
 ### If the website service fails its healthcheck on every main push
 
 Symptom: the `website` (Corporate Website) service shows **Deployment failed
-during network process → Healthcheck failure** after ~5 minutes, on commits
-that never touched `website/`, and the deployment says **via GitHub**.
+during network process → Healthcheck failure** after ~5 minutes, and the
+deployment says **via GitHub**. Deploy Logs repeat:
+
+```
+Error: Missing required environment variable: SUPABASE_URL
+    at required (file:///app/dist/config.js:18:15)
+```
 
 Cause: the service's Config File was never set, so GitHub autodeploys resolve
-the repo-root `/railway.toml` (the backend's). The nginx image then deployed
-with the backend's settings and never answered the probe. The CLI deploys from
-`deploy-website.yml` worked because that job copies `website/railway.toml`
-over the upload root — which masked the missing setting.
+the repo-root `/railway.toml` (the backend's). That config also names the
+repo-root `Dockerfile`, so the service does not merely inherit the backend's
+probe and start command — **it builds and runs the backend BFF**. The BFF
+fail-fasts on the first required variable the marketing service does not carry,
+Railway restarts it five times, and the 300s `/api/health` probe never
+answers. The ~5 minute failure and the 120s probe in `website/railway.toml`
+never lining up is the tell.
+
+`SUPABASE_URL` is a red herring: **do not add backend secrets to this
+service.** Satisfying them would only get the BFF listening on the marketing
+domain. The `dist/config.js` crash now names the service it is running on and
+the Config File it should have — see `misresolvedServiceHint` in
+`backend/src/bootFlags.ts`.
+
+The CLI deploys from `deploy-website.yml` keep working because that job copies
+`website/railway.toml` over the upload root — which is exactly what masks the
+missing setting.
 
 A second, later failure mode: `railwayUp.sh` treated Railway's in-window
 `Attempt #N failed with service unavailable. Continuing to retry` lines as a
@@ -280,14 +298,45 @@ boots through the nginx image entrypoint (same as the staff site).
 Fix, once, on the `website` service:
 
 1. Settings → **Config-as-code** → Config File = `/website/railway.toml`.
-   That brings its nginx start command, `GET /health` probe, and the
-   `website/**` watch paths onto GitHub autodeploys too.
+   That brings its nginx Dockerfile, start command, `GET /health` probe, and
+   the `website/**` watch paths onto GitHub autodeploys too.
 2. Or, if GitHub autodeploy on this service is unwanted (Actions already
    ships it via CLI on website changes), Settings → **Disable Autodeploy**.
 
-The repo also no longer sets a `startCommand` in the root `railway.toml`
-(the backend Dockerfile's CMD is the same command), so even a service still
-inheriting the root config boots its own image instead of crash-looping.
+Step 1 is the only one that fixes it, and it is now automated: every
+`deploy-website.yml` run calls `website/scripts/apply-railway-config.sh`, which
+ends in
+
+```
+RAILWAY_TOKEN=… node backend/scripts/applyRailwayConfigFile.mjs \
+  "Corporate Website" website/railway.toml
+```
+
+That writes `serviceInstance.railwayConfigFile` through Railway's GraphQL API —
+the one setting `railway environment edit --service-config` and `railway up`
+cannot stand in for. It is idempotent, never deploys, and **warns instead of
+failing** so a token without the scope cannot take the deploy job down. If the
+job logs `warn: could not set the Config File`, do step 1 by hand. Run it
+directly for any service:
+
+```
+RAILWAY_TOKEN=… node backend/scripts/applyRailwayConfigFile.mjs \
+  "Login & Dashboard" frontend/railway.toml --strict
+```
+
+Removing the `startCommand` from the root `railway.toml` was an earlier attempt
+at this and does **not** work on the autodeploy path: the inherited config
+picks the Dockerfile too, so there is no nginx image left to fall back to.
+The same trap applies to `Login & Dashboard` (`/frontend/railway.toml`) and
+`Internal Growth Metrics` (`/internal/railway.json`); both deploy jobs stamp it.
+
+After the **2026-12-01** config-as-code cutoff at the top of this document, the
+Config File field stops being read at all and every service falls back to its
+dashboard settings. The `edit build.dockerfilePath …` lines already in
+`apply-railway-config.sh` write exactly those, so the deploy jobs cover both
+sides of the cutoff — but re-check each service's Dockerfile path and start
+command in Settings before that date, because a service that silently reverts
+to repo-root defaults lands right back on this crash.
 
 Official references: [GitHub Autodeploys](https://docs.railway.com/deployments/github-autodeploys),
 [PR Environments](https://docs.railway.com/guides/preview-deployments-with-pr-environments),

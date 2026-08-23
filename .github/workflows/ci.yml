@@ -152,6 +152,53 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build backend image
         run: docker build -f backend/Dockerfile -t atmosphere-backend:ci ./backend
+      # The repo-root Dockerfile is what Railway builds for the API service, and
+      # what a service with no Config File builds by mistake. Nothing built it
+      # here before, so a break in it only showed up as a failed deploy.
+      - name: Build the Railway root image
+        run: docker build -f Dockerfile -t atmosphere-backend-root:ci .
+      # A Railway service whose Config File was never set resolves the root
+      # /railway.toml, builds this image, and dies on the first backend variable
+      # it does not carry. The bare error reads as "the marketing site needs a
+      # Supabase URL" and cost a real debugging session — the boot must say what
+      # is actually wrong. See docs/production.md.
+      - name: Diagnose the backend booting on a static-site service
+        run: |
+          set -euo pipefail
+          # No SUPABASE_URL, as on the marketing service. The boot MUST fail —
+          # an image that serves traffic here would be the BFF on a public
+          # marketing domain.
+          if logs="$(docker run --rm -e RAILWAY_SERVICE_NAME='Corporate Website' \
+            atmosphere-backend-root:ci 2>&1)"; then
+            echo "$logs"
+            echo "The backend booted without SUPABASE_URL. It must fail fast."
+            exit 1
+          fi
+          echo "$logs"
+          for phrase in \
+            'Missing required environment variable: SUPABASE_URL' \
+            'Corporate Website' \
+            '/website/railway.toml' \
+            'Do NOT add backend secrets'; do
+            if ! grep -qF "$phrase" <<<"$logs"; then
+              echo "The crash never said: $phrase"
+              exit 1
+            fi
+          done
+          # The API service must still read as a plain missing variable — no
+          # "point your Config File somewhere else" advice to send someone
+          # chasing a Railway setting that is already correct.
+          api_logs="$(docker run --rm -e RAILWAY_SERVICE_NAME='Atmosphere APIs' \
+            atmosphere-backend-root:ci 2>&1)" || true
+          echo "$api_logs"
+          if ! grep -qF 'Missing required environment variable: SUPABASE_URL' <<<"$api_logs"; then
+            echo "The API service lost its missing-variable error."
+            exit 1
+          fi
+          if grep -qF 'railway.toml' <<<"$api_logs"; then
+            echo "The API service was told to change its Config File."
+            exit 1
+          fi
 
   docker-app:
     name: Office app image

@@ -19,8 +19,20 @@ healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5
 # No startCommand here on purpose. The root Dockerfile's CMD is already
-# `node dist/index.js`, so the backend behaves identically — but a service
-# whose Config File was never pointed at its own railway.toml (website,
-# office app) resolves THIS file on GitHub autodeploys. With a startCommand
-# here, those nginx images tried to run Node, crash-looped, and failed the
-# healthcheck. Without it they fall back to their image's own entrypoint.
+# `node dist/index.js`, so the backend behaves identically, and a CLI deploy
+# that uploads the repo root cannot hand a nginx image a Node start command.
+#
+# It does NOT rescue a service whose Config File was never pointed at its own
+# railway.toml (website, office app, staff site). Such a service resolves THIS
+# file on GitHub autodeploys — including `dockerfilePath = "Dockerfile"` above,
+# which builds the BFF. There is no nginx image left to fall back to: the
+# deployed image IS the backend, and it dies on the first backend variable the
+# service does not carry:
+#
+#   Error: Missing required environment variable: SUPABASE_URL
+#       at required (file:///app/dist/config.js:18:15)
+#
+# then burns the full 300s /api/health probe and reports "Deployment failed
+# during network process". Do not add SUPABASE_URL to that service — set its
+# Config File. backend/scripts/applyRailwayConfigFile.mjs does it from CI, and
+# docs/production.md has the by-hand steps.

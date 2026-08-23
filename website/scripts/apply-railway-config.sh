@@ -16,6 +16,7 @@ service="${RAILWAY_WEBSITE_SERVICE:-${RAILWAY_SERVICE:-Corporate Website}}"
 project="${RAILWAY_PROJECT_ID:-d0af58bd-0eec-431d-bad3-4da4b4a2e2ae}"
 environment="${RAILWAY_ENVIRONMENT:-production}"
 dockerfile_path="website/Dockerfile"
+config_file="website/railway.toml"
 start_command="/usr/local/bin/website-start.sh"
 healthcheck_path="/health"
 healthcheck_timeout="120"
@@ -60,5 +61,14 @@ printf '%s' "$dockerfile_path" | railway variable set RAILWAY_DOCKERFILE_PATH \
   --stdin --skip-deploys --service "$service" \
   --project "$project" --environment "$environment" \
   || echo "warn: could not set RAILWAY_DOCKERFILE_PATH"
+
+# The setting none of the above stands in for. Service-config overrides and
+# `railway up` only cover the CLI path; a GitHub autodeploy reads the service's
+# Config File, and an unset one resolves the repo-root /railway.toml AND the
+# repo-root Dockerfile — so the service builds and boots the backend BFF and
+# dies on `Missing required environment variable: SUPABASE_URL`.
+RAILWAY_PROJECT_ID="$project" RAILWAY_ENVIRONMENT="$environment" \
+  node "$repo/backend/scripts/applyRailwayConfigFile.mjs" "$service" "$config_file" \
+  || echo "warn: could not set the Config File on $service"
 
 echo "Service $service now uses nginx + GET /health (not node dist/index.js / 300s /api/health)."

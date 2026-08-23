@@ -13,6 +13,7 @@ service="${RAILWAY_INTERNAL_SERVICE:-${RAILWAY_SERVICE:-Internal Growth Metrics}
 project="${RAILWAY_PROJECT_ID:-d0af58bd-0eec-431d-bad3-4da4b4a2e2ae}"
 environment="${RAILWAY_ENVIRONMENT:-production}"
 dockerfile_path="internal/Dockerfile"
+config_file="internal/railway.json"
 start_command="/docker-entrypoint.sh nginx -g 'daemon off;'"
 healthcheck_path="/healthz"
 healthcheck_timeout="120"
@@ -57,6 +58,13 @@ printf '%s' "$dockerfile_path" | railway variable set RAILWAY_DOCKERFILE_PATH \
   --stdin --skip-deploys --service "$service" \
   --project "$project" --environment "$environment" \
   || echo "warn: could not set RAILWAY_DOCKERFILE_PATH"
+
+# Service-config overrides and `railway up` do not cover GitHub autodeploys —
+# those read the service's Config File, and an unset one resolves the repo-root
+# /railway.toml AND the repo-root Dockerfile, deploying the backend BFF here.
+RAILWAY_PROJECT_ID="$project" RAILWAY_ENVIRONMENT="$environment" \
+  node "$repo/backend/scripts/applyRailwayConfigFile.mjs" "$service" "$config_file" \
+  || echo "warn: could not set the Config File on $service"
 
 if [ -f "$here/api.upstream" ]; then
   tr -d '\n' < "$here/api.upstream" | railway variable set API_UPSTREAM \

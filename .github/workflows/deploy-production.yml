@@ -218,6 +218,13 @@ jobs:
           echo "Resolved '$service' to $service_id"
           service="$service_id"
           printf '%s' 'frontend/Dockerfile' | railway variable set RAILWAY_DOCKERFILE_PATH --stdin --skip-deploys --service "$service"
+          # Neither the copy below nor RAILWAY_DOCKERFILE_PATH reaches a GitHub
+          # autodeploy — that reads the service's Config File, and an unset one
+          # resolves the repo-root /railway.toml *and* the repo-root Dockerfile,
+          # so this service builds the backend BFF and crash-loops on
+          # `Missing required environment variable: SUPABASE_URL`.
+          node backend/scripts/applyRailwayConfigFile.mjs "$service" frontend/railway.toml \
+            || echo "warn: could not set the Config File on $service"
           # Private HTTP to the BFF. The public https://atmosphere-production URL
           # hairpins out of the mesh (jfk1 → ams1 hops) and 502s /api for ~3s,
           # which is the spinner on /login (api.me() before the form).
