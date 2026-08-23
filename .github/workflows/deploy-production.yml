@@ -24,10 +24,13 @@
 #
 # One-time on the Railway **Atmosphere-web** service (Settings → Config-as-code):
 #   Config File = /frontend/railway.toml
-# Without that, `railway up` from the repo root applies /railway.toml and
-# builds the backend image instead. See docs/production.md.
 # This job also copies frontend/railway.toml over the root file and sets
 # RAILWAY_DOCKERFILE_PATH so a missing Config File still builds the office image.
+#
+# The repo-root /railway.toml is an inert fallback — no dockerfilePath, no
+# real watch path — so a service whose Config File is unset skips its
+# autodeploy instead of building the backend image. Every job here copies its
+# own surface's config over it before `railway up`. See railway.toml.
 #
 # Put GOOGLE_API_KEY / GOOGLE_MAPS_API_KEY / ANTHROPIC_API_KEY in `Keys`
 # as well (not only the "Google API keys" environment) so this job can see them.
@@ -167,6 +170,13 @@ jobs:
               --project "$RAILWAY_PROJECT_ID" --environment production || true
             export RAILWAY_SERVICE="$service_id"
           fi
+          # The root railway.toml is inert now, so a service that inherits it
+          # cannot build the BFF image onto the marketing site. `railway up`
+          # reads its config from the upload root, so put the backend's own
+          # config there first — exactly what the office, staff and website
+          # jobs already do. Without this the upload matches no watch path and
+          # Railway skips the build.
+          cp backend/railway.toml railway.toml
           backend/scripts/railwayUp.sh
 
   app:

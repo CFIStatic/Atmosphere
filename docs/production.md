@@ -19,10 +19,22 @@ from its own workflow (GitHub Pages is an optional second host — see
 
 | Railway service | Config as Code | Dockerfile | Rebuilds when these paths change |
 | --- | --- | --- | --- |
-| Backend BFF | `/railway.toml` | `Dockerfile` (repo root) | `backend/**`, `Dockerfile`, `railway.toml` |
+| Backend BFF | `/backend/railway.toml` | `Dockerfile` (repo root) | `backend/**`, `Dockerfile`, `railway.toml` |
 | Office console | `/frontend/railway.toml` | `frontend/Dockerfile` | `frontend/**`, `verifier/**`, `fieldcapture/**`, `frontend/Dockerfile` |
 | Corporate site (`website`) | `/website/railway.toml` | `website/Dockerfile` | `website/**`, `.dockerignore`, `.github/workflows/deploy-website.yml` |
 | Internal staff site | `/internal/railway.json` | `internal/Dockerfile` | `internal/**`, `internal/Dockerfile` |
+
+**The repo-root `/railway.toml` is not in that table on purpose.** It is an
+inert fallback: `builder` only, no `dockerfilePath`, no `startCommand`, no
+probe, and a watch path (`.railway-root-config-is-inert`) that cannot match.
+Every service whose Config File is unset resolves that file, and it used to be
+the backend's — which is how Corporate Website came to build the BFF image
+from a `backend/`-only merge. Now such a service **skips** the autodeploy
+instead of shipping the wrong image, and a manual Redeploy (which ignores
+watch paths) builds from that service's own `RAILWAY_DOCKERFILE_PATH`. Each
+Actions job copies its surface's config over the root file before
+`railway up`, so the CLI path is unchanged. Keep it inert; put per-service
+config in that service's own file.
 
 All git-backed services use **Root Directory `/`**. The console must not use
 `/frontend` as root — Vite copies sibling `verifier/` and `fieldcapture/`

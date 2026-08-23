@@ -126,6 +126,34 @@ const UPDATE = `
   }
 `;
 
+// Ask the API what the config-file field is called rather than hard-coding a
+// name that a schema change could quietly retire. A rejected mutation comes
+// back as HTTP 200 with an errors array, so a wrong guess would otherwise look
+// like a silent no-op.
+const INTROSPECT = `
+  query introspect($name: String!) {
+    __type(name: $name) {
+      inputFields { name }
+      fields { name }
+    }
+  }
+`;
+
+export const DEFAULT_CONFIG_FIELD = 'railwayConfigFile';
+
+/**
+ * Pick the field that holds the config-as-code path. Exact match first, then
+ * anything that reads as a config file, so a rename to e.g. `configFilePath`
+ * still resolves.
+ */
+export function pickConfigFileField(fields) {
+  const names = (fields || [])
+    .map((field) => field?.name)
+    .filter((name) => typeof name === 'string');
+  if (names.includes(DEFAULT_CONFIG_FIELD)) return DEFAULT_CONFIG_FIELD;
+  return names.find((name) => /config/i.test(name) && /file/i.test(name)) || null;
+}
+
 export function pickEnvironment(data, wanted) {
   const edges = data?.environments?.edges || [];
   const nodes = edges.map((edge) => edge?.node).filter((node) => node?.id);
@@ -179,18 +207,38 @@ async function main() {
     process.exit(1);
   }
 
+  // Introspection is best effort: if it is turned off we still try the name
+  // the API has always used, and a wrong one surfaces as a mutation error
+  // rather than a silent success.
+  let field = DEFAULT_CONFIG_FIELD;
+  const shape = await graphql(token, INTROSPECT, { name: 'ServiceInstanceUpdateInput' });
+  if (shape.ok) {
+    const found = pickConfigFileField(shape.data?.__type?.inputFields);
+    if (found) {
+      field = found;
+    } else {
+      console.error(
+        'applyRailwayConfigFile: ServiceInstanceUpdateInput exposes no config-file field; ' +
+          `trying ${DEFAULT_CONFIG_FIELD} anyway.`,
+      );
+    }
+  }
+
   const updated = await graphql(token, UPDATE, {
     serviceId,
     environmentId: env.id,
-    input: { railwayConfigFile: configPath },
+    input: { [field]: configPath },
   });
   if (!updated.ok) {
-    console.error(`applyRailwayConfigFile: could not set the config file — ${updated.message}`);
+    console.error(
+      `applyRailwayConfigFile: could not set ${field} — ${updated.message}`,
+    );
     process.exit(1);
   }
 
   console.log(
-    `applyRailwayConfigFile: ${serviceArg} (${serviceId}) now reads /${configPath} on ${environment}.`,
+    `applyRailwayConfigFile: ${serviceArg} (${serviceId}) now reads /${configPath} ` +
+      `on ${environment} (via ${field}).`,
   );
 }
 
