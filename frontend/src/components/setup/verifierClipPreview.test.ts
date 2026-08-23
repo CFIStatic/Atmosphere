@@ -72,4 +72,9 @@ describe('verifier dashboard clip preview', () => {
     expect(verifierHtml).toContain('function startPreview(video)');
     expect(verifierHtml).toContain('.thumb video');
   });
+
+  it('gives demo rows a local file so the preview cell can play without a backend', () => {
+    expect(verifierHtml).toContain("/verifier/demo-preview.mp4");
+    expect(verifierHtml).toContain('if (!o.previewUrl) o.previewUrl = \'/verifier/demo-preview.mp4\'');
+  });
 });
