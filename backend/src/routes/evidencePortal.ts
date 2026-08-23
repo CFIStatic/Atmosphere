@@ -12,6 +12,7 @@ import {
   type ClipAskRecord,
 } from '../shared/clipAsk.js';
 import { observeWatchFrame } from '../shared/liveNarrator.js';
+import { extractJpegAtSeconds } from '../shared/sparseExtract.js';
 import { DailyBudget } from '../shared/liveBudget.js';
 import {
   downloadDecision,
@@ -415,6 +416,20 @@ async function nearestStoredFrame(admin: any, proofId: string, atSeconds: number
   };
 }
 
+async function grabPlayheadJpeg(
+  admin: any,
+  proof: any,
+  atSeconds: number,
+): Promise<{ atSeconds: number; base64: string } | null> {
+  const storagePath = (proof as { storage_path?: string | null }).storage_path;
+  if (!storagePath) return null;
+  const { data: signed } = await admin.storage.from(PROOF_BUCKET).createSignedUrl(storagePath, 600);
+  if (!signed?.signedUrl) return null;
+  const jpeg = await extractJpegAtSeconds({ url: signed.signedUrl, atSeconds });
+  if (!jpeg?.length) return null;
+  return { atSeconds, base64: jpeg.toString('base64') };
+}
+
 function groundedWatchFromItem(item: any, atSeconds: number): string | null {
   const record: ClipAskRecord = clipRecordFromEvidenceItem(item);
   const rows: Array<{ at: number; text: string }> = [];
@@ -459,10 +474,26 @@ async function settleWatchFrame(opts: {
   let frameB64 = opts.frameBase64 ?? null;
   let at = opts.atSeconds;
   if (!frameB64) {
-    const stored = await nearestStoredFrame(opts.admin, opts.proof.id, opts.atSeconds);
+    let stored = await nearestStoredFrame(opts.admin, opts.proof.id, opts.atSeconds);
+    if (!stored) {
+      // Field-capture uploads often arrive with no duration and no stills.
+      // Extract them now so a live watch tick has something to look at.
+      try {
+        await ensureStillsAndDuration(opts.admin, opts.proof.id);
+      } catch {
+        /* best-effort — the client frame, if any, is the other door */
+      }
+      stored = await nearestStoredFrame(opts.admin, opts.proof.id, opts.atSeconds);
+    }
     if (stored) {
       frameB64 = stored.base64;
       at = stored.atSeconds;
+    } else {
+      const grabbed = await grabPlayheadJpeg(opts.admin, opts.proof, opts.atSeconds);
+      if (grabbed) {
+        frameB64 = grabbed.base64;
+        at = grabbed.atSeconds;
+      }
     }
   }
 
