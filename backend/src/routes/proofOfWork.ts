@@ -27,6 +27,7 @@ import { scopeForParty } from '../shared/jobRecord.js';
 import { analyseLongRecording } from '../shared/longAnalyst.js';
 import { prepareVideoFrames } from '../shared/videoIntelligence.js';
 import { probeMetadata } from '../verification/frames/extract.js';
+import { parseMediaDuration } from '../verification/frames/duration.js';
 import {
   narrateProofVideo,
   observeLiveFrame,
@@ -1371,6 +1372,10 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
         after: proofReport(after),
       },
       proofIds: list.map((r) => r.id),
+      proofClips: list.map((r) => ({
+        id: r.id,
+        durationSeconds: parseMediaDuration(r.duration_seconds),
+      })),
     };
   });
 
@@ -1553,15 +1558,10 @@ export async function proofVideoUrl(req: Request, res: Response, next: NextFunct
       ...actor,
     });
 
-    const stored = (proof as any).duration_seconds;
-    const durationSeconds =
-      stored != null && Number.isFinite(Number(stored)) && Number(stored) > 0
-        ? Number(stored)
-        : null;
     res.json({
       url: (data as any).signedUrl,
       expiresInSeconds: 600,
-      durationSeconds,
+      durationSeconds: parseMediaDuration((proof as any).duration_seconds),
     });
   } catch (err) {
     next(err);

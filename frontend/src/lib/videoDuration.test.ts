@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatVideoClock, measuredDuration } from './videoDuration';
+import { formatClipClocks, formatVideoClock, measuredDuration } from './videoDuration';
 
 describe('measuredDuration', () => {
   it('keeps a real length and drops placeholders', () => {
@@ -17,5 +17,18 @@ describe('formatVideoClock', () => {
     expect(formatVideoClock(4620)).toBe('1:17:00');
     expect(formatVideoClock(0)).toBe('—');
     expect(formatVideoClock(null)).toBe('—');
+  });
+});
+
+describe('formatClipClocks', () => {
+  it('joins known lengths and hides unknown ones', () => {
+    expect(
+      formatClipClocks([
+        { durationSeconds: 68 },
+        { durationSeconds: 94 },
+      ]),
+    ).toBe('1:08 · 1:34');
+    expect(formatClipClocks([{ durationSeconds: 0 }, { durationSeconds: null }])).toBeNull();
+    expect(formatClipClocks(undefined)).toBeNull();
   });
 });

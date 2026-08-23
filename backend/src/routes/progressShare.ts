@@ -3,6 +3,7 @@ import rateLimit from 'express-rate-limit';
 import { createAdminClient } from '../lib/supabase.js';
 import { HttpError } from '../lib/errors.js';
 import { shareState } from '../verifier/library.js';
+import { parseMediaDuration } from '../verification/frames/duration.js';
 import { buildJobProofPayload, PROOF_BUCKET, recordAccess } from './proofOfWork.js';
 
 /**
@@ -131,7 +132,7 @@ progressShareRouter.get(
 
       const { data: proof } = await admin
         .from('job_proofs')
-        .select('id, storage_path, job_id, work_date, phase')
+        .select('id, storage_path, job_id, work_date, phase, duration_seconds')
         .eq('job_id', share.job_id)
         .eq('id', req.params.proofId)
         .maybeSingle();
@@ -152,7 +153,11 @@ progressShareRouter.get(
         detail: `via progress link — ${(proof as any).phase} · ${(proof as any).work_date}`,
       });
 
-      res.json({ url: (data as any).signedUrl, expiresInSeconds: 600 });
+      res.json({
+        url: (data as any).signedUrl,
+        expiresInSeconds: 600,
+        durationSeconds: parseMediaDuration((proof as any).duration_seconds),
+      });
     } catch (err) {
       next(err);
     }

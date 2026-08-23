@@ -24,6 +24,16 @@ export function formatVideoClock(seconds: number | null | undefined): string {
   return `${minutes}:${String(rest).padStart(2, '0')}`;
 }
 
+/** Joined clocks for a day's clips, or null when none are known. */
+export function formatClipClocks(
+  clips: Array<{ durationSeconds: number | null | undefined }> | undefined,
+): string | null {
+  const labels = (clips ?? [])
+    .map((clip) => formatVideoClock(clip.durationSeconds))
+    .filter((label) => label !== '—');
+  return labels.length ? labels.join(' · ') : null;
+}
+
 export async function resolveElementDuration(
   video: HTMLVideoElement,
   timeoutMs = 8000,

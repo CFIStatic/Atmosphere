@@ -970,6 +970,10 @@ const PROOF_DAYS: Record<string, any> = {
           concerns: [],
         },
         proofIds: ['pf-1', 'pf-2'],
+        proofClips: [
+          { id: 'pf-1', durationSeconds: 68 },
+          { id: 'pf-2', durationSeconds: 94 },
+        ],
       },
       {
         partyId: 'pty-2', company: 'Delgado Roofing', workDate: '2026-08-04',
@@ -1020,6 +1024,10 @@ const PROOF_DAYS: Record<string, any> = {
           concerns: ['The after footage appears to be a different property'],
         },
         proofIds: ['pf-3', 'pf-4'],
+        proofClips: [
+          { id: 'pf-3', durationSeconds: 41 },
+          { id: 'pf-4', durationSeconds: 52 },
+        ],
       },
       {
         partyId: 'pty-3', company: 'Brightline Electric', workDate: '2026-08-05',
@@ -1037,6 +1045,7 @@ const PROOF_DAYS: Record<string, any> = {
         ],
         aiSummary: null, aiFindings: null,
         proofIds: ['pf-5'],
+        proofClips: [{ id: 'pf-5', durationSeconds: 33 }],
       },
       {
         partyId: 'pty-2', company: 'Delgado Roofing', workDate: '2026-08-01',
@@ -1070,6 +1079,10 @@ const PROOF_DAYS: Record<string, any> = {
           concerns: [],
         },
         proofIds: ['pf-6', 'pf-7'],
+        proofClips: [
+          { id: 'pf-6', durationSeconds: 55 },
+          { id: 'pf-7', durationSeconds: 71 },
+        ],
       },
     ],
   },

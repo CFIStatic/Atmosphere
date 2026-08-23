@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, type EvidenceItem, type CustodyEntry } from '../../lib/api';
 import { formatVideoClock } from '../../lib/videoDuration';
 import { SpinnerIcon } from '../icons';
+import { VideoClockBadge, useMeasuredVideoClock } from './VideoClockBadge';
 
 /**
  * The evidence locker.
@@ -289,9 +290,12 @@ function EvidenceDetail({
   const [loadingVideo, setLoadingVideo] = useState(false);
   const [custody, setCustody] = useState<CustodyEntry[] | null>(null);
   const [busy, setBusy] = useState(false);
+  const [fetchedSeconds, setFetchedSeconds] = useState<number | null>(null);
+  const [clock, videoRef] = useMeasuredVideoClock(fetchedSeconds ?? item.durationSeconds);
 
   useEffect(() => {
     setUrl(null);
+    setFetchedSeconds(null);
     setCustody(null);
     api
       .evidenceCustody(jobId, item.id)
@@ -304,6 +308,9 @@ function EvidenceDetail({
     try {
       const res = await api.proofVideoUrl(item.id);
       setUrl(res.url);
+      if (res.durationSeconds != null && res.durationSeconds > 0) {
+        setFetchedSeconds(res.durationSeconds);
+      }
       // The view has just been written server-side; pulling the log again is
       // what makes that visible rather than something the user has to trust.
       const fresh = await api.evidenceCustody(jobId, item.id).catch(() => null);
@@ -345,15 +352,25 @@ function EvidenceDetail({
       <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
         <div>
           {url ? (
-            <video src={url} controls playsInline className="w-full rounded-lg bg-black" />
+            <div className="relative">
+              <video
+                ref={videoRef}
+                src={url}
+                controls
+                playsInline
+                className="w-full rounded-lg bg-black"
+              />
+              <VideoClockBadge seconds={clock} />
+            </div>
           ) : (
             <button
               onClick={() => void play()}
               disabled={loadingVideo}
-              className="flex h-56 w-full items-center justify-center gap-2 rounded-lg border border-line bg-paper-100 text-xs text-ink-600 hover:text-ink-900 disabled:opacity-60"
+              className="relative flex h-56 w-full items-center justify-center gap-2 rounded-lg border border-line bg-paper-100 text-xs text-ink-600 hover:text-ink-900 disabled:opacity-60"
             >
               {loadingVideo && <SpinnerIcon className="animate-spin" width={14} height={14} />}
               {loadingVideo ? 'Opening…' : 'Play — this is recorded in the chain of custody'}
+              <VideoClockBadge seconds={clock} />
             </button>
           )}
 
@@ -382,7 +399,7 @@ function EvidenceDetail({
           <Row label="Location">
             {item.hasLocation ? 'on file' : <span className="text-caution-600">none recorded</span>}
           </Row>
-          <Row label="Length">{length(item.durationSeconds)}</Row>
+          <Row label="Length">{length(clock ?? item.durationSeconds)}</Row>
           <Row label="Size">{size(item.byteSize)}</Row>
           <Row label="Filed by">{item.company ?? '—'}</Row>
           <Row label="Retention">

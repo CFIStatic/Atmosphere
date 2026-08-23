@@ -5,6 +5,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { HttpError } from '../lib/errors.js';
+import { parseMediaDuration } from '../verification/frames/duration.js';
 import { ensureStillsAndDuration, proofVideoUrl, recordAccess } from './proofOfWork.js';
 import {
   answerFromClip,
@@ -1072,15 +1073,10 @@ evidenceShareRouter.get(
         detail: `via Verifier link — original video, ${(proof as any).phase} · ${(proof as any).work_date}`,
       });
 
-      const stored = (proof as any).duration_seconds;
-      const durationSeconds =
-        stored != null && Number.isFinite(Number(stored)) && Number(stored) > 0
-          ? Number(stored)
-          : null;
       res.json({
         url: (data as any).signedUrl,
         expiresInSeconds: 600,
-        durationSeconds,
+        durationSeconds: parseMediaDuration((proof as any).duration_seconds),
       });
     } catch (err) {
       next(err);

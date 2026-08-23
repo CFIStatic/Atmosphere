@@ -1,4 +1,5 @@
 import type { JobRisk, JobScopeItem, ProofDay, ScopeState } from '../../lib/api';
+import { formatClipClocks } from '../../lib/videoDuration';
 
 export type StoryTone = 'success' | 'caution' | 'danger' | 'neutral';
 export type StoryKind = 'day' | 'scope' | 'attention';
@@ -10,6 +11,8 @@ export type StoryItem = {
   badge: string;
   tone: StoryTone;
   kind: StoryKind;
+  /** Clip lengths for a filmed day, e.g. `1:08 · 1:34`. */
+  clock?: string | null;
 };
 
 export type JobProgressStory = {
@@ -40,6 +43,7 @@ type DayLike = Pick<
   | 'aiSummary'
 > & {
   aiFindings?: ProofDay['aiFindings'];
+  proofClips?: ProofDay['proofClips'];
 };
 
 const SKIP_STATES: ScopeState[] = ['excluded', 'declined'];
@@ -110,6 +114,7 @@ function dayToItem(day: DayLike): StoryItem {
     badge: badge.label,
     tone: badge.tone,
     kind: 'day',
+    clock: formatClipClocks(day.proofClips),
   };
 }
 
