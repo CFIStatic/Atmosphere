@@ -96,17 +96,7 @@ export async function probeMetadata(
     filePath,
   ]);
   if (code !== 0) throw new Error(`ffprobe failed: ${stderr.slice(0, 500)}`);
-  const parsed = JSON.parse(stdout) as ProbeJson & {
-    streams?: Array<{
-      codec_type?: string;
-      codec_name?: string;
-      width?: number;
-      height?: number;
-      avg_frame_rate?: string;
-      duration?: string | number;
-      tags?: { rotate?: string; DURATION?: string; Duration?: string; duration?: string };
-    }>;
-  };
+  const parsed = JSON.parse(stdout) as ProbeJson;
   const video = parsed.streams?.find((s) => s.codec_type === 'video');
   let fps: number | null = null;
   if (video?.avg_frame_rate && video.avg_frame_rate.includes('/')) {

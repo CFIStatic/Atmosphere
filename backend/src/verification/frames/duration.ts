@@ -15,6 +15,10 @@ export type ProbeJson = {
   };
   streams?: Array<{
     codec_type?: string;
+    codec_name?: string;
+    width?: number;
+    height?: number;
+    avg_frame_rate?: string;
     duration?: string | number;
     tags?: Record<string, string | undefined>;
   }>;
