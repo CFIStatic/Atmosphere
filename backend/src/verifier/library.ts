@@ -83,6 +83,19 @@ export function analysisStateOf(input: {
     // the after's business; this row only says whether one exists yet.
     return input.dayHasAfter ? 'paired' : 'waiting_on_after';
   }
+  // A finished dictation is a reading in its own right, and it outranks
+  // whatever the day comparison did.
+  //
+  // Two independent queues run on every upload: one dictates this clip, one
+  // compares the day. They fail independently too — a day with no before to
+  // compare against, or a comparison the model could not make, says nothing
+  // about the sentence the assistant already wrote about this footage. The
+  // switch below used to answer 'skipped' first, so a clip with a perfectly
+  // good dictation on it rendered as unread and serializeEvidence threw the
+  // dictation away. That is the office product being hidden by the failure
+  // of a different product.
+  if (input.narrationStatus === 'done') return 'done';
+
   switch (input.analysisStatus) {
     case 'done':
       return 'done';
@@ -94,9 +107,9 @@ export function analysisStateOf(input: {
     case 'skipped':
       return 'skipped';
     default:
-      // A finished dictation is enough for the office view even when the
-      // day-comparison pipeline has not written analysis_status yet.
-      if (input.narrationStatus === 'done' || input.hasAiSummary) return 'done';
+      // No day comparison has been attempted at all; an AI summary from any
+      // source is still a reading.
+      if (input.hasAiSummary) return 'done';
       if (input.narrationStatus === 'queued' || input.narrationStatus === 'running') {
         return 'queued';
       }

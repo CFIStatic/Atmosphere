@@ -192,6 +192,67 @@ test('an unread clip carries the reason the pipeline recorded', () => {
   );
 });
 
+/**
+ * The dictation and the day comparison are separate products of separate
+ * queues. A day that could not be compared — no before to compare against,
+ * a model that could not make the call — does not un-write the sentence the
+ * assistant already produced about this clip. Reading 'skipped' first hid a
+ * finished dictation behind another pipeline's failure.
+ */
+test('a finished dictation outranks a day comparison that never ran', () => {
+  const state = (over: Record<string, unknown> = {}) =>
+    analysisStateOf({
+      phase: 'after',
+      analysisStatus: null,
+      hasAiSummary: false,
+      dayHasAfter: true,
+      narrationStatus: null,
+      ...over,
+    });
+
+  assert.equal(state({ analysisStatus: 'skipped', narrationStatus: 'done' }), 'done');
+  assert.equal(state({ analysisStatus: 'failed', narrationStatus: 'done' }), 'done');
+  // With no dictation, the day comparison still gets the last word.
+  assert.equal(state({ analysisStatus: 'skipped' }), 'skipped');
+  assert.equal(state({ analysisStatus: 'skipped', narrationStatus: 'failed' }), 'skipped');
+  // A before is still read off its after, dictation or not.
+  assert.equal(state({ phase: 'before', narrationStatus: 'done' }), 'paired');
+});
+
+test('a dictated clip keeps its dictation even when the day was never compared', () => {
+  const item = serializeEvidence({
+    proof: {
+      id: 'p3',
+      job_id: 'j1',
+      party_id: 'pt1',
+      phase: 'after',
+      work_date: '2026-08-22',
+      received_at: '2026-08-22T20:03:00Z',
+      duration_seconds: 2,
+      byte_size: '13000000',
+      checks: [],
+      // The day comparison gave up; the per-clip dictation did not.
+      analysis_status: 'skipped',
+      analysis_error: 'No day film on file yet.',
+      narration_status: 'done',
+      narration_text: 'A desk with a monitor running a broadcast. No work in frame.',
+      narration: { entries: [{ atSeconds: 0, text: 'Desk, monitor, papers.' }] },
+      legal_hold: false,
+    },
+    jobName: 'Cedar Ridge',
+    jobNumber: 1038,
+    company: 'Field Capture',
+    contactName: 'Jack Cyganiak',
+    tier: 1,
+    dayHasAfter: true,
+  });
+
+  assert.equal(item.analysisState, 'done');
+  assert.equal(item.analysisReason, null);
+  assert.equal(item.analysis?.dictation, 'A desk with a monitor running a broadcast. No work in frame.');
+  assert.equal(item.analysis?.dictationEntries[0].text, 'Desk, monitor, papers.');
+});
+
 test('serialization hands the portal the recorded reason for a skipped read', () => {
   const item = serializeEvidence({
     proof: {
