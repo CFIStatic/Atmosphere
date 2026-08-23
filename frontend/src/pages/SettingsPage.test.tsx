@@ -31,22 +31,29 @@ const apiMocks = vi.hoisted(() => ({
   uploadAvatar: vi.fn(),
   removeAvatar: vi.fn(),
   getMembers: vi.fn().mockResolvedValue({ members: [] }),
+  orgInvites: vi.fn().mockResolvedValue({ invites: [] }),
+  createOrgInvite: vi.fn(),
+  revokeOrgInvite: vi.fn(),
 }));
 
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => authState,
 }));
 
-vi.mock('../lib/api', () => ({
-  api: apiMocks,
-  ApiError: class ApiError extends Error {
-    status = 400;
-    code = 'failed';
-  },
-  ROLE_LABELS: {},
-  WORK_TYPE_LABELS: {},
-  CONTRACTOR_TYPE_LABELS: {},
-}));
+vi.mock('../lib/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/api')>();
+  return {
+    ...actual,
+    api: {
+      ...actual.api,
+      ...apiMocks,
+    },
+    ApiError: class ApiError extends Error {
+      status = 400;
+      code = 'failed';
+    },
+  };
+});
 
 vi.mock('../hooks/useFeatureTimer', () => ({
   useFeatureTimer: () => undefined,
