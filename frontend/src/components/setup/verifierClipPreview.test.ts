@@ -117,4 +117,14 @@ describe('verifier dashboard clip preview', () => {
     expect(clipToOpen(items, '', false)).toBeNull();
     expect(clipToOpen(items, '?open=latest', false)?.id).toBe('jack-after');
   });
+
+  it('plays the recorded file even when the day film is longer than ten minutes', () => {
+    const start = verifierHtml.indexOf('function startLivePlayback(item)');
+    const end = verifierHtml.indexOf('function renderAnalysis(item)');
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const body = verifierHtml.slice(start, end);
+    expect(body.indexOf("querySelector('video')")).toBeLessThan(body.indexOf('> 600'));
+    expect(body).toContain('vid.muted = true');
+  });
 });

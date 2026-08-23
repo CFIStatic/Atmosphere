@@ -3002,10 +3002,10 @@
 
   function startLivePlayback(item) {
     if (!item) return;
-    if ((item.duration || 0) > 600) return;
     var host = $('#d-frame');
     var vid = host && host.querySelector('video');
     if (vid) {
+      vid.muted = true;
       var attempt = vid.play();
       if (attempt && attempt.catch) {
         attempt.catch(function () {
@@ -3015,6 +3015,7 @@
       }
       return;
     }
+    if ((item.duration || 0) > 600) return;
     if (item._frames && item._frames.length > 1) startFramePlayback();
   }
 
