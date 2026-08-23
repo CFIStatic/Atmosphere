@@ -109,7 +109,7 @@ async function assembleLibrary(client: any, orgId: string, proofs: any[]) {
   const jobIds = [...new Set(proofs.map((p) => p.job_id))];
   const partyIds = [...new Set(proofs.map((p) => p.party_id).filter(Boolean))];
 
-  const [jobs, parties, episodes, posters] = await Promise.all([
+  const [jobs, parties, episodes, posters, previews] = await Promise.all([
     jobIds.length
       ? client.from('crm_jobs').select('id, title, job_number').in('id', jobIds)
       : Promise.resolve({ data: [] }),
@@ -124,6 +124,7 @@ async function assembleLibrary(client: any, orgId: string, proofs: any[]) {
           .in('job_id', jobIds)
       : Promise.resolve({ data: [] }),
     posterUrls(proofs.map((p) => p.id)),
+    previewUrls(proofs),
   ]);
 
   const jobById = new Map<string, any>((jobs.data ?? []).map((j: any) => [j.id, j]));
@@ -150,6 +151,7 @@ async function assembleLibrary(client: any, orgId: string, proofs: any[]) {
       tier: tierByDay.get(dayKey) ?? null,
       dayHasAfter: daysWithAfter.has(dayKey),
       posterUrl: posters.get(proof.id) ?? null,
+      previewUrl: previews.get(proof.id) ?? null,
     });
   });
 }
@@ -255,7 +257,50 @@ async function posterUrls(proofIds: string[]): Promise<Map<string, string>> {
       if (url) out.set(proofId, url);
     }
   } catch {
-    // Best-effort. A storage hiccup costs the previews, never the list.
+    // Best-effort. A storage hiccup costs the stills, never the list.
+  }
+  return out;
+}
+
+/**
+ * Signed URLs of the recorded files themselves, for the list's muted snippet.
+ *
+ * Same batching and hour-long TTL as the posters. The portal only starts
+ * the file when a thumb is on screen (or hovered), so minting the URL is
+ * not downloading the day. A clip with no storage path simply has no
+ * preview — the drawn still stays.
+ *
+ * Not a custody opening. Seeing four muted seconds in a list is not
+ * opening the file; that log stays on the route that hands over the player.
+ */
+async function previewUrls(
+  proofs: Array<{ id: string; storage_path?: string | null }>,
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const pathByProof = new Map<string, string>();
+  for (const proof of proofs) {
+    if (proof.storage_path) pathByProof.set(proof.id, proof.storage_path);
+  }
+  if (!pathByProof.size) return out;
+
+  const admin = createAdminClient();
+  if (!admin) return out;
+
+  try {
+    const { data: signed } = await admin.storage
+      .from(PROOF_BUCKET)
+      .createSignedUrls([...pathByProof.values()], 3600);
+
+    const urlByPath = new Map<string, string>();
+    for (const row of (signed ?? []) as any[]) {
+      if (row?.path && row?.signedUrl) urlByPath.set(row.path, row.signedUrl);
+    }
+    for (const [proofId, path] of pathByProof) {
+      const url = urlByPath.get(path);
+      if (url) out.set(proofId, url);
+    }
+  } catch {
+    // Best-effort. A storage hiccup costs the moving preview, never the list.
   }
   return out;
 }
