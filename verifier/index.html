@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- ask-panel 2026-08-23-bar3 -->
+<!-- ask-panel 2026-08-23-see -->
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -738,6 +738,10 @@
     width: 12px; height: 12px; background: #FF0033; border: 0; border-radius: 50%;
   }
   .controls .time { font-family: var(--mono); font-size: 11.5px; color: #E7E5E4; min-width: 86px; text-align: right; }
+  .buildstamp {
+    flex: none; font-family: var(--mono); font-size: 10px; letter-spacing: .04em;
+    color: #FBBF24; white-space: nowrap;
+  }
 
   .player video {
     display: block; width: 100%; height: 100%; max-height: none; object-fit: contain; background: #1A1815;
@@ -1087,6 +1091,7 @@
             </button>
             <div class="scrub" id="d-scrub"></div>
             <span class="time" id="d-time">frame 1 / 6</span>
+            <span class="buildstamp" id="d-build">8:00p 23 Aug</span>
           </div>
         </div>
       </section>
@@ -3107,6 +3112,7 @@
     var parts = [dayLabel(item.workDate), esc(item.company)];
     if (item.duration && item.duration > 0) parts.push(dur(item.duration));
     if (item.bytes) parts.push(mb(item.bytes));
+    parts.push('8:00p 23 Aug');
     $('#d-meta').innerHTML = parts.join(' · ');
   }
 
@@ -3235,7 +3241,7 @@
     var rows = analysisLog(item);
     var pill = rows.length ? 'Ready' : 'Writing…';
     var wait = 'The assistant writes what is on screen as you watch.';
-    var html = '<div class="alog-head"><h4>AI analysis</h4><span class="livepill" id="alog-pill">' + pill + '</span></div>';
+    var html = '<div class="alog-head"><h4>AI analysis · 8:00p 23 Aug</h4><span class="livepill" id="alog-pill">' + pill + '</span></div>';
     html += '<p class="footnote alog-wait" id="alog-empty">' + esc(wait) + '</p>';
     if (a.pairedWith) {
       html += '<p><button class="navitem" style="width:auto;margin:6px 0 0;border:1px solid var(--line)" data-goto="' + a.pairedWith + '">Open ' + esc(a.pairedWith) + '</button></p>';
