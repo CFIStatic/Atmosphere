@@ -14,6 +14,7 @@ final class FieldDaySession: ObservableObject {
     @Published var uploading: Bool = false
     @Published var manifest: DayFilmManifest?
     @Published var loadingJobs: Bool = false
+    @Published var lastRecordingURL: URL?
 
     let recorder = DayFilmRecorder()
     let locator = SiteLocator()
@@ -62,6 +63,7 @@ final class FieldDaySession: ObservableObject {
         lastError = nil
         do {
             let url = try await recorder.finishDay()
+            lastRecordingURL = url
             locator.stop()
             let tracks = try await DayFilmRecorder.probeTracks(url: url)
             guard tracks.hasAudio, tracks.hasVideo else {
@@ -186,6 +188,7 @@ final class FieldDaySession: ObservableObject {
             phase = .door
         } catch {
             lastError = error.localizedDescription
+            recorder.teardown()
             phase = .door
             doorChecks = [
                 DoorCheck(id: "err", label: "Upload issue", detail: error.localizedDescription, ok: false),
@@ -194,6 +197,8 @@ final class FieldDaySession: ObservableObject {
     }
 
     func backToToday() {
+        recorder.teardown()
+        lastRecordingURL = nil
         phase = .today
         elapsedSeconds = 0
         lastError = nil
