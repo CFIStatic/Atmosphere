@@ -21,7 +21,7 @@ import {
   type TaskStatus,
   type WorkLogKind,
 } from '../lib/api';
-import { AppShell, PanelSpinner, ErrorNote, EmptyState } from '../components/AppShell';
+import { PanelSpinner, ErrorNote, EmptyState } from '../components/AppShell';
 import { MemoryFeed } from '../components/MemoryFeed';
 import { SpinnerIcon, PlusIcon, ChevronLeftIcon, CheckIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
@@ -163,22 +163,18 @@ export function JobDetailPage() {
 
   if (error && !detail) {
     return (
-      <AppShell>
-        <div className="mx-auto max-w-lg pt-10">
+      <div className="mx-auto max-w-lg pt-10">
           <ErrorNote message={error} />
           <Link to="/jobs" className="mt-4 inline-block text-sm text-brand-300 hover:text-brand-200">
             ← Back to jobs
           </Link>
         </div>
-      </AppShell>
     );
   }
 
   if (!detail) {
     return (
-      <AppShell>
-        <PanelSpinner label="Loading job" />
-      </AppShell>
+      <PanelSpinner label="Loading job" />
     );
   }
 
@@ -188,7 +184,7 @@ export function JobDetailPage() {
   const unassigned = members.filter((m) => !activeCrew.some((c) => c.userId === m.userId));
 
   return (
-    <AppShell>
+    <>
       <Link
         to="/jobs"
         className="mb-4 inline-flex items-center gap-1 text-sm text-ink-600 transition hover:text-ink-800"
@@ -498,6 +494,6 @@ export function JobDetailPage() {
           </Card>
         )}
       </div>
-    </AppShell>
+    </>
   );
 }

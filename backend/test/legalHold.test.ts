@@ -73,6 +73,12 @@ test('classifyRequest names asking a clip in the evidence portal', () => {
   );
   assert.equal(shareAsk.action, 'evidence.asked');
   assert.equal(shareAsk.resourceId, ORG);
+
+  const orgWatch = classifyRequest(
+    fakeReq('POST', `/api/evidence-portal/evidence/${ORG}/watch`),
+  );
+  assert.equal(orgWatch.action, 'evidence.watched');
+  assert.equal(orgWatch.resourceId, ORG);
 });
 
 test('user delete hides the catalog object and the vault keeps it', async () => {

@@ -19,6 +19,7 @@ import {
 import { RetryQueue } from '../shared/retryQueue.js';
 import { attachProofToEpisode } from '../episodes/attach.js';
 import { isModelProviderConfigured } from '../lib/anthropic.js';
+import { isVisionConfigured } from '../shared/visionDescribe.js';
 import { config } from '../config.js';
 import { DailyBudget } from '../shared/liveBudget.js';
 import { labelsForProof } from '../verifier/library.js';
@@ -405,7 +406,7 @@ async function runDayAnalysis(admin: any, party: any, workDate: string): Promise
   if (!film) {
     return { outcome: 'skipped', reason: 'No day film on file yet.' };
   }
-  if (!isModelProviderConfigured()) {
+  if (!isVisionConfigured()) {
     return { outcome: 'skipped', reason: 'Model access is not configured on this server.' };
   }
 
@@ -868,7 +869,7 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
   // with no model key should still leave a clip looking like itself.
   const settled = await ensureStillsAndDuration(admin, job.proofId);
 
-  if (!isModelProviderConfigured()) {
+  if (!isVisionConfigured()) {
     await write({ narration_status: 'skipped', narration_error: 'No model is configured.' });
     return;
   }

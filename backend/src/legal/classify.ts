@@ -115,8 +115,22 @@ const RULES: Rule[] = [
   },
   {
     method: 'POST',
+    pattern: new RegExp(`^/api/evidence-portal/evidence/([^/]+)/watch/?$`),
+    action: 'evidence.watched',
+    resourceType: 'proof',
+    resourceParam: 1,
+  },
+  {
+    method: 'POST',
     pattern: /^\/api\/verifier-share\/[^/]+\/evidence\/([^/]+)\/ask\/?$/,
     action: 'evidence.asked',
+    resourceType: 'proof',
+    resourceParam: 1,
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/verifier-share\/[^/]+\/evidence\/([^/]+)\/watch\/?$/,
+    action: 'evidence.watched',
     resourceType: 'proof',
     resourceParam: 1,
   },
