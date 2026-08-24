@@ -1,0 +1,124 @@
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const sharedJobs = vi.fn();
+const sharedJob = vi.fn();
+const renameJobFile = vi.fn();
+const duplicateJobFile = vi.fn();
+
+vi.mock('../hooks/useFeatureTimer', () => ({
+  useFeatureTimer: () => undefined,
+}));
+
+vi.mock('../components/shared/JobProgressDashboard', () => ({
+  JobProgressDashboard: () => <div>Job progress</div>,
+}));
+
+vi.mock('../components/shared/JobLegalHoldPortal', () => ({
+  JobLegalHoldPortal: () => null,
+}));
+
+vi.mock('../components/shared/EvidenceLocker', () => ({
+  EvidenceLocker: () => null,
+}));
+
+vi.mock('../components/shared/JobReadinessPanel', () => ({
+  JobReadinessPanel: () => null,
+}));
+
+vi.mock('../components/shared/ScopeDocPanel', () => ({
+  ScopeDocPanel: () => null,
+}));
+
+vi.mock('../lib/api', () => ({
+  api: {
+    sharedJobs: (...args: unknown[]) => sharedJobs(...args),
+    sharedJob: (...args: unknown[]) => sharedJob(...args),
+    renameJobFile: (...args: unknown[]) => renameJobFile(...args),
+    duplicateJobFile: (...args: unknown[]) => duplicateJobFile(...args),
+  },
+}));
+
+import { SharedDashboardPage } from './SharedDashboardPage';
+
+const summary = {
+  jobId: 'job-1038',
+  jobNumber: 1038,
+  title: 'Cedar Ridge — storm damage',
+  status: 'in_progress',
+  parties: 1,
+  currentRevision: 1,
+  behind: 0,
+  awaiting: 0,
+  exclusions: 0,
+};
+
+const record = {
+  job: {
+    id: 'job-1038',
+    jobNumber: 1038,
+    title: 'Cedar Ridge — storm damage',
+    status: 'in_progress',
+    claimNumber: 'CLM-1',
+  },
+  brief: null,
+  revisions: [],
+  currentRevision: 1,
+  parties: [],
+  scope: [],
+  money: { approved: 0, pending: 0, unpricedApprovals: 0 },
+  messages: [],
+  risks: [],
+};
+
+describe('SharedDashboardPage job file identity', () => {
+  beforeEach(() => {
+    sharedJobs.mockReset();
+    sharedJob.mockReset();
+    renameJobFile.mockReset();
+    duplicateJobFile.mockReset();
+    sharedJobs.mockResolvedValue({ jobs: [summary], counts: { jobs: 1, parties: 0, blockers: 0, awaiting: 0 } });
+    sharedJob.mockResolvedValue(record);
+    renameJobFile.mockResolvedValue({
+      job: { ...record.job, title: 'Cedar Ridge kitchen rebuild' },
+    });
+    duplicateJobFile.mockResolvedValue({
+      job: { id: 'job-2', title: 'Copy of Cedar Ridge kitchen rebuild', jobNumber: 1099 },
+      briefRevision: 1,
+      scopeSaved: 0,
+      jobFile: {
+        ...summary,
+        jobId: 'job-2',
+        jobNumber: 1099,
+        title: 'Copy of Cedar Ridge kitchen rebuild',
+      },
+    });
+  });
+
+  it('renames the open job file from the header', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/job-progress?job=job-1038']}>
+        <SharedDashboardPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Rename' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Duplicate' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Rename' }));
+    const field = screen.getByLabelText(/^Name$/i);
+    await user.clear(field);
+    await user.type(field, 'Cedar Ridge kitchen rebuild');
+    await user.click(screen.getByRole('button', { name: 'Save name' }));
+
+    await waitFor(() => {
+      expect(renameJobFile).toHaveBeenCalledWith('job-1038', 'Cedar Ridge kitchen rebuild');
+    });
+    expect(await screen.findByRole('heading', { name: 'Cedar Ridge kitchen rebuild' })).toBeInTheDocument();
+  });
+});
