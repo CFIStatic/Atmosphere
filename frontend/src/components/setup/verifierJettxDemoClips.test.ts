@@ -128,6 +128,7 @@ describe('Jettx LLC dashboard demo clips', () => {
     expect(rows).toContain('Meridian Ave');
     expect(rows).toContain('Camden Court');
     expect(rows).toContain('Cursor 1');
+    expect(document.getElementById('who-sub')?.textContent).toBe('Jettx LLC');
     dom.window.close();
   });
 
