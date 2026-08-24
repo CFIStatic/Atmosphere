@@ -5,6 +5,7 @@ import {
   parseVisionActions,
   type VisionAction,
 } from './proofActions.js';
+import { describeVision, isVisionConfigured } from './visionDescribe.js';
 
 /**
  * The model, watching the filming itself.
@@ -53,6 +54,90 @@ Rules:
 3. Confidence is between 0 and 1 and should be honest; 0.3 for a plausible guess is more useful than 0.9 for one.
 
 Reply with JSON only: {"stage": number, "note": string, "confidence": number}`;
+
+/* ------------------------------------------------------------------ *
+ * Watch observation — one frame, at the playhead
+ * ------------------------------------------------------------------ */
+
+export interface WatchObservation {
+  note: string;
+  confidence: number;
+}
+
+const WATCH_SYSTEM = `You are watching one frame from a video someone is playing right now. Tell them what is happening on screen.
+
+Write one or two plain spoken sentences, the way a person next to the player would say it. Name what you can see: people, screens, rooms, tools, movement. Examples: "The recording just started — someone is looking at a computer with YouTube open." or "The camera pans toward a stairwell that looks like a basement."
+
+Rules:
+1. Present tense. Concrete. Only what is visible — never what is probably happening off screen.
+2. If the frame is dark, blurred, a thumb, or a ceiling, say that.
+3. Never estimate cost, hours, or whether work is worth paying for. Do not invent names.
+4. Confidence is between 0 and 1 and should be honest.
+
+Reply with JSON only: {"note": string, "confidence": number}`;
+
+export function parseWatchObservation(text: string): WatchObservation | null {
+  const cleaned = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  if (!cleaned) return null;
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (typeof parsed.note !== 'string' || !parsed.note.trim()) return null;
+    const confidence =
+      typeof parsed.confidence === 'number' && Number.isFinite(parsed.confidence)
+        ? Math.min(1, Math.max(0, parsed.confidence))
+        : 0;
+    return { note: parsed.note.trim().slice(0, 280), confidence };
+  } catch {
+    // Haiku / Gemini sometimes answer with the sentence itself. A bare
+    // reading of the frame is still a reading — refuse only empty leftovers.
+    const note = cleaned.replace(/^["']|["']$/g, '').trim();
+    if (note.length < 4 || /^[[{]/.test(note)) return null;
+    return { note: note.slice(0, 280), confidence: 0.5 };
+  }
+}
+
+/**
+ * A watch note is about the playhead. A still pulled from elsewhere is only
+ * the picture; stamping it with that other second hides the note until the
+ * reviewer gets there, which looks like the assistant never wrote.
+ */
+export function watchNoteAtSeconds(playheadSeconds: number, frameSeconds: number): number {
+  const play = Math.max(0, Number(playheadSeconds) || 0);
+  const frame = Math.max(0, Number(frameSeconds) || 0);
+  return Math.abs(frame - play) <= 3 ? frame : play;
+}
+
+export async function observeWatchFrame(input: {
+  frameBase64: string;
+  atSeconds?: number | null;
+  phase?: string | null;
+  workDate?: string | null;
+}): Promise<WatchObservation | null> {
+  if (!isVisionConfigured()) return null;
+  if (!input.frameBase64 || input.frameBase64.length < 80) return null;
+
+  const when =
+    input.atSeconds != null && Number.isFinite(input.atSeconds)
+      ? ` at ${Math.max(0, Math.round(input.atSeconds))}s`
+      : '';
+  const context = [
+    input.phase ? `Phase: ${input.phase}` : '',
+    input.workDate ? `Work date: ${input.workDate}` : '',
+  ]
+    .filter(Boolean)
+    .join('. ');
+
+  const result = await describeVision({
+    system: WATCH_SYSTEM,
+    userText:
+      (context ? `${context}.\n` : '') +
+      `This is the frame on screen${when}. Describe only what is visible:`,
+    images: [{ base64: input.frameBase64 }],
+    maxTokens: 220,
+  });
+  return result ? parseWatchObservation(result.text) : null;
+}
 
 export function parseObservation(text: string, stepCount: number): LiveObservation | null {
   const cleaned = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');

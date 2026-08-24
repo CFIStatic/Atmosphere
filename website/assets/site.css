@@ -117,11 +117,13 @@ a { color: inherit; }
 }
 .nav-inner { display: flex; align-items: center; gap: 32px; height: 60px; }
 .wordmark {
-  display: flex; align-items: center; gap: 10px;
-  font-weight: 700; font-size: 17px; letter-spacing: -0.02em;
+  display: flex; align-items: center; gap: 12px;
+  font-weight: 700; font-size: 21px; letter-spacing: -0.02em;
   text-decoration: none; margin-right: auto;
 }
-.wordmark svg { display: block; }
+.wordmark svg { display: block; width: 28px; height: 28px; }
+.foot-brand .wordmark { font-size: 17px; gap: 10px; }
+.foot-brand .wordmark svg { width: 18px; height: 18px; }
 /* Logo mark: four atmosphere bars fading toward the ground, one orange base.
    Bars are ink at rising opacity, so the one asset matches both brand
    lockups — light-to-dark on paper, dark-to-light on a dark ground. */
