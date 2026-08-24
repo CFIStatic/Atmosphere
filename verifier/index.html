@@ -4605,8 +4605,10 @@
 
   function boot() {
     var playtest = new URLSearchParams(location.search).get('playtest');
-    if (playtest && EVIDENCE[0] && !EVIDENCE[0]._remote) {
-      EVIDENCE[0]._videoUrl = playtest;
+    if (playtest) {
+      EVIDENCE.forEach(function (item) {
+        if (item && !item._remote) item._videoUrl = playtest;
+      });
     }
     initFacets();
     counts();

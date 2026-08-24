@@ -46,7 +46,7 @@ describe('verifier YouTube progress line', () => {
     );
     expect(verifierHtml).not.toMatch(/<video[^>]*\bcrossorigin\b/);
     expect(verifierHtml).toMatch(/\.vp \{[\s\S]*?position: absolute; inset: 0/);
-    expect(verifierHtml).toContain('EVIDENCE[0]._videoUrl = playtest');
+    expect(verifierHtml).toContain('item._videoUrl = playtest');
   });
 
   it('grows the red fill when a Field Capture file has no duration yet', () => {
@@ -69,6 +69,42 @@ describe('verifier YouTube progress line', () => {
     expect(laterFrac).toBeLessThan(1);
 
     expect(clipLength({ duration: 96, currentTime: 18 }, { duration: 0 })).toBe(96);
+  });
+
+  it('mounts a real clip from playtest without asking the file for CORS', async () => {
+    const dom = new JSDOM(verifierHtml, {
+      url: 'https://atmosphere.test/verifier/?demo=1&playtest=https://cdn.example/clip.mp4',
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+      beforeParse(window) {
+        window.fetch = () => Promise.reject(new Error('offline'));
+        window.matchMedia = ((query: string) => ({
+          matches: false,
+          media: query,
+          addEventListener() {},
+          removeEventListener() {},
+          addListener() {},
+          removeListener() {},
+          dispatchEvent() {
+            return false;
+          },
+        })) as unknown as typeof window.matchMedia;
+      },
+    });
+
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+    const { document } = dom.window;
+    const row = document.querySelector('tr[data-id="EV-1038-0805-A"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    const video = document.querySelector('#d-frame video') as HTMLVideoElement | null;
+    expect(video).not.toBeNull();
+    expect(video!.getAttribute('src')).toBe('https://cdn.example/clip.mp4');
+    expect(video!.getAttribute('crossorigin')).toBeNull();
+    expect(document.querySelector('.vp-played')).not.toBeNull();
+    expect(document.querySelector('.player .controls')?.hasAttribute('hidden')).toBe(true);
+    dom.window.close();
   });
 
   it('still opens a demo clip on the schematic path and writes analysis notes', async () => {
