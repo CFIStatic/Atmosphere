@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		AFC000000000000000000202 /* DayFilmRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000102 /* DayFilmRecorder.swift */; };
 		AFC000000000000000000203 /* CapturePermissions.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000103 /* CapturePermissions.swift */; };
+		AFC00000000000000000021A /* CaptureAudioSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC00000000000000000011A /* CaptureAudioSession.swift */; };
 		AFC000000000000000000204 /* SiteLocator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000104 /* SiteLocator.swift */; };
 		AFC000000000000000000205 /* RoomPlanBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000105 /* RoomPlanBridge.swift */; };
 		AFC000000000000000000206 /* AtmosphereClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC000000000000000000106 /* AtmosphereClient.swift */; };
@@ -37,6 +38,7 @@
 		AFC000000000000000000101 /* AtmosphereFieldCaptureApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AtmosphereFieldCaptureApp.swift; sourceTree = "<group>"; };
 		AFC000000000000000000102 /* DayFilmRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayFilmRecorder.swift; sourceTree = "<group>"; };
 		AFC000000000000000000103 /* CapturePermissions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapturePermissions.swift; sourceTree = "<group>"; };
+		AFC00000000000000000011A /* CaptureAudioSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureAudioSession.swift; sourceTree = "<group>"; };
 		AFC000000000000000000104 /* SiteLocator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiteLocator.swift; sourceTree = "<group>"; };
 		AFC000000000000000000105 /* RoomPlanBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomPlanBridge.swift; sourceTree = "<group>"; };
 		AFC000000000000000000106 /* AtmosphereClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AtmosphereClient.swift; sourceTree = "<group>"; };
@@ -112,6 +114,7 @@
 			children = (
 				AFC000000000000000000102 /* DayFilmRecorder.swift */,
 				AFC000000000000000000103 /* CapturePermissions.swift */,
+				AFC00000000000000000011A /* CaptureAudioSession.swift */,
 			);
 			path = Capture;
 			sourceTree = "<group>";

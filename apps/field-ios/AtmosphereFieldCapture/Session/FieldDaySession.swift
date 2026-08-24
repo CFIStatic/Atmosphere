@@ -30,7 +30,8 @@ final class FieldDaySession: ObservableObject {
                 activeJobId = list.first?.id
             }
         } catch {
-            lastError = error.localizedDescription
+            if Task.isCancelled || Self.isBenignCancellation(error) { return }
+            lastError = Self.friendlyErrorMessage(error)
             jobs = []
         }
     }
@@ -44,12 +45,15 @@ final class FieldDaySession: ObservableObject {
         if activeJobId == nil { activeJobId = jobs.first?.id }
         do {
             try await recorder.prepare()
+            _ = await CapturePermissions.requestLocation()
             locator.configure(jobs: jobs)
             locator.start()
-            try recorder.startDay()
+            try await recorder.startDay()
             phase = .recording
         } catch {
             lastError = error.localizedDescription
+            recorder.teardown()
+            locator.stop()
         }
     }
 
@@ -59,6 +63,7 @@ final class FieldDaySession: ObservableObject {
     }
 
     func finishDay(api: AtmosphereClient) async {
+        guard recorder.isRecording else { return }
         lastError = nil
         do {
             let url = try await recorder.finishDay()
@@ -186,6 +191,8 @@ final class FieldDaySession: ObservableObject {
             phase = .door
         } catch {
             lastError = error.localizedDescription
+            recorder.teardown()
+            locator.stop()
             phase = .door
             doorChecks = [
                 DoorCheck(id: "err", label: "Upload issue", detail: error.localizedDescription, ok: false),
@@ -194,6 +201,8 @@ final class FieldDaySession: ObservableObject {
     }
 
     func backToToday() {
+        recorder.teardown()
+        locator.stop()
         phase = .today
         elapsedSeconds = 0
         lastError = nil
@@ -206,5 +215,18 @@ final class FieldDaySession: ObservableObject {
         f.timeZone = .current
         f.dateFormat = "yyyy-MM-dd"
         return f.string(from: Date())
+    }
+
+    private static func isBenignCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
+    }
+
+    private static func friendlyErrorMessage(_ error: Error) -> String {
+        if isBenignCancellation(error) {
+            return "Could not load today's jobs. Pull to refresh."
+        }
+        return error.localizedDescription
     }
 }

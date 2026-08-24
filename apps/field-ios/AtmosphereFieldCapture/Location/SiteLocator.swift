@@ -23,8 +23,20 @@ final class SiteLocator: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
 
     func start() {
-        manager.requestWhenInUseAuthorization()
-        manager.startUpdatingLocation()
+        switch manager.authorizationStatus {
+        case .authorizedAlways, .authorizedWhenInUse:
+            siteLabel = "Getting your bearings…"
+            manager.startUpdatingLocation()
+        case .notDetermined:
+            siteLabel = "Getting your bearings…"
+            manager.requestWhenInUseAuthorization()
+        case .denied, .restricted:
+            siteLabel = "Location off — enable in Settings for job hints"
+            unsure = true
+        @unknown default:
+            siteLabel = "Location unavailable"
+            unsure = true
+        }
     }
 
     func stop() {
@@ -40,6 +52,9 @@ final class SiteLocator: NSObject, ObservableObject, CLLocationManagerDelegate {
             if let first = jobs.first(where: \.placed) {
                 self.siteLabel = "\(first.name) · on site"
                 self.unsure = false
+            } else if let first = jobs.first {
+                self.siteLabel = "\(first.name) · nearby"
+                self.unsure = false
             } else {
                 self.siteLabel = "Not sure which job — the office will sort it"
                 self.unsure = true
@@ -49,8 +64,31 @@ final class SiteLocator: NSObject, ObservableObject, CLLocationManagerDelegate {
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         Task { @MainActor in
-            self.siteLabel = "Location unavailable"
+            switch manager.authorizationStatus {
+            case .denied, .restricted:
+                self.siteLabel = "Location off — enable in Settings for job hints"
+            default:
+                self.siteLabel = "Location unavailable"
+            }
             self.unsure = true
+        }
+    }
+
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        Task { @MainActor in
+            switch manager.authorizationStatus {
+            case .authorizedAlways, .authorizedWhenInUse:
+                self.siteLabel = "Getting your bearings…"
+                manager.startUpdatingLocation()
+            case .denied, .restricted:
+                self.siteLabel = "Location off — enable in Settings for job hints"
+                self.unsure = true
+            case .notDetermined:
+                break
+            @unknown default:
+                self.siteLabel = "Location unavailable"
+                self.unsure = true
+            }
         }
     }
 }
