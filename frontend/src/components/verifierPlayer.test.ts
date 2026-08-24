@@ -44,6 +44,28 @@ describe('verifier YouTube progress line', () => {
     );
   });
 
+  it('grows the red fill when a Field Capture file has no duration yet', () => {
+    const match = verifierHtml.match(/function clipLength\(vid, item\) \{[\s\S]*?\n  \}/);
+    expect(match).not.toBeNull();
+    const clipLength = new Function(`${match![0]}; return clipLength;`)() as (
+      vid: { duration?: number; currentTime?: number; seekable?: { length: number } },
+      item: { duration?: number } | null,
+    ) => number;
+
+    const noDuration = { duration: Number.POSITIVE_INFINITY, currentTime: 0, seekable: { length: 0 } };
+    const startLen = clipLength(noDuration, { duration: 0 });
+    expect(startLen).toBeGreaterThan(0);
+    expect(0 / startLen).toBe(0);
+
+    const later = { duration: Number.NaN, currentTime: 18, seekable: { length: 0 } };
+    const laterLen = clipLength(later, { duration: 0 });
+    const laterFrac = 18 / laterLen;
+    expect(laterFrac).toBeGreaterThan(0.5);
+    expect(laterFrac).toBeLessThan(1);
+
+    expect(clipLength({ duration: 96, currentTime: 18 }, { duration: 0 })).toBe(96);
+  });
+
   it('still opens a demo clip on the schematic path and writes analysis notes', async () => {
     const dom = new JSDOM(verifierHtml, {
       url: 'https://atmosphere.test/verifier/?demo=1',
