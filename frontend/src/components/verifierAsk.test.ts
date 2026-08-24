@@ -93,6 +93,16 @@ describe('verifier clip Analysis tab', () => {
       .join('\n');
     expect(reply).toMatch(/Tarp removed|footage/i);
     expect(document.getElementById('alog')).not.toBeNull();
+
+    const custodyTab = document.querySelector('[data-tab="custody"]') as HTMLElement;
+    custodyTab.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    expect(document.getElementById('ask-form')).toBeNull();
+
+    const analysisTab = document.querySelector('[data-tab="analysis"]') as HTMLElement;
+    analysisTab.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    expect(document.getElementById('alog')).not.toBeNull();
+    expect(document.getElementById('ask-form')).not.toBeNull();
+    expect(document.querySelector('.ask-bubble.assistant')?.textContent || '').toMatch(/Tarp removed|footage/i);
     dom.window.close();
   });
 });
