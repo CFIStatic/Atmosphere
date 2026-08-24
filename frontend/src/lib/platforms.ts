@@ -64,10 +64,10 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
       {
         label: 'Work',
         items: [
-          { to: '/field', label: 'Field', Icon: MicIcon },
+          { to: '/field', label: 'Overview', Icon: GaugeIcon },
           { to: '/intake', label: 'Start a job', Icon: BoltIcon },
           { to: '/verifier-library', label: 'Dashboard', Icon: DecisionIcon },
-          { to: '/jobs', label: 'Jobs', Icon: BriefcaseIcon },
+          { to: '/jobs', label: 'My jobs', Icon: BriefcaseIcon },
         ],
       },
       SYSTEM,
