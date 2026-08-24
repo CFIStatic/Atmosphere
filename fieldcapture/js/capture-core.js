@@ -245,6 +245,7 @@
               videoEl.srcObject = stream;
               videoEl.muted = true;
               videoEl.playsInline = true;
+              videoEl.play().catch(function () {});
             }
             var mime = pickMime();
             state.mimeType = mime || '';
@@ -262,13 +263,6 @@
               onTick(Math.floor((Date.now() - state.startedAt) / 1000));
             }, 500);
           });
-      },
-      resumePreview: function () {
-        if (!videoEl || !state.stream) return Promise.resolve();
-        videoEl.srcObject = state.stream;
-        videoEl.muted = true;
-        videoEl.playsInline = true;
-        return videoEl.play().catch(function () {});
       },
       stop: function () {
         return new Promise(function (resolve, reject) {
