@@ -654,39 +654,50 @@ async function fileClip(
         : null,
     );
 
-    const { data: proof, error: proofError } = await admin
+    const proofRow = {
+      org_id: org.id,
+      job_id: job.id,
+      party_id: party.id,
+      work_date: clip.workDate,
+      phase: clip.phase,
+      category: clip.category,
+      title: clip.title,
+      tags: ['product-testing', 'jettx-demo'],
+      storage_path: storagePath,
+      byte_size: bytes.length,
+      duration_seconds: clip.durationSeconds,
+      content_hash: contentHash,
+      captured_at: capturedAt,
+      received_at: capturedAt,
+      lat: clip.lat ?? null,
+      lon: clip.lon ?? null,
+      accuracy_m: clip.accuracyM ?? null,
+      state: 'checked',
+      checks,
+      ai_summary: clip.purpose,
+      narration_text: clip.purpose,
+      narration_status: 'done',
+      narrated_at: capturedAt,
+      labels: ['product-testing', 'jettx-demo', clip.phase],
+      legal_hold: Boolean(clip.legalHold),
+      hold_reason: clip.holdReason ?? null,
+    };
+
+    // Visible unique key is a partial index (deleted_at is null). PostgREST
+    // ON CONFLICT cannot target that, so replace the live row by id.
+    const { data: existingVisible } = await admin
       .from('job_proofs')
-      .upsert(
-        {
-          org_id: org.id,
-          job_id: job.id,
-          party_id: party.id,
-          work_date: clip.workDate,
-          phase: clip.phase,
-          category: clip.category,
-          title: clip.title,
-          tags: ['product-testing', 'jettx-demo'],
-          storage_path: storagePath,
-          byte_size: bytes.length,
-          duration_seconds: clip.durationSeconds,
-          content_hash: contentHash,
-          captured_at: capturedAt,
-          received_at: capturedAt,
-          lat: clip.lat ?? null,
-          lon: clip.lon ?? null,
-          accuracy_m: clip.accuracyM ?? null,
-          state: 'checked',
-          checks,
-          ai_summary: clip.purpose,
-          narration_text: clip.purpose,
-          narration_status: 'done',
-          narrated_at: capturedAt,
-          labels: ['product-testing', 'jettx-demo', clip.phase],
-          legal_hold: Boolean(clip.legalHold),
-          hold_reason: clip.holdReason ?? null,
-        },
-        { onConflict: 'party_id,work_date,phase' },
-      )
+      .select('id')
+      .eq('party_id', party.id)
+      .eq('work_date', clip.workDate)
+      .eq('phase', clip.phase)
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    const write = existingVisible?.id
+      ? admin.from('job_proofs').update(proofRow).eq('id', existingVisible.id)
+      : admin.from('job_proofs').insert(proofRow);
+    const { data: proof, error: proofError } = await write
       .select('id, title, duration_seconds')
       .single();
     if (proofError || !proof) {

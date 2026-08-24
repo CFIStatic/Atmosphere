@@ -1,10 +1,18 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   clipsForSeed,
   JETTX_DEMO_CLIPS,
   parseSeedVideoArgs,
 } from '../src/scripts/seedProductTestVideo.ts';
+
+const seedSource = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), '../src/scripts/seedProductTestVideo.ts'),
+  'utf8',
+);
 
 test('parseSeedVideoArgs defaults to the Cursor 1 / Jettx LLC product-testing clip', () => {
   const opts = parseSeedVideoArgs([], new Date('2026-08-22T17:00:00Z'));
@@ -72,4 +80,10 @@ test('without --catalog, only the Cursor 1 clip is filed', () => {
   assert.equal(clips.length, 1);
   assert.equal(clips[0]?.title, 'Cursor 1');
   assert.equal(clips[0]?.workDate, '2026-08-22');
+});
+
+test('replaces a live clip by id instead of ON CONFLICT on the partial unique index', () => {
+  assert.match(seedSource, /existingVisible\?\.id/);
+  assert.match(seedSource, /\.is\('deleted_at', null\)/);
+  assert.doesNotMatch(seedSource, /onConflict:\s*'party_id,work_date,phase'/);
 });
