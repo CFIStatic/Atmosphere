@@ -52,6 +52,10 @@ on:
       - cursor/fix-railway-office-deploy-157d
       - cursor/internal-data-platform-e19d
       - cursor/verifier-live-ask-b893
+      - cursor/working-video-analysis-chat-b181
+      - cursor/increase-logo-size-cf43
+      - cursor/fix-page-shift-4ec5
+      - cursor/update-railway-cli-cf43
     paths:
       - 'backend/**'
       - 'supabase/migrations/**'
@@ -62,6 +66,7 @@ on:
       - 'Dockerfile'
       - 'api.upstream'
       - 'scripts/railwayPrivateUpstream.sh'
+      - 'scripts/installRailwayCli.sh'
       - '.github/workflows/deploy-production.yml'
 
 concurrency:
@@ -74,14 +79,14 @@ jobs:
     runs-on: ubuntu-latest
     environment: Keys
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
 
       - name: Install Railway CLI
-        run: npm install -g @railway/cli
+        run: bash scripts/installRailwayCli.sh
 
       - name: Require Railway token
         env:
@@ -185,14 +190,14 @@ jobs:
     runs-on: ubuntu-latest
     environment: Keys
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
 
       - name: Install Railway CLI
-        run: npm install -g @railway/cli
+        run: bash scripts/installRailwayCli.sh
 
       - name: Require Railway token
         env:
@@ -257,6 +262,11 @@ jobs:
           # railway up reads /railway.toml from the upload root. Without this copy
           # the CLI builds the backend Dockerfile and probes /api/health on nginx.
           cp frontend/railway.toml railway.toml
+          railway --version
+          # Each attempt must change a file under frontend/** or Railway skips
+          # the rebuild and the Login & Dashboard CLI timestamp stays stale.
+          echo "# railway-up $(date -u +%s)" > frontend/.railway-up-stamp
+          export RAILWAY_UP_STAMP_FILE="$PWD/frontend/.railway-up-stamp"
           export RAILWAY_SERVICE="$service"
           export RAILWAY_PROJECT_ID="$project"
           chmod +x backend/scripts/railwayUp.sh
@@ -267,14 +277,14 @@ jobs:
     runs-on: ubuntu-latest
     environment: Keys
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
 
       - name: Install Railway CLI
-        run: npm install -g @railway/cli
+        run: bash scripts/installRailwayCli.sh
 
       # No deploy here. deploy-website.yml ships the site when website/**
       # changes; this job only re-asserts the service's settings, because the
@@ -307,14 +317,14 @@ jobs:
     runs-on: ubuntu-latest
     environment: Keys
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
 
       - name: Install Railway CLI
-        run: npm install -g @railway/cli
+        run: bash scripts/installRailwayCli.sh
 
       - name: Require Railway token
         env:

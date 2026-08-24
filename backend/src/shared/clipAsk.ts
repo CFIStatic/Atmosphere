@@ -8,11 +8,10 @@
  * discipline.
  *
  * When a model is configured it writes the prose; when it is not, a grounded
- * lookup still answers from the same record so the Ask tab works in demo and
- * in environments without a provider.
+ * lookup still answers from the same record so the Analysis tab works in demo
+ * and in environments without a provider.
  */
-import { anthropicClient, isModelProviderConfigured } from '../lib/anthropic.js';
-import { config } from '../config.js';
+import { completeText, isVisionConfigured } from './visionDescribe.js';
 
 export type ClipAskAnalysisState =
   | 'done'
@@ -43,6 +42,8 @@ export type ClipAskRecord = {
   dictationEntries?: Array<{ atSeconds?: number | null; text?: string | null; note?: string | null; summary?: string | null }>;
   timeline?: Array<{ startSeconds?: number | null; summary?: string | null }> | null;
   scope?: Array<{ title?: string | null; verdict?: string | null; because?: string | null }>;
+  /** Notes written while the reviewer watched this clip. Same honesty: only what was on screen. */
+  watchNotes?: Array<{ atSeconds?: number | null; text?: string | null }>;
 };
 
 export type ClipAskTurn = { role: 'user' | 'assistant'; text: string };
@@ -133,6 +134,7 @@ export function clipRecordFromEvidenceItem(item: {
     dictationEntries: Array.isArray(analysis?.dictationEntries) ? analysis.dictationEntries : [],
     timeline: Array.isArray(analysis?.timeline) ? analysis.timeline : null,
     scope: Array.isArray(analysis?.scope) ? analysis.scope : [],
+    watchNotes: Array.isArray(analysis?.watchNotes) ? analysis.watchNotes : [],
   };
 }
 
@@ -185,6 +187,7 @@ function clipCorpus(record: ClipAskRecord): CorpusRow[] {
   }
   for (const concern of record.concerns ?? []) push(null, concern, 'concern');
   for (const gap of record.couldNotTell ?? []) push(null, gap, 'gap');
+  for (const note of record.watchNotes ?? []) push(note.atSeconds, note.text, 'watch');
   return rows;
 }
 
@@ -240,6 +243,10 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
     }
     if (actions.length) {
       return `Yes — the footage${date} shows: ${actions.slice(0, 4).join('; ')}.`;
+    }
+    const watched = (record.watchNotes ?? []).map((n) => String(n.text || '').trim()).filter(Boolean);
+    if (watched.length) {
+      return `Yes — the footage${date} shows: ${watched.slice(0, 4).join('; ')}.`;
     }
     const summary = (record.dictation || record.summary || '').trim();
     if (summary) return `The reading of this clip${date}: ${summary}`;
@@ -317,6 +324,11 @@ export function formatClipRecordForModel(record: ClipAskRecord): string {
   }
   if ((record.couldNotTell ?? []).length) lines.push(`Could not tell: ${record.couldNotTell!.join('; ')}`);
   if ((record.concerns ?? []).length) lines.push(`Concerns: ${record.concerns!.join('; ')}`);
+  for (const note of record.watchNotes ?? []) {
+    if (!note.text) continue;
+    const when = formatClipTime(note.atSeconds);
+    lines.push(`Watch${when ? ` @ ${when}` : ''}: ${note.text}`);
+  }
   return lines.join('\n');
 }
 
@@ -329,7 +341,7 @@ export async function answerFromClip(input: {
   history?: ClipAskTurn[];
 }): Promise<{ answer: string; model: string | null }> {
   const grounded = groundedAnswerFromClip(input.question, input.record);
-  if (!isModelProviderConfigured()) return { answer: grounded, model: null };
+  if (!isVisionConfigured()) return { answer: grounded, model: null };
 
   const reading = formatClipRecordForModel(input.record).trim();
   if (!reading) return { answer: grounded, model: null };
@@ -341,26 +353,15 @@ export async function answerFromClip(input: {
     .join('\n');
 
   try {
-    const response = await anthropicClient().messages.create({
-      model: config.technician.assistant.model,
-      max_tokens: 500,
+    const response = await completeText({
       system: CLIP_QA_SYSTEM,
-      messages: [
-        {
-          role: 'user',
-          content:
-            `Reading of this clip:\n\n${reading}` +
-            (history ? `\n\nEarlier questions on this clip:\n${history}` : '') +
-            `\n\nQuestion: ${input.question}`,
-        },
-      ],
+      maxTokens: 500,
+      userText:
+        `Reading of this clip:\n\n${reading}` +
+        (history ? `\n\nEarlier questions on this clip:\n${history}` : '') +
+        `\n\nQuestion: ${input.question}`,
     });
-    const answer = response.content
-      .filter((block: { type: string }) => block.type === 'text')
-      .map((block: { type: string; text?: string }) => block.text ?? '')
-      .join('\n')
-      .trim();
-    return answer ? { answer, model: response.model } : { answer: grounded, model: null };
+    return response?.text ? { answer: response.text, model: response.model } : { answer: grounded, model: null };
   } catch {
     return { answer: grounded, model: null };
   }

@@ -13,6 +13,7 @@
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "frontend/Dockerfile"
+# Force a CLI rebuild of the restored Overview / My jobs office app.
 watchPatterns = [
   "frontend/**",
   "verifier/**",

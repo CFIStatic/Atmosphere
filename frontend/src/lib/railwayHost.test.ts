@@ -140,6 +140,7 @@ describe('every front door proxies /api over the private mesh', () => {
     const appJob = office.slice(office.indexOf('name: Deploy office app'));
     expect(appJob).toContain('resolveRailwayService.mjs');
     expect(appJob).toContain('Login & Dashboard');
+    expect(appJob).toContain('frontend/.railway-up-stamp');
     expect(appJob).not.toMatch(publicHost);
   });
 

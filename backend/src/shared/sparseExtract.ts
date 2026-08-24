@@ -181,3 +181,55 @@ export async function extractSparseFramesFromUrl(input: {
     await rm(workDir, { recursive: true, force: true }).catch(() => undefined);
   }
 }
+
+/**
+ * One JPEG at a playhead. Field-capture uploads often arrive with no
+ * duration and no stored stills; live watch still has to look at *this*
+ * second of the file.
+ */
+export async function extractJpegAtSeconds(input: {
+  url: string;
+  atSeconds: number;
+  ffmpegPath?: string;
+  runner?: CommandRunner;
+}): Promise<Buffer | null> {
+  const runner = input.runner ?? defaultRunner;
+  const ffmpeg = input.ffmpegPath ?? process.env.FFMPEG_PATH ?? 'ffmpeg';
+  const at = Math.max(0, Number(input.atSeconds) || 0);
+  const workDir = join(tmpdir(), `atm-watch-${randomUUID()}`);
+  await mkdir(workDir, { recursive: true });
+  const outPath = join(workDir, 'frame.jpg');
+
+  async function grab(seek: number): Promise<boolean> {
+    const { code } = await runner(ffmpeg, [
+      '-y',
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      '-ss',
+      String(seek),
+      '-i',
+      input.url,
+      '-frames:v',
+      '1',
+      '-q:v',
+      '5',
+      '-vf',
+      'scale=640:-2',
+      outPath,
+    ]);
+    return code === 0;
+  }
+
+  try {
+    // Phone files often have no keyframe at 0:00; a hair later still reads.
+    const ok = (await grab(at)) || (at < 0.4 && (await grab(0.4)));
+    if (!ok) return null;
+    const jpeg = await readFile(outPath);
+    return jpeg.length ? jpeg : null;
+  } catch {
+    return null;
+  } finally {
+    await rm(workDir, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
