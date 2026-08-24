@@ -26,8 +26,9 @@ struct RecordingView: View {
                         .font(FieldTheme.mono)
                         .foregroundStyle(.white)
                 }
-                .padding(12)
-                .background(.black.opacity(0.45))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(.ultraThinMaterial.opacity(0.85))
 
                 Spacer()
 
@@ -38,10 +39,10 @@ struct RecordingView: View {
                     Text(session.locator.siteLabel)
                         .font(.system(size: 13))
                         .foregroundStyle(.white.opacity(0.9))
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, 14)
                         .padding(.vertical, 8)
-                        .background(.black.opacity(0.4))
-                        .cornerRadius(8)
+                        .background(.black.opacity(0.35))
+                        .clipShape(Capsule())
 
                     Text("ON THE RECORD · video + audio")
                         .font(.system(size: 11, weight: .bold))
@@ -66,7 +67,7 @@ struct RecordingView: View {
             .padding(.vertical, 18)
             .background(holding ? FieldTheme.accent : FieldTheme.ink)
             .foregroundStyle(.white)
-            .cornerRadius(12)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { _ in
@@ -95,19 +96,33 @@ struct RecordingView: View {
     }
 }
 
+private final class CameraPreviewUIView: UIView {
+    var previewLayer: AVCaptureVideoPreviewLayer? {
+        didSet {
+            guard previewLayer !== oldValue else { return }
+            oldValue?.removeFromSuperlayer()
+            guard let previewLayer else { return }
+            previewLayer.frame = bounds
+            layer.insertSublayer(previewLayer, at: 0)
+        }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        previewLayer?.frame = bounds
+    }
+}
+
 private struct PreviewRepresentable: UIViewRepresentable {
     let layer: AVCaptureVideoPreviewLayer?
 
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
+    func makeUIView(context: Context) -> CameraPreviewUIView {
+        let view = CameraPreviewUIView()
         view.backgroundColor = .black
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
-        uiView.layer.sublayers?.filter { $0 is AVCaptureVideoPreviewLayer }.forEach { $0.removeFromSuperlayer() }
-        guard let layer else { return }
-        layer.frame = uiView.bounds
-        uiView.layer.addSublayer(layer)
+    func updateUIView(_ uiView: CameraPreviewUIView, context: Context) {
+        uiView.previewLayer = layer
     }
 }

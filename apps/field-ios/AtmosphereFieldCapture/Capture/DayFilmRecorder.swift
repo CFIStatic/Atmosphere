@@ -45,7 +45,10 @@ final class DayFilmRecorder: NSObject, ObservableObject {
             throw CaptureError.permissionDenied
         }
 
+        try configureAudioSession()
+
         session.beginConfiguration()
+        session.automaticallyConfiguresApplicationAudioSession = false
         session.sessionPreset = .high
 
         session.inputs.forEach { session.removeInput($0) }
@@ -81,6 +84,19 @@ final class DayFilmRecorder: NSObject, ObservableObject {
             throw CaptureError.deviceUnavailable
         }
         session.addOutput(movieOutput)
+
+        if let audioConnection = movieOutput.connection(with: .audio), audioConnection.isActive {
+            audioConnection.isEnabled = true
+            movieOutput.setOutputSettings(
+                [
+                    AVFormatIDKey: kAudioFormatMPEG4AAC,
+                    AVSampleRateKey: 44_100,
+                    AVNumberOfChannelsKey: 1,
+                    AVEncoderBitRateKey: 64_000,
+                ],
+                for: audioConnection
+            )
+        }
 
         // Prefer AAC audio + H.264 in QuickTime/MP4.
         if let connection = movieOutput.connection(with: .video),
@@ -146,12 +162,30 @@ final class DayFilmRecorder: NSObject, ObservableObject {
 
     /// Probe the finished file for audio + video tracks before upload.
     static func probeTracks(url: URL) async throws -> (hasVideo: Bool, hasAudio: Bool, duration: Double) {
-        let asset = AVURLAsset(url: url)
-        let video = try await asset.loadTracks(withMediaType: .video)
-        let audio = try await asset.loadTracks(withMediaType: .audio)
-        let duration = try await asset.load(.duration)
-        let seconds = CMTimeGetSeconds(duration)
-        return (!video.isEmpty, !audio.isEmpty, seconds.isFinite ? seconds : 0)
+        var last = (hasVideo: false, hasAudio: false, duration: 0.0)
+        for attempt in 0..<6 {
+            let asset = AVURLAsset(url: url)
+            let video = try await asset.loadTracks(withMediaType: .video)
+            let audio = try await asset.loadTracks(withMediaType: .audio)
+            let duration = try await asset.load(.duration)
+            let seconds = CMTimeGetSeconds(duration)
+            last = (!video.isEmpty, !audio.isEmpty, seconds.isFinite ? seconds : 0)
+            if last.hasVideo, last.hasAudio { return last }
+            if attempt < 5 {
+                try await Task.sleep(nanoseconds: 200_000_000)
+            }
+        }
+        return last
+    }
+
+    private func configureAudioSession() throws {
+        let audioSession = AVAudioSession.sharedInstance()
+        try audioSession.setCategory(
+            .playAndRecord,
+            mode: .videoRecording,
+            options: [.defaultToSpeaker, .allowBluetooth, .mixWithOthers]
+        )
+        try audioSession.setActive(true)
     }
 }
 
