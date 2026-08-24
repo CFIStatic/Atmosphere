@@ -107,3 +107,14 @@ test('answerFromClip falls back to the grounded reading when no model is configu
   assert.equal(result.model, null);
   assert.match(result.answer, /Tarp removed/);
 });
+
+test('live watch notes are enough to answer when the official reading has not landed', async () => {
+  const result = await answerFromClip({
+    question: 'Did anything happen?',
+    record: {
+      analysisState: 'queued',
+      watchNotes: [{ atSeconds: 3, text: 'Someone is looking at a laptop with YouTube open.' }],
+    },
+  });
+  assert.match(result.answer, /YouTube/);
+});

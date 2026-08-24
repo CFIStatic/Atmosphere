@@ -2667,11 +2667,18 @@
       $('#d-time').textContent = 'full clip · ' + dur(item.duration);
       var vid = $('#d-frame').querySelector('video');
       if (vid) {
-        vid.addEventListener('timeupdate', function () { syncAnalysisLog(vid.currentTime); });
+        vid.addEventListener('timeupdate', function () {
+          syncAnalysisLog(vid.currentTime);
+          if (!vid.paused && !vid.ended) tickWatch(item, false);
+        });
         vid.addEventListener('seeked', function () { syncAnalysisLog(vid.currentTime); });
-        vid.addEventListener('play', function () { syncAnalysisLog(vid.currentTime); });
+        vid.addEventListener('play', function () {
+          syncAnalysisLog(vid.currentTime);
+          tickWatch(item, true);
+        });
         vid.addEventListener('pause', function () { syncAnalysisLog(vid.currentTime); });
         vid.addEventListener('ended', function () { syncAnalysisLog(vid.currentTime); });
+        vid.addEventListener('loadeddata', function () { tickWatch(item, true); });
       }
     } else {
       item._frames = item._remoteFrames && item._remoteFrames.length
@@ -2777,7 +2784,11 @@
 
   function startLivePlayback(item) {
     if (!item) return;
-    if ((item.duration || 0) > 600) return;
+    resetWatch(item);
+    if ((item.duration || 0) > 600) {
+      tickWatch(item, true);
+      return;
+    }
     var host = $('#d-frame');
     var vid = host && host.querySelector('video');
     if (vid) {
@@ -2788,9 +2799,118 @@
           vid.play().catch(function () {});
         });
       }
+      tickWatch(item, true);
       return;
     }
     if (item._frames && item._frames.length > 1) startFramePlayback();
+    tickWatch(item, true);
+  }
+
+  var WATCH = { inflight: false, lastAt: -99, failed: null, itemId: null };
+
+  function resetWatch(item) {
+    WATCH.inflight = false;
+    WATCH.lastAt = -99;
+    WATCH.failed = null;
+    WATCH.itemId = item && item.id;
+    if (item) {
+      item.analysis = item.analysis || { state: item.analysis && item.analysis.state };
+      item.analysis.watchNotes = item.analysis.watchNotes || [];
+    }
+  }
+
+  function grabPlayheadJpeg(cb) {
+    var host = $('#d-frame');
+    var vid = host && host.querySelector('video');
+    if (vid && vid.readyState >= 2 && vid.videoWidth) {
+      try {
+        var canvas = document.createElement('canvas');
+        var w = Math.min(640, vid.videoWidth || 640);
+        var h = Math.max(1, Math.round(((vid.videoHeight || 360) / (vid.videoWidth || 640)) * w));
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(vid, 0, 0, w, h);
+        var data = canvas.toDataURL('image/jpeg', 0.72);
+        cb(data.replace(/^data:image\/jpeg;base64,/, ''));
+        return;
+      } catch (_err) { /* fall through */ }
+    }
+    var item = state.open;
+    if (item && item._frames && item._frames[state.frame] && item._frames[state.frame].src) {
+      var src = item._frames[state.frame].src;
+      var marker = 'base64,';
+      var idx = src.indexOf(marker);
+      cb(idx >= 0 ? src.slice(idx + marker.length) : null);
+      return;
+    }
+    cb(null);
+  }
+
+  function rememberWatchNote(item, at, text) {
+    item.analysis = item.analysis || {};
+    item.analysis.watchNotes = item.analysis.watchNotes || [];
+    var t = String(text || '').trim();
+    if (!t) return false;
+    if (item.analysis.watchNotes.some(function (n) {
+      return Math.abs((n.atSeconds || 0) - at) < 2 && n.text === t;
+    })) return false;
+    item.analysis.watchNotes.push({ atSeconds: at, text: t });
+    return true;
+  }
+
+  function tickWatch(item, force) {
+    if (!item || !item._remote) return;
+    if (WATCH.inflight) return;
+    var at = currentPlayhead();
+    if (!force && Math.abs(at - WATCH.lastAt) < 4) return;
+    WATCH.inflight = true;
+    WATCH.lastAt = at;
+    setAnalysisPill('Writing…');
+    grabPlayheadJpeg(function (frame) {
+      var url = ORG_MODE
+        ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id) + '/watch'
+        : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id) + '/watch';
+      var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      var hang = setTimeout(function () { if (ctrl) ctrl.abort(); }, 12000);
+      fetch(url, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ atSeconds: at, frameBase64: frame || undefined }),
+        signal: ctrl && ctrl.signal
+      }).then(function (r) {
+        return r.json().then(function (body) {
+          if (!r.ok) {
+            var err = new Error((body && (body.error || body.message)) || 'Could not read this moment.');
+            err.code = body && body.code;
+            throw err;
+          }
+          return body;
+        });
+      }).then(function (body) {
+        if (body && body.note && rememberWatchNote(item, body.atSeconds != null ? body.atSeconds : at, body.note)) {
+          if (state.open && state.open.id === item.id && state.tab === 'integrity') {
+            setTab('integrity');
+            syncAnalysisLog(currentPlayhead());
+          }
+        }
+        WATCH.failed = null;
+      }).catch(function (err) {
+        WATCH.failed = (err && err.message) || 'Could not read this moment.';
+        if (state.open && state.open.id === item.id) {
+          setAnalysisPill(err && err.code === 'model_provider_unconfigured' ? 'Needs key' : 'Retrying');
+          var empty = document.getElementById('alog-empty');
+          if (empty && err && err.code === 'model_provider_unconfigured') {
+            empty.textContent = WATCH.failed;
+            empty.hidden = false;
+          }
+        }
+      }).finally(function () {
+        clearTimeout(hang);
+        WATCH.inflight = false;
+        if (state.open && state.open.id === item.id) syncAnalysisLog(currentPlayhead());
+      });
+    });
   }
 
   function renderAnalysis(item) {
@@ -2893,6 +3013,9 @@
       seen[key] = true;
       rows.push({ at: Math.max(0, Number(at) || 0), text: t, kind: kind || 'note' });
     }
+    (a.watchNotes || []).forEach(function (e) {
+      add(e.atSeconds, e.text, 'watch');
+    });
     (a.dictationEntries || []).forEach(function (e) {
       add(e.atSeconds, e.text || e.note || e.summary, 'read');
     });
@@ -3045,17 +3168,18 @@
     var a = item.analysis || {};
     var rows = analysisLog(item);
     var pill = a.state === 'failed' ? 'Failed'
+      : WATCH.failed && WATCH.failed.indexOf('model key') >= 0 ? 'Needs key'
       : (a.state === 'queued' || a.state === 'none' || !a.state) && !rows.length ? 'Writing…'
-      : a.state === 'paired' || a.state === 'skipped' ? 'Not yet'
+      : a.state === 'paired' || a.state === 'skipped' ? 'Watching'
       : 'Ready';
     var html = '<div class="alog-head"><h4>AI analysis</h4><span class="livepill" id="alog-pill">' + pill + '</span></div>';
     if (!rows.length) {
-      html += '<p class="footnote alog-wait">' +
-        esc(a.reason || (a.state === 'paired'
-          ? 'This is the before half of a day. Open the after clip for the dictation of what changed.'
+      html += '<p class="footnote alog-wait" id="alog-empty">' +
+        esc(WATCH.failed || a.reason || (a.state === 'paired'
+          ? 'This is the before half of a day. Play it anyway — live notes still write as the footage plays.'
           : a.state === 'failed'
-            ? 'The dictation failed after retries. The footage itself is unaffected.'
-            : 'The assistant is reading this clip. Notes land here as the footage plays.')) +
+            ? 'The filed dictation failed. Play the clip and the assistant will still describe what is on screen.'
+            : 'Play the clip. The assistant writes what is on screen here.')) +
         '</p>';
       if (a.pairedWith) {
         html += '<p><button class="navitem" style="width:auto;margin:6px 0 0;border:1px solid var(--line)" data-goto="' + a.pairedWith + '">Open ' + esc(a.pairedWith) + '</button></p>';
@@ -3104,26 +3228,29 @@
       push(null, [s.title, s.verdict, s.because].filter(Boolean).join(' — '));
     });
     (a.couldNotTell || []).forEach(function (c) { push(null, c); });
+    (a.watchNotes || []).forEach(function (n) { push(n.atSeconds, n.text); });
     return rows;
   }
 
   function answerClipLocally(item, question) {
     var a = item.analysis || {};
     var q = String(question || '').trim();
-    if (a.state === 'paired' || a.state === 'waiting_on_after') {
+    var rows = clipAskCorpus(item);
+    if (!rows.length && (a.state === 'paired' || a.state === 'waiting_on_after')) {
       return 'This is the before half of the day. Open the after clip — that is where the reading of what changed lives.';
     }
-    if (a.state === 'queued') return 'This clip is still being read. Ask again once the dictation lands.';
-    if (a.state === 'failed') return 'The reading of this clip failed. The footage itself is unaffected.';
-    if (a.state === 'skipped') return 'There is no after video on file for this day, so there is nothing to compare against.';
-    var rows = clipAskCorpus(item);
+    if (!rows.length && a.state === 'queued') return 'This clip is still being read. Ask again once the dictation lands.';
+    if (!rows.length && a.state === 'failed') return 'The reading of this clip failed. The footage itself is unaffected.';
+    if (!rows.length && a.state === 'skipped') return 'There is no after video on file for this day, so there is nothing to compare against.';
     if (!rows.length) return 'This clip has not been read yet, so there is nothing to answer from.';
     if (/what (happened|did|work)|did anything|anything happen|what('s| is) (visible|going on)|any work/i.test(q)) {
       var changes = (a.changes || []).filter(Boolean);
       var actions = (a.actions || []).map(function (act) { return act.description; }).filter(Boolean);
+      var watched = (a.watchNotes || []).map(function (n) { return n.text; }).filter(Boolean);
       var date = item.workDate ? ' on ' + item.workDate : '';
       if (changes.length) return 'Yes — the footage' + date + ' shows: ' + changes.slice(0, 4).join('; ') + '.';
       if (actions.length) return 'Yes — the footage' + date + ' shows: ' + actions.slice(0, 4).join('; ') + '.';
+      if (watched.length) return 'Yes — the footage' + date + ' shows: ' + watched.slice(0, 4).join('; ') + '.';
       if (a.dictation || a.summary) return 'The reading of this clip' + date + ': ' + (a.dictation || a.summary);
       return 'The footage on file does not show work happening.';
     }
@@ -3150,6 +3277,13 @@
     }).join('. ') + '.';
   }
 
+  function watchNotesPayload(item) {
+    var notes = ((item.analysis || {}).watchNotes) || [];
+    return notes.filter(function (n) { return n && n.text; }).slice(-40).map(function (n) {
+      return { atSeconds: n.atSeconds, text: n.text };
+    });
+  }
+
   function askClip(item, question, history, cb) {
     var local = answerClipLocally(item, question);
     if (!item._remote) {
@@ -3163,7 +3297,7 @@
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: question, history: history || [] })
+      body: JSON.stringify({ question: question, history: history || [], watchNotes: watchNotesPayload(item) })
     }).then(function (r) {
       return r.json().then(function (body) {
         if (!r.ok) throw new Error((body && (body.error || body.message)) || 'Could not answer.');

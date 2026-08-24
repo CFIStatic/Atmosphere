@@ -26,7 +26,8 @@ describe('verifier clip Ask tab and live analysis', () => {
   it('writes analysis notes as the footage plays rather than dumping the log', () => {
     expect(verifierHtml).toContain('function startLivePlayback');
     expect(verifierHtml).toContain("setAnalysisPill('Writing…')");
-    expect(verifierHtml).toContain('Notes land here as the footage plays');
+    expect(verifierHtml).toContain('function tickWatch');
+    expect(verifierHtml).toContain('/watch');
     expect(verifierHtml).toContain('data-full=');
   });
 
@@ -35,6 +36,7 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(verifierHtml).toContain('Did anything happen');
     expect(verifierHtml).toContain('/api/evidence-portal/evidence/');
     expect(verifierHtml).toContain('/ask');
+    expect(verifierHtml).toContain('watchNotes');
   });
 
   it('opens a demo clip, lands notes as frames play, and answers from the reading', async () => {

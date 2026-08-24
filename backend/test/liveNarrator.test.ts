@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import {
   parseNarration,
   parseObservation,
+  parseWatchObservation,
   stepsForNarration,
+  watchNoteAtSeconds,
   type StageStep,
 } from '../src/shared/liveNarrator.js';
 
@@ -22,6 +24,24 @@ const STEPS: StageStep[] = [
 ];
 
 const FRAMES = [{ atSeconds: 5 }, { atSeconds: 42 }, { atSeconds: 78 }, { atSeconds: 110 }];
+
+/* ---- watch observation ---- */
+
+test('a watch note parses from JSON and from a bare sentence', () => {
+  const json = parseWatchObservation('{"note":"Someone is looking at a laptop with YouTube open.","confidence":0.8}');
+  assert.equal(json?.note, 'Someone is looking at a laptop with YouTube open.');
+  assert.equal(json?.confidence, 0.8);
+
+  const bare = parseWatchObservation('The camera pans toward a stairwell that looks like a basement.');
+  assert.equal(bare?.note.startsWith('The camera pans'), true);
+  assert.equal(parseWatchObservation('{}'), null);
+  assert.equal(parseWatchObservation(''), null);
+});
+
+test('watch notes stamp the playhead when the still is from somewhere else', () => {
+  assert.equal(watchNoteAtSeconds(12, 12.4), 12.4);
+  assert.equal(watchNoteAtSeconds(12, 40), 12);
+});
 
 /* ---- live observation ---- */
 
