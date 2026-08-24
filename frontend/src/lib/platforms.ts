@@ -91,18 +91,18 @@ export const PLATFORM_IDS: PlatformId[] = ['operations', 'field'];
 /**
  * What the switcher offers, office first.
  *
- * Verification is the office view (home is the Dashboard). Field is the same
+ * Verification is the office view (home is Overview). Field is the same
  * product from the truck. Both must stay listed: leaving Verification out
  * made it a one-way door after switching to Field.
  */
 export const VISIBLE_PLATFORM_IDS: PlatformId[] = ['operations', 'field'];
 
 export const PLATFORM_HOME: Record<PlatformId, string> = {
-  operations: '/verifier-library',
-  field: '/verifier-library',
+  operations: '/field',
+  field: '/field',
 };
 
-/** The Work Verification dashboard — logo clicks always return here. */
+/** Office home — logo clicks and sign-in land on Overview, not All videos. */
 export const DASHBOARD_HOME = PLATFORM_HOME.operations;
 
 /**

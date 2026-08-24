@@ -29,4 +29,9 @@ describe('verifier Dashboard rail', () => {
     expect(verifierHtml).toContain("goShell('/jobs')");
     expect(verifierHtml).toContain("atmosphere: 'navigate'");
   });
+
+  it('sends the embedded brand home to Overview instead of All videos', () => {
+    expect(verifierHtml).toContain("window.parent.postMessage({ atmosphere: 'navigate', to: '/field' }, '*');");
+    expect(verifierHtml).toMatch(/function goHome\(\)[\s\S]*to: '\/field'/);
+  });
 });

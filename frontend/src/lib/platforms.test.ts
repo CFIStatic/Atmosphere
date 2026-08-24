@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { PLATFORMS } from './platforms';
+import { DASHBOARD_HOME, PLATFORM_HOME, PLATFORMS } from './platforms';
 
 describe('operations rail destinations', () => {
+  it('opens the office on Overview, not the All videos library', () => {
+    expect(PLATFORM_HOME.operations).toBe('/field');
+    expect(PLATFORM_HOME.field).toBe('/field');
+    expect(DASHBOARD_HOME).toBe('/field');
+  });
+
   it('puts Overview above Start a job and My jobs under Dashboard', () => {
     const work = PLATFORMS.operations.groups.find((group) => group.label === 'Work');
     expect(work).toBeDefined();

@@ -3967,13 +3967,16 @@
   initAccountMenu();
 
   function goHome() {
-    // Brand / home lands on the Dashboard — job folders and clips.
-    activeRoute = '/verifier-library';
-    activeRailItem = 'dashboard';
-    syncSidebarActive();
+    // Brand / home lands on Overview. All videos stays a Dashboard destination.
     if (EMBEDDED) {
-      window.parent.postMessage({ atmosphere: 'navigate', to: '/verifier-library' }, '*');
+      activeRoute = '/field';
+      activeRailItem = '';
+      syncSidebarActive();
+      window.parent.postMessage({ atmosphere: 'navigate', to: '/field' }, '*');
     } else {
+      activeRoute = '/verifier-library';
+      activeRailItem = 'dashboard';
+      syncSidebarActive();
       location.href = '/verifier-library';
     }
   }
