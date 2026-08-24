@@ -5,8 +5,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   clipsForSeed,
-  JETTX_DEMO_CLIPS,
+  jettxDemoClips,
   parseSeedVideoArgs,
+  utcDayKey,
 } from '../src/scripts/seedProductTestVideo.ts';
 
 const seedSource = readFileSync(
@@ -51,12 +52,17 @@ test('parseSeedVideoArgs rejects a bad duration', () => {
   assert.throws(() => parseSeedVideoArgs(['--duration', '0']), /duration/);
 });
 
-test('--catalog demo files the walkthrough set as real Jettx LLC clips', () => {
-  const opts = parseSeedVideoArgs(['--catalog', 'demo'], new Date('2026-08-24T12:00:00Z'));
+test('--catalog demo files the walkthrough set on today and the last few days', () => {
+  const now = new Date('2026-08-24T18:00:00.000Z');
+  const opts = parseSeedVideoArgs(['--catalog', 'demo'], now);
   assert.equal(opts.catalog, 'demo');
-  const clips = clipsForSeed(opts);
-  assert.equal(clips, JETTX_DEMO_CLIPS);
+  const clips = clipsForSeed(opts, now);
+  assert.deepEqual(clips, jettxDemoClips(now));
   assert.equal(clips.length, 11);
+  assert.equal(clips[0]?.jobTitle, 'Cursor 1');
+  assert.equal(clips[0]?.workDate, '2026-08-24');
+  assert.ok(clips.some((c) => c.jobTitle.startsWith('Cedar Ridge') && c.workDate === '2026-08-24'));
+  assert.ok(clips.some((c) => c.jobTitle.startsWith('Camden Court') && c.workDate === '2026-08-22'));
   assert.deepEqual(
     [...new Set(clips.map((c) => c.jobTitle))].sort(),
     [
@@ -71,7 +77,14 @@ test('--catalog demo files the walkthrough set as real Jettx LLC clips', () => {
   for (const clip of clips) {
     assert.match(clip.phase, /^(before|after)$/);
     assert.ok(clip.durationSeconds >= 20);
+    assert.match(clip.workDate, /^2026-08-2[1-4]$/);
   }
+});
+
+test('utcDayKey walks backward in UTC', () => {
+  const now = new Date('2026-08-24T18:00:00.000Z');
+  assert.equal(utcDayKey(now, 0), '2026-08-24');
+  assert.equal(utcDayKey(now, 3), '2026-08-21');
 });
 
 test('without --catalog, only the Cursor 1 clip is filed', () => {
@@ -86,4 +99,10 @@ test('replaces a live clip by id instead of ON CONFLICT on the partial unique in
   assert.match(seedSource, /existingVisible\?\.id/);
   assert.match(seedSource, /\.is\('deleted_at', null\)/);
   assert.doesNotMatch(seedSource, /onConflict:\s*'party_id,work_date,phase'/);
+});
+
+test('live writes stamp received_at as now and retire historical demo rows', () => {
+  assert.match(seedSource, /received_at:\s*new Date\(\)\.toISOString\(\)/);
+  assert.match(seedSource, /retireStaleDemoProofs/);
+  assert.match(seedSource, /contains\('tags', \['jettx-demo'\]\)/);
 });

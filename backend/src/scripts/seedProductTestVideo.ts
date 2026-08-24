@@ -9,8 +9,9 @@
  * that clip plus the Cedar Ridge / Meridian / Camden walkthrough set as real
  * job_proofs rows with playable MP4s in `job-proofs`.
  *
- * Re-running upserts the same party + work_date + phase key rather than
- * stacking duplicates.
+ * `--catalog demo` dates clips from today backward so they sit on top of the
+ * dashboard (today's job first). Re-running upserts the same party + work_date
+ * + phase key and retires older jettx-demo rows that are no longer in the set.
  */
 
 import { createHash } from 'node:crypto';
@@ -117,206 +118,232 @@ const CAMDEN = {
   },
 };
 
-/** Real rows written onto Jettx LLC — same jobs the dashboard walkthrough uses. */
-export const JETTX_DEMO_CLIPS: SeedClipSpec[] = [
-  {
-    jobTitle: 'Cursor 1',
-    jobPurpose: 'See how the product works — product testing.',
-    workType: 'mitigation',
-    address: {
-      label: 'Product testing',
-      line1: '1 Product Testing Lane',
-      city: 'Austin',
-      region: 'TX',
-      postal: '78701',
-      lat: 30.2672,
-      lon: -97.7431,
+export function utcDayKey(now: Date, daysBack = 0): string {
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - daysBack));
+  return d.toISOString().slice(0, 10);
+}
+
+function shortUtcDay(day: string): string {
+  return new Date(`${day}T12:00:00.000Z`).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+function at(day: string, hour: number, minute: number): string {
+  return `${day}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00.000Z`;
+}
+
+/**
+ * Walkthrough clips dated from today backward so they sit on top of the
+ * dashboard (today's job first) instead of under an older Field Capture row.
+ */
+export function jettxDemoClips(now = new Date()): SeedClipSpec[] {
+  const d0 = utcDayKey(now, 0);
+  const d1 = utcDayKey(now, 1);
+  const d2 = utcDayKey(now, 2);
+  const d3 = utcDayKey(now, 3);
+  return [
+    {
+      jobTitle: 'Cursor 1',
+      jobPurpose: 'See how the product works — product testing.',
+      workType: 'mitigation',
+      address: {
+        label: 'Product testing',
+        line1: '1 Product Testing Lane',
+        city: 'Austin',
+        region: 'TX',
+        postal: '78701',
+        lat: 30.2672,
+        lon: -97.7431,
+      },
+      company: 'Field Capture',
+      contactName: 'Product Testing',
+      trade: 'field_capture',
+      title: 'Cursor 1',
+      purpose: 'See how the product works — product testing.',
+      phase: 'before',
+      category: 'other',
+      workDate: d0,
+      capturedAt: at(d0, 17, 5),
+      durationSeconds: 60,
+      color: '0x142033',
     },
-    company: 'Field Capture',
-    contactName: 'Product Testing',
-    trade: 'field_capture',
-    title: 'Cursor 1',
-    purpose: 'See how the product works — product testing.',
-    phase: 'before',
-    category: 'other',
-    workDate: '2026-08-22',
-    capturedAt: '2026-08-22T17:00:00.000Z',
-    durationSeconds: 60,
-    color: '0x142033',
-  },
-  {
-    ...CEDAR,
-    company: 'Delgado Roofing',
-    contactName: 'Hector Delgado',
-    trade: 'roofing',
-    title: 'After — Aug 05',
-    purpose: 'North slope stripped, tarp gone, underlayment on two thirds of the slope.',
-    phase: 'after',
-    category: 'after',
-    workDate: '2026-08-05',
-    capturedAt: '2026-08-05T20:48:00.000Z',
-    durationSeconds: 24,
-    color: '0x1a3028',
-    lat: 30.4413,
-    lon: -97.7218,
-    accuracyM: 6,
-  },
-  {
-    ...CEDAR,
-    company: 'Delgado Roofing',
-    contactName: 'Hector Delgado',
-    trade: 'roofing',
-    title: 'Workday — Aug 07',
-    purpose: 'Tear-off, six new decking sheets, underlayment through the afternoon.',
-    phase: 'after',
-    category: 'after',
-    workDate: '2026-08-07',
-    capturedAt: '2026-08-07T14:11:00.000Z',
-    durationSeconds: 24,
-    color: '0x243018',
-    lat: 30.4413,
-    lon: -97.7218,
-    accuracyM: 7,
-  },
-  {
-    ...CEDAR,
-    company: 'Delgado Roofing',
-    contactName: 'Hector Delgado',
-    trade: 'roofing',
-    title: 'Before — Aug 05',
-    purpose: 'Morning walk of the north slope before the tarp comes off.',
-    phase: 'before',
-    category: 'before',
-    workDate: '2026-08-05',
-    capturedAt: '2026-08-05T07:12:00.000Z',
-    durationSeconds: 24,
-    color: '0x2a2418',
-    lat: 30.4413,
-    lon: -97.7219,
-    accuracyM: 8,
-  },
-  {
-    ...CEDAR,
-    company: 'Delgado Roofing',
-    contactName: 'Hector Delgado',
-    trade: 'roofing',
-    title: 'Before — Aug 04 (off site)',
-    purpose: 'Filmed 2.14 miles from the job — a different roof.',
-    phase: 'before',
-    category: 'issue',
-    workDate: '2026-08-04',
-    capturedAt: '2026-08-04T07:31:00.000Z',
-    durationSeconds: 24,
-    color: '0x331818',
-    lat: 30.4692,
-    lon: -97.755,
-    accuracyM: 11,
-  },
-  {
-    ...CEDAR,
-    company: 'Delgado Roofing',
-    contactName: 'Hector Delgado',
-    trade: 'roofing',
-    title: 'After — Aug 01',
-    purpose: 'Emergency tarp across the north and west slopes.',
-    phase: 'after',
-    category: 'after',
-    workDate: '2026-08-01',
-    capturedAt: '2026-08-01T18:20:00.000Z',
-    durationSeconds: 24,
-    color: '0x182030',
-    lat: null,
-    lon: null,
-    accuracyM: null,
-  },
-  {
-    ...CEDAR,
-    company: 'Brightline Electric',
-    contactName: 'Marisol Vega',
-    trade: 'electrical',
-    title: 'Before — Aug 06',
-    purpose: 'Service walk before electrical. No after filed for this day.',
-    phase: 'before',
-    category: 'before',
-    workDate: '2026-08-06',
-    capturedAt: '2026-08-06T08:02:00.000Z',
-    durationSeconds: 24,
-    color: '0x201828',
-    lat: 30.4414,
-    lon: -97.7217,
-    accuracyM: 5,
-  },
-  {
-    ...MERIDIAN,
-    company: 'Coastal Drying LLC',
-    contactName: 'Andre Boone',
-    trade: 'restoration',
-    title: 'After — Aug 03',
-    purpose: 'Six air movers and one dehumidifier in the same positions as the morning.',
-    phase: 'after',
-    category: 'after',
-    workDate: '2026-08-03',
-    capturedAt: '2026-08-03T17:20:00.000Z',
-    durationSeconds: 24,
-    color: '0x183040',
-    lat: 30.2984,
-    lon: -97.7431,
-    accuracyM: 7,
-  },
-  {
-    ...MERIDIAN,
-    company: 'Coastal Drying LLC',
-    contactName: 'Andre Boone',
-    trade: 'restoration',
-    title: 'Pre-conceal — Aug 02',
-    purpose: 'Cavities open, flood cut at 24 in. Legal hold — carrier dispute CLM-88412.',
-    phase: 'after',
-    category: 'condition',
-    workDate: '2026-08-02',
-    capturedAt: '2026-08-02T15:44:00.000Z',
-    durationSeconds: 24,
-    color: '0x102838',
-    legalHold: true,
-    holdReason: 'Carrier dispute over the extent of the flood cut — CLM-88412.',
-    lat: 30.2984,
-    lon: -97.743,
-    accuracyM: 6,
-  },
-  {
-    ...CAMDEN,
-    company: 'Vantage Drywall',
-    contactName: 'Luis Marte',
-    trade: 'drywall',
-    title: 'After — Jul 30',
-    purpose: 'Board hung; queued for analysis against the three rooms in scope.',
-    phase: 'after',
-    category: 'after',
-    workDate: '2026-07-30',
-    capturedAt: '2026-07-30T16:55:00.000Z',
-    durationSeconds: 24,
-    color: '0x283018',
-    lat: 30.5083,
-    lon: -97.6789,
-    accuracyM: 9,
-  },
-  {
-    ...CAMDEN,
-    company: 'Vantage Drywall',
-    contactName: 'Luis Marte',
-    trade: 'drywall',
-    title: 'After — Jul 29',
-    purpose: 'Short pan of one room. Board on a single wall; two rooms never shown.',
-    phase: 'after',
-    category: 'after',
-    workDate: '2026-07-29',
-    capturedAt: '2026-07-29T17:41:00.000Z',
-    durationSeconds: 24,
-    color: '0x302818',
-    lat: 30.5083,
-    lon: -97.6791,
-    accuracyM: 14,
-  },
-];
+    {
+      ...CEDAR,
+      company: 'Delgado Roofing',
+      contactName: 'Hector Delgado',
+      trade: 'roofing',
+      title: `After — ${shortUtcDay(d0)}`,
+      purpose: 'North slope stripped, tarp gone, underlayment on two thirds of the slope.',
+      phase: 'after',
+      category: 'after',
+      workDate: d0,
+      capturedAt: at(d0, 20, 48),
+      durationSeconds: 24,
+      color: '0x1a3028',
+      lat: 30.4413,
+      lon: -97.7218,
+      accuracyM: 6,
+    },
+    {
+      ...CEDAR,
+      company: 'Delgado Roofing',
+      contactName: 'Hector Delgado',
+      trade: 'roofing',
+      title: `Before — ${shortUtcDay(d0)}`,
+      purpose: 'Morning walk of the north slope before the tarp comes off.',
+      phase: 'before',
+      category: 'before',
+      workDate: d0,
+      capturedAt: at(d0, 7, 12),
+      durationSeconds: 24,
+      color: '0x2a2418',
+      lat: 30.4413,
+      lon: -97.7219,
+      accuracyM: 8,
+    },
+    {
+      ...CEDAR,
+      company: 'Delgado Roofing',
+      contactName: 'Hector Delgado',
+      trade: 'roofing',
+      title: `Workday — ${shortUtcDay(d1)}`,
+      purpose: 'Tear-off, six new decking sheets, underlayment through the afternoon.',
+      phase: 'after',
+      category: 'after',
+      workDate: d1,
+      capturedAt: at(d1, 14, 11),
+      durationSeconds: 24,
+      color: '0x243018',
+      lat: 30.4413,
+      lon: -97.7218,
+      accuracyM: 7,
+    },
+    {
+      ...CEDAR,
+      company: 'Brightline Electric',
+      contactName: 'Marisol Vega',
+      trade: 'electrical',
+      title: `Before — ${shortUtcDay(d1)}`,
+      purpose: 'Service walk before electrical. No after filed for this day.',
+      phase: 'before',
+      category: 'before',
+      workDate: d1,
+      capturedAt: at(d1, 8, 2),
+      durationSeconds: 24,
+      color: '0x201828',
+      lat: 30.4414,
+      lon: -97.7217,
+      accuracyM: 5,
+    },
+    {
+      ...CEDAR,
+      company: 'Delgado Roofing',
+      contactName: 'Hector Delgado',
+      trade: 'roofing',
+      title: `Before — ${shortUtcDay(d2)} (off site)`,
+      purpose: 'Filmed 2.14 miles from the job — a different roof.',
+      phase: 'before',
+      category: 'issue',
+      workDate: d2,
+      capturedAt: at(d2, 7, 31),
+      durationSeconds: 24,
+      color: '0x331818',
+      lat: 30.4692,
+      lon: -97.755,
+      accuracyM: 11,
+    },
+    {
+      ...CEDAR,
+      company: 'Delgado Roofing',
+      contactName: 'Hector Delgado',
+      trade: 'roofing',
+      title: `After — ${shortUtcDay(d3)}`,
+      purpose: 'Emergency tarp across the north and west slopes.',
+      phase: 'after',
+      category: 'after',
+      workDate: d3,
+      capturedAt: at(d3, 18, 20),
+      durationSeconds: 24,
+      color: '0x182030',
+      lat: null,
+      lon: null,
+      accuracyM: null,
+    },
+    {
+      ...MERIDIAN,
+      company: 'Coastal Drying LLC',
+      contactName: 'Andre Boone',
+      trade: 'restoration',
+      title: `After — ${shortUtcDay(d1)}`,
+      purpose: 'Six air movers and one dehumidifier in the same positions as the morning.',
+      phase: 'after',
+      category: 'after',
+      workDate: d1,
+      capturedAt: at(d1, 17, 20),
+      durationSeconds: 24,
+      color: '0x183040',
+      lat: 30.2984,
+      lon: -97.7431,
+      accuracyM: 7,
+    },
+    {
+      ...MERIDIAN,
+      company: 'Coastal Drying LLC',
+      contactName: 'Andre Boone',
+      trade: 'restoration',
+      title: `Pre-conceal — ${shortUtcDay(d2)}`,
+      purpose: 'Cavities open, flood cut at 24 in. Legal hold — carrier dispute CLM-88412.',
+      phase: 'after',
+      category: 'condition',
+      workDate: d2,
+      capturedAt: at(d2, 15, 44),
+      durationSeconds: 24,
+      color: '0x102838',
+      legalHold: true,
+      holdReason: 'Carrier dispute over the extent of the flood cut — CLM-88412.',
+      lat: 30.2984,
+      lon: -97.743,
+      accuracyM: 6,
+    },
+    {
+      ...CAMDEN,
+      company: 'Vantage Drywall',
+      contactName: 'Luis Marte',
+      trade: 'drywall',
+      title: `After — ${shortUtcDay(d2)}`,
+      purpose: 'Board hung; queued for analysis against the three rooms in scope.',
+      phase: 'after',
+      category: 'after',
+      workDate: d2,
+      capturedAt: at(d2, 16, 55),
+      durationSeconds: 24,
+      color: '0x283018',
+      lat: 30.5083,
+      lon: -97.6789,
+      accuracyM: 9,
+    },
+    {
+      ...CAMDEN,
+      company: 'Vantage Drywall',
+      contactName: 'Luis Marte',
+      trade: 'drywall',
+      title: `After — ${shortUtcDay(d3)}`,
+      purpose: 'Short pan of one room. Board on a single wall; two rooms never shown.',
+      phase: 'after',
+      category: 'after',
+      workDate: d3,
+      capturedAt: at(d3, 17, 41),
+      durationSeconds: 24,
+      color: '0x302818',
+      lat: 30.5083,
+      lon: -97.6791,
+      accuracyM: 14,
+    },
+  ];
+}
 
 export function parseSeedVideoArgs(
   argv: string[],
@@ -352,8 +379,8 @@ export function parseSeedVideoArgs(
   };
 }
 
-export function clipsForSeed(opts: SeedVideoOptions): SeedClipSpec[] {
-  if (opts.catalog === 'demo') return JETTX_DEMO_CLIPS;
+export function clipsForSeed(opts: SeedVideoOptions, now = new Date()): SeedClipSpec[] {
+  if (opts.catalog === 'demo') return jettxDemoClips(now);
   return [
     {
       jobTitle: opts.title,
@@ -668,7 +695,7 @@ async function fileClip(
       duration_seconds: clip.durationSeconds,
       content_hash: contentHash,
       captured_at: capturedAt,
-      received_at: capturedAt,
+      received_at: new Date().toISOString(),
       lat: clip.lat ?? null,
       lon: clip.lon ?? null,
       accuracy_m: clip.accuracyM ?? null,
@@ -747,8 +774,40 @@ async function fileClip(
   }
 }
 
+async function retireStaleDemoProofs(
+  admin: SupabaseClient,
+  orgId: string,
+  keepDates: Set<string>,
+): Promise<number> {
+  const { data: rows, error } = await admin
+    .from('job_proofs')
+    .select('id, work_date, tags')
+    .eq('org_id', orgId)
+    .is('deleted_at', null)
+    .contains('tags', ['jettx-demo']);
+  if (error) {
+    console.warn(`  could not list older demo clips: ${error.message}`);
+    return 0;
+  }
+  const stale = (rows ?? []).filter((row) => !keepDates.has(String(row.work_date ?? '')));
+  if (!stale.length) return 0;
+  const { error: retireError } = await admin
+    .from('job_proofs')
+    .update({ deleted_at: new Date().toISOString() })
+    .in(
+      'id',
+      stale.map((row) => row.id),
+    );
+  if (retireError) {
+    console.warn(`  could not retire older demo clips: ${retireError.message}`);
+    return 0;
+  }
+  return stale.length;
+}
+
 async function main(): Promise<void> {
-  const opts = parseSeedVideoArgs(process.argv.slice(2));
+  const now = new Date();
+  const opts = parseSeedVideoArgs(process.argv.slice(2), now);
   const admin = createAdminClient();
   if (!admin) {
     fail(
@@ -756,7 +815,7 @@ async function main(): Promise<void> {
     );
   }
 
-  const clips = clipsForSeed(opts);
+  const clips = clipsForSeed(opts, now);
   console.log(`Looking up organization "${opts.orgName}"…`);
   const org = await findOrg(admin, opts.orgName);
   console.log(`  ${org.name}  ${org.id}`);
@@ -766,6 +825,17 @@ async function main(): Promise<void> {
   for (const clip of clips) {
     console.log(`\n${clip.jobTitle} · ${clip.title}`);
     await fileClip(admin, org, userId, clip);
+  }
+
+  if (opts.catalog === 'demo') {
+    const retired = await retireStaleDemoProofs(
+      admin,
+      org.id,
+      new Set(clips.map((clip) => clip.workDate)),
+    );
+    if (retired) {
+      console.log(`Retired ${retired} older demo clip${retired === 1 ? '' : 's'} that used historical dates.`);
+    }
   }
 
   console.log(`\nFiled ${clips.length} product-testing video${clips.length === 1 ? '' : 's'} on ${org.name}.`);
