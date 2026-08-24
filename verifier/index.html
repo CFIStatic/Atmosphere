@@ -307,6 +307,89 @@
     overflow: hidden;
   }
   .screen-dashboard[hidden] { display: none !important; }
+
+  /* Clip preview is a dashboard screen, not a dimmed overlay. The still the
+     list already has paints first so opening a clip shows what is on file
+     instead of a blank wait for the signed video URL. */
+  .screen-preview {
+    flex: 1;
+    min-height: 0;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg);
+  }
+  .screen-preview[data-open="1"] { display: flex; }
+  .screen-preview[hidden] { display: none !important; }
+  .screen-preview .sheet {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+    box-shadow: none;
+    background: var(--bg);
+  }
+  .screen-preview .sheethead { padding: 12px 18px; }
+  .screen-preview .sheetbody {
+    grid-template-columns: minmax(0, 1.9fr) minmax(300px, 0.8fr);
+  }
+  .screen-preview .stage { padding: 12px 16px 16px; }
+  .screen-preview .player { border-radius: 12px; }
+  .screen-preview .player .frame {
+    min-height: 0;
+    position: relative;
+    background: var(--stage);
+  }
+  .preview-stage {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 280px;
+    display: grid;
+    place-items: center;
+    background: var(--stage);
+  }
+  .preview-stage video,
+  .preview-stage img,
+  .screen-preview .player .frame video,
+  .screen-preview .player .frame img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    background: var(--stage);
+  }
+  .preview-wait {
+    position: absolute;
+    left: 50%;
+    bottom: 18px;
+    transform: translateX(-50%);
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, .62);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    pointer-events: none;
+  }
+  .backbtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 8px 0 0;
+    padding: 6px 10px 6px 8px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--ink-2);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    flex: none;
+  }
+  .backbtn:hover { background: var(--line-soft); color: var(--ink); }
+  .backbtn svg { flex: none; }
   .rail {
     background: var(--bg);
     border-right: 1px solid var(--line);
@@ -488,6 +571,12 @@
     background: var(--stage); flex: none; position: relative; display: block;
   }
   .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb .play {
+    position: absolute; left: 50%; top: 50%;
+    width: 22px; height: 22px; margin: -11px 0 0 -11px;
+    border-radius: 50%; background: rgba(0,0,0,.55); color: #fff;
+    display: grid; place-items: center; pointer-events: none;
+  }
   .thumb .dur {
     position: absolute; right: 3px; bottom: 3px; padding: 1px 4px; border-radius: 3px;
     background: rgba(0,0,0,.78); color: #fff; font-size: 10px; font-variant-numeric: tabular-nums;
@@ -954,6 +1043,48 @@
     </div>
   </main>
   </div>
+
+  <div class="screen screen-preview" id="detail" hidden data-open="0" role="region" aria-labelledby="d-title">
+    <div class="sheet">
+      <div class="sheethead">
+        <button type="button" class="backbtn" id="d-back">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+          Dashboard
+        </button>
+        <div>
+          <h2 id="d-title">—</h2>
+          <div class="meta" id="d-meta"></div>
+        </div>
+        <button class="closebtn" id="d-close" aria-label="Close preview">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <div class="sheetbody">
+        <section class="stage">
+          <div class="player">
+            <div class="frame" id="d-frame"></div>
+            <div class="controls">
+              <button id="d-play" aria-label="Play">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              </button>
+              <div class="scrub" id="d-scrub"></div>
+              <span class="time" id="d-time">on file</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="side">
+          <div class="tabs" role="tablist">
+            <button role="tab" data-tab="integrity" aria-selected="true">Scope of work</button>
+            <button role="tab" data-tab="custody" aria-selected="false">Chain of custody</button>
+            <button role="tab" data-tab="details" aria-selected="false">Details</button>
+            <button role="tab" data-tab="ask" aria-selected="false">Ask</button>
+          </div>
+          <div id="d-panel" style="margin-top:14px"></div>
+        </section>
+      </div>
+    </div>
+  </div>
   </div>
 </div>
   </div>
@@ -1016,44 +1147,6 @@
   </div>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-
-<div class="detail" id="detail" role="dialog" aria-modal="true" aria-labelledby="d-title">
-  <div class="sheet">
-    <div class="sheethead">
-      <div>
-        <h2 id="d-title">—</h2>
-        <div class="meta" id="d-meta"></div>
-      </div>
-      <button class="closebtn" id="d-close" aria-label="Close">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 6l12 12M18 6 6 18"/></svg>
-      </button>
-    </div>
-    <div class="sheetbody">
-      <section class="stage">
-        <div class="player">
-          <div class="frame" id="d-frame"></div>
-          <div class="controls">
-            <button id="d-play" aria-label="Play frames">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-            </button>
-            <div class="scrub" id="d-scrub"></div>
-            <span class="time" id="d-time">frame 1 / 6</span>
-          </div>
-        </div>
-      </section>
-
-      <section class="side">
-        <div class="tabs" role="tablist">
-          <button role="tab" data-tab="integrity" aria-selected="true">Scope of work</button>
-          <button role="tab" data-tab="custody" aria-selected="false">Chain of custody</button>
-          <button role="tab" data-tab="details" aria-selected="false">Details</button>
-          <button role="tab" data-tab="ask" aria-selected="false">Ask</button>
-        </div>
-        <div id="d-panel" style="margin-top:14px"></div>
-      </section>
-    </div>
-  </div>
-</div>
 
 <script>
 (function () {
@@ -1721,7 +1814,7 @@
     phase = phase.charAt(0).toUpperCase() + phase.slice(1);
     return '' +
       '<tr tabindex="0" data-id="' + e.id + '">' +
-        '<td><span class="thumb"><img class="shot" alt="" loading="lazy" decoding="async" src="' + esc(thumbFor(e)) + '" /><span class="dur">' + dur(e.duration) + '</span></span></td>' +
+        '<td><span class="thumb"><img class="shot" alt="" loading="lazy" decoding="async" src="' + esc(thumbFor(e)) + '" /><span class="play" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span><span class="dur">' + dur(e.duration) + '</span></span></td>' +
         '<td class="titlecell">' +
           '<div class="t">' + esc(job.name) + '</div>' +
           '<div class="s">' + esc(phase) +
@@ -2632,13 +2725,101 @@
     not_visible: ['neutral', 'Not visible']
   };
 
+  function fillPreviewChrome(item) {
+    $('#d-title').textContent = (JOBS[item.job] || { name: item.jobName || 'Job' }).name;
+    $('#d-meta').innerHTML =
+      '<span class="id">' + esc(item.id) + '</span> · ' + esc(item.phase) + ' · ' +
+      dayLabel(item.workDate) + ' · ' + esc(item.company) + ' · ' + dur(item.duration) + ' · ' + mb(item.bytes);
+  }
+
+  function showPreviewScreen() {
+    var dash = document.getElementById('screen-dashboard');
+    if (dash) dash.hidden = true;
+    var preview = document.getElementById('detail');
+    if (preview) {
+      preview.setAttribute('data-open', '1');
+      preview.removeAttribute('hidden');
+    }
+  }
+
+  function closePreview() {
+    stopPlay();
+    var host = $('#d-frame');
+    var vid = host && host.querySelector('video');
+    if (vid) {
+      try { vid.pause(); } catch (err) {}
+    }
+    var preview = document.getElementById('detail');
+    if (preview) {
+      preview.setAttribute('data-open', '0');
+      preview.setAttribute('hidden', '');
+    }
+    var dash = document.getElementById('screen-dashboard');
+    if (dash) dash.hidden = false;
+    state.open = null;
+  }
+
+  /**
+   * Paint the preview with whatever the list already has — the signed still,
+   * or the drawn frame — so the screen is never blank while the file URL
+   * is minted. A poster is what we currently have.
+   */
+  function paintPreviewShell(item, tab) {
+    state.open = item;
+    state.frame = 0;
+    stopPlay();
+    fillPreviewChrome(item);
+    var poster = thumbFor(item);
+    var waiting = item._remote && !item._loaded && !item._videoUrl;
+    $('#d-frame').innerHTML =
+      '<div class="preview-stage" data-preview-state="still">' +
+        '<img class="preview-still" alt="Still from this clip" src="' + esc(poster) + '" />' +
+        (waiting ? '<div class="preview-wait" id="d-wait">Opening the clip on file…</div>' : '') +
+      '</div>';
+    $('#d-scrub').innerHTML = '';
+    $('#d-time').textContent = item.duration ? ('on file · ' + dur(item.duration)) : 'on file';
+    renderDictation(item);
+    renderAnalysis(item);
+    setTab(tab || 'integrity');
+    showPreviewScreen();
+  }
+
+  function paintPreviewVideo(item) {
+    var poster = item.poster || thumbFor(item);
+    var posterAttr = poster ? ' poster="' + esc(poster) + '"' : '';
+    $('#d-frame').innerHTML =
+      '<div class="preview-stage" data-preview-state="video">' +
+        '<video controls playsinline preload="metadata"' + posterAttr +
+        ' src="' + esc(item._videoUrl) + '"></video>' +
+      '</div>';
+    $('#d-scrub').innerHTML = '';
+    $('#d-time').textContent = 'full clip · ' + dur(item.duration);
+    var vid = $('#d-frame').querySelector('video');
+    if (!vid) return;
+    vid.addEventListener('timeupdate', function () { syncAnalysisLog(vid.currentTime); });
+    vid.addEventListener('seeked', function () { syncAnalysisLog(vid.currentTime); });
+    vid.addEventListener('play', function () { syncAnalysisLog(vid.currentTime); });
+    vid.addEventListener('pause', function () { syncAnalysisLog(vid.currentTime); });
+    vid.addEventListener('ended', function () { syncAnalysisLog(vid.currentTime); });
+    vid.addEventListener('error', function () {
+      $('#d-frame').innerHTML =
+        '<div class="preview-stage" data-preview-state="still">' +
+          '<img class="preview-still" alt="Still from this clip" src="' + esc(thumbFor(item)) + '" />' +
+          '<div class="preview-wait">Could not play this file — showing the still on file.</div>' +
+        '</div>';
+    });
+  }
+
   function open(id, tab) {
     var item = EVIDENCE.filter(function (e) { return e.id === id; })[0];
     if (!item) return;
-    // Against a live backend the list is thin: custody and frames arrive when
-    // a clip is opened, which is also the moment the access gets logged.
+    // Show the still the list already has immediately. Custody and the
+    // signed file arrive next; a blank wait reads as a missing clip.
+    paintPreviewShell(item, tab);
     if (item._remote && !item._loaded) {
-      fetchRemoteDetail(item).then(function () { openLoaded(item, tab); });
+      fetchRemoteDetail(item).then(function () {
+        if (state.open && state.open.id === item.id) openLoaded(item, tab);
+      });
       return;
     }
     openLoaded(item, tab);
@@ -2648,31 +2829,12 @@
     state.open = item;
     state.frame = 0;
     stopPlay();
-
-    $('#d-title').textContent = (JOBS[item.job] || { name: item.jobName || 'Job' }).name;
-    $('#d-meta').innerHTML =
-      '<span class="id">' + esc(item.id) + '</span> · ' + esc(item.phase) + ' · ' +
-      dayLabel(item.workDate) + ' · ' + esc(item.company) + ' · ' + dur(item.duration) + ' · ' + mb(item.bytes);
+    fillPreviewChrome(item);
 
     // Prefer the real file when the portal minted a URL. Frames remain the
     // fallback for the demo artifact and for clips whose file URL expired.
     if (item._videoUrl) {
-      // The poster is the same still the list showed, so the player opens on
-      // the clip rather than on the black rectangle a browser picks.
-      var posterAttr = item.poster ? ' poster="' + esc(item.poster) + '"' : '';
-      $('#d-frame').innerHTML =
-        '<video controls playsinline preload="metadata"' + posterAttr +
-        ' src="' + esc(item._videoUrl) + '"></video>';
-      $('#d-scrub').innerHTML = '';
-      $('#d-time').textContent = 'full clip · ' + dur(item.duration);
-      var vid = $('#d-frame').querySelector('video');
-      if (vid) {
-        vid.addEventListener('timeupdate', function () { syncAnalysisLog(vid.currentTime); });
-        vid.addEventListener('seeked', function () { syncAnalysisLog(vid.currentTime); });
-        vid.addEventListener('play', function () { syncAnalysisLog(vid.currentTime); });
-        vid.addEventListener('pause', function () { syncAnalysisLog(vid.currentTime); });
-        vid.addEventListener('ended', function () { syncAnalysisLog(vid.currentTime); });
-      }
+      paintPreviewVideo(item);
     } else {
       item._frames = item._remoteFrames && item._remoteFrames.length
         ? item._remoteFrames
@@ -2692,8 +2854,9 @@
     renderDictation(item);
     renderAnalysis(item);
     setTab(tab || 'integrity');
-    $('#detail').setAttribute('data-open', '1');
-    $('#d-close').focus();
+    showPreviewScreen();
+    var back = document.getElementById('d-back');
+    if (back) back.focus();
     startLivePlayback(item);
   }
 
@@ -2752,7 +2915,10 @@
     if (!item) return;
     state.frame = i;
     var f = item._frames[i];
-    $('#d-frame').innerHTML = '<img alt="Frame ' + (i + 1) + ' of the clip" src="' + f.src + '" />';
+    $('#d-frame').innerHTML =
+      '<div class="preview-stage" data-preview-state="frame">' +
+        '<img alt="Frame ' + (i + 1) + ' of the clip" src="' + f.src + '" />' +
+      '</div>';
     $('#d-time').textContent = 'frame ' + (i + 1) + ' / ' + item._frames.length + ' · ' + dur(f.at);
     Array.prototype.forEach.call($('#d-scrub').querySelectorAll('button'), function (b) {
       b.setAttribute('aria-pressed', String(+b.dataset.i === i));
@@ -3527,6 +3693,7 @@
 
   document.querySelectorAll('.navitem[data-view]').forEach(function (b) {
     b.addEventListener('click', function () {
+      closePreview();
       state.view = b.dataset.view;
       activeRoute = '/verifier-library';
       activeRailItem = 'view:' + b.dataset.view;
@@ -3547,6 +3714,7 @@
   // Opening a job name is the same handoff for the record the portal has no
   // screen for: scope, whether it can be verified yet, and inviting a crew.
   function setScreen(name) {
+    if (name === 'dashboard') closePreview();
     var dash = document.getElementById('screen-dashboard');
     if (dash) dash.hidden = name !== 'dashboard';
     if (name === 'dashboard') {
@@ -3702,6 +3870,7 @@
     if (railFooter) railFooter.hidden = false;
     document.querySelectorAll('.app-nav[data-screen]').forEach(function (btn) {
       btn.addEventListener('click', function () {
+        closePreview();
         if (EMBEDDED) {
           state.view = 'all';
           activeRoute = '/verifier-library';
@@ -3751,16 +3920,11 @@
     });
   }
 
-  $('#d-close').addEventListener('click', function () {
-    stopPlay();
-    $('#detail').setAttribute('data-open', '0');
-    state.open = null;
-  });
-  $('#detail').addEventListener('click', function (e) {
-    if (e.target === $('#detail')) $('#d-close').click();
-  });
+  $('#d-close').addEventListener('click', function () { closePreview(); });
+  var dBack = document.getElementById('d-back');
+  if (dBack) dBack.addEventListener('click', function () { closePreview(); });
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && state.open) $('#d-close').click();
+    if (e.key === 'Escape' && state.open) closePreview();
   });
 
   $('#d-play').addEventListener('click', function () {
