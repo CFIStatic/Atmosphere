@@ -87,6 +87,7 @@
     jobs: [],
     activeJobId: null,
     account: false,
+    doorFilmUrl: null,
   };
 
   function readStoredSession() {
@@ -324,6 +325,7 @@
       setStatus('No open job to file this day against.', true);
       return;
     }
+    show('s-rec');
     var videoEl = $('#preview');
     state.recorder = Core.recordDayFilm({
       videoEl: videoEl,
@@ -336,7 +338,9 @@
     state.recorder
       .start()
       .then(function () {
-        show('s-rec');
+        return state.recorder.resumePreview();
+      })
+      .then(function () {
         $('#rec-since').textContent = 'since ' + new Date().toLocaleTimeString();
         $('#live-text').textContent = 'Recording video + audio. Keep the phone on you.';
         state.stopWatch = state.recorder.watchPosition(function (site) {
@@ -346,9 +350,31 @@
         });
       })
       .catch(function (err) {
+        show('s-home');
         setStatus(err.message || 'Could not start camera/mic.', true);
         alert(err.message || 'Could not start camera/mic.');
       });
+  }
+
+  function showDoorFilm(blob) {
+    var wrap = $('#doorfilm');
+    var video = $('#door-preview');
+    if (!wrap || !video || !blob) return;
+    if (state.doorFilmUrl) URL.revokeObjectURL(state.doorFilmUrl);
+    state.doorFilmUrl = URL.createObjectURL(blob);
+    video.src = state.doorFilmUrl;
+    wrap.hidden = false;
+  }
+
+  function clearDoorFilm() {
+    var wrap = $('#doorfilm');
+    var video = $('#door-preview');
+    if (video) video.removeAttribute('src');
+    if (wrap) wrap.hidden = true;
+    if (state.doorFilmUrl) {
+      URL.revokeObjectURL(state.doorFilmUrl);
+      state.doorFilmUrl = null;
+    }
   }
 
   function finishLiveDay() {
@@ -358,6 +384,7 @@
     state.recorder
       .stop()
       .then(function (clip) {
+        showDoorFilm(clip.blob);
         openDoorUploading();
         return Core.uploadDayFilm({
           token: TOKEN || undefined,
@@ -572,6 +599,7 @@
 
   bindHold();
   $('#donebtn').addEventListener('click', function () {
+    clearDoorFilm();
     show('s-home');
     setStatus(LIVE || state.account ? 'Ready for another day.' : '');
   });
