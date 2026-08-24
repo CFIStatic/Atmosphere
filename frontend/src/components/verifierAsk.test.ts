@@ -31,7 +31,7 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(verifierHtml).toContain('<!-- ask-panel 2026-08-23-see -->');
     expect(verifierHtml).toContain('8:00p 23 Aug');
     expect(verifierHtml).toContain('function startProgressTick');
-    expect(verifierHtml).toContain('Math.max(t + 2, 1)');
+    expect(verifierHtml).toContain('Seekable/buffered ends are the loaded window, not the clip.');
     expect(verifierHtml).toContain('function bindVideoProgress');
     expect(verifierHtml).toContain('id="d-progress"');
     expect(verifierHtml).not.toContain('<video controls');

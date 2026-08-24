@@ -3018,8 +3018,12 @@
       railPlayed.style.transform = 'scaleX(' + frac + ')';
       knob.style.left = (frac * 100).toFixed(3) + '%';
       clockEl.textContent = clock(at);
+      if (clockTotal && clockTotal.lastChild) {
+        clockTotal.lastChild.nodeValue = d > 0 ? ' / ' + clock(d) : ' / —';
+      }
       bar.setAttribute('aria-valuenow', String(Math.floor(at)));
-      bar.setAttribute('aria-valuetext', clock(at) + ' of ' + clock(d));
+      bar.setAttribute('aria-valuemax', String(d > 0 ? Math.floor(d) : 0));
+      bar.setAttribute('aria-valuetext', d > 0 ? clock(at) + ' of ' + clock(d) : clock(at));
       var buffered = 0;
       try {
         for (var i = 0; i < video.buffered.length; i++) {
@@ -3225,19 +3229,26 @@
     root.addEventListener('pointermove', function () { wake(); });
     root.addEventListener('pointerleave', function () { if (!video.paused) wake(); });
 
-    video.addEventListener('loadedmetadata', function () {
-      var d = length();
-      if (clockTotal && clockTotal.lastChild) clockTotal.lastChild.nodeValue = ' / ' + clock(d);
-      bar.setAttribute('aria-valuemax', String(Math.floor(d)));
-      if (d > 0 && Math.abs(d - (Number(item.duration) || 0)) > 1) {
-        item.duration = Math.round(d);
+    function adoptMediaDuration() {
+      var media = Number(video.duration);
+      if (!(isFinite(media) && media > 0)) {
+        paint();
+        return;
+      }
+      if (Math.abs(media - (Number(item.duration) || 0)) > 0.5) {
+        item.duration = Math.round(media);
         $('#d-time').textContent = 'full clip · ' + dur(item.duration);
         if (typeof paintClipMeta === 'function') paintClipMeta(item);
       }
       paint();
+    }
+    video.addEventListener('loadedmetadata', function () {
+      adoptMediaDuration();
       syncAnalysisLog(video.currentTime || 0);
       if (typeof requestWatchNote === 'function') requestWatchNote(item, video.currentTime || 0);
     });
+    video.addEventListener('durationchange', adoptMediaDuration);
+    video.addEventListener('loadeddata', adoptMediaDuration);
     video.addEventListener('timeupdate', function () { paint(); syncAnalysisLog(video.currentTime); });
     video.addEventListener('progress', paint);
     video.addEventListener('seeked', function () {
@@ -3544,21 +3555,15 @@
   }
 
   function clipLength(vid, item) {
-    var d = vid && vid.duration;
-    if (d && isFinite(d) && d > 0) return d;
-    try {
-      if (vid && vid.seekable && vid.seekable.length) {
-        var end = vid.seekable.end(vid.seekable.length - 1);
-        if (isFinite(end) && end > 0) return end;
-      }
-    } catch (err) {}
-    var fallback = Number(item && item.duration) || 0;
-    if (fallback > 0 && isFinite(fallback)) return fallback;
+    var media = vid ? Number(vid.duration) : NaN;
+    if (isFinite(media) && media > 0) return media;
+    var catalog = Number(item && item.duration) || 0;
     var t = vid ? (vid.currentTime || 0) : 0;
-    // Field-capture files often have no duration until they finish. Grow a
-    // moving end so the red fill advances with the playhead instead of
-    // jumping to 100% when the length finally appears.
-    return Math.max(t + 2, 1);
+    // Seekable/buffered ends are the loaded window, not the clip. An 11s
+    // Field Capture file often reports a 2s seekable range; using that as
+    // duration makes the red line race through while the picture is still going.
+    if (catalog > 0 && isFinite(catalog) && t <= catalog + 0.35) return catalog;
+    return 0;
   }
 
   var PROGRESS_RAF = 0;

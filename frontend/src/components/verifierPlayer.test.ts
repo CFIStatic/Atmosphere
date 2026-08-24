@@ -49,26 +49,28 @@ describe('verifier YouTube progress line', () => {
     expect(verifierHtml).toContain('item._videoUrl = playtest');
   });
 
-  it('grows the red fill when a Field Capture file has no duration yet', () => {
+  it('progresses the red line against the real clip length, not a 2s buffer window', () => {
     const match = verifierHtml.match(/function clipLength\(vid, item\) \{[\s\S]*?\n  \}/);
     expect(match).not.toBeNull();
     const clipLength = new Function(`${match![0]}; return clipLength;`)() as (
-      vid: { duration?: number; currentTime?: number; seekable?: { length: number } },
+      vid: { duration?: number; currentTime?: number; seekable?: { length: number; end: (i: number) => number } },
       item: { duration?: number } | null,
     ) => number;
 
-    const noDuration = { duration: Number.POSITIVE_INFINITY, currentTime: 0, seekable: { length: 0 } };
-    const startLen = clipLength(noDuration, { duration: 0 });
-    expect(startLen).toBeGreaterThan(0);
-    expect(0 / startLen).toBe(0);
+    const twoSecondWindow = {
+      duration: Number.POSITIVE_INFINITY,
+      currentTime: 3,
+      seekable: { length: 1, end: () => 2 },
+    };
+    expect(clipLength(twoSecondWindow, { duration: 11 })).toBe(11);
+    expect(3 / clipLength(twoSecondWindow, { duration: 11 })).toBeCloseTo(3 / 11);
 
-    const later = { duration: Number.NaN, currentTime: 18, seekable: { length: 0 } };
-    const laterLen = clipLength(later, { duration: 0 });
-    const laterFrac = 18 / laterLen;
-    expect(laterFrac).toBeGreaterThan(0.5);
-    expect(laterFrac).toBeLessThan(1);
+    expect(clipLength({ duration: 11, currentTime: 3, seekable: { length: 1, end: () => 2 } }, { duration: 2 })).toBe(11);
 
-    expect(clipLength({ duration: 96, currentTime: 18 }, { duration: 0 })).toBe(96);
+    expect(clipLength({ duration: Number.NaN, currentTime: 0, seekable: { length: 1, end: () => 2 } }, { duration: 0 })).toBe(0);
+    expect(clipLength({ duration: Number.POSITIVE_INFINITY, currentTime: 5, seekable: { length: 0, end: () => 0 } }, { duration: 2 })).toBe(0);
+    expect(verifierHtml).not.toContain('Math.max(t + 2, 1)');
+    expect(verifierHtml).toContain('function adoptMediaDuration');
   });
 
   it('mounts a real clip from playtest without asking the file for CORS', async () => {
