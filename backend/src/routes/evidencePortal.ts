@@ -9,7 +9,11 @@ import { ensureStillsAndDuration, proofVideoUrl, recordAccess } from './proofOfW
 import {
   answerFromClip,
   clipRecordFromEvidenceItem,
+  type ClipAskRecord,
 } from '../shared/clipAsk.js';
+import { observeWatchFrame } from '../shared/liveNarrator.js';
+import { extractJpegAtSeconds } from '../shared/sparseExtract.js';
+import { DailyBudget } from '../shared/liveBudget.js';
 import {
   downloadDecision,
   serializeEvidence,
@@ -93,7 +97,31 @@ const askBody = z.object({
     )
     .max(20)
     .optional(),
+  watchNotes: z
+    .array(
+      z.object({
+        atSeconds: z.number().min(0).max(100_000).optional(),
+        text: z.string().trim().min(1).max(400),
+      }),
+    )
+    .max(40)
+    .optional(),
 });
+
+const watchBody = z.object({
+  atSeconds: z.number().min(0).max(100_000).optional(),
+  frameBase64: z.string().min(80).max(2_000_000).optional(),
+});
+
+const watchLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 24,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many live-watch ticks. Wait a moment.', code: 'rate_limited' },
+});
+
+const watchBudget = new DailyBudget(config.technician.assistant.liveDailyCapPerOrg);
 
 /* ------------------------------------------------------------------ *
  * Shared assembly
@@ -318,11 +346,15 @@ async function settleClipQuestion(opts: {
   item: any;
   question: string;
   history?: Array<{ role: 'user' | 'assistant'; text: string }>;
+  watchNotes?: Array<{ atSeconds?: number; text: string }>;
   askedBy?: string | null;
   actorLabel: string;
   actorRole: string;
 }): Promise<{ answer: string; model: string | null }> {
   const record = clipRecordFromEvidenceItem(opts.item);
+  if (opts.watchNotes?.length) {
+    record.watchNotes = [...(record.watchNotes ?? []), ...opts.watchNotes];
+  }
   const result = await answerFromClip({
     question: opts.question,
     record,
@@ -355,6 +387,142 @@ async function settleClipQuestion(opts: {
   });
 
   return result;
+}
+
+async function nearestStoredFrame(admin: any, proofId: string, atSeconds: number) {
+  const { data: rows } = await admin
+    .from('job_proof_frames')
+    .select('at_seconds, storage_path')
+    .eq('proof_id', proofId)
+    .order('at_seconds');
+  const frames = (rows ?? []) as Array<{ at_seconds: number; storage_path: string }>;
+  if (!frames.length) return null;
+  let best = frames[0];
+  let dist = Math.abs(Number(best.at_seconds) - atSeconds);
+  for (const row of frames) {
+    const d = Math.abs(Number(row.at_seconds) - atSeconds);
+    if (d < dist) {
+      best = row;
+      dist = d;
+    }
+  }
+  // A still from a minute away is not "this moment".
+  if (dist > 45) return null;
+  const { data: blob } = await admin.storage.from(PROOF_BUCKET).download(best.storage_path);
+  if (!blob) return null;
+  return {
+    atSeconds: Number(best.at_seconds),
+    base64: Buffer.from(await blob.arrayBuffer()).toString('base64'),
+  };
+}
+
+async function grabPlayheadJpeg(
+  admin: any,
+  proof: any,
+  atSeconds: number,
+): Promise<{ atSeconds: number; base64: string } | null> {
+  const storagePath = (proof as { storage_path?: string | null }).storage_path;
+  if (!storagePath) return null;
+  const { data: signed } = await admin.storage.from(PROOF_BUCKET).createSignedUrl(storagePath, 600);
+  if (!signed?.signedUrl) return null;
+  const jpeg = await extractJpegAtSeconds({ url: signed.signedUrl, atSeconds });
+  if (!jpeg?.length) return null;
+  return { atSeconds, base64: jpeg.toString('base64') };
+}
+
+function groundedWatchFromItem(item: any, atSeconds: number): string | null {
+  const record: ClipAskRecord = clipRecordFromEvidenceItem(item);
+  const rows: Array<{ at: number; text: string }> = [];
+  for (const entry of record.dictationEntries ?? []) {
+    const text = entry.text || entry.note || entry.summary;
+    if (text && entry.atSeconds != null) rows.push({ at: Number(entry.atSeconds), text });
+  }
+  for (const action of record.actions ?? []) {
+    if (action.description && action.atSeconds != null) {
+      rows.push({ at: Number(action.atSeconds), text: action.description });
+    }
+  }
+  for (const note of record.watchNotes ?? []) {
+    if (note.text && note.atSeconds != null) rows.push({ at: Number(note.atSeconds), text: note.text });
+  }
+  if (!rows.length) return null;
+  let best = rows[0];
+  let dist = Math.abs(best.at - atSeconds);
+  for (const row of rows) {
+    const d = Math.abs(row.at - atSeconds);
+    if (d < dist) {
+      best = row;
+      dist = d;
+    }
+  }
+  return dist <= 12 ? best.text.trim() : null;
+}
+
+/**
+ * One playhead tick: describe the frame on screen. Uses the still the
+ * reviewer captured, or the nearest stored frame, and falls back to the
+ * clip's existing reading when no model is configured.
+ */
+async function settleWatchFrame(opts: {
+  admin: any;
+  orgId: string;
+  item: any;
+  proof: any;
+  atSeconds: number;
+  frameBase64?: string;
+}): Promise<{ atSeconds: number; note: string; model: string | null }> {
+  let frameB64 = opts.frameBase64 ?? null;
+  let at = opts.atSeconds;
+  if (!frameB64) {
+    let stored = await nearestStoredFrame(opts.admin, opts.proof.id, opts.atSeconds);
+    if (!stored) {
+      // Field-capture uploads often arrive with no duration and no stills.
+      // Extract them now so a live watch tick has something to look at.
+      try {
+        await ensureStillsAndDuration(opts.admin, opts.proof.id);
+      } catch {
+        /* best-effort — the client frame, if any, is the other door */
+      }
+      stored = await nearestStoredFrame(opts.admin, opts.proof.id, opts.atSeconds);
+    }
+    if (stored) {
+      frameB64 = stored.base64;
+      at = stored.atSeconds;
+    } else {
+      const grabbed = await grabPlayheadJpeg(opts.admin, opts.proof, opts.atSeconds);
+      if (grabbed) {
+        frameB64 = grabbed.base64;
+        at = grabbed.atSeconds;
+      }
+    }
+  }
+
+  if (frameB64) {
+    const budget = watchBudget.spend(opts.orgId);
+    if (!budget.allowed) {
+      const grounded = groundedWatchFromItem(opts.item, opts.atSeconds);
+      if (grounded) return { atSeconds: opts.atSeconds, note: grounded, model: null };
+      throw new HttpError(
+        429,
+        "Today's live-watch allowance is used up. The filed reading is still here; live commentary returns tomorrow.",
+        'live_budget_exhausted',
+      );
+    }
+    const observation = await observeWatchFrame({
+      frameBase64: frameB64,
+      atSeconds: at,
+      phase: opts.item.phase ?? opts.proof.phase,
+      workDate: opts.item.workDate ?? opts.proof.work_date,
+    });
+    if (observation?.note) {
+      return { atSeconds: at, note: observation.note, model: config.technician.assistant.liveModel };
+    }
+  }
+
+  const grounded = groundedWatchFromItem(opts.item, opts.atSeconds);
+  if (grounded) return { atSeconds: opts.atSeconds, note: grounded, model: null };
+
+  throw new HttpError(502, 'Could not read this moment of the clip.', 'watch_failed');
 }
 
 /* ------------------------------------------------------------------ *
@@ -556,12 +724,60 @@ evidencePortalRouter.post(
         item,
         question: input.question,
         history: input.history,
+        watchNotes: input.watchNotes,
         askedBy: userId,
         actorLabel: await actorLabelFor(supabase, userId),
         actorRole: 'general_contractor',
       });
 
       res.status(201).json({ answer: result.answer, model: result.model });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/evidence-portal/evidence/:proofId/watch
+ * One playhead tick. The assistant describes what is on screen right now
+ * so the analysis writes as the footage plays.
+ */
+evidencePortalRouter.post(
+  '/evidence/:proofId/watch',
+  watchLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { supabase, orgId } = await requireOrgContext(req);
+      const input = watchBody.parse(req.body ?? {});
+      const { data: proof, error } = await supabase
+        .from('job_proofs')
+        .select(PORTAL_PROOF_SELECT)
+        .eq('org_id', orgId)
+        .eq('id', req.params.proofId)
+        .maybeSingle();
+      if (error) throw new HttpError(500, error.message, 'evidence_failed');
+      if (!proof) throw new HttpError(404, 'No such clip.', 'not_found');
+
+      const { data: siblings } = await supabase
+        .from('job_proofs')
+        .select('phase')
+        .eq('org_id', orgId)
+        .eq('job_id', (proof as any).job_id)
+        .eq('party_id', (proof as any).party_id)
+        .eq('work_date', (proof as any).work_date);
+
+      const items = await assembleLibrary(supabase, orgId, [proof]);
+      const item = fixPairing(items[0], (siblings ?? []) as any[]);
+      const admin = createAdminClient() ?? supabase;
+      const result = await settleWatchFrame({
+        admin,
+        orgId,
+        item,
+        proof,
+        atSeconds: input.atSeconds ?? 0,
+        frameBase64: input.frameBase64,
+      });
+      res.json(result);
     } catch (err) {
       next(err);
     }
@@ -1109,12 +1325,57 @@ evidenceShareRouter.post(
         item,
         question: input.question,
         history: input.history,
+        watchNotes: input.watchNotes,
         askedBy: viewer.userId,
         actorLabel: viewer.custodyLabel,
         actorRole: 'external_reviewer',
       });
 
       res.status(201).json({ answer: result.answer, model: result.model });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/verifier-share/:token/evidence/:proofId/watch
+ * Same playhead tick, through the outward door.
+ */
+evidenceShareRouter.post(
+  '/:token/evidence/:proofId/watch',
+  watchLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { share, admin } = await shareForToken(req.params.token, req);
+      const input = watchBody.parse(req.body ?? {});
+
+      const { data: proof } = await admin
+        .from('job_proofs')
+        .select(PORTAL_PROOF_SELECT)
+        .eq('job_id', share.job_id)
+        .eq('id', req.params.proofId)
+        .maybeSingle();
+      if (!proof) throw new HttpError(404, 'No such clip on this job.', 'not_found');
+
+      const { data: siblings } = await admin
+        .from('job_proofs')
+        .select('phase')
+        .eq('job_id', share.job_id)
+        .eq('party_id', (proof as any).party_id)
+        .eq('work_date', (proof as any).work_date);
+
+      const items = await assembleLibrary(admin, share.org_id, [proof]);
+      const item = fixPairing(items[0], (siblings ?? []) as any[]);
+      const result = await settleWatchFrame({
+        admin,
+        orgId: share.org_id,
+        item,
+        proof,
+        atSeconds: input.atSeconds ?? 0,
+        frameBase64: input.frameBase64,
+      });
+      res.json(result);
     } catch (err) {
       next(err);
     }
