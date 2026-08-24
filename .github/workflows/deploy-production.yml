@@ -74,14 +74,14 @@ jobs:
     runs-on: ubuntu-latest
     environment: Keys
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
 
       - name: Install Railway CLI
-        run: npm install -g @railway/cli
+        run: bash scripts/installRailwayCli.sh
 
       - name: Require Railway token
         env:
@@ -185,14 +185,14 @@ jobs:
     runs-on: ubuntu-latest
     environment: Keys
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
 
       - name: Install Railway CLI
-        run: npm install -g @railway/cli
+        run: bash scripts/installRailwayCli.sh
 
       - name: Require Railway token
         env:
@@ -267,14 +267,14 @@ jobs:
     runs-on: ubuntu-latest
     environment: Keys
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
 
       - name: Install Railway CLI
-        run: npm install -g @railway/cli
+        run: bash scripts/installRailwayCli.sh
 
       # No deploy here. deploy-website.yml ships the site when website/**
       # changes; this job only re-asserts the service's settings, because the
@@ -307,14 +307,14 @@ jobs:
     runs-on: ubuntu-latest
     environment: Keys
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
 
       - name: Install Railway CLI
-        run: npm install -g @railway/cli
+        run: bash scripts/installRailwayCli.sh
 
       - name: Require Railway token
         env:
