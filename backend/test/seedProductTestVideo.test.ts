@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  ACCOUNT_SEED_EMAILS,
   clipsForSeed,
   jettxDemoClips,
   parseSeedVideoArgs,
@@ -105,4 +106,10 @@ test('live writes stamp received_at as now and retire historical demo rows', () 
   assert.match(seedSource, /received_at:\s*new Date\(\)\.toISOString\(\)/);
   assert.match(seedSource, /retireStaleDemoProofs/);
   assert.match(seedSource, /contains\('tags', \['jettx-demo'\]\)/);
+});
+
+test('demo catalog also files onto Jack session orgs, not only the named org', () => {
+  assert.deepEqual(ACCOUNT_SEED_EMAILS, ['jack@jettx.ai', 'jackcyganiak@yahoo.com']);
+  assert.match(seedSource, /orgsToSeed/);
+  assert.match(seedSource, /dashboard uses this/);
 });

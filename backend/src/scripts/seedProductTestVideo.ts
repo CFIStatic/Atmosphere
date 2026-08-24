@@ -39,6 +39,9 @@ export interface SeedVideoOptions {
   catalog: 'demo' | null;
 }
 
+/** Live accounts that should receive the walkthrough set, not only a named org. */
+export const ACCOUNT_SEED_EMAILS = ['jack@jettx.ai', 'jackcyganiak@yahoo.com'];
+
 export type SeedProofPhase = 'before' | 'after';
 export type SeedProofCategory = 'before' | 'after' | 'condition' | 'issue' | 'completion' | 'other';
 
@@ -166,7 +169,7 @@ export function jettxDemoClips(now = new Date()): SeedClipSpec[] {
       phase: 'before',
       category: 'other',
       workDate: d0,
-      capturedAt: at(d0, 17, 5),
+      capturedAt: now.toISOString(),
       durationSeconds: 60,
       color: '0x142033',
     },
@@ -473,6 +476,132 @@ async function extractJpegFrame(videoPath: string, atSeconds: number, dest: stri
     '4',
     dest,
   ]);
+}
+
+type SeedOrg = { id: string; name: string; created_by: string | null };
+
+function sameEmail(a: string | null | undefined, b: string): boolean {
+  return String(a ?? '').trim().toLowerCase() === b.toLowerCase();
+}
+
+async function usersForEmails(
+  admin: SupabaseClient,
+  emails: string[],
+): Promise<Array<{ id: string; email: string }>> {
+  const wanted = new Set(emails.map((e) => e.toLowerCase()));
+  const found = new Map<string, { id: string; email: string }>();
+
+  const { data: profiles } = await admin
+    .from('profiles')
+    .select('id, email')
+    .in('email', emails);
+  for (const row of profiles ?? []) {
+    const email = String(row.email ?? '');
+    if (wanted.has(email.toLowerCase())) {
+      found.set(row.id as string, { id: row.id as string, email });
+    }
+  }
+
+  const { data: auth } = await admin.auth.admin.listUsers({ perPage: 200 });
+  for (const user of auth?.users ?? []) {
+    const email = user.email ?? '';
+    if (wanted.has(email.toLowerCase())) {
+      found.set(user.id, { id: user.id, email });
+    }
+  }
+
+  return [...found.values()];
+}
+
+async function inspectLiveState(admin: SupabaseClient): Promise<void> {
+  console.log('\n=== Live organizations ===');
+  const { data: orgs, error: orgErr } = await admin
+    .from('orgs')
+    .select('id, name, created_at')
+    .order('created_at', { ascending: true })
+    .limit(80);
+  if (orgErr) {
+    console.warn(`  could not list orgs: ${orgErr.message}`);
+    return;
+  }
+  for (const org of orgs ?? []) {
+    const { data: members } = await admin
+      .from('org_members')
+      .select('user_id, status, created_at, role')
+      .eq('org_id', org.id)
+      .order('created_at', { ascending: true });
+    const userIds = [...new Set((members ?? []).map((m) => m.user_id).filter(Boolean))];
+    const { data: profiles } = userIds.length
+      ? await admin.from('profiles').select('id, email, full_name').in('id', userIds)
+      : { data: [] };
+    const emailById = new Map((profiles ?? []).map((p) => [p.id as string, String(p.email ?? '')]));
+    const { data: proofs } = await admin
+      .from('job_proofs')
+      .select('id, title, work_date, received_at, captured_at, deleted_at, tags')
+      .eq('org_id', org.id)
+      .order('received_at', { ascending: false })
+      .limit(20);
+    const live = (proofs ?? []).filter((p) => !p.deleted_at);
+    console.log(`\n  ${org.name}  ${org.id}`);
+    for (const m of members ?? []) {
+      console.log(
+        `    member ${emailById.get(m.user_id as string) || m.user_id}  ${m.role}  ${m.status}  joined ${m.created_at}`,
+      );
+    }
+    console.log(`    ${live.length} visible proof(s) in the latest 20`);
+    for (const p of live) {
+      console.log(
+        `    proof ${p.title}  work=${p.work_date}  received=${p.received_at}  captured=${p.captured_at}  ${p.id}`,
+      );
+    }
+  }
+
+  console.log('\n=== Session org for Jack (oldest membership wins) ===');
+  const users = await usersForEmails(admin, ACCOUNT_SEED_EMAILS);
+  if (!users.length) {
+    console.log('  no auth/profile rows for', ACCOUNT_SEED_EMAILS.join(', '));
+    return;
+  }
+  for (const user of users) {
+    const { data: memberships } = await admin
+      .from('org_members')
+      .select('org_id, status, created_at, role, orgs(id, name)')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true });
+    console.log(`  ${user.email}  ${user.id}`);
+    (memberships ?? []).forEach((m, i) => {
+      const org = Array.isArray(m.orgs) ? m.orgs[0] : m.orgs;
+      const mark = i === 0 ? '  ← dashboard uses this' : '';
+      console.log(
+        `    ${i + 1}. ${org?.name ?? m.org_id}  ${m.status}  joined ${m.created_at}${mark}`,
+      );
+    });
+  }
+}
+
+export async function orgsToSeed(
+  admin: SupabaseClient,
+  named: SeedOrg,
+): Promise<SeedOrg[]> {
+  const byId = new Map<string, SeedOrg>([[named.id, named]]);
+  const users = await usersForEmails(admin, ACCOUNT_SEED_EMAILS);
+  for (const user of users) {
+    const { data: memberships } = await admin
+      .from('org_members')
+      .select('org_id, status, orgs(id, name, created_by)')
+      .eq('user_id', user.id)
+      .eq('status', 'active');
+    for (const row of memberships ?? []) {
+      const org = Array.isArray(row.orgs) ? row.orgs[0] : row.orgs;
+      if (!org?.id) continue;
+      byId.set(org.id, {
+        id: org.id as string,
+        name: String(org.name ?? org.id),
+        created_by: (org.created_by as string | null) ?? null,
+      });
+    }
+  }
+  return [...byId.values()];
 }
 
 async function findOrg(admin: SupabaseClient, name: string) {
@@ -816,29 +945,36 @@ async function main(): Promise<void> {
   }
 
   const clips = clipsForSeed(opts, now);
-  console.log(`Looking up organization "${opts.orgName}"…`);
-  const org = await findOrg(admin, opts.orgName);
-  console.log(`  ${org.name}  ${org.id}`);
-  console.log(`Filing ${clips.length} clip${clips.length === 1 ? '' : 's'}…`);
+  await inspectLiveState(admin);
 
-  const userId = await actorUserId(admin, org);
-  for (const clip of clips) {
-    console.log(`\n${clip.jobTitle} · ${clip.title}`);
-    await fileClip(admin, org, userId, clip);
-  }
+  console.log(`\nLooking up organization "${opts.orgName}"…`);
+  const named = await findOrg(admin, opts.orgName);
+  const targets = opts.catalog === 'demo' ? await orgsToSeed(admin, named) : [named];
+  console.log(
+    `Filing ${clips.length} clip${clips.length === 1 ? '' : 's'} on ${targets
+      .map((org) => org.name)
+      .join(', ')}…`,
+  );
 
-  if (opts.catalog === 'demo') {
-    const retired = await retireStaleDemoProofs(
-      admin,
-      org.id,
-      new Set(clips.map((clip) => clip.workDate)),
-    );
-    if (retired) {
-      console.log(`Retired ${retired} older demo clip${retired === 1 ? '' : 's'} that used historical dates.`);
+  for (const org of targets) {
+    console.log(`\n==== ${org.name}  ${org.id} ====`);
+    const userId = await actorUserId(admin, org);
+    for (const clip of clips) {
+      console.log(`\n${clip.jobTitle} · ${clip.title}`);
+      await fileClip(admin, org, userId, clip);
     }
+    if (opts.catalog === 'demo') {
+      const retired = await retireStaleDemoProofs(
+        admin,
+        org.id,
+        new Set(clips.map((clip) => clip.workDate)),
+      );
+      if (retired) {
+        console.log(`Retired ${retired} older demo clip${retired === 1 ? '' : 's'} that used historical dates.`);
+      }
+    }
+    console.log(`\nFiled ${clips.length} product-testing video${clips.length === 1 ? '' : 's'} on ${org.name}.`);
   }
-
-  console.log(`\nFiled ${clips.length} product-testing video${clips.length === 1 ? '' : 's'} on ${org.name}.`);
 }
 
 const invokedDirectly = /seedProductTestVideo\.(ts|js)$/.test(process.argv[1] ?? '');
