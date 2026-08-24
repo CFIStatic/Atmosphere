@@ -5,6 +5,7 @@ node_modules/
 website/.vite/
 # Written by deploy-website.yml so Railway retries actually rebuild.
 website/.railway-up-stamp
+frontend/.railway-up-stamp
 .pnp
 .pnp.js
 
