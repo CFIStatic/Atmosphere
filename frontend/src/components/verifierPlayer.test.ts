@@ -38,10 +38,15 @@ describe('verifier YouTube progress line', () => {
     expect(verifierHtml).toContain('.controls[hidden] { display: none; }');
     expect(verifierHtml).toContain('return clipLength(video, item)');
     expect(verifierHtml).toContain('function startPaintTick');
+    expect(verifierHtml).toContain('function playVideo');
+    expect(verifierHtml).toContain('class="vp-err"');
     expect(verifierHtml).toContain('.vp[data-idle="1"][data-paused="0"] .vp-row');
     expect(verifierHtml).not.toMatch(
       /\.vp\[data-idle="1"\]\[data-paused="0"\] \.vp-chrome \{ opacity: 0/,
     );
+    expect(verifierHtml).not.toMatch(/<video[^>]*\bcrossorigin\b/);
+    expect(verifierHtml).toMatch(/\.vp \{[\s\S]*?position: absolute; inset: 0/);
+    expect(verifierHtml).toContain('EVIDENCE[0]._videoUrl = playtest');
   });
 
   it('grows the red fill when a Field Capture file has no duration yet', () => {

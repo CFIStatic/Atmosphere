@@ -686,7 +686,7 @@
 
   .stage { padding: 16px 18px; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
   .player { position: relative; background: var(--stage); border-radius: 10px; overflow: hidden; flex: 1; min-height: 0; display: flex; flex-direction: column; }
-  .player .frame { flex: 1; min-height: 240px; display: grid; place-items: center; }
+  .player .frame { flex: 1; min-height: 240px; position: relative; }
   .livecap {
     position: absolute; left: 12px; right: 12px; bottom: 58px; z-index: 3;
     background: rgba(28, 25, 23, 0.82); color: #F5F0E8;
@@ -766,15 +766,15 @@
     --yt-rail-h: 3px;
     --yt-rail-h-hot: 5px;
     --yt-knob: 13px;
-    position: relative; width: 100%; height: 100%; background: #000; overflow: hidden;
+    position: absolute; inset: 0; background: #000; overflow: hidden;
   }
   .vp video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
-  .vp .vp-hit { position: absolute; inset: 0 0 46px; cursor: pointer; }
+  .vp .vp-hit { position: absolute; inset: 0 0 46px; cursor: pointer; z-index: 1; }
   .vp[data-idle="1"] .vp-hit { cursor: none; }
 
   .vp .vp-big {
     position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-    width: 64px; height: 64px; border-radius: 50%; border: 0; cursor: pointer;
+    width: 64px; height: 64px; border-radius: 50%; border: 0; cursor: pointer; z-index: 2;
     background: rgba(0, 0, 0, .6); color: #fff; display: grid; place-items: center;
     transition: opacity .16s ease, transform .16s ease;
   }
@@ -782,10 +782,16 @@
   .vp .vp-big:hover { background: rgba(0, 0, 0, .78); }
 
   .vp .vp-chrome {
-    position: absolute; left: 0; right: 0; bottom: 0; padding: 28px 12px 8px;
+    position: absolute; left: 0; right: 0; bottom: 0; padding: 28px 12px 8px; z-index: 3;
     background: linear-gradient(to top, rgba(0,0,0,.75) 0%, rgba(0,0,0,.45) 42%, rgba(0,0,0,0) 100%);
     color: #fff; transition: opacity .18s ease; opacity: 1;
   }
+  .vp .vp-err {
+    position: absolute; left: 16px; right: 16px; top: 16px; z-index: 4;
+    background: rgba(0, 0, 0, .72); color: #fff; border-radius: 6px;
+    padding: 8px 10px; font-size: 13px; line-height: 1.4;
+  }
+  .vp .vp-err[hidden] { display: none; }
   /* YouTube hides the buttons when the picture is playing, not the red
      line. The line has to keep walking or the clip looks like it is not
      playing. */
@@ -2936,8 +2942,9 @@
 
     $('#d-frame').innerHTML =
       '<div class="vp" data-paused="1" data-idle="0" data-scrubbing="0">' +
-        '<video playsinline preload="metadata" crossorigin="anonymous"' + posterAttr + ' src="' + esc(url) + '"></video>' +
+        '<video playsinline preload="auto"' + posterAttr + ' src="' + esc(url) + '"></video>' +
         '<div class="vp-hit"></div>' +
+        '<div class="vp-err" hidden></div>' +
         '<button class="vp-big" type="button" aria-label="Play">' + ICON.play + '</button>' +
         '<div class="vp-chrome">' +
           '<div class="vp-bar" role="slider" tabindex="0" aria-label="Seek"' +
@@ -3035,8 +3042,32 @@
       if (paused) wake(true);
     }
 
+    function showPlayError(mediaError) {
+      var box = root.querySelector('.vp-err');
+      if (!box) return;
+      box.hidden = false;
+      box.textContent = mediaError && mediaError.code === 4
+        ? 'This clip’s format could not be played.'
+        : 'This clip could not be played.';
+    }
+
+    function playVideo() {
+      var box = root.querySelector('.vp-err');
+      if (box) box.hidden = true;
+      var attempt = video.play();
+      if (attempt && attempt.catch) {
+        attempt.catch(function () {
+          video.muted = true;
+          syncVolume();
+          return video.play();
+        }).catch(function () {
+          showPlayError(video.error);
+        });
+      }
+    }
+
     function toggle() {
-      if (video.paused || video.ended) video.play().catch(function () {});
+      if (video.paused || video.ended) playVideo();
       else video.pause();
     }
 
@@ -3125,7 +3156,7 @@
       vp.scrubbing = false;
       root.setAttribute('data-scrubbing', '0');
       try { if (bar.releasePointerCapture) bar.releasePointerCapture(ev.pointerId); } catch (err) { /* already released */ }
-      if (vp.resume) video.play().catch(function () {});
+      if (vp.resume) playVideo();
       wake();
     });
 
@@ -3234,6 +3265,7 @@
       syncAnalysisLog(video.currentTime);
     });
     video.addEventListener('volumechange', syncVolume);
+    video.addEventListener('error', function () { showPlayError(video.error); });
 
     vp.onKey = function (ev) {
       if (!vp || !state.open) return;
@@ -4572,6 +4604,10 @@
   });
 
   function boot() {
+    var playtest = new URLSearchParams(location.search).get('playtest');
+    if (playtest && EVIDENCE[0] && !EVIDENCE[0]._remote) {
+      EVIDENCE[0]._videoUrl = playtest;
+    }
     initFacets();
     counts();
     syncSidebarActive();
