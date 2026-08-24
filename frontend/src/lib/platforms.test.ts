@@ -12,4 +12,13 @@ describe('operations rail destinations', () => {
       ['/jobs', 'My jobs'],
     ]);
   });
+
+  it('does not offer a Capture tab', () => {
+    const labels = Object.values(PLATFORMS).flatMap((platform) =>
+      platform.groups.flatMap((group) => group.items.map((item) => item.label)),
+    );
+    expect(labels).not.toContain('Capture');
+    expect(labels).not.toContain('Field capture');
+    expect(labels).not.toContain('Field');
+  });
 });
