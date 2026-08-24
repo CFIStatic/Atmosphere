@@ -5,8 +5,14 @@ import UIKit
 struct RecordingView: View {
     @EnvironmentObject private var session: FieldDaySession
     @EnvironmentObject private var api: AtmosphereClient
-    @State private var holding = false
+    /// GestureState so the label/fill can update without cancelling the press.
+    /// `@State holding = true` used to rebuild the button and abort the hold
+    /// before the timer fired — the recording never stopped.
+    @GestureState private var pressing = false
     @State private var holdTask: Task<Void, Never>?
+
+    private static let holdSeconds: Double = 5
+    private static let holdNanos: UInt64 = 5_000_000_000
 
     var body: some View {
         ZStack {
@@ -60,30 +66,44 @@ struct RecordingView: View {
     }
 
     private var holdToFinish: some View {
-        Text(holding ? "Keep holding…" : "Hold to finish the day")
-            .font(.system(size: 16, weight: .bold))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 18)
-            .background(holding ? FieldTheme.accent : FieldTheme.ink)
-            .foregroundStyle(.white)
-            .cornerRadius(12)
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { _ in
-                        guard !holding else { return }
-                        holding = true
-                        holdTask = Task {
-                            try? await Task.sleep(nanoseconds: 1_500_000_000)
-                            guard !Task.isCancelled else { return }
-                            await session.finishDay(api: api)
-                        }
-                    }
-                    .onEnded { _ in
-                        holding = false
-                        holdTask?.cancel()
-                        holdTask = nil
-                    }
-            )
+        ZStack {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(FieldTheme.ink)
+            GeometryReader { geo in
+                FieldTheme.rec
+                    .frame(width: pressing ? geo.size.width : 0, height: geo.size.height)
+                    .animation(.linear(duration: pressing ? Self.holdSeconds : 0), value: pressing)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            Text(pressing ? "Keep holding…" : "Hold 5 seconds to finish")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 18)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: 56)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .updating($pressing) { _, state, _ in
+                    state = true
+                }
+        )
+        // iOS 16 onChange(of:perform:) — do not use the iOS 17 two-parameter form.
+        .onChange(of: pressing) { isPressing in
+            holdTask?.cancel()
+            holdTask = nil
+            guard isPressing else { return }
+            holdTask = Task {
+                try? await Task.sleep(nanoseconds: Self.holdNanos)
+                guard !Task.isCancelled else { return }
+                await session.finishDay(api: api)
+            }
+        }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel("Hold 5 seconds to finish the day")
+        .accessibilityHint("Keep holding for five seconds to stop recording.")
     }
 
     private func formatClock(_ sec: Int) -> String {

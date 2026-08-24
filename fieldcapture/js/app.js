@@ -82,6 +82,7 @@
     job: null,
     site: null,
     seconds: 0,
+    finishing: false,
     accessToken: null,
     refreshToken: null,
     jobs: [],
@@ -324,6 +325,7 @@
       setStatus('No open job to file this day against.', true);
       return;
     }
+    state.finishing = false;
     var videoEl = $('#preview');
     state.recorder = Core.recordDayFilm({
       videoEl: videoEl,
@@ -352,9 +354,12 @@
   }
 
   function finishLiveDay() {
-    if (!state.recorder) return;
+    if (!state.recorder || state.finishing) return;
+    state.finishing = true;
     if (state.stopWatch) state.stopWatch();
-    $('#stopbtn').querySelector('.lbl').textContent = 'Finishing…';
+    state.stopWatch = null;
+    var stopLbl = $('#stopbtn') && $('#stopbtn').querySelector('.lbl');
+    if (stopLbl) stopLbl.textContent = 'Finishing…';
     state.recorder
       .stop()
       .then(function (clip) {
@@ -462,39 +467,73 @@
     $('#donebtn').classList.add('on');
   }
 
-  /* ---------- hold to finish ---------- */
+  /* ---------- hold to finish ----------
+     Five seconds, not a tap. Accidental pocket presses must not end the day.
+     Signed-in crew (account) and share-token crew both film through the same
+     recorder — finish when that recorder exists, not only when ?token= is set. */
 
+  var HOLD_MS = Core.HOLD_TO_FINISH_MS || 5000;
   var holdTimer = null;
+
+  function finishFromHold() {
+    var action = Core.resolveFinishHold({
+      recorder: state.recorder,
+      demoFinish: window.__demoFinish,
+    });
+    if (action === 'live') finishLiveDay();
+    else if (action === 'demo' && window.__demoFinish) window.__demoFinish();
+  }
+
   function bindHold() {
     var stopBtn = $('#stopbtn');
     if (!stopBtn) return;
+    function holdLabel() {
+      return stopBtn.querySelector('.lbl');
+    }
     function beginHold(e) {
       if (e && e.cancelable) e.preventDefault();
-      if (holdTimer) return;
+      if (holdTimer || state.finishing) return;
+      if (e && e.pointerId != null && stopBtn.setPointerCapture) {
+        try {
+          stopBtn.setPointerCapture(e.pointerId);
+        } catch (err) {
+          /* capture is best-effort — iOS Safari still gets preventDefault */
+        }
+      }
       stopBtn.setAttribute('data-holding', '1');
-      stopBtn.querySelector('.lbl').textContent = 'Keep holding…';
+      if (holdLabel()) holdLabel().textContent = 'Keep holding…';
       holdTimer = setTimeout(function () {
         holdTimer = null;
-        if (LIVE) finishLiveDay();
-        else if (window.__demoFinish) window.__demoFinish();
-      }, 1500);
+        finishFromHold();
+      }, HOLD_MS);
     }
-    function cancelHold() {
+    function cancelHold(e) {
+      /* pointerleave fires on tiny finger movement and on iOS callout chrome.
+         Capture + pointerup/cancel are the only ways the hold should abort. */
+      if (e && e.type === 'pointerleave') return;
       if (!holdTimer) return;
       clearTimeout(holdTimer);
       holdTimer = null;
       stopBtn.removeAttribute('data-holding');
-      stopBtn.querySelector('.lbl').textContent = 'Hold to finish the day';
+      if (holdLabel()) holdLabel().textContent = 'Hold 5 seconds to finish';
     }
-    stopBtn.addEventListener('pointerdown', beginHold);
+    stopBtn.addEventListener('pointerdown', beginHold, { passive: false });
     stopBtn.addEventListener('pointerup', cancelHold);
-    stopBtn.addEventListener('pointerleave', cancelHold);
     stopBtn.addEventListener('pointercancel', cancelHold);
+    stopBtn.addEventListener('pointerleave', cancelHold);
+    stopBtn.addEventListener('contextmenu', function (e) {
+      e.preventDefault();
+    });
     stopBtn.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        if (LIVE) finishLiveDay();
-        else if (window.__demoFinish) window.__demoFinish();
+        beginHold(e);
+      }
+    });
+    stopBtn.addEventListener('keyup', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        cancelHold(e);
       }
     });
   }
@@ -572,6 +611,8 @@
 
   bindHold();
   $('#donebtn').addEventListener('click', function () {
+    state.finishing = false;
+    state.recorder = null;
     show('s-home');
     setStatus(LIVE || state.account ? 'Ready for another day.' : '');
   });

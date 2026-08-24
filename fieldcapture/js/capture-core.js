@@ -7,6 +7,15 @@
 
   var LONG_FORM_CLIENT_SECONDS = 15 * 60;
   var SAFE_HASH_BYTES = 512 * 1024 * 1024;
+  /** Pocket-proof: the day film stops only after a continuous 5s hold. */
+  var HOLD_TO_FINISH_MS = 5000;
+
+  function resolveFinishHold(input) {
+    input = input || {};
+    if (input.recorder) return 'live';
+    if (input.demoFinish) return 'demo';
+    return null;
+  }
 
   function todayISO() {
     var now = new Date();
@@ -492,6 +501,8 @@
   }
 
   global.FieldCaptureCore = {
+    HOLD_TO_FINISH_MS: HOLD_TO_FINISH_MS,
+    resolveFinishHold: resolveFinishHold,
     todayISO: todayISO,
     readCapture: readCapture,
     recordDayFilm: recordDayFilm,
