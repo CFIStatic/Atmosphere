@@ -73,22 +73,6 @@ struct TodayView: View {
                         }
                     }
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Property twin · App Store")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(FieldTheme.faint)
-                            .textCase(.uppercase)
-                        Text(
-                            "While you film, LiDAR / RoomPlan can measure rooms. The office gets a 3D twin of the property and the work — you still only press one button."
-                        )
-                        .font(.system(size: 13.5))
-                        .foregroundStyle(FieldTheme.muted)
-                    }
-                    .padding(14)
-                    .background(FieldTheme.panel)
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(FieldTheme.line))
-                    .cornerRadius(12)
-
                     if let warn = auth.restoreWarning {
                         Text(warn)
                             .font(.system(size: 13))
