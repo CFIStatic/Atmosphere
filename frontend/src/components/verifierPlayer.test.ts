@@ -36,6 +36,12 @@ describe('verifier YouTube progress line', () => {
     expect(verifierHtml).toContain("class=\"vp-buffered\"");
     expect(verifierHtml).toContain('mountPlayer(item, item._videoUrl)');
     expect(verifierHtml).toContain('.controls[hidden] { display: none; }');
+    expect(verifierHtml).toContain('return clipLength(video, item)');
+    expect(verifierHtml).toContain('function startPaintTick');
+    expect(verifierHtml).toContain('.vp[data-idle="1"][data-paused="0"] .vp-row');
+    expect(verifierHtml).not.toMatch(
+      /\.vp\[data-idle="1"\]\[data-paused="0"\] \.vp-chrome \{ opacity: 0/,
+    );
   });
 
   it('still opens a demo clip on the schematic path and writes analysis notes', async () => {
