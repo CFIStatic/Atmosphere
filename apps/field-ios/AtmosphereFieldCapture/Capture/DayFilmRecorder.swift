@@ -19,7 +19,12 @@ final class DayFilmRecorder: NSObject, ObservableObject {
 
     @Published private(set) var status: Status = .idle
     @Published private(set) var elapsedSeconds: Int = 0
-    @Published private(set) var previewLayer: AVCaptureVideoPreviewLayer?
+
+    /// The live capture session. Recording UI binds a preview layer to this
+    /// so the crew sees what is being recorded — not a black view.
+    var captureSession: AVCaptureSession { session }
+
+    var isSessionRunning: Bool { session.isRunning }
 
     private let session = AVCaptureSession()
     private let movieOutput = AVCaptureMovieFileOutput()
@@ -82,17 +87,16 @@ final class DayFilmRecorder: NSObject, ObservableObject {
         }
         session.addOutput(movieOutput)
 
-        // Prefer AAC audio + H.264 in QuickTime/MP4.
-        if let connection = movieOutput.connection(with: .video),
-           connection.isVideoStabilizationSupported {
-            connection.preferredVideoStabilizationMode = .auto
+        // Prefer AAC audio + H.264 in QuickTime/MP4. Portrait so the filed
+        // film matches the live preview the crew watches.
+        if let connection = movieOutput.connection(with: .video) {
+            if connection.isVideoStabilizationSupported {
+                connection.preferredVideoStabilizationMode = .auto
+            }
+            Self.applyPortraitOrientation(to: connection)
         }
 
         session.commitConfiguration()
-
-        let preview = AVCaptureVideoPreviewLayer(session: session)
-        preview.videoGravity = .resizeAspectFill
-        previewLayer = preview
 
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             DispatchQueue.global(qos: .userInitiated).async {
@@ -140,8 +144,19 @@ final class DayFilmRecorder: NSObject, ObservableObject {
         timer?.invalidate()
         timer = nil
         session.stopRunning()
-        previewLayer = nil
         status = .idle
+    }
+
+    /// iPhone is portrait-locked; keep the movie track the same way up as the finder.
+    static func applyPortraitOrientation(to connection: AVCaptureConnection?) {
+        guard let connection else { return }
+        if #available(iOS 17.0, *) {
+            if connection.isVideoRotationAngleSupported(90) {
+                connection.videoRotationAngle = 90
+            }
+        } else if connection.isVideoOrientationSupported {
+            connection.videoOrientation = .portrait
+        }
     }
 
     /// Probe the finished file for audio + video tracks before upload.

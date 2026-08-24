@@ -15,7 +15,21 @@ sandbox.globalThis = sandbox;
 vm.runInNewContext(coreSrc, sandbox);
 const Core = sandbox.FieldCaptureCore;
 
+assert.equal(typeof Core.bindLivePreview, 'function', 'iPhone preview needs bindLivePreview');
 assert.equal(Core.HOLD_TO_FINISH_MS, 5000, 'hold-to-finish must be 5 seconds');
+
+const fakeVideo = {
+  attributes: {},
+  setAttribute(name, value) { this.attributes[name] = value; },
+  play() { this.played = true; return Promise.resolve(); },
+};
+Core.bindLivePreview(fakeVideo, {});
+assert.equal(fakeVideo.playsInline, true);
+assert.equal(fakeVideo.muted, true);
+assert.ok(fakeVideo.srcObject);
+assert.ok(fakeVideo.played, 'preview must call play() so iOS does not stay black');
+assert.ok('playsinline' in fakeVideo.attributes);
+assert.ok('webkit-playsinline' in fakeVideo.attributes);
 assert.equal(Core.resolveFinishHold({ recorder: { stop() {} } }), 'live');
 assert.equal(Core.resolveFinishHold({ recorder: null, demoFinish: () => {} }), 'demo');
 assert.equal(
@@ -37,5 +51,8 @@ assert.doesNotMatch(
 );
 assert.match(html, /transition: width 5s linear/, 'fill bar must last the full 5s hold');
 assert.match(html, /Hold 5 seconds to finish/);
+assert.match(html, /id="preview"/);
+assert.match(html, /webkit-playsinline/);
+assert.match(html, /#preview \{/);
 
 console.log('hold-to-finish OK');

@@ -112,7 +112,8 @@ AtmosphereFieldCapture/
 1. **First launch only:** Create an Atmosphere account or sign in (same as the website), then **Link to office account** with the office join code.
 2. Later launches open Today already connected.
 3. Confirm today’s jobs (tap one if several) → **Start the day**.
-4. Hold **Finish the day** — proof upload into that job → optional RoomPlan twin.
+4. The recording screen is a live rear-camera finder (what you see is what is being recorded). The iOS Simulator has no camera.
+5. Hold **Finish the day** for 5 seconds — proof upload into that job → optional RoomPlan twin.
 
 AI dictation and twin review stay in the **office Verifier**.
 

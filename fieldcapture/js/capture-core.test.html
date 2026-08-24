@@ -8,6 +8,7 @@
     && typeof FieldCaptureCore.recordDayFilm === 'function'
     && typeof FieldCaptureCore.uploadDayFilm === 'function'
     && typeof FieldCaptureCore.todayISO === 'function'
+    && typeof FieldCaptureCore.bindLivePreview === 'function'
     && FieldCaptureCore.HOLD_TO_FINISH_MS === 5000
     && FieldCaptureCore.resolveFinishHold({ recorder: {} }) === 'live'
     && FieldCaptureCore.resolveFinishHold({ demoFinish: function () {} }) === 'demo'

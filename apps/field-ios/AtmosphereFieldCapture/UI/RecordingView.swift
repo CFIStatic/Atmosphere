@@ -16,8 +16,10 @@ struct RecordingView: View {
 
     var body: some View {
         ZStack {
-            PreviewRepresentable(layer: session.recorder.previewLayer)
+            CameraPreview(session: session.recorder.captureSession)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .ignoresSafeArea()
+                .accessibilityLabel("Live camera — what is being recorded")
 
             VStack {
                 HStack {
@@ -60,6 +62,8 @@ struct RecordingView: View {
                     .padding(.bottom, 28)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black.ignoresSafeArea())
         .onReceive(Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()) { _ in
             session.tickFromRecorder()
         }
@@ -115,19 +119,98 @@ struct RecordingView: View {
     }
 }
 
-private struct PreviewRepresentable: UIViewRepresentable {
-    let layer: AVCaptureVideoPreviewLayer?
+/// Live rear-camera finder. The preview *is* this view's layer so SwiftUI
+/// layout always sizes it — the old path added a zero-frame sublayer and
+/// ripped it out on every clock tick, which left a black rectangle.
+struct CameraPreview: UIViewRepresentable {
+    let session: AVCaptureSession
 
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
-        view.backgroundColor = .black
+    func makeUIView(context: Context) -> CameraPreviewView {
+        let view = CameraPreviewView()
+        view.session = session
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
-        uiView.layer.sublayers?.filter { $0 is AVCaptureVideoPreviewLayer }.forEach { $0.removeFromSuperlayer() }
-        guard let layer else { return }
-        layer.frame = uiView.bounds
-        uiView.layer.addSublayer(layer)
+    func updateUIView(_ uiView: CameraPreviewView, context: Context) {
+        if uiView.previewLayer.session !== session {
+            uiView.session = session
+        } else {
+            uiView.syncVideoOrientation()
+        }
+    }
+}
+
+final class CameraPreviewView: UIView {
+    override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
+
+    var previewLayer: AVCaptureVideoPreviewLayer {
+        layer as! AVCaptureVideoPreviewLayer
+    }
+
+    var session: AVCaptureSession? {
+        get { previewLayer.session }
+        set {
+            previewLayer.session = newValue
+            previewLayer.videoGravity = .resizeAspectFill
+            syncVideoOrientation()
+        }
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isOpaque = true
+        backgroundColor = .black
+        clipsToBounds = true
+        previewLayer.videoGravity = .resizeAspectFill
+        previewLayer.masksToBounds = true
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        isOpaque = true
+        backgroundColor = .black
+        clipsToBounds = true
+        previewLayer.videoGravity = .resizeAspectFill
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        syncVideoOrientation()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        syncVideoOrientation()
+    }
+
+    func syncVideoOrientation() {
+        guard let connection = previewLayer.connection else { return }
+        let orientation = window?.windowScene?.interfaceOrientation ?? .portrait
+        if #available(iOS 17.0, *) {
+            let angle = Self.rotationAngle(for: orientation)
+            if connection.isVideoRotationAngleSupported(angle) {
+                connection.videoRotationAngle = angle
+            }
+        } else if connection.isVideoOrientationSupported {
+            connection.videoOrientation = Self.videoOrientation(for: orientation)
+        }
+    }
+
+    static func rotationAngle(for orientation: UIInterfaceOrientation) -> CGFloat {
+        switch orientation {
+        case .landscapeLeft: return 0
+        case .landscapeRight: return 180
+        case .portraitUpsideDown: return 270
+        default: return 90
+        }
+    }
+
+    static func videoOrientation(for orientation: UIInterfaceOrientation) -> AVCaptureVideoOrientation {
+        switch orientation {
+        case .landscapeLeft: return .landscapeLeft
+        case .landscapeRight: return .landscapeRight
+        case .portraitUpsideDown: return .portraitUpsideDown
+        default: return .portrait
+        }
     }
 }

@@ -10,6 +10,28 @@
   /** Pocket-proof: the day film stops only after a continuous 5s hold. */
   var HOLD_TO_FINISH_MS = 5000;
 
+  /**
+   * Put the live camera on screen. iPhone Safari / home-screen Field Capture
+   * will stay black unless the video is muted, playsinline, and play() is
+   * called again after metadata arrives.
+   */
+  function bindLivePreview(videoEl, stream) {
+    if (!videoEl || !stream) return;
+    videoEl.setAttribute('playsinline', '');
+    videoEl.setAttribute('webkit-playsinline', '');
+    videoEl.muted = true;
+    videoEl.defaultMuted = true;
+    videoEl.autoplay = true;
+    videoEl.playsInline = true;
+    videoEl.srcObject = stream;
+    var play = function () {
+      var p = videoEl.play();
+      if (p && typeof p.catch === 'function') p.catch(function () {});
+    };
+    play();
+    videoEl.onloadedmetadata = play;
+  }
+
   function resolveFinishHold(input) {
     input = input || {};
     if (input.recorder) return 'live';
@@ -250,12 +272,7 @@
               throw new Error('Camera is required.');
             }
             state.stream = stream;
-            if (videoEl) {
-              videoEl.srcObject = stream;
-              videoEl.muted = true;
-              videoEl.playsInline = true;
-              videoEl.play().catch(function () {});
-            }
+            bindLivePreview(videoEl, stream);
             var mime = pickMime();
             state.mimeType = mime || '';
             var recorder = mime
@@ -503,6 +520,7 @@
   global.FieldCaptureCore = {
     HOLD_TO_FINISH_MS: HOLD_TO_FINISH_MS,
     resolveFinishHold: resolveFinishHold,
+    bindLivePreview: bindLivePreview,
     todayISO: todayISO,
     readCapture: readCapture,
     recordDayFilm: recordDayFilm,
