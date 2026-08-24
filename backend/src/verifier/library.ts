@@ -268,6 +268,41 @@ export function serializeEvidence(input: {
   };
 }
 
+/**
+ * YouTube-style poster time: a quarter of the way in, not the opening
+ * instant (thumb over the lens) and not the end (people walking away).
+ */
+export function youtubePosterAt(durationSeconds: number | null | undefined): number {
+  const duration = Number(durationSeconds);
+  if (!Number.isFinite(duration) || duration <= 0) return 1;
+  if (duration < 4) return duration / 2;
+  return duration * 0.25;
+}
+
+/**
+ * The frame that should ride as the list / player screenshot — the still
+ * closest to the YouTube poster time. A clip with no stored frames returns
+ * null so the portal can fall back without pointing an <img> at nothing.
+ */
+export function pickPosterFrame<T extends { at_seconds: number; storage_path?: string | null }>(
+  frames: T[],
+  durationSeconds: number | null | undefined,
+): T | null {
+  const usable = frames.filter((frame) => Boolean(frame.storage_path));
+  if (!usable.length) return null;
+  const target = youtubePosterAt(durationSeconds);
+  let best = usable[0];
+  let bestDist = Math.abs(Number(best.at_seconds) - target);
+  for (let i = 1; i < usable.length; i += 1) {
+    const dist = Math.abs(Number(usable[i].at_seconds) - target);
+    if (dist < bestDist) {
+      best = usable[i];
+      bestDist = dist;
+    }
+  }
+  return best;
+}
+
 /* ------------------------------------------------------------------ *
  * Labels — the historical library's index
  * ------------------------------------------------------------------ */

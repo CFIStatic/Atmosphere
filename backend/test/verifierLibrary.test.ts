@@ -4,12 +4,14 @@ import {
   analysisStateOf,
   downloadDecision,
   labelsForProof,
+  pickPosterFrame,
   shareRecipientAllowed,
   integrityOf,
   labelForCheck,
   needsAttention,
   serializeEvidence,
   shareState,
+  youtubePosterAt,
   type StoredCheck,
 } from '../src/verifier/library.js';
 
@@ -157,6 +159,22 @@ test('serialization: labels attached, integrity computed, flag derived', () => {
   // No still was passed, so the row carries no poster and the portal draws
   // its placeholder rather than pointing an <img> at nothing.
   assert.equal(item.posterUrl, null);
+});
+
+test('youtube poster time is a quarter of the way through the clip', () => {
+  assert.equal(youtubePosterAt(120), 30);
+  assert.equal(youtubePosterAt(2), 1);
+  assert.equal(youtubePosterAt(null), 1);
+
+  const frames = [
+    { at_seconds: 1, storage_path: 'a.jpg' },
+    { at_seconds: 28, storage_path: 'b.jpg' },
+    { at_seconds: 90, storage_path: 'c.jpg' },
+  ];
+  const picked = pickPosterFrame(frames, 120);
+  assert.equal(picked?.storage_path, 'b.jpg');
+  assert.equal(pickPosterFrame([], 120), null);
+  assert.equal(pickPosterFrame([{ at_seconds: 3, storage_path: null }], 120), null);
 });
 
 test('serialization: a still out of the clip rides along as the poster', () => {

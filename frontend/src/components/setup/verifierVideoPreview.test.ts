@@ -36,6 +36,13 @@ describe('verifier dashboard video preview screen', () => {
     localStorage.clear();
   });
 
+  it('uses a 16:9 YouTube-style screenshot in the Preview column', () => {
+    expect(verifierHtml).toContain('width: 160px; height: 90px');
+    expect(verifierHtml).toContain('function capturedStill');
+    expect(verifierHtml).toContain('function captureVideoScreenshot');
+    expect(verifierHtml).toMatch(/th style="width:176px"[^>]*data-sort-key="preview"/);
+  });
+
   it('keeps the preview as a dashboard screen next to the list, not a modal overlay', () => {
     const shell = verifierHtml.match(/<div class="shell" id="shell">[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/);
     expect(shell).not.toBeNull();
@@ -47,10 +54,12 @@ describe('verifier dashboard video preview screen', () => {
     expect(verifierHtml).not.toMatch(/id="detail"[^>]*role="dialog"/);
   });
 
-  it('paints the still on file before waiting on the signed video URL', () => {
-    expect(verifierHtml).toContain('function paintPreviewShell');
-    expect(verifierHtml).toContain('Opening the clip on file');
+  it('paints a YouTube-style screenshot from the clip before waiting on the file', () => {
+    expect(verifierHtml).toContain('function paintPreviewPoster');
+    expect(verifierHtml).toContain('function captureVideoScreenshot');
     expect(verifierHtml).toContain('class="preview-still"');
+    expect(verifierHtml).toContain('class="yt-play"');
+    expect(verifierHtml).toContain('Screenshot from this video');
     const paint = verifierHtml.indexOf('paintPreviewShell(item, tab)');
     const fetchDetail = verifierHtml.indexOf('fetchRemoteDetail(item)');
     expect(paint).toBeGreaterThan(0);
@@ -74,7 +83,9 @@ describe('verifier dashboard video preview screen', () => {
     expect(preview?.getAttribute('data-open')).toBe('1');
     expect(preview?.hidden).toBe(false);
     expect(dashboard?.hidden).toBe(true);
-    expect(document.querySelector('#d-frame img, #d-frame video')).not.toBeNull();
+    expect(document.querySelector('#d-frame img.preview-still')).not.toBeNull();
+    expect(document.getElementById('d-yt-play')).not.toBeNull();
+    expect(document.querySelector('#d-frame .yt-dur')).not.toBeNull();
     expect(document.getElementById('d-title')?.textContent).not.toBe('—');
 
     document.getElementById('d-back')!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
