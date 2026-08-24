@@ -30,7 +30,8 @@ final class FieldDaySession: ObservableObject {
                 activeJobId = list.first?.id
             }
         } catch {
-            lastError = error.localizedDescription
+            if Task.isCancelled || Self.isBenignCancellation(error) { return }
+            lastError = Self.friendlyErrorMessage(error)
             jobs = []
         }
     }
@@ -52,6 +53,7 @@ final class FieldDaySession: ObservableObject {
         } catch {
             lastError = error.localizedDescription
             recorder.teardown()
+            locator.stop()
         }
     }
 
@@ -213,5 +215,18 @@ final class FieldDaySession: ObservableObject {
         f.timeZone = .current
         f.dateFormat = "yyyy-MM-dd"
         return f.string(from: Date())
+    }
+
+    private static func isBenignCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
+    }
+
+    private static func friendlyErrorMessage(_ error: Error) -> String {
+        if isBenignCancellation(error) {
+            return "Could not load today's jobs. Pull to refresh."
+        }
+        return error.localizedDescription
     }
 }
