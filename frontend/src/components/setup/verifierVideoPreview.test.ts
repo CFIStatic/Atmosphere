@@ -43,7 +43,7 @@ describe('verifier dashboard video preview screen', () => {
     expect(shell![0]).toContain('id="detail"');
     expect(shell![0]).toContain('class="screen screen-preview"');
     expect(shell![0]).toContain('id="d-back"');
-    expect(shell![0]).toMatch(/>Dashboard</);
+    expect(shell![0]).toMatch(/id="d-back"[\s\S]*Dashboard[\s\S]*<\/button>/);
     expect(verifierHtml).not.toMatch(/id="detail"[^>]*role="dialog"/);
   });
 
