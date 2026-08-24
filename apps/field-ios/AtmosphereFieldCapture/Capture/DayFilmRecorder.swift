@@ -27,6 +27,7 @@ final class DayFilmRecorder: NSObject, ObservableObject {
     private var startedAt: Date?
     private var outputURL: URL?
     private var stopContinuation: CheckedContinuation<URL, Error>?
+    private var sessionConfigured = false
 
     /// Max one object (~24h), matching server `PROOF_MAX_DURATION_SECONDS`.
     static let maxDurationSeconds: Double = 86_400
@@ -36,6 +37,11 @@ final class DayFilmRecorder: NSObject, ObservableObject {
         return false
     }
 
+    var isCaptureActive: Bool {
+        session.isRunning
+    }
+
+    /// Permission prompts only — no camera or microphone hardware is started.
     func prepare() async throws {
         status = .preparing
         let cam = try await CapturePermissions.requestCamera()
@@ -46,7 +52,55 @@ final class DayFilmRecorder: NSObject, ObservableObject {
             status = .failed(message)
             throw CaptureError.permissionDenied
         }
+        status = .idle
+    }
 
+    func startDay() async throws {
+        guard !movieOutput.isRecording else { return }
+        if !sessionConfigured {
+            try configureSession()
+        }
+        if !session.isRunning {
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    self.session.startRunning()
+                    cont.resume()
+                }
+            }
+        }
+        try beginRecordingFile()
+    }
+
+    func finishDay() async throws -> URL {
+        guard movieOutput.isRecording else {
+            throw CaptureError.notRecording
+        }
+        status = .finishing
+        timer?.invalidate()
+        timer = nil
+        return try await withCheckedThrowingContinuation { cont in
+            self.stopContinuation = cont
+            self.movieOutput.stopRecording()
+        }
+    }
+
+    func teardown() {
+        timer?.invalidate()
+        timer = nil
+        if movieOutput.isRecording {
+            movieOutput.stopRecording()
+        }
+        if session.isRunning {
+            session.stopRunning()
+        }
+        previewLayer = nil
+        startedAt = nil
+        elapsedSeconds = 0
+        sessionConfigured = false
+        status = .idle
+    }
+
+    private func configureSession() throws {
         session.beginConfiguration()
         session.sessionPreset = .high
 
@@ -67,7 +121,6 @@ final class DayFilmRecorder: NSObject, ObservableObject {
         }
         session.addInput(videoInput)
 
-        // Microphone is mandatory — day film is audiovisual.
         guard
             let audioDevice = AVCaptureDevice.default(for: .audio),
             let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
@@ -84,7 +137,6 @@ final class DayFilmRecorder: NSObject, ObservableObject {
         }
         session.addOutput(movieOutput)
 
-        // Prefer AAC audio + H.264 in QuickTime/MP4.
         if let connection = movieOutput.connection(with: .video),
            connection.isVideoStabilizationSupported {
             connection.preferredVideoStabilizationMode = .auto
@@ -98,18 +150,10 @@ final class DayFilmRecorder: NSObject, ObservableObject {
             connection.videoOrientation = .portrait
         }
         previewLayer = preview
-
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            DispatchQueue.global(qos: .userInitiated).async {
-                self.session.startRunning()
-                cont.resume()
-            }
-        }
-        status = .idle
+        sessionConfigured = true
     }
 
-    func startDay() throws {
-        guard !movieOutput.isRecording else { return }
+    private func beginRecordingFile() throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("field-day-\(UUID().uuidString).mp4")
         outputURL = url
@@ -126,27 +170,6 @@ final class DayFilmRecorder: NSObject, ObservableObject {
                 }
             }
         }
-    }
-
-    func finishDay() async throws -> URL {
-        guard movieOutput.isRecording else {
-            throw CaptureError.notRecording
-        }
-        status = .finishing
-        timer?.invalidate()
-        timer = nil
-        return try await withCheckedThrowingContinuation { cont in
-            self.stopContinuation = cont
-            self.movieOutput.stopRecording()
-        }
-    }
-
-    func teardown() {
-        timer?.invalidate()
-        timer = nil
-        session.stopRunning()
-        previewLayer = nil
-        status = .idle
     }
 
     /// Probe the finished file for audio + video tracks before upload.

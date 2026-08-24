@@ -19,13 +19,6 @@ final class FieldDaySession: ObservableObject {
     let locator = SiteLocator()
     let roomPlan = RoomPlanBridge()
 
-    /// Ask for camera, microphone, and location before the crew taps Start.
-    func requestCapturePermissions() async {
-        _ = try? await CapturePermissions.requestCamera()
-        _ = try? await CapturePermissions.requestMicrophone()
-        _ = await CapturePermissions.requestLocation()
-    }
-
     func loadToday(api: AtmosphereClient) async {
         loadingJobs = true
         lastError = nil
@@ -54,7 +47,7 @@ final class FieldDaySession: ObservableObject {
             _ = await CapturePermissions.requestLocation()
             locator.configure(jobs: jobs)
             locator.start()
-            try recorder.startDay()
+            try await recorder.startDay()
             phase = .recording
         } catch {
             lastError = error.localizedDescription
@@ -196,6 +189,8 @@ final class FieldDaySession: ObservableObject {
             phase = .door
         } catch {
             lastError = error.localizedDescription
+            recorder.teardown()
+            locator.stop()
             phase = .door
             doorChecks = [
                 DoorCheck(id: "err", label: "Upload issue", detail: error.localizedDescription, ok: false),
@@ -204,6 +199,8 @@ final class FieldDaySession: ObservableObject {
     }
 
     func backToToday() {
+        recorder.teardown()
+        locator.stop()
         phase = .today
         elapsedSeconds = 0
         lastError = nil
