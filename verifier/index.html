@@ -729,35 +729,74 @@
     display: block; width: 100%; height: 100%; max-height: none; object-fit: contain; background: #1A1815;
   }
 
-  .side { padding: 16px 18px 24px; overflow-y: auto; min-height: 0; }
-  .tabs { display: flex; gap: 3px; background: var(--line-soft); padding: 3px; border-radius: 8px; }
+  .side {
+    padding: 16px 18px 0;
+    overflow: hidden;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  @media (max-width: 860px) { .side { min-height: 420px; } }
+  .tabs { display: flex; gap: 3px; background: var(--line-soft); padding: 3px; border-radius: 8px; flex: none; }
   .tabs button {
-    flex: 1; min-width: 0; border: 0; background: none; padding: 7px 4px; border-radius: 6px;
-    font-size: 12px; cursor: pointer; color: var(--muted); font-weight: 550;
+    flex: 1; min-width: 0; border: 0; background: none; padding: 7px 8px; border-radius: 6px;
+    font-size: 12.5px; cursor: pointer; color: var(--muted); font-weight: 550;
   }
   .tabs button[aria-selected="true"] { background: var(--panel); color: var(--ink); font-weight: 650; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
 
+  #d-panel {
+    flex: 1;
+    min-height: 0;
+    margin-top: 14px;
+    overflow-y: auto;
+  }
+  #d-panel.panel-analysis {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .analysis-pane {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .analysis-notes {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 2px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--muted) transparent;
+  }
+  .analysis-ask {
+    flex: none;
+    padding: 12px 0 16px;
+    border-top: 1px solid var(--line-soft);
+    background: linear-gradient(180deg, transparent, var(--panel) 10px);
+  }
+
   .alog-head {
-    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
-    margin: 0 0 10px;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    margin: 0 0 8px;
   }
   .alog-head h4 {
-    margin: 0; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
-    color: var(--faint); font-weight: 750;
+    margin: 0; font-size: 13px; letter-spacing: -0.01em;
+    color: var(--ink); font-weight: 650;
   }
   .alog-head .livepill {
-    font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+    font-size: 11px; font-weight: 650; letter-spacing: .01em;
     color: var(--accent); background: var(--accent-soft);
-    padding: 2px 8px; border-radius: 999px;
+    padding: 3px 8px; border-radius: 999px;
   }
   .alog { list-style: none; margin: 0; padding: 0; }
   .alog li {
-    display: grid; grid-template-columns: 52px 1fr; gap: 10px;
-    padding: 10px 8px 10px 10px; border-radius: 8px; cursor: pointer;
-    border-bottom: 1px solid var(--line-soft);
+    display: grid; grid-template-columns: 46px 1fr; gap: 10px;
+    padding: 9px 8px 9px 4px; border-radius: 8px; cursor: pointer;
     font-size: 13px; line-height: 1.45; color: var(--ink-2);
   }
-  .alog li:last-child { border-bottom: 0; }
+  .alog li + li { border-top: 1px solid var(--line-soft); }
   .alog li.soon { display: none; }
   .alog li.seen { color: var(--ink); }
   .alog li.on {
@@ -772,12 +811,21 @@
     animation: alog-caret 1s step-end infinite;
   }
   @keyframes alog-caret { 50% { opacity: 0; } }
-  .alog-wait { margin-top: 4px; }
+  .alog-wait {
+    margin: 18px 4px 8px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--muted);
+  }
   .alog-wait[hidden] { display: none; }
 
-  .ask-thread { display: flex; flex-direction: column; gap: 10px; min-height: 88px; }
+  .ask-thread {
+    display: flex; flex-direction: column; gap: 8px;
+    max-height: 168px; overflow-y: auto;
+    scrollbar-width: thin;
+  }
   .ask-bubble {
-    max-width: 100%; padding: 8px 10px; border-radius: 10px;
+    max-width: 94%; padding: 8px 11px; border-radius: 12px;
     font-size: 13px; line-height: 1.45; white-space: pre-wrap;
   }
   .ask-bubble.user {
@@ -789,20 +837,20 @@
     border-bottom-left-radius: 4px;
   }
   .ask-bubble.pending { color: var(--muted); font-style: italic; }
-  .ask-suggest { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ask-suggest { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 2px; }
   .ask-suggest button {
     border: 1px solid var(--line); background: var(--panel); color: var(--ink-2);
-    border-radius: 999px; padding: 6px 10px; font-size: 12px; cursor: pointer;
+    border-radius: 999px; padding: 5px 10px; font-size: 12px; cursor: pointer;
   }
   .ask-suggest button:hover { border-color: var(--accent); color: var(--accent); }
-  .ask-form { display: flex; gap: 6px; margin-top: 12px; }
+  .ask-form { display: flex; gap: 6px; margin-top: 10px; }
   .ask-form input {
-    flex: 1; min-width: 0; height: 36px; border: 1px solid var(--line); border-radius: 8px;
-    padding: 0 10px; background: var(--bg); color: var(--ink); font: inherit; outline: none;
+    flex: 1; min-width: 0; height: 38px; border: 1px solid var(--line); border-radius: 10px;
+    padding: 0 12px; background: var(--bg); color: var(--ink); font: inherit; outline: none;
   }
   .ask-form input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
   .ask-form button[type="submit"] {
-    border: 0; background: var(--accent); color: #fff; border-radius: 8px;
+    border: 0; background: var(--accent); color: #fff; border-radius: 10px;
     padding: 0 14px; font-weight: 650; cursor: pointer; flex: none;
   }
   .ask-form button[type="submit"]:disabled { opacity: .55; cursor: default; }
@@ -1069,12 +1117,11 @@
 
       <section class="side">
         <div class="tabs" role="tablist">
-          <button role="tab" data-tab="integrity" aria-selected="true">Scope of work</button>
+          <button role="tab" data-tab="analysis" aria-selected="true">Analysis</button>
           <button role="tab" data-tab="custody" aria-selected="false">Chain of custody</button>
           <button role="tab" data-tab="details" aria-selected="false">Details</button>
-          <button role="tab" data-tab="ask" aria-selected="false">Ask</button>
         </div>
-        <div id="d-panel" style="margin-top:14px"></div>
+        <div id="d-panel"></div>
       </section>
     </div>
   </div>
@@ -1538,7 +1585,7 @@
     sortKey: 'recorded',
     /** asc | desc — toggle on repeated clicks of the same header */
     sortDir: 'desc',
-    groupByJob: true, collapsed: {}, open: null, frame: 0, playing: null, tab: 'integrity'
+    groupByJob: true, collapsed: {}, open: null, frame: 0, playing: null, tab: 'analysis'
   };
 
   var $ = function (sel) { return document.querySelector(sel); };
@@ -2723,7 +2770,7 @@
 
     renderDictation(item);
     renderAnalysis(item);
-    setTab(tab || 'integrity');
+    setTab(tab || 'analysis');
     $('#detail').setAttribute('data-open', '1');
     $('#d-close').focus();
     startLivePlayback(item);
@@ -2914,9 +2961,8 @@
         });
       }).then(function (body) {
         if (body && body.note && rememberWatchNote(item, body.atSeconds != null ? body.atSeconds : at, body.note)) {
-          if (state.open && state.open.id === item.id && state.tab === 'integrity') {
-            setTab('integrity');
-            syncAnalysisLog(currentPlayhead());
+          if (state.open && state.open.id === item.id && isAnalysisTab()) {
+            ensureAnalysisNotes(item);
           }
         }
         WATCH.failed = null;
@@ -3189,34 +3235,101 @@
     setFrame(best);
   }
 
+  function isAnalysisTab(tab) {
+    var t = tab || state.tab;
+    return t === 'analysis' || t === 'integrity' || t === 'ask';
+  }
+
+  function normalizeTab(tab) {
+    if (!tab || tab === 'integrity' || tab === 'ask') return 'analysis';
+    return tab;
+  }
+
+  function analysisEmptyCopy(item) {
+    var a = item.analysis || {};
+    if (WATCH.failed) return WATCH.failed;
+    if (a.reason) return a.reason;
+    if (a.state === 'paired') {
+      return 'This is the before half of the day. Play it anyway — notes still write as the footage plays.';
+    }
+    if (a.state === 'failed') {
+      return 'The filed reading failed. Play the clip and the assistant will still describe what is on screen.';
+    }
+    return 'Play the clip. Notes appear here as the footage plays.';
+  }
+
+  function analysisPillLabel(item) {
+    var a = item.analysis || {};
+    var rows = analysisLog(item);
+    if (a.state === 'failed') return 'Failed';
+    if (WATCH.failed && WATCH.failed.indexOf('model key') >= 0) return 'Needs key';
+    if ((a.state === 'queued' || a.state === 'none' || !a.state) && !rows.length) return 'Writing…';
+    if (a.state === 'paired' || a.state === 'skipped') return 'Watching';
+    return 'Ready';
+  }
+
   function renderScopeLog(item) {
     var a = item.analysis || {};
     var rows = analysisLog(item);
-    var pill = a.state === 'failed' ? 'Failed'
-      : WATCH.failed && WATCH.failed.indexOf('model key') >= 0 ? 'Needs key'
-      : (a.state === 'queued' || a.state === 'none' || !a.state) && !rows.length ? 'Writing…'
-      : a.state === 'paired' || a.state === 'skipped' ? 'Watching'
-      : 'Ready';
-    var html = '<div class="alog-head"><h4>AI analysis</h4><span class="livepill" id="alog-pill">' + pill + '</span></div>';
-    if (!rows.length) {
-      html += '<p class="footnote alog-wait" id="alog-empty">' +
-        esc(WATCH.failed || a.reason || (a.state === 'paired'
-          ? 'This is the before half of a day. Play it anyway — live notes still write as the footage plays.'
-          : a.state === 'failed'
-            ? 'The filed dictation failed. Play the clip and the assistant will still describe what is on screen.'
-            : 'Play the clip. The assistant writes what is on screen here.')) +
-        '</p>';
-      if (a.pairedWith) {
-        html += '<p><button class="navitem" style="width:auto;margin:6px 0 0;border:1px solid var(--line)" data-goto="' + a.pairedWith + '">Open ' + esc(a.pairedWith) + '</button></p>';
-      }
-      return html;
+    var html = '<div class="alog-head"><h4>Live notes</h4><span class="livepill" id="alog-pill">' +
+      analysisPillLabel(item) + '</span></div>';
+    html += '<p class="alog-wait" id="alog-empty">' + esc(analysisEmptyCopy(item)) + '</p>';
+    if (a.pairedWith && !rows.length) {
+      html += '<p><button class="navitem" style="width:auto;margin:6px 0 0;border:1px solid var(--line)" data-goto="' +
+        a.pairedWith + '">Open ' + esc(a.pairedWith) + '</button></p>';
     }
-    html += '<p class="footnote alog-wait" id="alog-empty">Play the clip. Notes land here as the footage plays.</p>';
-    html += '<ul class="alog" id="alog">' + rows.map(function (r) {
-      return '<li data-at="' + r.at + '" class="soon">' +
-        '<span class="t">' + dur(r.at) + '</span><span data-full="' + esc(r.text) + '"></span></li>';
-    }).join('') + '</ul>';
+    if (rows.length) {
+      html += '<ul class="alog" id="alog">' + rows.map(function (r) {
+        return '<li data-at="' + r.at + '" class="soon">' +
+          '<span class="t">' + dur(r.at) + '</span><span data-full="' + esc(r.text) + '"></span></li>';
+      }).join('') + '</ul>';
+    }
     return html;
+  }
+
+  function bindNoteSeek(root) {
+    Array.prototype.forEach.call((root || document).querySelectorAll('#alog [data-at]'), function (li) {
+      if (li._boundSeek) return;
+      li._boundSeek = true;
+      li.addEventListener('click', function () { seekTo(Number(li.getAttribute('data-at'))); });
+    });
+    var goto = (root || document).querySelector('[data-goto]');
+    if (goto && !goto._boundGoto) {
+      goto._boundGoto = true;
+      goto.addEventListener('click', function () { open(goto.dataset.goto); });
+    }
+  }
+
+  function noteKey(at, text) {
+    return String(at) + '|' + String(text || '');
+  }
+
+  function ensureAnalysisNotes(item) {
+    var host = document.querySelector('.analysis-notes');
+    if (!host) return;
+    var rows = analysisLog(item);
+    var list = document.getElementById('alog');
+    if (!list) {
+      host.innerHTML = renderScopeLog(item);
+      bindNoteSeek(host);
+      syncAnalysisLog(currentPlayhead());
+      return;
+    }
+    var have = {};
+    Array.prototype.forEach.call(list.querySelectorAll('[data-at]'), function (li) {
+      var span = li.querySelector('[data-full]');
+      have[noteKey(li.getAttribute('data-at'), span && span.getAttribute('data-full'))] = true;
+    });
+    rows.forEach(function (r) {
+      if (have[noteKey(r.at, r.text)]) return;
+      var li = document.createElement('li');
+      li.setAttribute('data-at', String(r.at));
+      li.className = 'soon';
+      li.innerHTML = '<span class="t">' + dur(r.at) + '</span><span data-full="' + esc(r.text) + '"></span>';
+      list.appendChild(li);
+    });
+    bindNoteSeek(host);
+    syncAnalysisLog(currentPlayhead());
   }
 
   var ASK_STOP = {
@@ -3331,69 +3444,84 @@
     }).catch(function () { cb(null, local); });
   }
 
-  function renderAsk(item) {
+  function renderAskThreadHtml(item, pending) {
     var thread = ASK_THREADS[item.id] || [];
-    var html = '<div class="alog-head"><h4>Ask this clip</h4></div>' +
-      '<p class="footnote" style="margin:0 0 12px">Ask whether anything happened, or what the footage shows. The assistant answers from its reading of this clip.</p>' +
-      '<div class="ask-thread" id="ask-thread">';
-    if (!thread.length) {
-      html += '<div class="ask-suggest">' +
+    if (!thread.length && !pending) {
+      return '<div class="ask-suggest">' +
         '<button type="button" data-ask="Did anything happen in this clip?">Did anything happen?</button>' +
         '<button type="button" data-ask="What work is visible?">What work is visible?</button>' +
         '<button type="button" data-ask="Is anything in this footage unfinished?">Anything unfinished?</button>' +
         '</div>';
-    } else {
-      thread.forEach(function (m) {
-        html += '<div class="ask-bubble ' + esc(m.role) + '">' + esc(m.text) + '</div>';
-      });
     }
-    html += '</div>' +
+    return thread.map(function (m) {
+      return '<div class="ask-bubble ' + esc(m.role) + '">' + esc(m.text) + '</div>';
+    }).join('') + (pending ? '<div class="ask-bubble assistant pending">Reading the clip…</div>' : '');
+  }
+
+  function renderAsk(item) {
+    return '<div class="ask-thread" id="ask-thread">' + renderAskThreadHtml(item, false) + '</div>' +
       '<form id="ask-form" class="ask-form">' +
       '<input id="ask-input" maxlength="1000" autocomplete="off" placeholder="Ask about this clip…" />' +
       '<button type="submit">Ask</button>' +
       '</form>';
-    return html;
+  }
+
+  function paintAskThread(item, pending) {
+    var host = document.getElementById('ask-thread');
+    if (!host) return;
+    host.innerHTML = renderAskThreadHtml(item, pending);
+    Array.prototype.forEach.call(host.querySelectorAll('[data-ask]'), function (btn) {
+      btn.addEventListener('click', function () { sendAsk(item, btn.getAttribute('data-ask')); });
+    });
+    host.scrollTop = host.scrollHeight;
+  }
+
+  function sendAsk(item, text) {
+    var q = String(text || '').trim();
+    if (q.length < 3) return;
+    var thread = ASK_THREADS[item.id] || [];
+    thread.push({ role: 'user', text: q });
+    ASK_THREADS[item.id] = thread;
+    var history = thread.slice(0, -1).map(function (m) {
+      return { role: m.role === 'assistant' ? 'assistant' : 'user', text: m.text };
+    });
+    var input = document.getElementById('ask-input');
+    if (input) input.value = '';
+    paintAskThread(item, true);
+    askClip(item, q, history, function (_err, answer) {
+      thread.push({ role: 'assistant', text: answer });
+      ASK_THREADS[item.id] = thread;
+      if (state.open && state.open.id === item.id) paintAskThread(item, false);
+    });
   }
 
   function bindAsk(item) {
     var form = document.getElementById('ask-form');
     var input = document.getElementById('ask-input');
-    function send(text) {
-      var q = String(text || '').trim();
-      if (q.length < 3) return;
-      var thread = ASK_THREADS[item.id] || [];
-      thread.push({ role: 'user', text: q });
-      ASK_THREADS[item.id] = thread;
-      var history = thread.slice(0, -1).map(function (m) {
-        return { role: m.role === 'assistant' ? 'assistant' : 'user', text: m.text };
-      });
-      setTab('ask');
-      var host = document.getElementById('ask-thread');
-      if (host) {
-        var pending = document.createElement('div');
-        pending.className = 'ask-bubble assistant pending';
-        pending.textContent = 'Reading the clip…';
-        host.appendChild(pending);
-      }
-      askClip(item, q, history, function (_err, answer) {
-        thread.push({ role: 'assistant', text: answer });
-        ASK_THREADS[item.id] = thread;
-        if (state.open && state.open.id === item.id && state.tab === 'ask') setTab('ask');
-      });
-    }
     if (form) {
       form.addEventListener('submit', function (ev) {
         ev.preventDefault();
-        send(input && input.value);
+        sendAsk(item, input && input.value);
       });
     }
-    Array.prototype.forEach.call(document.querySelectorAll('[data-ask]'), function (btn) {
-      btn.addEventListener('click', function () { send(btn.getAttribute('data-ask')); });
-    });
-    if (input) setTimeout(function () { input.focus(); }, 0);
+    paintAskThread(item, false);
+  }
+
+  function renderAnalysisPane(item) {
+    return '<div class="analysis-pane">' +
+      '<div class="analysis-notes">' + renderScopeLog(item) + '</div>' +
+      '<div class="analysis-ask">' + renderAsk(item) + '</div>' +
+      '</div>';
+  }
+
+  function bindAnalysisPane(item) {
+    bindNoteSeek(document.getElementById('d-panel'));
+    bindAsk(item);
+    syncAnalysisLog(currentPlayhead());
   }
 
   function setTab(tab) {
+    tab = normalizeTab(tab);
     state.tab = tab;
     Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
       b.setAttribute('aria-selected', String(b.dataset.tab === tab));
@@ -3401,18 +3529,20 @@
     var item = state.open;
     if (!item) return;
     var el = $('#d-panel');
+    el.className = tab === 'analysis' ? 'panel-analysis' : '';
 
-    if (tab === 'integrity') {
-      el.innerHTML = renderScopeLog(item);
-      Array.prototype.forEach.call(el.querySelectorAll('#alog [data-at]'), function (li) {
-        li.addEventListener('click', function () { seekTo(Number(li.getAttribute('data-at'))); });
-      });
-      var goto = el.querySelector('[data-goto]');
-      if (goto) goto.addEventListener('click', function () { open(goto.dataset.goto); });
-      syncAnalysisLog(currentPlayhead());
+    if (tab === 'analysis') {
+      if (el.getAttribute('data-item') === item.id && el.querySelector('.analysis-pane')) {
+        ensureAnalysisNotes(item);
+        return;
+      }
+      el.setAttribute('data-item', item.id);
+      el.innerHTML = renderAnalysisPane(item);
+      bindAnalysisPane(item);
       return;
     }
 
+    el.removeAttribute('data-item');
     if (tab === 'custody') {
       el.innerHTML = '<ul class="custody">' + item.custody.map(function (c) {
         return '<li class="' + (c.role === 'ai' ? 'ai' : '') + '">' +
@@ -3422,12 +3552,6 @@
       '<p class="footnote">Every access is logged at the moment a viewing link is minted, including external ' +
       'shares. The log is append-only: entries cannot be edited or removed, by anyone, including the account ' +
       'that owns the job.</p>';
-      return;
-    }
-
-    if (tab === 'ask') {
-      el.innerHTML = renderAsk(item);
-      bindAsk(item);
       return;
     }
 

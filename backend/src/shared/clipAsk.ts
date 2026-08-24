@@ -8,8 +8,8 @@
  * discipline.
  *
  * When a model is configured it writes the prose; when it is not, a grounded
- * lookup still answers from the same record so the Ask tab works in demo and
- * in environments without a provider.
+ * lookup still answers from the same record so the Analysis tab works in demo
+ * and in environments without a provider.
  */
 import { completeText, isVisionConfigured } from './visionDescribe.js';
 
