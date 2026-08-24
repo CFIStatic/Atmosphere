@@ -480,10 +480,6 @@ async function extractJpegFrame(videoPath: string, atSeconds: number, dest: stri
 
 type SeedOrg = { id: string; name: string; created_by: string | null };
 
-function sameEmail(a: string | null | undefined, b: string): boolean {
-  return String(a ?? '').trim().toLowerCase() === b.toLowerCase();
-}
-
 async function usersForEmails(
   admin: SupabaseClient,
   emails: string[],
