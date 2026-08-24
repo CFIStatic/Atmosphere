@@ -20,6 +20,10 @@ describe('verifier Dashboard rail', () => {
     expect(nav![0].indexOf('data-screen="dashboard"')).toBeLessThan(nav![0].indexOf('id="nav-jobs"'));
   });
 
+  it('keeps the Videos filters on the rail when the office page sits beside it', () => {
+    expect(verifierHtml).not.toMatch(/data-atm-rail-only\]\s*#evidence-nav\s*\{\s*display:\s*none/);
+  });
+
   it('hands Overview and My jobs to the office shell', () => {
     expect(verifierHtml).toContain("goShell('/field')");
     expect(verifierHtml).toContain("goShell('/jobs')");

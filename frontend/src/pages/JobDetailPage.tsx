@@ -185,7 +185,7 @@ export function JobDetailPage() {
 
   return (
     <>
-      <Link>
+      <Link
         to="/jobs"
         className="mb-4 inline-flex items-center gap-1 text-sm text-ink-600 transition hover:text-ink-800"
       >
