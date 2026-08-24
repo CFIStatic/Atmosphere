@@ -14,7 +14,13 @@ export function OperationsShell() {
   useFeatureTimer('verifier_library', isLibrary);
 
   return (
-    <div className="relative min-h-screen bg-paper-100">
+    <div
+      className={
+        isLibrary
+          ? 'relative h-screen overflow-hidden bg-paper-100'
+          : 'relative min-h-screen overflow-x-hidden bg-paper-100'
+      }
+    >
       <VerifierFrame
         railOnly={!isLibrary}
         className={
