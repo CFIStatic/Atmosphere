@@ -22,8 +22,8 @@ jobs:
     # apt/mirror wait cannot burn a runner until SIGTERM (exit 143).
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: npm
@@ -64,13 +64,15 @@ jobs:
         working-directory: backend
       - name: Railway upload healthcheck matcher
         run: bash backend/scripts/railwayUp.healthcheck.test.sh
+      - name: Railway CLI install pin
+        run: bash scripts/installRailwayCli.test.sh
 
   frontend:
     name: Frontend
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: npm
@@ -87,8 +89,8 @@ jobs:
     name: Internal site
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: npm
@@ -104,8 +106,8 @@ jobs:
     name: Agent
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: npm
@@ -135,7 +137,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Agent Memory schema tests
         env:
           PGPASSWORD: postgres
@@ -149,7 +151,7 @@ jobs:
     name: Backend image
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build backend image
         run: docker build -f backend/Dockerfile -t atmosphere-backend:ci ./backend
 
@@ -163,7 +165,7 @@ jobs:
     # image on that exact value here, where it costs a branch check instead of
     # production.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build office app image
         run: docker build -f frontend/Dockerfile -t atmosphere-app:ci .
       - name: Serve the office app with an unusable API_UPSTREAM
@@ -197,7 +199,7 @@ jobs:
     # takes the whole container down rather than just the forms — worth
     # catching on the branch instead of after the merge.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build and serve the marketing site image
         run: |
           set -euo pipefail
@@ -220,6 +222,6 @@ jobs:
     name: Internal site image
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build internal site image
         run: docker build -f internal/Dockerfile -t atmosphere-internal:ci .

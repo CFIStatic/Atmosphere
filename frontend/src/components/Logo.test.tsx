@@ -11,6 +11,10 @@ describe('Logo brand mark', () => {
     // Skip NavLink wrapper — this test asserts the mark only.
     const { container, getByText, queryByText } = render(<Logo to={null} />);
 
+    const svg = container.querySelector('svg');
+    expect(svg).toHaveAttribute('width', '28');
+    expect(svg).toHaveAttribute('height', '28');
+
     const rects = container.querySelectorAll('rect');
     expect(rects.length).toBe(5);
     expect(container.querySelector('circle')).toBeNull();

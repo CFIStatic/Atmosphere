@@ -2837,6 +2837,16 @@ const routes: Array<[string, RegExp, Handler]> = [
     }
     return { body: { ok: true } };
   }],
+  ['POST', /^\/api\/evidence-portal\/evidence\/([^/]+)\/watch$/, (_m, b) => {
+    const at = Number(b.atSeconds ?? 0);
+    return {
+      body: {
+        atSeconds: at,
+        note: 'The clip is playing — the assistant is describing what is on screen.',
+        model: null,
+      },
+    };
+  }],
   ['POST', /^\/api\/evidence-portal\/evidence\/([^/]+)\/ask$/, (m, b) => {
     const question = String(b.question ?? '').trim();
     let found: { aiSummary?: string | null; workDate?: string } | undefined;

@@ -6,7 +6,8 @@ const RAIL_W = 220;
 
 /**
  * Operations routes share one persistent Verifier iframe. The library fills
- * the screen; intake and the job record render beside the same anchored rail.
+ * the screen; Overview, intake, My jobs, and the job record render beside
+ * the same anchored rail so the office sidebar never swaps.
  */
 export function OperationsShell() {
   const { pathname } = useLocation();
@@ -14,13 +15,7 @@ export function OperationsShell() {
   useFeatureTimer('verifier_library', isLibrary);
 
   return (
-    <div
-      className={
-        isLibrary
-          ? 'relative h-screen overflow-hidden bg-paper-100'
-          : 'relative min-h-screen overflow-x-hidden bg-paper-100'
-      }
-    >
+    <div className="relative min-h-screen bg-paper-100">
       <VerifierFrame
         railOnly={!isLibrary}
         className={

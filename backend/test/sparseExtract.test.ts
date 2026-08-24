@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { longFormBudget, planSparseTimestamps } from '../src/shared/sparseExtract.js';
+import { extractJpegAtSeconds, longFormBudget, planSparseTimestamps } from '../src/shared/sparseExtract.js';
+import { writeFile, mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { segmentFrames } from '../src/shared/longAnalyst.js';
 
 /**
@@ -53,6 +55,25 @@ test('a diversity-kept day (≤180 distinct frames) windows into a bounded read'
 test('zero or negative duration yields no timestamps', () => {
   assert.deepEqual(planSparseTimestamps(0, { intervalSeconds: 600, maxFrames: 180 }), []);
   assert.deepEqual(planSparseTimestamps(-10, { intervalSeconds: 600, maxFrames: 180 }), []);
+});
+
+test('extractJpegAtSeconds seeks one still and retries 0.4s when 0:00 has no keyframe', async () => {
+  const seeks: number[] = [];
+  const jpeg = await extractJpegAtSeconds({
+    url: 'https://example.test/clip.mp4',
+    atSeconds: 0,
+    runner: async (_bin, args) => {
+      const ss = args[args.indexOf('-ss') + 1];
+      seeks.push(Number(ss));
+      const out = args[args.length - 1];
+      if (Number(ss) < 0.3) return { stdout: '', stderr: 'no keyframe', code: 1 };
+      await mkdir(join(out, '..'), { recursive: true });
+      await writeFile(out, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+      return { stdout: '', stderr: '', code: 0 };
+    },
+  });
+  assert.ok(jpeg && jpeg.length > 0);
+  assert.deepEqual(seeks, [0, 0.4]);
 });
 
 test('short clips still get at least one sparse timestamp under a 60s preferred interval', () => {

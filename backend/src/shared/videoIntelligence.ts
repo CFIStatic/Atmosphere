@@ -18,6 +18,7 @@ import { createHash } from 'node:crypto';
 import { config } from '../config.js';
 import { HttpError } from '../lib/errors.js';
 import { anthropicClient, isModelProviderConfigured } from '../lib/anthropic.js';
+import { describeVision, isVisionConfigured } from './visionDescribe.js';
 import {
   extractSparseFramesFromUrl,
   type CommandRunner,
@@ -145,7 +146,7 @@ export async function dictatePreparedFrames(
   prepared: PreparedVideoFrames,
   opts?: { contextText?: string | null; maxModelFrames?: number },
 ): Promise<VideoDictationResult> {
-  if (!isModelProviderConfigured()) {
+  if (!isVisionConfigured()) {
     throw new HttpError(503, 'Model access is not configured on this server.', 'model_provider_unconfigured');
   }
   if (prepared.frames.length === 0) {
@@ -171,52 +172,68 @@ export async function dictatePreparedFrames(
     'summary is 2–4 sentences. actions may be an empty array when nothing is being performed.',
   ].join(' ');
 
-  const response = await anthropicClient().messages.create({
-    model: config.technician.assistant.model,
-    max_tokens: 2500,
-    system,
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: [
-              `Source: ${prepared.source}`,
-              `Video id: ${prepared.id}`,
-              `Duration: ${prepared.durationSeconds}s (~${hours}h)`,
-              `Stills: ${frames.length} of ${prepared.frames.length} prepared (diverse sample)`,
-              context ? `Context:\n${context}` : 'Context: (none)',
-              'Dictate what the video shows for the office verifier. JSON only.',
-            ].join('\n'),
-          },
-          ...frames.flatMap((frame, i) => [
-            {
-              type: 'text' as const,
-              text: `frame ${i} — at ${Math.round(frame.atSeconds)}s:`,
-            },
-            {
-              type: 'image' as const,
-              source: {
-                type: 'base64' as const,
-                media_type: 'image/jpeg' as const,
-                data: frame.jpeg.toString('base64'),
-              },
-            },
-          ]),
-        ],
-      },
-    ],
-  });
+  const userText = [
+    `Source: ${prepared.source}`,
+    `Video id: ${prepared.id}`,
+    `Duration: ${prepared.durationSeconds}s (~${hours}h)`,
+    `Stills: ${frames.length} of ${prepared.frames.length} prepared (diverse sample)`,
+    context ? `Context:\n${context}` : 'Context: (none)',
+    'Dictate what the video shows for the office verifier. JSON only.',
+    ...frames.map((frame, i) => `frame ${i} — at ${Math.round(frame.atSeconds)}s.`),
+  ].join('\n');
 
-  const text = response.content
-    .filter((b: { type: string }) => b.type === 'text')
-    .map((b: { type: string; text?: string }) => b.text ?? '')
-    .join('\n');
+  let text = '';
+  let model = '';
+  if (isModelProviderConfigured()) {
+    const response = await anthropicClient().messages.create({
+      model: config.technician.assistant.model,
+      max_tokens: 2500,
+      system,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: userText },
+            ...frames.flatMap((frame, i) => [
+              {
+                type: 'text' as const,
+                text: `frame ${i} — at ${Math.round(frame.atSeconds)}s:`,
+              },
+              {
+                type: 'image' as const,
+                source: {
+                  type: 'base64' as const,
+                  media_type: 'image/jpeg' as const,
+                  data: frame.jpeg.toString('base64'),
+                },
+              },
+            ]),
+          ],
+        },
+      ],
+    });
+    text = response.content
+      .filter((b: { type: string }) => b.type === 'text')
+      .map((b: { type: string; text?: string }) => b.text ?? '')
+      .join('\n');
+    model = response.model;
+  } else {
+    const fallback = await describeVision({
+      system,
+      userText,
+      images: frames.map((frame) => ({ base64: frame.jpeg.toString('base64') })),
+      maxTokens: 2500,
+    });
+    if (!fallback) {
+      throw new HttpError(503, 'Model access is not configured on this server.', 'model_provider_unconfigured');
+    }
+    text = fallback.text;
+    model = fallback.model;
+  }
   const parsed = parseDictationPayload(
     text,
     frames.map((frame) => frame.atSeconds),
-    response.model,
+    model,
   );
   if (!parsed.narration) {
     throw new HttpError(502, 'Dictation model returned empty narration', 'empty_dictation');
@@ -225,7 +242,7 @@ export async function dictatePreparedFrames(
   return {
     narrationText: parsed.narration,
     narrationSummary: parsed.summary,
-    model: response.model,
+    model,
     frameCount: frames.length,
     actions: parsed.actions,
   };

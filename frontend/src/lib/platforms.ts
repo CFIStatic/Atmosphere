@@ -48,6 +48,16 @@ const SYSTEM: NavGroup = {
   items: [{ to: '/settings', label: 'Settings', Icon: SettingsIcon }],
 };
 
+const WORK: NavGroup = {
+  label: 'Work',
+  items: [
+    { to: '/field', label: 'Overview', Icon: GaugeIcon },
+    { to: '/intake', label: 'Start a job', Icon: BoltIcon },
+    { to: '/verifier-library', label: 'Dashboard', Icon: DecisionIcon },
+    { to: '/jobs', label: 'My jobs', Icon: BriefcaseIcon },
+  ],
+};
+
 export const PLATFORMS: Record<PlatformId, Platform> = {
   // The id stays 'operations' so stored preferences keep working — the brand
   // is the display fields, not the key.
@@ -60,16 +70,7 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
       'Every day of work filmed against the scope, checked at the door, read by the assistant, and held in a chain of custody — job files that create themselves from your CRM.',
     Icon: DecisionIcon,
     metrics: ['openJobs', 'crewOnJobs', 'scheduledToday', 'unscheduled'],
-    groups: [
-      {
-        label: 'Work',
-        items: [
-          { to: '/intake', label: 'Start a job', Icon: BoltIcon },
-          { to: '/verifier-library', label: 'Dashboard', Icon: DecisionIcon },
-        ],
-      },
-      SYSTEM,
-    ],
+    groups: [WORK, SYSTEM],
   },
 
   field: {
@@ -78,23 +79,10 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
     short: 'Field',
     tagline: 'Capture the job site',
     homeBlurb:
-      'Recording, a spoken assistant, and a camera that names what it sees — built for gloved hands and a phone in the rain.',
+      'The office view of crews in the field today — every job underway, not one technician’s day.',
     Icon: MicIcon,
     metrics: ['scheduledToday', 'crewOnJobs', 'openJobs', 'unscheduled'],
-    groups: [
-      {
-        label: 'Today',
-        items: [{ to: '/field', label: 'Overview', Icon: GaugeIcon }],
-      },
-      {
-        label: 'On site',
-        items: [
-          { to: '/technician', label: 'Capture', Icon: MicIcon },
-          { to: '/jobs', label: 'My jobs', Icon: BriefcaseIcon },
-        ],
-      },
-      SYSTEM,
-    ],
+    groups: [WORK, SYSTEM],
   },
 };
 
@@ -103,18 +91,18 @@ export const PLATFORM_IDS: PlatformId[] = ['operations', 'field'];
 /**
  * What the switcher offers, office first.
  *
- * Verification is the office view (home is the Dashboard). Field is the same
+ * Verification is the office view (home is Overview). Field is the same
  * product from the truck. Both must stay listed: leaving Verification out
  * made it a one-way door after switching to Field.
  */
 export const VISIBLE_PLATFORM_IDS: PlatformId[] = ['operations', 'field'];
 
 export const PLATFORM_HOME: Record<PlatformId, string> = {
-  operations: '/verifier-library',
+  operations: '/field',
   field: '/field',
 };
 
-/** The Work Verification dashboard — logo clicks always return here. */
+/** Office home — logo clicks and sign-in land on Overview, not All videos. */
 export const DASHBOARD_HOME = PLATFORM_HOME.operations;
 
 /**
