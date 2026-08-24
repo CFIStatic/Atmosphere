@@ -75,7 +75,9 @@ export function LoginPage() {
     return <Navigate to={qs ? `/signup?${qs}` : '/signup'} replace />;
   }
 
-  if (loading) {
+  const switchAccount = searchParams.get('switch') === '1';
+
+  if (loading || (user && membershipLoading && !switchAccount)) {
     return (
       <div className="grid min-h-screen place-items-center bg-paper-100 text-brand-600">
         <SpinnerIcon className="animate-spin" width={28} height={28} />
@@ -83,9 +85,14 @@ export function LoginPage() {
     );
   }
 
-  // A leftover session must not skip this page — Sign in from the marketing
-  // site is supposed to show the form, the same way Create an organization
-  // stays on signup instead of bouncing to the last workspace.
+  // A leftover session should take the visitor into their workspace. The
+  // "already signed in" box used to sit on every /login visit — including
+  // marketing Sign in — and made people click through an extra step they
+  // already completed. ?switch=1 keeps the form for an explicit account change.
+  if (user && !switchAccount) {
+    return <Navigate to={postAuthDestination(membership, redirectTo)} replace />;
+  }
+
   const emailValid = EMAIL_RE.test(email.trim());
   const passwordValid = password.length >= 8;
   const canSubmit = emailValid && passwordValid && !submitting;
