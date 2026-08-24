@@ -16,7 +16,7 @@ import {
   shareRecipientAllowed,
   shareState,
 } from '../verifier/library.js';
-import { jobTitleForIntake } from '../verifier/intakePropose.js';
+import { displayJobFileName } from '../shared/jobFileCopy.js';
 import { shareEmail } from '../verifier/shareEmail.js';
 import { progressShareEmail } from '../verifier/progressShareEmail.js';
 import { buildMailSender } from '../campaigns/mail/index.js';
@@ -430,7 +430,7 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
       }
       jobs = ((jobRows ?? []) as any[]).map((j) => ({
         jobId: j.id as string,
-        jobName: jobTitleForIntake(j.title, addrByProperty.get(j.property_id) ?? ''),
+        jobName: displayJobFileName(j.title, addrByProperty.get(j.property_id) ?? ''),
         jobNumber: (j.job_number as number | null) ?? null,
         createdAt: (j.created_at as string | null) ?? null,
       }));

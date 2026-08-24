@@ -30,8 +30,21 @@ import {
   evidenceCustody,
   setEvidenceHold,
   deleteEvidence,
+  recordAccess,
 } from './proofOfWork.js';
 import { getJobLegalHold, releaseJobHold, setJobLegalHold } from './jobLegalHold.js';
+import {
+  JOB_FILE_TITLE_MAX,
+  JOB_FILE_TITLE_MIN,
+  normalizeJobFileTitle,
+  scopeLinesForDuplicate,
+  suggestedDuplicateTitle,
+} from '../shared/jobFileCopy.js';
+import {
+  intakeWriteError,
+  isMemoryLedgerError,
+  repairMemoryJobFk,
+} from '../lib/memoryLedger.js';
 
 /**
  * The shared job record.
@@ -273,6 +286,254 @@ sharedJobsRouter.get('/shared/:jobId', async (req: Request, res: Response, next:
     next(err);
   }
 });
+
+const jobTitleSchema = z.object({
+  title: z
+    .string({ required_error: 'Job name is required' })
+    .trim()
+    .min(JOB_FILE_TITLE_MIN, 'Job name is too short')
+    .max(JOB_FILE_TITLE_MAX, 'Job name is too long'),
+});
+
+/**
+ * PATCH /api/operations/shared/:jobId
+ * Change the job file's name. The stored title is what the library paints.
+ */
+sharedJobsRouter.patch('/shared/:jobId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { orgId, userId, supabase } = await requireOrgContext(req);
+    const { title } = jobTitleSchema.parse(req.body ?? {});
+    const nextTitle = normalizeJobFileTitle(title);
+
+    const { data, error } = await supabase
+      .from('crm_jobs')
+      .update({ title: nextTitle })
+      .eq('org_id', orgId)
+      .eq('id', req.params.jobId)
+      .select('id, job_number, title, status, claim_number')
+      .maybeSingle();
+    if (error) throw new HttpError(400, error.message, 'rename_failed');
+    if (!data) throw new HttpError(404, 'No such job.', 'job_not_found');
+
+    await recordAccess(supabase, {
+      orgId,
+      jobId: data.id,
+      action: 'uploaded',
+      actorId: userId,
+      actorLabel: 'Office',
+      detail: `Job file renamed to ${data.title}`,
+    }).catch(() => undefined);
+
+    res.json({
+      job: {
+        id: data.id,
+        jobNumber: data.job_number ?? null,
+        title: data.title,
+        status: data.status ?? null,
+        claimNumber: data.claim_number ?? null,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const duplicateSchema = z.object({
+  title: z
+    .string()
+    .trim()
+    .min(JOB_FILE_TITLE_MIN, 'Job name is too short')
+    .max(JOB_FILE_TITLE_MAX, 'Job name is too long')
+    .optional(),
+});
+
+async function insertCopiedJob(writer: any, row: Record<string, unknown>) {
+  await repairMemoryJobFk();
+  const attempt = () => writer.from('crm_jobs').insert(row).select('id, title, job_number, status').single();
+  const first = await attempt();
+  if (!first.error && first.data) return first.data;
+  if (isMemoryLedgerError(first.error?.message)) {
+    await repairMemoryJobFk();
+    const retry = await attempt();
+    if (!retry.error && retry.data) return retry.data;
+    throw intakeWriteError(retry.error ?? first.error, 'Could not duplicate the job file.', 'job_failed');
+  }
+  throw intakeWriteError(first.error, 'Could not duplicate the job file.', 'job_failed');
+}
+
+/**
+ * POST /api/operations/shared/:jobId/duplicate
+ * A new job file with the same site, brief, and scope. Clips, parties,
+ * messages, and legal holds stay on the original.
+ */
+sharedJobsRouter.post(
+  '/shared/:jobId/duplicate',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { orgId, userId, supabase } = await requireOrgContext(req);
+      const input = duplicateSchema.parse(req.body ?? {});
+      const writer = createAdminClient() ?? supabase;
+
+      const { data: source, error: sourceError } = await supabase
+        .from('crm_jobs')
+        .select(
+          'id, title, status, claim_number, policy_number, work_type, description, property_id',
+        )
+        .eq('org_id', orgId)
+        .eq('id', req.params.jobId)
+        .maybeSingle();
+      if (sourceError) throw new HttpError(500, sourceError.message, 'job_read_failed');
+      if (!source) throw new HttpError(404, 'No such job.', 'job_not_found');
+
+      const record = await loadRecord(supabase, orgId, source.id);
+      const currentRevision = record.briefs[0]?.revision ?? null;
+      const nextTitle = normalizeJobFileTitle(
+        input.title ?? suggestedDuplicateTitle(String(source.title ?? 'Job')),
+      );
+
+      let propertyId: string | null = null;
+      if (source.property_id) {
+        const { data: property, error: propertyReadError } = await writer
+          .from('crm_properties')
+          .select(
+            'address_line1, address_line2, city, region, postal_code, country, latitude, longitude, label, property_type, year_built, square_feet, access_notes',
+          )
+          .eq('id', source.property_id)
+          .maybeSingle();
+        if (propertyReadError) {
+          console.warn('[shared] property read for duplicate failed:', propertyReadError.message);
+        } else if (property?.address_line1) {
+          const { data: copiedProperty, error: propertyError } = await writer
+            .from('crm_properties')
+            .insert({
+              org_id: orgId,
+              address_line1: property.address_line1,
+              address_line2: property.address_line2 ?? null,
+              city: property.city ?? null,
+              region: property.region ?? null,
+              postal_code: property.postal_code ?? null,
+              country: property.country ?? 'US',
+              latitude: property.latitude ?? null,
+              longitude: property.longitude ?? null,
+              label: property.label ?? null,
+              property_type: property.property_type ?? null,
+              year_built: property.year_built ?? null,
+              square_feet: property.square_feet ?? null,
+              access_notes: property.access_notes ?? null,
+              created_by: userId,
+            })
+            .select('id')
+            .single();
+          if (propertyError || !copiedProperty) {
+            throw intakeWriteError(propertyError, 'Could not copy the address.', 'property_failed');
+          }
+          propertyId = copiedProperty.id as string;
+        }
+      }
+
+      const job = await insertCopiedJob(writer, {
+        org_id: orgId,
+        title: nextTitle,
+        work_type: source.work_type || 'mitigation',
+        property_id: propertyId,
+        claim_number: source.claim_number ?? null,
+        policy_number: source.policy_number ?? null,
+        description: source.description ?? null,
+        status: 'scheduled',
+        created_by: userId,
+      });
+
+      const { error: intakeError } = await writer.from('job_intake').insert({
+        job_id: job.id,
+        org_id: orgId,
+        source: 'manual',
+        source_detail: {
+          enteredFrom: 'duplicate',
+          sourceJobId: source.id,
+        },
+        entered_by: userId,
+      });
+      if (intakeError) {
+        console.warn('[shared] job_intake insert on duplicate failed:', intakeError.message);
+      }
+
+      const latestBrief = record.briefs[0] ?? null;
+      const { data: brief, error: briefError } = await writer
+        .from('job_briefs')
+        .insert({
+          org_id: orgId,
+          job_id: job.id,
+          revision: 0,
+          facts: latestBrief?.facts ?? {},
+          note: latestBrief?.note ?? null,
+          created_by: userId,
+        })
+        .select('id, revision')
+        .single();
+      if (briefError || !brief) {
+        throw intakeWriteError(briefError, 'Could not copy the brief.', 'brief_failed');
+      }
+      const revision = (brief as any).revision ?? 1;
+
+      const scopeLines = scopeLinesForDuplicate(record.scope, currentRevision);
+      if (scopeLines.length) {
+        const inserted = await writer
+          .from('job_scope_items')
+          .insert(
+            scopeLines.map((line) => ({
+              org_id: orgId,
+              job_id: job.id,
+              title: line.title,
+              state: line.state,
+              detail: line.detail,
+              reason: line.reason,
+              amount: Number.isFinite(line.amount as number) ? line.amount : null,
+              revision,
+              created_by: userId,
+            })),
+          )
+          .select('id');
+        if (inserted.error) {
+          throw intakeWriteError(inserted.error, 'Could not copy scope lines.', 'scope_failed');
+        }
+      }
+
+      const summary = {
+        jobId: job.id as string,
+        jobNumber: job.job_number ?? null,
+        title: job.title as string,
+        status: (job.status as string) ?? 'scheduled',
+        parties: 0,
+        currentRevision: revision,
+        behind: 0,
+        awaiting: 0,
+        exclusions: scopeLines.filter((s) => s.state === 'excluded').length,
+      };
+
+      await recordAccess(supabase, {
+        orgId,
+        jobId: job.id,
+        action: 'uploaded',
+        actorId: userId,
+        actorLabel: 'Office',
+        detail: `Duplicated from ${source.title} — ${scopeLines.length} scope lines, brief r${revision}`,
+      }).catch(() => undefined);
+
+      res.status(201).json({
+        job: {
+          id: job.id,
+          title: job.title,
+          jobNumber: job.job_number ?? null,
+        },
+        briefRevision: revision,
+        scopeSaved: scopeLines.length,
+        jobFile: summary,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 const partySchema = z.object({
   company: z.string().trim().min(1).max(160),

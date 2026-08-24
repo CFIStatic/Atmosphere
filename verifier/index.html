@@ -566,6 +566,7 @@
 
   .sheet-narrow { width: min(520px, 100%); height: auto; max-height: min(88vh, 720px); }
   .jf-tabs { display: flex; gap: 4px; padding: 10px 16px 0; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .jf-tabs[hidden] { display: none; }
   .jf-tabs button {
     border: 0; background: none; padding: 8px 10px; font: inherit; font-size: 13px; font-weight: 600;
     color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
@@ -984,6 +985,14 @@
   </button>
 </div>
 <div class="rowmenu" id="jobmenu" role="menu" aria-label="Job file actions" hidden>
+  <button role="menuitem" data-job-act="rename">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+    Rename
+  </button>
+  <button role="menuitem" data-job-act="duplicate">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M4 16V5.5A1.5 1.5 0 0 1 5.5 4H16"/></svg>
+    Duplicate
+  </button>
   <button role="menuitem" data-job-act="share">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M12 4v12"/><path d="M8 8l4-4 4 4"/></svg>
     Share this job
@@ -2385,19 +2394,34 @@
     } else { window.prompt('Copy this link', text); done(); }
   }
 
+  function jobFileSheetTitle(tab) {
+    if (tab === 'invite') return 'Add people to this job';
+    if (tab === 'rename') return 'Rename this job file';
+    if (tab === 'duplicate') return 'Duplicate this job file';
+    return 'Share this job';
+  }
+
+  function suggestedDuplicateTitle(name) {
+    var base = String(name || 'Job').trim() || 'Job';
+    if (/^copy of /i.test(base)) return base.slice(0, 200);
+    return ('Copy of ' + base).slice(0, 200);
+  }
+
   function openJobFileSheet(jobKey, tab) {
     closeJobMenu();
     hydrateJobBoard(jobKey);
     jobSheet.key = jobKey;
-    jobSheet.tab = tab === 'invite' ? 'invite' : 'share';
+    jobSheet.tab = tab === 'invite' || tab === 'rename' || tab === 'duplicate' ? tab : 'share';
     jobSheet.made = null;
     jobSheet.error = null;
     jobSheet.busy = false;
     var job = JOBS[jobKey] || { name: 'Job' };
     var title = document.getElementById('jf-title');
     var meta = document.getElementById('jf-meta');
-    if (title) title.textContent = jobSheet.tab === 'invite' ? 'Add people to this job' : 'Share this job';
+    if (title) title.textContent = jobFileSheetTitle(jobSheet.tab);
     if (meta) meta.textContent = job.name + (job.number ? ' · #' + job.number : '');
+    var tabs = document.querySelector('#jobfile-sheet .jf-tabs');
+    if (tabs) tabs.hidden = jobSheet.tab === 'rename' || jobSheet.tab === 'duplicate';
     document.querySelectorAll('#jobfile-sheet [data-jf-tab]').forEach(function (btn) {
       btn.setAttribute('aria-selected', btn.getAttribute('data-jf-tab') === jobSheet.tab ? 'true' : 'false');
     });
@@ -2416,8 +2440,35 @@
     var body = document.getElementById('jf-body');
     if (!body || !jobSheet.key) return;
     var key = jobSheet.key;
+    var job = JOBS[key] || { name: 'Job' };
     var b = JOB_BOARD[key];
     var live = canOpenJobRecord(key);
+    if (jobSheet.tab === 'rename' || jobSheet.tab === 'duplicate') {
+      var suggested = jobSheet.tab === 'duplicate' ? suggestedDuplicateTitle(job.name) : job.name;
+      body.innerHTML =
+        '<p class="jf-note">' +
+          (jobSheet.tab === 'rename'
+            ? 'The name is what shows on the dashboard and in this library.'
+            : 'Creates a new job file with the same site, brief, and scope. Footage and people stay on the original.') +
+        '</p>' +
+        (jobSheet.error ? '<p class="jf-note" style="color:var(--fail)">' + esc(jobSheet.error) + '</p>' : '') +
+        '<form id="jf-name-form">' +
+          '<label><span>Name</span><input name="title" required minlength="2" maxlength="200" value="' + esc(suggested) + '" /></label>' +
+          '<button type="submit" class="jf-submit"' + (jobSheet.busy ? ' disabled' : '') + '>' +
+            (jobSheet.busy ? 'Working…' : (jobSheet.tab === 'rename' ? 'Save name' : 'Create copy')) +
+          '</button>' +
+        '</form>';
+      var nameForm = document.getElementById('jf-name-form');
+      if (nameForm) {
+        nameForm.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          submitJobFileName(nameForm);
+        });
+        var input = nameForm.querySelector('input[name="title"]');
+        if (input) { input.focus(); input.select(); }
+      }
+      return;
+    }
     if (jobSheet.tab === 'invite') {
       body.innerHTML =
         '<p class="jf-note">Add a trade, homeowner, or adjuster to this job file. Trades get a capture link; homeowners and other parties can be sent a read-only progress link from Send a link.</p>' +
@@ -2485,6 +2536,89 @@
         (path ? '<button type="button" class="jf-copy" data-copy="' + esc(full) + '">Copy link</button>' : '') +
         '</li>';
     }).join('') + '</ul>';
+  }
+
+  function applyRenamedJob(key, title) {
+    if (!JOBS[key]) JOBS[key] = { key: key, name: title, number: null, address: '' };
+    JOBS[key].name = title;
+    render();
+  }
+
+  function applyDuplicatedJob(payload) {
+    var created = payload && (payload.jobFile || payload.job);
+    if (!created) return;
+    var id = created.jobId || created.id;
+    var name = created.title || created.jobName || 'Job';
+    if (!id) return;
+    JOBS[id] = {
+      key: id,
+      name: name,
+      number: created.jobNumber != null ? created.jobNumber : null,
+      address: ''
+    };
+    render();
+    return id;
+  }
+
+  function submitJobFileName(form) {
+    var key = jobSheet.key;
+    var title = (form.title.value || '').trim();
+    if (title.length < 2) {
+      jobSheet.error = 'Enter a name for this job file.';
+      paintJobFileSheet();
+      return;
+    }
+    jobSheet.busy = true;
+    jobSheet.error = null;
+    paintJobFileSheet();
+    if (!canOpenJobRecord(key)) {
+      if (jobSheet.tab === 'rename') {
+        applyRenamedJob(key, title);
+        jobSheet.busy = false;
+        closeJobFileSheet();
+        toast('Renamed to ' + title + '.');
+        return;
+      }
+      var demoId = 'copy-' + Date.now();
+      JOBS[demoId] = { key: demoId, name: title, number: null, address: '' };
+      jobSheet.busy = false;
+      closeJobFileSheet();
+      render();
+      toast('Duplicated as ' + title + '.');
+      return;
+    }
+    var renaming = jobSheet.tab === 'rename';
+    var url = '/api/operations/shared/' + encodeURIComponent(key) + (renaming ? '' : '/duplicate');
+    fetch(url, {
+      method: renaming ? 'PATCH' : 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: title })
+    }).then(function (r) {
+      return r.json().then(function (body) { return { ok: r.ok, body: body }; });
+    }).then(function (res) {
+      jobSheet.busy = false;
+      if (!res.ok) {
+        jobSheet.error = (res.body && (res.body.error || res.body.message)) || (renaming ? 'Could not rename that job file.' : 'Could not duplicate that job file.');
+        paintJobFileSheet();
+        return;
+      }
+      if (renaming) {
+        var next = (res.body.job && res.body.job.title) || title;
+        applyRenamedJob(key, next);
+        closeJobFileSheet();
+        toast('Renamed to ' + next + '.');
+        return;
+      }
+      var newId = applyDuplicatedJob(res.body);
+      closeJobFileSheet();
+      toast('Duplicated as ' + title + '.');
+      if (newId) openJobRecord(newId);
+    }).catch(function (err) {
+      jobSheet.busy = false;
+      jobSheet.error = err && err.message ? err.message : (renaming ? 'Could not rename that job file.' : 'Could not duplicate that job file.');
+      paintJobFileSheet();
+    });
   }
 
   function submitShare(form) {
@@ -2613,7 +2747,9 @@
         jobSheet.made = null;
         jobSheet.error = null;
         var title = document.getElementById('jf-title');
-        if (title) title.textContent = jobSheet.tab === 'invite' ? 'Add people to this job' : 'Share this job';
+        if (title) title.textContent = jobFileSheetTitle(jobSheet.tab);
+        var tabs = document.querySelector('#jobfile-sheet .jf-tabs');
+        if (tabs) tabs.hidden = false;
         document.querySelectorAll('#jobfile-sheet [data-jf-tab]').forEach(function (t) {
           t.setAttribute('aria-selected', t.getAttribute('data-jf-tab') === jobSheet.tab ? 'true' : 'false');
         });

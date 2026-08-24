@@ -2902,6 +2902,25 @@ export const api = {
   sharedJob: (jobId: string) =>
     request<SharedJobRecord>(`/api/operations/shared/${jobId}`, { method: 'GET' }),
 
+  renameJobFile: (jobId: string, title: string) =>
+    request<{
+      job: { id: string; jobNumber: number | null; title: string; status: string | null; claimNumber: string | null };
+    }>(`/api/operations/shared/${jobId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title }),
+    }),
+
+  duplicateJobFile: (jobId: string, title?: string) =>
+    request<{
+      job: { id: string; title: string; jobNumber: number | null };
+      briefRevision: number;
+      scopeSaved: number;
+      jobFile: SharedJobSummary;
+    }>(`/api/operations/shared/${jobId}/duplicate`, {
+      method: 'POST',
+      body: JSON.stringify(title ? { title } : {}),
+    }),
+
   addJobParty: (
     jobId: string,
     input: { company: string; trade?: string | null; contactName?: string | null; email?: string | null; role?: string },
