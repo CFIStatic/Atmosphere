@@ -157,7 +157,10 @@
   }
 
   * { box-sizing: border-box; }
-  html, body { height: 100%; }
+  html, body {
+    height: 100%;
+    overflow: hidden;
+  }
   body {
     margin: 0;
     font-family: var(--sans);
@@ -169,11 +172,18 @@
   button { font: inherit; color: inherit; }
 
   /* ---------- chrome ---------- */
+  /* Mounted, opaque search bar. It is a grid sibling of the list, not a
+     sticky overlay, so footage never scrolls through it and the bar itself
+     does not travel with the table. */
   .topbar {
     display: flex; align-items: center; gap: 18px;
     height: 56px; padding: 0 16px;
     background: var(--panel); color: var(--ink);
     border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 30;
+    flex-shrink: 0;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
   /* The wordmark, identical to the console's and the site's: four bars of ink
      at rising opacity over one terracotta base. The same asset works on paper
@@ -255,8 +265,9 @@
   .app-frame {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    height: 100%;
     min-height: 0;
+    overflow: hidden;
   }
   .app-body {
     display: flex;
@@ -305,6 +316,8 @@
     flex: 1;
     min-height: 0;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
   .screen-dashboard[hidden] { display: none !important; }
   .rail {
@@ -434,14 +447,23 @@
   .facet input { accent-color: var(--accent); margin: 0; }
   .facet .n { margin-left: auto; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
 
-  .main { overflow-y: auto; }
+  .main {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
 
   /* ---------- toolbar ---------- */
+  /* Sits above the scrolling table, same as the search bar: opaque and
+     mounted, so row stills cannot show through it on the way past. */
   .toolbar {
-    position: sticky; top: 0; z-index: 5;
+    position: relative; z-index: 5;
     display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
     padding: 12px 18px; background: var(--bg);
     border-bottom: 1px solid var(--line);
+    flex-shrink: 0;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
   .toolbar h1 { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: -0.01em; }
   .toolbar .result { font-size: 12.5px; color: var(--muted); }
@@ -457,7 +479,7 @@
   .tablewrap { padding: 0 18px 60px; }
   table { width: 100%; border-collapse: collapse; }
   thead th {
-    position: sticky; top: 53px; z-index: 4; background: var(--bg);
+    position: sticky; top: 0; z-index: 4; background: var(--bg);
     text-align: left; font-size: 12px; letter-spacing: 0;
     text-transform: none;
     color: var(--muted); font-weight: 600; padding: 0; white-space: nowrap;
@@ -928,12 +950,11 @@
 <div class="shell" id="shell">
   <div class="shell-main">
   <div class="screen screen-dashboard" id="screen-dashboard">
-  <main class="main">
     <div class="toolbar">
       <h1 id="viewtitle">All videos</h1>
       <span class="result" id="resultcount"></span>
     </div>
-
+  <main class="main">
     <div class="tablewrap">
       <table id="clip-table">
         <thead>
