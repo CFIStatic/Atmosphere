@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   parseNarration,
   parseObservation,
+  parseWatchObservation,
   stepsForNarration,
   type StageStep,
 } from '../src/shared/liveNarrator.js';
@@ -35,6 +36,13 @@ test('a live observation parses, with the stage clamped to the list', () => {
 
   const negative = parseObservation('{"stage": -5, "note": "Something.", "confidence": 0.2}', STEPS.length);
   assert.equal(negative?.stageIndex, -1);
+});
+
+test('a watch observation is a note about the playhead, not a stage', () => {
+  const good = parseWatchObservation('{"note": "Tarp coming off the north slope.", "confidence": 0.8}');
+  assert.deepEqual(good, { note: 'Tarp coming off the north slope.', confidence: 0.8 });
+  assert.equal(parseWatchObservation('{"confidence": 0.9}'), null, 'no note, no watch beat');
+  assert.equal(parseWatchObservation('the tarp is gone'), null);
 });
 
 test('confidence is clamped and garbage is refused whole', () => {

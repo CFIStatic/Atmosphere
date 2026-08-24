@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { longFormBudget, planSparseTimestamps } from '../src/shared/sparseExtract.js';
+import { writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { extractJpegAtSeconds, longFormBudget, planSparseTimestamps } from '../src/shared/sparseExtract.js';
 import { segmentFrames } from '../src/shared/longAnalyst.js';
 
 /**
@@ -53,6 +56,46 @@ test('a diversity-kept day (≤180 distinct frames) windows into a bounded read'
 test('zero or negative duration yields no timestamps', () => {
   assert.deepEqual(planSparseTimestamps(0, { intervalSeconds: 600, maxFrames: 180 }), []);
   assert.deepEqual(planSparseTimestamps(-10, { intervalSeconds: 600, maxFrames: 180 }), []);
+});
+
+test('a playhead grab seeks to the requested second and returns the JPEG', async () => {
+  const out = join(tmpdir(), `atm-watch-test-${Date.now()}.jpg`);
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+  const runner = async (_bin: string, args: string[]) => {
+    assert.ok(args.includes('-ss'));
+    assert.ok(args.includes('3.5'));
+    assert.ok(args.includes('-frames:v'));
+    const dest = args[args.length - 1];
+    await writeFile(dest, jpeg);
+    return { stdout: '', stderr: '', code: 0 };
+  };
+  const grabbed = await extractJpegAtSeconds({
+    url: 'https://example.test/clip.mp4',
+    atSeconds: 3.5,
+    runner,
+  });
+  assert.ok(grabbed);
+  assert.deepEqual(grabbed, jpeg);
+  await rm(out, { force: true }).catch(() => undefined);
+});
+
+test('a playhead grab that fails at 0:00 retries a hair later', async () => {
+  const seeks: string[] = [];
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+  const runner = async (_bin: string, args: string[]) => {
+    const seek = args[args.indexOf('-ss') + 1];
+    seeks.push(seek);
+    if (seek === '0') return { stdout: '', stderr: 'no keyframe', code: 1 };
+    await writeFile(args[args.length - 1], jpeg);
+    return { stdout: '', stderr: '', code: 0 };
+  };
+  const grabbed = await extractJpegAtSeconds({
+    url: 'https://example.test/clip.mp4',
+    atSeconds: 0,
+    runner,
+  });
+  assert.ok(grabbed);
+  assert.deepEqual(seeks, ['0', '0.4']);
 });
 
 test('short clips still get at least one sparse timestamp under a 60s preferred interval', () => {
