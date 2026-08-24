@@ -1500,13 +1500,6 @@
     })
   ];
 
-  // Snapshot the drawn product-testing clips so a live Jettx LLC session can
-  // keep them on the Dashboard next to Field Capture uploads. applyOrgLibrary
-  // replaces EVIDENCE/JOBS with the org's real rows.
-  var DEMO_EVIDENCE = EVIDENCE.slice();
-  var DEMO_JOBS = {};
-  Object.keys(JOBS).forEach(function (k) { DEMO_JOBS[k] = JOBS[k]; });
-
   // The before half of each analysed pair is not separately analysed; it is read
   // as one half of the day. Rows say so rather than reading as "not analysed".
 
@@ -3966,43 +3959,10 @@
     EVIDENCE = (payload.items || []).map(function (raw) { return mapRemoteItem(raw, raw.jobId); });
   }
 
-  function orgNameFromMembership(payload) {
-    var membership = payload && payload.membership;
-    var org = membership && membership.org;
-    return org && org.name ? String(org.name) : '';
-  }
-
-  function isJettxLlcAccount(name) {
-    return String(name || '').replace(/\s+/g, ' ').trim().toLowerCase() === 'jettx llc';
-  }
-
-  /**
-   * Jettx LLC is the in-house account. Put the drawn product-testing clips on
-   * that Dashboard so the office can open the same rows the ?demo=1 walkthrough
-   * uses, without hiding live Field Capture uploads.
-   */
-  function mergeDemoClipsForJettx() {
-    Object.keys(DEMO_JOBS).forEach(function (k) {
-      if (!JOBS[k]) JOBS[k] = DEMO_JOBS[k];
-    });
-    var seen = {};
-    EVIDENCE.forEach(function (e) { seen[e.id] = true; });
-    DEMO_EVIDENCE.forEach(function (e) {
-      if (!seen[e.id]) EVIDENCE.push(e);
-    });
-  }
-
   function loadOrgLibrary() {
     var wantDemo = new URLSearchParams(location.search).get('demo') === '1';
-    return Promise.all([
-      fetch('/api/evidence-portal/library', { credentials: 'include' }),
-      fetch('/api/org/me', { credentials: 'include' })
-        .then(function (r) { return r.ok ? r.json() : null; })
-        .catch(function () { return null; })
-    ])
-      .then(function (parts) {
-        var r = parts[0];
-        var membership = parts[1];
+    return fetch('/api/evidence-portal/library', { credentials: 'include' })
+      .then(function (r) {
         if (r.status === 401 || r.status === 403) {
           if (wantDemo) { boot(); return null; }
           // Signed-out library: same empty chrome as an org with no uploads —
@@ -4014,13 +3974,12 @@
           return null;
         }
         if (!r.ok) throw new Error('no library');
-        return r.json().then(function (payload) {
-          applyOrgLibrary(payload);
-          if (isJettxLlcAccount(orgNameFromMembership(membership))) {
-            mergeDemoClipsForJettx();
-          }
-          boot();
-        });
+        return r.json();
+      })
+      .then(function (payload) {
+        if (!payload) return;
+        applyOrgLibrary(payload);
+        boot();
       })
       .catch(function () {
         if (wantDemo) boot();

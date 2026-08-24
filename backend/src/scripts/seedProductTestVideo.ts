@@ -1,14 +1,16 @@
 /**
- * File a synthetic product-testing video on an existing organization.
+ * File synthetic product-testing videos on an existing organization.
  *
  *   cd backend
  *   SUPABASE_SERVICE_ROLE_KEY=… npm run seed:test-video
+ *   SUPABASE_SERVICE_ROLE_KEY=… npm run seed:test-video -- --catalog demo
  *
- * Defaults match the Cursor 1 / Jettx LLC product-testing clip: a real 60s
- * MP4 uploaded to `job-proofs`, with a job_proofs row titled "Cursor 1".
+ * Defaults file one 60s "Cursor 1" clip on Jettx LLC. `--catalog demo` files
+ * that clip plus the Cedar Ridge / Meridian / Camden walkthrough set as real
+ * job_proofs rows with playable MP4s in `job-proofs`.
  *
- * Re-running replaces the same party's same-day before clip (the unique
- * party + work_date + phase key) rather than stacking duplicates.
+ * Re-running upserts the same party + work_date + phase key rather than
+ * stacking duplicates.
  */
 
 import { createHash } from 'node:crypto';
@@ -33,7 +35,288 @@ export interface SeedVideoOptions {
   purpose: string;
   durationSeconds: number;
   workDate: string;
+  catalog: 'demo' | null;
 }
+
+export type SeedProofPhase = 'before' | 'after';
+export type SeedProofCategory = 'before' | 'after' | 'condition' | 'issue' | 'completion' | 'other';
+
+export interface SeedClipSpec {
+  jobTitle: string;
+  jobPurpose: string;
+  workType: 'mitigation' | 'construction';
+  address: {
+    label: string;
+    line1: string;
+    city: string;
+    region: string;
+    postal: string;
+    lat: number;
+    lon: number;
+  };
+  company: string;
+  contactName: string;
+  trade: string;
+  title: string;
+  purpose: string;
+  phase: SeedProofPhase;
+  category: SeedProofCategory;
+  workDate: string;
+  capturedAt: string;
+  durationSeconds: number;
+  color: string;
+  legalHold?: boolean;
+  holdReason?: string;
+  lat?: number | null;
+  lon?: number | null;
+  accuracyM?: number | null;
+}
+
+const CEDAR = {
+  jobTitle: 'Cedar Ridge — storm damage, roof tarp + rebuild',
+  jobPurpose: 'Storm damage: tarp the north slope, strip to decking, replace rot, underlayment.',
+  workType: 'construction' as const,
+  address: {
+    label: 'Cedar Ridge',
+    line1: '4118 Cedar Ridge Dr',
+    city: 'Austin',
+    region: 'TX',
+    postal: '78731',
+    lat: 30.4413,
+    lon: -97.7218,
+  },
+};
+
+const MERIDIAN = {
+  jobTitle: 'Meridian Ave — water loss, Class 3',
+  jobPurpose: 'Category 2 water loss. Dry-out, flood cut, and cavity readings before close-up.',
+  workType: 'mitigation' as const,
+  address: {
+    label: 'Meridian Ave',
+    line1: '1841 Meridian Ave',
+    city: 'Austin',
+    region: 'TX',
+    postal: '78704',
+    lat: 30.2984,
+    lon: -97.7431,
+  },
+};
+
+const CAMDEN = {
+  jobTitle: 'Camden Court — HOA clubhouse rebuild',
+  jobPurpose: 'Hang board in the front room, corridor, and back office after the water loss.',
+  workType: 'construction' as const,
+  address: {
+    label: 'Camden Court',
+    line1: '900 Camden Ct',
+    city: 'Round Rock',
+    region: 'TX',
+    postal: '78681',
+    lat: 30.5083,
+    lon: -97.6789,
+  },
+};
+
+/** Real rows written onto Jettx LLC — same jobs the dashboard walkthrough uses. */
+export const JETTX_DEMO_CLIPS: SeedClipSpec[] = [
+  {
+    jobTitle: 'Cursor 1',
+    jobPurpose: 'See how the product works — product testing.',
+    workType: 'mitigation',
+    address: {
+      label: 'Product testing',
+      line1: '1 Product Testing Lane',
+      city: 'Austin',
+      region: 'TX',
+      postal: '78701',
+      lat: 30.2672,
+      lon: -97.7431,
+    },
+    company: 'Field Capture',
+    contactName: 'Product Testing',
+    trade: 'field_capture',
+    title: 'Cursor 1',
+    purpose: 'See how the product works — product testing.',
+    phase: 'before',
+    category: 'other',
+    workDate: '2026-08-22',
+    capturedAt: '2026-08-22T17:00:00.000Z',
+    durationSeconds: 60,
+    color: '0x142033',
+  },
+  {
+    ...CEDAR,
+    company: 'Delgado Roofing',
+    contactName: 'Hector Delgado',
+    trade: 'roofing',
+    title: 'After — Aug 05',
+    purpose: 'North slope stripped, tarp gone, underlayment on two thirds of the slope.',
+    phase: 'after',
+    category: 'after',
+    workDate: '2026-08-05',
+    capturedAt: '2026-08-05T20:48:00.000Z',
+    durationSeconds: 24,
+    color: '0x1a3028',
+    lat: 30.4413,
+    lon: -97.7218,
+    accuracyM: 6,
+  },
+  {
+    ...CEDAR,
+    company: 'Delgado Roofing',
+    contactName: 'Hector Delgado',
+    trade: 'roofing',
+    title: 'Workday — Aug 07',
+    purpose: 'Tear-off, six new decking sheets, underlayment through the afternoon.',
+    phase: 'after',
+    category: 'after',
+    workDate: '2026-08-07',
+    capturedAt: '2026-08-07T14:11:00.000Z',
+    durationSeconds: 24,
+    color: '0x243018',
+    lat: 30.4413,
+    lon: -97.7218,
+    accuracyM: 7,
+  },
+  {
+    ...CEDAR,
+    company: 'Delgado Roofing',
+    contactName: 'Hector Delgado',
+    trade: 'roofing',
+    title: 'Before — Aug 05',
+    purpose: 'Morning walk of the north slope before the tarp comes off.',
+    phase: 'before',
+    category: 'before',
+    workDate: '2026-08-05',
+    capturedAt: '2026-08-05T07:12:00.000Z',
+    durationSeconds: 24,
+    color: '0x2a2418',
+    lat: 30.4413,
+    lon: -97.7219,
+    accuracyM: 8,
+  },
+  {
+    ...CEDAR,
+    company: 'Delgado Roofing',
+    contactName: 'Hector Delgado',
+    trade: 'roofing',
+    title: 'Before — Aug 04 (off site)',
+    purpose: 'Filmed 2.14 miles from the job — a different roof.',
+    phase: 'before',
+    category: 'issue',
+    workDate: '2026-08-04',
+    capturedAt: '2026-08-04T07:31:00.000Z',
+    durationSeconds: 24,
+    color: '0x331818',
+    lat: 30.4692,
+    lon: -97.755,
+    accuracyM: 11,
+  },
+  {
+    ...CEDAR,
+    company: 'Delgado Roofing',
+    contactName: 'Hector Delgado',
+    trade: 'roofing',
+    title: 'After — Aug 01',
+    purpose: 'Emergency tarp across the north and west slopes.',
+    phase: 'after',
+    category: 'after',
+    workDate: '2026-08-01',
+    capturedAt: '2026-08-01T18:20:00.000Z',
+    durationSeconds: 24,
+    color: '0x182030',
+    lat: null,
+    lon: null,
+    accuracyM: null,
+  },
+  {
+    ...CEDAR,
+    company: 'Brightline Electric',
+    contactName: 'Marisol Vega',
+    trade: 'electrical',
+    title: 'Before — Aug 06',
+    purpose: 'Service walk before electrical. No after filed for this day.',
+    phase: 'before',
+    category: 'before',
+    workDate: '2026-08-06',
+    capturedAt: '2026-08-06T08:02:00.000Z',
+    durationSeconds: 24,
+    color: '0x201828',
+    lat: 30.4414,
+    lon: -97.7217,
+    accuracyM: 5,
+  },
+  {
+    ...MERIDIAN,
+    company: 'Coastal Drying LLC',
+    contactName: 'Andre Boone',
+    trade: 'restoration',
+    title: 'After — Aug 03',
+    purpose: 'Six air movers and one dehumidifier in the same positions as the morning.',
+    phase: 'after',
+    category: 'after',
+    workDate: '2026-08-03',
+    capturedAt: '2026-08-03T17:20:00.000Z',
+    durationSeconds: 24,
+    color: '0x183040',
+    lat: 30.2984,
+    lon: -97.7431,
+    accuracyM: 7,
+  },
+  {
+    ...MERIDIAN,
+    company: 'Coastal Drying LLC',
+    contactName: 'Andre Boone',
+    trade: 'restoration',
+    title: 'Pre-conceal — Aug 02',
+    purpose: 'Cavities open, flood cut at 24 in. Legal hold — carrier dispute CLM-88412.',
+    phase: 'after',
+    category: 'condition',
+    workDate: '2026-08-02',
+    capturedAt: '2026-08-02T15:44:00.000Z',
+    durationSeconds: 24,
+    color: '0x102838',
+    legalHold: true,
+    holdReason: 'Carrier dispute over the extent of the flood cut — CLM-88412.',
+    lat: 30.2984,
+    lon: -97.743,
+    accuracyM: 6,
+  },
+  {
+    ...CAMDEN,
+    company: 'Vantage Drywall',
+    contactName: 'Luis Marte',
+    trade: 'drywall',
+    title: 'After — Jul 30',
+    purpose: 'Board hung; queued for analysis against the three rooms in scope.',
+    phase: 'after',
+    category: 'after',
+    workDate: '2026-07-30',
+    capturedAt: '2026-07-30T16:55:00.000Z',
+    durationSeconds: 24,
+    color: '0x283018',
+    lat: 30.5083,
+    lon: -97.6789,
+    accuracyM: 9,
+  },
+  {
+    ...CAMDEN,
+    company: 'Vantage Drywall',
+    contactName: 'Luis Marte',
+    trade: 'drywall',
+    title: 'After — Jul 29',
+    purpose: 'Short pan of one room. Board on a single wall; two rooms never shown.',
+    phase: 'after',
+    category: 'after',
+    workDate: '2026-07-29',
+    capturedAt: '2026-07-29T17:41:00.000Z',
+    durationSeconds: 24,
+    color: '0x302818',
+    lat: 30.5083,
+    lon: -97.6791,
+    accuracyM: 14,
+  },
+];
 
 export function parseSeedVideoArgs(
   argv: string[],
@@ -52,6 +335,10 @@ export function parseSeedVideoArgs(
   if (!/^\d{4}-\d{2}-\d{2}$/.test(workDate)) {
     throw new Error('--work-date must be YYYY-MM-DD');
   }
+  const catalogRaw = get('--catalog', '');
+  if (catalogRaw && catalogRaw !== 'demo') {
+    throw new Error('--catalog must be demo when set');
+  }
   return {
     orgName: get('--org', 'Jettx LLC'),
     title: get('--title', 'Cursor 1'),
@@ -61,7 +348,39 @@ export function parseSeedVideoArgs(
     ),
     durationSeconds: duration,
     workDate,
+    catalog: catalogRaw === 'demo' ? 'demo' : null,
   };
+}
+
+export function clipsForSeed(opts: SeedVideoOptions): SeedClipSpec[] {
+  if (opts.catalog === 'demo') return JETTX_DEMO_CLIPS;
+  return [
+    {
+      jobTitle: opts.title,
+      jobPurpose: opts.purpose,
+      workType: 'mitigation',
+      address: {
+        label: 'Product testing',
+        line1: '1 Product Testing Lane',
+        city: 'Austin',
+        region: 'TX',
+        postal: '78701',
+        lat: 30.2672,
+        lon: -97.7431,
+      },
+      company: 'Field Capture',
+      contactName: 'Product Testing',
+      trade: 'field_capture',
+      title: opts.title,
+      purpose: opts.purpose,
+      phase: 'before',
+      category: 'other',
+      workDate: opts.workDate,
+      capturedAt: `${opts.workDate}T17:00:00.000Z`,
+      durationSeconds: opts.durationSeconds,
+      color: '0x142033',
+    },
+  ];
 }
 
 function fail(message: string): never {
@@ -79,7 +398,7 @@ function escapeDrawtext(value: string): string {
 
 async function generateTestVideo(
   dest: string,
-  opts: { title: string; purpose: string; durationSeconds: number },
+  opts: { title: string; purpose: string; durationSeconds: number; color: string },
 ): Promise<void> {
   const title = escapeDrawtext(opts.title);
   const purpose = escapeDrawtext(opts.purpose.slice(0, 80));
@@ -94,7 +413,7 @@ async function generateTestVideo(
     '-f',
     'lavfi',
     '-i',
-    `color=c=0x142033:s=1280x720:d=${opts.durationSeconds}:r=30`,
+    `color=c=${opts.color}:s=1280x720:d=${opts.durationSeconds}:r=30`,
     '-f',
     'lavfi',
     '-i',
@@ -169,13 +488,13 @@ async function ensureJob(
   admin: SupabaseClient,
   orgId: string,
   userId: string | null,
-  opts: SeedVideoOptions,
+  clip: SeedClipSpec,
 ): Promise<{ id: string; title: string; jobNumber: number | null }> {
   const { data: existing } = await admin
     .from('crm_jobs')
     .select('id, title, job_number')
     .eq('org_id', orgId)
-    .eq('title', opts.title)
+    .eq('title', clip.jobTitle)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -191,11 +510,11 @@ async function ensureJob(
     .from('crm_properties')
     .insert({
       org_id: orgId,
-      label: 'Product testing',
-      address_line1: '1 Product Testing Lane',
-      city: 'Austin',
-      region: 'TX',
-      postal_code: '78701',
+      label: clip.address.label,
+      address_line1: clip.address.line1,
+      city: clip.address.city,
+      region: clip.address.region,
+      postal_code: clip.address.postal,
       created_by: userId,
     })
     .select('id')
@@ -208,9 +527,9 @@ async function ensureJob(
     .from('crm_jobs')
     .insert({
       org_id: orgId,
-      title: opts.title,
-      description: opts.purpose,
-      work_type: 'mitigation',
+      title: clip.jobTitle,
+      description: clip.jobPurpose,
+      work_type: clip.workType,
       status: 'scheduled',
       property_id: property.id,
       created_by: userId,
@@ -225,8 +544,8 @@ async function ensureJob(
     org_id: orgId,
     job_id: job.id,
     revision: 0,
-    facts: { purpose: opts.purpose },
-    note: opts.purpose,
+    facts: { purpose: clip.jobPurpose },
+    note: clip.jobPurpose,
     created_by: userId,
   });
   if (briefError) console.warn(`  brief skipped: ${briefError.message}`);
@@ -234,7 +553,7 @@ async function ensureJob(
   const { error: scopeError } = await admin.from('job_scope_items').insert({
     org_id: orgId,
     job_id: job.id,
-    title: opts.purpose.slice(0, 200),
+    title: clip.jobPurpose.slice(0, 200),
     state: 'included',
     revision: 1,
     created_by: userId,
@@ -253,12 +572,14 @@ async function ensureParty(
   orgId: string,
   jobId: string,
   userId: string | null,
+  clip: SeedClipSpec,
 ): Promise<{ id: string; company: string }> {
   const { data: existing } = await admin
     .from('job_parties')
     .select('id, company')
     .eq('org_id', orgId)
     .eq('job_id', jobId)
+    .eq('company', clip.company)
     .is('revoked_at', null)
     .order('created_at', { ascending: true })
     .limit(1)
@@ -272,9 +593,9 @@ async function ensureParty(
     .insert({
       org_id: orgId,
       job_id: jobId,
-      company: 'Field Capture',
-      trade: 'field_capture',
-      contact_name: 'Product Testing',
+      company: clip.company,
+      trade: clip.trade,
+      contact_name: clip.contactName,
       role: 'subcontractor',
       invited_at: new Date().toISOString(),
       created_by: userId,
@@ -282,40 +603,31 @@ async function ensureParty(
     .select('id, company')
     .single();
   if (error || !party) {
-    throw new Error(error?.message ?? 'Could not create the Field Capture party.');
+    throw new Error(error?.message ?? `Could not create the ${clip.company} party.`);
   }
   return { id: party.id as string, company: party.company as string };
 }
 
-async function main(): Promise<void> {
-  const opts = parseSeedVideoArgs(process.argv.slice(2));
-  const admin = createAdminClient();
-  if (!admin) {
-    fail(
-      'SUPABASE_SERVICE_ROLE_KEY is not set. This script writes into the live org and cannot run on the anon key.',
-    );
-  }
-
-  console.log(`Looking up organization "${opts.orgName}"…`);
-  const org = await findOrg(admin, opts.orgName);
-  console.log(`  ${org.name}  ${org.id}`);
-
-  const userId = await actorUserId(admin, org);
-  const job = await ensureJob(admin, org.id, userId, opts);
+async function fileClip(
+  admin: SupabaseClient,
+  org: { id: string; name: string },
+  userId: string | null,
+  clip: SeedClipSpec,
+): Promise<void> {
+  const job = await ensureJob(admin, org.id, userId, clip);
+  const party = await ensureParty(admin, org.id, job.id, userId, clip);
   console.log(`  job ${job.title}${job.jobNumber != null ? ` (#${job.jobNumber})` : ''}  ${job.id}`);
-
-  const party = await ensureParty(admin, org.id, job.id, userId);
   console.log(`  party ${party.company}  ${party.id}`);
 
-  const dir = await mkdtemp(join(tmpdir(), 'cursor1-'));
-  const videoPath = join(dir, 'cursor-1.mp4');
+  const dir = await mkdtemp(join(tmpdir(), 'jettx-seed-'));
+  const videoPath = join(dir, 'clip.mp4');
   try {
-    console.log(`Rendering ${opts.durationSeconds}s test video…`);
-    await generateTestVideo(videoPath, opts);
+    console.log(`  rendering ${clip.durationSeconds}s · ${clip.title}`);
+    await generateTestVideo(videoPath, clip);
     const bytes = await readFile(videoPath);
     const contentHash = createHash('sha256').update(bytes).digest('hex');
-    const capturedAt = new Date().toISOString();
-    const storagePath = `${org.id}/${job.id}/${party.id}/${opts.workDate}-before.mp4`;
+    const capturedAt = clip.capturedAt;
+    const storagePath = `${org.id}/${job.id}/${party.id}/${clip.workDate}-${clip.phase}.mp4`;
 
     const { error: uploadError } = await admin.storage.from(PROOF_BUCKET).upload(storagePath, bytes, {
       contentType: 'video/mp4',
@@ -327,17 +639,19 @@ async function main(): Promise<void> {
     const checks = verifyProof(
       {
         id: 'pending',
-        phase: 'before',
-        workDate: opts.workDate,
+        phase: clip.phase,
+        workDate: clip.workDate,
         capturedAt,
         receivedAt: capturedAt,
-        durationSeconds: opts.durationSeconds,
+        durationSeconds: clip.durationSeconds,
         contentHash,
-        lat: null,
-        lon: null,
-        accuracyM: null,
+        lat: clip.lat ?? null,
+        lon: clip.lon ?? null,
+        accuracyM: clip.accuracyM ?? null,
       },
-      null,
+      clip.lat != null && clip.lon != null
+        ? { lat: clip.address.lat, lon: clip.address.lon }
+        : null,
     );
 
     const { data: proof, error: proofError } = await admin
@@ -347,24 +661,29 @@ async function main(): Promise<void> {
           org_id: org.id,
           job_id: job.id,
           party_id: party.id,
-          work_date: opts.workDate,
-          phase: 'before',
-          category: 'other',
-          title: opts.title,
-          tags: ['product-testing', 'cursor'],
+          work_date: clip.workDate,
+          phase: clip.phase,
+          category: clip.category,
+          title: clip.title,
+          tags: ['product-testing', 'jettx-demo'],
           storage_path: storagePath,
           byte_size: bytes.length,
-          duration_seconds: opts.durationSeconds,
+          duration_seconds: clip.durationSeconds,
           content_hash: contentHash,
           captured_at: capturedAt,
           received_at: capturedAt,
+          lat: clip.lat ?? null,
+          lon: clip.lon ?? null,
+          accuracy_m: clip.accuracyM ?? null,
           state: 'checked',
           checks,
-          ai_summary: opts.purpose,
-          narration_text: opts.purpose,
+          ai_summary: clip.purpose,
+          narration_text: clip.purpose,
           narration_status: 'done',
           narrated_at: capturedAt,
-          labels: ['product-testing', 'cursor', 'before'],
+          labels: ['product-testing', 'jettx-demo', clip.phase],
+          legal_hold: Boolean(clip.legalHold),
+          hold_reason: clip.holdReason ?? null,
         },
         { onConflict: 'party_id,work_date,phase' },
       )
@@ -376,15 +695,15 @@ async function main(): Promise<void> {
 
     const frameAts = [
       1,
-      Math.max(1, Math.round(opts.durationSeconds / 3)),
-      Math.max(2, Math.round((opts.durationSeconds * 2) / 3)),
-      Math.max(3, opts.durationSeconds - 1),
+      Math.max(1, Math.round(clip.durationSeconds / 3)),
+      Math.max(2, Math.round((clip.durationSeconds * 2) / 3)),
+      Math.max(3, clip.durationSeconds - 1),
     ];
-    for (const at of frameAts) {
+    for (const at of [...new Set(frameAts)]) {
       const framePath = join(dir, `f${at}.jpg`);
       await extractJpegFrame(videoPath, at, framePath);
       const jpeg = await readFile(framePath);
-      const frameStorage = `${org.id}/${job.id}/${party.id}/${opts.workDate}-before-f${at}.jpg`;
+      const frameStorage = `${org.id}/${job.id}/${party.id}/${clip.workDate}-${clip.phase}-f${at}.jpg`;
       await admin.storage.from(PROOF_BUCKET).upload(frameStorage, jpeg, {
         contentType: 'image/jpeg',
         upsert: true,
@@ -408,19 +727,37 @@ async function main(): Promise<void> {
       party_id: party.id,
       actor_label: 'Product testing seed',
       actor_role: 'system',
-      detail: `${opts.title} · ${opts.durationSeconds}s · ${opts.purpose}`.slice(0, 500),
+      detail: `${clip.title} · ${clip.durationSeconds}s · ${clip.purpose}`.slice(0, 500),
     });
 
-    console.log('\nFiled product-testing video:');
-    console.log(`  org      ${org.name}`);
-    console.log(`  job      ${job.title}${job.jobNumber != null ? ` (#${job.jobNumber})` : ''}`);
-    console.log(`  video    ${proof.title}`);
-    console.log(`  duration ${Number(proof.duration_seconds)}s`);
-    console.log(`  proof    ${proof.id}`);
-    console.log(`  hash     ${contentHash}`);
+    console.log(`  filed ${proof.title}  ${proof.id}  ${Number(proof.duration_seconds)}s`);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+async function main(): Promise<void> {
+  const opts = parseSeedVideoArgs(process.argv.slice(2));
+  const admin = createAdminClient();
+  if (!admin) {
+    fail(
+      'SUPABASE_SERVICE_ROLE_KEY is not set. This script writes into the live org and cannot run on the anon key.',
+    );
+  }
+
+  const clips = clipsForSeed(opts);
+  console.log(`Looking up organization "${opts.orgName}"…`);
+  const org = await findOrg(admin, opts.orgName);
+  console.log(`  ${org.name}  ${org.id}`);
+  console.log(`Filing ${clips.length} clip${clips.length === 1 ? '' : 's'}…`);
+
+  const userId = await actorUserId(admin, org);
+  for (const clip of clips) {
+    console.log(`\n${clip.jobTitle} · ${clip.title}`);
+    await fileClip(admin, org, userId, clip);
+  }
+
+  console.log(`\nFiled ${clips.length} product-testing video${clips.length === 1 ? '' : 's'} on ${org.name}.`);
 }
 
 const invokedDirectly = /seedProductTestVideo\.(ts|js)$/.test(process.argv[1] ?? '');
