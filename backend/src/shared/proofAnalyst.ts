@@ -1,5 +1,6 @@
 import { anthropicClient, isModelProviderConfigured } from '../lib/anthropic.js';
 import { config } from '../config.js';
+import { describeVision, isVisionConfigured } from './visionDescribe.js';
 
 /**
  * Reading the proof videos, and answering questions about them.
@@ -346,7 +347,7 @@ export async function analyseDayFilm(input: {
   workDate: string;
   trade?: string | null;
 }): Promise<DayFilmAnalysis | null> {
-  if (!isModelProviderConfigured()) return null;
+  if (!isVisionConfigured()) return null;
   if (!input.frames.length) return null;
 
   const scopeBlock = input.scopeTitles.length
@@ -357,38 +358,48 @@ export async function analyseDayFilm(input: {
         'Leave scopeTouched and scopeVerdicts empty — do not invent scope lines.',
       ].join(' ');
 
-  const response = await anthropicClient().messages.create({
-    model: config.technician.assistant.model,
-    max_tokens: 1200,
-    system: DAY_FILM_SYSTEM,
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text:
-              `Work date: ${input.workDate}\n` +
-              (input.trade ? `Trade: ${input.trade}\n` : '') +
-              `\n${scopeBlock}\n`,
-          },
-          ...imageBlocks(input.frames, 'DAY FILM'),
-        ],
-      },
-    ],
-  });
+  const userText =
+    `Work date: ${input.workDate}\n` +
+    (input.trade ? `Trade: ${input.trade}\n` : '') +
+    `\n${scopeBlock}\n`;
 
-  const text = response.content
-    .filter((block: any) => block.type === 'text')
-    .map((block: any) => block.text)
-    .join('\n');
+  let text = '';
+  let model: string | null = null;
+  if (isModelProviderConfigured()) {
+    const response = await anthropicClient().messages.create({
+      model: config.technician.assistant.model,
+      max_tokens: 1200,
+      system: DAY_FILM_SYSTEM,
+      messages: [
+        {
+          role: 'user',
+          content: [{ type: 'text', text: userText }, ...imageBlocks(input.frames, 'DAY FILM')],
+        },
+      ],
+    });
+    text = response.content
+      .filter((block: any) => block.type === 'text')
+      .map((block: any) => block.text)
+      .join('\n');
+    model = response.model;
+  } else {
+    const fallback = await describeVision({
+      system: DAY_FILM_SYSTEM,
+      userText,
+      images: input.frames.map((frame) => ({ base64: frame.base64 })),
+      maxTokens: 1200,
+    });
+    if (!fallback) return null;
+    text = fallback.text;
+    model = fallback.model;
+  }
 
   const parsed = parseDayFilmAnalysis(text);
   if (!parsed) return null;
   return {
     ...parsed,
     scopeVerdicts: keepKnownScope(parsed.scopeVerdicts, input.scopeTitles),
-    model: response.model,
+    model,
   };
 }
 
@@ -399,7 +410,7 @@ export async function analyseProofDay(input: {
   workDate: string;
   trade?: string | null;
 }): Promise<ProofAnalysis | null> {
-  if (!isModelProviderConfigured()) return null;
+  if (!isVisionConfigured()) return null;
   if (!input.beforeFrames.length || !input.afterFrames.length) return null;
 
   const scopeBlock = input.scopeTitles.length
@@ -410,39 +421,55 @@ export async function analyseProofDay(input: {
         'Leave scopeTouched and scopeVerdicts empty — do not invent scope lines.',
       ].join(' ');
 
-  const response = await anthropicClient().messages.create({
-    model: config.technician.assistant.model,
-    max_tokens: 1200,
-    system: SYSTEM,
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text:
-              `Work date: ${input.workDate}\n` +
-              (input.trade ? `Trade: ${input.trade}\n` : '') +
-              `\n${scopeBlock}\n`,
-          },
-          ...imageBlocks(input.beforeFrames, 'BEFORE'),
-          ...imageBlocks(input.afterFrames, 'AFTER'),
-        ],
-      },
-    ],
-  });
+  const userText =
+    `Work date: ${input.workDate}\n` +
+    (input.trade ? `Trade: ${input.trade}\n` : '') +
+    `\n${scopeBlock}\n`;
 
-  const text = response.content
-    .filter((block: any) => block.type === 'text')
-    .map((block: any) => block.text)
-    .join('\n');
+  let text = '';
+  let model: string | null = null;
+  if (isModelProviderConfigured()) {
+    const response = await anthropicClient().messages.create({
+      model: config.technician.assistant.model,
+      max_tokens: 1200,
+      system: SYSTEM,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: userText },
+            ...imageBlocks(input.beforeFrames, 'BEFORE'),
+            ...imageBlocks(input.afterFrames, 'AFTER'),
+          ],
+        },
+      ],
+    });
+    text = response.content
+      .filter((block: any) => block.type === 'text')
+      .map((block: any) => block.text)
+      .join('\n');
+    model = response.model;
+  } else {
+    const fallback = await describeVision({
+      system: SYSTEM,
+      userText,
+      images: [
+        ...input.beforeFrames.map((frame) => ({ base64: frame.base64 })),
+        ...input.afterFrames.map((frame) => ({ base64: frame.base64 })),
+      ],
+      maxTokens: 1200,
+    });
+    if (!fallback) return null;
+    text = fallback.text;
+    model = fallback.model;
+  }
 
   const parsed = parseAnalysis(text);
   if (!parsed) return null;
   return {
     ...parsed,
     scopeVerdicts: keepKnownScope(parsed.scopeVerdicts, input.scopeTitles),
-    model: response.model,
+    model,
   };
 }
 
