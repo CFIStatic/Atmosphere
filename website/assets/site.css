@@ -117,11 +117,15 @@ a { color: inherit; }
 }
 .nav-inner { display: flex; align-items: center; gap: 32px; height: 60px; }
 .wordmark {
-  display: flex; align-items: center; gap: 10px;
-  font-weight: 700; font-size: 17px; letter-spacing: -0.02em;
+  display: flex; align-items: center; gap: 8px;
+  font-weight: 700; font-size: 15px; line-height: 1;
+  letter-spacing: -0.02em;
   text-decoration: none; margin-right: auto;
 }
-.wordmark svg { display: block; }
+/* Mark is 1em so the bars match the company name, and both sit
+   next to the 14.5px nav links and pill buttons instead of
+   dominating the 60px bar. */
+.wordmark svg { display: block; width: 1em; height: 1em; flex: none; }
 /* Logo mark: four atmosphere bars fading toward the ground, one orange base.
    Bars are ink at rising opacity, so the one asset matches both brand
    lockups — light-to-dark on paper, dark-to-light on a dark ground. */
