@@ -122,6 +122,30 @@ describe('Railway office-app image', () => {
   });
 });
 
+describe('leftover Field Capture Railway image', () => {
+  it('builds an nginx probe image from the repo root', () => {
+    const dockerfile = readRoot('fieldcapture/Dockerfile');
+    expect(dockerfile).toContain('COPY fieldcapture/index.html');
+    expect(dockerfile).toContain('NGINX_ENVSUBST_FILTER=^PORT$$');
+    expect(dockerfile).not.toMatch(/API_UPSTREAM/);
+  });
+
+  it('points that canvas service at its own config, not the BFF', () => {
+    const toml = readRoot('fieldcapture/railway.toml');
+    expect(toml).toContain('dockerfilePath = "fieldcapture/Dockerfile"');
+    expect(toml).toContain('healthcheckPath = "/healthz"');
+    expect(toml).toContain('fieldcapture/**');
+  });
+
+  it('answers platform probes locally', () => {
+    const nginx = readRoot('fieldcapture/nginx/default.conf.template');
+    expect(nginx).toContain('location = /healthz');
+    expect(nginx).toContain('location = /health');
+    expect(nginx).toContain('location = /api/health');
+    expect(nginx).not.toContain('proxy_pass');
+  });
+});
+
 /**
  * Office console and marketing site are nginx front doors onto one BFF.
  * Pointed at the public https host, /api leaves the mesh and 502s. They share

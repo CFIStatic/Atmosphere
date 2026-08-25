@@ -1,0 +1,101 @@
+# Repair the leftover Railway "Field Capture" GitHub Autodeploy.
+#
+# Crew capture ships in the office nginx image (deploy-production.yml →
+# Login & Dashboard → /fieldcapture/). A separate canvas service still
+# autodeploys from main; without its own Config File it fails in ~15s and
+# Railway then retries that failed deploy on every later main push — which is
+# the red "Atmosphere - Field Capture" commit status. Do not fold this into
+# deploy-production.yml.
+#
+# This job stamps Config File = /fieldcapture/railway.toml and `railway up`s
+# that nginx image so the GitHub check can go green. Warns rather than failing
+# the whole workflow if the token cannot see the service.
+
+name: Repair Field Capture Railway
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'fieldcapture/**'
+      - '.github/workflows/repair-field-capture-config.yml'
+
+concurrency:
+  group: repair-field-capture
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    name: Repair Field Capture config
+    runs-on: ubuntu-latest
+    environment: Keys
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Install Railway CLI
+        run: bash scripts/installRailwayCli.sh
+
+      - name: Point Field Capture at /fieldcapture/railway.toml
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || vars.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
+          RAILWAY_FIELD_CAPTURE_SERVICE: ${{ secrets.RAILWAY_FIELD_CAPTURE_SERVICE || vars.RAILWAY_FIELD_CAPTURE_SERVICE || 'Field Capture' }}
+          RAILWAY_ENVIRONMENT: production
+        run: |
+          set -uo pipefail
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "No RAILWAY_TOKEN; skipping the Field Capture config repair."
+            exit 0
+          fi
+          railway link --project "$RAILWAY_PROJECT_ID" --environment production || true
+          chmod +x fieldcapture/scripts/apply-railway-config.sh
+          fieldcapture/scripts/apply-railway-config.sh || \
+            echo "warn: could not repair Field Capture config; see docs/production.md."
+
+      - name: Smoke the nginx image
+        run: |
+          set -euo pipefail
+          docker build -f fieldcapture/Dockerfile -t atmosphere-fieldcapture:ci .
+          docker run -d --name atmosphere-fieldcapture-ci -e PORT=8080 -p 18082:8080 atmosphere-fieldcapture:ci
+          trap 'docker logs atmosphere-fieldcapture-ci || true; docker rm -f atmosphere-fieldcapture-ci >/dev/null 2>&1 || true' EXIT
+          for _ in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:18082/healthz >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          probe="$(curl -fsS http://127.0.0.1:18082/healthz)"; grep -qx 'ok' <<<"$probe"
+          probe="$(curl -fsS http://127.0.0.1:18082/health)"; grep -qx 'ok' <<<"$probe"
+          probe="$(curl -fsS http://127.0.0.1:18082/api/health)"; grep -qx 'ok' <<<"$probe"
+          page="$(curl -fsS http://127.0.0.1:18082/)"; grep -qi 'Field Capture' <<<"$page"
+          page="$(curl -fsS http://127.0.0.1:18082/fieldcapture/)"; grep -qi 'Field Capture' <<<"$page"
+
+      - name: Deploy Field Capture image
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || vars.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
+          RAILWAY_FIELD_CAPTURE_SERVICE: ${{ secrets.RAILWAY_FIELD_CAPTURE_SERVICE || vars.RAILWAY_FIELD_CAPTURE_SERVICE || 'Field Capture' }}
+          RAILWAY_ENVIRONMENT: production
+          RAILWAY_UP_ATTEMPTS: '3'
+        run: |
+          set -uo pipefail
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "No RAILWAY_TOKEN; skipping the Field Capture deploy."
+            exit 0
+          fi
+          chmod +x backend/scripts/railwayUp.sh fieldcapture/scripts/apply-railway-config.sh
+          service="${RAILWAY_FIELD_CAPTURE_SERVICE}"
+          if service_id="$(node backend/scripts/resolveRailwayService.mjs "$service")"; then
+            echo "Resolved '$service' to $service_id"
+            service="$service_id"
+          fi
+          cp fieldcapture/railway.toml railway.toml
+          printf '\n# gha %s %s\n' "${GITHUB_SHA}" "$(date -u +%Y%m%dT%H%M%SZ)" >> fieldcapture/nginx/default.conf.template
+          export RAILWAY_UP_STAMP_FILE="$PWD/fieldcapture/nginx/default.conf.template"
+          export RAILWAY_SERVICE="$service"
+          backend/scripts/railwayUp.sh || \
+            echo "warn: railway up for Field Capture did not finish; the GitHub Autodeploy may still be the live replica."

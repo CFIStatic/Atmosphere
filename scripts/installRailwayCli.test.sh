@@ -13,7 +13,8 @@ grep -q "RAILWAY_CLI_VERSION:-${pin}" "$script"
 
 for workflow in \
   "$root/.github/workflows/deploy-production.yml" \
-  "$root/.github/workflows/deploy-website.yml"
+  "$root/.github/workflows/deploy-website.yml" \
+  "$root/.github/workflows/repair-field-capture-config.yml"
 do
   if grep -q 'npm install -g @railway/cli' "$workflow"; then
     echo "$workflow still installs the npm Railway CLI wrapper" >&2

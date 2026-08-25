@@ -1,0 +1,25 @@
+# Leftover Railway service named "Field Capture" (GitHub check
+# "Atmosphere - Field Capture"). Crew capture is already in the office nginx
+# image at /fieldcapture/; this file exists so GitHub Autodeploy of that
+# canvas service builds this nginx image instead of failing in ~15s.
+#
+# One-time on this service (Settings → Config-as-code), or via
+# fieldcapture/scripts/apply-railway-config.sh:
+#   Config File    = /fieldcapture/railway.toml
+#   Root Directory = /
+# See docs/production.md → "If Field Capture fails GitHub Autodeploy".
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "fieldcapture/Dockerfile"
+watchPatterns = [
+  "fieldcapture/**",
+  "fieldcapture/Dockerfile",
+]
+
+[deploy]
+healthcheckPath = "/healthz"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
+startCommand = "/docker-entrypoint.sh nginx -g 'daemon off;'"

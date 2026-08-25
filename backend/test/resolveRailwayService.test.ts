@@ -28,3 +28,10 @@ test('matchService maps old office and website names onto the live canvas', () =
   assert.equal(matchService('Atmosphere-internal', canvas)?.id, 'staff');
   assert.equal(matchService('Atmosphere APIs', canvas)?.id, 'api');
 });
+
+test('matchService maps Field Capture aliases onto the leftover capture service', () => {
+  const withField = [...canvas, { id: 'fc', name: 'Field Capture' }];
+  assert.equal(matchService('Field Capture', withField)?.id, 'fc');
+  assert.equal(matchService('fieldcapture', withField)?.id, 'fc');
+  assert.equal(matchService('field-capture', withField)?.id, 'fc');
+});

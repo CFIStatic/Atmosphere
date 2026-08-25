@@ -18,6 +18,29 @@ const MIME: Record<string, string> = {
 };
 
 /**
+ * Files that live next to the static app so Railway can build it, but must
+ * not be copied into the office image's public /fieldcapture/ tree.
+ */
+const SKIP_PUBLIC = new Set([
+  'dockerfile',
+  'railway.toml',
+  'railway.json',
+  '.dockerignore',
+  'readme.md',
+]);
+const SKIP_PUBLIC_DIRS = new Set(['nginx', 'scripts']);
+
+export function isStaticAppPublicFile(filePath: string, sourceDir?: string): boolean {
+  const rel = sourceDir
+    ? path.relative(sourceDir, filePath)
+    : filePath.replace(/\\/g, '/');
+  const parts = rel.split(/[\\/]/).filter(Boolean);
+  if (parts.some((part) => SKIP_PUBLIC_DIRS.has(part.toLowerCase()))) return false;
+  const base = (parts[parts.length - 1] || '').toLowerCase();
+  return !SKIP_PUBLIC.has(base);
+}
+
+/**
  * Serve a sibling static app (Verifier, Field Capture) at `/mount` in dev and
  * preview, and copy it into dist on production builds.
  *
@@ -70,7 +93,10 @@ export function staticAppPlugin(mount: string, sourceDir: string, outDir: string
     closeBundle() {
       const target = path.join(outDir, prefix.replace(/^\//, ''));
       fs.mkdirSync(outDir, { recursive: true });
-      fs.cpSync(sourceDir, target, { recursive: true });
+      fs.cpSync(sourceDir, target, {
+        recursive: true,
+        filter: (filePath) => isStaticAppPublicFile(filePath, sourceDir),
+      });
     },
   };
 }

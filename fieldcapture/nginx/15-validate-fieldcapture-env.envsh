@@ -1,0 +1,18 @@
+#!/bin/sh
+# vim:sw=2:ts=2:sts=2:et
+#
+# Sourced by the nginx image entrypoint before 20-envsubst-on-templates.sh.
+# .envsh, not .sh: only a sourced file can export PORT to envsubst.
+# Never exit: the entrypoint runs with set -e.
+
+fieldcapture_log() { echo "fieldcapture: $*" >&2; }
+
+case "${PORT:-}" in
+  '' | *[!0-9]*)
+    fieldcapture_log "PORT='${PORT:-}' is not a port number — binding 8080."
+    PORT=8080
+    ;;
+esac
+export PORT
+
+fieldcapture_log "listening on ${PORT}"
