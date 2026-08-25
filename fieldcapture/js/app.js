@@ -114,44 +114,93 @@
 
   /* ---------- home hydration ---------- */
 
+  function updateExpectOverflow() {
+    var root = $('#expect');
+    var wrap = root && root.closest('.expect');
+    if (!root || !wrap) return;
+    var remaining = root.scrollHeight - root.scrollTop - root.clientHeight;
+    wrap.setAttribute('data-overflow', remaining > 8 ? '1' : '0');
+  }
+
   function renderExpect(jobs) {
     var root = $('#expect');
     if (!root) return;
+    var countEl = $('#expect-count');
+    if (countEl) {
+      if (jobs.length) {
+        countEl.hidden = false;
+        countEl.textContent = String(jobs.length);
+      } else {
+        countEl.hidden = true;
+        countEl.textContent = '';
+      }
+    }
     if (!jobs.length) {
       root.innerHTML =
-        '<div class="erow"><span class="t"><b>Nothing assigned yet</b><span>Ask the office to put you on a job, then refresh.</span></span></div>';
+        '<div class="erow erow-empty"><span class="t"><b>Nothing assigned yet</b><span class="addr">Ask the office to put you on a job, then refresh.</span></span></div>';
+      requestAnimationFrame(updateExpectOverflow);
       return;
     }
     root.innerHTML = jobs
       .map(function (j) {
-        var selected = state.account && j.id && j.id === state.activeJobId;
+        var selected = Boolean(state.account && j.id && j.id === state.activeJobId);
+        var selectable = Boolean(state.account && j.id);
+        var tag = selectable ? 'button' : 'div';
+        var extras = selectable
+          ? ' type="button" aria-pressed="' + (selected ? 'true' : 'false') + '"'
+          : '';
+        var pick = selectable ? '<span class="pick" aria-hidden="true"></span>' : '';
+        var meta = '';
+        if (j.filmed) meta += '<span class="filmedpin">Filmed today</span>';
+        if (!j.placed) meta += '<span class="warnpin">Cannot be placed from GPS</span>';
         return (
-          '<div class="erow"' +
+          '<' +
+          tag +
+          ' class="erow"' +
+          extras +
           (j.id ? ' data-job-id="' + escapeHtml(j.id) + '"' : '') +
           (selected ? ' data-selected="1"' : '') +
           '>' +
+          pick +
           '<span class="t"><b>' +
           escapeHtml(j.name) +
-          '</b><span>' +
+          '</b><span class="addr">' +
           escapeHtml(j.addr) +
-          (j.filmed ? ' <span class="filmedpin">· filmed today</span>' : '') +
-          (j.placed ? '' : ' <span class="warnpin">· cannot be placed from GPS</span>') +
-          '</span></span>' +
+          '</span>' +
+          meta +
+          '</span>' +
           '<span class="at">' +
           escapeHtml(j.filmed ? 'Filmed' : j.at || '') +
-          '</span></div>'
+          '</span></' +
+          tag +
+          '>'
         );
       })
       .join('');
-    if (state.account) {
-      root.querySelectorAll('[data-job-id]').forEach(function (row) {
-        row.style.cursor = 'pointer';
-        row.addEventListener('click', function () {
-          state.activeJobId = row.getAttribute('data-job-id');
-          renderExpect(state.jobs);
-        });
-      });
-    }
+    requestAnimationFrame(function () {
+      updateExpectOverflow();
+      var selected = root.querySelector('[data-selected="1"]');
+      if (selected && typeof selected.scrollIntoView === 'function') {
+        selected.scrollIntoView({ block: 'nearest' });
+      }
+    });
+  }
+
+  function bindExpectList() {
+    var root = $('#expect');
+    if (!root) return;
+    root.addEventListener('click', function (event) {
+      if (!state.account) return;
+      var row = event.target.closest('[data-job-id]');
+      if (!row || !root.contains(row)) return;
+      var next = row.getAttribute('data-job-id');
+      if (!next || next === state.activeJobId) return;
+      state.activeJobId = next;
+      renderExpect(state.jobs);
+      setStatus('Ready — tap Start. Records video + microphone.');
+    });
+    root.addEventListener('scroll', updateExpectOverflow, { passive: true });
+    window.addEventListener('resize', updateExpectOverflow);
   }
 
   function escapeHtml(s) {
@@ -506,15 +555,19 @@
     document.body.setAttribute('data-mode', 'demo');
     setStatus('Demo mode (?demo=1) — not uploading.');
     $('#week-wrap').hidden = false;
+    state.account = true;
     var JOBS = [
-      {
-        id: 'j1041',
-        name: 'Meridian Ave — water loss, Class 3',
-        addr: '1841 Meridian Ave, Austin',
-        at: '7:00 AM',
-        placed: true,
-      },
+      { id: 'j1041', name: 'Meridian Ave — water loss, Class 3', addr: '1841 Meridian Ave, Austin', at: '7:00 AM', placed: true },
+      { id: 'j1042', name: '#6 · Cedar Ridge — storm damage, roof tarp + rebuild', addr: '4118 Cedar Ridge Dr, Austin', at: 'Today', placed: true, filmed: true },
+      { id: 'j1043', name: '#5 · Cursor 1', addr: '1 Product Testing Lane, Austin', at: 'Today', placed: true, filmed: true },
+      { id: 'j1044', name: 'Oak Hollow — kitchen leak, dry-out', addr: '902 Oak Hollow Ct, Austin', at: '9:30 AM', placed: true },
+      { id: 'j1045', name: 'Riverside — hail, south slope', addr: '2204 Riverside Dr, Austin', at: '11:00 AM', placed: true },
+      { id: 'j1046', name: 'Lamar — water heater flood', addr: '511 S Lamar Blvd, Austin', at: '1:00 PM', placed: false },
+      { id: 'j1047', name: 'Barton Hills — remodel punch', addr: '1809 Barton Hills Dr, Austin', at: '3:00 PM', placed: true },
+      { id: 'j1048', name: 'East 6th — fire mitigation', addr: '1402 E 6th St, Austin', at: '4:30 PM', placed: true },
     ];
+    state.jobs = JOBS;
+    state.activeJobId = JOBS[0].id;
     renderExpect(JOBS);
     var WEEK = [
       { what: 'Mon · Meridian after', chip: ['pass', 'Accepted'] },
@@ -571,6 +624,7 @@
   }
 
   bindHold();
+  bindExpectList();
   $('#donebtn').addEventListener('click', function () {
     show('s-home');
     setStatus(LIVE || state.account ? 'Ready for another day.' : '');

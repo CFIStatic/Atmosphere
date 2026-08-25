@@ -93,7 +93,7 @@
   * { box-sizing: border-box; margin: 0; }
   [hidden] { display: none !important; }
   html { color-scheme: light dark; }
-  html, body { height: 100%; }
+  html, body { height: 100%; height: 100dvh; overflow: hidden; }
   body {
     background: var(--bg); color: var(--ink);
     font: 16px/1.5 Inter, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -106,7 +106,8 @@
      app; pretending otherwise on a desktop would just stretch the truth. */
   .app {
     position: relative;
-    max-width: 480px; margin: 0 auto; min-height: 100vh;
+    max-width: 480px; margin: 0 auto;
+    height: 100%; min-height: 0; overflow: hidden;
     display: flex; flex-direction: column;
     background: var(--bg);
   }
@@ -117,10 +118,11 @@
   /* ---------- header ---------- */
   .top {
     display: flex; align-items: center; gap: 10px;
-    padding: 14px 18px 12px;
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 18px 12px;
     border-bottom: 1px solid var(--line);
     background: var(--panel);
     position: sticky; top: 0; z-index: 10;
+    flex-shrink: 0;
   }
   .brand { display: flex; align-items: center; gap: 9px; font-weight: 800; font-size: 15.5px; letter-spacing: -0.02em; }
   .brand svg { display: block; color: var(--ink); }
@@ -131,16 +133,22 @@
      between. There is nowhere to go back to. */
 
   /* ---------- screens ---------- */
-  .screen { flex: 1; display: none; flex-direction: column; }
+  .screen { flex: 1; min-height: 0; display: none; flex-direction: column; overflow: hidden; }
   .screen[data-on="1"] { display: flex; }
+  #s-door, #s-blocked { overflow-y: auto; -webkit-overflow-scrolling: touch; }
   .pad { padding: 18px; }
+  .home-main {
+    flex: 1; min-height: 0;
+    display: flex; flex-direction: column;
+  }
+  .home-intro { flex-shrink: 0; padding-bottom: 8px; }
 
   .daterow { font-size: 12px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 650; }
   .h1 { font-size: 22px; font-weight: 750; letter-spacing: -0.02em; margin-top: 4px; }
   .lede { color: var(--ink-2); font-size: 13.5px; margin-top: 6px; }
 
   /* ---------- this week ---------- */
-  .week { margin-top: 22px; }
+  .week { flex-shrink: 0; margin-top: 8px; padding: 0 18px; }
   .week h3 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); font-weight: 750; }
   .weekrow {
     display: flex; align-items: center; gap: 10px;
@@ -161,7 +169,10 @@
      place on both screens so the hand learns it once: tap it when you get
      to work, hold it when you are done. Everything between those two
      presses is the system's problem, not the crew's. */
-  .recwrap { padding: 6px 18px 26px; margin-top: auto; text-align: center; }
+  .recwrap {
+    padding: 6px 18px calc(18px + env(safe-area-inset-bottom, 8px));
+    flex-shrink: 0; text-align: center;
+  }
   .daybtn {
     position: relative; overflow: hidden;
     width: 100%; padding: 20px 18px;
@@ -189,24 +200,78 @@
 
   .rechint { font-size: 12px; color: var(--faint); margin-top: 10px; line-height: 1.5; }
 
-  /* ---------- today's expected work (passive) ----------
-     Listed, never tapped. The crew does not choose a job — they drive to
-     one and film. Which job the footage belongs to is decided from where
-     the phone was and when, which is the one answer a person standing in
-     the rain should never be asked to type. */
-  .expect { margin-top: 18px; }
-  .expect h3 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); font-weight: 750; }
-  .erow {
-    display: flex; align-items: baseline; gap: 10px;
-    padding: 11px 2px; border-bottom: 1px solid var(--line-soft);
+  /* ---------- today's jobs (scrollable, tappable) ----------
+     The Start button stays put. This list takes the leftover height and
+     scrolls on its own, with rows sized for a thumb. */
+  .expect {
+    flex: 1; min-height: 0;
+    display: flex; flex-direction: column;
+    position: relative;
+    margin-top: 4px;
   }
-  .erow:last-child { border-bottom: 0; }
+  .expect-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+    padding: 0 18px 8px; flex-shrink: 0;
+  }
+  .expect h3 {
+    font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--faint); font-weight: 750;
+  }
+  .expect-count {
+    font-family: var(--mono); font-size: 11px; color: var(--faint); font-weight: 650;
+  }
+  .expect-list {
+    flex: 1; min-height: 0;
+    overflow-y: auto; overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    padding: 2px 18px 18px;
+    scroll-padding-bottom: 24px;
+  }
+  .expect[data-overflow="1"]::after {
+    content: '';
+    position: absolute; left: 18px; right: 18px; bottom: 0;
+    height: 24px; pointer-events: none;
+    background: linear-gradient(transparent, var(--bg));
+  }
+  .erow {
+    display: flex; align-items: flex-start; gap: 12px;
+    width: 100%; min-height: 64px;
+    padding: 14px;
+    margin: 0 0 8px;
+    border: 1px solid var(--line); border-radius: 12px;
+    background: var(--panel); color: inherit;
+    text-align: left;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  .erow:last-child { margin-bottom: 0; }
+  .erow .pick {
+    flex-shrink: 0; width: 18px; height: 18px; margin-top: 2px;
+    border-radius: 50%; border: 2px solid var(--line); background: var(--bg);
+  }
+  .erow[data-selected="1"] .pick {
+    border-color: var(--accent); background: var(--accent);
+    box-shadow: inset 0 0 0 3px var(--panel);
+  }
   .erow .t { flex: 1; min-width: 0; }
-  .erow .t b { display: block; font-size: 13.5px; font-weight: 650; letter-spacing: -0.01em; }
-  .erow .t span { display: block; font-size: 12px; color: var(--muted); }
-  .erow .at { font-family: var(--mono); font-size: 11.5px; color: var(--faint); white-space: nowrap; }
-  .erow .warnpin { font-size: 11px; color: var(--warn); }
-  .erow .filmedpin { font-size: 11px; color: var(--pass); }
+  .erow .t b {
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: 15px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.3;
+  }
+  .erow .addr { display: block; font-size: 13px; color: var(--muted); margin-top: 3px; }
+  .erow .at {
+    flex-shrink: 0; padding-top: 2px;
+    font-family: var(--mono); font-size: 11px; color: var(--faint); white-space: nowrap;
+  }
+  .erow .warnpin, .erow .filmedpin {
+    display: block; font-size: 12px; font-weight: 650; margin-top: 4px;
+  }
+  .erow .warnpin { color: var(--warn); }
+  .erow .filmedpin { color: var(--pass); }
+  .erow-empty { border-style: dashed; cursor: default; }
+  button.erow:active { transform: scale(0.99); }
 
   /* ---------- the day, while it runs ---------- */
   .dayclock {
@@ -304,7 +369,7 @@
   }
   .donebtn.on { opacity: 1; transition: opacity .4s; }
 
-  .foot { padding: 10px 18px 20px; font-size: 11px; color: var(--faint); line-height: 1.6; }
+  .foot { flex-shrink: 0; padding: 10px 18px 20px; font-size: 11px; color: var(--faint); line-height: 1.6; }
 
   /* Property twin — App Store Field measures while filming; office gets the 3D model. */
   .twin {
@@ -336,7 +401,12 @@
   }
   .auth-form input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   .auth-err { color: var(--fail); font-size: 13px; min-height: 1.2em; }
-  .erow[data-selected="1"] { background: var(--accent-soft); margin: 0 -8px; padding-left: 10px; padding-right: 10px; border-radius: 8px; }
+  .erow[data-selected="1"] { background: var(--accent-soft); border-color: var(--accent); }
+  .home-status {
+    flex-shrink: 0;
+    padding: 8px 18px 0;
+    font-size: 13px; color: var(--muted); line-height: 1.45;
+  }
 
   /* Elevate: bars slam up from the orange ground, then sit on paper or
      night — whichever the phone is already using — and ease into Today. */
@@ -497,26 +567,30 @@
 
   <!-- ================= HOME: before the day starts ================= -->
   <div class="screen" id="s-home" data-on="1">
-    <div class="pad">
-      <div class="daterow mono" id="today-date">TODAY</div>
-      <h1 class="h1">Start it and go to work</h1>
-      <p class="lede">
-        One button, once a day. Tap it when you get to your first job and hold it when you are
-        done. You never pick a job, tag a video, or say what you filmed — the footage carries
-        where it was and when, and the office works it out from that.
-      </p>
-
-      <div class="expect">
-        <h3>Today's jobs</h3>
-        <div id="expect"></div>
+    <div class="home-main">
+      <div class="pad home-intro">
+        <div class="daterow mono" id="today-date">TODAY</div>
+        <h1 class="h1">Start it and go to work</h1>
+        <p class="lede">
+          Tap the job you are standing at, then Start. Hold when you are done.
+          Video and microphone ride along — the office works the rest out.
+        </p>
       </div>
+
+      <section class="expect" aria-labelledby="expect-heading">
+        <div class="expect-head">
+          <h3 id="expect-heading">Today's jobs</h3>
+          <span class="expect-count" id="expect-count" hidden></span>
+        </div>
+        <div class="expect-list" id="expect"></div>
+      </section>
 
       <div class="week" id="week-wrap" hidden>
         <h3>This week — what your days became</h3>
         <div id="week"></div>
       </div>
 
-      <p class="lede" id="live-status" style="margin-top:14px;font-size:13px;color:var(--muted)"></p>
+      <p class="home-status" id="live-status"></p>
     </div>
 
     <div class="recwrap">
@@ -638,6 +712,6 @@
 </div>
 
 <script src="js/capture-core.js"></script>
-<script src="js/app.js?v=elevate13"></script>
+<script src="js/app.js?v=jobs-scroll1"></script>
 </body>
 </html>

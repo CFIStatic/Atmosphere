@@ -23,6 +23,20 @@ describe('phone home-screen manifests', () => {
     expect(manifest.icons.some((icon) => icon.sizes === '192x192')).toBe(true);
   });
 
+  it('keeps today\'s jobs in a scrollable phone list with thumb-sized rows', () => {
+    const html = readFileSync(resolve(repoRoot, 'fieldcapture/index.html'), 'utf8');
+    const script = readFileSync(resolve(repoRoot, 'fieldcapture/js/app.js'), 'utf8');
+    expect(html).toContain('class="expect-list" id="expect"');
+    expect(html).toContain('class="home-main"');
+    expect(html).toMatch(/\.expect-list\s*\{[^}]*overflow-y:\s*auto/s);
+    expect(html).toMatch(/\.erow\s*\{[^}]*min-height:\s*64px/s);
+    expect(html).toMatch(/\.app\s*\{[^}]*overflow:\s*hidden/s);
+    expect(script).toContain('updateExpectOverflow');
+    expect(script).toContain('type="button"');
+    expect(script).toContain('aria-pressed=');
+    expect(script).toContain('scrollIntoView');
+  });
+
   it('installs Field Capture as a standalone app', () => {
     const manifest = readJson('fieldcapture/manifest.webmanifest');
     expect(manifest.name).toMatch(/Field Capture/);
