@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -31,6 +31,9 @@ const apiMocks = vi.hoisted(() => ({
   uploadAvatar: vi.fn(),
   removeAvatar: vi.fn(),
   getMembers: vi.fn().mockResolvedValue({ members: [] }),
+  orgInvites: vi.fn().mockResolvedValue({ invites: [] }),
+  createOrgInvite: vi.fn(),
+  revokeOrgInvite: vi.fn(),
 }));
 
 vi.mock('../context/AuthContext', () => ({
@@ -46,6 +49,8 @@ vi.mock('../lib/api', () => ({
   ROLE_LABELS: {},
   WORK_TYPE_LABELS: {},
   CONTRACTOR_TYPE_LABELS: {},
+  CONTRACTOR_TYPE_ORDER: [],
+  humanize: (value: string) => value,
 }));
 
 vi.mock('../hooks/useFeatureTimer', () => ({
@@ -126,6 +131,20 @@ describe('Settings profile photo', () => {
     await user.upload(screen.getByLabelText('Upload a profile photo or icon'), file);
 
     expect(apiMocks.uploadAvatar).toHaveBeenCalled();
+  });
+});
+
+describe('Settings Field Capture', () => {
+  it('tells the office the web Field Capture URL and the join code', async () => {
+    renderSettings('/settings?section=organization');
+
+    expect(screen.getByText('Field Capture app')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'field-capture-production.up.railway.app' })).toHaveAttribute(
+      'href',
+      'https://field-capture-production.up.railway.app/',
+    );
+    expect(screen.getAllByText('ABC123').length).toBeGreaterThan(0);
+    await waitFor(() => expect(apiMocks.orgInvites).toHaveBeenCalled());
   });
 });
 

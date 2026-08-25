@@ -70,4 +70,13 @@ describe('phone home-screen manifests', () => {
     expect(swift).toContain('productionBffURL');
     expect(swift).toContain('isLoopback(host), !isSimulator { return productionBffURL }');
   });
+
+  it('points the standalone Field Capture web host at the live office API', () => {
+    const core = readFileSync(resolve(repoRoot, 'fieldcapture/js/capture-core.js'), 'utf8');
+    const app = readFileSync(resolve(repoRoot, 'fieldcapture/js/app.js'), 'utf8');
+    expect(core).toContain('https://atmosphere-web-production.up.railway.app');
+    expect(core).toContain('field-capture(?:-[a-z0-9]+)*\\.up\\.railway\\.app');
+    expect(core).toContain('function resolveApiBase');
+    expect(app).toContain('Core.resolveApiBase');
+  });
 });

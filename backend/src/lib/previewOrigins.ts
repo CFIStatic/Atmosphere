@@ -11,6 +11,11 @@
  *
  * Atmosphere-internal is the staff data platform (accounts + analytics). Same
  * same-origin /api proxy, same cookie Origin problem.
+ *
+ * Field Capture on Railway publishes as field-capture.up.railway.app and
+ * field-capture-<environment>.up.railway.app. Crews open that host, type a
+ * name + office join code, and the page calls /api/field-app/join. CORS must
+ * accept that Origin or the connect screen shows a generic "Request failed."
  */
 
 const QUICK_TUNNEL = /^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/i;
@@ -20,6 +25,8 @@ const ATMOSPHERE_RAILWAY_INTERNAL =
   /^https:\/\/atmosphere-internal(?:-[a-z0-9]+)*\.up\.railway\.app$/i;
 const ATMOSPHERE_RAILWAY_INTERNAL_GROWTH =
   /^https:\/\/melodious-inspiration(?:-[a-z0-9]+)*\.up\.railway\.app$/i;
+const ATMOSPHERE_RAILWAY_FIELD_CAPTURE =
+  /^https:\/\/field-capture(?:-[a-z0-9]+)*\.up\.railway\.app$/i;
 
 export function isCloudflareQuickTunnelOrigin(origin: string): boolean {
   return QUICK_TUNNEL.test(origin);
@@ -31,4 +38,8 @@ export function isAtmosphereRailwayWebOrigin(origin: string): boolean {
 
 export function isAtmosphereRailwayInternalOrigin(origin: string): boolean {
   return ATMOSPHERE_RAILWAY_INTERNAL.test(origin) || ATMOSPHERE_RAILWAY_INTERNAL_GROWTH.test(origin);
+}
+
+export function isAtmosphereRailwayFieldCaptureOrigin(origin: string): boolean {
+  return ATMOSPHERE_RAILWAY_FIELD_CAPTURE.test(origin);
 }

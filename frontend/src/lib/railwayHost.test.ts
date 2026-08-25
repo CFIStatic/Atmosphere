@@ -122,12 +122,14 @@ describe('Railway office-app image', () => {
   });
 });
 
-describe('leftover Field Capture Railway image', () => {
-  it('builds an nginx probe image from the repo root', () => {
+describe('Field Capture Railway image', () => {
+  it('builds an nginx image from the repo root that can proxy /api', () => {
     const dockerfile = readRoot('fieldcapture/Dockerfile');
     expect(dockerfile).toContain('COPY fieldcapture/index.html');
-    expect(dockerfile).toContain('NGINX_ENVSUBST_FILTER=^PORT$$');
-    expect(dockerfile).not.toMatch(/API_UPSTREAM/);
+    expect(dockerfile).toContain('NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM|API_RESOLVERS)$$');
+    expect(dockerfile).toContain(
+      'COPY fieldcapture/nginx/15-validate-fieldcapture-env.envsh /docker-entrypoint.d/15-validate-fieldcapture-env.envsh',
+    );
   });
 
   it('points that canvas service at its own config, not the BFF', () => {
@@ -137,12 +139,29 @@ describe('leftover Field Capture Railway image', () => {
     expect(toml).toContain('fieldcapture/**');
   });
 
-  it('answers platform probes locally', () => {
+  it('answers platform probes locally, then proxies /api to the BFF', () => {
     const nginx = readRoot('fieldcapture/nginx/default.conf.template');
     expect(nginx).toContain('location = /healthz');
     expect(nginx).toContain('location = /health');
     expect(nginx).toContain('location = /api/health');
-    expect(nginx).not.toContain('proxy_pass');
+    expect(nginx).toContain('set $api_upstream ${API_UPSTREAM}');
+    expect(nginx).toContain('proxy_pass $api_upstream$request_uri');
+    expect(nginx).not.toContain('proxy_pass ${API_UPSTREAM}');
+    expect(nginx).toContain('backend_unreachable');
+    const apiProxy = nginx.indexOf('location /api {');
+    for (const probe of ['location = /healthz', 'location = /health', 'location = /api/health']) {
+      expect(nginx.indexOf(probe)).toBeLessThan(apiProxy);
+    }
+  });
+
+  it('never lets an unusable API_UPSTREAM stop nginx from starting', () => {
+    const guard = readRoot('fieldcapture/nginx/15-validate-fieldcapture-env.envsh');
+    expect(guard).toContain('http://:*');
+    expect(guard).toContain("*'${{'*");
+    expect(guard).toContain('export API_UPSTREAM');
+    expect(guard).toContain('export API_RESOLVERS');
+    expect(guard).toContain('https://atmosphere-production.up.railway.app');
+    expect(guard).not.toMatch(/^\s*exit /m);
   });
 });
 

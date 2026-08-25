@@ -12,7 +12,7 @@
   var params = new URLSearchParams(location.search);
   var TOKEN = params.get('token') || params.get('share') || '';
   var FORCE_DEMO = params.get('demo') === '1';
-  var API_BASE = params.get('api') || '';
+  var API_BASE = Core.resolveApiBase(params.get('api') || '');
   var STORAGE_BASE = params.get('storage') || '';
   var LIVE = Boolean(TOKEN) && !FORCE_DEMO;
   var DEMO = FORCE_DEMO || (!TOKEN && params.get('allowDemo') === '1');

@@ -73,6 +73,11 @@ jobs:
           probe="$(curl -fsS http://127.0.0.1:18082/api/health)"; grep -qx 'ok' <<<"$probe"
           page="$(curl -fsS http://127.0.0.1:18082/)"; grep -qi 'Field Capture' <<<"$page"
           page="$(curl -fsS http://127.0.0.1:18082/fieldcapture/)"; grep -qi 'Field Capture' <<<"$page"
+          join="$(curl -sS -o /tmp/fc-join.json -w '%{http_code}' -X POST http://127.0.0.1:18082/api/field-app/join \
+            -H 'Content-Type: application/json' \
+            -d '{"fullName":"Test User","joinCode":"ABC123"}')"
+          test "$join" != "405"
+          grep -q '"error"' /tmp/fc-join.json
 
       - name: Deploy Field Capture image
         env:

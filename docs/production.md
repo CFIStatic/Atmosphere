@@ -362,12 +362,21 @@ recent `main` commit touched `fieldcapture/**`, so that service skipped
 folder with no image of its own and failed; Railway then retried the failed
 deploy on every later `main` push — including office-rail-only merges.
 
+That service is now the live Field Capture web host
+(`https://field-capture-production.up.railway.app/`). It must proxy `/api`
+to the Atmosphere BFF. A static-only nginx answers `POST /api/field-app/join`
+with 405 HTML, which the connect screen shows as **Request failed.**
+
 Fix:
 
 1. Settings → **Config-as-code** → Config File = `/fieldcapture/railway.toml`
    and Root Directory = `/`. `.github/workflows/repair-field-capture-config.yml`
    stamps this and `railway up`s the nginx image.
-2. Or Disable Autodeploy on that service. The product URL stays
+2. Optional: set `API_UPSTREAM` to the Atmosphere APIs private HTTP URL
+   (`api.upstream`). Unset or broken values fall back to the public BFF so
+   the connect screen still works.
+3. Backend CORS already allows `https://field-capture*.up.railway.app`.
+4. Office fallback stays
    `https://atmosphere-web-production.up.railway.app/fieldcapture/`.
 
 Official references: [GitHub Autodeploys](https://docs.railway.com/deployments/github-autodeploys),

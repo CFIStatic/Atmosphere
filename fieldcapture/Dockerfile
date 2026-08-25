@@ -1,15 +1,17 @@
-# Leftover Railway "Field Capture" service — static capture app + nginx probe.
+# Field Capture web host — static capture app + /api proxy to the BFF.
 #
 # Build from the repo root (same as website/ and frontend/):
 #   docker build -f fieldcapture/Dockerfile -t atmosphere-fieldcapture .
 #
 # Railway: Config File = /fieldcapture/railway.toml, Root Directory = /.
-# The product capture URL remains the office app at /fieldcapture/.
+# Live URL: https://field-capture-production.up.railway.app/
+# Office /fieldcapture/ remains as a same-origin fallback.
 
 FROM nginx:1.27-alpine AS runtime
 
 ENV PORT=8080
-ENV NGINX_ENVSUBST_FILTER=^PORT$$
+ENV NGINX_ENVSUBST_FILTER=^(PORT|API_UPSTREAM|API_RESOLVERS)$$
+ENV API_UPSTREAM=https://atmosphere-production.up.railway.app
 
 COPY fieldcapture/nginx/default.conf.template /etc/nginx/templates/default.conf.template
 COPY fieldcapture/nginx/15-validate-fieldcapture-env.envsh /docker-entrypoint.d/15-validate-fieldcapture-env.envsh

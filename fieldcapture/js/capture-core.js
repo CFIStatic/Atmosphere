@@ -9,6 +9,8 @@
   var SAFE_HASH_BYTES = 512 * 1024 * 1024;
   /** Pocket-proof: the day film stops only after a continuous 5s hold. */
   var HOLD_TO_FINISH_MS = 5000;
+  var LIVE_OFFICE_ORIGIN = 'https://atmosphere-web-production.up.railway.app';
+  var FIELD_CAPTURE_HOST = /^field-capture(?:-[a-z0-9]+)*\.up\.railway\.app$/i;
 
   /**
    * Put the live camera on screen. iPhone Safari / home-screen Field Capture
@@ -367,14 +369,52 @@
         } catch (e) {
           body = {};
         }
-        if (!r.ok) throw new Error((body && body.error) || 'Request failed.');
+        if (!r.ok) throw new Error(apiErrorMessage(r.status, body, text));
         return body;
       });
     });
   }
 
+  function apiErrorMessage(status, body, text) {
+    var explicit = body && typeof body.error === 'string' ? body.error.trim() : '';
+    if (explicit) return explicit;
+    if (status === 405 || status === 404) {
+      return 'This Field Capture host is not connected to the office. Open the office Field Capture link, or try again in a moment.';
+    }
+    if (status === 502 || status === 503 || status === 504) {
+      return 'Cannot reach the Atmosphere API right now. Wait a moment and try again.';
+    }
+    if (text && text.charAt(0) === '<') {
+      return 'This Field Capture host is not connected to the office. Open the office Field Capture link, or try again in a moment.';
+    }
+    return 'Request failed.';
+  }
+
   function origin(apiBase) {
     return (apiBase || '').replace(/\/$/, '');
+  }
+
+  /** Railway Field Capture service — not the office /fieldcapture/ path. */
+  function isStandaloneFieldCaptureHost(hostname) {
+    return FIELD_CAPTURE_HOST.test(hostname || '');
+  }
+
+  /**
+   * Same-origin on the office console. On the standalone Field Capture
+   * Railway host, talk to the live office /api so name + join code can
+   * attach this phone to the office account.
+   */
+  function resolveApiBase(explicit) {
+    var given = (explicit || '').trim().replace(/\/$/, '');
+    if (given) return given;
+    var hostname = '';
+    try {
+      hostname = typeof location !== 'undefined' ? location.hostname || '' : '';
+    } catch (e) {
+      hostname = '';
+    }
+    if (isStandaloneFieldCaptureHost(hostname)) return LIVE_OFFICE_ORIGIN;
+    return '';
   }
 
   /** Name + office invite code. No email or password. */
@@ -527,6 +567,9 @@
     uploadDayFilm: uploadDayFilm,
     joinCrew: joinCrew,
     loginWithPassword: loginWithPassword,
+    resolveApiBase: resolveApiBase,
+    isStandaloneFieldCaptureHost: isStandaloneFieldCaptureHost,
+    LIVE_OFFICE_ORIGIN: LIVE_OFFICE_ORIGIN,
     loadFieldMe: loadFieldMe,
     loadTodayJobs: loadTodayJobs,
     loadShareJob: loadShareJob,
