@@ -31,6 +31,18 @@ fi
 
 echo "Deploying Railway service=$service project=$project environment=$environment"
 
+# Official CLI 5.43+ treats $CI=true as --ci (stream build logs, then
+# exit). GitHub Actions always sets CI=true, so a bare `railway up`
+# returns after the Metal image push and the Railway dashboard often
+# never shows a finished replica. This script waits on purpose.
+message="${RAILWAY_UP_MESSAGE:-}"
+if [ -z "$message" ] && [ -n "${GITHUB_SHA:-}" ]; then
+  message="${GITHUB_REF_NAME:-ci} ${GITHUB_SHA:0:7}"
+fi
+if [ -n "$message" ]; then
+  echo "Railway deployment message: $message"
+fi
+
 railway status --project "$project" --environment "$environment" || true
 
 dump_build_logs() {
@@ -47,11 +59,17 @@ while [ "$attempt" -le "$max_attempts" ]; do
   fi
   echo "railway up attempt $attempt/$max_attempts (wait ${wait_secs}s)"
   log="$(mktemp)"
-  timeout "$wait_secs" railway up \
-    --service "$service" \
-    --project "$project" \
-    --environment "$environment" \
-    --verbose >"$log" 2>&1
+  up_args=(
+    up
+    --service "$service"
+    --project "$project"
+    --environment "$environment"
+    --verbose
+  )
+  if [ -n "$message" ]; then
+    up_args+=(--message "$message")
+  fi
+  timeout "$wait_secs" env -u CI railway "${up_args[@]}" >"$log" 2>&1
   status=$?
   cat "$log"
   # Railway logs "Attempt #N failed with service unavailable. Continuing to
@@ -75,6 +93,12 @@ while [ "$attempt" -le "$max_attempts" ]; do
   fi
   if [ "$status" -eq 0 ]; then
     rm -f "$log"
+    echo "---- railway deployment list (latest 5) ----"
+    railway deployment list \
+      --service "$service" \
+      --project "$project" \
+      --environment "$environment" \
+      --limit 5 || true
     echo "Railway deploy succeeded"
     exit 0
   fi

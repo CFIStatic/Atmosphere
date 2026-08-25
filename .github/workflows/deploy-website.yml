@@ -188,6 +188,7 @@ jobs:
         env:
           RAILWAY_ENVIRONMENT: production
           RAILWAY_UP_ATTEMPTS: '8'
+          RAILWAY_UP_MESSAGE: 'website ${{ github.ref_name }} ${{ github.sha }}'
         run: |
           cp website/railway.toml railway.toml
           cp website/railway.json railway.json
@@ -205,7 +206,7 @@ jobs:
         run: |
           set -euo pipefail
           railway domain --service "$RAILWAY_WEBSITE_SERVICE" || true
-          BUNDLE="$( { railway domain --service "$RAILWAY_WEBSITE_SERVICE" || true; railway status --json --service "$RAILWAY_WEBSITE_SERVICE" || true; } 2>&1 )"
+          BUNDLE="$( { railway domain --service "$RAILWAY_WEBSITE_SERVICE" || true; railway status --json --project "$RAILWAY_PROJECT_ID" --environment production || true; } 2>&1 )"
           echo "$BUNDLE"
           DOMAIN="$(printf '%s' "$BUNDLE" | node website/scripts/railwayDomain.mjs || true)"
           if [ -z "${DOMAIN:-}" ]; then

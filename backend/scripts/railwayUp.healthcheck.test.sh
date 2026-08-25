@@ -44,3 +44,8 @@ fi
 echo "railwayUp healthcheck matcher ok"
 # Touch the script so a rename of railwayUp.sh fails this job if we forget.
 test -f "$here/railwayUp.sh"
+# Official CLI 5.43+ treats $CI=true as --ci. The upload must unset it
+# or GitHub Actions exits after the image push.
+grep -q 'env -u CI' "$here/railwayUp.sh"
+grep -q -- '--message' "$here/railwayUp.sh"
+echo "railwayUp CI-mode override ok"
