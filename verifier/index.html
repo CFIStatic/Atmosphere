@@ -305,6 +305,8 @@
     flex: 1;
     min-height: 0;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
   .screen-dashboard[hidden] { display: none !important; }
   .rail {
@@ -368,8 +370,6 @@
     overflow-x: hidden;
   }
   body[data-atm-rail-only] .app-frame { overflow: hidden; }
-  /* Intake / job record: keep the office links, hide video filters. */
-  body[data-atm-rail-only] #evidence-nav { display: none; }
   .navitem.nav-icon { justify-content: flex-start; gap: 10px; }
   .navitem.nav-icon svg { flex: none; color: var(--muted); width: 16px; height: 16px; }
   .navitem.nav-icon[aria-current="true"] svg { color: var(--accent); }
@@ -434,14 +434,24 @@
   .facet input { accent-color: var(--accent); margin: 0; }
   .facet .n { margin-left: auto; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
 
-  .main { overflow-y: auto; }
+  .main {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  /* Title sits outside the scrollport so the column header can stick
+     flush against it. One opaque slab — no gap, no rows showing through. */
+  .list-chrome {
+    flex: none;
+    z-index: 6;
+    background: var(--bg);
+  }
 
   /* ---------- toolbar ---------- */
   .toolbar {
-    position: sticky; top: 0; z-index: 5;
     display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-    padding: 12px 18px; background: var(--bg);
-    border-bottom: 1px solid var(--line);
+    padding: 10px 18px 8px; background: var(--bg);
   }
   .toolbar h1 { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: -0.01em; }
   .toolbar .result { font-size: 12.5px; color: var(--muted); }
@@ -455,13 +465,16 @@
 
   /* ---------- table ---------- */
   .tablewrap { padding: 0 18px 60px; }
-  table { width: 100%; border-collapse: collapse; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; }
+  thead { background: var(--bg); }
   thead th {
-    position: sticky; top: 53px; z-index: 4; background: var(--bg);
+    position: sticky; top: 0; z-index: 4;
+    background: var(--bg);
+    background-clip: padding-box;
     text-align: left; font-size: 12px; letter-spacing: 0;
     text-transform: none;
     color: var(--muted); font-weight: 600; padding: 0; white-space: nowrap;
-    border-bottom: 1px solid var(--line);
+    box-shadow: inset 0 -1px 0 var(--line);
   }
   thead th button {
     display: inline-flex; align-items: center; gap: 5px;
@@ -854,6 +867,10 @@
 
     <div class="rail-body">
     <div class="rail-section" id="platform-nav" hidden>
+      <button type="button" class="navitem nav-icon" id="nav-field" data-route="/field">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17 16 12"/></svg>
+        <span class="label">Overview</span>
+      </button>
       <button type="button" class="navitem nav-icon" id="nav-start-job" data-tour="nav-start-job">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
         <span class="label">Start a job</span>
@@ -861,6 +878,10 @@
       <button type="button" class="navitem nav-icon app-nav" data-screen="dashboard">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
         <span class="label">Dashboard</span>
+      </button>
+      <button type="button" class="navitem nav-icon" id="nav-jobs" data-route="/jobs">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.75" y="7.25" width="18.5" height="12" rx="2.25"/><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7"/><path d="M2.75 12h18.5"/></svg>
+        <span class="label">My jobs</span>
       </button>
     </div>
 
@@ -928,12 +949,13 @@
 <div class="shell" id="shell">
   <div class="shell-main">
   <div class="screen screen-dashboard" id="screen-dashboard">
-  <main class="main">
+  <div class="list-chrome">
     <div class="toolbar">
       <h1 id="viewtitle">All videos</h1>
       <span class="result" id="resultcount"></span>
     </div>
-
+  </div>
+  <main class="main">
     <div class="tablewrap">
       <table id="clip-table">
         <thead>
@@ -3473,6 +3495,16 @@
       btn.removeAttribute('aria-current');
     });
 
+    if (activeRoute === '/field' || activeRoute.indexOf('/field/') === 0) {
+      var fieldBtn = document.getElementById('nav-field');
+      if (fieldBtn) fieldBtn.setAttribute('aria-current', 'true');
+      return;
+    }
+    if (activeRoute === '/jobs' || activeRoute.indexOf('/jobs/') === 0) {
+      var jobsBtn = document.getElementById('nav-jobs');
+      if (jobsBtn) jobsBtn.setAttribute('aria-current', 'true');
+      return;
+    }
     if (activeRoute === '/intake') {
       var startJob = document.getElementById('nav-start-job');
       if (startJob) startJob.setAttribute('aria-current', 'true');
@@ -3664,13 +3696,16 @@
   initAccountMenu();
 
   function goHome() {
-    // Brand / home lands on the Dashboard — job folders and clips.
-    activeRoute = '/verifier-library';
-    activeRailItem = 'dashboard';
-    syncSidebarActive();
+    // Brand / home lands on Overview. All videos stays a Dashboard destination.
     if (EMBEDDED) {
-      window.parent.postMessage({ atmosphere: 'navigate', to: '/verifier-library' }, '*');
+      activeRoute = '/field';
+      activeRailItem = '';
+      syncSidebarActive();
+      window.parent.postMessage({ atmosphere: 'navigate', to: '/field' }, '*');
     } else {
+      activeRoute = '/verifier-library';
+      activeRailItem = 'dashboard';
+      syncSidebarActive();
       location.href = '/verifier-library';
     }
   }
@@ -3714,15 +3749,20 @@
         setScreen(btn.dataset.screen);
       });
     });
+    function goShell(path) {
+      activeRoute = path;
+      activeRailItem = '';
+      syncSidebarActive();
+      window.parent.postMessage({ atmosphere: 'navigate', to: path }, '*');
+    }
+    var navField = document.getElementById('nav-field');
+    if (navField) navField.addEventListener('click', function () { goShell('/field'); });
     var navStartJob = document.getElementById('nav-start-job');
     if (navStartJob) {
-      navStartJob.addEventListener('click', function () {
-        activeRoute = '/intake';
-        activeRailItem = '';
-        syncSidebarActive();
-        window.parent.postMessage({ atmosphere: 'navigate', to: '/intake' }, '*');
-      });
+      navStartJob.addEventListener('click', function () { goShell('/intake'); });
     }
+    var navJobs = document.getElementById('nav-jobs');
+    if (navJobs) navJobs.addEventListener('click', function () { goShell('/jobs'); });
     var navSettings = document.getElementById('nav-settings');
     if (navSettings) {
       navSettings.addEventListener('click', function () {

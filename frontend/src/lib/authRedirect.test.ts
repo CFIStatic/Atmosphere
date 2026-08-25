@@ -26,7 +26,7 @@ describe('resolveAuthRedirect', () => {
   });
 
   it('falls back to platform home', () => {
-    expect(resolveAuthRedirect(null, null, '/verifier-library')).toBe('/verifier-library');
+    expect(resolveAuthRedirect(null, null, '/field')).toBe('/field');
   });
 });
 
