@@ -88,9 +88,6 @@ export function passwordResetEmail(input: { url: string }): {
               <p style="margin:18px 0 0;font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:12px;line-height:1.4;color:${INK_FAINT};">
                 Expires in 1 hour · one use
               </p>
-              <p style="margin:16px 0 0;font-size:12px;line-height:1.45;color:${INK_FAINT};word-break:break-all;">
-                Or paste this link:<br>${escapeHtml(url)}
-              </p>
             </td></tr>
           </table>
         </td></tr>

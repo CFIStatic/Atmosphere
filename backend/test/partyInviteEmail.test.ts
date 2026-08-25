@@ -37,15 +37,24 @@ test('Atmosphere sends the invite; the org is named, not the From party', () => 
   assert.equal(subject, 'Ortiz Restoration invited you to capture: 1842 Meridian Ave — water loss');
   assert.ok(html.includes('Open job on phone'));
   assert.ok(html.includes('Ortiz Restoration'));
+  assert.ok(
+    html.includes(
+      'href="https://app.atmosphere.example/shared/tok123?email=alex%40riogrande.example"',
+    ),
+  );
+  assert.ok(!html.includes('Or paste this link'));
+  assert.ok(!html.includes('You already have an Atmosphere account'));
+  assert.ok(!html.includes(base.recipientEmail));
 });
 
-test('an existing account gets sign-in; a missing one gets create-with-this-address', () => {
-  const has = partyInviteEmail(base).text;
-  assert.ok(has.includes('You already have an Atmosphere account'));
-  assert.ok(has.includes('Sign in with that exact email'));
-  assert.ok(has.includes('not the office job list'));
-  assert.ok(!has.includes('My jobs'));
-  assert.ok(!has.includes('Create a free account with that exact address'));
+test('an existing account gets no account copy; a missing one gets create-with-this-address', () => {
+  const has = partyInviteEmail(base);
+  assert.ok(!has.text.includes('You already have an Atmosphere account'));
+  assert.ok(!has.text.includes('Sign in with that exact email'));
+  assert.ok(!has.text.includes('not the office job list'));
+  assert.ok(!has.html.includes('You already have an Atmosphere account'));
+  assert.ok(!has.html.includes('office job list'));
+  assert.ok(!has.text.includes('Create a free account with that exact address'));
 
   const not = partyInviteEmail({ ...base, recipientHasAccount: false });
   assert.ok(not.text.includes('Create a free account with that exact address'));
