@@ -53,6 +53,7 @@ on:
       - cursor/internal-data-platform-e19d
       - cursor/verifier-live-ask-b893
       - cursor/bigger-logo-16cc
+      - cursor/field-capture-scrollable-jobs-b1c0
     paths:
       - 'backend/**'
       - 'supabase/migrations/**'
