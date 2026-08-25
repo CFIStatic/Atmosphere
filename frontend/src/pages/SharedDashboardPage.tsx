@@ -16,6 +16,7 @@ import { ScopeDocPanel } from '../components/shared/ScopeDocPanel';
 import { JobReadinessPanel } from '../components/shared/JobReadinessPanel';
 import { JobLegalHoldPortal } from '../components/shared/JobLegalHoldPortal';
 import { EvidenceLocker } from '../components/shared/EvidenceLocker';
+import { JobFileActions } from '../components/shared/JobFileActions';
 import { JOB_PARTY_TRADE_OPTIONS } from '../components/setup/verifierSetupOptions';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
@@ -285,13 +286,32 @@ export function SharedDashboardPage() {
         description="What is happening on site, what has already been done, and what is still ahead."
         action={
           record ? (
-            <button
-              type="button"
-              onClick={openShare}
-              className="rounded-lg bg-ink-900 px-3.5 py-2 text-sm font-semibold text-paper-0 transition hover:bg-ink-800"
-            >
-              Share
-            </button>
+            <JobFileActions
+              jobId={record.job.id}
+              title={record.job.title}
+              onShare={openShare}
+              onRenamed={(nextTitle) => {
+                setRecord((prev) =>
+                  prev ? { ...prev, job: { ...prev.job, title: nextTitle } } : prev,
+                );
+                setList((prev) =>
+                  (prev ?? []).map((job) =>
+                    job.jobId === record.job.id ? { ...job, title: nextTitle } : job,
+                  ),
+                );
+                if (requestedJob === record.job.id) {
+                  const next: Record<string, string> = { job: record.job.id, title: nextTitle };
+                  if (requestedNumber) next.number = requestedNumber;
+                  setSearchParams(next, { replace: true, state: location.state });
+                }
+              }}
+              onDuplicated={({ jobId, title: nextTitle, summary }) => {
+                ensureListed(summary);
+                navigate(`/job-progress?job=${encodeURIComponent(jobId)}&title=${encodeURIComponent(nextTitle)}`, {
+                  state: { freshJob: summary },
+                });
+              }}
+            />
           ) : undefined
         }
       />

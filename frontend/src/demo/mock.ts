@@ -3099,6 +3099,76 @@ const routes: Array<[string, RegExp, Handler]> = [
     SHARED_RECORDS[id] = record;
     return { body: record };
   }],
+  ['PATCH', /^\/api\/operations\/shared\/([\w-]+)$/, (m, b) => {
+    const id = m[1];
+    const title = String(b.title ?? '').trim();
+    if (title.length < 2) {
+      return { status: 400, body: { error: 'Job name is too short.', code: 'validation_error' } };
+    }
+    const listed = SHARED_JOBS.find((j) => j.jobId === id);
+    if (listed) listed.title = title;
+    const record = SHARED_RECORDS[id];
+    if (record?.job) record.job.title = title;
+    return {
+      body: {
+        job: {
+          id,
+          jobNumber: listed?.jobNumber ?? record?.job?.jobNumber ?? null,
+          title,
+          status: listed?.status ?? record?.job?.status ?? 'scheduled',
+          claimNumber: record?.job?.claimNumber ?? null,
+        },
+      },
+    };
+  }],
+  ['POST', /^\/api\/operations\/shared\/([\w-]+)\/duplicate$/, (m, b) => {
+    const sourceId = m[1];
+    const source = SHARED_RECORDS[sourceId] ?? emptySharedRecord(
+      sourceId,
+      SHARED_JOBS.find((j) => j.jobId === sourceId)?.jobNumber ?? null,
+      SHARED_JOBS.find((j) => j.jobId === sourceId)?.title ?? 'Job',
+      null,
+    );
+    const title = String(b.title ?? `Copy of ${source.job?.title ?? 'Job'}`).trim() || `Copy of ${source.job?.title ?? 'Job'}`;
+    const id = `job-copy-${Date.now()}`;
+    const jobNumber = 9000 + (SHARED_JOBS.length % 900);
+    const scope = (source.scope ?? []).map((item: any, i: number) => ({
+      ...item,
+      id: `sc-${id}-${i}`,
+      party_id: null,
+      state: item.state === 'approved' ? 'included' : item.state === 'declined' ? 'excluded' : item.state,
+      decided_at: null,
+    }));
+    SHARED_JOBS.unshift({
+      jobId: id,
+      jobNumber,
+      title,
+      status: 'scheduled',
+      parties: 0,
+      currentRevision: source.currentRevision ?? 1,
+      behind: 0,
+      awaiting: 0,
+      exclusions: scope.filter((s: { state?: string }) => s.state === 'excluded').length,
+    });
+    SHARED_RECORDS[id] = {
+      ...source,
+      job: { id, jobNumber, title, status: 'scheduled', claimNumber: source.job?.claimNumber ?? null },
+      parties: [],
+      messages: [],
+      risks: [],
+      scope,
+      money: { approved: 0, pending: 0, unpricedApprovals: 0 },
+    };
+    return {
+      status: 201,
+      body: {
+        job: { id, title, jobNumber },
+        briefRevision: source.currentRevision ?? 1,
+        scopeSaved: scope.length,
+        jobFile: SHARED_JOBS[0],
+      },
+    };
+  }],
   ['GET', /^\/api\/operations\/shared\/([\w-]+)\/parties\/([\w-]+)\/link$/, (m) => {
     const record = SHARED_RECORDS[m[1]];
     const party = record?.parties?.find((p: any) => p.id === m[2]);

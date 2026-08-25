@@ -18,7 +18,7 @@ import {
   shareRecipientAllowed,
   shareState,
 } from '../verifier/library.js';
-import { jobTitleForIntake } from '../verifier/intakePropose.js';
+import { displayJobFileName } from '../shared/jobFileCopy.js';
 import { shareEmail } from '../verifier/shareEmail.js';
 import { progressShareEmail } from '../verifier/progressShareEmail.js';
 import { buildMailSender } from '../campaigns/mail/index.js';
@@ -153,7 +153,7 @@ async function assembleLibrary(client: any, orgId: string, proofs: any[]) {
     const dayKey = `${proof.job_id}|${proof.party_id}|${proof.work_date}`;
     return serializeEvidence({
       proof,
-      jobName: jobTitleForIntake(job?.title, address ?? ''),
+      jobName: displayJobFileName(job?.title, address ?? ''),
       jobNumber: job?.job_number ?? null,
       company: party?.company ?? null,
       contactName: party?.contact_name ?? null,
@@ -478,7 +478,7 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
         const party = partyByJob.get(j.id);
         return {
           jobId: j.id as string,
-          jobName: jobTitleForIntake(j.title, address ?? ''),
+          jobName: displayJobFileName(j.title, address ?? ''),
           jobNumber: (j.job_number as number | null) ?? null,
           address,
           claimNumber: (j.claim_number as string | null) ?? null,
