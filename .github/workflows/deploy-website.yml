@@ -21,6 +21,7 @@ on:
       - main
       - cursor/host-corporate-website-51c8
       - cursor/fix-railway-office-deploy-157d
+      - cursor/bigger-logo-16cc
     paths:
       - 'website/**'
       - '.dockerignore'
@@ -66,7 +67,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Configure Pages
         id: pages
@@ -119,7 +120,7 @@ jobs:
       # The default is the private mesh URL in api.upstream — see the step below.
       API_UPSTREAM_OVERRIDE: ${{ vars.API_UPSTREAM }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Require Railway token
         run: |
@@ -128,12 +129,12 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
 
       - name: Install Railway CLI
-        run: npm install -g @railway/cli
+        run: bash scripts/installRailwayCli.sh
 
       - name: Link Railway project
         run: railway link --project "$RAILWAY_PROJECT_ID" --environment production || railway link --project "$RAILWAY_PROJECT_ID" || true
@@ -187,6 +188,7 @@ jobs:
         env:
           RAILWAY_ENVIRONMENT: production
           RAILWAY_UP_ATTEMPTS: '8'
+          RAILWAY_UP_MESSAGE: 'website ${{ github.ref_name }} ${{ github.sha }}'
         run: |
           cp website/railway.toml railway.toml
           cp website/railway.json railway.json
@@ -204,7 +206,7 @@ jobs:
         run: |
           set -euo pipefail
           railway domain --service "$RAILWAY_WEBSITE_SERVICE" || true
-          BUNDLE="$( { railway domain --service "$RAILWAY_WEBSITE_SERVICE" || true; railway status --json --service "$RAILWAY_WEBSITE_SERVICE" || true; } 2>&1 )"
+          BUNDLE="$( { railway domain --service "$RAILWAY_WEBSITE_SERVICE" || true; railway status --json --project "$RAILWAY_PROJECT_ID" --environment production || true; } 2>&1 )"
           echo "$BUNDLE"
           DOMAIN="$(printf '%s' "$BUNDLE" | node website/scripts/railwayDomain.mjs || true)"
           if [ -z "${DOMAIN:-}" ]; then
