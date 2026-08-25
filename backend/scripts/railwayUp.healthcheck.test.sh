@@ -44,3 +44,17 @@ fi
 echo "railwayUp healthcheck matcher ok"
 # Touch the script so a rename of railwayUp.sh fails this job if we forget.
 test -f "$here/railwayUp.sh"
+# Official CLI 5.43+ treats $CI=true as --ci. The upload must unset it
+# or GitHub Actions exits after the image push.
+grep -q 'env -u CI' "$here/railwayUp.sh"
+grep -q -- '--message' "$here/railwayUp.sh"
+grep -q -- '--no-gitignore' "$here/railwayUp.sh"
+grep -q 'wait_for_deployment' "$here/railwayUp.sh"
+extract_deploy_id() {
+  grep -oE 'id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' "$1" \
+    | head -1 | cut -d= -f2
+}
+printf '%s\n' 'Build Logs: https://railway.com/project/x/service/y?id=b3d4930c-1c3d-4ab1-bdc7-dd3e7d6b9be3&' \
+  >"$tmpdir/up.log"
+[ "$(extract_deploy_id "$tmpdir/up.log")" = 'b3d4930c-1c3d-4ab1-bdc7-dd3e7d6b9be3' ]
+echo "railwayUp CI-mode override ok"

@@ -31,6 +31,18 @@ fi
 
 echo "Deploying Railway service=$service project=$project environment=$environment"
 
+# Official CLI 5.43+ treats $CI=true as --ci (stream build logs, then
+# exit). GitHub Actions always sets CI=true, so a bare `railway up`
+# returns after the Metal image push and the Railway dashboard often
+# never shows a finished replica. This script waits on purpose.
+message="${RAILWAY_UP_MESSAGE:-}"
+if [ -z "$message" ] && [ -n "${GITHUB_SHA:-}" ]; then
+  message="${GITHUB_REF_NAME:-ci} ${GITHUB_SHA:0:7}"
+fi
+if [ -n "$message" ]; then
+  echo "Railway deployment message: $message"
+fi
+
 railway status --project "$project" --environment "$environment" || true
 
 dump_build_logs() {
@@ -40,6 +52,40 @@ dump_build_logs() {
     || true
 }
 
+extract_deploy_id() {
+  grep -oE 'id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' "$1" \
+    | head -1 | cut -d= -f2
+}
+
+wait_for_deployment() {
+  local id="$1"
+  local deadline=$((SECONDS + wait_secs))
+  echo "Waiting for Railway deployment $id"
+  echo "https://railway.com/project/${project}/service/${service}?id=${id}"
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    list="$(railway deployment list \
+      --service "$service" \
+      --project "$project" \
+      --environment "$environment" \
+      --limit 10 2>/dev/null || true)"
+    echo "$list"
+    line="$(printf '%s\n' "$list" | grep -i "$id" || true)"
+    case "$line" in
+      *SUCCESS*)
+        echo "Deployment $id is SUCCESS"
+        return 0
+        ;;
+      *FAILED*|*CRASHED*|*REMOVED*)
+        echo "Deployment $id finished unsuccessfully: $line"
+        return 1
+        ;;
+    esac
+    sleep 15
+  done
+  echo "Timed out waiting for deployment $id"
+  return 1
+}
+
 attempt=1
 while [ "$attempt" -le "$max_attempts" ]; do
   if [ -n "${RAILWAY_UP_STAMP_FILE:-}" ] && [ -f "${RAILWAY_UP_STAMP_FILE}" ]; then
@@ -47,11 +93,18 @@ while [ "$attempt" -le "$max_attempts" ]; do
   fi
   echo "railway up attempt $attempt/$max_attempts (wait ${wait_secs}s)"
   log="$(mktemp)"
-  timeout "$wait_secs" railway up \
-    --service "$service" \
-    --project "$project" \
-    --environment "$environment" \
-    --verbose >"$log" 2>&1
+  up_args=(
+    up
+    --service "$service"
+    --project "$project"
+    --environment "$environment"
+    --verbose
+    --no-gitignore
+  )
+  if [ -n "$message" ]; then
+    up_args+=(--message "$message")
+  fi
+  timeout "$wait_secs" env -u CI railway "${up_args[@]}" >"$log" 2>&1
   status=$?
   cat "$log"
   # Railway logs "Attempt #N failed with service unavailable. Continuing to
@@ -74,7 +127,22 @@ while [ "$attempt" -le "$max_attempts" ]; do
     fi
   fi
   if [ "$status" -eq 0 ]; then
+    deploy_id="$(extract_deploy_id "$log")"
     rm -f "$log"
+    if [ -z "$deploy_id" ]; then
+      echo "railway up returned without a deployment id"
+      status=1
+    elif ! wait_for_deployment "$deploy_id"; then
+      status=1
+    fi
+  fi
+  if [ "$status" -eq 0 ]; then
+    echo "---- railway deployment list (latest 5) ----"
+    railway deployment list \
+      --service "$service" \
+      --project "$project" \
+      --environment "$environment" \
+      --limit 5 || true
     echo "Railway deploy succeeded"
     exit 0
   fi
