@@ -142,3 +142,27 @@ export function sortJobsForOpen<T extends { jobId: string; createdAt?: string | 
     return bCreated.localeCompare(aCreated);
   });
 }
+
+/** A live invite on a job — the same token the office emailed. */
+export interface JobPartyInvite {
+  jobId: string;
+  email: string | null;
+  accessToken: string;
+}
+
+/**
+ * Prefer the invite that was emailed to this person. Do not fall back to
+ * another crew's token — that would open someone else's job record.
+ */
+export function pickInviteToken(
+  parties: JobPartyInvite[],
+  jobId: string,
+  email: string | null | undefined,
+): string | null {
+  const want = email?.trim().toLowerCase() ?? '';
+  if (!want) return null;
+  const match = parties.find(
+    (p) => p.jobId === jobId && p.accessToken && (p.email ?? '').trim().toLowerCase() === want,
+  );
+  return match?.accessToken ?? null;
+}

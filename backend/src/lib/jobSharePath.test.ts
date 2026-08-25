@@ -21,6 +21,13 @@ describe('jobSharePagePath', () => {
   it('omits the query when there is no email', () => {
     assert.equal(jobSharePagePath('abc'), '/shared/abc');
   });
+
+  it('builds the emailed invite URL Field Capture should open', () => {
+    assert.equal(
+      jobSharePagePath('ce731b712f8eaf218161c24baa03c0731ad11ea93b15cb0b', 'jack@jettx.ai'),
+      '/shared/ce731b712f8eaf218161c24baa03c0731ad11ea93b15cb0b?email=jack%40jettx.ai',
+    );
+  });
 });
 
 describe('jobShareTokenFromRoute', () => {

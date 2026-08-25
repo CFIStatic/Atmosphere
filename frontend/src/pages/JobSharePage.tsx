@@ -1,12 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { SpinnerIcon } from '../components/icons';
 import { readCapture, todayISO } from '../lib/proofCapture';
 import { signupHref } from '../lib/authRedirect';
 import { jobShareApiPath, jobSharePagePath, jobShareTokenFromRoute } from '../lib/jobSharePath';
 import { CaptureGuideSteps } from '../components/shared/CaptureGuideSteps';
-import { ClaimInvitationPanel } from '../components/shared/ClaimInvitationPanel';
-import { readFieldSession, writeFieldSession } from './MyJobsPage';
 import type { CaptureGuide } from '../lib/api';
 
 /**
@@ -24,9 +22,9 @@ import type { CaptureGuide } from '../lib/api';
  * they came here to do and will scroll to find; the scope is the thing they
  * would not have read otherwise.
  *
- * Nothing here can be edited afterwards. Accepting a revision, filing a video,
- * asking a question — each is an entry in a record, which is the point of the
- * whole feature and worth the cost of not being able to take it back.
+ * Nothing here can be edited afterwards. Accepting a revision or filing a
+ * video is an entry in a record, which is the point of the whole feature
+ * and worth the cost of not being able to take it back.
  */
 
 const shareApi = jobShareApiPath;
@@ -82,22 +80,11 @@ const STATE_STYLE: Record<string, string> = {
 export function JobSharePage() {
   const params = useParams();
   const token = jobShareTokenFromRoute(params);
-  const [searchParams] = useSearchParams();
-  const inviteReturnTo = jobSharePagePath(token, searchParams.get('email'));
-  const inviteEmail = useMemo(() => {
-    const raw = searchParams.get('email')?.trim() ?? '';
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw) ? raw : '';
-  }, [searchParams]);
   const [view, setView] = useState<ShareView | null>(null);
   const [days, setDays] = useState<ProofDay[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
-  const [question, setQuestion] = useState('');
-  const [extra, setExtra] = useState('');
-  // Seeded from the stored session rather than from the server: a sub who has
-  // already claimed some other GC's link should not be asked again here.
-  const [claimed, setClaimed] = useState(() => Boolean(readFieldSession()));
 
   const load = useCallback(async () => {
     try {
@@ -132,27 +119,6 @@ export function JobSharePage() {
     }
   }
 
-  async function ask() {
-    if (!question.trim()) return;
-    setBusy('ask');
-    try {
-      await call(shareApi(token, '/ask'), {
-        method: 'POST',
-        body: JSON.stringify({
-          body: question,
-          asScopeItem: extra.trim() || undefined,
-        }),
-      });
-      setQuestion('');
-      setExtra('');
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not send that.');
-    } finally {
-      setBusy(null);
-    }
-  }
-
   const today = todayISO();
   const todaysDay = days.find((d) => d.workDate === today);
 
@@ -162,17 +128,10 @@ export function JobSharePage() {
       data-testid="invited-job"
     >
       <header>
-        <p className="text-xs font-medium uppercase tracking-wide text-brand-600">Job record</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-brand-600">What's happening</p>
         <h1 className="mt-1 text-2xl font-bold text-ink-900">
           {view?.job.title ?? 'Loading…'}
         </h1>
-        {view && (
-          <p className="mt-1 text-sm text-ink-600">
-            {view.you.company}
-            {view.you.trade ? ` · ${view.you.trade}` : ''}
-            {view.job.jobNumber !== null ? ` · job #${view.job.jobNumber}` : ''}
-          </p>
-        )}
       </header>
 
       {error && (
@@ -183,42 +142,39 @@ export function JobSharePage() {
 
       {view && (
         <>
-          {/* Where they stand, in one sentence, before anything else. */}
-          <section
-            className={`mt-4 rounded-xl border px-4 py-3 ${
-              view.clear ? 'border-success-200 bg-success-50' : 'border-caution-200 bg-caution-50'
-            }`}
-          >
-            <p className={`text-sm font-semibold ${view.clear ? 'text-success-600' : 'text-caution-600'}`}>
-              {view.clear ? 'You are clear to work' : 'Not clear to work yet'}
-            </p>
-            <p className="mt-0.5 text-xs text-ink-700">{view.because}</p>
+          {/* Only when they are not clear: the accept step has to sit above
+              the scope so a crew member cannot start work without seeing it. */}
+          {!view.clear && (
+            <section className="mt-4 rounded-xl border border-caution-200 bg-caution-50 px-4 py-3">
+              <p className="text-sm font-semibold text-caution-600">Not clear to work yet</p>
+              <p className="mt-0.5 text-xs text-ink-700">{view.because}</p>
 
-            {view.currentRevision !== null && view.acknowledgedRevision !== view.currentRevision && (
-              <div className="mt-3">
-                <p className="text-xs text-ink-700">
-                  Read the scope below, then put your name to it. This records that you have seen
-                  revision {view.currentRevision}.
-                </p>
-                <div className="mt-2 flex gap-2">
-                  <input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Your name"
-                    className="min-w-0 flex-1 rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
-                  />
-                  <button
-                    onClick={() => void accept()}
-                    disabled={busy === 'accept' || !name.trim()}
-                    className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900 disabled:opacity-50"
-                  >
-                    {busy === 'accept' && <SpinnerIcon className="animate-spin" width={13} height={13} />}
-                    Accept
-                  </button>
+              {view.currentRevision !== null && view.acknowledgedRevision !== view.currentRevision && (
+                <div className="mt-3">
+                  <p className="text-xs text-ink-700">
+                    Read the scope below, then put your name to it. This records that you have seen
+                    revision {view.currentRevision}.
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Your name"
+                      className="min-w-0 flex-1 rounded-lg border border-line bg-paper-0 px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
+                    />
+                    <button
+                      onClick={() => void accept()}
+                      disabled={busy === 'accept' || !name.trim()}
+                      className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900 disabled:opacity-50"
+                    >
+                      {busy === 'accept' && <SpinnerIcon className="animate-spin" width={13} height={13} />}
+                      Accept
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
-          </section>
+              )}
+            </section>
+          )}
 
           {/* Exclusions first, always. Somebody reading this on a phone reads
               the top of the screen and starts working. */}
@@ -279,37 +235,6 @@ export function JobSharePage() {
             onDone={load}
           />
 
-          {/* Asking, which is the whole point of having this in their hand.
-              Ten seconds to raise it beats a phone call nobody answers. */}
-          <section className="mt-5 rounded-xl border border-line bg-paper-0 p-4">
-            <h2 className="text-base font-semibold text-ink-900">Ask before you do it</h2>
-            <p className="mt-0.5 text-xs text-ink-600">
-              Anything you are unsure about, or extra work you have found. It goes on the record and
-              the office sees it straight away.
-            </p>
-            <textarea
-              rows={3}
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              placeholder="Found rot under the north valley — six sheets. Photos to follow."
-              className="mt-2 w-full rounded-lg border border-line bg-paper-100 px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
-            />
-            <input
-              value={extra}
-              onChange={(e) => setExtra(e.target.value)}
-              placeholder="If it is extra work, name it here — e.g. Replace 6 sheets of decking"
-              className="mt-2 w-full rounded-lg border border-line bg-paper-100 px-3 py-2 text-sm text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
-            />
-            <button
-              onClick={() => void ask()}
-              disabled={busy === 'ask' || !question.trim()}
-              className="mt-2 flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900 disabled:opacity-50"
-            >
-              {busy === 'ask' && <SpinnerIcon className="animate-spin" width={13} height={13} />}
-              Send it
-            </button>
-          </section>
-
           {view.messages.length > 0 && (
             <section className="mt-5">
               <h2 className="text-base font-semibold text-ink-900">On the record</h2>
@@ -324,95 +249,9 @@ export function JobSharePage() {
             </section>
           )}
 
-          {/* Above the pitch and below the work. Claiming is about this sub's
-              other general contractors, so it belongs after everything to do
-              with the job in front of them — and before the pitch, because
-              collecting their own links is a smaller ask than buying
-              something. */}
-          {claimed ? (
-            <section className="mt-5 rounded-xl glass-card p-5">
-              <h2 className="text-base font-semibold text-ink-900">This job is on your list</h2>
-              <p className="mt-1 text-xs text-ink-600">
-                Saved to your Atmosphere account. Stay on this job to review the
-                scope and film the day.
-              </p>
-            </section>
-          ) : (
-            <div className="mt-5">
-              <ClaimInvitationPanel
-                token={token ?? ''}
-                company={view.you.company}
-                initialContact={inviteEmail}
-                returnTo={inviteReturnTo}
-                onClaimed={(session) => {
-                  writeFieldSession(session);
-                  setClaimed(true);
-                }}
-              />
-            </div>
-          )}
-
-          <AtmospherePitch
-            company={view.you.company}
-            inviteEmail={inviteEmail}
-            returnTo={inviteReturnTo}
-          />
         </>
       )}
     </div>
-  );
-}
-
-/**
- * The lure.
- *
- * A sub lands on this page because a GC sent them here, and everything above
- * quietly demonstrates the product: a scope that cannot be argued about, a
- * record that pays. This is the one place the page speaks for itself — after
- * the work is done, at the bottom, in the sub's own terms. Their pain is that
- * every builder runs a different system and their history resets with each
- * one; the pitch is that the record they just added to could be theirs.
- *
- * Deliberately not a banner, not a popup, and never between the crew and the
- * upload button. A lure that gets in the way of the day's work would cost the
- * GC's trust — and the GC is who brought us here.
- */
-function AtmospherePitch({
-  company,
-  inviteEmail,
-  returnTo,
-}: {
-  company: string;
-  inviteEmail?: string;
-  returnTo?: string;
-}) {
-  const signupLink = signupHref({
-    email: inviteEmail || undefined,
-    next: returnTo,
-  });
-  return (
-    <footer className="mt-8 rounded-xl border border-brand-200 bg-brand-600/5 p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-brand-600">
-        Powered by Atmosphere
-      </p>
-      <p className="mt-1.5 text-sm font-semibold text-ink-900">
-        This record works for {company} too.
-      </p>
-      <p className="mt-1 text-xs text-ink-600">
-        Every video you file and every scope you sign lives in a builder's account today. With your
-        own Atmosphere account, your proof-of-work follows you — every job, every builder, one
-        history that shows how you work. Free for subcontractors.
-        {inviteEmail
-          ? ` Use ${inviteEmail} so this invite stays with your account.`
-          : ''}
-      </p>
-      <Link
-        to={signupLink}
-        className="mt-3 inline-block rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-ink-900 transition hover:bg-brand-700"
-      >
-        {inviteEmail ? 'Create your free account' : 'Get your own record'}
-      </Link>
-    </footer>
   );
 }
 
@@ -572,8 +411,10 @@ function ProofSection({
             </span>
           ) : filed ? (
             `${phase === 'before' ? 'Before' : 'After'} filed — refilm`
+          ) : phase === 'before' ? (
+            'Start film'
           ) : (
-            `Film ${phase === 'before' ? 'before you start' : 'when you finish'}`
+            'Film when you finish'
           )}
         </button>
       </div>

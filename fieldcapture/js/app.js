@@ -29,6 +29,11 @@
     return document.querySelector(sel);
   }
 
+  function when(sel, fn) {
+    var node = $(sel);
+    if (node) fn(node);
+  }
+
   var SCREENS = ['s-home', 's-rec', 's-door', 's-blocked'];
   function show(id) {
     SCREENS.forEach(function (s) {
@@ -126,8 +131,12 @@
     root.innerHTML = jobs
       .map(function (j) {
         var selected = state.account && j.id && j.id === state.activeJobId;
+        var href = j.sharePath ? escapeHtml(j.sharePath) : '';
+        var open = href ? 'a' : 'div';
+        var hrefAttr = href ? ' href="' + href + '"' : '';
         return (
-          '<div class="erow"' +
+          '<' + open + ' class="erow"' +
+          hrefAttr +
           (j.id ? ' data-job-id="' + escapeHtml(j.id) + '"' : '') +
           (selected ? ' data-selected="1"' : '') +
           '>' +
@@ -137,15 +146,18 @@
           escapeHtml(j.addr) +
           (j.filmed ? ' <span class="filmedpin">· filmed today</span>' : '') +
           (j.placed ? '' : ' <span class="warnpin">· cannot be placed from GPS</span>') +
-          '</span></span>' +
+          '</span>' +
+          (href ? '<span class="sharelink">' + href + '</span>' : '') +
+          '</span>' +
           '<span class="at">' +
           escapeHtml(j.filmed ? 'Filmed' : j.at || '') +
-          '</span></div>'
+          '</span></' + open + '>'
         );
       })
       .join('');
     if (state.account) {
       root.querySelectorAll('[data-job-id]').forEach(function (row) {
+        if (row.tagName === 'A') return;
         row.style.cursor = 'pointer';
         row.addEventListener('click', function () {
           state.activeJobId = row.getAttribute('data-job-id');
@@ -191,14 +203,15 @@
             addr: payload.job && payload.job.claimNumber ? 'Claim ' + payload.job.claimNumber : 'Shared job',
             at: 'Today',
             placed: true,
+            sharePath: '/shared/' + TOKEN,
           },
         ]);
-        setStatus('Ready — tap Start. Records video + microphone.');
-        $('#daybtn').disabled = false;
+        setStatus('Ready — pick a job.');
+        when('#daybtn', function (btn) { btn.disabled = false; });
       })
       .catch(function (err) {
         setStatus(err.message || 'Could not open this link.', true);
-        $('#daybtn').disabled = true;
+        when('#daybtn', function (btn) { btn.disabled = true; });
         show('s-blocked');
         $('#blocked-msg').textContent = err.message || 'This link is invalid or expired.';
       });
@@ -237,6 +250,7 @@
         at: j.at || 'Today',
         placed: Boolean(j.placed),
         filmed: Boolean(j.filmed),
+        sharePath: j.sharePath || '',
       };
     });
     if (!state.activeJobId || !state.jobs.some(function (j) { return j.id === state.activeJobId; })) {
@@ -251,10 +265,10 @@
     }
     renderExpect(state.jobs);
     $('#week-wrap').hidden = true;
-    $('#daybtn').disabled = !state.activeJobId;
+    when('#daybtn', function (btn) { btn.disabled = !state.activeJobId; });
     setStatus(
       state.activeJobId
-        ? 'Ready — tap Start. Records video + microphone.'
+        ? 'Ready — pick a job.'
         : 'Nothing on the schedule for today. Ask the office to start a job.',
     );
     show('s-home');
@@ -271,7 +285,7 @@
   function bootAccount() {
     document.body.setAttribute('data-mode', 'account');
     readStoredSession();
-    $('#daybtn').addEventListener('click', startLiveDay);
+    when('#daybtn', function (btn) { btn.addEventListener('click', startLiveDay); });
     var form = $('#login-form');
     if (form) {
       form.addEventListener('submit', function (event) {
@@ -552,6 +566,7 @@
         addr: '1841 Meridian Ave, Austin',
         at: '7:00 AM',
         placed: true,
+        sharePath: '/shared/demo-token?email=jack%40jettx.ai',
       },
     ];
     renderExpect(JOBS);
@@ -573,19 +588,21 @@
 
     var seconds = 0;
     var timer = null;
-    $('#daybtn').onclick = function () {
-      show('s-rec');
-      $('#scene').innerHTML = '';
-      $('#preview').hidden = true;
-      $('#rec-since').textContent = 'demo';
-      seconds = 0;
-      timer = setInterval(function () {
-        seconds += 1;
-        $('#clock').textContent = fmt(seconds);
-      }, 1000);
-      $('#live-text').textContent = 'Demo recording — no bytes leave this phone.';
-      $('#site-text').textContent = 'Demo site';
-    };
+    when('#daybtn', function (btn) {
+      btn.onclick = function () {
+        show('s-rec');
+        $('#scene').innerHTML = '';
+        $('#preview').hidden = true;
+        $('#rec-since').textContent = 'demo';
+        seconds = 0;
+        timer = setInterval(function () {
+          seconds += 1;
+          $('#clock').textContent = fmt(seconds);
+        }, 1000);
+        $('#live-text').textContent = 'Demo recording — no bytes leave this phone.';
+        $('#site-text').textContent = 'Demo site';
+      };
+    });
     window.__demoFinish = function () {
       if (timer) clearInterval(timer);
       show('s-door');
@@ -619,7 +636,7 @@
 
   if (LIVE) {
     document.body.setAttribute('data-mode', 'live');
-    $('#daybtn').addEventListener('click', startLiveDay);
+    when('#daybtn', function (btn) { btn.addEventListener('click', startLiveDay); });
     bootLive();
   } else if (DEMO) {
     bootDemo();

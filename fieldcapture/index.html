@@ -194,21 +194,29 @@
 
   .rechint { font-size: 12px; color: var(--faint); margin-top: 10px; line-height: 1.5; }
 
-  /* ---------- today's expected work (passive) ----------
-     Listed, never tapped. The crew does not choose a job — they drive to
-     one and film. Which job the footage belongs to is decided from where
-     the phone was and when, which is the one answer a person standing in
-     the rain should never be asked to type. */
+  /* ---------- today's expected work ----------
+     Tap a job to open the emailed invite — what's happening, then film. */
   .expect { margin-top: 18px; }
   .expect h3 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); font-weight: 750; }
   .erow {
     display: flex; align-items: baseline; gap: 10px;
     padding: 11px 2px; border-bottom: 1px solid var(--line-soft);
   }
+  a.erow { color: inherit; text-decoration: none; cursor: pointer; }
+  a.erow:active { opacity: 0.72; }
   .erow:last-child { border-bottom: 0; }
   .erow .t { flex: 1; min-width: 0; }
   .erow .t b { display: block; font-size: 13.5px; font-weight: 650; letter-spacing: -0.01em; }
   .erow .t span { display: block; font-size: 12px; color: var(--muted); }
+  .erow .t span.sharelink {
+    margin-top: 5px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    word-break: break-all;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
   .erow .at { font-family: var(--mono); font-size: 11.5px; color: var(--faint); white-space: nowrap; }
   .erow .warnpin { font-size: 11px; color: var(--warn); }
   .erow .filmedpin { font-size: 11px; color: var(--pass); }
@@ -528,19 +536,6 @@
 
       <p class="lede" id="live-status" style="margin-top:14px;font-size:13px;color:var(--muted)"></p>
     </div>
-
-    <div class="recwrap">
-      <button class="daybtn" id="daybtn" data-state="idle">
-        <span class="ico" aria-hidden="true">
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3.5l5 4v-11z"/></svg>
-        </span>
-        <span class="lbl">Start the day</span>
-      </button>
-      <p class="rechint" id="btnhint">
-        Your location, clock, video, and microphone ride along with the footage and are checked at
-        the door — that is what makes it proof instead of silent video.
-      </p>
-    </div>
   </div>
 
   <!-- ================= SIGN IN: dashboard credentials, or a job link ================= -->
@@ -642,11 +637,6 @@
       <p class="elevate-word">Atmosphere</p>
       <p class="elevate-sub">Field Capture</p>
     </div>
-  </div>
-
-  <div class="foot">
-    Uploading finishes itself when signal returns — never delete anything to "help". A day that
-    fails a check is still filed and still counts; it is just marked for a person to look at.
   </div>
 </div>
 

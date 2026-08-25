@@ -21,10 +21,12 @@ import { createUploadUrl, recordProof } from './proofOfWork.js';
 import {
   DEFAULT_FIELD_TIMEZONE,
   formatTodayAt,
+  pickInviteToken,
   pickTodayJobs,
   todayKey,
   type TodayJobInput,
 } from '../field/todayJobs.js';
+import { jobSharePagePath } from '../lib/jobSharePath.js';
 
 /**
  * Field Capture (App Store) ↔ platform account bridge.
@@ -301,17 +303,62 @@ fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunct
       }
     }
 
-    const out = picked.map((j) => ({
-      id: j.id,
-      number: j.jobNumber != null ? `#${j.jobNumber}` : '',
-      name: j.title || 'Job',
-      address: (j.propertyId && addressById.get(j.propertyId)) || 'Address on file',
-      at: formatTodayAt(j.scheduledStart, j.filmed, timeZone),
-      status: j.status ?? null,
-      placed: Boolean(j.scheduledStart) || j.filmed,
-      filmed: j.filmed,
-      reason: j.reason,
-    }));
+    const jobIds = picked.map((j) => j.id);
+    const inviteByJob = new Map<string, string>();
+    const email = req.user?.email ?? null;
+    if (jobIds.length) {
+      const { data: parties } = await supabase
+        .from('job_parties')
+        .select('job_id, email, access_token')
+        .eq('org_id', orgId)
+        .in('job_id', jobIds)
+        .is('revoked_at', null);
+      const invites = ((parties ?? []) as any[]).map((p) => ({
+        jobId: p.job_id as string,
+        email: (p.email as string | null) ?? null,
+        accessToken: p.access_token as string,
+      }));
+      for (const job of picked) {
+        const token = pickInviteToken(invites, job.id, email);
+        if (token) inviteByJob.set(job.id, token);
+      }
+    }
+
+    const missing = picked.filter((j) => !inviteByJob.has(j.id));
+    if (missing.length) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', userId)
+        .maybeSingle();
+      const fullName = (profile as { full_name?: string } | null)?.full_name ?? null;
+      await Promise.all(
+        missing.map(async (job) => {
+          try {
+            const party = await ensureFieldParty(supabase, orgId, job.id, userId, email, fullName);
+            if (party.access_token) inviteByJob.set(job.id, party.access_token);
+          } catch {
+            /* click still lists the job; they just cannot open a share link */
+          }
+        }),
+      );
+    }
+
+    const out = picked.map((j) => {
+      const token = inviteByJob.get(j.id) ?? null;
+      return {
+        id: j.id,
+        number: j.jobNumber != null ? `#${j.jobNumber}` : '',
+        name: j.title || 'Job',
+        address: (j.propertyId && addressById.get(j.propertyId)) || 'Address on file',
+        at: formatTodayAt(j.scheduledStart, j.filmed, timeZone),
+        status: j.status ?? null,
+        placed: Boolean(j.scheduledStart) || j.filmed,
+        filmed: j.filmed,
+        reason: j.reason,
+        sharePath: token ? jobSharePagePath(token, email) : null,
+      };
+    });
 
     res.json({ jobs: out, today: day });
   } catch (err) {
