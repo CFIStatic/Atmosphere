@@ -51,9 +51,9 @@ const SYSTEM: NavGroup = {
 const WORK: NavGroup = {
   label: 'Work',
   items: [
-    { to: '/verifier-library', label: 'Overview', Icon: DecisionIcon },
+    { to: '/field', label: 'Overview', Icon: GaugeIcon },
     { to: '/intake', label: 'Start a job', Icon: BoltIcon },
-    { to: '/field', label: 'Field', Icon: GaugeIcon },
+    { to: '/verifier-library', label: 'Dashboard', Icon: DecisionIcon },
     { to: '/jobs', label: 'My jobs', Icon: BriefcaseIcon },
   ],
 };
@@ -98,7 +98,7 @@ export const PLATFORM_IDS: PlatformId[] = ['operations', 'field'];
 export const VISIBLE_PLATFORM_IDS: PlatformId[] = ['operations', 'field'];
 
 export const PLATFORM_HOME: Record<PlatformId, string> = {
-  operations: '/verifier-library',
+  operations: '/field',
   field: '/field',
 };
 
