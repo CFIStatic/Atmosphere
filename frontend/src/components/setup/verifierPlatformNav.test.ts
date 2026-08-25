@@ -34,7 +34,8 @@ describe('verifier Overview rail', () => {
     expect(verifierHtml).toContain("atmosphere: 'navigate'");
   });
 
-  it('keeps the Videos filters on the library rail', () => {
+  it('keeps the Videos filters on the rail when the office page sits beside it', () => {
+    expect(verifierHtml).not.toMatch(/data-atm-rail-only\]\s*#evidence-nav\s*\{\s*display:\s*none/);
     expect(verifierHtml).toContain('data-label="All videos"');
     expect(verifierHtml).toContain('data-label="Classified"');
     expect(verifierHtml).toContain('data-label="Awaiting analysis"');
