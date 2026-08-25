@@ -917,7 +917,7 @@
   </button>
   <div class="search">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-    <input id="q" type="search" placeholder="Search videos by job, company, ID, or hash" aria-label="Search videos" />
+    <input id="q" type="search" placeholder="Search by job, company, date, address, ID, or hash" aria-label="Search videos" />
   </div>
   <div class="spacer"></div>
   <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark mode" title="Light mode. Click for dark.">
@@ -1635,8 +1635,112 @@
        and the evidence view tabs carry enough filtering for most work. */
   }
 
+  var MONTHS_SHORT = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  var MONTHS_LONG = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+
+  /** Every way someone might type a filmed / uploaded day. */
+  function dateSearchPhrases(iso) {
+    if (!iso) return [];
+    var day = String(iso).trim().slice(0, 10);
+    var match = day.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return [String(iso).toLowerCase()];
+    var year = match[1], month = match[2], date = match[3];
+    var monthIndex = Number(month) - 1;
+    var short = MONTHS_SHORT[monthIndex];
+    var long = MONTHS_LONG[monthIndex];
+    if (!short || !long) return [day];
+    return [
+      day,
+      month + '/' + date + '/' + year,
+      Number(month) + '/' + Number(date) + '/' + year,
+      Number(month) + '/' + Number(date),
+      short + ' ' + Number(date),
+      short + ' ' + Number(date) + ' ' + year,
+      long + ' ' + Number(date),
+      long + ' ' + Number(date) + ' ' + year,
+      year
+    ];
+  }
+
+  /**
+   * Every whitespace-separated token must appear in the identifiers — job
+   * name, company, date, address, id, hash. A missing job record cannot throw.
+   */
+  function tokenMatchesHay(hay, token) {
+    if (!token) return true;
+    if (hay.indexOf(token) !== -1 && token.length >= 4) return true;
+    var escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp('(^|[^a-z0-9])' + escaped + '([^a-z0-9]|$)').test(hay);
+  }
+
+  function matchesLibraryQuery(query, fields, dates) {
+    var needle = String(query || '').trim().toLowerCase();
+    if (!needle) return true;
+    var parts = [];
+    (fields || []).forEach(function (field) {
+      if (field == null || field === '' || field === '—') return;
+      parts.push(String(field));
+    });
+    (dates || []).forEach(function (iso) {
+      dateSearchPhrases(iso).forEach(function (p) { parts.push(p); });
+    });
+    var hay = parts.join(' ').toLowerCase();
+    if (hay.indexOf(needle) !== -1) return true;
+    return needle.split(/\s+/).every(function (token) { return tokenMatchesHay(hay, token); });
+  }
+
+  function clipSearchFields(e) {
+    var job = (e && e.job && JOBS[e.job]) || {};
+    return [
+      e.id,
+      e.job,
+      e.jobName,
+      job.name,
+      job.number != null ? '#' + job.number : null,
+      job.number,
+      job.address,
+      job.claimNumber,
+      job.company,
+      e.address,
+      e.claimNumber,
+      e.company,
+      e.person,
+      e.hash,
+      e.phase
+    ].concat(Array.isArray(e.labels) ? e.labels : []);
+  }
+
+  function clipMatchesQuery(e, q) {
+    if (!q) return true;
+    return matchesLibraryQuery(q, clipSearchFields(e), [e.workDate, e.capturedAt, e.uploadedAt]);
+  }
+
+  function jobFileMatchesQuery(key, q) {
+    if (!q) return true;
+    var job = JOBS[key] || {};
+    var clips = EVIDENCE.filter(function (e) { return e.job === key; });
+    var fields = [
+      key,
+      job.name,
+      job.number != null ? '#' + job.number : null,
+      job.number,
+      job.address,
+      job.claimNumber,
+      job.company,
+      job.person
+    ];
+    clips.forEach(function (e) {
+      clipSearchFields(e).forEach(function (f) { fields.push(f); });
+    });
+    var dates = [job.createdAt];
+    clips.forEach(function (e) {
+      dates.push(e.workDate, e.capturedAt, e.uploadedAt);
+    });
+    return matchesLibraryQuery(q, fields, dates);
+  }
+
   function visible() {
-    var q = state.q.trim().toLowerCase();
+    var q = state.q.trim();
     return EVIDENCE.filter(function (e) {
       if (state.view === 'flagged' && !needsAttention(e)) return false;
       if (state.view === 'classified' && (e.analysis || {}).state !== 'done') return false;
@@ -1645,11 +1749,7 @@
       if (Object.keys(state.jobs).length && !state.jobs[e.job]) return false;
       if (Object.keys(state.companies).length && !state.companies[e.company]) return false;
       if (Object.keys(state.phases).length && !state.phases[e.phase]) return false;
-      if (q) {
-        var hay = [e.id, e.company, e.person, e.hash, JOBS[e.job].name, JOBS[e.job].number, e.phase].join(' ').toLowerCase();
-        if (hay.indexOf(q) === -1) return false;
-      }
-      return true;
+      return clipMatchesQuery(e, q);
     }).sort(compareEvidence);
   }
 
@@ -2074,7 +2174,12 @@
     var emptyBody = document.getElementById('empty-body');
     var clipTable = document.getElementById('clip-table');
     var jobFileKeys = Object.keys(JOBS);
-    var showJobFiles = state.groupByJob && jobFileKeys.length > 0 && !state.q && state.view === 'all';
+    var q = state.q.trim();
+    var matchingJobKeys = jobFileKeys.filter(function (k) {
+      if (!q) return true;
+      return jobFileMatchesQuery(k, q);
+    });
+    var showJobFiles = state.groupByJob && matchingJobKeys.length > 0 && (q || state.view === 'all');
     var hasRows = list.length > 0 || showJobFiles;
     if (emptyEl) {
       emptyEl.hidden = hasRows;
@@ -2108,7 +2213,7 @@
       // themselves under the job they arrived with.
       var order = [];
       var groups = {};
-      jobFileKeys.forEach(function (k) {
+      matchingJobKeys.forEach(function (k) {
         groups[k] = [];
         order.push(k);
       });
@@ -2116,8 +2221,10 @@
         if (!groups[e.job]) { groups[e.job] = []; order.push(e.job); }
         groups[e.job].push(e);
       });
-      if (state.q || state.view !== 'all') {
-        order = order.filter(function (k) { return (groups[k] || []).length > 0; });
+      if (q || state.view !== 'all') {
+        order = order.filter(function (k) {
+          return (groups[k] || []).length > 0 || (q && jobFileMatchesQuery(k, q));
+        });
       }
       if (!jobFileKeys.length) {
         order.sort(function (ka, kb) {
@@ -3824,6 +3931,8 @@
       id: raw.id,
       job: jobKey || 'shared',
       jobName: raw.jobName,
+      address: raw.address || '',
+      claimNumber: raw.claimNumber || '',
       company: raw.company || '—',
       person: raw.person || raw.company || '—',
       phase: raw.phase,
@@ -3837,6 +3946,7 @@
       device: null,
       gps: raw.gps ? { lat: raw.gps.lat, lon: raw.gps.lon, accuracy: raw.gps.accuracyM, distanceFt: null } : null,
       hash: raw.hash,
+      labels: Array.isArray(raw.labels) ? raw.labels : [],
       tier: raw.tier || 1,
       hold: raw.legalHold ? { on: true, reason: 'This clip is under legal hold. Retention cannot delete it while the hold stands.', by: '', at: '' } : null,
       checks: raw.checks || [],
@@ -3963,7 +4073,10 @@
         key: j.jobId,
         name: j.jobName || 'Job',
         number: j.jobNumber != null ? j.jobNumber : null,
-        address: ''
+        address: j.address || '',
+        claimNumber: j.claimNumber || '',
+        company: j.company || '',
+        person: j.person || ''
       };
     });
     (payload.items || []).forEach(function (raw) {
@@ -3972,7 +4085,10 @@
           key: raw.jobId,
           name: raw.jobName || 'Job',
           number: raw.jobNumber != null ? raw.jobNumber : null,
-          address: ''
+          address: raw.address || '',
+          claimNumber: raw.claimNumber || '',
+          company: raw.company || '',
+          person: raw.person || ''
         };
       }
     });

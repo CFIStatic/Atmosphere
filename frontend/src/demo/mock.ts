@@ -1168,6 +1168,7 @@ function evidencePortalLibrary() {
         jobId,
         jobName: job?.title ?? 'Job',
         jobNumber: job?.jobNumber ?? null,
+        claimNumber: job?.claimNumber ?? null,
         company: p.company,
         person: p.company,
         phase: p.phase,
@@ -1198,7 +1199,12 @@ function evidencePortalLibrary() {
       });
     }
   }
-  const jobs: Array<{ jobId: string; jobName: string; jobNumber: number | null }> = [];
+  const jobs: Array<{
+    jobId: string;
+    jobName: string;
+    jobNumber: number | null;
+    claimNumber?: string | null;
+  }> = [];
   const seen = new Set<string>();
   for (const j of SHARED_JOBS) {
     jobs.push({ jobId: j.jobId, jobName: j.title, jobNumber: j.jobNumber ?? null });
@@ -1206,7 +1212,12 @@ function evidencePortalLibrary() {
   }
   for (const j of JOBS) {
     if (seen.has(j.jobId)) continue;
-    jobs.push({ jobId: j.jobId, jobName: j.title, jobNumber: j.jobNumber ?? null });
+    jobs.push({
+      jobId: j.jobId,
+      jobName: j.title,
+      jobNumber: j.jobNumber ?? null,
+      claimNumber: j.claimNumber ?? null,
+    });
     seen.add(j.jobId);
   }
   for (const item of items) {
