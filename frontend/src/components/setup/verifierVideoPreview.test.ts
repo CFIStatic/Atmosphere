@@ -53,7 +53,7 @@ describe('verifier dashboard video preview screen', () => {
     expect(verifierHtml).toContain('border: 2px solid rgb(var(--glass-edge) / 0.55)');
     expect(verifierHtml).toMatch(/id="d-back"[\s\S]*Dashboard[\s\S]*<\/button>/);
     expect(verifierHtml).toContain('class="side"');
-    expect(verifierHtml).toContain('backdrop-filter: blur(12px) saturate(155%)');
+    expect(verifierHtml).toContain('backdrop-filter: blur(8px) saturate(140%)');
     expect(verifierHtml).toContain('animation: liquid-sheen');
     expect(verifierHtml).toContain("document.body.setAttribute('data-preview-open', '1')");
     expect(verifierHtml).not.toMatch(/if \(dash\) dash\.hidden = true;/);
