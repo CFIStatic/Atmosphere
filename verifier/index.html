@@ -3683,13 +3683,16 @@
   initAccountMenu();
 
   function goHome() {
-    // Brand / home lands on Overview — the library, not a Dashboard label.
-    activeRoute = '/verifier-library';
-    activeRailItem = 'dashboard';
-    syncSidebarActive();
+    // Brand / home lands on Overview. All videos stays a Dashboard destination.
     if (EMBEDDED) {
-      window.parent.postMessage({ atmosphere: 'navigate', to: '/verifier-library' }, '*');
+      activeRoute = '/field';
+      activeRailItem = '';
+      syncSidebarActive();
+      window.parent.postMessage({ atmosphere: 'navigate', to: '/field' }, '*');
     } else {
+      activeRoute = '/verifier-library';
+      activeRailItem = 'dashboard';
+      syncSidebarActive();
       location.href = '/verifier-library';
     }
   }
