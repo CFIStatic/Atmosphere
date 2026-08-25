@@ -16,7 +16,7 @@ import {
   type JobPriority,
   type LossType,
 } from '../lib/api';
-import { AppShell, PageHeader, PanelSpinner, EmptyState, ErrorNote } from '../components/AppShell';
+import { PageHeader, PanelSpinner, EmptyState, ErrorNote } from '../components/AppShell';
 import { SpinnerIcon, PlusIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
@@ -233,7 +233,7 @@ export function JobsPage() {
   }, [load, search]);
 
   return (
-    <AppShell>
+    <>
       <PageHeader
         title="Jobs"
         description="Every job the organization has opened. Each one carries its own complete history."
@@ -309,6 +309,6 @@ export function JobsPage() {
           ))}
         </div>
       )}
-    </AppShell>
+    </>
   );
 }

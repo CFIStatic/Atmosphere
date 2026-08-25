@@ -23,6 +23,7 @@ import { PLATFORM_HOME } from './lib/platforms';
 import { RequirePlatform } from './components/RequirePlatform';
 import { SharedDashboardPage } from './pages/SharedDashboardPage';
 import { JobIntakePage } from './pages/JobIntakePage';
+import { ConsoleShell } from './layouts/ConsoleShell';
 import { OperationsShell } from './layouts/OperationsShell';
 import { JobSharePage } from './pages/JobSharePage';
 import { PlatformHomePage } from './pages/PlatformHomePage';
@@ -249,17 +250,25 @@ export default function App() {
           <Route path="/dashboard" element={<PlatformRedirect />} />
           <Route path="/overview" element={<PlatformRedirect />} />
           <Route
-            path="/field"
             element={
               <ProtectedRoute>
                 <RequireOnboarded>
-                  <RequirePlatform platform="field">
-                    <PlatformHomePage platform="field" />
-                  </RequirePlatform>
+                  <ConsoleShell />
                 </RequireOnboarded>
               </ProtectedRoute>
             }
-          />
+          >
+            <Route
+              path="/field"
+              element={
+                <RequirePlatform platform="field">
+                  <PlatformHomePage platform="field" />
+                </RequirePlatform>
+              }
+            />
+            <Route path="/jobs" element={<JobsPage />} />
+            <Route path="/jobs/:id" element={<JobDetailPage />} />
+          </Route>
 
           <Route
             element={
@@ -281,21 +290,6 @@ export default function App() {
             <Route path="/job-progress" element={<SharedDashboardPage />} />
             <Route path="/shared" element={<SharedJobsRedirect />} />
           </Route>
-
-          {[
-            { path: '/jobs', element: <JobsPage /> },
-            { path: '/jobs/:id', element: <JobDetailPage /> },
-          ].map(({ path, element }) => (
-            <Route
-              key={path}
-              path={path}
-              element={
-                <ProtectedRoute>
-                  <RequireOnboarded>{element}</RequireOnboarded>
-                </ProtectedRoute>
-              }
-            />
-          ))}
           {/* The technician app. Open to every onboarded member — a project
               manager reviewing a job needs the same capture tools a field
               technician does. */}
