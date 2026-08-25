@@ -1,12 +1,10 @@
-# Leftover Railway "Field Capture" service. The product capture app is served
-# from the office image at /fieldcapture/. This image exists so GitHub
-# Autodeploy of that canvas service has an nginx that answers Railway's probe
-# instead of failing in ~15s (Nixpacks on a static folder, or a backend image
-# plus an nginx pre-deploy command).
+# Field Capture web host. PORT, API_UPSTREAM, and API_RESOLVERS are
+# substituted at container start (NGINX_ENVSUBST_FILTER). Every other $var
+# is nginx's own.
 #
-# Only substitute PORT. Do not mention API_UPSTREAM: a leftover reference that
-# resolves to "http://:" would take the replica down, and this host is not the
-# product origin.
+# Crews open this origin, type a name + office join code, and the page POSTs
+# /api/field-app/join. That must reach the Atmosphere BFF — a static-only
+# nginx answers POST with 405 HTML, which the app surfaces as "Request failed."
 
 server {
   listen ${PORT};
@@ -14,12 +12,16 @@ server {
   root /usr/share/nginx/html;
   index index.html;
 
+  client_max_body_size 25m;
   gzip on;
   gzip_types text/plain text/css application/javascript application/json image/svg+xml;
 
   add_header X-Content-Type-Options nosniff always;
   add_header Referrer-Policy strict-origin-when-cross-origin always;
 
+  # Liveness for this replica only — never proxied. A cold or misconfigured
+  # BFF must not fail Railway's probe: the connect screen is static files and
+  # only /api needs the API.
   location = /healthz {
     access_log off;
     default_type text/plain;
@@ -39,6 +41,33 @@ server {
     default_type text/plain;
     add_header Cache-Control "no-store";
     return 200 'ok';
+  }
+
+  location /api {
+    resolver ${API_RESOLVERS} valid=10s ipv6=on;
+    resolver_timeout 5s;
+    set $api_upstream ${API_UPSTREAM};
+    proxy_pass $api_upstream$request_uri;
+    proxy_http_version 1.1;
+    proxy_ssl_server_name on;
+    proxy_set_header Host $proxy_host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header Connection "";
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 120s;
+    proxy_send_timeout 120s;
+    proxy_intercept_errors on;
+    error_page 502 503 504 = @api_down;
+  }
+
+  location @api_down {
+    default_type application/json;
+    add_header Cache-Control "no-store" always;
+    add_header Content-Type "application/json; charset=utf-8" always;
+    return 503 '{"error":"Atmosphere API is not reachable. Set API_UPSTREAM on this service to the Atmosphere APIs private HTTP URL.","code":"backend_unreachable"}';
   }
 
   location / {

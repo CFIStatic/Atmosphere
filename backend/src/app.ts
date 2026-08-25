@@ -68,6 +68,7 @@ import { setRunSucceededHook, setSlotReleasedHook } from './lib/webRunner.js';
 import { verificationHook, pumpVerificationQueue } from './lib/verifierRunner.js';
 import { forbidden } from './lib/errors.js';
 import {
+  isAtmosphereRailwayFieldCaptureOrigin,
   isAtmosphereRailwayInternalOrigin,
   isAtmosphereRailwayWebOrigin,
   isCloudflareQuickTunnelOrigin,
@@ -77,13 +78,15 @@ import {
  * Match a browser Origin against FRONTEND_ORIGIN.
  * In development, treat localhost and 127.0.0.1 as interchangeable — Cursor's
  * preview and some OS stacks use one while .env lists the other.
- * Production also allows the Atmosphere-web and Atmosphere-internal Railway
- * hostnames so those SPAs can call /api before custom DNS is wired.
+ * Production also allows the Atmosphere-web, Atmosphere-internal, and
+ * Field Capture Railway hostnames so those SPAs can call /api before custom
+ * DNS is wired.
  */
 function isAllowedFrontendOrigin(origin: string): boolean {
   if (config.frontendOrigins.includes(origin)) return true;
   if (isAtmosphereRailwayWebOrigin(origin)) return true;
   if (isAtmosphereRailwayInternalOrigin(origin)) return true;
+  if (isAtmosphereRailwayFieldCaptureOrigin(origin)) return true;
   if (config.isProduction) return false;
 
   let alt: string | null = null;

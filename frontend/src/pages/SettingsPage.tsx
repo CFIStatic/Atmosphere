@@ -878,7 +878,17 @@ function FieldCaptureAppSection() {
         </div>
       </div>
       <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm text-ink-700">
-        <li>Install Field Capture on the phone.</li>
+        <li>
+          Open Field Capture on the phone — the web app at{' '}
+          <a
+            href="https://field-capture-production.up.railway.app/"
+            className="font-medium text-ink-900 underline decoration-line underline-offset-2"
+          >
+            field-capture-production.up.railway.app
+          </a>
+          , or <code className="font-mono text-xs">/fieldcapture/</code> on this
+          office site.
+        </li>
         <li>
           They type their <strong className="font-semibold text-ink-900">first and last name</strong>{' '}
           (so the office can assign work to them) and this code

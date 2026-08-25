@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Point the leftover Railway "Field Capture" service at fieldcapture/railway.toml
-# so GitHub Autodeploy builds this nginx image instead of failing in ~15s.
+# Point the Railway "Field Capture" service at fieldcapture/railway.toml
+# so GitHub Autodeploy builds the nginx image that serves the crew app
+# and proxies /api to the Atmosphere BFF.
 #
 #   RAILWAY_TOKEN=… ./fieldcapture/scripts/apply-railway-config.sh
 #

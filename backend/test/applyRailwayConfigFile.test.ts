@@ -131,7 +131,7 @@ test('each deploy job puts its own config on the upload root', () => {
   assert.doesNotMatch(fieldCapture, /npm install -g @railway\/cli/);
 });
 
-test('the leftover Field Capture service has its own nginx config, not the BFF probe', () => {
+test('the Field Capture service has its own nginx config, not the BFF probe', () => {
   const toml = readFileSync(
     new URL('../../fieldcapture/railway.toml', import.meta.url),
     'utf8',
@@ -148,5 +148,5 @@ test('the leftover Field Capture service has its own nginx config, not the BFF p
   );
   assert.match(dockerfile, /FROM nginx:1\.27-alpine/);
   assert.match(dockerfile, /15-validate-fieldcapture-env\.envsh/);
-  assert.doesNotMatch(dockerfile, /API_UPSTREAM/);
+  assert.match(dockerfile, /NGINX_ENVSUBST_FILTER=\^\(PORT\|API_UPSTREAM\|API_RESOLVERS\)\$\$/);
 });

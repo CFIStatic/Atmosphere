@@ -55,4 +55,13 @@ assert.match(html, /id="preview"/);
 assert.match(html, /webkit-playsinline/);
 assert.match(html, /#preview \{/);
 
+assert.equal(typeof Core.resolveApiBase, 'function');
+assert.equal(Core.isStandaloneFieldCaptureHost('field-capture-production.up.railway.app'), true);
+assert.equal(Core.isStandaloneFieldCaptureHost('field-capture.up.railway.app'), true);
+assert.equal(Core.isStandaloneFieldCaptureHost('atmosphere-web-production.up.railway.app'), false);
+assert.equal(Core.isStandaloneFieldCaptureHost('fieldcapture-production.up.railway.app'), false);
+assert.equal(Core.resolveApiBase('https://example.test/api/'), 'https://example.test/api');
+assert.equal(Core.resolveApiBase(''), '');
+assert.match(appSrc, /Core\.resolveApiBase/, 'standalone Field Capture must pick the office API');
+
 console.log('hold-to-finish OK');

@@ -7,6 +7,9 @@ import { isAtmosphereRailwayWebOrigin } from './previewOrigins.js';
  */
 export const LIVE_OFFICE_ORIGIN = 'https://atmosphere-web-production.up.railway.app';
 
+/** Live Field Capture web host (Railway service "Field Capture"). */
+export const LIVE_FIELD_CAPTURE_ORIGIN = 'https://field-capture-production.up.railway.app';
+
 const UNMAPPED_INTENDED_APP = /^https:\/\/(app|api)\.atmosphereteam\.com\/?$/i;
 const UNMAPPED_APP_HOST = /^(app|api)\.atmosphereteam\.com$/i;
 const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1)$/i;

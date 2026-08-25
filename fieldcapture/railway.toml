@@ -1,13 +1,13 @@
-# Leftover Railway service named "Field Capture" (GitHub check
-# "Atmosphere - Field Capture"). Crew capture is already in the office nginx
-# image at /fieldcapture/; this file exists so GitHub Autodeploy of that
-# canvas service builds this nginx image instead of failing in ~15s.
+# Railway service named "Field Capture" (GitHub check
+# "Atmosphere - Field Capture"). Serves the crew web app at / and proxies
+# /api to the Atmosphere BFF so name + office-code connect works.
 #
 # One-time on this service (Settings → Config-as-code), or via
 # fieldcapture/scripts/apply-railway-config.sh:
 #   Config File    = /fieldcapture/railway.toml
 #   Root Directory = /
-# See docs/production.md → "If Field Capture fails GitHub Autodeploy".
+# Optional: API_UPSTREAM = the Atmosphere APIs private HTTP URL.
+# See docs/production.md → Field Capture web host.
 
 [build]
 builder = "DOCKERFILE"
