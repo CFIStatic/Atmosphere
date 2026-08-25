@@ -21,6 +21,7 @@ on:
       - main
       - cursor/host-corporate-website-51c8
       - cursor/fix-railway-office-deploy-157d
+      - cursor/bigger-logo-16cc
     paths:
       - 'website/**'
       - '.dockerignore'
