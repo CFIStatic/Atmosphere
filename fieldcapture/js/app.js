@@ -190,13 +190,13 @@
     var el = $('#live-status');
     if (!el) return;
     el.textContent = msg || '';
+    el.hidden = !msg;
     el.style.color = isErr ? 'var(--fail)' : 'var(--muted)';
   }
 
   function bootLive() {
     show('s-home');
     setStatus('Loading job…');
-    $('#week-wrap').hidden = true;
     Core.loadShareJob(TOKEN, API_BASE)
       .then(function (payload) {
         state.job = payload;
@@ -275,7 +275,6 @@
       who.innerHTML = '<b>' + escapeHtml(name) + '</b>' + escapeHtml(org);
     }
     renderExpect(state.jobs);
-    $('#week-wrap').hidden = true;
     when('#daybtn', function (btn) { btn.disabled = !state.activeJobId; });
     setStatus(
       state.activeJobId
@@ -568,8 +567,7 @@
   function bootDemo() {
     // Minimal demo path — scripted, never pretend to be live.
     document.body.setAttribute('data-mode', 'demo');
-    setStatus('Demo mode (?demo=1) — not uploading.');
-    $('#week-wrap').hidden = false;
+    setStatus('');
     var JOBS = [
       {
         id: 'j1041',
@@ -603,21 +601,6 @@
     state.jobs = JOBS;
     state.activeJobId = JOBS[0].id;
     renderExpect(JOBS);
-    var WEEK = [
-      { what: 'Mon · Meridian after', chip: ['pass', 'Accepted'] },
-      { what: 'Tue · Cedar Ridge', chip: ['warn', 'Needs eyes'] },
-    ];
-    $('#week').innerHTML = WEEK.map(function (w) {
-      return (
-        '<div class="weekrow"><span class="what">' +
-        w.what +
-        '</span><span class="chip ' +
-        w.chip[0] +
-        '"><span class="dot"></span>' +
-        w.chip[1] +
-        '</span></div>'
-      );
-    }).join('');
 
     var seconds = 0;
     var timer = null;

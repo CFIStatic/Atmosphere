@@ -138,23 +138,7 @@
   .daterow { font-size: 12px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 650; }
   .h1 { font-size: 22px; font-weight: 750; letter-spacing: -0.02em; margin-top: 4px; }
   .lede { color: var(--ink-2); font-size: 13.5px; margin-top: 6px; }
-
-  /* ---------- this week ---------- */
-  .week { margin-top: 22px; }
-  .week h3 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); font-weight: 750; }
-  .weekrow {
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px 2px; border-bottom: 1px solid var(--line-soft); font-size: 12.5px;
-  }
-  .weekrow:last-child { border-bottom: 0; }
-  .weekrow .what { flex: 1; min-width: 0; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .chip {
-    display: inline-flex; align-items: center; gap: 5px;
-    padding: 2.5px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 700; white-space: nowrap;
-  }
-  .chip .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-  .chip.pass { background: var(--pass-soft); color: var(--pass); }
-  .chip.warm { background: var(--accent-soft); color: var(--accent); }
+  #live-status { margin-top: 14px; font-size: 13px; color: var(--muted); }
 
   /* ---------- the one button ----------
      There is exactly one control in this app, and it lives in the same
@@ -600,12 +584,7 @@
         <div class="joblist" id="expect" role="listbox" aria-label="Today's jobs"></div>
       </div>
 
-      <div class="week" id="week-wrap" hidden>
-        <h3>This week — what your days became</h3>
-        <div id="week"></div>
-      </div>
-
-      <p class="lede" id="live-status" style="margin-top:14px;font-size:13px;color:var(--muted)"></p>
+      <p class="lede" id="live-status" hidden></p>
     </div>
     </div>
 
@@ -725,7 +704,7 @@
   </div>
 </div>
 
-<script src="js/capture-core.js?v=jobs-list1"></script>
-<script src="js/app.js?v=jobs-list1"></script>
+<script src="js/capture-core.js?v=jobs-list2"></script>
+<script src="js/app.js?v=jobs-list2"></script>
 </body>
 </html>
