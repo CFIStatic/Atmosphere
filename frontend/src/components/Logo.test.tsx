@@ -21,4 +21,12 @@ describe('Logo brand mark', () => {
     expect(queryByText('Atmo')).toBeNull();
     expect(queryByText('sphere')).toBeNull();
   });
+
+  it('renders the bars and name at the larger lockup size', () => {
+    const { container, getByText } = render(<Logo to={null} />);
+    const svg = container.querySelector('svg');
+    expect(svg?.getAttribute('width')).toBe('28');
+    expect(svg?.getAttribute('height')).toBe('28');
+    expect(getByText('Atmosphere').className).toContain('text-[21px]');
+  });
 });
