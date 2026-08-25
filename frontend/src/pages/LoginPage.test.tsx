@@ -1,5 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -45,7 +45,11 @@ import { LoginPage } from './LoginPage';
 function renderLogin(initialEntry = '/login') {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
-      <LoginPage />
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/verifier-library" element={<div>Workspace home</div>} />
+        <Route path="/signup" element={<div>Signup</div>} />
+      </Routes>
     </MemoryRouter>,
   );
 }
@@ -88,11 +92,41 @@ describe('LoginPage', () => {
     );
   });
 
-  it('keeps a signed-in customer on the sign-in form instead of sending them to the dashboard', () => {
+  it('sends a signed-in customer straight to their workspace', () => {
     authState.user = signedInUser;
     authState.membership = { org: { id: 'org-1', name: 'Jettx LLC' } };
 
     renderLogin();
+
+    expect(screen.getByText('Workspace home')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Welcome back' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Continue to workspace' })).toBeNull();
+  });
+
+  it('sends a signed-in customer without a workspace to finish setup', () => {
+    authState.user = signedInUser;
+    authState.membership = null;
+
+    renderLogin();
+
+    expect(screen.getByText('Signup')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Welcome back' })).toBeNull();
+  });
+
+  it('honors ?next= when a leftover session is already signed in', () => {
+    authState.user = signedInUser;
+    authState.membership = { org: { id: 'org-1', name: 'Jettx LLC' } };
+
+    renderLogin('/login?next=%2Fverifier-library');
+
+    expect(screen.getByText('Workspace home')).toBeInTheDocument();
+  });
+
+  it('keeps the sign-in form when the visitor asks to switch accounts', () => {
+    authState.user = signedInUser;
+    authState.membership = { org: { id: 'org-1', name: 'Jettx LLC' } };
+
+    renderLogin('/login?switch=1');
 
     expect(screen.getByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
     expect(screen.getByLabelText('Email')).toBeInTheDocument();
@@ -104,12 +138,12 @@ describe('LoginPage', () => {
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
   });
 
-  it('lets a signed-in visitor continue to their workspace without leaving the form first', async () => {
+  it('lets a signed-in visitor continue to their workspace from the switch-account form', async () => {
     const user = userEvent.setup();
     authState.user = signedInUser;
     authState.membership = { org: { id: 'org-1', name: 'Jettx LLC' } };
 
-    renderLogin();
+    renderLogin('/login?switch=1');
     await user.click(screen.getByRole('button', { name: 'Continue to workspace' }));
 
     expect(queueRedirect).toHaveBeenCalledWith('/verifier-library');
@@ -121,7 +155,7 @@ describe('LoginPage', () => {
     authState.membership = { org: { id: 'org-1', name: 'Jettx LLC' } };
     authState.login.mockResolvedValue({ org: { id: 'org-2', name: 'Acme' } });
 
-    renderLogin();
+    renderLogin('/login?switch=1');
     await user.type(screen.getByLabelText('Email'), 'new@acme.com');
     await user.type(screen.getByLabelText('Password'), 'password1');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
