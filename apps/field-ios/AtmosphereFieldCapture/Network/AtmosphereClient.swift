@@ -326,9 +326,14 @@ final class AtmosphereClient: ObservableObject {
         guard let uploadURL = URL(string: begin.uploadUrl) else {
             throw APIError.http(status: 0, body: "Bad upload URL")
         }
-        let isStorage = begin.uploadUrl.contains("/storage/v1/object/")
+        // Signed upload URLs also live under `/storage/v1/object/upload/sign/…` and
+        // must be PUT. Only the direct fallback path
+        // `/storage/v1/object/job-proofs/…` is a bearer-authenticated POST.
+        let isDirectStoragePost =
+            begin.uploadUrl.contains("/storage/v1/object/job-proofs/")
+            && !begin.uploadUrl.contains("/upload/sign/")
         var headers: [String: String] = ["Content-Type": "video/mp4"]
-        if isStorage {
+        if isDirectStoragePost {
             headers["apikey"] = supabaseAnonKey
             if let accessToken {
                 headers["Authorization"] = "Bearer \(accessToken)"
@@ -338,7 +343,7 @@ final class AtmosphereClient: ObservableObject {
         return try await MediaUploadClient.uploadFile(
             localURL: localURL,
             uploadURL: uploadURL,
-            method: isStorage ? "POST" : "PUT",
+            method: isDirectStoragePost ? "POST" : "PUT",
             headers: headers
         )
     }

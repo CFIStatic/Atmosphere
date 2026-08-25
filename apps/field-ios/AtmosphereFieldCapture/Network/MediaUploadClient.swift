@@ -23,11 +23,14 @@ enum MediaUploadClient {
             request.setValue(value, forHTTPHeaderField: key)
         }
         request.httpBody = data
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (responseData, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, (200 ... 299).contains(http.statusCode) else {
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let body = String(data: responseData, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
             throw APIError.http(
-                status: (response as? HTTPURLResponse)?.statusCode ?? 0,
-                body: "upload failed"
+                status: status,
+                body: (body?.isEmpty == false) ? String(body!.prefix(240)) : "upload failed"
             )
         }
         return (size, hex)
