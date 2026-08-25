@@ -265,10 +265,10 @@ export default function App() {
             <Route path="/intake" element={<JobIntakePage />} />
             <Route path="/jobs" element={<JobsPage />} />
             <Route path="/jobs/:id" element={<JobDetailPage />} />
-            {/* Job record (opened from an Overview job name). /shared stays as
+            {/* Job record (opened from a Dashboard job name). /shared stays as
                 a redirect so old bookmarks keep working without colliding with
                 public share pages at /shared/:token. Bare /job-progress sends
-                people to Overview. */}
+                people to the Dashboard. */}
             <Route path="/job-progress" element={<SharedDashboardPage />} />
             <Route path="/shared" element={<SharedJobsRedirect />} />
           </Route>

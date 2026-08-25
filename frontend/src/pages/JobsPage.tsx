@@ -235,7 +235,7 @@ export function JobsPage() {
   return (
     <>
       <PageHeader
-        title="Jobs"
+        title="My jobs"
         description="Every job the organization has opened. Each one carries its own complete history."
         action={
           !creating && (
