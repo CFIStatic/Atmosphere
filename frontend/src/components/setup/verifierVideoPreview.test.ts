@@ -44,20 +44,25 @@ describe('verifier dashboard video preview screen', () => {
   });
 
   it('opens the clip as a liquid-glass overlay over the dashboard', () => {
-    const shell = verifierHtml.match(/<div class="shell" id="shell">[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/);
-    expect(shell).not.toBeNull();
-    expect(shell![0]).toContain('id="screen-dashboard"');
-    expect(shell![0]).toContain('id="detail"');
-    expect(shell![0]).toContain('class="screen screen-preview"');
-    expect(shell![0]).toContain('class="liquid-glass"');
-    expect(shell![0]).toContain('id="d-back"');
-    expect(shell![0]).toMatch(/id="d-back"[\s\S]*Dashboard[\s\S]*<\/button>/);
-    expect(shell![0]).toContain('class="side"');
+    expect(verifierHtml).toContain('id="screen-dashboard"');
     expect(verifierHtml).toMatch(/id="detail"[^>]*role="dialog"/);
+    expect(verifierHtml).toContain('class="screen screen-preview"');
+    expect(verifierHtml).toContain('class="liquid-glass"');
+    expect(verifierHtml).toMatch(/id="d-back"[\s\S]*Dashboard[\s\S]*<\/button>/);
+    expect(verifierHtml).toContain('class="side"');
     expect(verifierHtml).toContain('backdrop-filter: blur(var(--glass-blur))');
     expect(verifierHtml).toContain('animation: liquid-sheen');
     expect(verifierHtml).toContain("document.body.setAttribute('data-preview-open', '1')");
     expect(verifierHtml).not.toMatch(/if \(dash\) dash\.hidden = true;/);
+
+    const structure = new JSDOM(verifierHtml).window.document;
+    const frame = structure.getElementById('app-frame');
+    const preview = structure.getElementById('detail');
+    expect(frame).not.toBeNull();
+    expect(preview).not.toBeNull();
+    expect(frame!.contains(preview)).toBe(false);
+    expect(preview!.querySelector('.liquid-glass')).not.toBeNull();
+    expect(preview!.querySelector('.side')).not.toBeNull();
   });
 
   it('paints a YouTube-style screenshot from the clip before waiting on the file', () => {
