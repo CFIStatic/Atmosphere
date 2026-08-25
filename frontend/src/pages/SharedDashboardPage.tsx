@@ -278,7 +278,7 @@ export function SharedDashboardPage() {
         onClick={() => navigate('/verifier-library')}
         className="mb-3 text-sm font-medium text-ink-500 hover:text-ink-800"
       >
-        ← Overview
+        ← Dashboard
       </button>
       <PageHeader
         title={record?.job.title ?? 'Job'}
@@ -311,7 +311,7 @@ export function SharedDashboardPage() {
                     ? ' — Field Capture invites went out.'
                     : ' — some invites could not be emailed.'
                   : '.'}{' '}
-                Footage will land on Overview as they film.
+                Footage will land on Dashboard as they film.
               </p>
             </div>
             <button

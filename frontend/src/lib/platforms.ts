@@ -48,6 +48,7 @@ const SYSTEM: NavGroup = {
   items: [{ to: '/settings', label: 'Settings', Icon: SettingsIcon }],
 };
 
+/** Office rail — these four labels only. Do not add Field. Do not rename Dashboard to Overview. */
 const WORK: NavGroup = {
   label: 'Work',
   items: [

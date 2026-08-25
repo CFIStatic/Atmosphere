@@ -369,7 +369,7 @@
     overflow-x: hidden;
   }
   body[data-atm-rail-only] .app-frame { overflow: hidden; }
-  /* Videos stay on the rail beside Overview / Start a job / Field / My jobs. */
+  /* Videos stay on the rail beside Overview / Start a job / Dashboard / My jobs. */
   .navitem.nav-icon { justify-content: flex-start; gap: 10px; }
   .navitem.nav-icon svg { flex: none; color: var(--muted); width: 16px; height: 16px; }
   .navitem.nav-icon[aria-current="true"] svg { color: var(--accent); }
@@ -3472,9 +3472,9 @@
   initThemeToggle();
 
   var activeRoute = '/verifier-library';
-  // Which rail row owns the orange overlay. Overview and the Videos filters
+  // Which rail row owns the orange overlay. Dashboard and the Videos filters
   // share /verifier-library in the shell, so route alone cannot tell them apart
-  // — only the last clicked bar should light up.
+  // — only the last clicked bar should light up. Overview is /field, not this.
   var activeRailItem = 'dashboard';
 
   function syncSidebarActive() {
@@ -3498,7 +3498,7 @@
       return;
     }
     if (activeRoute === '/shared' || activeRoute === '/job-progress') {
-      // Job record is an Overview detail — keep Overview lit.
+      // Job record is a Dashboard detail — keep Dashboard lit.
       var dashOnRecord = document.querySelector('#platform-nav .app-nav[data-screen="dashboard"]');
       if (dashOnRecord) dashOnRecord.setAttribute('aria-current', 'true');
       return;
@@ -3509,7 +3509,7 @@
       return;
     }
 
-    // Library: exactly one of Overview or a Videos filter.
+    // Library: exactly one of Dashboard or a Videos filter.
     if (activeRailItem === 'dashboard') {
       var dashBtn = document.querySelector('#platform-nav .app-nav[data-screen="dashboard"]');
       if (dashBtn) dashBtn.setAttribute('aria-current', 'true');
@@ -3527,7 +3527,7 @@
     var prev = activeRoute;
     activeRoute = path || '/verifier-library';
     if (activeRoute === '/verifier-library') {
-      // Keep Overview vs Videos selection; only reset when arriving from
+      // Keep Dashboard vs Videos selection; only reset when arriving from
       // another top-level route without a rail click.
       if (activeRailItem !== 'dashboard' && activeRailItem.indexOf('view:') !== 0) {
         activeRailItem = 'dashboard';
