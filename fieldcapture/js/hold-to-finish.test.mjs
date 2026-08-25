@@ -64,4 +64,24 @@ assert.equal(Core.resolveApiBase('https://example.test/api/'), 'https://example.
 assert.equal(Core.resolveApiBase(''), '');
 assert.match(appSrc, /Core\.resolveApiBase/, 'standalone Field Capture must pick the office API');
 
+const coreAssignIndex = appSrc.indexOf('var Core = window.FieldCaptureCore');
+const resolveIndex = appSrc.indexOf('Core.resolveApiBase');
+assert.ok(coreAssignIndex >= 0, 'app.js must assign FieldCaptureCore');
+assert.ok(
+  resolveIndex > coreAssignIndex,
+  'resolveApiBase must run after Core is assigned so the connect screen can boot',
+);
+assert.match(html, /id="daybtn"/, 'Today must keep the Start the day record button');
+assert.match(html, /Start the day/);
+assert.match(html, /id="s-home"[^>]*data-on="0"/, 'home stays hidden until a phone is linked');
+assert.match(html, /id="s-blocked"[^>]*data-on="1"/, 'connect form is the default first screen');
+assert.match(html, /Connect Field Capture/);
+assert.match(html, /Office invite code/);
+assert.match(html, /id="login-name"/);
+assert.match(html, /id="login-code"/);
+assert.match(html, /<button class="daybtn" type="submit" id="login-btn">/);
+assert.match(html, /js\/capture-core\.js\?v=connect-record1/);
+assert.match(html, /js\/app\.js\?v=connect-record1/);
+assert.match(html, /\.daybtn:disabled/);
+
 console.log('hold-to-finish OK');

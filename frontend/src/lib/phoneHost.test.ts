@@ -78,5 +78,9 @@ describe('phone home-screen manifests', () => {
     expect(core).toContain('field-capture(?:-[a-z0-9]+)*\\.up\\.railway\\.app');
     expect(core).toContain('function resolveApiBase');
     expect(app).toContain('Core.resolveApiBase');
+    expect(app.indexOf('var Core = window.FieldCaptureCore')).toBeGreaterThan(-1);
+    expect(app.indexOf('Core.resolveApiBase')).toBeGreaterThan(
+      app.indexOf('var Core = window.FieldCaptureCore'),
+    );
   });
 });

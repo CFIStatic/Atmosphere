@@ -171,6 +171,7 @@
     display: flex; align-items: center; justify-content: center; gap: 10px;
   }
   .daybtn:active { transform: translateY(1px); }
+  .daybtn:disabled { opacity: 0.45; cursor: default; }
   .daybtn .lbl { position: relative; z-index: 1; }
   .daybtn .ico { position: relative; z-index: 1; display: grid; place-items: center; }
   /* Finishing is a hold, not a tap. Starting early costs nothing; ending
@@ -514,7 +515,7 @@
   </div>
 
   <!-- ================= HOME: before the day starts ================= -->
-  <div class="screen" id="s-home" data-on="1">
+  <div class="screen" id="s-home" data-on="0">
     <div class="pad">
       <div class="daterow mono" id="today-date">TODAY</div>
       <h1 class="h1">Start it and go to work</h1>
@@ -536,10 +537,23 @@
 
       <p class="lede" id="live-status" style="margin-top:14px;font-size:13px;color:var(--muted)"></p>
     </div>
+
+    <div class="recwrap">
+      <button class="daybtn" id="daybtn" data-state="idle">
+        <span class="ico" aria-hidden="true">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3.5l5 4v-11z"/></svg>
+        </span>
+        <span class="lbl">Start the day</span>
+      </button>
+      <p class="rechint" id="btnhint">
+        Your location, clock, video, and microphone ride along with the footage and are checked at
+        the door — that is what makes it proof instead of silent video.
+      </p>
+    </div>
   </div>
 
-  <!-- ================= SIGN IN: dashboard credentials, or a job link ================= -->
-  <div class="screen" id="s-blocked">
+  <!-- ================= SIGN IN: name + office invite code ================= -->
+  <div class="screen" id="s-blocked" data-on="1">
     <div class="pad" style="padding-top:36px">
       <h1 class="h1">Connect Field Capture</h1>
       <p class="lede" id="blocked-msg">
@@ -640,7 +654,7 @@
   </div>
 </div>
 
-<script src="js/capture-core.js?v=office-link1"></script>
-<script src="js/app.js?v=office-link1"></script>
+<script src="js/capture-core.js?v=connect-record1"></script>
+<script src="js/app.js?v=connect-record1"></script>
 </body>
 </html>

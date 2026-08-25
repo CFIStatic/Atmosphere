@@ -9,21 +9,23 @@
 (function () {
   'use strict';
 
-  var params = new URLSearchParams(location.search);
-  var TOKEN = params.get('token') || params.get('share') || '';
-  var FORCE_DEMO = params.get('demo') === '1';
-  var API_BASE = Core.resolveApiBase(params.get('api') || '');
-  var STORAGE_BASE = params.get('storage') || '';
-  var LIVE = Boolean(TOKEN) && !FORCE_DEMO;
-  var DEMO = FORCE_DEMO || (!TOKEN && params.get('allowDemo') === '1');
-  var ACCESS_KEY = 'atm.field.accessToken';
-  var REFRESH_KEY = 'atm.field.refreshToken';
-
   var Core = window.FieldCaptureCore;
   if (!Core) {
     console.error('capture-core.js failed to load');
     return;
   }
+
+  var params = new URLSearchParams(location.search);
+  var TOKEN = params.get('token') || params.get('share') || '';
+  var FORCE_DEMO = params.get('demo') === '1';
+  var API_BASE = Core.resolveApiBase
+    ? Core.resolveApiBase(params.get('api') || '')
+    : (params.get('api') || '');
+  var STORAGE_BASE = params.get('storage') || '';
+  var LIVE = Boolean(TOKEN) && !FORCE_DEMO;
+  var DEMO = FORCE_DEMO || (!TOKEN && params.get('allowDemo') === '1');
+  var ACCESS_KEY = 'atm.field.accessToken';
+  var REFRESH_KEY = 'atm.field.refreshToken';
 
   function $(sel) {
     return document.querySelector(sel);
