@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 import { api, type JobSummary } from '../lib/api';
-import { AppShell } from '../components/AppShell';
-import { displayName } from '../lib/display';
-import { METRIC_LABELS, PLATFORMS, type MetricKey, type PlatformId } from '../lib/platforms';
+import { METRIC_LABELS, type MetricKey } from '../lib/platforms';
 import { AlertIcon } from '../components/icons';
+import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 const OPEN_STATUSES = new Set(['draft', 'scheduled', 'in_progress', 'on_hold']);
 
@@ -20,12 +18,24 @@ function isToday(iso: string | null): boolean {
   );
 }
 
+const PHASE_LABEL: Record<string, string> = {
+  draft: 'Draft',
+  scheduled: 'Scheduled',
+  in_progress: 'In progress',
+  on_hold: 'On hold',
+  completed: 'Completed',
+  invoiced: 'Invoiced',
+  paid: 'Paid',
+};
+
 /**
- * Field home — today's jobs and the numbers a crew glances at before they film.
+ * Office Overview — what the organization is doing today.
+ *
+ * This is the admin view from the office, not a technician's personal day.
+ * It sits beside the permanent Dashboard rail.
  */
-export function PlatformHomePage({ platform: platformId }: { platform: PlatformId }) {
-  const platform = PLATFORMS[platformId];
-  const { user, profile } = useAuth();
+export function PlatformHomePage() {
+  useFeatureTimer('office_overview');
   const [jobs, setJobs] = useState<JobSummary[] | null>(null);
 
   useEffect(() => {
@@ -43,86 +53,98 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
     };
   }, []);
 
-  const firstName = displayName(profile?.fullName, user?.email).split(/[\s@]/)[0];
   const open = useMemo(() => (jobs ?? []).filter((j) => OPEN_STATUSES.has(j.status)), [jobs]);
+  const today = useMemo(
+    () =>
+      (jobs ?? []).filter(
+        (j) =>
+          j.status !== 'cancelled' &&
+          (isToday(j.scheduledStart) || isToday(j.lastEventAt) || j.status === 'in_progress'),
+      ),
+    [jobs],
+  );
+  const blocked = useMemo(() => open.filter((j) => j.status === 'on_hold'), [open]);
 
   const metricValue = (key: MetricKey): { value: string; sub: string } => {
-    const { hint } = METRIC_LABELS[key];
     switch (key) {
       case 'openJobs':
-        return { value: jobs ? String(open.length) : '—', sub: hint };
+        return { value: jobs ? String(open.length) : '—', sub: METRIC_LABELS[key].hint };
       case 'crewOnJobs':
-        return { value: jobs ? String(open.reduce((s, j) => s + j.crewSize, 0)) : '—', sub: hint };
+        return {
+          value: jobs ? String(open.reduce((s, j) => s + j.crewSize, 0)) : '—',
+          sub: METRIC_LABELS[key].hint,
+        };
       case 'scheduledToday':
-        return { value: jobs ? String(open.filter((j) => isToday(j.scheduledStart)).length) : '—', sub: hint };
+        return { value: jobs ? String(today.length) : '—', sub: 'Jobs with work on the calendar or already underway' };
       case 'unscheduled':
-        return { value: jobs ? String(open.filter((j) => !j.scheduledStart).length) : '—', sub: hint };
+        return { value: jobs ? String(open.filter((j) => !j.scheduledStart).length) : '—', sub: METRIC_LABELS[key].hint };
     }
   };
 
-  const attention = useMemo(() => {
-    const list = [...open];
-    const workedToday = (jobs ?? []).filter(
-      (j) =>
-        j.status !== 'cancelled' &&
-        (isToday(j.scheduledStart) || isToday(j.lastEventAt) || j.status === 'in_progress'),
-    );
-    const pool = workedToday.length ? workedToday : list;
-    return [...pool]
-      .sort((a, b) => {
-        const aToday = isToday(a.lastEventAt) || isToday(a.scheduledStart) ? 0 : 1;
-        const bToday = isToday(b.lastEventAt) || isToday(b.scheduledStart) ? 0 : 1;
-        if (aToday !== bToday) return aToday - bToday;
-        const at = a.scheduledStart ? Date.parse(a.scheduledStart) : Number.MAX_SAFE_INTEGER;
-        const bt = b.scheduledStart ? Date.parse(b.scheduledStart) : Number.MAX_SAFE_INTEGER;
-        return at - bt;
-      })
-      .slice(0, 8);
-  }, [jobs, open]);
+  const board = useMemo(() => {
+    const pool = today.length ? today : open;
+    return [...pool].sort((a, b) => {
+      const aHold = a.status === 'on_hold' ? 0 : 1;
+      const bHold = b.status === 'on_hold' ? 0 : 1;
+      if (aHold !== bHold) return aHold - bHold;
+      const aLive = a.status === 'in_progress' ? 0 : 1;
+      const bLive = b.status === 'in_progress' ? 0 : 1;
+      if (aLive !== bLive) return aLive - bLive;
+      const at = a.scheduledStart ? Date.parse(a.scheduledStart) : Number.MAX_SAFE_INTEGER;
+      const bt = b.scheduledStart ? Date.parse(b.scheduledStart) : Number.MAX_SAFE_INTEGER;
+      return at - bt;
+    });
+  }, [today, open]);
 
   return (
-    <AppShell>
-      <div>
-        <p className="text-sm font-medium text-brand-600">{platform.name}</p>
-        <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-ink-900">
-          Good to see you, {firstName}
-        </h1>
-        <p className="mt-1 max-w-2xl text-sm text-ink-600">{platform.homeBlurb}</p>
-      </div>
+    <div>
+      <p className="text-sm font-medium text-brand-600">Overview</p>
+      <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-ink-900">The day across the office</h1>
+      <p className="mt-1 max-w-2xl text-sm text-ink-600">
+        Every crew in the field today, what is underway, and what is blocked — for the office, not
+        one technician.
+      </p>
 
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {platform.metrics.map((key) => {
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {(['scheduledToday', 'crewOnJobs', 'openJobs', 'unscheduled'] as MetricKey[]).map((key) => {
           const { value, sub } = metricValue(key);
-          return <Kpi key={key} label={METRIC_LABELS[key].label} value={value} sub={sub} />;
+          const label = key === 'scheduledToday' ? 'In the field today' : METRIC_LABELS[key].label;
+          return <Kpi key={key} label={label} value={value} sub={sub} />;
         })}
       </div>
+
+      {blocked.length > 0 && (
+        <p className="mt-4 text-sm text-danger-600">
+          {blocked.length} job{blocked.length === 1 ? '' : 's'} on hold.
+        </p>
+      )}
 
       <section className="mt-6 rounded-xl glass-card">
         <header className="flex items-baseline justify-between border-b border-line px-5 py-4">
           <div>
-            <h2 className="text-[15px] font-semibold text-ink-900">Today&apos;s jobs</h2>
+            <h2 className="text-[15px] font-semibold text-ink-900">Today&apos;s work</h2>
             <p className="mt-0.5 text-xs text-ink-500">
               {jobs
-                ? attention.length
-                  ? `${attention.length} job${attention.length === 1 ? '' : 's'} for today`
-                  : 'Nothing scheduled or filmed today'
+                ? board.length
+                  ? `${board.length} job${board.length === 1 ? '' : 's'} with work today`
+                  : 'No jobs are scheduled or underway today'
                 : 'Loading…'}
             </p>
           </div>
           <Link to="/jobs" className="text-xs font-medium text-brand-600 hover:text-brand-700">
-            All jobs
+            My jobs
           </Link>
         </header>
         <div>
-          {attention.map((job) => (
-            <AttentionRow key={job.jobId} job={job} />
+          {board.map((job) => (
+            <OfficeJobRow key={job.jobId} job={job} />
           ))}
-          {jobs && attention.length === 0 && (
-            <p className="px-5 py-8 text-sm text-ink-500">Nothing here right now.</p>
+          {jobs && board.length === 0 && (
+            <p className="px-5 py-8 text-sm text-ink-500">Nothing on the board for today.</p>
           )}
         </div>
       </section>
-    </AppShell>
+    </div>
   );
 }
 
@@ -136,17 +158,7 @@ function Kpi({ label, value, sub }: { label: string; value: string; sub?: string
   );
 }
 
-const PHASE_LABEL: Record<string, string> = {
-  draft: 'Draft',
-  scheduled: 'Scheduled',
-  in_progress: 'In progress',
-  on_hold: 'On hold',
-  completed: 'Completed',
-  invoiced: 'Invoiced',
-  paid: 'Paid',
-};
-
-function AttentionRow({ job }: { job: JobSummary }) {
+function OfficeJobRow({ job }: { job: JobSummary }) {
   const blocked = job.status === 'on_hold';
   const critical = job.priority === 1;
 
@@ -166,7 +178,7 @@ function AttentionRow({ job }: { job: JobSummary }) {
           <span className="truncate text-sm font-semibold text-ink-900">{job.title}</span>
           {blocked && (
             <span className="rounded-full bg-danger-50 px-2 py-0.5 text-[11px] font-semibold text-danger-600">
-              Blocked
+              On hold
             </span>
           )}
           <span className="rounded-full bg-paper-200 px-2 py-0.5 text-[11px] font-medium text-ink-600">
@@ -178,10 +190,15 @@ function AttentionRow({ job }: { job: JobSummary }) {
       <div className="shrink-0 text-right">
         <p className="text-sm font-semibold tabular-nums text-ink-900">
           {job.scheduledStart
-            ? new Date(job.scheduledStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+            ? new Date(job.scheduledStart).toLocaleTimeString('en-US', {
+                hour: 'numeric',
+                minute: '2-digit',
+              })
             : 'Unscheduled'}
         </p>
-        <p className="mt-0.5 text-xs text-ink-500">{job.crewSize} on crew</p>
+        <p className="mt-0.5 text-xs text-ink-500">
+          {job.crewSize} on crew{job.crewSize === 1 ? '' : 's'}
+        </p>
       </div>
     </Link>
   );

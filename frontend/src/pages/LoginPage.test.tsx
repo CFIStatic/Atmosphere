@@ -112,7 +112,7 @@ describe('LoginPage', () => {
     renderLogin();
     await user.click(screen.getByRole('button', { name: 'Continue to workspace' }));
 
-    expect(queueRedirect).toHaveBeenCalledWith('/verifier-library');
+    expect(queueRedirect).toHaveBeenCalledWith('/field');
   });
 
   it('signs the current session out before signing in as a different account', async () => {
