@@ -36,11 +36,11 @@ describe('verifier dashboard video preview screen', () => {
     localStorage.clear();
   });
 
-  it('uses a 16:9 YouTube-style screenshot in the Preview column', () => {
-    expect(verifierHtml).toContain('width: 160px; height: 90px');
+  it('uses a compact 16:9 screenshot in the Preview column', () => {
+    expect(verifierHtml).toContain('width: 112px; height: 63px');
     expect(verifierHtml).toContain('function capturedStill');
     expect(verifierHtml).toContain('function captureVideoScreenshot');
-    expect(verifierHtml).toMatch(/th style="width:176px"[^>]*data-sort-key="preview"/);
+    expect(verifierHtml).toMatch(/th style="width:128px"[^>]*data-sort-key="preview"/);
   });
 
   it('opens the clip as a liquid-glass overlay over the dashboard', () => {
