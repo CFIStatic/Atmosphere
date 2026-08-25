@@ -20,7 +20,7 @@ struct TodayView: View {
                         .foregroundStyle(FieldTheme.ink)
 
                     Text(
-                        "One button, once a day. Tap when you get to your first job and hold when you are done. The film is video + audio — filed to \(auth.orgName ?? "your organization") so the office can open it in the evidence library."
+                        "One button, once a day. Tap when you get to your first job and hold for 5 seconds when you are done. The film is video + audio — filed to \(auth.orgName ?? "your organization") so the office can open it in the evidence library."
                     )
                     .font(.system(size: 15))
                     .foregroundStyle(FieldTheme.muted)

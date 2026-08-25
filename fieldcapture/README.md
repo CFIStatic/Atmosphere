@@ -46,8 +46,8 @@ The API returns an absolute `uploadUrl` for Storage, so you do **not** need
 
 1. Sign in (`POST /api/auth/login`) **or** open `?token=`
 2. Load today’s jobs (`GET /api/field-app/today`) or the shared job
-3. `getUserMedia({ video, audio: true })` + `MediaRecorder` (mic required)
-4. Hold to finish → `readCapture` (hash / duration / GPS / frames)
+3. `getUserMedia({ video, audio: true })` + live `<video>` preview + `MediaRecorder` (mic required; iPhone needs playsinline + play())
+4. Hold 5 seconds to finish → `readCapture` (hash / duration / GPS / frames)
 5. `POST …/proof/upload-url` → `PUT` bytes to storage → `POST …/proof`
 6. Door screen shows **real** checks / problems from the API
 
