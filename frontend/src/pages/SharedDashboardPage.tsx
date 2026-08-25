@@ -278,7 +278,7 @@ export function SharedDashboardPage() {
         onClick={() => navigate('/verifier-library')}
         className="mb-3 text-sm font-medium text-ink-500 hover:text-ink-800"
       >
-        ← Dashboard
+        ← Overview
       </button>
       <PageHeader
         title={record?.job.title ?? 'Job'}
