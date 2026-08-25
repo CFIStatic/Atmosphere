@@ -179,12 +179,13 @@
      at rising opacity over one terracotta base. The same asset works on paper
      and on a dark ground because the bars take their colour from the text. */
   .brand {
-    display: flex; align-items: center; gap: 10px;
-    font-weight: 800; font-size: 16px; letter-spacing: -0.02em; color: var(--ink);
+    display: flex; align-items: center; gap: 12px;
+    font-weight: 800; font-size: 22px; letter-spacing: -0.02em; color: var(--ink);
     background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit;
+    white-space: nowrap;
   }
   .brand:hover { opacity: 0.88; }
-  .brand svg { display: block; flex: none; color: var(--ink); }
+  .brand svg { display: block; flex: none; width: 32px; height: 32px; color: var(--ink); }
 
   .search { flex: 1; max-width: 520px; position: relative; }
   .search input {
@@ -270,7 +271,7 @@
      classic app shell, without a band of search bar floating over empty rail. */
   .app-frame.has-sidebar .app-body {
     display: grid;
-    grid-template-columns: var(--rail-w, 220px) minmax(0, 1fr);
+    grid-template-columns: var(--rail-w, 248px) minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
     grid-template-areas:
       'rail topbar'
@@ -335,7 +336,7 @@
   }
   .rail-head {
     flex: none;
-    height: 56px;
+    height: 64px;
     display: flex;
     align-items: center;
     padding: 0 16px;
@@ -343,7 +344,7 @@
     background: var(--panel);
     gap: 8px;
   }
-  .rail-head .brand { font-size: 15px; flex: 1; min-width: 0; }
+  .rail-head .brand { font-size: 22px; flex: 1; min-width: 0; }
   .rail-section { padding: 0; }
   .rail-section + .rail-section {
     margin-top: 6px;
@@ -368,16 +369,16 @@
     overflow-x: hidden;
   }
   body[data-atm-rail-only] .app-frame { overflow: hidden; }
-  /* Intake / job record: keep the office links, hide video filters. */
-  body[data-atm-rail-only] #evidence-nav { display: none; }
+  /* Videos stay on the rail beside Overview / Start a job / Dashboard / My jobs. */
   .navitem.nav-icon { justify-content: flex-start; gap: 10px; }
   .navitem.nav-icon svg { flex: none; color: var(--muted); width: 16px; height: 16px; }
   .navitem.nav-icon[aria-current="true"] svg { color: var(--accent); }
+  .app-frame.has-sidebar { --rail-w: 248px; }
   @media (max-width: 1100px) {
-    .app-frame.has-sidebar { --rail-w: 204px; }
+    .app-frame.has-sidebar { --rail-w: 232px; }
   }
   @media (max-width: 900px) {
-    .app-frame.has-sidebar { --rail-w: 188px; }
+    .app-frame.has-sidebar { --rail-w: 216px; }
   }
 
   .rail h3 {
@@ -841,7 +842,7 @@
   <aside class="rail" id="main-rail" aria-label="Navigation">
     <div class="rail-head" id="rail-head" hidden>
       <button type="button" class="brand" id="brand-home" aria-label="Atmosphere home">
-        <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+        <svg width="32" height="32" viewBox="0 0 22 22" aria-hidden="true">
           <rect width="22" height="2.8" fill="currentColor" opacity="0.3" />
           <rect y="4.8" width="22" height="2.8" fill="currentColor" opacity="0.5" />
           <rect y="9.6" width="22" height="2.8" fill="currentColor" opacity="0.68" />
@@ -854,6 +855,10 @@
 
     <div class="rail-body">
     <div class="rail-section" id="platform-nav" hidden>
+      <button type="button" class="navitem nav-icon" id="nav-field" data-route="/field">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17 16 12"/></svg>
+        <span class="label">Overview</span>
+      </button>
       <button type="button" class="navitem nav-icon" id="nav-start-job" data-tour="nav-start-job">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
         <span class="label">Start a job</span>
@@ -861,6 +866,10 @@
       <button type="button" class="navitem nav-icon app-nav" data-screen="dashboard">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
         <span class="label">Dashboard</span>
+      </button>
+      <button type="button" class="navitem nav-icon" id="nav-jobs" data-route="/jobs">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.75" y="7.25" width="18.5" height="12" rx="2.25"/><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7"/><path d="M2.75 12h18.5"/></svg>
+        <span class="label">My jobs</span>
       </button>
     </div>
 
@@ -884,7 +893,7 @@
 
 <header class="topbar">
   <button type="button" class="brand brand-fallback" id="brand-home-fallback" aria-label="Atmosphere home">
-    <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+    <svg width="32" height="32" viewBox="0 0 22 22" aria-hidden="true">
       <rect width="22" height="2.8" fill="currentColor" opacity="0.3" />
       <rect y="4.8" width="22" height="2.8" fill="currentColor" opacity="0.5" />
       <rect y="9.6" width="22" height="2.8" fill="currentColor" opacity="0.68" />
@@ -3465,7 +3474,7 @@
   var activeRoute = '/verifier-library';
   // Which rail row owns the orange overlay. Dashboard and the Videos filters
   // share /verifier-library in the shell, so route alone cannot tell them apart
-  // — only the last clicked bar should light up.
+  // — only the last clicked bar should light up. Overview is /field, not this.
   var activeRailItem = 'dashboard';
 
   function syncSidebarActive() {
@@ -3473,6 +3482,16 @@
       btn.removeAttribute('aria-current');
     });
 
+    if (activeRoute === '/field' || activeRoute.indexOf('/field/') === 0) {
+      var fieldBtn = document.getElementById('nav-field');
+      if (fieldBtn) fieldBtn.setAttribute('aria-current', 'true');
+      return;
+    }
+    if (activeRoute === '/jobs' || activeRoute.indexOf('/jobs/') === 0) {
+      var jobsBtn = document.getElementById('nav-jobs');
+      if (jobsBtn) jobsBtn.setAttribute('aria-current', 'true');
+      return;
+    }
     if (activeRoute === '/intake') {
       var startJob = document.getElementById('nav-start-job');
       if (startJob) startJob.setAttribute('aria-current', 'true');
@@ -3664,13 +3683,16 @@
   initAccountMenu();
 
   function goHome() {
-    // Brand / home lands on the Dashboard — job folders and clips.
-    activeRoute = '/verifier-library';
-    activeRailItem = 'dashboard';
-    syncSidebarActive();
+    // Brand / home lands on Overview. All videos stays a Dashboard destination.
     if (EMBEDDED) {
-      window.parent.postMessage({ atmosphere: 'navigate', to: '/verifier-library' }, '*');
+      activeRoute = '/field';
+      activeRailItem = '';
+      syncSidebarActive();
+      window.parent.postMessage({ atmosphere: 'navigate', to: '/field' }, '*');
     } else {
+      activeRoute = '/verifier-library';
+      activeRailItem = 'dashboard';
+      syncSidebarActive();
       location.href = '/verifier-library';
     }
   }
@@ -3714,15 +3736,20 @@
         setScreen(btn.dataset.screen);
       });
     });
+    function goShell(path) {
+      activeRoute = path;
+      activeRailItem = '';
+      syncSidebarActive();
+      window.parent.postMessage({ atmosphere: 'navigate', to: path }, '*');
+    }
+    var navField = document.getElementById('nav-field');
+    if (navField) navField.addEventListener('click', function () { goShell('/field'); });
     var navStartJob = document.getElementById('nav-start-job');
     if (navStartJob) {
-      navStartJob.addEventListener('click', function () {
-        activeRoute = '/intake';
-        activeRailItem = '';
-        syncSidebarActive();
-        window.parent.postMessage({ atmosphere: 'navigate', to: '/intake' }, '*');
-      });
+      navStartJob.addEventListener('click', function () { goShell('/intake'); });
     }
+    var navJobs = document.getElementById('nav-jobs');
+    if (navJobs) navJobs.addEventListener('click', function () { goShell('/jobs'); });
     var navSettings = document.getElementById('nav-settings');
     if (navSettings) {
       navSettings.addEventListener('click', function () {

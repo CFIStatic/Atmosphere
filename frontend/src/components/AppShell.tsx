@@ -80,7 +80,7 @@ export function AppShell({
       {/* ---- Sidebar ---- */}
       {/* Fixed full-width rail on desktop; slide-in drawer on mobile. */}
       <aside
-        className={`glass-rail fixed inset-y-0 left-0 z-40 flex w-60 flex-col transition-transform duration-200 md:translate-x-0 md:transform-none ${
+        className={`glass-rail fixed inset-y-0 left-0 z-40 flex w-64 flex-col transition-transform duration-200 md:translate-x-0 md:transform-none ${`
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -134,7 +134,7 @@ export function AppShell({
       )}
 
       {/* ---- Top bar + content ---- */}
-      <div className="md:pl-60">
+      <div className="md:pl-64">
         <header className="glass-bar sticky top-0 z-20">
           <div className="flex items-center gap-3 px-4 py-3 sm:px-6">
             <button

@@ -311,7 +311,7 @@ export function SharedDashboardPage() {
                     ? ' — Field Capture invites went out.'
                     : ' — some invites could not be emailed.'
                   : '.'}{' '}
-                Footage will land on the Dashboard as they film.
+                Footage will land on Dashboard as they film.
               </p>
             </div>
             <button
