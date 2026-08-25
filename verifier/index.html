@@ -855,17 +855,17 @@
 
     <div class="rail-body">
     <div class="rail-section" id="platform-nav" hidden>
-      <button type="button" class="navitem nav-icon" id="nav-field" data-route="/field">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17 16 12"/></svg>
+      <button type="button" class="navitem nav-icon app-nav" data-screen="dashboard">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
         <span class="label">Overview</span>
       </button>
       <button type="button" class="navitem nav-icon" id="nav-start-job" data-tour="nav-start-job">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
         <span class="label">Start a job</span>
       </button>
-      <button type="button" class="navitem nav-icon app-nav" data-screen="dashboard">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-        <span class="label">Dashboard</span>
+      <button type="button" class="navitem nav-icon" id="nav-field" data-route="/field">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17 16 12"/></svg>
+        <span class="label">Field</span>
       </button>
       <button type="button" class="navitem nav-icon" id="nav-jobs" data-route="/jobs">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.75" y="7.25" width="18.5" height="12" rx="2.25"/><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7"/><path d="M2.75 12h18.5"/></svg>
@@ -3683,16 +3683,13 @@
   initAccountMenu();
 
   function goHome() {
-    // Brand / home lands on Overview. All videos stays a Dashboard destination.
+    // Brand / home lands on Overview — the library, not a Dashboard label.
+    activeRoute = '/verifier-library';
+    activeRailItem = 'dashboard';
+    syncSidebarActive();
     if (EMBEDDED) {
-      activeRoute = '/field';
-      activeRailItem = '';
-      syncSidebarActive();
-      window.parent.postMessage({ atmosphere: 'navigate', to: '/field' }, '*');
+      window.parent.postMessage({ atmosphere: 'navigate', to: '/verifier-library' }, '*');
     } else {
-      activeRoute = '/verifier-library';
-      activeRailItem = 'dashboard';
-      syncSidebarActive();
       location.href = '/verifier-library';
     }
   }

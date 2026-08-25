@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 const appSrc = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../App.tsx'), 'utf8');
 
 describe('office rail routes', () => {
-  it('keeps Overview, Dashboard, Start a job, and My jobs inside the permanent office shell', () => {
+  it('keeps Overview, Field, Start a job, and My jobs inside the permanent office shell', () => {
     const start = appSrc.indexOf('<OperationsShell');
     const end = appSrc.indexOf('path="/technician"');
     const shell = appSrc.slice(start, end);
