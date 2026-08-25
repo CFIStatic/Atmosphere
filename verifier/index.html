@@ -84,8 +84,8 @@
     --sans: 'Inter', ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     --glass-tint: 251 250 247;
     --glass-alpha: 0.16;
-    --glass-blur: 40px;
-    --glass-sat: 200%;
+    --glass-blur: 16px;
+    --glass-sat: 140%;
     --glass-sheen: 0.22;
     --glass-edge: 28 25 23;
     --glass-edge-alpha: 0.1;
@@ -360,7 +360,7 @@
     z-index: 50;
     display: none;
     flex-direction: column;
-    padding: 28px 36px 32px;
+    padding: 52px 56px 56px;
     overflow: hidden;
     background: transparent;
   }
@@ -376,8 +376,8 @@
       radial-gradient(56rem 40rem at 108% 4%, rgb(255 255 255 / 0.1), transparent 52%),
       radial-gradient(48rem 36rem at 50% 118%, rgb(188 69 8 / 0.04), transparent 58%),
       rgb(var(--glass-tint) / var(--glass-alpha));
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(1.06);
-    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(1.06);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
   }
   .screen-preview .liquid-glass::before {
     content: '';
@@ -406,7 +406,7 @@
   .screen-preview .sheet {
     position: relative;
     z-index: 1;
-    width: min(1480px, 100%);
+    width: min(1280px, 100%);
     height: 100%;
     max-height: none;
     margin: 0 auto;
@@ -469,7 +469,7 @@
     backdrop-filter: blur(12px);
   }
   @media (max-width: 860px) {
-    .screen-preview { padding: 8px; }
+    .screen-preview { padding: 12px; }
     .screen-preview .sheet { border-radius: 14px; }
     .screen-preview .sheethead { border-radius: 12px; }
     .screen-preview .side { margin: 0 8px 8px; }
