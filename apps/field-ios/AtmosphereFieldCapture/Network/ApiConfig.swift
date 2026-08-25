@@ -3,10 +3,11 @@ import Foundation
 /**
  * Where Field Capture talks to Atmosphere.
  *
- * Physical iPhones file day films through the hosted office app, which
- * reverse-proxies `/api` to the BFF. That is what queues internal AI
- * action-reading. The iOS Simulator still prefers a local BFF when one is
- * running. Direct Supabase is only a fallback if the BFF is unreachable, so
+ * Physical iPhones and the simulator file day films directly through the
+ * public BFF. That is what queues internal AI action-reading and avoids
+ * depending on an office nginx proxy for native traffic. Set
+ * `ATMOSPHERE_API_BASE` in the Xcode scheme when intentionally testing a local
+ * BFF. Direct Supabase is only a fallback if the BFF is unreachable, so
  * a crew can still upload when the API is down — those films will not be
  * read until they are filed through `/api/field-app`.
  */
@@ -15,8 +16,8 @@ enum ApiConfig {
     static let supabaseURL = URL(string: "https://ccxatzfsvzetciiwsjlj.supabase.co")!
     static let supabaseAnonKey = "sb_publishable_4ppzqtXQPeVPuzP8Ant-pQ_MZIPMcGn"
 
-    /// Production office origin. nginx proxies `/api` onto the Express BFF.
-    static let productionBffURL = URL(string: "https://atmosphere-web-production.up.railway.app")!
+    /// Production Express BFF origin.
+    static let productionBffURL = URL(string: "https://atmosphere-production.up.railway.app")!
 
     static var isSimulator: Bool {
         #if targetEnvironment(simulator)
@@ -29,11 +30,11 @@ enum ApiConfig {
     /// Optional Express BFF. Nil only when no usable origin can be resolved.
     static func bffBaseURL() -> URL? {
         UserDefaults.standard.removeObject(forKey: "atmosphere.apiBase")
-        let plist = Bundle.main.object(forInfoDictionaryKey: "ATMOSPHERE_API_BASE") as? String
         let env = ProcessInfo.processInfo.environment["ATMOSPHERE_API_BASE"]
-        let raw = (plist?.isEmpty == false ? plist : nil)
-            ?? (env?.isEmpty == false ? env : nil)
-            ?? (isSimulator ? "http://127.0.0.1:4000" : productionBffURL.absoluteString)
+        let plist = Bundle.main.object(forInfoDictionaryKey: "ATMOSPHERE_API_BASE") as? String
+        let raw = (env?.isEmpty == false ? env : nil)
+            ?? (plist?.isEmpty == false ? plist : nil)
+            ?? productionBffURL.absoluteString
         guard let raw, let url = URL(string: stripTrailingSlash(raw)),
               let scheme = url.scheme?.lowercased(),
               scheme == "http" || scheme == "https",

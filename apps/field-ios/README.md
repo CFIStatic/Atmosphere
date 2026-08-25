@@ -39,7 +39,11 @@ open apps/field-ios/AtmosphereFieldCapture.xcodeproj
 ```
 
 **Simulator:** no Apple Team needed. Signing is off for `iphonesimulator`.
-Pick any iPhone simulator and press Run (⌘R).
+Pick any iPhone simulator and press Run (⌘R). The simulator uses the hosted
+Atmosphere API by default, so account and invite-code flows work without
+starting the backend on your Mac. To test a local backend instead, edit the
+shared scheme and set the `ATMOSPHERE_API_BASE` environment variable to
+`http://127.0.0.1:4000` for the Run action.
 
 **Physical iPhone (cable, for testing):**
 
@@ -64,11 +68,10 @@ Pick any iPhone simulator and press Run (⌘R).
 
 A Personal Team build expires after 7 days — Run from Xcode again to refresh.
 The phone signs in with the same email/password as the Atmosphere website.
-A physical iPhone never uses localhost; it talks to the hosted Atmosphere
-office app (`https://atmosphere-web-production.up.railway.app`), which
-proxies `/api` to the BFF. That filing path is what queues internal AI
-action-reading of the day film. Direct Supabase is only a fallback if the
-BFF cannot be reached. RoomPlan needs a LiDAR iPhone.
+A physical iPhone never uses localhost; it talks directly to the hosted
+Atmosphere BFF (`https://atmosphere-production.up.railway.app`). That filing
+path queues internal AI action-reading of the day film. Direct Supabase is
+only a fallback if the BFF cannot be reached. RoomPlan needs a LiDAR iPhone.
 
 To use the **web** Field Capture on the phone instead (no Xcode):
 
@@ -119,10 +122,11 @@ AI dictation and twin review stay in the **office Verifier**.
 
 ## API (account-linked)
 
-On a physical iPhone the app talks to the Atmosphere office BFF
-(`https://atmosphere-web-production.up.railway.app/api/field-app/*`) so
+The simulator and a physical iPhone talk directly to the Atmosphere BFF
+(`https://atmosphere-production.up.railway.app/api/field-app/*`) so
 day films enqueue server-side vision: sparse frames, action log, and
-Verifier dictation. A local BFF is used in Simulator when one is running.
+Verifier dictation. Set the Xcode Run scheme's `ATMOSPHERE_API_BASE`
+environment variable when intentionally testing a local BFF.
 
 1. Create account: BFF `POST /api/field-app/register` (email + password + join code or new office name), or Supabase `POST /auth/v1/signup` plus `create_org` / `join_org`
 2. Sign-in: `POST /auth/v1/token?grant_type=password` (or BFF `POST /api/auth/login`)

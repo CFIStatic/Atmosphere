@@ -35,7 +35,7 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Location attributes stretches of the day film to the right job — you never pick a job by hand.</string>
 	<key>ATMOSPHERE_API_BASE</key>
-	<string>http://127.0.0.1:4000</string>
+	<string>https://atmosphere-production.up.railway.app</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
