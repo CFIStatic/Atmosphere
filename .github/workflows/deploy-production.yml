@@ -52,6 +52,7 @@ on:
       - cursor/fix-railway-office-deploy-157d
       - cursor/internal-data-platform-e19d
       - cursor/verifier-live-ask-b893
+      - cursor/bigger-logo-16cc
     paths:
       - 'backend/**'
       - 'supabase/migrations/**'
@@ -71,6 +72,7 @@ concurrency:
 jobs:
   backend:
     name: Sync Keys → Railway and deploy backend
+    if: github.ref_name != 'cursor/bigger-logo-16cc'
     runs-on: ubuntu-latest
     environment: Keys
     steps:
@@ -211,6 +213,7 @@ jobs:
           RAILWAY_WEB_SERVICE: ${{ secrets.RAILWAY_WEB_SERVICE || vars.RAILWAY_WEB_SERVICE }}
           RAILWAY_BACKEND_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere APIs' }}
           RAILWAY_ENVIRONMENT: production
+          RAILWAY_UP_MESSAGE: 'office ${{ github.ref_name }} ${{ github.sha }}'
         run: |
           set -euo pipefail
           project="${RAILWAY_PROJECT_ID}"
@@ -257,6 +260,8 @@ jobs:
           # railway up reads /railway.toml from the upload root. Without this copy
           # the CLI builds the backend Dockerfile and probes /api/health on nginx.
           cp frontend/railway.toml railway.toml
+          echo "# railway-up $(date -u +%s)" > frontend/.railway-up-stamp
+          export RAILWAY_UP_STAMP_FILE="$PWD/frontend/.railway-up-stamp"
           export RAILWAY_SERVICE="$service"
           export RAILWAY_PROJECT_ID="$project"
           chmod +x backend/scripts/railwayUp.sh
@@ -264,6 +269,7 @@ jobs:
 
   website-config:
     name: Repair Corporate Website config
+    if: github.ref_name != 'cursor/bigger-logo-16cc'
     runs-on: ubuntu-latest
     environment: Keys
     steps:
@@ -304,6 +310,7 @@ jobs:
 
   internal:
     name: Deploy internal site
+    if: github.ref_name != 'cursor/bigger-logo-16cc'
     runs-on: ubuntu-latest
     environment: Keys
     steps:

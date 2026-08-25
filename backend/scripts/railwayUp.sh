@@ -52,6 +52,40 @@ dump_build_logs() {
     || true
 }
 
+extract_deploy_id() {
+  grep -oE 'id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' "$1" \
+    | head -1 | cut -d= -f2
+}
+
+wait_for_deployment() {
+  local id="$1"
+  local deadline=$((SECONDS + wait_secs))
+  echo "Waiting for Railway deployment $id"
+  echo "https://railway.com/project/${project}/service/${service}?id=${id}"
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    list="$(railway deployment list \
+      --service "$service" \
+      --project "$project" \
+      --environment "$environment" \
+      --limit 10 2>/dev/null || true)"
+    echo "$list"
+    line="$(printf '%s\n' "$list" | grep -i "$id" || true)"
+    case "$line" in
+      *SUCCESS*)
+        echo "Deployment $id is SUCCESS"
+        return 0
+        ;;
+      *FAILED*|*CRASHED*|*REMOVED*)
+        echo "Deployment $id finished unsuccessfully: $line"
+        return 1
+        ;;
+    esac
+    sleep 15
+  done
+  echo "Timed out waiting for deployment $id"
+  return 1
+}
+
 attempt=1
 while [ "$attempt" -le "$max_attempts" ]; do
   if [ -n "${RAILWAY_UP_STAMP_FILE:-}" ] && [ -f "${RAILWAY_UP_STAMP_FILE}" ]; then
@@ -65,6 +99,7 @@ while [ "$attempt" -le "$max_attempts" ]; do
     --project "$project"
     --environment "$environment"
     --verbose
+    --no-gitignore
   )
   if [ -n "$message" ]; then
     up_args+=(--message "$message")
@@ -92,7 +127,16 @@ while [ "$attempt" -le "$max_attempts" ]; do
     fi
   fi
   if [ "$status" -eq 0 ]; then
+    deploy_id="$(extract_deploy_id "$log")"
     rm -f "$log"
+    if [ -z "$deploy_id" ]; then
+      echo "railway up returned without a deployment id"
+      status=1
+    elif ! wait_for_deployment "$deploy_id"; then
+      status=1
+    fi
+  fi
+  if [ "$status" -eq 0 ]; then
     echo "---- railway deployment list (latest 5) ----"
     railway deployment list \
       --service "$service" \
