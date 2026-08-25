@@ -122,51 +122,60 @@
 
   /* ---------- home hydration ---------- */
 
+  function jobMetaLine(j) {
+    var bits = [];
+    if (j.addr) bits.push(escapeHtml(j.addr));
+    if (j.filmed) bits.push('<span class="filmedpin">Filmed today</span>');
+    else if (j.placed === false) bits.push('<span class="warnpin">Location not placed</span>');
+    return bits.join(' · ') || 'Assigned today';
+  }
+
   function renderExpect(jobs) {
     var root = $('#expect');
     if (!root) return;
+    var hint = $('#job-hint');
     if (!jobs.length) {
+      if (hint) hint.hidden = true;
       root.innerHTML =
-        '<div class="erow"><span class="t"><b>Nothing assigned yet</b><span>Ask the office to put you on a job, then refresh.</span></span></div>';
+        '<div class="erow erow-empty" role="status">' +
+        '<span class="t"><b>Nothing assigned yet</b><span>Ask the office to put you on a job, then refresh.</span></span>' +
+        '</div>';
       return;
     }
+    if (hint) hint.hidden = false;
     root.innerHTML = jobs
       .map(function (j) {
-        var selected = state.account && j.id && j.id === state.activeJobId;
-        var href = j.sharePath ? escapeHtml(j.sharePath) : '';
-        var open = href ? 'a' : 'div';
-        var hrefAttr = href ? ' href="' + href + '"' : '';
+        var selected = Boolean(j.id && j.id === state.activeJobId);
+        var selectable = Boolean(j.id);
+        var tag = selectable ? 'button' : 'div';
+        var extra = selectable
+          ? ' type="button" role="option" aria-selected="' + (selected ? 'true' : 'false') + '"'
+          : '';
         return (
-          '<' + open + ' class="erow"' +
-          hrefAttr +
+          '<' + tag + ' class="erow"' +
+          extra +
           (j.id ? ' data-job-id="' + escapeHtml(j.id) + '"' : '') +
           (selected ? ' data-selected="1"' : '') +
           '>' +
+          (selectable ? '<span class="pick" aria-hidden="true"></span>' : '') +
           '<span class="t"><b>' +
           escapeHtml(j.name) +
           '</b><span>' +
-          escapeHtml(j.addr) +
-          (j.filmed ? ' <span class="filmedpin">· filmed today</span>' : '') +
-          (j.placed ? '' : ' <span class="warnpin">· cannot be placed from GPS</span>') +
-          '</span>' +
-          (href ? '<span class="sharelink">' + href + '</span>' : '') +
-          '</span>' +
+          jobMetaLine(j) +
+          '</span></span>' +
           '<span class="at">' +
           escapeHtml(j.filmed ? 'Filmed' : j.at || '') +
-          '</span></' + open + '>'
+          '</span></' + tag + '>'
         );
       })
       .join('');
-    if (state.account) {
-      root.querySelectorAll('[data-job-id]').forEach(function (row) {
-        if (row.tagName === 'A') return;
-        row.style.cursor = 'pointer';
-        row.addEventListener('click', function () {
-          state.activeJobId = row.getAttribute('data-job-id');
-          renderExpect(state.jobs);
-        });
+    root.querySelectorAll('[data-job-id]').forEach(function (row) {
+      row.addEventListener('click', function () {
+        state.activeJobId = row.getAttribute('data-job-id');
+        renderExpect(jobs);
+        when('#daybtn', function (btn) { btn.disabled = !state.activeJobId; });
       });
-    }
+    });
   }
 
   function escapeHtml(s) {
@@ -568,9 +577,31 @@
         addr: '1841 Meridian Ave, Austin',
         at: '7:00 AM',
         placed: true,
-        sharePath: '/shared/demo-token?email=jack%40jettx.ai',
+      },
+      {
+        id: 'j1042',
+        name: 'Cedar Ridge — roof, wind',
+        addr: '902 Cedar Ridge Dr, Austin',
+        at: '9:30 AM',
+        placed: true,
+      },
+      {
+        id: 'j1043',
+        name: 'Oak Hill — mold, Class 2',
+        addr: '4412 Convict Hill Rd, Austin',
+        at: '11:15 AM',
+        placed: true,
+      },
+      {
+        id: 'j1044',
+        name: 'East 6th — kitchen, water',
+        addr: '1801 E 6th St, Austin',
+        at: '1:45 PM',
+        placed: false,
       },
     ];
+    state.jobs = JOBS;
+    state.activeJobId = JOBS[0].id;
     renderExpect(JOBS);
     var WEEK = [
       { what: 'Mon · Meridian after', chip: ['pass', 'Accepted'] },

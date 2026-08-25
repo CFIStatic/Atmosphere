@@ -80,8 +80,16 @@ assert.match(html, /Office invite code/);
 assert.match(html, /id="login-name"/);
 assert.match(html, /id="login-code"/);
 assert.match(html, /<button class="daybtn" type="submit" id="login-btn">/);
-assert.match(html, /js\/capture-core\.js\?v=connect-record1/);
-assert.match(html, /js\/app\.js\?v=connect-record1/);
+assert.match(html, /js\/capture-core\.js\?v=jobs-list1/);
+assert.match(html, /js\/app\.js\?v=jobs-list1/);
 assert.match(html, /\.daybtn:disabled/);
+assert.match(html, /class="home-scroll"/, 'Today must scroll independently of Start the day');
+assert.match(html, /class="joblist"/, 'jobs must live in a scrollable list');
+assert.match(html, /id="job-hint"/);
+assert.doesNotMatch(html, /sharelink/, 'job cards must not show raw share URLs');
+assert.doesNotMatch(appSrc, /sharelink/);
+assert.doesNotMatch(appSrc, /hrefAttr/);
+assert.match(appSrc, /role="option"/, 'assigned jobs are tappable options, not links');
+assert.match(appSrc, /function jobMetaLine/, 'job cards show address, not a URL');
 
 console.log('hold-to-finish OK');

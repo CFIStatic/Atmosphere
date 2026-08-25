@@ -195,30 +195,99 @@
 
   .rechint { font-size: 12px; color: var(--faint); margin-top: 10px; line-height: 1.5; }
 
-  /* ---------- today's expected work ----------
-     Tap a job to open the emailed invite — what's happening, then film. */
+  /* Home column: jobs scroll, Start the day stays on the thumb. */
+  .home-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* ---------- today's jobs: tap to select, no raw links ---------- */
   .expect { margin-top: 18px; }
   .expect h3 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); font-weight: 750; }
-  .erow {
-    display: flex; align-items: baseline; gap: 10px;
-    padding: 11px 2px; border-bottom: 1px solid var(--line-soft);
+  .expect .hint { margin-top: 4px; font-size: 12.5px; color: var(--muted); }
+  .joblist {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 2px;
   }
-  a.erow { color: inherit; text-decoration: none; cursor: pointer; }
-  a.erow:active { opacity: 0.72; }
-  .erow:last-child { border-bottom: 0; }
+  .erow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    text-align: left;
+    padding: 13px 14px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--panel);
+    color: inherit;
+    font: inherit;
+    box-shadow: 0 1px 0 rgba(28, 25, 23, 0.03);
+  }
+  button.erow {
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button.erow:active { transform: scale(0.99); }
+  .erow[data-selected="1"] {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  .erow .pick {
+    flex: 0 0 20px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid var(--line);
+    background: var(--bg);
+    position: relative;
+  }
+  .erow[data-selected="1"] .pick {
+    border-color: var(--accent);
+    background: var(--accent);
+  }
+  .erow[data-selected="1"] .pick::after {
+    content: '';
+    position: absolute;
+    inset: 5px;
+    border-radius: 50%;
+    background: #fff;
+  }
   .erow .t { flex: 1; min-width: 0; }
-  .erow .t b { display: block; font-size: 13.5px; font-weight: 650; letter-spacing: -0.01em; }
-  .erow .t span { display: block; font-size: 12px; color: var(--muted); }
-  .erow .t span.sharelink {
-    margin-top: 5px;
+  .erow .t b {
+    display: block;
+    font-size: 14.5px;
+    font-weight: 650;
+    letter-spacing: -0.015em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .erow .t span {
+    display: block;
+    margin-top: 2px;
+    font-size: 12.5px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .erow .at {
+    flex: 0 0 auto;
     font-family: var(--mono);
     font-size: 11px;
-    color: var(--accent);
-    word-break: break-all;
-    text-decoration: underline;
-    text-underline-offset: 2px;
+    font-weight: 650;
+    color: var(--faint);
+    letter-spacing: 0.02em;
+    white-space: nowrap;
   }
-  .erow .at { font-family: var(--mono); font-size: 11.5px; color: var(--faint); white-space: nowrap; }
+  .erow[data-selected="1"] .at { color: var(--accent); }
+  .erow-empty { border-style: dashed; background: transparent; }
   .erow .warnpin { font-size: 11px; color: var(--warn); }
   .erow .filmedpin { font-size: 11px; color: var(--pass); }
 
@@ -355,7 +424,6 @@
   }
   .auth-form input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   .auth-err { color: var(--fail); font-size: 13px; min-height: 1.2em; }
-  .erow[data-selected="1"] { background: var(--accent-soft); margin: 0 -8px; padding-left: 10px; padding-right: 10px; border-radius: 8px; }
 
   /* Elevate: bars slam up from the orange ground, then sit on paper or
      night — whichever the phone is already using — and ease into Today. */
@@ -516,6 +584,7 @@
 
   <!-- ================= HOME: before the day starts ================= -->
   <div class="screen" id="s-home" data-on="0">
+    <div class="home-scroll">
     <div class="pad">
       <div class="daterow mono" id="today-date">TODAY</div>
       <h1 class="h1">Start it and go to work</h1>
@@ -527,7 +596,8 @@
 
       <div class="expect">
         <h3>Today's jobs</h3>
-        <div id="expect"></div>
+        <p class="hint" id="job-hint">Tap a job to select it. Scroll the list if there are more.</p>
+        <div class="joblist" id="expect" role="listbox" aria-label="Today's jobs"></div>
       </div>
 
       <div class="week" id="week-wrap" hidden>
@@ -536,6 +606,7 @@
       </div>
 
       <p class="lede" id="live-status" style="margin-top:14px;font-size:13px;color:var(--muted)"></p>
+    </div>
     </div>
 
     <div class="recwrap">
@@ -654,7 +725,7 @@
   </div>
 </div>
 
-<script src="js/capture-core.js?v=connect-record1"></script>
-<script src="js/app.js?v=connect-record1"></script>
+<script src="js/capture-core.js?v=jobs-list1"></script>
+<script src="js/app.js?v=jobs-list1"></script>
 </body>
 </html>
