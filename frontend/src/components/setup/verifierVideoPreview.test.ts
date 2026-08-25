@@ -43,15 +43,21 @@ describe('verifier dashboard video preview screen', () => {
     expect(verifierHtml).toMatch(/th style="width:176px"[^>]*data-sort-key="preview"/);
   });
 
-  it('keeps the preview as a dashboard screen next to the list, not a modal overlay', () => {
+  it('opens the clip as a liquid-glass overlay over the dashboard', () => {
     const shell = verifierHtml.match(/<div class="shell" id="shell">[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/);
     expect(shell).not.toBeNull();
     expect(shell![0]).toContain('id="screen-dashboard"');
     expect(shell![0]).toContain('id="detail"');
     expect(shell![0]).toContain('class="screen screen-preview"');
+    expect(shell![0]).toContain('class="liquid-glass"');
     expect(shell![0]).toContain('id="d-back"');
     expect(shell![0]).toMatch(/id="d-back"[\s\S]*Dashboard[\s\S]*<\/button>/);
-    expect(verifierHtml).not.toMatch(/id="detail"[^>]*role="dialog"/);
+    expect(shell![0]).toContain('class="side"');
+    expect(verifierHtml).toMatch(/id="detail"[^>]*role="dialog"/);
+    expect(verifierHtml).toContain('backdrop-filter: blur(var(--glass-blur))');
+    expect(verifierHtml).toContain('animation: liquid-sheen');
+    expect(verifierHtml).toContain("document.body.setAttribute('data-preview-open', '1')");
+    expect(verifierHtml).not.toMatch(/if \(dash\) dash\.hidden = true;/);
   });
 
   it('paints a YouTube-style screenshot from the clip before waiting on the file', () => {
@@ -82,7 +88,10 @@ describe('verifier dashboard video preview screen', () => {
 
     expect(preview?.getAttribute('data-open')).toBe('1');
     expect(preview?.hidden).toBe(false);
-    expect(dashboard?.hidden).toBe(true);
+    expect(dashboard?.hidden).toBe(false);
+    expect(document.body.getAttribute('data-preview-open')).toBe('1');
+    expect(document.querySelector('#detail .liquid-glass')).not.toBeNull();
+    expect(document.querySelector('#detail .side')).not.toBeNull();
     expect(document.querySelector('#d-frame img.preview-still')).not.toBeNull();
     expect(document.getElementById('d-yt-play')).not.toBeNull();
     expect(document.querySelector('#d-frame .yt-dur')).not.toBeNull();
@@ -93,7 +102,27 @@ describe('verifier dashboard video preview screen', () => {
     expect(preview?.getAttribute('data-open')).toBe('0');
     expect(preview?.hidden).toBe(true);
     expect(dashboard?.hidden).toBe(false);
+    expect(document.body.getAttribute('data-preview-open')).toBeNull();
     expect(document.querySelector('tr[data-id="EV-1038-0805-A"]')).not.toBeNull();
+    dom.window.close();
+  });
+
+  it('closes the overlay when the liquid-glass background is clicked', async () => {
+    const dom = bootVerifier();
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+    const { document } = dom.window;
+
+    const row = document.querySelector('tr[data-id="EV-1038-0805-A"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    const glass = document.querySelector('#detail .liquid-glass') as HTMLElement | null;
+    expect(glass).not.toBeNull();
+    glass!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    expect(document.getElementById('detail')?.getAttribute('data-open')).toBe('0');
+    expect(document.getElementById('screen-dashboard')?.hidden).toBe(false);
+    expect(document.body.getAttribute('data-preview-open')).toBeNull();
     dom.window.close();
   });
 });

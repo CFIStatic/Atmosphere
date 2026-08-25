@@ -82,6 +82,15 @@
     --shadow-card: 0 1px 2px rgba(28,25,23,.04), 0 1px 3px rgba(28,25,23,.03);
     --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
     --sans: 'Inter', ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --glass-tint: 251 250 247;
+    --glass-alpha: 0.38;
+    --glass-blur: 32px;
+    --glass-sat: 185%;
+    --glass-sheen: 0.18;
+    --glass-edge: 28 25 23;
+    --glass-edge-alpha: 0.1;
+    --glass-panel: 255 255 255;
+    --glass-panel-alpha: 0.78;
   }
 
   /* Follow the console's stored preference when present; otherwise the OS.
@@ -109,6 +118,13 @@
       --stage-2: #26231F;
       --stage-ink: #E8E4DD;
       --shadow-card: 0 1px 2px rgba(0,0,0,.35), 0 1px 3px rgba(0,0,0,.25);
+      --glass-tint: 20 19 17;
+      --glass-alpha: 0.45;
+      --glass-sheen: 0.08;
+      --glass-edge: 255 255 255;
+      --glass-edge-alpha: 0.1;
+      --glass-panel: 29 27 24;
+      --glass-panel-alpha: 0.68;
     }
   }
   :root[data-theme="light"] {
@@ -132,6 +148,13 @@
     --stage-2: #2A2724;
     --stage-ink: #E8E4DD;
     --shadow-card: 0 1px 2px rgba(28,25,23,.04), 0 1px 3px rgba(28,25,23,.03);
+    --glass-tint: 251 250 247;
+    --glass-alpha: 0.38;
+    --glass-sheen: 0.18;
+    --glass-edge: 28 25 23;
+    --glass-edge-alpha: 0.1;
+    --glass-panel: 255 255 255;
+    --glass-panel-alpha: 0.78;
   }
   :root[data-theme="dark"] {
     --bg: #141311;
@@ -154,6 +177,13 @@
     --stage-2: #26231F;
     --stage-ink: #E8E4DD;
     --shadow-card: 0 1px 2px rgba(0,0,0,.35), 0 1px 3px rgba(0,0,0,.25);
+    --glass-tint: 20 19 17;
+    --glass-alpha: 0.45;
+    --glass-sheen: 0.08;
+    --glass-edge: 255 255 255;
+    --glass-edge-alpha: 0.1;
+    --glass-panel: 29 27 24;
+    --glass-panel-alpha: 0.68;
   }
 
   * { box-sizing: border-box; }
@@ -321,37 +351,128 @@
   }
   .screen-dashboard[hidden] { display: none !important; }
 
-  /* Clip preview is a dashboard screen, not a dimmed overlay. The still the
-     list already has paints first so opening a clip shows what is on file
-     instead of a blank wait for the signed video URL. */
+  /* Clip preview is a liquid-glass overlay: the dashboard stays in place
+     underneath so the rail, search, and list remain visible as frosted
+     glass. The video stage and the right-hand clip panel sit on top. */
   .screen-preview {
-    flex: 1;
-    min-height: 0;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
     display: none;
     flex-direction: column;
+    padding: 18px 20px 20px;
     overflow: hidden;
-    background: var(--bg);
+    background: transparent;
   }
   .screen-preview[data-open="1"] { display: flex; }
   .screen-preview[hidden] { display: none !important; }
+  .screen-preview .liquid-glass {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: auto;
+    background:
+      radial-gradient(72rem 48rem at 10% -8%, rgb(188 69 8 / 0.1), transparent 56%),
+      radial-gradient(56rem 40rem at 108% 4%, rgb(255 255 255 / 0.16), transparent 52%),
+      radial-gradient(48rem 36rem at 50% 118%, rgb(188 69 8 / 0.06), transparent 58%),
+      rgb(var(--glass-tint) / var(--glass-alpha));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(1.06);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(1.06);
+  }
+  .screen-preview .liquid-glass::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(165deg, rgb(255 255 255 / var(--glass-sheen)) 0%, transparent 42%);
+  }
+  .screen-preview .liquid-glass::after {
+    content: '';
+    position: absolute;
+    inset: -35%;
+    pointer-events: none;
+    background: linear-gradient(115deg, transparent 38%, rgb(255 255 255 / 0.16) 50%, transparent 62%);
+    mix-blend-mode: overlay;
+    animation: liquid-sheen 9s ease-in-out infinite;
+  }
+  @keyframes liquid-sheen {
+    0% { transform: translateX(-10%) rotate(0deg); opacity: 0.35; }
+    50% { transform: translateX(10%) rotate(2.5deg); opacity: 0.72; }
+    100% { transform: translateX(-10%) rotate(0deg); opacity: 0.35; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .screen-preview .liquid-glass::after { animation: none; }
+  }
   .screen-preview .sheet {
-    width: 100%;
+    position: relative;
+    z-index: 1;
+    width: min(1480px, 100%);
     height: 100%;
     max-height: none;
-    border-radius: 0;
+    margin: 0 auto;
+    border-radius: 20px;
     box-shadow: none;
-    background: var(--bg);
+    background: transparent;
+    pointer-events: auto;
   }
-  .screen-preview .sheethead { padding: 12px 18px; }
+  .screen-preview .sheethead {
+    padding: 12px 16px;
+    margin: 0 0 4px;
+    background: rgb(var(--glass-panel) / var(--glass-panel-alpha));
+    border: 1px solid rgb(var(--glass-edge) / var(--glass-edge-alpha));
+    border-radius: 16px;
+    box-shadow: inset 0 1px 0 0 rgb(255 255 255 / var(--glass-sheen));
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    backdrop-filter: blur(18px) saturate(160%);
+  }
   .screen-preview .sheetbody {
     grid-template-columns: minmax(0, 1.9fr) minmax(300px, 0.8fr);
+    min-height: 0;
   }
-  .screen-preview .stage { padding: 12px 16px 16px; }
-  .screen-preview .player { border-radius: 12px; }
+  .screen-preview .stage {
+    padding: 12px 16px 16px;
+    border-right: 0;
+    background: transparent;
+  }
+  .screen-preview .player {
+    border-radius: 14px;
+    box-shadow: 0 28px 70px -28px rgba(0,0,0,.62);
+  }
   .screen-preview .player .frame {
     min-height: 0;
     position: relative;
     background: var(--stage);
+  }
+  .screen-preview .side {
+    margin: 12px 16px 16px 0;
+    padding: 16px 16px 20px;
+    border-radius: 16px;
+    background: rgb(var(--glass-panel) / var(--glass-panel-alpha));
+    border: 1px solid rgb(var(--glass-edge) / var(--glass-edge-alpha));
+    box-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / var(--glass-sheen)),
+      0 18px 48px -28px rgba(0,0,0,.45);
+    -webkit-backdrop-filter: blur(22px) saturate(170%);
+    backdrop-filter: blur(22px) saturate(170%);
+  }
+  .screen-preview .tabs {
+    background: rgb(var(--glass-tint) / 0.35);
+  }
+  .screen-preview .tabs button[aria-selected="true"] {
+    background: rgb(var(--glass-panel) / 0.92);
+  }
+  .screen-preview .backbtn,
+  .screen-preview .closebtn {
+    background: rgb(var(--glass-panel) / 0.72);
+    border-color: rgb(var(--glass-edge) / var(--glass-edge-alpha));
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+  @media (max-width: 860px) {
+    .screen-preview { padding: 8px; }
+    .screen-preview .sheet { border-radius: 14px; }
+    .screen-preview .sheethead { border-radius: 12px; }
+    .screen-preview .side { margin: 0 8px 8px; }
   }
   .preview-stage {
     position: relative;
@@ -1103,7 +1224,8 @@
   </main>
   </div>
 
-  <div class="screen screen-preview" id="detail" hidden data-open="0" role="region" aria-labelledby="d-title">
+  <div class="screen screen-preview" id="detail" hidden data-open="0" role="dialog" aria-modal="true" aria-labelledby="d-title">
+    <div class="liquid-glass" aria-hidden="true"></div>
     <div class="sheet">
       <div class="sheethead">
         <button type="button" class="backbtn" id="d-back">
@@ -3158,8 +3280,9 @@
   }
 
   function showPreviewScreen() {
+    document.body.setAttribute('data-preview-open', '1');
     var dash = document.getElementById('screen-dashboard');
-    if (dash) dash.hidden = true;
+    if (dash) dash.hidden = false;
     var preview = document.getElementById('detail');
     if (preview) {
       preview.setAttribute('data-open', '1');
@@ -3179,6 +3302,7 @@
       preview.setAttribute('data-open', '0');
       preview.setAttribute('hidden', '');
     }
+    document.body.removeAttribute('data-preview-open');
     var dash = document.getElementById('screen-dashboard');
     if (dash) dash.hidden = false;
     state.open = null;
@@ -4483,6 +4607,8 @@
   $('#d-close').addEventListener('click', function () { closePreview(); });
   var dBack = document.getElementById('d-back');
   if (dBack) dBack.addEventListener('click', function () { closePreview(); });
+  var liquidGlass = document.querySelector('#detail .liquid-glass');
+  if (liquidGlass) liquidGlass.addEventListener('click', function () { closePreview(); });
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && state.open) closePreview();
   });
