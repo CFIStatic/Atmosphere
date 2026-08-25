@@ -15,12 +15,19 @@ name: Deploy website
 # `node dist/index.js` and fail the healthcheck; the root file no longer sets
 # a startCommand, so that misresolution now boots nginx and survives).
 # See docs/production.md → "If the website service fails its healthcheck".
+#
+# Corporate Website stays on `npm install -g @railway/cli`. Official Railway
+# CLI 5.43+ treats GitHub's CI=true as --ci, so `railway up` exits after the
+# Metal image push and the Railway dashboard never shows a finished replica
+# (see the cursor/bigger-logo-16cc ships). Do not point this job at
+# scripts/installRailwayCli.sh.
 on:
   push:
     branches:
       - main
       - cursor/host-corporate-website-51c8
       - cursor/fix-railway-office-deploy-157d
+      - cursor/reverse-website-cli-2de8
     paths:
       - 'website/**'
       - '.dockerignore'
@@ -133,6 +140,8 @@ jobs:
           node-version: '22'
 
       - name: Install Railway CLI
+        # npm wrapper on purpose — see the workflow header. Official CLI 5.43+
+        # in this job hid the Corporate Website replica from the dashboard.
         run: npm install -g @railway/cli
 
       - name: Link Railway project

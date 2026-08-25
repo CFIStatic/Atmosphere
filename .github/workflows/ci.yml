@@ -64,6 +64,10 @@ jobs:
         working-directory: backend
       - name: Railway upload healthcheck matcher
         run: bash backend/scripts/railwayUp.healthcheck.test.sh
+      - name: Keep Corporate Website on the npm Railway CLI
+        run: bash scripts/keepWebsiteNpmRailwayCli.test.sh
+      - name: Keep the marketing wordmark proportionate
+        run: bash scripts/keepWebsiteWordmarkLockup.test.sh
 
   frontend:
     name: Frontend
