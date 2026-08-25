@@ -48,9 +48,9 @@ describe('verifier dashboard video preview screen', () => {
     expect(verifierHtml).toMatch(/id="detail"[^>]*role="dialog"/);
     expect(verifierHtml).toContain('class="screen screen-preview"');
     expect(verifierHtml).toContain('class="liquid-glass"');
-    expect(verifierHtml).toContain('class="sheetbody preview-pane"');
+    expect(verifierHtml).toContain('class="preview-pane"');
     expect(verifierHtml).toContain('class="preview-pane-fill"');
-    expect(verifierHtml).toContain('border: 1.5px solid rgb(var(--glass-edge) / 0.34)');
+    expect(verifierHtml).toContain('border: 2px solid rgb(var(--glass-edge) / 0.55)');
     expect(verifierHtml).toMatch(/id="d-back"[\s\S]*Dashboard[\s\S]*<\/button>/);
     expect(verifierHtml).toContain('class="side"');
     expect(verifierHtml).toContain('backdrop-filter: blur(12px) saturate(155%)');
