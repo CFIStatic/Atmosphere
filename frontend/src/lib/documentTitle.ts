@@ -14,7 +14,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/forgot-password': 'Reset password',
   '/reset-password': 'Choose a new password',
   '/onboarding': 'Set up',
-  '/verifier-library': 'Dashboard',
+  '/verifier-library': 'Overview',
   '/intake': 'Start a job',
   '/job-progress': 'Job file',
   '/jobs': 'Jobs',

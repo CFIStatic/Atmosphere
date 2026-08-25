@@ -9,7 +9,7 @@ describe('documentTitleFor', () => {
 
   it('keeps Atmosphere in every known tab title', () => {
     expect(documentTitleFor('/login')).toBe('Sign in · Atmosphere');
-    expect(documentTitleFor('/verifier-library')).toBe('Dashboard · Atmosphere');
+    expect(documentTitleFor('/verifier-library')).toBe('Overview · Atmosphere');
     expect(documentTitleFor('/intake')).toBe('Start a job · Atmosphere');
     expect(documentTitleFor('/jobs/abc')).toBe('Jobs · Atmosphere');
     expect(documentTitleFor('/settings')).toBe('Settings · Atmosphere');

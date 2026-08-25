@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, type JobSummary } from '../lib/api';
-import { AppShell } from '../components/AppShell';
 import { displayName } from '../lib/display';
 import { METRIC_LABELS, PLATFORMS, type MetricKey, type PlatformId } from '../lib/platforms';
 import { AlertIcon } from '../components/icons';
@@ -81,7 +80,7 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
   }, [jobs, open]);
 
   return (
-    <AppShell>
+    <div>
       <div>
         <p className="text-sm font-medium text-brand-600">{platform.name}</p>
         <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-ink-900">
@@ -122,7 +121,7 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
           )}
         </div>
       </section>
-    </AppShell>
+    </div>
   );
 }
 

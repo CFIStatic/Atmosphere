@@ -64,8 +64,10 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
       {
         label: 'Work',
         items: [
+          { to: '/verifier-library', label: 'Overview', Icon: DecisionIcon },
           { to: '/intake', label: 'Start a job', Icon: BoltIcon },
-          { to: '/verifier-library', label: 'Dashboard', Icon: DecisionIcon },
+          { to: '/field', label: 'Field', Icon: GaugeIcon },
+          { to: '/jobs', label: 'My jobs', Icon: BriefcaseIcon },
         ],
       },
       SYSTEM,
@@ -103,7 +105,7 @@ export const PLATFORM_IDS: PlatformId[] = ['operations', 'field'];
 /**
  * What the switcher offers, office first.
  *
- * Verification is the office view (home is the Dashboard). Field is the same
+ * Verification is the office view (home is Overview). Field is the same
  * product from the truck. Both must stay listed: leaving Verification out
  * made it a one-way door after switching to Field.
  */
@@ -114,7 +116,7 @@ export const PLATFORM_HOME: Record<PlatformId, string> = {
   field: '/field',
 };
 
-/** The Work Verification dashboard — logo clicks always return here. */
+/** The Work Verification Overview — logo clicks always return here. */
 export const DASHBOARD_HOME = PLATFORM_HOME.operations;
 
 /**

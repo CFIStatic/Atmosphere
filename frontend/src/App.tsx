@@ -248,18 +248,6 @@ export default function App() {
               platform the person last used. */}
           <Route path="/dashboard" element={<PlatformRedirect />} />
           <Route path="/overview" element={<PlatformRedirect />} />
-          <Route
-            path="/field"
-            element={
-              <ProtectedRoute>
-                <RequireOnboarded>
-                  <RequirePlatform platform="field">
-                    <PlatformHomePage platform="field" />
-                  </RequirePlatform>
-                </RequireOnboarded>
-              </ProtectedRoute>
-            }
-          />
 
           <Route
             element={
@@ -273,29 +261,17 @@ export default function App() {
             }
           >
             <Route path="/verifier-library" element={null} />
+            <Route path="/field" element={<PlatformHomePage platform="field" />} />
             <Route path="/intake" element={<JobIntakePage />} />
-            {/* Job record (opened from a Dashboard job name). /shared stays as
+            <Route path="/jobs" element={<JobsPage />} />
+            <Route path="/jobs/:id" element={<JobDetailPage />} />
+            {/* Job record (opened from an Overview job name). /shared stays as
                 a redirect so old bookmarks keep working without colliding with
                 public share pages at /shared/:token. Bare /job-progress sends
-                people to the Dashboard. */}
+                people to Overview. */}
             <Route path="/job-progress" element={<SharedDashboardPage />} />
             <Route path="/shared" element={<SharedJobsRedirect />} />
           </Route>
-
-          {[
-            { path: '/jobs', element: <JobsPage /> },
-            { path: '/jobs/:id', element: <JobDetailPage /> },
-          ].map(({ path, element }) => (
-            <Route
-              key={path}
-              path={path}
-              element={
-                <ProtectedRoute>
-                  <RequireOnboarded>{element}</RequireOnboarded>
-                </ProtectedRoute>
-              }
-            />
-          ))}
           {/* The technician app. Open to every onboarded member — a project
               manager reviewing a job needs the same capture tools a field
               technician does. */}
