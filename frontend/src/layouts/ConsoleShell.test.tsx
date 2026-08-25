@@ -72,8 +72,10 @@ describe('ConsoleShell', () => {
     // Same DOM node — a remounted shell would be a new <nav>.
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBe(rail);
     expect(rail).toHaveTextContent('Overview');
-    expect(rail).toHaveTextContent('Capture');
+    expect(rail).toHaveTextContent('Start a job');
+    expect(rail).toHaveTextContent('Dashboard');
     expect(rail).toHaveTextContent('My jobs');
     expect(rail).toHaveTextContent('Settings');
+    expect(rail).not.toHaveTextContent('Capture');
   });
 });

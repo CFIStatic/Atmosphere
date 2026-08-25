@@ -23,7 +23,6 @@ import { PLATFORM_HOME } from './lib/platforms';
 import { RequirePlatform } from './components/RequirePlatform';
 import { SharedDashboardPage } from './pages/SharedDashboardPage';
 import { JobIntakePage } from './pages/JobIntakePage';
-import { ConsoleShell } from './layouts/ConsoleShell';
 import { OperationsShell } from './layouts/OperationsShell';
 import { JobSharePage } from './pages/JobSharePage';
 import { PlatformHomePage } from './pages/PlatformHomePage';
@@ -249,26 +248,6 @@ export default function App() {
               platform the person last used. */}
           <Route path="/dashboard" element={<PlatformRedirect />} />
           <Route path="/overview" element={<PlatformRedirect />} />
-          <Route
-            element={
-              <ProtectedRoute>
-                <RequireOnboarded>
-                  <ConsoleShell />
-                </RequireOnboarded>
-              </ProtectedRoute>
-            }
-          >
-            <Route
-              path="/field"
-              element={
-                <RequirePlatform platform="field">
-                  <PlatformHomePage platform="field" />
-                </RequirePlatform>
-              }
-            />
-            <Route path="/jobs" element={<JobsPage />} />
-            <Route path="/jobs/:id" element={<JobDetailPage />} />
-          </Route>
 
           <Route
             element={
@@ -282,7 +261,10 @@ export default function App() {
             }
           >
             <Route path="/verifier-library" element={null} />
+            <Route path="/field" element={<PlatformHomePage platform="field" />} />
             <Route path="/intake" element={<JobIntakePage />} />
+            <Route path="/jobs" element={<JobsPage />} />
+            <Route path="/jobs/:id" element={<JobDetailPage />} />
             {/* Job record (opened from a Dashboard job name). /shared stays as
                 a redirect so old bookmarks keep working without colliding with
                 public share pages at /shared/:token. Bare /job-progress sends
