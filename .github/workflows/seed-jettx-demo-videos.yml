@@ -1,0 +1,48 @@
+# File the product-testing walkthrough clips on the live Jettx LLC org.
+# Uses the Keys environment so SUPABASE_SERVICE_ROLE_KEY is available.
+# Safe to re-run — each clip upserts the same party + work_date + phase.
+name: Seed Jettx LLC demo videos
+
+on:
+  push:
+    branches:
+      - cursor/jettx-llc-demo-clips-bf9a
+  workflow_dispatch:
+
+concurrency:
+  group: seed-jettx-demo-videos
+  cancel-in-progress: false
+
+jobs:
+  seed:
+    name: File demo clips on Jettx LLC
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: Keys
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install ffmpeg
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core
+
+      - name: Install backend
+        working-directory: backend
+        run: npm ci
+
+      - name: File the Jettx LLC walkthrough clips
+        working-directory: backend
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL || 'https://ccxatzfsvzetciiwsjlj.supabase.co' }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || vars.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npm run seed:test-video -- --org "Jettx LLC" --catalog demo
