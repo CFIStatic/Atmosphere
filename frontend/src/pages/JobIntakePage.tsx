@@ -224,8 +224,18 @@ export function JobIntakePage() {
     setCaptureTeam((team) => team.map((m) => ({ ...m, selected })));
   }
 
-  async function copyLink(path: string, id: string) {
-    const url = `${window.location.origin}${path}`;
+  function captureHref(inv: {
+    external?: boolean;
+    sharePath: string;
+    fieldCapturePath?: string;
+    fieldCaptureUrl?: string;
+  }) {
+    if (inv.external) return `${window.location.origin}${inv.sharePath}`;
+    if (inv.fieldCaptureUrl) return inv.fieldCaptureUrl;
+    return `${window.location.origin}${inv.fieldCapturePath || inv.sharePath}`;
+  }
+
+  async function copyLink(url: string, id: string) {
     try {
       await navigator.clipboard.writeText(url);
       setCopiedId(id);
@@ -297,17 +307,11 @@ export function JobIntakePage() {
                   </p>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <code className="glass-field min-w-0 flex-1 truncate rounded-lg px-3 py-2 text-xs text-ink-800">
-                      {window.location.origin}
-                      {inv.external ? inv.sharePath : inv.fieldCapturePath || inv.sharePath}
+                      {captureHref(inv)}
                     </code>
                     <button
                       type="button"
-                      onClick={() =>
-                        void copyLink(
-                          inv.external ? inv.sharePath : inv.fieldCapturePath || inv.sharePath,
-                          inv.id,
-                        )
-                      }
+                      onClick={() => void copyLink(captureHref(inv), inv.id)}
                       className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-ink-900"
                     >
                       {copiedId === inv.id ? 'Copied' : 'Copy'}

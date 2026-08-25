@@ -1,11 +1,17 @@
 import { config } from '../config.js';
-import { isAtmosphereRailwayWebOrigin } from './previewOrigins.js';
+import { isAtmosphereRailwayFieldOrigin, isAtmosphereRailwayWebOrigin } from './previewOrigins.js';
 
 /**
  * Live office console until app.atmosphereteam.com has public DNS.
  * Invite emails must open this host — CORS already allows it.
  */
 export const LIVE_OFFICE_ORIGIN = 'https://atmosphere-web-production.up.railway.app';
+
+/**
+ * Dedicated Field Capture host. Until that Railway service has a public
+ * domain, invite copy-links stay on the office /fieldcapture/ path.
+ */
+export const LIVE_FIELD_PATH = '/fieldcapture/index.html';
 
 const UNMAPPED_INTENDED_APP = /^https:\/\/(app|api)\.atmosphereteam\.com\/?$/i;
 const UNMAPPED_APP_HOST = /^(app|api)\.atmosphereteam\.com$/i;
@@ -37,6 +43,39 @@ export function publicAppOrigin(origins: string[] = config.frontendOrigins): str
   if (mappedHttps) return stripSlash(mappedHttps);
 
   return LIVE_OFFICE_ORIGIN;
+}
+
+/**
+ * Public URL for the crew phone app.
+ *
+ * Prefer FIELD_CAPTURE_ORIGIN, then a Field Capture Railway host on
+ * FRONTEND_ORIGIN. Fall back to the office origin so existing
+ * /fieldcapture/ bookmarks keep working until the dedicated host is live.
+ */
+export function publicFieldCaptureOrigin(
+  origins: string[] = config.frontendOrigins,
+  explicit: string | undefined = config.fieldCaptureOrigin || undefined,
+): string {
+  const trimmed = explicit?.trim();
+  if (trimmed && /^https:\/\//i.test(trimmed) && !UNMAPPED_INTENDED_APP.test(trimmed)) {
+    return stripSlash(trimmed);
+  }
+
+  const cleaned = origins.map((o) => o.trim()).filter(Boolean);
+  const field = cleaned.find((o) => isAtmosphereRailwayFieldOrigin(o));
+  if (field) return stripSlash(field);
+
+  return publicAppOrigin(origins);
+}
+
+/** Absolute Field Capture URL for a job-share token. */
+export function fieldCaptureInviteUrl(
+  token: string,
+  origins: string[] = config.frontendOrigins,
+  explicit: string | undefined = config.fieldCaptureOrigin || undefined,
+): string {
+  const origin = publicFieldCaptureOrigin(origins, explicit);
+  return `${origin}${LIVE_FIELD_PATH}?token=${encodeURIComponent(token)}`;
 }
 
 /**

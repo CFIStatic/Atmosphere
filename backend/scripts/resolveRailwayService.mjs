@@ -24,6 +24,10 @@ export const ALIASES = {
   website: ['corporate website', 'website'],
   'corporate website': ['corporate website', 'website'],
   'atmosphere-website': ['corporate website', 'website'],
+  'atmosphere-field': ['field capture', 'atmosphere-field'],
+  'field capture': ['field capture', 'atmosphere-field'],
+  fieldcapture: ['field capture', 'atmosphere-field'],
+  field: ['field capture', 'atmosphere-field'],
 };
 
 export function norm(value) {

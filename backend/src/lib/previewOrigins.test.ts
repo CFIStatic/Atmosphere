@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  isAtmosphereRailwayFieldOrigin,
   isAtmosphereRailwayInternalOrigin,
   isAtmosphereRailwayWebOrigin,
   isCloudflareQuickTunnelOrigin,
@@ -104,6 +105,39 @@ describe('isAtmosphereRailwayInternalOrigin', () => {
     );
     assert.equal(
       isAtmosphereRailwayInternalOrigin('https://evil-atmosphere-internal.up.railway.app'),
+      false,
+    );
+  });
+});
+
+describe('isAtmosphereRailwayFieldOrigin', () => {
+  it('accepts the dedicated Field Capture Railway hostnames', () => {
+    assert.equal(
+      isAtmosphereRailwayFieldOrigin('https://atmosphere-field-production.up.railway.app'),
+      true,
+    );
+    assert.equal(isAtmosphereRailwayFieldOrigin('https://atmosphere-field.up.railway.app'), true);
+    assert.equal(
+      isAtmosphereRailwayFieldOrigin('https://field-capture-production.up.railway.app'),
+      true,
+    );
+  });
+
+  it('rejects the office, backend, and lookalikes', () => {
+    assert.equal(
+      isAtmosphereRailwayFieldOrigin('https://atmosphere-web-production.up.railway.app'),
+      false,
+    );
+    assert.equal(
+      isAtmosphereRailwayFieldOrigin('https://atmosphere-production.up.railway.app'),
+      false,
+    );
+    assert.equal(
+      isAtmosphereRailwayFieldOrigin('http://atmosphere-field-production.up.railway.app'),
+      false,
+    );
+    assert.equal(
+      isAtmosphereRailwayFieldOrigin('https://evil-atmosphere-field.up.railway.app'),
       false,
     );
   });

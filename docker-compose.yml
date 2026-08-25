@@ -4,9 +4,10 @@
 #   cp backend/.env.example backend/.env   # fill production values
 #   docker compose up --build
 #
-# App (console + Verifier + Field Capture): http://localhost:8080
+# App (console + Verifier + Field Capture fallback): http://localhost:8080
 #   nginx reverse-proxies /api to the backend, same as Railway.
 # Internal staff site: http://localhost:8081
+# Field Capture (phone app only): http://localhost:8082
 # Backend: http://localhost:4000  (GET /api/health, /api/ready)
 
 services:
@@ -56,6 +57,19 @@ services:
       API_UPSTREAM: http://backend:4000
     ports:
       - '8081:80'
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  fieldcapture:
+    build:
+      context: .
+      dockerfile: fieldcapture/Dockerfile
+    environment:
+      PORT: '80'
+      API_UPSTREAM: http://backend:4000
+    ports:
+      - '8082:80'
     depends_on:
       backend:
         condition: service_healthy

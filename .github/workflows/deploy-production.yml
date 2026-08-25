@@ -21,6 +21,7 @@
 #   RAILWAY_APP_SERVICE    (office app service name, default: Atmosphere-web / Login & Dashboard)
 #   RAILWAY_WEB_SERVICE    (alias of RAILWAY_APP_SERVICE)
 #   RAILWAY_INTERNAL_SERVICE (staff site, default: Internal Growth Metrics)
+#   RAILWAY_FIELD_SERVICE    (phone app, default: Field Capture)
 #
 # One-time on the Railway **Atmosphere-web** service (Settings → Config-as-code):
 #   Config File = /frontend/railway.toml
@@ -52,6 +53,7 @@ on:
       - cursor/fix-railway-office-deploy-157d
       - cursor/internal-data-platform-e19d
       - cursor/verifier-live-ask-b893
+      - cursor/field-capture-host-7b71
     paths:
       - 'backend/**'
       - 'supabase/migrations/**'
@@ -260,6 +262,80 @@ jobs:
           export RAILWAY_SERVICE="$service"
           export RAILWAY_PROJECT_ID="$project"
           chmod +x backend/scripts/railwayUp.sh
+          backend/scripts/railwayUp.sh
+
+  field:
+    name: Deploy Field Capture
+    runs-on: ubuntu-latest
+    environment: Keys
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Require Railway token
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "Add RAILWAY_TOKEN to the GitHub environment Keys (Railway → Account → Tokens)."
+            exit 1
+          fi
+
+      - name: Deploy Field Capture
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || vars.RAILWAY_PROJECT_ID || 'd0af58bd-0eec-431d-bad3-4da4b4a2e2ae' }}
+          RAILWAY_FIELD_SERVICE: ${{ secrets.RAILWAY_FIELD_SERVICE || vars.RAILWAY_FIELD_SERVICE }}
+          RAILWAY_BACKEND_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE || 'Atmosphere APIs' }}
+          RAILWAY_ENVIRONMENT: production
+        run: |
+          set -euo pipefail
+          project="${RAILWAY_PROJECT_ID}"
+          service="${RAILWAY_FIELD_SERVICE:-Field Capture}"
+          echo "Deploying Field Capture to Railway service '$service' in project $project."
+          export RAILWAY_PROJECT_ID="$project"
+          export RAILWAY_ENVIRONMENT=production
+          railway status --project "$project" --environment production || railway status || true
+          chmod +x fieldcapture/scripts/ensure-railway-service.sh \
+                   fieldcapture/scripts/apply-railway-config.sh \
+                   backend/scripts/railwayUp.sh
+          service_id="$(fieldcapture/scripts/ensure-railway-service.sh | tail -n 1)"
+          echo "Field Capture service id: $service_id"
+          export RAILWAY_FIELD_SERVICE="$service_id"
+          export RAILWAY_SERVICE="$service_id"
+          railway link --project "$project" --environment production --service "$service_id" \
+            || railway link --project "$project" --environment production \
+            || railway link --project "$project" \
+            || true
+          fieldcapture/scripts/apply-railway-config.sh
+          domains="$(railway domain list --service "$service_id" --project "$project" --environment production --json || true)"
+          if ! printf '%s' "$domains" | grep -q 'up.railway.app'; then
+            echo "No public domain yet — generating one."
+            railway domain --service "$service_id" --project "$project" --environment production --json || true
+          fi
+          upstream=""
+          if backend_id="$(node backend/scripts/resolveRailwayService.mjs "${RAILWAY_BACKEND_SERVICE:-Atmosphere APIs}")"; then
+            upstream="$(node scripts/resolveApiUpstream.mjs "$backend_id" || true)"
+          fi
+          if [ -z "$upstream" ]; then
+            upstream="$(tr -d '\n' < api.upstream)"
+            echo "Falling back to the api.upstream reference; Railway resolves it on its side."
+          fi
+          echo "API_UPSTREAM=$upstream"
+          printf '%s' "$upstream" | railway variable set API_UPSTREAM --stdin --skip-deploys --service "$service_id"
+          node fieldcapture/scripts/publishFieldOrigin.mjs "$service_id" || \
+            echo "warn: could not stamp FIELD_CAPTURE_ORIGIN yet (generate a domain, then re-run)."
+          printf '\n# gha %s %s\n' "${GITHUB_SHA}" "$(date -u +%Y%m%dT%H%M%SZ)" >> fieldcapture/nginx/default.conf.template
+          export RAILWAY_UP_STAMP_FILE="$PWD/fieldcapture/nginx/default.conf.template"
+          export RAILWAY_UP_ATTEMPTS=3
+          cp fieldcapture/railway.toml railway.toml
+          cp fieldcapture/railway.json railway.json
           backend/scripts/railwayUp.sh
 
   website-config:

@@ -3,6 +3,27 @@
 Production crew app: **one button**, **video + microphone**, filed with the
 **same Atmosphere login as the dashboard** — or through a **job share token**.
 
+## Dedicated host
+
+Railway service **`Field Capture`** serves only this folder — no office login,
+no dashboard. Same BFF via `/api`.
+
+| URL on that host | What it is |
+| --- | --- |
+| `/` | Phone app |
+| `/fieldcapture/` | Same app (office invite path) |
+| `/healthz` | nginx liveness |
+
+Office `https://atmosphere-web-production.up.railway.app/fieldcapture/` stays
+as a fallback until copy-links switch to `FIELD_CAPTURE_ORIGIN`.
+
+Local stand-in: `docker compose up --build` → http://localhost:8082
+
+```bash
+docker build -f fieldcapture/Dockerfile -t atmosphere-field .
+docker run --rm -p 8082:80 -e API_UPSTREAM=http://host.docker.internal:4000 atmosphere-field
+```
+
 ## Sign in
 
 Open Field Capture and sign in with the **same email and password** you use on

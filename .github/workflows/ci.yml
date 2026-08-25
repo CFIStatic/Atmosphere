@@ -223,3 +223,28 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build internal site image
         run: docker build -f internal/Dockerfile -t atmosphere-internal:ci .
+
+  docker-field:
+    name: Field Capture image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and serve the Field Capture image
+        run: |
+          set -euo pipefail
+          docker build -f fieldcapture/Dockerfile -t atmosphere-field:ci .
+          docker run -d --name atmosphere-field-ci \
+            -e PORT=8080 -e API_UPSTREAM='http://:' -e RAILWAY_ENVIRONMENT=production \
+            -p 18082:8080 atmosphere-field:ci
+          trap 'docker logs atmosphere-field-ci || true; docker rm -f atmosphere-field-ci >/dev/null 2>&1 || true' EXIT
+          for _ in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:18082/healthz >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          probe="$(curl -fsS http://127.0.0.1:18082/healthz)"; grep -qx 'ok' <<<"$probe"
+          probe="$(curl -fsS http://127.0.0.1:18082/health)"; grep -qx 'ok' <<<"$probe"
+          probe="$(curl -fsS http://127.0.0.1:18082/api/health)"; grep -qx 'ok' <<<"$probe"
+          page="$(curl -fsS http://127.0.0.1:18082/)"; grep -q 'Field Capture' <<<"$page"
+          page="$(curl -fsS http://127.0.0.1:18082/fieldcapture/)"; grep -q 'Field Capture' <<<"$page"
+          curl -fsS -o /dev/null http://127.0.0.1:18082/js/app.js
+

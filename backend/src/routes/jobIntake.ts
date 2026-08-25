@@ -7,7 +7,7 @@ import { assessReadiness, type IntakeSource, type JobFacts } from '../verifier/r
 import { jobTitleForIntake, proposeIntakeFromText } from '../verifier/intakePropose.js';
 import { partyInviteEmail } from '../verifier/partyInviteEmail.js';
 import { sendSystemMail } from '../lib/systemMail.js';
-import { publicAppOrigin } from '../lib/publicAppOrigin.js';
+import { fieldCaptureInviteUrl, publicAppOrigin } from '../lib/publicAppOrigin.js';
 import { jobSharePagePath } from '../lib/jobSharePath.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { recordAccess } from './proofOfWork.js';
@@ -821,6 +821,7 @@ jobIntakeRouter.post('/intake/approve', async (req: Request, res: Response, next
       email: string | null;
       sharePath: string;
       fieldCapturePath: string;
+      fieldCaptureUrl: string;
       token: string;
       external: boolean;
       emailed: boolean;
@@ -849,6 +850,7 @@ jobIntakeRouter.post('/intake/approve', async (req: Request, res: Response, next
         token: party.token,
         sharePath: jobSharePagePath(party.token, party.email),
         fieldCapturePath: `/fieldcapture/index.html?token=${encodeURIComponent(party.token)}`,
+        fieldCaptureUrl: fieldCaptureInviteUrl(party.token),
         external: party.external,
         emailed: delivery.emailed,
         recipientHasAccount: delivery.recipientHasAccount,

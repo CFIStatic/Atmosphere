@@ -4,7 +4,9 @@ import {
   LIVE_OFFICE_ORIGIN,
   isUnusablePasswordResetUrl,
   passwordResetRedirectUrl,
+  fieldCaptureInviteUrl,
   publicAppOrigin,
+  publicFieldCaptureOrigin,
   recoveryPageUrl,
 } from './publicAppOrigin.js';
 
@@ -27,6 +29,46 @@ describe('publicAppOrigin', () => {
     assert.equal(
       publicAppOrigin(['https://office.example.com']),
       'https://office.example.com',
+    );
+  });
+});
+
+describe('publicFieldCaptureOrigin', () => {
+  it('prefers an explicit Field Capture origin', () => {
+    assert.equal(
+      publicFieldCaptureOrigin(
+        ['https://atmosphere-web-production.up.railway.app'],
+        'https://atmosphere-field-production.up.railway.app',
+      ),
+      'https://atmosphere-field-production.up.railway.app',
+    );
+  });
+
+  it('picks a Field Capture Railway host off FRONTEND_ORIGIN', () => {
+    assert.equal(
+      publicFieldCaptureOrigin([
+        'https://app.atmosphereteam.com',
+        'https://atmosphere-field-production.up.railway.app',
+      ]),
+      'https://atmosphere-field-production.up.railway.app',
+    );
+  });
+
+  it('falls back to the office origin so existing /fieldcapture/ links keep working', () => {
+    assert.equal(
+      publicFieldCaptureOrigin(['https://atmosphere-web-production.up.railway.app']),
+      LIVE_OFFICE_ORIGIN,
+    );
+  });
+
+  it('stamps the phone path and token onto that origin', () => {
+    assert.equal(
+      fieldCaptureInviteUrl(
+        'abc 1',
+        ['https://atmosphere-web-production.up.railway.app'],
+        'https://atmosphere-field-production.up.railway.app',
+      ),
+      'https://atmosphere-field-production.up.railway.app/fieldcapture/index.html?token=abc%201',
     );
   });
 });

@@ -1,0 +1,78 @@
+#!/bin/sh
+# vim:sw=2:ts=2:sts=2:et
+#
+# Sourced by the nginx image entrypoint before 20-envsubst-on-templates.sh.
+# .envsh, not .sh: the entrypoint *executes* *.sh in a child process (exports
+# die with it) and *sources* *.envsh, so only a sourced file can hand PORT /
+# API_UPSTREAM / API_RESOLVERS to envsubst.
+#
+# Never exit, and never fail: the entrypoint runs with `set -e`, so a failure
+# here is a container that does not start. Field Capture is static files;
+# only /api needs the BFF.
+
+field_log() { echo "field: $*" >&2; }
+
+field_public_bff="https://atmosphere-production.up.railway.app"
+field_default_api_port="4000"
+
+case "${PORT:-}" in
+  '' | *[!0-9]*)
+    field_log "PORT='${PORT:-}' is not a port number — binding 80."
+    PORT=80
+    ;;
+esac
+export PORT
+
+field_upstream="$(printf '%s' "${API_UPSTREAM:-}" | tr -d ' \t\n\r' || true)"
+field_upstream="${field_upstream%/}"
+field_usable=''
+
+case "$field_upstream" in
+  '')
+    field_log 'API_UPSTREAM is unset.'
+    ;;
+  *'${{'* | *'}}'*)
+    field_log "API_UPSTREAM='${field_upstream}' still holds an unresolved Railway reference."
+    ;;
+  http://:* | https://:*)
+    field_log "API_UPSTREAM='${field_upstream}' has no host — check the service name"
+    field_log 'in the reference (the BFF service is "Atmosphere APIs").'
+    ;;
+  http://*: | https://*:)
+    field_usable="${field_upstream}${field_default_api_port}"
+    field_log "API_UPSTREAM='${field_upstream}' has no port — using ${field_usable}."
+    ;;
+  http://127.0.0.1* | http://localhost* | 'http://[::1]'*)
+    if [ -n "${RAILWAY_ENVIRONMENT:-}${RAILWAY_PRIVATE_DOMAIN:-}" ]; then
+      field_log "API_UPSTREAM='${field_upstream}' is loopback inside this container."
+    else
+      field_usable="$field_upstream"
+    fi
+    ;;
+  http://* | https://*)
+    field_usable="$field_upstream"
+    ;;
+  *)
+    field_log "API_UPSTREAM='${field_upstream}' is not an http(s) URL."
+    ;;
+esac
+
+if [ -z "$field_usable" ]; then
+  field_usable="$field_public_bff"
+  field_log "serving /api from ${field_usable} so this replica still starts."
+  field_log 'Set API_UPSTREAM on Field Capture to the Atmosphere APIs private'
+  field_log 'HTTP URL to keep /api inside the mesh (see docs/production.md).'
+fi
+
+API_UPSTREAM="$field_usable"
+export API_UPSTREAM
+
+field_resolvers="$(awk 'BEGIN{ORS=" "} $1=="nameserver" {if ($2 ~ ":") {print "["$2"]"} else {print $2}}' /etc/resolv.conf 2>/dev/null || true)"
+field_resolvers="${field_resolvers% }"
+[ -n "$field_resolvers" ] || field_resolvers="127.0.0.11"
+API_RESOLVERS="${NGINX_RESOLVERS:-$field_resolvers}"
+export API_RESOLVERS
+
+field_log "listening on ${PORT}, proxying /api to ${API_UPSTREAM} via resolver ${API_RESOLVERS}"
+
+unset field_upstream field_usable field_resolvers field_public_bff field_default_api_port
