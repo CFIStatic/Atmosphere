@@ -7,6 +7,7 @@ const canvas = [
   { id: 'site', name: 'Corporate Website ' },
   { id: 'staff', name: 'Internal Growth Metrics ' },
   { id: 'office', name: 'Login & Dashboard ' },
+  { id: 'field', name: 'Field Capture ' },
 ];
 
 test('norm collapses hyphens and padding so Atmosphere-web matches atmosphere web', () => {
@@ -27,4 +28,6 @@ test('matchService maps old office and website names onto the live canvas', () =
   assert.equal(matchService('Corporate Website', canvas)?.id, 'site');
   assert.equal(matchService('Atmosphere-internal', canvas)?.id, 'staff');
   assert.equal(matchService('Atmosphere APIs', canvas)?.id, 'api');
+  assert.equal(matchService('Field Capture', canvas)?.id, 'field');
+  assert.equal(matchService('Atmosphere-field', canvas)?.id, 'field');
 });

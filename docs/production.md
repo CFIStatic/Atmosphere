@@ -21,6 +21,7 @@ from its own workflow (GitHub Pages is an optional second host — see
 | --- | --- | --- | --- |
 | Backend BFF | `/backend/railway.toml` | `Dockerfile` (repo root) | `backend/**`, `Dockerfile`, `railway.toml` |
 | Office console | `/frontend/railway.toml` | `frontend/Dockerfile` | `frontend/**`, `verifier/**`, `fieldcapture/**`, `frontend/Dockerfile` |
+| Field Capture | `/fieldcapture/railway.json` | `fieldcapture/Dockerfile` | `fieldcapture/**`, `fieldcapture/Dockerfile` |
 | Corporate site (`website`) | `/website/railway.toml` | `website/Dockerfile` | `website/**`, `.dockerignore`, `.github/workflows/deploy-website.yml` |
 | Internal staff site | `/internal/railway.json` | `internal/Dockerfile` | `internal/**`, `internal/Dockerfile` |
 
@@ -166,6 +167,7 @@ dashboard visit:
 | Service | Set by |
 | --- | --- |
 | `Atmosphere-web` | `deploy-production.yml` → office app job (`api.upstream`) |
+| `Field Capture` | `deploy-production.yml` → Field Capture job (`api.upstream`) |
 | `website` | `deploy-website.yml` (override with the `API_UPSTREAM` Actions variable only if the site ever moves out of this project) |
 | `Internal Growth Metrics` | `deploy-production.yml` → internal site job (public BFF; name it with `RAILWAY_INTERNAL_SERVICE`) |
 
@@ -356,7 +358,8 @@ Official references: [GitHub Autodeploys](https://docs.railway.com/deployments/g
 | Surface | Artifact | Notes |
 | --- | --- | --- |
 | Backend BFF | `backend/` (`Dockerfile` or `npm run build && npm start`) | Node 22, long-lived process; needs FFmpeg for proof sparse frames. **Railway service `Atmosphere APIs` (override with `RAILWAY_SERVICE`).** |
-| Office app | `frontend/` + `verifier/` + `fieldcapture/` | One nginx image; `/api` proxied to the BFF. **Railway service `Atmosphere-web` (override with `RAILWAY_APP_SERVICE`).** |
+| Office app | `frontend/` + `verifier/` + `fieldcapture/` | One nginx image; `/api` proxied to the BFF. **Railway service `Atmosphere-web` (override with `RAILWAY_APP_SERVICE`).** Office `/fieldcapture/` remains as a fallback. |
+| Field Capture | `fieldcapture/` | Phone-only nginx image. **Railway service `Field Capture` (override with `RAILWAY_FIELD_SERVICE`).** Serves `/` and `/fieldcapture/`. |
 | Marketing site | `website/` | nginx image on Railway service **Corporate Website**; live URL `https://website-production-7e3f.up.railway.app`; GitHub Pages optional (`deploy-website.yml`); nginx proxies `/api` for the careers and contact forms |
 | Internal staff site | `internal/` | Accounts, analytics, system health. **Railway service `Internal Growth Metrics` (override with `RAILWAY_INTERNAL_SERVICE`).** Staff-only; `noindex`. |
 | Native Field | `apps/field-ios/` | App Store path; uses the same BFF |
@@ -408,7 +411,32 @@ The deploy workflow already defaults `FRONTEND_ORIGIN` to `https://app.atmospher
 railway up --service Atmosphere-web
 ```
 
-Health probe: `GET https://<app-host>/healthz` → `ok`. The SPA is `/`; Field Capture is `/fieldcapture/`; Verifier is `/verifier/`.
+Health probe: `GET https://<app-host>/healthz` → `ok`. The SPA is `/`; Field Capture fallback is `/fieldcapture/`; Verifier is `/verifier/`. The dedicated phone host is the **Field Capture** service.
+
+### Host Field Capture on Railway
+
+Field Capture (`fieldcapture/`) is its own Railway service next to the BFF and office app. Same-origin `/api`, same Atmosphere account — no office login or dashboard on this host.
+
+The canvas service is already named **`Field Capture`**. Do not create a second one.
+
+1. Settings → **Source** = this repo, **Trigger branch** = `main` (until this branch merges, point it at `cursor/field-capture-host-7b71` or the first GitHub Autodeploy of today's `main` cannot see `/fieldcapture/Dockerfile`).
+2. Settings → **Root Directory** = `/`
+3. Settings → **Config File** = `/fieldcapture/railway.json` (same values as `fieldcapture/railway.toml`). New services often cannot set this field; the deploy job runs `fieldcapture/scripts/apply-railway-config.sh`.
+4. Variable:
+
+   | Variable | Value |
+   | --- | --- |
+   | `API_UPSTREAM` | `http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}` |
+
+5. Networking → **Generate domain**. The deploy job also runs `railway domain` when none exists, then appends that https origin to backend `FRONTEND_ORIGIN` and `FIELD_CAPTURE_ORIGIN`.
+6. Health probe: `GET /healthz` → `ok`. The phone app is `/` and `/fieldcapture/`.
+
+Until `FIELD_CAPTURE_ORIGIN` is set, office copy-links still open `https://atmosphere-web-production.up.railway.app/fieldcapture/`. After it is set, they open the dedicated host.
+
+```bash
+# From the repo root, after railway link:
+railway up --service "Field Capture"
+```
 
 ### 4. Point the rest of the product at that origin
 
@@ -446,6 +474,7 @@ Local stand-in for this topology:
 docker compose up --build
 # app:       http://localhost:8080
 # internal:  http://localhost:8081
+# field:     http://localhost:8082
 # api:       http://localhost:4000  (also reachable as http://localhost:8080/api/…)
 ```
 

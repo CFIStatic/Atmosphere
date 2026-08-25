@@ -1,0 +1,27 @@
+# Railway service config for Field Capture (phone app only).
+#
+# The canvas service is already named Field Capture and connected to this repo.
+# One-time on that service (Settings):
+#   Config File  = /fieldcapture/railway.json
+#   Root Directory = /   (repo root — do not set /fieldcapture)
+#
+# Runtime variable (Variables tab, not GitHub Keys):
+#   API_UPSTREAM=http://${{ "Atmosphere APIs".RAILWAY_PRIVATE_DOMAIN }}:${{ "Atmosphere APIs".PORT }}
+#
+# Then generate a domain and put that origin on the backend as
+# FRONTEND_ORIGIN and FIELD_CAPTURE_ORIGIN. See docs/production.md.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "fieldcapture/Dockerfile"
+watchPatterns = [
+  "fieldcapture/**",
+  "fieldcapture/Dockerfile",
+]
+
+[deploy]
+healthcheckPath = "/healthz"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
+startCommand = "/usr/local/bin/field-start.sh"

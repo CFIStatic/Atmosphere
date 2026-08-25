@@ -37,7 +37,7 @@ const devOnly = (value: string): string | undefined => (isProduction ? undefined
 const frontendOriginRaw = isProduction
   ? required('FRONTEND_ORIGIN')
   : (process.env.FRONTEND_ORIGIN ??
-    'http://localhost:5174,http://localhost:5173,http://localhost:5175,http://127.0.0.1:5174,http://127.0.0.1:5173,http://127.0.0.1:5175');
+    'http://localhost:5174,http://localhost:5173,http://localhost:5175,http://localhost:8082,http://127.0.0.1:5174,http://127.0.0.1:5173,http://127.0.0.1:5175,http://127.0.0.1:8082');
 
 // Comma-separated list of allowed browser origins for CORS.
 const frontendOrigins = frontendOriginRaw
@@ -50,6 +50,12 @@ export const config = {
   port: Number(process.env.PORT ?? 4000),
 
   frontendOrigins,
+
+  /**
+   * Dedicated Field Capture origin (phone app). When unset, invite copy-links
+   * stay on the office /fieldcapture/ path.
+   */
+  fieldCaptureOrigin: (process.env.FIELD_CAPTURE_ORIGIN ?? '').trim(),
 
   supabase: {
     url: required('SUPABASE_URL', devOnly('https://ccxatzfsvzetciiwsjlj.supabase.co')),

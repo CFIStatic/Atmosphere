@@ -1,4 +1,4 @@
-# Shared repo-root Docker context (backend, office app, website, and internal images).
+# Shared repo-root Docker context (backend, office, field, website, internal).
 # Do not exclude frontend/, verifier/, fieldcapture/, website/, or internal/ — those
 # Dockerfiles COPY them from this context.
 .git

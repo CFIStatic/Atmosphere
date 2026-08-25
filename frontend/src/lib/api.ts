@@ -1029,6 +1029,7 @@ export type IntakeCaptureInvite = {
   email: string | null;
   sharePath: string;
   fieldCapturePath: string;
+  fieldCaptureUrl?: string;
   token: string;
   external?: boolean;
   emailed?: boolean;

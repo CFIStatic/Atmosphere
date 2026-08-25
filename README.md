@@ -58,7 +58,8 @@ are prompted to create one with that exact address.
 
 ### Field Capture (crew)
 
-- **Web:** `fieldcapture/?token=<job-share-token>` — one-button video + mic
+- **Web:** dedicated Railway host **Field Capture** (`/` or `/fieldcapture/?token=`) — one-button video + mic
+- **Office fallback:** `https://atmosphere-web-production.up.railway.app/fieldcapture/`
 - **My jobs** (`/my-jobs`) — after claiming a link with email/phone OTP
 - **iOS (App Store path):** `apps/field-ios/` — same upload contract; RoomPlan twin later
 
@@ -80,8 +81,8 @@ are prompted to create one with that exact address.
                                                  │  Storage (job-proofs)│
                                                  └──────────────────────┘
 
-  Field Capture (static) ──token──▶ /api/job-share/*/proof/* ──▶ Storage PUT
-  Verifier (static)      ──auth──▶ /api/evidence-portal · shared evidence
+  Field Capture (own host) ──token / session──▶ /api/field-app · job-share ──▶ Storage PUT
+  Verifier (static)        ──auth──▶ /api/evidence-portal · shared evidence
 ```
 
 **Why this shape**
@@ -107,9 +108,11 @@ Atmosphere/
 ├── verifier/                 Evidence portal (static HTML)
 │   ├── index.html            Clips, integrity, AI vs human, custody
 │   └── twin.html             Property twin / floor sketch (office)
-├── fieldcapture/             Crew capture app (static)
+├── fieldcapture/             Crew capture app (static) — Railway `Field Capture`
 │   ├── index.html
-│   └── js/capture-core.js    Record, hash, GPS, upload
+│   ├── js/capture-core.js    Record, hash, GPS, upload
+│   ├── Dockerfile            nginx image (phone app only)
+│   └── railway.json          Config File for that service
 ├── apps/field-ios/           Native Field Capture (Swift)
 ├── backend/                  Express BFF
 │   ├── src/routes/
@@ -133,7 +136,9 @@ Atmosphere/
 ```
 
 The console is Work Verification and Field Capture only. Sales, Manager, and
-the other later-product screens have been removed from the product.
+the other later-product screens have been removed from the product. Field
+Capture also ships as its own Railway service so a dashboard deploy cannot
+take the phone app down.
 
 ## Quick start
 

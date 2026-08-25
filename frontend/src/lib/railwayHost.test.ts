@@ -118,6 +118,7 @@ describe('Railway office-app image', () => {
 
     const compose = readFileSync(resolve(repoRoot, '../docker-compose.yml'), 'utf8');
     expect(compose).toContain('dockerfile: frontend/Dockerfile');
+    expect(compose).toContain('dockerfile: fieldcapture/Dockerfile');
     expect(compose).toContain('API_UPSTREAM: http://backend:4000');
   });
 });
@@ -152,6 +153,14 @@ describe('every front door proxies /api over the private mesh', () => {
     expect(office).toContain("service=\"${RAILWAY_INTERNAL_SERVICE:-Internal Growth Metrics}\"");
     expect(office).toContain('upstream="https://atmosphere-production.up.railway.app"');
     expect(office).toContain('cp internal/railway.toml railway.toml');
+  });
+
+  it('deploys Field Capture as its own front door onto the private mesh', () => {
+    expect(office).toContain("service=\"${RAILWAY_FIELD_SERVICE:-Field Capture}\"");
+    const fieldJob = office.slice(office.indexOf('name: Deploy Field Capture'));
+    expect(fieldJob).toContain('resolveApiUpstream.mjs');
+    expect(fieldJob).toContain('cp fieldcapture/railway.toml railway.toml');
+    expect(fieldJob).not.toMatch(publicHost);
   });
 
   it('never bakes a public https upstream into the website image', () => {
