@@ -21,15 +21,15 @@ interface Props {
  */
 export function Logo({ className = '', compact = false, to = DASHBOARD_HOME }: Props) {
   const mark = (
-    <div className={`flex items-center gap-2.5 text-ink-900 ${className}`}>
-      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true" className="shrink-0">
+    <div className={`flex items-center gap-3 text-ink-900 ${className}`}>
+      <svg width="28" height="28" viewBox="0 0 22 22" aria-hidden="true" className="shrink-0">
         <rect className="fill-current opacity-30" width="22" height="2.8" />
         <rect className="fill-current opacity-50" y="4.8" width="22" height="2.8" />
         <rect className="fill-current opacity-[0.68]" y="9.6" width="22" height="2.8" />
         <rect className="fill-current opacity-[0.88]" y="14.4" width="22" height="2.8" />
         <rect className="fill-brand-500" y="19.2" width="22" height="2.8" />
       </svg>
-      {!compact && <span className="text-lg font-bold tracking-tight">Atmosphere</span>}
+      {!compact && <span className="text-xl font-bold tracking-tight">Atmosphere</span>}
     </div>
   );
 
