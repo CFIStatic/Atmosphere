@@ -13,6 +13,7 @@ import {
 import {
   downloadDecision,
   matchesLibraryQuery,
+  pickPosterFrame,
   serializeEvidence,
   shareRecipientAllowed,
   shareState,
@@ -127,7 +128,7 @@ async function assembleLibrary(client: any, orgId: string, proofs: any[]) {
           .eq('org_id', orgId)
           .in('job_id', jobIds)
       : Promise.resolve({ data: [] }),
-    posterUrls(proofs.map((p) => p.id)),
+    posterUrls(proofs),
   ]);
 
   const jobById = new Map<string, any>((jobs.data ?? []).map((j: any) => [j.id, j]));
@@ -230,10 +231,10 @@ async function backfillStills(proofIds: string[]): Promise<void> {
 /**
  * One still per clip, for the library's preview cell.
  *
- * The earliest frame the pipeline kept, which is deliberately not the file's
- * first frame: both the device extractor and the server one start half a
- * sample in, because the opening moment of a phone recording is usually a
- * thumb over the lens.
+ * YouTube-style: the frame closest to a quarter of the way through the
+ * recording, not the opening instant. Both extractors already nudge off the
+ * first moment (a thumb over the lens), and the picker then prefers the
+ * screenshot a viewer would actually recognise as "this video".
  *
  * Batched on purpose. The library returns up to 500 rows, and a signed URL per
  * row minted one at a time would make the list wait on the storage API 500
@@ -244,8 +245,11 @@ async function backfillStills(proofIds: string[]): Promise<void> {
  * footage, so nothing here writes to the custody trail — that stays for the
  * routes that hand over frames, the analysis, or the file itself.
  */
-async function posterUrls(proofIds: string[]): Promise<Map<string, string>> {
+async function posterUrls(
+  proofs: Array<{ id: string; duration_seconds?: number | null }>,
+): Promise<Map<string, string>> {
   const out = new Map<string, string>();
+  const proofIds = proofs.map((proof) => proof.id);
   if (!proofIds.length) return out;
   const admin = createAdminClient();
   if (!admin) return out;
@@ -257,12 +261,20 @@ async function posterUrls(proofIds: string[]): Promise<Map<string, string>> {
       .in('proof_id', proofIds)
       .order('at_seconds');
 
-    // First row wins per clip: the select is ordered by time, so the earliest
-    // kept frame is the one that lands.
-    const pathByProof = new Map<string, string>();
+    const framesByProof = new Map<string, Array<{ at_seconds: number; storage_path: string | null }>>();
     for (const frame of (frames ?? []) as any[]) {
-      if (!frame.storage_path) continue;
-      if (!pathByProof.has(frame.proof_id)) pathByProof.set(frame.proof_id, frame.storage_path);
+      const list = framesByProof.get(frame.proof_id) ?? [];
+      list.push(frame);
+      framesByProof.set(frame.proof_id, list);
+    }
+
+    const durationByProof = new Map(
+      proofs.map((proof) => [proof.id, proof.duration_seconds ?? null]),
+    );
+    const pathByProof = new Map<string, string>();
+    for (const [proofId, list] of framesByProof) {
+      const picked = pickPosterFrame(list, durationByProof.get(proofId));
+      if (picked?.storage_path) pathByProof.set(proofId, picked.storage_path);
     }
 
     // Clips filed before stills were extracted independently of the model have
