@@ -22,6 +22,7 @@ case "$service" in
   Atmosphere-internal) service="Internal Growth Metrics" ;;
   Atmosphere-web) service="Login & Dashboard" ;;
   website) service="Corporate Website" ;;
+  fieldcapture|field-capture|Atmosphere-fieldcapture) service="Field Capture" ;;
 esac
 
 if resolved="$(node "$here/resolveRailwayService.mjs" "$service")"; then

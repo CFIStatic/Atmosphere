@@ -122,4 +122,31 @@ test('each deploy job puts its own config on the upload root', () => {
     'utf8',
   );
   assert.match(website, /cp website\/railway\.toml railway\.toml/);
+
+  const fieldCapture = readFileSync(
+    new URL('../../.github/workflows/repair-field-capture-config.yml', import.meta.url),
+    'utf8',
+  );
+  assert.match(fieldCapture, /cp fieldcapture\/railway\.toml railway\.toml/);
+  assert.doesNotMatch(fieldCapture, /npm install -g @railway\/cli/);
+});
+
+test('the leftover Field Capture service has its own nginx config, not the BFF probe', () => {
+  const toml = readFileSync(
+    new URL('../../fieldcapture/railway.toml', import.meta.url),
+    'utf8',
+  );
+  assert.match(toml, /dockerfilePath\s*=\s*"fieldcapture\/Dockerfile"/);
+  assert.match(toml, /healthcheckPath\s*=\s*"\/healthz"/);
+  assert.match(toml, /fieldcapture\/\*\*/);
+  assert.doesNotMatch(toml, /healthcheckPath\s*=\s*"\/api\/health"/);
+  assert.doesNotMatch(toml, /^\s*preDeployCommand\s*=/m);
+
+  const dockerfile = readFileSync(
+    new URL('../../fieldcapture/Dockerfile', import.meta.url),
+    'utf8',
+  );
+  assert.match(dockerfile, /FROM nginx:1\.27-alpine/);
+  assert.match(dockerfile, /15-validate-fieldcapture-env\.envsh/);
+  assert.doesNotMatch(dockerfile, /API_UPSTREAM/);
 });

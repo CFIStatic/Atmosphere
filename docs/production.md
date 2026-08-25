@@ -347,6 +347,29 @@ Nothing in this repo wants a Railway pre-deploy command at all. The BFF's
 real pre-deploy work — Keys sync, the Resend sending domain, the Supabase
 `memory_events` repair — runs as GitHub Actions steps before `railway up`.
 
+### If Field Capture fails GitHub Autodeploy
+
+Symptom: the GitHub commit status **Atmosphere - Field Capture** is
+**Deployment failed** about 15 seconds after a `main` push, while GitHub
+Actions CI and Deploy Work Verification are green. Production
+`/fieldcapture/` on the office app still serves the capture app.
+
+Cause: a leftover Railway canvas service named **Field Capture** still has
+GitHub Autodeploy. Crew capture already ships inside **Login & Dashboard**
+(`frontend/Dockerfile` copies `fieldcapture/`). Until #157 (hold-5s) no
+recent `main` commit touched `fieldcapture/**`, so that service skipped
+("No deployment needed"). The first matching commit tried to build a static
+folder with no image of its own and failed; Railway then retried the failed
+deploy on every later `main` push — including office-rail-only merges.
+
+Fix:
+
+1. Settings → **Config-as-code** → Config File = `/fieldcapture/railway.toml`
+   and Root Directory = `/`. `.github/workflows/repair-field-capture-config.yml`
+   stamps this and `railway up`s the nginx image.
+2. Or Disable Autodeploy on that service. The product URL stays
+   `https://atmosphere-web-production.up.railway.app/fieldcapture/`.
+
 Official references: [GitHub Autodeploys](https://docs.railway.com/deployments/github-autodeploys),
 [PR Environments](https://docs.railway.com/guides/preview-deployments-with-pr-environments),
 [Monorepos](https://docs.railway.com/deployments/monorepo).

@@ -1,0 +1,48 @@
+# Leftover Railway "Field Capture" service. The product capture app is served
+# from the office image at /fieldcapture/. This image exists so GitHub
+# Autodeploy of that canvas service has an nginx that answers Railway's probe
+# instead of failing in ~15s (Nixpacks on a static folder, or a backend image
+# plus an nginx pre-deploy command).
+#
+# Only substitute PORT. Do not mention API_UPSTREAM: a leftover reference that
+# resolves to "http://:" would take the replica down, and this host is not the
+# product origin.
+
+server {
+  listen ${PORT};
+  server_name _;
+  root /usr/share/nginx/html;
+  index index.html;
+
+  gzip on;
+  gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+
+  add_header X-Content-Type-Options nosniff always;
+  add_header Referrer-Policy strict-origin-when-cross-origin always;
+
+  location = /healthz {
+    access_log off;
+    default_type text/plain;
+    add_header Cache-Control "no-store";
+    return 200 'ok';
+  }
+
+  location = /health {
+    access_log off;
+    default_type text/plain;
+    add_header Cache-Control "no-store";
+    return 200 'ok';
+  }
+
+  location = /api/health {
+    access_log off;
+    default_type text/plain;
+    add_header Cache-Control "no-store";
+    return 200 'ok';
+  }
+
+  location / {
+    add_header Cache-Control "no-store";
+    try_files $uri $uri/ /index.html;
+  }
+}
