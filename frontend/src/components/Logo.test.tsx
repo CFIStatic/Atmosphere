@@ -20,5 +20,10 @@ describe('Logo brand mark', () => {
     expect(getByText('Atmosphere')).toBeInTheDocument();
     expect(queryByText('Atmo')).toBeNull();
     expect(queryByText('sphere')).toBeNull();
+
+    const svg = container.querySelector('svg');
+    expect(svg).toHaveAttribute('width', '32');
+    expect(svg).toHaveAttribute('height', '32');
+    expect(getByText('Atmosphere').className).toMatch(/text-\[22px\]/);
   });
 });

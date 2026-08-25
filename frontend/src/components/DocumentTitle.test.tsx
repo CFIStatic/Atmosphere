@@ -10,6 +10,6 @@ describe('DocumentTitle', () => {
         <DocumentTitle />
       </MemoryRouter>,
     );
-    expect(document.title).toBe('Dashboard · Atmosphere');
+    expect(document.title).toBe('Overview · Atmosphere');
   });
 });
