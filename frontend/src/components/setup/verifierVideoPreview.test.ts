@@ -48,9 +48,12 @@ describe('verifier dashboard video preview screen', () => {
     expect(verifierHtml).toMatch(/id="detail"[^>]*role="dialog"/);
     expect(verifierHtml).toContain('class="screen screen-preview"');
     expect(verifierHtml).toContain('class="liquid-glass"');
+    expect(verifierHtml).toContain('class="sheetbody preview-pane"');
+    expect(verifierHtml).toContain('class="preview-pane-fill"');
+    expect(verifierHtml).toContain('border: 1.5px solid rgb(var(--glass-edge) / 0.34)');
     expect(verifierHtml).toMatch(/id="d-back"[\s\S]*Dashboard[\s\S]*<\/button>/);
     expect(verifierHtml).toContain('class="side"');
-    expect(verifierHtml).toContain('backdrop-filter: blur(var(--glass-blur))');
+    expect(verifierHtml).toContain('backdrop-filter: blur(12px) saturate(155%)');
     expect(verifierHtml).toContain('animation: liquid-sheen');
     expect(verifierHtml).toContain("document.body.setAttribute('data-preview-open', '1')");
     expect(verifierHtml).not.toMatch(/if \(dash\) dash\.hidden = true;/);
@@ -62,6 +65,8 @@ describe('verifier dashboard video preview screen', () => {
     expect(preview).not.toBeNull();
     expect(frame!.contains(preview)).toBe(false);
     expect(preview!.querySelector('.liquid-glass')).not.toBeNull();
+    expect(preview!.querySelector('.preview-pane')).not.toBeNull();
+    expect(preview!.querySelector('.preview-pane-fill')).not.toBeNull();
     expect(preview!.querySelector('.side')).not.toBeNull();
   });
 
@@ -96,6 +101,8 @@ describe('verifier dashboard video preview screen', () => {
     expect(dashboard?.hidden).toBe(false);
     expect(document.body.getAttribute('data-preview-open')).toBe('1');
     expect(document.querySelector('#detail .liquid-glass')).not.toBeNull();
+    expect(document.querySelector('#detail .preview-pane')).not.toBeNull();
+    expect(document.querySelector('#detail .preview-pane-fill')).not.toBeNull();
     expect(document.querySelector('#detail .side')).not.toBeNull();
     expect(document.querySelector('#d-frame img.preview-still')).not.toBeNull();
     expect(document.getElementById('d-yt-play')).not.toBeNull();
