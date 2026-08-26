@@ -40,6 +40,25 @@ describe('verifier dashboard top bar', () => {
     expect(dash![1]).toMatch(/<div class="toolbar">[\s\S]*?<\/div>\s*<main class="main">/);
   });
 
+  it('renders a large wordmark that fills the top-left corner', () => {
+    const brand = cssBlock('.brand');
+    expect(brand).toContain('font-size: 24px');
+    expect(brand).toContain('gap: 14px');
+
+    const mark = cssBlock('.brand svg');
+    expect(mark).toContain('width: 40px');
+    expect(mark).toContain('height: 40px');
+
+    const railHead = cssBlock('.rail-head');
+    expect(railHead).toContain('height: 72px');
+    expect(cssBlock('.topbar')).toContain('height: 72px');
+
+    const railBrand = verifierHtml.match(/id="brand-home"[\s\S]*?<\/button>/);
+    expect(railBrand).not.toBeNull();
+    expect(railBrand![0]).toContain('width="40"');
+    expect(railBrand![0]).toContain('height="40"');
+  });
+
   it('places the search bar outside the scrolling list', () => {
     const dash = verifierHtml.match(
       /<div class="app-frame"[\s\S]*?<header class="topbar">[\s\S]*?<\/header>[\s\S]*?<main class="main">/,

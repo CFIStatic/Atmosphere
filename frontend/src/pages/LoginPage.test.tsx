@@ -76,6 +76,16 @@ describe('LoginPage', () => {
     queueRedirect.mockReset();
   });
 
+  it('places a large Atmosphere lockup in the top-left corner', () => {
+    const { container } = renderLogin();
+    const home = screen.getByRole('link', { name: 'Atmosphere home' });
+    const svg = home.querySelector('svg');
+    expect(svg?.getAttribute('width')).toBe('40');
+    expect(svg?.getAttribute('height')).toBe('40');
+    expect(screen.getByText('Atmosphere').className).toContain('text-[26px]');
+    expect(container.querySelector('header')?.className).toContain('py-8');
+  });
+
   it('offers a single create-account link instead of org vs office cards', () => {
     renderLogin();
 
