@@ -19,8 +19,6 @@ export type ClipAskAnalysisState =
   | 'queued'
   | 'failed'
   | 'skipped'
-  | 'paired'
-  | 'waiting_on_after'
   | 'none'
   | string
   | null
@@ -133,16 +131,18 @@ const STOP = new Set([
   'inside',
 ]);
 
-const CLIP_QA_SYSTEM = `You answer questions about one proof-of-work video, using only the reading of that clip.
+const CLIP_QA_SYSTEM = `You answer questions about one filed video, using only the reading of that clip.
 
 Rules:
 1. Answer only from the reading given. It is a description of video frames somebody already looked at, and when present, what was heard on the mic.
 2. If the reading does not contain the answer, say "The footage on file does not show that" and stop. Do not reason about what was probably true.
-3. For yes/no questions, start with Yes or No. If yes, say what was visible or said and when, using a spoken timestamp such as "1 hour and 52 minutes into the recording" when the reading has one.
-4. Quote a timestamp when the reading has one, so the answer can be checked against the playhead.
-5. Speech on the recording is evidence. Quote what the contractor or homeowner said when that is what was asked — agreements, concerns, rooms, insurance, instructions.
-6. Two or three sentences. This is read next to the player.
-7. Never estimate cost, hours, or whether work was worth paying for.`;
+3. When asked what is happening / what this video is, describe the scene: setting, people, screens, logos, news, text on screen, furniture, tools. A desk, a TV, a YouTube/news clip, or a conversation is a valid answer — not every film is construction.
+4. Each video is standalone. Do not mention before/after pairing or ask for another clip.
+5. For yes/no questions, start with Yes or No. If yes, say what was visible or said and when, using a spoken timestamp such as "1 hour and 52 minutes into the recording" when the reading has one.
+6. Quote a timestamp when the reading has one, so the answer can be checked against the playhead.
+7. Speech on the recording is evidence. Quote what was said when that is what was asked.
+8. Two or three sentences. This is read next to the player.
+9. Never estimate cost, hours, or whether work was worth paying for.`;
 
 type CorpusRow = { at: number | null; text: string; kind: string };
 
@@ -296,8 +296,9 @@ function hasReading(record: ClipAskRecord): boolean {
 }
 
 function isWhatHappened(question: string): boolean {
-  return /what (happened|did|work)|did anything|anything happen|what('s| is) (visible|going on)|any work/.test(
-    question.toLowerCase(),
+  const q = question.toLowerCase();
+  return /what('?s| is| was)? (happening|happing|happeniong|happened|going on)|what (did|work)|did anything|anything happen|what('s| is) (visible|going on|in this|on (the |this )?(clip|video|film|screen))|what do you see|describe (this |the )?(clip|video|film|footage)|any work/.test(
+    q,
   );
 }
 
@@ -331,19 +332,13 @@ function yesFromRow(row: CorpusRow): string {
   return `Yes. ${text}.`;
 }
 
-function unreadAnswer(state: ClipAskAnalysisState): string | null {
+function unreadAnswer(state: ClipAskAnalysisState, _question?: string): string | null {
   if (!state || state === 'done') return null;
-  if (state === 'paired' || state === 'waiting_on_after') {
-    return 'This is the before half of the day. Open the after clip — that is where the reading of what changed lives.';
-  }
   if (state === 'queued') {
     return 'This clip is still being read. Ask again once the dictation lands.';
   }
   if (state === 'failed') {
     return 'The reading of this clip failed. The footage itself is unaffected; re-run the analysis from the platform.';
-  }
-  if (state === 'skipped') {
-    return 'There is no after video on file for this day, so there is nothing to compare against.';
   }
   return 'This clip has not been read yet, so there is nothing to answer from.';
 }
@@ -353,7 +348,7 @@ function unreadAnswer(state: ClipAskAnalysisState): string | null {
  * configured, and as a fallback if the model call fails.
  */
 export function groundedAnswerFromClip(question: string, record: ClipAskRecord): string {
-  const unread = unreadAnswer(record.analysisState);
+  const unread = unreadAnswer(record.analysisState, question);
   if (unread && !hasReading(record)) return unread;
 
   const rows = clipCorpus(record);
@@ -396,7 +391,7 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
     }
     const summary = (record.dictation || record.summary || '').trim();
     if (summary) return `The reading of this clip${date}: ${summary}`;
-    return 'The footage on file does not show work happening.';
+    return 'The footage on file does not show that.';
   }
 
   const qTokens = tokens(q);

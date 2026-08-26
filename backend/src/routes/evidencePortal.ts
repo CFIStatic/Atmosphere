@@ -5,7 +5,8 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { HttpError } from '../lib/errors.js';
-import { ensureStillsAndDuration, proofVideoUrl, recordAccess } from './proofOfWork.js';
+import { ensureStillsAndDuration, proofVideoUrl, queueNarration, recordAccess } from './proofOfWork.js';
+import { queueProofTranscript } from '../audio/proofTranscript.js';
 import {
   answerFromClip,
   clipRecordFromEvidenceItem,
@@ -192,15 +193,25 @@ async function propertyAddresses(
   return addrByProperty;
 }
 
-/**
- * A before clip's pairing state depends on siblings the caller may not have
- * loaded. Fixed up here rather than special-cased in two routes.
- */
-function fixPairing(item: any, siblings: Array<{ phase: string }>) {
-  if (item.phase === 'before') {
-    item.analysisState = siblings.some((s) => s.phase === 'after') ? 'paired' : 'waiting_on_after';
+/** A clip with no reading yet still gets vision + speech when someone Asks. */
+async function kickUnreadClip(admin: any, orgId: string, item: any): Promise<void> {
+  const analysis = item?.analysis;
+  const has =
+    Boolean(analysis?.dictation || analysis?.summary || analysis?.transcript) ||
+    (Array.isArray(analysis?.actions) && analysis.actions.length > 0);
+  if (has || !admin || !item?.id) return;
+  try {
+    await queueNarration(
+      admin,
+      { org_id: orgId, job_id: item.jobId, id: item.partyId },
+      item.id,
+      item.phase,
+      item.workDate,
+    );
+    await queueProofTranscript(admin, item.id);
+  } catch {
+    /* Ask still answers; the sweep will retry */
   }
-  return item;
 }
 
 /**
@@ -574,9 +585,7 @@ evidencePortalRouter.get('/library', async (req: Request, res: Response, next: N
       counts: {
         total: items.length,
         flagged: items.filter((i: any) => i.flagged).length,
-        unanalysed: items.filter(
-          (i: any) => i.analysisState !== 'done' && i.analysisState !== 'paired',
-        ).length,
+        unanalysed: items.filter((i: any) => i.analysisState !== 'done').length,
         onHold: items.filter((i: any) => i.legalHold).length,
       },
     });
@@ -600,16 +609,8 @@ evidencePortalRouter.get(
       if (error) throw new HttpError(500, error.message, 'evidence_failed');
       if (!proof) throw new HttpError(404, 'No such clip.', 'not_found');
 
-      const { data: siblings } = await supabase
-        .from('job_proofs')
-        .select('phase')
-        .eq('org_id', orgId)
-        .eq('job_id', (proof as any).job_id)
-        .eq('party_id', (proof as any).party_id)
-        .eq('work_date', (proof as any).work_date);
-
       const items = await assembleLibrary(supabase, orgId, [proof]);
-      const item = fixPairing(items[0], (siblings ?? []) as any[]);
+      const item = items[0];
 
       const [custody, frames] = await Promise.all([
         custodyFor(supabase, req.params.proofId),
@@ -647,16 +648,10 @@ evidencePortalRouter.post(
       if (error) throw new HttpError(500, error.message, 'evidence_failed');
       if (!proof) throw new HttpError(404, 'No such clip.', 'not_found');
 
-      const { data: siblings } = await supabase
-        .from('job_proofs')
-        .select('phase')
-        .eq('org_id', orgId)
-        .eq('job_id', (proof as any).job_id)
-        .eq('party_id', (proof as any).party_id)
-        .eq('work_date', (proof as any).work_date);
-
       const items = await assembleLibrary(supabase, orgId, [proof]);
-      const item = fixPairing(items[0], (siblings ?? []) as any[]);
+      const item = items[0];
+      const admin = createAdminClient() ?? supabase;
+      await kickUnreadClip(admin, orgId, item);
 
       const result = await settleClipQuestion({
         client: supabase,
@@ -1109,15 +1104,8 @@ evidenceShareRouter.get(
         .maybeSingle();
       if (!proof) throw new HttpError(404, 'No such clip on this job.', 'not_found');
 
-      const { data: siblings } = await admin
-        .from('job_proofs')
-        .select('phase')
-        .eq('job_id', share.job_id)
-        .eq('party_id', (proof as any).party_id)
-        .eq('work_date', (proof as any).work_date);
-
       const items = await assembleLibrary(admin, share.org_id, [proof]);
-      const item = fixPairing(items[0], (siblings ?? []) as any[]);
+      const item = items[0];
 
       // Opening the detail is seeing the frames and the analysis — that is a
       // view, under the name the link was issued to.
@@ -1201,15 +1189,9 @@ evidenceShareRouter.post(
         .maybeSingle();
       if (!proof) throw new HttpError(404, 'No such clip on this job.', 'not_found');
 
-      const { data: siblings } = await admin
-        .from('job_proofs')
-        .select('phase')
-        .eq('job_id', share.job_id)
-        .eq('party_id', (proof as any).party_id)
-        .eq('work_date', (proof as any).work_date);
-
       const items = await assembleLibrary(admin, share.org_id, [proof]);
-      const item = fixPairing(items[0], (siblings ?? []) as any[]);
+      const item = items[0];
+      await kickUnreadClip(admin, share.org_id, item);
 
       const result = await settleClipQuestion({
         client: admin,

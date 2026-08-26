@@ -15,10 +15,8 @@ import { PhysicalWorkPanel } from './PhysicalWorkPanel';
  * Proof of work.
  *
  * Crews film the day (video + mic). This is where the office reads it —
- * integrity checks first, then what the assistant saw in the footage.
- *
- * A single day film is enough to analyse. A before/after pair still gets a
- * comparison when both exist. Unknown is never a pass.
+ * integrity checks first, then what the assistant saw in each video.
+ * Unknown is never a pass.
  */
 
 /**
@@ -231,8 +229,8 @@ export function ProofOfWork({
         <p className="mt-3 text-sm text-ink-600">Loading…</p>
       ) : data.days.length === 0 && !(data.videos?.length) ? (
         <p className="mt-3 rounded-lg border border-line px-4 py-3 text-sm text-ink-600">
-          Nothing filed yet. Crews upload from Field Capture — one day film (video + mic) is
-          enough. The assistant will describe what work was performed.
+          Nothing filed yet. Crews upload from Field Capture — a video (picture + mic) is
+          enough. The assistant will describe what happened.
         </p>
       ) : (
         <>
@@ -273,22 +271,12 @@ export function ProofOfWork({
                           {MATERIAL_CHIP[day.materialChange].word}
                         </span>
                       )}
-                      {/* Two badges, never merged. "Before + after are here" and
-                          "this is safe to pay against" are different claims. */}
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                          day.hasBefore && day.hasAfter
-                            ? 'bg-paper-200/60 text-ink-600'
-                            : 'bg-paper-200/60 text-ink-600'
-                        }`}
-                      >
-                        {day.hasBefore && day.hasAfter
-                          ? 'before + after'
-                          : day.hasAfter
-                            ? 'day film'
-                            : day.hasBefore
-                              ? 'morning clip'
-                              : 'no film'}
+                      <span className="rounded-full bg-paper-200/60 px-2 py-0.5 text-[10px] font-semibold text-ink-600">
+                        {day.proofIds.length === 1
+                          ? '1 video'
+                          : day.proofIds.length > 1
+                            ? `${day.proofIds.length} videos`
+                            : 'no video'}
                       </span>
                       {day.accepted ? (
                         <span className="rounded-full bg-success-50 px-2 py-0.5 text-[10px] font-semibold text-success-600">
@@ -368,7 +356,7 @@ export function ProofOfWork({
                         </p>
                         {day.aiFindings?.kind === 'day_film' && (
                           <p className="mt-1 text-[11px] text-ink-500">
-                            Read from the day film — not a before/after comparison.
+                            Read from this video.
                           </p>
                         )}
                         {day.aiFindings?.scopeCrossRef === false && day.aiFindings?.kind !== 'day_film' && (
@@ -518,10 +506,8 @@ export function ProofOfWork({
                           proofId={id}
                           label={
                             day.proofIds.length === 1
-                              ? 'Day film'
-                              : i === 0
-                                ? 'Before'
-                                : 'After'
+                              ? 'Video'
+                              : `Video ${i + 1}`
                           }
                           videoFetcher={videoFetcher}
                         />
@@ -536,7 +522,7 @@ export function ProofOfWork({
                         title={
                           day.hasAfter || day.hasBefore
                             ? undefined
-                            : 'Nothing to read until a day film is filed.'
+                            : 'Nothing to read until a video is filed.'
                         }
                         className="flex items-center gap-1.5 rounded-lg glass-card px-2.5 py-1 text-[11px] font-medium text-ink-700 disabled:opacity-40"
                       >
@@ -547,7 +533,7 @@ export function ProofOfWork({
                           ? 'Try the AI again'
                           : day.aiSummary
                             ? 'Watch it again'
-                            : 'Read the day film'}
+                            : 'Read this video'}
                       </button>
                       {!day.accepted && (
                         <>
@@ -672,7 +658,7 @@ function VideoCatalog({
                     day: 'numeric',
                   })}
                   <span className="ml-1.5 font-normal text-ink-500">
-                    {video.phase === 'before' ? 'morning clip' : 'day film'} · {video.company}
+                    {video.company}
                   </span>
                 </p>
                 <p className="mt-0.5 text-[11px] text-ink-500">

@@ -127,6 +127,33 @@ describe('verifier clip Ask tab and live analysis', () => {
     dom.window.close();
   });
 
+  it('does not ask for an after clip when you ask what is happening', async () => {
+    const dom = bootVerifier();
+
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+    const { document } = dom.window;
+    const row = document.querySelector('tr[data-id="EV-1038-0806-B"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    const askTab = document.querySelector('[data-tab="ask"]') as HTMLElement | null;
+    askTab!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    const suggest = document.querySelector(
+      '[data-ask="What is happening in this video?"]',
+    ) as HTMLElement | null;
+    expect(suggest).not.toBeNull();
+    suggest!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    await new Promise((resolveWait) => setTimeout(resolveWait, 40));
+    const reply = Array.from(document.querySelectorAll('.ask-bubble.assistant'))
+      .map((el) => el.textContent || '')
+      .join('\n');
+    expect(reply).not.toMatch(/after video/i);
+    expect(reply).toMatch(/panel|breaker|garage|footage|reading of this clip/i);
+    dom.window.close();
+  });
+
   it('extracts homeowner talk from a walkthrough and answers from the mic', async () => {
     const dom = bootVerifier();
 

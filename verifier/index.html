@@ -1270,7 +1270,7 @@
       </table>
       <div class="empty" id="empty" hidden>
         <p class="empty-title" id="empty-title">No clips yet</p>
-        <p class="empty-body" id="empty-body">When Field Capture uploads a day film, it shows up here.</p>
+        <p class="empty-body" id="empty-body">When Field Capture uploads a video, it shows up here.</p>
       </div>
     </div>
   </main>
@@ -1624,10 +1624,20 @@
         { verdict: 'pass', what: 'Not filed before', detail: 'This file has not appeared on any other day or job.' },
         { verdict: 'pass', what: 'Long enough to show the work', detail: '1 min 36 s walking the affected slope.' }
       ],
-      analysis: { state: 'paired', pairedWith: 'EV-1038-0805-A' },
+      analysis: {
+        state: 'done',
+        dictation: 'A morning walk of the north slope. The temporary tarp is still clipped at the ridge, decking is not exposed, and no crew is on the roof yet.',
+        summary: 'Tarp still on the north slope; no tear-off visible in this clip.',
+        changes: ['Tarp still covering the north slope', 'No crew or tools on the roof'],
+        scope: [
+          { title: 'Remove temporary tarp', verdict: 'not_visible', because: 'The tarp is still in place.' },
+          { title: 'Strip north slope to decking', verdict: 'not_visible' }
+        ],
+        couldNotTell: ['Whether the tarp is leaking — the camera stays at the eave.']
+      },
       custody: [
-        { action: 'uploaded', by: 'Hector Delgado, Delgado Roofing', role: 'subcontractor', at: '2026-08-05T07:14', detail: 'before · 2026-08-05' },
-        { action: 'analysed', by: 'Atmosphere', role: 'ai', at: '2026-08-05T20:55', detail: 'Read as the before half of 2026-08-05' }
+        { action: 'uploaded', by: 'Hector Delgado, Delgado Roofing', role: 'subcontractor', at: '2026-08-05T07:14', detail: 'video · 2026-08-05' },
+        { action: 'analysed', by: 'Atmosphere', role: 'ai', at: '2026-08-05T07:18', detail: 'This clip read on its own' }
       ],
       before: { wet: 0.6, cut: 0, gear: 0, seconds: 96 },
       after: { wet: 0.55, cut: 0, gear: 0, seconds: 96 }
@@ -1707,9 +1717,17 @@
         { verdict: 'pass', what: 'Not filed before', detail: 'This file has not appeared on any other day or job.' },
         { verdict: 'unknown', what: 'Long enough to show the work', detail: '52 s is short for a walkthrough; not a failure on its own.' }
       ],
-      analysis: { state: 'skipped', reason: 'No after video has been filed for this day, so there is nothing to compare against.' },
+      analysis: {
+        state: 'done',
+        dictation: 'A short walk through the garage electrical panel. The cover is open, breakers are labelled, and nobody is working in frame.',
+        summary: 'Garage panel open; no work performed in this clip.',
+        changes: ['Panel cover open', 'Breakers labelled, no new wiring visible'],
+        scope: [{ title: 'Inspect panel', verdict: 'in_progress', because: 'The panel is open and filmed; no work is done.' }],
+        couldNotTell: ['Whether any breaker was tripped — labels are readable, positions are not.']
+      },
       custody: [
-        { action: 'uploaded', by: 'Marisol Vega, Brightline Electric', role: 'subcontractor', at: '2026-08-06T08:05', detail: 'before · 2026-08-06' }
+        { action: 'uploaded', by: 'Marisol Vega, Brightline Electric', role: 'subcontractor', at: '2026-08-06T08:05', detail: 'video · 2026-08-06' },
+        { action: 'analysed', by: 'Atmosphere', role: 'ai', at: '2026-08-06T08:09', detail: 'This clip read on its own' }
       ],
       before: { wet: 0.2, cut: 0.2, gear: 0, seconds: 52 },
       after: { wet: 0.2, cut: 0.2, gear: 0, seconds: 52 }
@@ -1949,9 +1967,6 @@
     })
   ];
 
-  // The before half of each analysed pair is not separately analysed; it is read
-  // as one half of the day. Rows say so rather than reading as "not analysed".
-
   /* ------------------------------------------------------------------ *
    * State
    * ------------------------------------------------------------------ */
@@ -2042,15 +2057,13 @@
   function analysisChip(item) {
     var a = item.analysis || {};
     if (a.state === 'queued') return { cls: 'neutral', text: 'Queued' };
-    if (a.state === 'skipped') return { cls: 'neutral', text: 'Waiting on the after' };
-    if (a.state === 'paired') return { cls: 'neutral', text: 'Read as the before half' };
     if (a.state === 'failed') return { cls: 'fail', text: 'Analysis failed' };
     if (a.state !== 'done') return { cls: 'neutral', text: 'Awaiting analysis' };
     if (a.longForm) return { cls: 'pass', text: 'Workday read' };
-    if (a.materialChange === 'significant') return { cls: 'pass', text: 'Work changed' };
+    if (a.materialChange === 'significant') return { cls: 'pass', text: 'Work visible' };
     if (a.materialChange === 'minor') return { cls: 'unknown', text: 'Minor change' };
-    if (a.materialChange === 'none') return { cls: 'fail', text: 'No visible change' };
-    return { cls: 'unknown', text: 'Could not compare' };
+    if (a.materialChange === 'none') return { cls: 'fail', text: 'No work visible' };
+    return { cls: 'pass', text: 'Read' };
   }
 
   function needsAttention(item) {
@@ -2405,11 +2418,16 @@
     return item.poster || capturedStill(item);
   }
 
+  function clipKind(phase) {
+    var raw = String(phase || '').replace(/_/g, ' ').trim();
+    if (!raw || raw === 'before' || raw === 'after') return 'Video';
+    return raw.charAt(0).toUpperCase() + raw.slice(1);
+  }
+
   function clipRow(e) {
     var job = JOBS[e.job] || { name: e.jobName || 'Job', number: null };
     var status = clipStatus(e);
-    var phase = e.phase ? String(e.phase).replace(/_/g, ' ') : 'Video';
-    phase = phase.charAt(0).toUpperCase() + phase.slice(1);
+    var phase = clipKind(e.phase);
     return '' +
       '<tr tabindex="0" data-id="' + e.id + '">' +
         '<td><span class="thumb"><img class="shot" alt="" loading="lazy" decoding="async" src="' + esc(thumbFor(e)) + '" /><span class="dur">' + dur(e.duration) + '</span></span></td>' +
@@ -2454,7 +2472,7 @@
    */
   function isActiveRecording(e) {
     var a = (e.analysis || {}).state;
-    if (a === 'queued' || a === 'done' || a === 'paired' || a === 'skipped' || a === 'failed') {
+    if (a === 'queued' || a === 'done' || a === 'failed') {
       return false;
     }
     var t = clipInstant(e, ['uploadedAt', 'capturedAt']);
@@ -2759,7 +2777,7 @@
           if (emptyBody) emptyBody.textContent = 'Start a job and the name shows up here. Footage files under it as crews film.';
         } else if (!EVIDENCE.length) {
           if (emptyTitle) emptyTitle.textContent = 'No clips yet';
-          if (emptyBody) emptyBody.textContent = 'When Field Capture uploads a day film, it shows up here.';
+          if (emptyBody) emptyBody.textContent = 'When Field Capture uploads a video, it shows up here.';
         } else {
           if (emptyTitle) emptyTitle.textContent = 'No matches';
           if (emptyBody) emptyBody.textContent = 'Try clearing search or picking another view.';
@@ -3460,7 +3478,7 @@
   function fillPreviewChrome(item) {
     $('#d-title').textContent = (JOBS[item.job] || { name: item.jobName || 'Job' }).name;
     $('#d-meta').innerHTML =
-      '<span class="id">' + esc(item.id) + '</span> · ' + esc(item.phase) + ' · ' +
+      '<span class="id">' + esc(item.id) + '</span> · ' + esc(clipKind(item.phase)) + ' · ' +
       dayLabel(item.workDate) + ' · ' + esc(item.company) + ' · ' + dur(item.duration) + ' · ' + mb(item.bytes);
   }
 
@@ -3715,12 +3733,10 @@
       el.innerHTML = '<p style="color:var(--fail)">The dictation failed after retries. The footage itself is unaffected and can be re-read from the platform.</p>';
       return;
     }
-    if (a.state === 'paired' || a.state === 'skipped' || a.state === 'none' || !a.state) {
+    if (a.state === 'skipped' || a.state === 'none' || !a.state) {
       if (pill) pill.textContent = 'Not yet';
       el.innerHTML = '<p style="color:var(--muted)">' + esc(
-        a.reason || (a.state === 'paired'
-          ? 'This is the before half of a day. Open the after clip for the dictation of what changed.'
-          : 'No AI dictation on this clip yet.')
+        a.reason || 'No AI dictation on this clip yet.'
       ) + '</p>';
       return;
     }
@@ -3823,16 +3839,10 @@
       el.innerHTML = '<p style="color:var(--fail)">Scope reading failed with the dictation. Re-run from the platform; the footage is unaffected.</p>';
       return;
     }
-    if (a.state === 'queued' || a.state === 'skipped' || a.state === 'paired' || a.state === 'none' || !a.state) {
+    if (a.state === 'queued' || a.state === 'skipped' || a.state === 'none' || !a.state) {
       el.innerHTML = '<p style="color:var(--muted)">' + esc(
-        a.reason || (a.state === 'paired'
-          ? 'Open the after clip for the scope reading of this day.'
-          : 'No scope reading on this clip yet.')
-      ) + '</p>' + (a.pairedWith
-        ? '<p><button class="navitem" style="width:auto;margin:6px 0 0;border:1px solid var(--line)" data-goto="' + a.pairedWith + '">Open ' + esc(a.pairedWith) + '</button></p>'
-        : '');
-      var goto = el.querySelector('[data-goto]');
-      if (goto) goto.addEventListener('click', function () { open(goto.dataset.goto); });
+        a.reason || 'No scope reading on this clip yet.'
+      ) + '</p>';
       return;
     }
 
@@ -3844,12 +3854,12 @@
         (a.windowsTotal != null ? a.windowsTotal : '?') + ' time windows'];
     } else {
       vl = a.materialChange === 'significant'
-        ? ['pass', 'Work materially changed between the two clips']
+        ? ['pass', 'Work is visible in this video']
         : a.materialChange === 'minor'
           ? ['unknown', 'Minor visible change only']
           : a.materialChange === 'none'
-            ? ['fail', 'No visible change between the two clips']
-            : ['unknown', 'Could not compare the two clips'];
+            ? ['fail', 'No work visible in this video']
+            : ['unknown', 'What this video shows'];
     }
 
     var html = '<div class="verdictline ' + vl[0] + '">' + esc(vl[1]) + '</div>';
@@ -4047,20 +4057,15 @@
     var heard = String(a.transcript || '').trim();
     var pill = a.state === 'failed' ? 'Failed'
       : (a.state === 'queued' || a.state === 'none' || !a.state) && !rows.length && !saw && !heard ? 'Writing…'
-      : a.state === 'paired' || a.state === 'skipped' ? 'Not yet'
+      : a.state === 'skipped' ? 'Not yet'
       : 'Ready';
     var html = '<div class="alog-head"><h4>AI analysis</h4><span class="livepill" id="alog-pill">' + pill + '</span></div>';
     if (!rows.length && !saw && !heard) {
       html += '<p class="footnote alog-wait">' +
-        esc(a.reason || (a.state === 'paired'
-          ? 'This is the before half of a day. Open the after clip for the dictation of what changed.'
-          : a.state === 'failed'
-            ? 'The dictation failed after retries. The footage itself is unaffected.'
-            : 'The assistant is reading this clip. What it sees will land here when the reading finishes.')) +
+        esc(a.reason || (a.state === 'failed'
+          ? 'The dictation failed after retries. The footage itself is unaffected.'
+          : 'The assistant is reading this clip. What it sees will land here when the reading finishes.')) +
         '</p>';
-      if (a.pairedWith) {
-        html += '<p><button class="navitem" style="width:auto;margin:6px 0 0;border:1px solid var(--line)" data-goto="' + a.pairedWith + '">Open ' + esc(a.pairedWith) + '</button></p>';
-      }
       return html;
     }
     if (saw) {
@@ -4169,12 +4174,8 @@
   function answerClipLocally(item, question) {
     var a = item.analysis || {};
     var q = String(question || '').trim();
-    if (a.state === 'paired' || a.state === 'waiting_on_after') {
-      return 'This is the before half of the day. Open the after clip — that is where the reading of what changed lives.';
-    }
-    if (a.state === 'queued') return 'This clip is still being read. Ask again once the dictation lands.';
-    if (a.state === 'failed') return 'The reading of this clip failed. The footage itself is unaffected.';
-    if (a.state === 'skipped') return 'There is no after video on file for this day, so there is nothing to compare against.';
+    if (a.state === 'queued' && !clipAskCorpus(item).length) return 'This clip is still being read. Ask again once the dictation lands.';
+    if (a.state === 'failed' && !clipAskCorpus(item).length) return 'The reading of this clip failed. The footage itself is unaffected.';
     var rows = clipAskCorpus(item);
     if (!rows.length) return 'This clip has not been read yet, so there is nothing to answer from.';
     if (/what (did|was) (the )?(homeowner|owner|contractor|they|he|she|worker).*(say|ask|tell|agree|mention)|did (the )?(homeowner|owner|contractor|they).*(say|mention|agree)|what was said|anything said|heard on the mic|conversation|what did they agree/i.test(q)) {
@@ -4187,14 +4188,14 @@
       if (heardLines.length) return 'Yes — this is what was said on the recording: ' + heardLines.slice(0, 2).join(' ');
       return 'The footage on file does not include usable speech.';
     }
-    if (/what (happened|did|work)|did anything|anything happen|what('s| is) (visible|going on)|any work/i.test(q)) {
+    if (/what('?s| is| was)? (happening|happing|happeniong|happened|going on)|what (did|work)|did anything|anything happen|what('s| is) (visible|going on|in this|on (the |this )?(clip|video|film|screen))|what do you see|describe (this |the )?(clip|video|film|footage)|any work/i.test(q)) {
       var changes = (a.changes || []).filter(Boolean);
       var actions = (a.actions || []).map(function (act) { return act.description; }).filter(Boolean);
       var date = item.workDate ? ' on ' + item.workDate : '';
       if (changes.length) return 'Yes — the footage' + date + ' shows: ' + changes.slice(0, 4).join('; ') + '.';
       if (actions.length) return 'Yes — the footage' + date + ' shows: ' + actions.slice(0, 4).join('; ') + '.';
       if (a.dictation || a.summary) return 'The reading of this clip' + date + ': ' + (a.dictation || a.summary);
-      return 'The footage on file does not show work happening.';
+      return 'The footage on file does not show that.';
     }
     var qTokens = askTokens(q);
     if (!qTokens.length) return (a.dictation || a.summary || 'The footage on file does not show that.');
@@ -4263,6 +4264,7 @@
     if (!thread.length) {
       html += '<p class="ask-empty">This clip has already been read. Ask what happened or what was said — you do not have to watch it. Answers come from the frames and, when the mic was on, the conversation.</p>' +
         '<div class="ask-suggest">' +
+        '<button type="button" data-ask="What is happening in this video?">What is happening?</button>' +
         '<button type="button" data-ask="Did anything happen in this clip?">Did anything happen?</button>' +
         '<button type="button" data-ask="What work is visible?">What work is visible?</button>' +
         '<button type="button" data-ask="At any point did the worker go in the bathroom?">Did they go in the bathroom?</button>' +
@@ -4376,7 +4378,7 @@
       '<dt>Evidence ID</dt><dd class="mono">' + esc(item.id) + '</dd>' +
       '<dt>Job</dt><dd>' + esc(job.name) + '</dd>' +
       '<dt>Address</dt><dd>' + esc(job.address) + '</dd>' +
-      '<dt>Capture</dt><dd>' + esc(item.phase) + ' · ' + dayLabel(item.workDate) + '</dd>' +
+      '<dt>Capture</dt><dd>' + esc(clipKind(item.phase)) + ' · ' + dayLabel(item.workDate) + '</dd>' +
       '<dt>Filmed</dt><dd>' + (item.capturedAt ? stamp(item.capturedAt) : 'not reported by the device') + '</dd>' +
       '<dt>Received</dt><dd>' + stamp(item.uploadedAt) + '</dd>' +
       '<dt>Duration</dt><dd>' + dur(item.duration) + '</dd>' +
@@ -4965,15 +4967,11 @@
             conversationConcerns: (raw.analysis && raw.analysis.conversationConcerns) || [],
             conversationRooms: (raw.analysis && raw.analysis.conversationRooms) || []
           }
-        : raw.analysisState === 'paired'
-          ? { state: 'paired' }
-          : raw.analysisState === 'waiting_on_after'
-            ? { state: 'skipped', reason: 'No after video has been filed for this day, so there is nothing to compare against.' }
-            : raw.analysisState === 'queued'
-              ? { state: 'queued', reason: 'Queued for analysis. The model has not read the day yet.' }
-              : raw.analysisState === 'failed'
-                ? { state: 'failed' }
-                : { state: 'none' },
+        : raw.analysisState === 'queued'
+          ? { state: 'queued', reason: 'Queued for analysis. The model has not read this video yet.' }
+          : raw.analysisState === 'failed'
+            ? { state: 'failed' }
+            : { state: 'none' },
       custody: [],
       _loaded: false
     };
