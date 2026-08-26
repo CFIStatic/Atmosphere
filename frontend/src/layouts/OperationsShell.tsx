@@ -2,7 +2,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { VerifierFrame } from '../components/VerifierFrame';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
-const RAIL_W = 220;
+const RAIL_W = 248;
 
 /**
  * Operations routes share one persistent Verifier iframe. The library fills
@@ -21,7 +21,7 @@ export function OperationsShell() {
         className={
           isLibrary
             ? 'fixed inset-0 z-0 h-full w-full'
-            : 'fixed inset-y-0 left-0 z-20 h-full w-[220px] overflow-hidden border-r border-line bg-panel'
+            : 'fixed inset-y-0 left-0 z-20 h-full w-[248px] overflow-hidden border-r border-line bg-panel'
         }
       />
       {!isLibrary && (
