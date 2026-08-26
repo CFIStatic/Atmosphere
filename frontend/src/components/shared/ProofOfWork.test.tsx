@@ -88,10 +88,10 @@ describe('ProofOfWork video collection', () => {
     expect(screen.getByText(/2 videos on file/)).toBeInTheDocument();
     expect(screen.getByText(/Empty hall before the crew started/)).toBeInTheDocument();
     expect(screen.getByText(/On the mic: We have not started the subfloor yet/)).toBeInTheDocument();
-    expect(screen.getByText(/Picture: read/)).toBeInTheDocument();
-    expect(screen.getByText(/Mic: heard/)).toBeInTheDocument();
-    expect(screen.getByText(/Picture: reading/)).toBeInTheDocument();
-    expect(screen.getByText(/Mic: skipped/)).toBeInTheDocument();
+    expect(screen.getByText((_, el) => el?.textContent === 'Picture: read · Mic: heard')).toBeInTheDocument();
+    expect(
+      screen.getByText((_, el) => el?.textContent === 'Picture: reading · Mic: skipped'),
+    ).toBeInTheDocument();
     expect(
       screen.getByPlaceholderText(/Ask the video collection/i),
     ).toBeInTheDocument();
