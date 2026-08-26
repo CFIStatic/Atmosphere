@@ -268,7 +268,7 @@ test('a day-film reply without a summary is not an analysis', () => {
 
 /* ---- Asking the collection ---------------------------------------------- */
 
-test('formatCollectionRecord includes morning clips, transcripts, and day films', () => {
+test('formatCollectionRecord includes every video, transcripts included', () => {
   const text = formatCollectionRecord([
     {
       workDate: '2026-08-20',
@@ -287,14 +287,13 @@ test('formatCollectionRecord includes morning clips, transcripts, and day films'
       concerns: ['Wet corner'],
     },
   ]);
-  assert.match(text, /morning clip/);
+  assert.match(text, /video/);
   assert.match(text, /Heard on the mic: We have not started the subfloor yet/);
-  assert.match(text, /day film/);
   assert.match(text, /Drywall hung/);
   assert.match(text, /Wet corner/);
 });
 
-test('groundedCollectionAnswer finds a hit on a morning-clip transcript', () => {
+test('groundedCollectionAnswer finds a hit on a video transcript', () => {
   const answer = groundedCollectionAnswer('when was the subfloor mentioned', [
     { workDate: '2026-08-21', phase: 'after', summary: 'Painted the ceiling' },
     {
@@ -305,7 +304,7 @@ test('groundedCollectionAnswer finds a hit on a morning-clip transcript', () => 
     },
   ]);
   assert.match(answer, /2026-08-20/);
-  assert.match(answer, /morning clip/);
+  assert.match(answer, /video/);
   assert.match(answer, /subfloor/);
 });
 
