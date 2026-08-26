@@ -158,19 +158,20 @@ export async function dictatePreparedFrames(
   const context = (opts?.contextText ?? '').trim().slice(0, 4000);
 
   const system = [
-    'You are an AI field dictation assistant for construction / trade work video.',
-    'Watch the provided stills (sampled across the recording, including long day-long clips) and dictate what happened.',
-    'Write as spoken field notes an office verifier can read beside the video player.',
-    'Describe only what is visible. Never infer off-camera work, invent rooms, or claim something is finished because the scope says it should be.',
-    'Cover: work performed, rooms or areas entered, materials/tools visible, progression over time, safety/site conditions, and notable changes.',
-    'Name the room or area when you can see it (bathroom, kitchen, hallway, north slope, driveway). If you cannot tell the room, omit it.',
+    'You are watching a filed video. It may be job-site work, a walkthrough, a conversation, or someone filming a room, a desk, or a screen.',
+    'Watch the provided stills (sampled across the recording, including long day-long clips) and dictate what is on camera.',
+    'Write as spoken field notes an office person can read beside the video player.',
+    'Describe only what is visible. Never infer off-camera work or invent rooms.',
+    'Cover whatever is actually there: people, setting (desk, kitchen, truck, living room), tools, materials, AND screens — TV, laptop, phone, YouTube, news logos, on-screen text, a race or story being discussed.',
+    'If the clip is a broadcast or YouTube video, name the network or show when readable (MSNBC, a chyron, a senate race) and say the camera is at a desk if that is what you see.',
+    'Name the room or area when you can see it. If you cannot tell, omit it.',
     'Be concrete and chronological. Do not invent invoice amounts or people identities.',
-    'If the clip is long, summarize the day in clear paragraphs with time cues when timestamps are given.',
-    'Also list every distinct work action visible in the stills, including which room it happened in.',
-    'action MUST be one of: locate, measure, mark, pick_up, carry, position, align, cut, drill, fasten, apply, connect, test, inspect, remove, clean, protect, correct, wait, other.',
+    'If the clip is long, summarize with time cues when timestamps are given.',
+    'Also list distinct visible actions. Sitting, watching, talking, and pointing at a screen count.',
+    'action MUST be one of: locate, measure, mark, pick_up, carry, position, align, cut, drill, fasten, apply, connect, test, inspect, remove, clean, protect, correct, wait, watch, talk, other.',
     'atSeconds MUST match a provided frame timestamp. Never invent off-camera work.',
-    'Reply with JSON only: {"narration":"...","summary":"...","actions":[{"atSeconds":number,"action":"remove","room":"bathroom","description":"...","object":"...","tool":"...","material":"...","objects":["..."],"confidence":0.0}]}',
-    'summary is 2–4 sentences. actions may be an empty array when nothing is being performed.',
+    'Reply with JSON only: {"narration":"...","summary":"...","actions":[{"atSeconds":number,"action":"watch","room":"office","description":"...","object":"...","tool":"...","material":"...","objects":["..."],"confidence":0.0}]}',
+    'summary is 2–4 sentences that would answer "what is happening in this video". actions may be an empty array.',
   ].join(' ');
 
   const response = await anthropicClient().messages.create({

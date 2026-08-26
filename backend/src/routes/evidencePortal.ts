@@ -5,7 +5,8 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { HttpError } from '../lib/errors.js';
-import { ensureStillsAndDuration, proofVideoUrl, recordAccess } from './proofOfWork.js';
+import { ensureStillsAndDuration, proofVideoUrl, queueNarration, recordAccess } from './proofOfWork.js';
+import { queueProofTranscript } from '../audio/proofTranscript.js';
 import {
   answerFromClip,
   clipRecordFromEvidenceItem,
@@ -197,10 +198,31 @@ async function propertyAddresses(
  * loaded. Fixed up here rather than special-cased in two routes.
  */
 function fixPairing(item: any, siblings: Array<{ phase: string }>) {
-  if (item.phase === 'before') {
+  if (item.phase === 'before' && item.analysisState !== 'done' && item.analysisState !== 'queued') {
     item.analysisState = siblings.some((s) => s.phase === 'after') ? 'paired' : 'waiting_on_after';
   }
   return item;
+}
+
+/** A clip with no reading yet still gets vision + speech when someone Asks. */
+async function kickUnreadClip(admin: any, orgId: string, item: any): Promise<void> {
+  const analysis = item?.analysis;
+  const has =
+    Boolean(analysis?.dictation || analysis?.summary || analysis?.transcript) ||
+    (Array.isArray(analysis?.actions) && analysis.actions.length > 0);
+  if (has || !admin || !item?.id) return;
+  try {
+    await queueNarration(
+      admin,
+      { org_id: orgId, job_id: item.jobId, id: item.partyId },
+      item.id,
+      item.phase,
+      item.workDate,
+    );
+    await queueProofTranscript(admin, item.id);
+  } catch {
+    /* Ask still answers; the sweep will retry */
+  }
 }
 
 /**
@@ -657,6 +679,8 @@ evidencePortalRouter.post(
 
       const items = await assembleLibrary(supabase, orgId, [proof]);
       const item = fixPairing(items[0], (siblings ?? []) as any[]);
+      const admin = createAdminClient() ?? supabase;
+      await kickUnreadClip(admin, orgId, item);
 
       const result = await settleClipQuestion({
         client: supabase,
@@ -1210,6 +1234,7 @@ evidenceShareRouter.post(
 
       const items = await assembleLibrary(admin, share.org_id, [proof]);
       const item = fixPairing(items[0], (siblings ?? []) as any[]);
+      await kickUnreadClip(admin, share.org_id, item);
 
       const result = await settleClipQuestion({
         client: admin,

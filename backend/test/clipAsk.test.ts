@@ -125,12 +125,32 @@ test('a question about skylights cites the scope reading rather than inventing c
   assert.doesNotMatch(answer, /does not show that/);
 });
 
-test('a before clip without a reading points at the after', () => {
-  const answer = groundedAnswerFromClip('Did anything happen?', {
-    analysisState: 'paired',
+test('a before clip without a reading is still asked about this video', () => {
+  const answer = groundedAnswerFromClip('What is happening in this video?', {
+    analysisState: 'skipped',
     phase: 'before',
   });
-  assert.match(answer, /after clip/);
+  assert.match(answer, /has not been read yet|still being read/i);
+  assert.doesNotMatch(answer, /after video/i);
+});
+
+test('what is happening cites the scene, not a missing after pair', () => {
+  const answer = groundedAnswerFromClip('what is happing in this video', {
+    analysisState: 'skipped',
+    dictation:
+      'A person sits at a desk. On the screen is an MSNBC YouTube clip about an Oklahoma state senate race.',
+    summary: 'Desk, MSNBC, Oklahoma senate race.',
+  });
+  assert.match(answer, /MSNBC|senate|desk/i);
+  assert.doesNotMatch(answer, /after video/i);
+});
+
+test('a comparison question without a pair still names the missing after', () => {
+  const answer = groundedAnswerFromClip('What changed compared to the after clip?', {
+    analysisState: 'skipped',
+    phase: 'before',
+  });
+  assert.match(answer, /after video/i);
 });
 
 test('a clip still being read says so instead of inventing work', () => {

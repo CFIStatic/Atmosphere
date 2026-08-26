@@ -6,6 +6,8 @@ test('needsNarration and needsTranscript treat idle and missing as unread', () =
   assert.equal(needsNarration(null), true);
   assert.equal(needsNarration('idle'), true);
   assert.equal(needsNarration('done'), false);
+  assert.equal(needsNarration('skipped', 'No model is configured.'), true);
+  assert.equal(needsNarration('skipped', 'Could not extract frames from this recording.'), false);
   assert.equal(needsTranscript('queued'), false);
   assert.equal(needsTranscript(undefined), true);
 });

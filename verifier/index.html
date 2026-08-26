@@ -4169,12 +4169,14 @@
   function answerClipLocally(item, question) {
     var a = item.analysis || {};
     var q = String(question || '').trim();
-    if (a.state === 'paired' || a.state === 'waiting_on_after') {
-      return 'This is the before half of the day. Open the after clip — that is where the reading of what changed lives.';
+    if (a.state === 'queued' && !clipAskCorpus(item).length) return 'This clip is still being read. Ask again once the dictation lands.';
+    if (a.state === 'failed' && !clipAskCorpus(item).length) return 'The reading of this clip failed. The footage itself is unaffected.';
+    var compare = /what changed|before and after|compared to|material change|the after (clip|video|film)/i.test(q);
+    if (compare && (a.state === 'paired' || a.state === 'waiting_on_after' || a.state === 'skipped') && !clipAskCorpus(item).length) {
+      return a.state === 'paired'
+        ? 'This is the before half of the day. Open the after clip — that is where the reading of what changed lives.'
+        : 'There is no after video on file for this day, so there is nothing to compare against.';
     }
-    if (a.state === 'queued') return 'This clip is still being read. Ask again once the dictation lands.';
-    if (a.state === 'failed') return 'The reading of this clip failed. The footage itself is unaffected.';
-    if (a.state === 'skipped') return 'There is no after video on file for this day, so there is nothing to compare against.';
     var rows = clipAskCorpus(item);
     if (!rows.length) return 'This clip has not been read yet, so there is nothing to answer from.';
     if (/what (did|was) (the )?(homeowner|owner|contractor|they|he|she|worker).*(say|ask|tell|agree|mention)|did (the )?(homeowner|owner|contractor|they).*(say|mention|agree)|what was said|anything said|heard on the mic|conversation|what did they agree/i.test(q)) {
@@ -4187,14 +4189,14 @@
       if (heardLines.length) return 'Yes — this is what was said on the recording: ' + heardLines.slice(0, 2).join(' ');
       return 'The footage on file does not include usable speech.';
     }
-    if (/what (happened|did|work)|did anything|anything happen|what('s| is) (visible|going on)|any work/i.test(q)) {
+    if (/what('?s| is| was)? (happening|happing|happeniong|happened|going on)|what (did|work)|did anything|anything happen|what('s| is) (visible|going on|in this|on (the |this )?(clip|video|film|screen))|what do you see|describe (this |the )?(clip|video|film|footage)|any work/i.test(q)) {
       var changes = (a.changes || []).filter(Boolean);
       var actions = (a.actions || []).map(function (act) { return act.description; }).filter(Boolean);
       var date = item.workDate ? ' on ' + item.workDate : '';
       if (changes.length) return 'Yes — the footage' + date + ' shows: ' + changes.slice(0, 4).join('; ') + '.';
       if (actions.length) return 'Yes — the footage' + date + ' shows: ' + actions.slice(0, 4).join('; ') + '.';
       if (a.dictation || a.summary) return 'The reading of this clip' + date + ': ' + (a.dictation || a.summary);
-      return 'The footage on file does not show work happening.';
+      return 'The footage on file does not show that.';
     }
     var qTokens = askTokens(q);
     if (!qTokens.length) return (a.dictation || a.summary || 'The footage on file does not show that.');
@@ -4263,6 +4265,7 @@
     if (!thread.length) {
       html += '<p class="ask-empty">This clip has already been read. Ask what happened or what was said — you do not have to watch it. Answers come from the frames and, when the mic was on, the conversation.</p>' +
         '<div class="ask-suggest">' +
+        '<button type="button" data-ask="What is happening in this video?">What is happening?</button>' +
         '<button type="button" data-ask="Did anything happen in this clip?">Did anything happen?</button>' +
         '<button type="button" data-ask="What work is visible?">What work is visible?</button>' +
         '<button type="button" data-ask="At any point did the worker go in the bathroom?">Did they go in the bathroom?</button>' +
@@ -4967,8 +4970,8 @@
           }
         : raw.analysisState === 'paired'
           ? { state: 'paired' }
-          : raw.analysisState === 'waiting_on_after'
-            ? { state: 'skipped', reason: 'No after video has been filed for this day, so there is nothing to compare against.' }
+        : raw.analysisState === 'waiting_on_after'
+          ? { state: 'waiting_on_after', reason: 'No after video has been filed for this day — this clip is still read on its own.' }
             : raw.analysisState === 'queued'
               ? { state: 'queued', reason: 'Queued for analysis. The model has not read the day yet.' }
               : raw.analysisState === 'failed'
