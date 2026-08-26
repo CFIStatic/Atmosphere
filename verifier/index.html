@@ -4174,10 +4174,10 @@
   function answerClipLocally(item, question) {
     var a = item.analysis || {};
     var q = String(question || '').trim();
-    if (a.state === 'queued' && !clipAskCorpus(item).length) return 'This clip is still being read. Ask again once the dictation lands.';
-    if (a.state === 'failed' && !clipAskCorpus(item).length) return 'The reading of this clip failed. The footage itself is unaffected.';
+    var state = a.state || item.analysisState;
+    if (state === 'failed' && !clipAskCorpus(item).length) return 'The reading of this clip failed. The footage itself is unaffected.';
     var rows = clipAskCorpus(item);
-    if (!rows.length) return 'This clip has not been read yet, so there is nothing to answer from.';
+    if (!rows.length) return 'This clip is still being read. Ask again once the dictation lands.';
     if (/what (did|was) (the )?(homeowner|owner|contractor|they|he|she|worker).*(say|ask|tell|agree|mention)|did (the )?(homeowner|owner|contractor|they).*(say|mention|agree)|what was said|anything said|heard on the mic|conversation|what did they agree/i.test(q)) {
       var spoken = (a.conversationDetails || []).concat(a.conversationAgreements || []).concat(a.conversationConcerns || []).filter(Boolean);
       if (spoken.length) return 'Yes — this is what was said on the recording: ' + spoken.slice(0, 3).join(' ');
@@ -4253,7 +4253,9 @@
         if (!r.ok) throw new Error((body && (body.error || body.message)) || 'Could not answer.');
         cb(null, body.answer || local);
       });
-    }).catch(function () { cb(null, local); });
+    }).catch(function () {
+      cb(null, clipAskCorpus(item).length ? local : 'This clip is still being read. Ask again once the dictation lands.');
+    });
   }
 
   function renderAsk(item) {
@@ -4921,6 +4923,10 @@
   var ORG_MODE = false;
 
   function mapRemoteItem(raw, jobKey) {
+    var reading = raw.analysis || {};
+    var hasReading = raw.analysisState === 'done' ||
+      Boolean(reading.dictation || reading.summary || reading.transcript) ||
+      (Array.isArray(reading.actions) && reading.actions.length > 0);
     return {
       _remote: true,
       id: raw.id,
@@ -4945,30 +4951,30 @@
       tier: raw.tier || 1,
       hold: raw.legalHold ? { on: true, reason: 'This clip is under legal hold. Retention cannot delete it while the hold stands.', by: '', at: '' } : null,
       checks: raw.checks || [],
-      analysis: raw.analysisState === 'done'
+      analysis: hasReading
         ? {
             state: 'done',
-            materialChange: raw.analysis && raw.analysis.materialChange,
-            materialBecause: raw.analysis && raw.analysis.materialBecause,
-            summary: (raw.analysis && raw.analysis.summary) || '',
-            dictation: (raw.analysis && (raw.analysis.dictation || raw.analysis.summary)) || '',
-            dictationEntries: (raw.analysis && raw.analysis.dictationEntries) || [],
-            actions: (raw.analysis && raw.analysis.actions) || [],
-            changes: (raw.analysis && raw.analysis.changes) || [],
-            scope: (raw.analysis && raw.analysis.scope) || [],
-            couldNotTell: (raw.analysis && raw.analysis.couldNotTell) || [],
-            longForm: Boolean(raw.analysis && raw.analysis.longForm),
-            timeline: (raw.analysis && raw.analysis.timeline) || null,
-            windowsTotal: raw.analysis ? raw.analysis.windowsTotal : null,
-            windowsRead: raw.analysis ? raw.analysis.windowsRead : null,
-            transcript: (raw.analysis && raw.analysis.transcript) || '',
-            conversationDetails: (raw.analysis && raw.analysis.conversationDetails) || [],
-            conversationAgreements: (raw.analysis && raw.analysis.conversationAgreements) || [],
-            conversationConcerns: (raw.analysis && raw.analysis.conversationConcerns) || [],
-            conversationRooms: (raw.analysis && raw.analysis.conversationRooms) || []
+            materialChange: reading.materialChange,
+            materialBecause: reading.materialBecause,
+            summary: reading.summary || '',
+            dictation: reading.dictation || reading.summary || '',
+            dictationEntries: reading.dictationEntries || [],
+            actions: reading.actions || [],
+            changes: reading.changes || [],
+            scope: reading.scope || [],
+            couldNotTell: reading.couldNotTell || [],
+            longForm: Boolean(reading.longForm),
+            timeline: reading.timeline || null,
+            windowsTotal: reading.windowsTotal,
+            windowsRead: reading.windowsRead,
+            transcript: reading.transcript || '',
+            conversationDetails: reading.conversationDetails || [],
+            conversationAgreements: reading.conversationAgreements || [],
+            conversationConcerns: reading.conversationConcerns || [],
+            conversationRooms: reading.conversationRooms || []
           }
         : raw.analysisState === 'queued'
-          ? { state: 'queued', reason: 'Queued for analysis. The model has not read this video yet.' }
+          ? { state: 'queued', reason: 'This clip is being read now.' }
           : raw.analysisState === 'failed'
             ? { state: 'failed' }
             : { state: 'none' },

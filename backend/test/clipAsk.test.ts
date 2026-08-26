@@ -130,8 +130,9 @@ test('a before clip without a reading is still asked about this video', () => {
     analysisState: 'skipped',
     phase: 'before',
   });
-  assert.match(answer, /has not been read yet|still being read/i);
+  assert.match(answer, /still being read/i);
   assert.doesNotMatch(answer, /after video/i);
+  assert.doesNotMatch(answer, /has not been read yet/i);
 });
 
 test('what is happening cites the scene, not a missing after pair', () => {
@@ -150,8 +151,16 @@ test('a comparison question without a reading does not ask for another clip', ()
     analysisState: 'skipped',
     phase: 'before',
   });
-  assert.match(answer, /has not been read yet|still being read|nothing to answer/i);
+  assert.match(answer, /still being read/i);
   assert.doesNotMatch(answer, /after video/i);
+});
+
+test('an unread clip is being read, not abandoned', () => {
+  const answer = groundedAnswerFromClip('What is happening in this video?', {
+    analysisState: 'none',
+  });
+  assert.match(answer, /still being read/i);
+  assert.doesNotMatch(answer, /has not been read yet/i);
 });
 
 test('a clip still being read says so instead of inventing work', () => {

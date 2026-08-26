@@ -2845,7 +2845,7 @@ const routes: Array<[string, RegExp, Handler]> = [
     const summary = found?.aiSummary;
     const happen = /did anything|anything happen|what (happened|work)|what is visible/i.test(question);
     const answer = !summary
-      ? 'This clip has not been read yet, so there is nothing to answer from.'
+      ? 'This clip is still being read. Ask again once the dictation lands.'
       : happen
         ? `Yes — the footage${found?.workDate ? ` on ${found.workDate}` : ''} shows: ${summary}`
         : summary.toLowerCase().includes(question.toLowerCase().slice(0, 12))

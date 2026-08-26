@@ -749,6 +749,7 @@ const stillsAttempted = new Set<string>();
 export async function ensureStillsAndDuration(
   admin: any,
   proofId: string,
+  opts?: { force?: boolean },
 ): Promise<{ durationSeconds: number; longForm: boolean; error: string | null }> {
   const { data: proofRow } = await admin
     .from('job_proofs')
@@ -795,9 +796,9 @@ export async function ensureStillsAndDuration(
   // A workday always gets the server's spread — a handful of device stills
   // does not cover eight hours. Anything else only needs filling when the
   // device sent nothing.
-  const wanted = longForm || have === 0;
-  if (wanted && storagePath && !stillsAttempted.has(proofId)) {
-    stillsAttempted.add(proofId);
+  const wanted = longForm || have === 0 || Boolean(opts?.force);
+  if (wanted && storagePath && (opts?.force || !stillsAttempted.has(proofId))) {
+    if (!opts?.force) stillsAttempted.add(proofId);
     try {
       await ensureSparseFramesFromStorage(
         admin,
@@ -839,19 +840,22 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
   // facts about the file rather than readings of it — the office list prints
   // the length, the preview and the scrubber are the stills — and a server
   // with no model key should still leave a clip looking like itself.
-  const settled = await ensureStillsAndDuration(admin, job.proofId);
+  let settled = await ensureStillsAndDuration(admin, job.proofId);
 
   if (!isModelProviderConfigured()) {
     await write({ narration_status: 'skipped', narration_error: 'No model is configured.' });
     return;
   }
 
-  const durationSeconds = settled.durationSeconds;
-  const longForm = settled.longForm;
-
-  const ready = await framesFor(admin, job.proofId);
+  let ready = await framesFor(admin, job.proofId);
   if (!ready.length) {
-    // Honest and terminal after FFmpeg had a chance at the stored file.
+    // A first extract can miss (cold storage, WebM with no duration, a
+    // process that already burned its once-per-clip attempt on the list
+    // backfill). Ask and the sweep need a second look at the stored file.
+    settled = await ensureStillsAndDuration(admin, job.proofId, { force: true });
+    ready = await framesFor(admin, job.proofId);
+  }
+  if (!ready.length) {
     await write({
       narration_status: 'skipped',
       narration_error: settled.error
@@ -860,6 +864,9 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
     });
     return;
   }
+
+  const durationSeconds = settled.durationSeconds;
+  const longForm = settled.longForm;
 
   // A workday-length recording is a different reading problem from a guided
   // walk: hours of frames go through windows on the cheap model, then one
@@ -1139,6 +1146,62 @@ export async function queueNarration(admin: any, party: any, proofId: string, ph
     phase,
     workDate,
   });
+}
+
+/**
+ * Read this file now so Ask can answer from a dictation.
+ *
+ * Uploads enqueue and return. Existing clips that never got a reading sit
+ * unread until somebody Asks — that question is the moment to look at the
+ * frames, not to say the clip has not been read.
+ */
+export async function ensureClipReading(
+  admin: any,
+  party: { org_id: string; job_id: string; id: string },
+  proofId: string,
+  phase: string,
+  workDate: string,
+): Promise<'done' | 'skipped' | 'failed'> {
+  try {
+    await performNarration(admin, {
+      key: `narr:${proofId}`,
+      proofId,
+      orgId: party.org_id,
+      jobId: party.job_id,
+      partyId: party.id,
+      phase,
+      workDate,
+    });
+    const { data } = await admin
+      .from('job_proofs')
+      .select('narration_status, narration_text, ai_summary, transcript_text')
+      .eq('id', proofId)
+      .maybeSingle();
+    const row = data as {
+      narration_status?: string | null;
+      narration_text?: string | null;
+      ai_summary?: string | null;
+      transcript_text?: string | null;
+    } | null;
+    if (
+      row?.narration_status === 'done' ||
+      (typeof row?.narration_text === 'string' && row.narration_text.trim()) ||
+      (typeof row?.ai_summary === 'string' && row.ai_summary.trim()) ||
+      (typeof row?.transcript_text === 'string' && row.transcript_text.trim())
+    ) {
+      return 'done';
+    }
+    return row?.narration_status === 'skipped' ? 'skipped' : 'failed';
+  } catch (error) {
+    await admin
+      .from('job_proofs')
+      .update({
+        narration_status: 'failed',
+        narration_error: error instanceof Error ? error.message : 'Analysis failed.',
+      })
+      .eq('id', proofId);
+    return 'failed';
+  }
 }
 
 /**

@@ -176,7 +176,10 @@ export function serializeEvidence(input: {
   const analysis = analysisStateOf({
     phase: proof.phase,
     analysisStatus: proof.analysis_status ?? null,
-    hasAiSummary: Boolean(proof.ai_summary),
+    hasAiSummary: Boolean(
+      (typeof proof.ai_summary === 'string' && proof.ai_summary.trim()) ||
+        (typeof proof.narration_text === 'string' && proof.narration_text.trim()),
+    ),
     dayHasAfter: input.dayHasAfter,
     narrationStatus: proof.narration_status ?? null,
     hasTranscript: Boolean(typeof proof.transcript_text === 'string' && proof.transcript_text.trim()),
@@ -234,7 +237,7 @@ export function serializeEvidence(input: {
     retentionUntil: proof.retention_until ?? null,
     labels: Array.isArray(proof.labels) ? proof.labels : [],
     analysis:
-      analysis === 'done'
+      analysis === 'done' || Boolean(dictation) || Boolean(proof.ai_summary) || actions.length > 0
         ? {
             summary: proof.ai_summary ?? findings.summary ?? null,
             /** Spoken-style description for the office player — primary reading. */

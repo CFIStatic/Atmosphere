@@ -59,6 +59,8 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(verifierHtml).toContain('/api/evidence-portal/evidence/');
     expect(verifierHtml).toContain('/ask');
     expect(verifierHtml).toContain('function durSpoken');
+    expect(verifierHtml).toContain('This clip is still being read');
+    expect(verifierHtml).not.toContain('This clip has not been read yet');
   });
 
   it('opens a demo clip, shows the reading immediately, and answers from it', async () => {

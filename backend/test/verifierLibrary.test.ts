@@ -296,6 +296,45 @@ test('serialization: office dictation prefers narration_text over the day summar
   assert.equal(item.analysis?.summary, 'Short headline.');
 });
 
+test('serialization: leftover dictation is still Askable even if status never flipped to done', () => {
+  const item = serializeEvidence({
+    proof: {
+      id: 'p-unread-text',
+      job_id: 'j1',
+      party_id: 'pt1',
+      phase: 'before',
+      work_date: '2026-08-26',
+      captured_at: '2026-08-26T15:00:00Z',
+      received_at: '2026-08-26T15:02:00Z',
+      duration_seconds: '64',
+      byte_size: '4000',
+      lat: null,
+      lon: null,
+      accuracy_m: null,
+      content_hash: 'desk',
+      state: 'checked',
+      checks: [],
+      ai_summary: null,
+      ai_findings: {},
+      ai_material_change: null,
+      ai_model: 'claude',
+      analysis_status: 'skipped',
+      narration_status: 'skipped',
+      narration_text: 'A person sits at a desk watching an MSNBC YouTube clip.',
+      legal_hold: false,
+      retention_until: null,
+    },
+    jobName: 'Desk clip',
+    jobNumber: 2001,
+    company: 'Field Capture',
+    contactName: 'Marcus',
+    tier: 1,
+    dayHasAfter: false,
+  });
+  assert.equal(item.analysisState, 'done');
+  assert.match(String(item.analysis?.dictation), /MSNBC/);
+});
+
 test('serialization: a talk clip with only a transcript is Askable', () => {
   const item = serializeEvidence({
     proof: {

@@ -22,19 +22,18 @@ let running = false;
 
 export function needsNarration(
   status: string | null | undefined,
-  error?: string | null,
+  _error?: string | null,
 ): boolean {
   if (!status || status === 'idle') return true;
-  // Skipped because no model, or because a before sat waiting on an after —
-  // both still need a reading of this file.
-  if (status === 'skipped') {
-    return !error || /no model|not configured|no after|nothing to compare/i.test(error);
-  }
+  // Skipped (no model, no after pair, no frames) and failed rows still need a
+  // reading of this file. Queued is the in-memory queue — a restart loses it
+  // and the row sits queued forever unless we put it back on.
+  if (status === 'skipped' || status === 'failed' || status === 'queued') return true;
   return false;
 }
 
 export function needsTranscript(status: string | null | undefined): boolean {
-  return !status || status === 'idle';
+  return !status || status === 'idle' || status === 'failed' || status === 'skipped';
 }
 
 export async function sweepUnanalyzedProofs(
@@ -60,8 +59,12 @@ export async function sweepUnanalyzedProofs(
         'narration_status.is.null',
         'narration_status.eq.idle',
         'narration_status.eq.skipped',
+        'narration_status.eq.failed',
+        'narration_status.eq.queued',
         'transcript_status.is.null',
         'transcript_status.eq.idle',
+        'transcript_status.eq.failed',
+        'transcript_status.eq.skipped',
       ].join(','),
     )
     .order('received_at', { ascending: true })
