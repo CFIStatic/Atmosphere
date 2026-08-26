@@ -9,6 +9,28 @@ const verifierHtml = readFileSync(
   'utf8',
 );
 
+function bootVerifier() {
+  return new JSDOM(verifierHtml, {
+    url: 'https://atmosphere.test/verifier/?demo=1',
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+    beforeParse(window) {
+      window.fetch = () => Promise.reject(new Error('offline'));
+      window.matchMedia = ((query: string) => ({
+        matches: false,
+        media: query,
+        addEventListener() {},
+        removeEventListener() {},
+        addListener() {},
+        removeListener() {},
+        dispatchEvent() {
+          return false;
+        },
+      })) as unknown as typeof window.matchMedia;
+    },
+  });
+}
+
 describe('verifier clip Ask tab and live analysis', () => {
   afterEach(() => {
     localStorage.clear();
@@ -23,40 +45,24 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(tabs![0]).toMatch(/>Ask</);
   });
 
-  it('writes analysis notes as the footage plays rather than dumping the log', () => {
+  it('shows what the AI saw on the Scope of work tab without requiring playback', () => {
     expect(verifierHtml).toContain('function startLivePlayback');
-    expect(verifierHtml).toContain("setAnalysisPill('Writing…')");
-    expect(verifierHtml).toContain('Notes land here as the footage plays');
+    expect(verifierHtml).toContain('What the AI saw, in order');
+    expect(verifierHtml).toContain('You do not have to watch the clip');
     expect(verifierHtml).toContain('data-full=');
   });
 
   it('answers clip questions from the reading of that clip', () => {
     expect(verifierHtml).toContain('function answerClipLocally');
     expect(verifierHtml).toContain('Did anything happen');
+    expect(verifierHtml).toContain('At any point did the worker go in the bathroom?');
     expect(verifierHtml).toContain('/api/evidence-portal/evidence/');
     expect(verifierHtml).toContain('/ask');
+    expect(verifierHtml).toContain('function durSpoken');
   });
 
-  it('opens a demo clip, lands notes as frames play, and answers from the reading', async () => {
-    const dom = new JSDOM(verifierHtml, {
-      url: 'https://atmosphere.test/verifier/?demo=1',
-      runScripts: 'dangerously',
-      pretendToBeVisual: true,
-      beforeParse(window) {
-        window.fetch = () => Promise.reject(new Error('offline'));
-        window.matchMedia = ((query: string) => ({
-          matches: false,
-          media: query,
-          addEventListener() {},
-          removeEventListener() {},
-          addListener() {},
-          removeListener() {},
-          dispatchEvent() {
-            return false;
-          },
-        })) as unknown as typeof window.matchMedia;
-      },
-    });
+  it('opens a demo clip, shows the reading immediately, and answers from it', async () => {
+    const dom = bootVerifier();
 
     await new Promise((resolveWait) => setTimeout(resolveWait, 80));
     const { document } = dom.window;
@@ -65,11 +71,12 @@ describe('verifier clip Ask tab and live analysis', () => {
     row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 
     expect(document.getElementById('detail')?.getAttribute('data-open')).toBe('1');
+    expect(document.getElementById('d-saw')).not.toBeNull();
+    expect(document.getElementById('d-saw')?.textContent).toMatch(/tarp/i);
     expect(document.getElementById('alog')).not.toBeNull();
-
-    await new Promise((resolveWait) => setTimeout(resolveWait, 900));
-    const notes = Array.from(document.querySelectorAll('#alog li:not(.soon) [data-full]'));
+    const notes = Array.from(document.querySelectorAll('#alog [data-full]'));
     expect(notes.length).toBeGreaterThan(0);
+    expect(notes.some((el) => (el.textContent || '').length > 0)).toBe(true);
 
     const askTab = document.querySelector('[data-tab="ask"]') as HTMLElement | null;
     expect(askTab).not.toBeNull();
@@ -86,6 +93,37 @@ describe('verifier clip Ask tab and live analysis', () => {
       .map((el) => el.textContent || '')
       .join('\n');
     expect(reply).toMatch(/Tarp removed|footage/i);
+    dom.window.close();
+  });
+
+  it('answers a bathroom question from the workday reading with a spoken timestamp', async () => {
+    const dom = bootVerifier();
+
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+    const { document } = dom.window;
+    const row = document.querySelector('tr[data-id="EV-1041-0804-W"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    expect(document.getElementById('d-saw')?.textContent).toMatch(/bathroom/i);
+
+    const askTab = document.querySelector('[data-tab="ask"]') as HTMLElement | null;
+    askTab!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    const suggest = document.querySelector(
+      '[data-ask="At any point did the worker go in the bathroom?"]',
+    ) as HTMLElement | null;
+    expect(suggest).not.toBeNull();
+    suggest!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    await new Promise((resolveWait) => setTimeout(resolveWait, 40));
+    const reply = Array.from(document.querySelectorAll('.ask-bubble.assistant'))
+      .map((el) => el.textContent || '')
+      .join('\n');
+    expect(reply).toMatch(/^Yes\./);
+    expect(reply).toMatch(/bathroom/i);
+    expect(reply).toMatch(/mirror/i);
+    expect(reply).toMatch(/1 hour and 52 minutes into the recording/);
     dom.window.close();
   });
 });

@@ -1012,6 +1012,9 @@
   }
 
   .side { padding: 16px 18px 24px; overflow-y: auto; min-height: 0; }
+  .side.ask-mode { display: flex; flex-direction: column; overflow: hidden; }
+  .side.ask-mode .tabs { flex: none; }
+  .side.ask-mode #d-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; margin-top: 14px; }
   .tabs { display: flex; gap: 3px; background: var(--line-soft); padding: 3px; border-radius: 8px; }
   .tabs button {
     flex: 1; min-width: 0; border: 0; background: none; padding: 7px 4px; border-radius: 6px;
@@ -1040,8 +1043,8 @@
     font-size: 13px; line-height: 1.45; color: var(--ink-2);
   }
   .alog li:last-child { border-bottom: 0; }
-  .alog li.soon { display: none; }
-  .alog li.seen { color: var(--ink); }
+  .alog li.soon { display: grid; opacity: .48; }
+  .alog li.seen { color: var(--ink); opacity: 1; }
   .alog li.on {
     display: grid; background: var(--accent-soft); color: var(--ink);
     box-shadow: inset 3px 0 0 var(--accent);
@@ -1056,11 +1059,22 @@
   @keyframes alog-caret { 50% { opacity: 0; } }
   .alog-wait { margin-top: 4px; }
   .alog-wait[hidden] { display: none; }
+  .saw-block {
+    margin: 0 0 14px; padding: 12px 13px; border-radius: 10px;
+    background: var(--accent-soft); color: var(--ink); font-size: 13.5px; line-height: 1.55;
+  }
+  .saw-block p { margin: 0; }
+  .saw-k {
+    margin: 16px 0 8px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--faint); font-weight: 750;
+  }
 
-  .ask-thread { display: flex; flex-direction: column; gap: 10px; min-height: 88px; }
+  .ask-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .ask-thread { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 120px; overflow-y: auto; padding-bottom: 4px; }
+  .ask-empty { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0 0 10px; }
   .ask-bubble {
-    max-width: 100%; padding: 8px 10px; border-radius: 10px;
-    font-size: 13px; line-height: 1.45; white-space: pre-wrap;
+    max-width: 92%; padding: 9px 12px; border-radius: 12px;
+    font-size: 13.5px; line-height: 1.5; white-space: pre-wrap;
   }
   .ask-bubble.user {
     align-self: flex-end; background: var(--accent); color: #fff;
@@ -1077,15 +1091,17 @@
     border-radius: 999px; padding: 6px 10px; font-size: 12px; cursor: pointer;
   }
   .ask-suggest button:hover { border-color: var(--accent); color: var(--accent); }
-  .ask-form { display: flex; gap: 6px; margin-top: 12px; }
-  .ask-form input {
-    flex: 1; min-width: 0; height: 36px; border: 1px solid var(--line); border-radius: 8px;
-    padding: 0 10px; background: var(--bg); color: var(--ink); font: inherit; outline: none;
+  .ask-form { display: flex; gap: 6px; margin-top: 12px; flex: none; align-items: flex-end; }
+  .ask-form textarea {
+    flex: 1; min-width: 0; min-height: 40px; max-height: 120px; resize: none;
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 9px 11px; background: var(--bg); color: var(--ink); font: inherit; outline: none;
+    line-height: 1.4;
   }
-  .ask-form input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .ask-form textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
   .ask-form button[type="submit"] {
-    border: 0; background: var(--accent); color: #fff; border-radius: 8px;
-    padding: 0 14px; font-weight: 650; cursor: pointer; flex: none;
+    border: 0; background: var(--accent); color: #fff; border-radius: 10px;
+    padding: 0 14px; height: 40px; font-weight: 650; cursor: pointer; flex: none;
   }
   .ask-form button[type="submit"]:disabled { opacity: .55; cursor: default; }
 
@@ -1777,6 +1793,63 @@
       after: { wet: 0.25, cut: 0.7, gear: 6, seconds: 208 }
     }),
     ev({
+      // Interior workday: the office cannot watch three hours. The reading
+      // already names rooms and times so Ask can answer "did they go in the
+      // bathroom?" without a second pass over the pixels.
+      id: 'EV-1041-0804-W', job: 'meridian', company: 'Coastal Drying LLC', person: 'Andre Boone',
+      phase: 'workday', workDate: '2026-08-04', capturedAt: '2026-08-04T07:10:00', uploadedAt: '2026-08-04T10:22:00',
+      duration: 10800, bytes: 3_410_000_000, device: 'iPhone 14 · Atmosphere 2.4 · chest mount',
+      gps: { lat: 30.2984, lon: -97.7431, accuracy: 6, distanceFt: 24 },
+      hash: HASHES[9], tier: 2, integrity: 'pass',
+      checks: [
+        { verdict: 'pass', what: 'Filmed on site', detail: '24 ft from the recorded property centre for the whole recording.' },
+        { verdict: 'pass', what: 'Filmed on the day claimed', detail: 'Rolling clock 07:10–10:10, received 10:22.' },
+        { verdict: 'pass', what: 'Not filed before', detail: 'This file has not appeared on any other day or job.' },
+        { verdict: 'pass', what: 'Long enough to show the work', detail: '3 h of continuous footage.' }
+      ],
+      analysis: {
+        state: 'done',
+        longForm: true,
+        windowsTotal: 12,
+        windowsRead: 12,
+        materialChange: null,
+        materialBecause: null,
+        summary: 'The crew extracts standing water in the living room through the first hour, opens the hallway flood cut late morning, then enters the bathroom at 1 hour and 52 minutes to remount the vanity mirror. The kitchen is passed and not worked.',
+        dictation: 'The day film opens in the living room with extractors and air movers running. Late morning the crew opens the hallway flood cut. At 1 hour and 52 minutes they go into the bathroom and remount the vanity mirror — tools and the mirror are in frame on the wall. The kitchen is walked through and left untouched.',
+        dictationEntries: [
+          { atSeconds: 180, text: 'Living room: extractors running; standing water being pulled from the carpet edge.' },
+          { atSeconds: 2400, text: 'Hallway flood cut opened to about 24 inches; wet insulation coming out.' },
+          { atSeconds: 6720, text: 'They went in the bathroom to remount the mirror.' },
+          { atSeconds: 9000, text: 'Kitchen walked through; no work visible on the cabinets or floor.' }
+        ],
+        actions: [
+          { atSeconds: 180, action: 'remove', room: 'living room', description: 'Extracting standing water along the living-room carpet edge.', object: 'water' },
+          { atSeconds: 2400, action: 'cut', room: 'hallway', description: 'Opening the hallway flood cut and pulling wet insulation.', object: 'drywall' },
+          { atSeconds: 6720, action: 'position', room: 'bathroom', description: 'They went in the bathroom to remount the mirror.', object: 'mirror' }
+        ],
+        changes: [],
+        scope: [
+          { title: 'Extract standing water, living room', verdict: 'appears_complete', because: 'Extractors in frame on the living-room carpet for the first hour.', seenInWindows: [0, 1] },
+          { title: 'Flood cut to 24 in, hallway', verdict: 'appears_complete', because: 'Cut line opened and insulation removed in late morning.', seenInWindows: [3, 4] },
+          { title: 'Remount vanity mirror, bathroom', verdict: 'appears_complete', because: 'Crew enters the bathroom at 1:52:00 and the mirror is fastened back on the wall.', seenInWindows: [7] },
+          { title: 'Reset kitchen cabinets', verdict: 'not_visible', because: 'Kitchen is walked through; no cabinet work is in frame.', seenInWindows: [] }
+        ],
+        timeline: [
+          { idx: 0, startSeconds: 0, endSeconds: 1200, summary: 'Living room extraction; air movers and a wand on the wet carpet.', scopeTouched: [0] },
+          { idx: 3, startSeconds: 2400, endSeconds: 3600, summary: 'Hallway flood cut opened; wet insulation bagged.', scopeTouched: [1] },
+          { idx: 7, startSeconds: 6720, endSeconds: 7500, summary: 'Bathroom: worker remounts the vanity mirror.', scopeTouched: [2] },
+          { idx: 10, startSeconds: 9000, endSeconds: 10800, summary: 'Kitchen walkthrough; no cabinet work visible.', scopeTouched: [] }
+        ],
+        couldNotTell: ['Whether the bathroom floor was dried — the camera stays on the vanity wall.']
+      },
+      custody: [
+        { action: 'uploaded', by: 'Andre Boone, Coastal Drying LLC', role: 'subcontractor', at: '2026-08-04T10:22', detail: 'workday · 2026-08-04 · 3 h' },
+        { action: 'analysed', by: 'Atmosphere', role: 'ai', at: '2026-08-04T10:41', detail: 'Workday read · 12 windows · rooms named against the scope' }
+      ],
+      before: { wet: 0.45, cut: 0.2, gear: 4, seconds: 10800 },
+      after: { wet: 0.15, cut: 0.55, gear: 3, seconds: 10800 }
+    }),
+    ev({
       id: 'EV-1044-0730-A', job: 'camden', company: 'Vantage Drywall', person: 'Luis Marte',
       phase: 'after', workDate: '2026-07-30', capturedAt: '2026-07-30T16:55:00', uploadedAt: '2026-07-30T17:02:00',
       duration: 132, bytes: 79_500_000, device: 'iPhone 13 · Atmosphere 2.3',
@@ -1878,8 +1951,26 @@
   function mb(bytes) { return bytes == null ? '—' : (bytes / 1048576).toFixed(0) + ' MB'; }
   function dur(s) {
     if (s == null) return '—';
-    var m = Math.floor(s / 60), r = Math.round(s % 60);
+    var total = Math.round(Number(s));
+    if (!isFinite(total) || total < 0) return '—';
+    var h = Math.floor(total / 3600);
+    var m = Math.floor((total % 3600) / 60);
+    var r = total % 60;
+    if (h > 0) return h + ':' + String(m).padStart(2, '0') + ':' + String(r).padStart(2, '0');
     return m + ':' + String(r).padStart(2, '0');
+  }
+  function durSpoken(s) {
+    if (s == null || !isFinite(Number(s)) || Number(s) < 0) return '';
+    var total = Math.round(Number(s));
+    var h = Math.floor(total / 3600);
+    var m = Math.floor((total % 3600) / 60);
+    var r = total % 60;
+    var parts = [];
+    if (h) parts.push(h === 1 ? '1 hour' : h + ' hours');
+    if (m) parts.push(m === 1 ? '1 minute' : m + ' minutes');
+    if (!h && !m) parts.push(r === 1 ? '1 second' : r + ' seconds');
+    else if (!h && r) parts.push(r === 1 ? '1 second' : r + ' seconds');
+    return parts.join(' and ') + ' into the recording';
   }
   function dayLabel(iso) {
     var d = new Date(iso + 'T12:00:00');
@@ -3780,7 +3871,9 @@
     });
     (a.actions || []).forEach(function (act) {
       var verb = String(act.action || '').replace(/_/g, ' ');
-      add(act.atSeconds, (verb ? verb + ' — ' : '') + (act.description || ''), 'action');
+      var room = String(act.room || '').trim();
+      var body = act.description || ((verb ? verb + ' — ' : '') + (act.object || ''));
+      add(act.atSeconds, (room && body.toLowerCase().indexOf(room.toLowerCase()) === -1 ? room + ': ' : '') + body, 'action');
     });
     (a.timeline || []).forEach(function (t) {
       add(t.startSeconds, t.summary, 'window');
@@ -3835,39 +3928,11 @@
     if (pill) pill.textContent = text;
   }
 
-  function fillNote(li, animate) {
+  function fillNote(li) {
     var span = li.querySelector('[data-full]');
-    if (!span) {
-      li.setAttribute('data-written', '1');
-      return;
-    }
-    var full = span.getAttribute('data-full') || '';
-    if (li._typeTimer) {
-      clearTimeout(li._typeTimer);
-      li._typeTimer = null;
-    }
-    if (!animate || li.getAttribute('data-written')) {
-      span.textContent = full;
-      li.classList.remove('writing');
-      li.setAttribute('data-written', '1');
-      return;
-    }
-    li.classList.add('writing');
-    var i = 0;
-    function tick() {
-      i += Math.max(2, Math.ceil(full.length / 40));
-      span.textContent = full.slice(0, i);
-      if (i >= full.length) {
-        li.classList.remove('writing');
-        li.setAttribute('data-written', '1');
-        li._typeTimer = null;
-        setAnalysisPill(isFootagePlaying() ? 'Watching' : 'Paused');
-        return;
-      }
-      li._typeTimer = setTimeout(tick, 18);
-    }
-    span.textContent = '';
-    tick();
+    if (span) span.textContent = span.getAttribute('data-full') || span.textContent || '';
+    li.classList.remove('writing');
+    li.setAttribute('data-written', '1');
   }
 
   function syncAnalysisLog(seconds) {
@@ -3890,10 +3955,9 @@
       if (li.getAttribute('data-written') || li.classList.contains('writing')) return;
       fillNote(li, playing && i === lastSeen);
     });
-    if (empty) empty.hidden = lastSeen >= 0;
+    if (empty) empty.hidden = false;
     var cur = lastSeen >= 0 ? items[lastSeen] : null;
-    if (lastSeen < 0) setAnalysisPill(playing ? 'Writing…' : 'Ready');
-    else if (cur && cur.classList.contains('writing')) setAnalysisPill('Writing…');
+    if (lastSeen < 0) setAnalysisPill(playing ? 'Watching' : 'Ready');
     else if (playing && lastSeen < items.length - 1) setAnalysisPill('Watching');
     else if (lastSeen === items.length - 1) setAnalysisPill('Caught up');
     else setAnalysisPill('Paused');
@@ -3926,29 +3990,54 @@
   function renderScopeLog(item) {
     var a = item.analysis || {};
     var rows = analysisLog(item);
+    var saw = String(a.dictation || a.summary || '').trim();
     var pill = a.state === 'failed' ? 'Failed'
-      : (a.state === 'queued' || a.state === 'none' || !a.state) && !rows.length ? 'Writing…'
+      : (a.state === 'queued' || a.state === 'none' || !a.state) && !rows.length && !saw ? 'Writing…'
       : a.state === 'paired' || a.state === 'skipped' ? 'Not yet'
       : 'Ready';
     var html = '<div class="alog-head"><h4>AI analysis</h4><span class="livepill" id="alog-pill">' + pill + '</span></div>';
-    if (!rows.length) {
+    if (!rows.length && !saw) {
       html += '<p class="footnote alog-wait">' +
         esc(a.reason || (a.state === 'paired'
           ? 'This is the before half of a day. Open the after clip for the dictation of what changed.'
           : a.state === 'failed'
             ? 'The dictation failed after retries. The footage itself is unaffected.'
-            : 'The assistant is reading this clip. Notes land here as the footage plays.')) +
+            : 'The assistant is reading this clip. What it sees will land here when the reading finishes.')) +
         '</p>';
       if (a.pairedWith) {
         html += '<p><button class="navitem" style="width:auto;margin:6px 0 0;border:1px solid var(--line)" data-goto="' + a.pairedWith + '">Open ' + esc(a.pairedWith) + '</button></p>';
       }
       return html;
     }
-    html += '<p class="footnote alog-wait" id="alog-empty">Play the clip. Notes land here as the footage plays.</p>';
-    html += '<ul class="alog" id="alog">' + rows.map(function (r) {
-      return '<li data-at="' + r.at + '" class="soon">' +
-        '<span class="t">' + dur(r.at) + '</span><span data-full="' + esc(r.text) + '"></span></li>';
-    }).join('') + '</ul>';
+    if (saw) {
+      html += '<div class="saw-block" id="d-saw"><p>' + esc(saw) + '</p></div>';
+    }
+    if (a.scope && a.scope.length) {
+      html += '<p class="saw-k">Against the scope</p><ul class="scopelist">';
+      a.scope.forEach(function (s) {
+        var w = VERDICT_WORD[s.verdict] || ['neutral', s.verdict];
+        html += '<li><span class="label">' + esc(s.title) +
+          (s.because ? '<span style="display:block;font-size:11.5px;color:var(--muted);font-weight:400;margin-top:1px">' + esc(s.because) + '</span>' : '') +
+          '</span><span class="chip ' + w[0] + '">' + esc(w[1]) + '</span></li>';
+      });
+      html += '</ul>';
+    }
+    if (rows.length) {
+      html += '<p class="saw-k">What the AI saw, in order</p>';
+      html += '<p class="footnote alog-wait" id="alog-empty">You do not have to watch the clip. Times jump the playhead.</p>';
+      html += '<ul class="alog" id="alog">' + rows.map(function (r) {
+        return '<li data-at="' + r.at + '" class="soon">' +
+          '<span class="t">' + dur(r.at) + '</span><span data-full="' + esc(r.text) + '">' + esc(r.text) + '</span></li>';
+      }).join('') + '</ul>';
+    }
+    if (a.couldNotTell && a.couldNotTell.length) {
+      html += '<p class="saw-k">What it could not tell</p>';
+      html += '<ul style="margin:0;padding-left:17px;font-size:12.5px;color:var(--muted);line-height:1.6">' +
+        a.couldNotTell.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>';
+    }
+    html += '<p class="footnote" style="margin-top:14px;padding-top:11px;border-top:1px solid var(--line-soft)">' +
+      'This is what the model could see in the frames — rooms entered, work in view, times on the recording. ' +
+      'It does not infer off-camera work, and it is never an acceptance.</p>';
     return html;
   }
 
@@ -3957,13 +4046,22 @@
     is: 1, was: 1, are: 1, were: 1, this: 1, that: 1, it: 1, any: 1, anything: 1, something: 1,
     what: 1, when: 1, where: 1, how: 1, who: 1, why: 1, clip: 1, video: 1, footage: 1, they: 1,
     them: 1, their: 1, there: 1, for: 1, with: 1, from: 1, about: 1, have: 1, has: 1, been: 1,
-    show: 1, shows: 1, seen: 1, visible: 1
+    show: 1, shows: 1, seen: 1, visible: 1,
+    worker: 1, workers: 1, crew: 1, person: 1, people: 1, someone: 1, somebody: 1,
+    anyone: 1, anybody: 1, went: 1, going: 1, gone: 1, enter: 1, entered: 1, entering: 1,
+    point: 1, anytime: 1, anypoint: 1, ever: 1, into: 1, inside: 1
   };
 
   function askTokens(s) {
     return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(/\s+/).filter(function (t) {
       return t.length > 2 && !ASK_STOP[t];
     });
+  }
+
+  function askTokensOverlap(query, hay) {
+    if (query === hay) return true;
+    if (query.length < 5 || hay.length < 5) return false;
+    return hay.indexOf(query) !== -1 || query.indexOf(hay) !== -1;
   }
 
   function clipAskCorpus(item) {
@@ -3978,7 +4076,9 @@
     (a.dictationEntries || []).forEach(function (e) { push(e.atSeconds, e.text || e.note || e.summary); });
     (a.actions || []).forEach(function (act) {
       var verb = String(act.action || '').replace(/_/g, ' ');
-      push(act.atSeconds, (verb ? verb + ' — ' : '') + (act.description || ''));
+      var room = String(act.room || '').trim();
+      var object = String(act.object || act.objectLabel || '').trim();
+      push(act.atSeconds, [room, verb, act.description, object].filter(Boolean).join(' — '));
     });
     (a.timeline || []).forEach(function (t) { push(t.startSeconds, t.summary); });
     (a.changes || []).forEach(function (c) { push(null, c); });
@@ -4011,24 +4111,36 @@
     }
     var qTokens = askTokens(q);
     if (!qTokens.length) return (a.dictation || a.summary || 'The footage on file does not show that.');
-    var need = Math.min(2, qTokens.length);
+    var yesNo = /^(did|does|do|was|were|is|are|has|have|had|at any|anytime)\b/i.test(q) ||
+      /\b(go in|went in|go into|went into|enter|entered|ever go|at any point)\b/i.test(q);
+    var need = Math.min(qTokens.length >= 2 ? 2 : 1, qTokens.length);
     var scored = rows.map(function (row) {
       var hay = askTokens(row.text);
       var hits = qTokens.filter(function (t) {
-        return hay.some(function (h) { return h.indexOf(t) !== -1 || t.indexOf(h) !== -1; });
+        return hay.some(function (h) { return askTokensOverlap(t, h); });
       });
       return { row: row, score: hits.length };
     }).filter(function (e) { return e.score >= need; }).sort(function (x, y) {
       return y.score - x.score || (x.row.at || 0) - (y.row.at || 0);
     });
-    if (!scored.length) return 'The footage on file does not show that.';
+    if (!scored.length) {
+      return yesNo ? 'No. The footage on file does not show that.' : 'The footage on file does not show that.';
+    }
+    if (yesNo) {
+      var hit = scored.filter(function (e) { return e.row.at != null; })[0] || scored[0];
+      var spoken = hit.row.at != null ? durSpoken(hit.row.at) : '';
+      var body = hit.row.text.replace(/\.$/, '');
+      return spoken ? 'Yes. ' + body + '. That happened at ' + spoken + '.' : 'Yes. ' + body + '.';
+    }
     var best = scored[0];
     var timed = scored.filter(function (e) { return e.row.at != null; })[0];
     var top = timed && timed !== best ? [best, timed] : scored.slice(0, 2);
     return top.map(function (e) {
       var when = e.row.at != null ? dur(e.row.at) : '';
+      var spoken = e.row.at != null ? durSpoken(e.row.at) : '';
       var text = e.row.text.replace(/\.$/, '');
-      return when ? 'At ' + when + ', ' + text.charAt(0).toLowerCase() + text.slice(1) : text;
+      if (when && spoken) return 'At ' + when + ', ' + text.charAt(0).toLowerCase() + text.slice(1) + '. That was ' + spoken;
+      return text;
     }).join('. ') + '.';
   }
 
@@ -4056,13 +4168,15 @@
 
   function renderAsk(item) {
     var thread = ASK_THREADS[item.id] || [];
-    var html = '<div class="alog-head"><h4>Ask this clip</h4></div>' +
-      '<p class="footnote" style="margin:0 0 12px">Ask whether anything happened, or what the footage shows. The assistant answers from its reading of this clip.</p>' +
+    var html = '<div class="ask-pane">' +
+      '<div class="alog-head"><h4>Ask this clip</h4></div>' +
       '<div class="ask-thread" id="ask-thread">';
     if (!thread.length) {
-      html += '<div class="ask-suggest">' +
+      html += '<p class="ask-empty">This clip has already been read. Ask what happened — you do not have to watch it. Answers come only from what the AI could see in the frames.</p>' +
+        '<div class="ask-suggest">' +
         '<button type="button" data-ask="Did anything happen in this clip?">Did anything happen?</button>' +
         '<button type="button" data-ask="What work is visible?">What work is visible?</button>' +
+        '<button type="button" data-ask="At any point did the worker go in the bathroom?">Did they go in the bathroom?</button>' +
         '<button type="button" data-ask="Is anything in this footage unfinished?">Anything unfinished?</button>' +
         '</div>';
     } else {
@@ -4072,9 +4186,9 @@
     }
     html += '</div>' +
       '<form id="ask-form" class="ask-form">' +
-      '<input id="ask-input" maxlength="1000" autocomplete="off" placeholder="Ask about this clip…" />' +
+      '<textarea id="ask-input" maxlength="1000" rows="1" autocomplete="off" placeholder="Ask about this clip…"></textarea>' +
       '<button type="submit">Ask</button>' +
-      '</form>';
+      '</form></div>';
     return html;
   }
 
@@ -4108,6 +4222,16 @@
       form.addEventListener('submit', function (ev) {
         ev.preventDefault();
         send(input && input.value);
+        if (input) input.value = '';
+      });
+    }
+    if (input) {
+      input.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' && !ev.shiftKey) {
+          ev.preventDefault();
+          send(input.value);
+          input.value = '';
+        }
       });
     }
     Array.prototype.forEach.call(document.querySelectorAll('[data-ask]'), function (btn) {
@@ -4121,6 +4245,8 @@
     Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
       b.setAttribute('aria-selected', String(b.dataset.tab === tab));
     });
+    var side = document.querySelector('.side');
+    if (side) side.classList.toggle('ask-mode', tab === 'ask');
     var item = state.open;
     if (!item) return;
     var el = $('#d-panel');
