@@ -17,7 +17,9 @@
 import { createHash } from 'node:crypto';
 import { config } from '../config.js';
 import { HttpError } from '../lib/errors.js';
-import { anthropicClient, isModelProviderConfigured } from '../lib/anthropic.js';
+import { anthropicClient } from '../lib/anthropic.js';
+import { googleVisionApiKey, isVisionConfigured } from '../lib/visionProvider.js';
+import { verificationConfig } from '../verification/config.js';
 import {
   extractSparseFramesFromUrl,
   type CommandRunner,
@@ -145,7 +147,7 @@ export async function dictatePreparedFrames(
   prepared: PreparedVideoFrames,
   opts?: { contextText?: string | null; maxModelFrames?: number },
 ): Promise<VideoDictationResult> {
-  if (!isModelProviderConfigured()) {
+  if (!isVisionConfigured()) {
     throw new HttpError(503, 'Model access is not configured on this server.', 'model_provider_unconfigured');
   }
   if (prepared.frames.length === 0) {
@@ -174,6 +176,33 @@ export async function dictatePreparedFrames(
     'summary is 2–4 sentences that would answer "what is happening in this video". actions may be an empty array.',
   ].join(' ');
 
+  const userText = [
+    `Source: ${prepared.source}`,
+    `Video id: ${prepared.id}`,
+    `Duration: ${prepared.durationSeconds}s (~${hours}h)`,
+    `Stills: ${frames.length} of ${prepared.frames.length} prepared (diverse sample)`,
+    context ? `Context:\n${context}` : 'Context: (none)',
+    'Dictate what the video shows for the office verifier. JSON only.',
+  ].join('\n');
+
+  const googleKey = googleVisionApiKey();
+  if (googleKey) {
+    try {
+      return await dictateWithGemini({
+        apiKey: googleKey,
+        system,
+        userText,
+        frames,
+      });
+    } catch (err) {
+      if (!config.anthropic.apiKey) throw err;
+      console.warn(
+        '[dictation] Gemini failed, trying Anthropic:',
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
   const response = await anthropicClient().messages.create({
     model: config.technician.assistant.model,
     max_tokens: 2500,
@@ -182,17 +211,7 @@ export async function dictatePreparedFrames(
       {
         role: 'user',
         content: [
-          {
-            type: 'text',
-            text: [
-              `Source: ${prepared.source}`,
-              `Video id: ${prepared.id}`,
-              `Duration: ${prepared.durationSeconds}s (~${hours}h)`,
-              `Stills: ${frames.length} of ${prepared.frames.length} prepared (diverse sample)`,
-              context ? `Context:\n${context}` : 'Context: (none)',
-              'Dictate what the video shows for the office verifier. JSON only.',
-            ].join('\n'),
-          },
+          { type: 'text', text: userText },
           ...frames.flatMap((frame, i) => [
             {
               type: 'text' as const,
@@ -230,6 +249,67 @@ export async function dictatePreparedFrames(
     narrationSummary: parsed.summary,
     model: response.model,
     frameCount: frames.length,
+    actions: parsed.actions,
+  };
+}
+
+async function dictateWithGemini(input: {
+  apiKey: string;
+  system: string;
+  userText: string;
+  frames: PreparedVideoFrame[];
+}): Promise<VideoDictationResult> {
+  const model = verificationConfig.primaryModel;
+  const baseUrl = (process.env.GOOGLE_BASE_URL || 'https://generativelanguage.googleapis.com').replace(
+    /\/+$/,
+    '',
+  );
+  const url = `${baseUrl}/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': input.apiKey },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: input.system }] },
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: input.userText },
+            ...input.frames.flatMap((frame, i) => [
+              { text: `frame ${i} — at ${Math.round(frame.atSeconds)}s:` },
+              { inline_data: { mime_type: 'image/jpeg', data: frame.jpeg.toString('base64') } },
+            ]),
+          ],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        temperature: 0,
+        maxOutputTokens: 2500,
+      },
+    }),
+  });
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Gemini vision error ${response.status}: ${errText.slice(0, 400)}`);
+  }
+  const payload = (await response.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+  const text = (payload.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('\n');
+  const parsed = parseDictationPayload(
+    text,
+    input.frames.map((frame) => frame.atSeconds),
+    model,
+  );
+  if (!parsed.narration) {
+    throw new HttpError(502, 'Dictation model returned empty narration', 'empty_dictation');
+  }
+  return {
+    narrationText: parsed.narration,
+    narrationSummary: parsed.summary,
+    model,
+    frameCount: input.frames.length,
     actions: parsed.actions,
   };
 }
