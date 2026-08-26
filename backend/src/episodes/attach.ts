@@ -1,4 +1,3 @@
-import { ingestPhysicalWorkFromProof } from '../physicalWork/ingest.js';
 import { assessRows } from './resolve.js';
 import { observationPhaseForProof } from './resolve.js';
 
@@ -90,7 +89,13 @@ export async function attachProofToEpisode(
     }
 
     await rescoreEpisode(admin, episodeId);
-    await ingestPhysicalWorkFromProof(admin, { orgId: input.orgId, proofId: input.proofId });
+    // Dynamic import avoids a cycle: ingest.ts already imports this file.
+    try {
+      const { ingestPhysicalWorkFromProof } = await import('../physicalWork/ingest.js');
+      await ingestPhysicalWorkFromProof(admin, { orgId: input.orgId, proofId: input.proofId });
+    } catch {
+      /* dataset enrichment; never fail the upload */
+    }
     return episodeId;
   } catch {
     return null;
