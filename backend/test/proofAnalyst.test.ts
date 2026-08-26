@@ -313,6 +313,14 @@ test('groundedCollectionAnswer says so when nothing is filed', () => {
   assert.match(groundedCollectionAnswer('any drywall?', []), /nothing to answer/i);
 });
 
+test('groundedCollectionAnswer does not invent a clip when nothing matches', () => {
+  const answer = groundedCollectionAnswer('was the roof tiled', [
+    { workDate: '2026-08-20', phase: 'after', summary: 'Painted the ceiling' },
+  ]);
+  assert.match(answer, /do not show that/i);
+  assert.doesNotMatch(answer, /Painted the ceiling/);
+});
+
 test('collectionClipsFromRows keeps every clip, not only after-phase', () => {
   const clips = collectionClipsFromRows([
     {

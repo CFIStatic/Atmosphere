@@ -538,17 +538,25 @@ export function groundedCollectionAnswer(question: string, clips: CollectionClip
       (value): value is string => Boolean(value),
     );
 
+  if (!words.length) {
+    return 'Ask a more specific question about what is on the videos.';
+  }
+
   const hits = clips.filter((clip) => {
     const hay = fieldsOf(clip).join(' ').toLowerCase();
-    return words.length === 0 || words.some((w) => hay.includes(w));
+    return words.some((w) => hay.includes(w));
   });
-  const use = hits.length ? hits : clips;
-  const first = use[0]!;
-  const matched = words.length
-    ? fieldsOf(first).find((field) => words.some((w) => field.toLowerCase().includes(w)))
-    : null;
-  const text = matched || first.summary || first.narration || first.transcript || 'The footage is on file.';
-  return `${clipLabel(first)}: ${text}`.slice(0, 600);
+  if (!hits.length) {
+    return 'The videos on file do not show that';
+  }
+  const first = hits[0]!;
+  const matched =
+    fieldsOf(first).find((field) => words.some((w) => field.toLowerCase().includes(w))) ??
+    first.summary ??
+    first.narration ??
+    first.transcript ??
+    'The footage is on file.';
+  return `${clipLabel(first)}: ${matched}`.slice(0, 600);
 }
 
 /**
