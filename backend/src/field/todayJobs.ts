@@ -1,12 +1,13 @@
 import { localDayKey } from '../pm/psychrometrics.js';
 
 /**
- * Today's work for Field Capture and the office dashboard.
+ * Jobs Field Capture and the office overview can film.
  *
- * Opening the app has to answer one question: which job are we on today.
- * That is not "every open job in the org". It is the job scheduled for this
- * calendar day, the job already filmed today, or the job currently in
- * progress — and a filmed-today job still counts after it is marked complete.
+ * Opening the app has to answer one question: which job can we add video to.
+ * That is every open job in the org — not only the ones with a start date —
+ * plus anything already filmed today (those still count after they are marked
+ * complete). A crew standing at a house must never be told the job is hidden
+ * because nobody put it on a calendar.
  */
 
 export const DEFAULT_FIELD_TIMEZONE = 'America/New_York';
@@ -14,7 +15,7 @@ export const DEFAULT_FIELD_TIMEZONE = 'America/New_York';
 const CLOSED = new Set(['cancelled']);
 const OPEN = new Set(['draft', 'scheduled', 'in_progress', 'on_hold']);
 
-export type TodayReason = 'filmed' | 'scheduled' | 'in_progress' | 'open';
+export type TodayReason = 'filmed' | 'in_progress' | 'open';
 
 export interface TodayJobInput {
   id: string;
@@ -41,24 +42,20 @@ export function fallsOnDay(iso: string | null | undefined, day: string, timeZone
   return localDayKey(t, timeZone) === day;
 }
 
-function reasonFor(
-  job: TodayJobInput,
-  filmedIds: Set<string>,
-  day: string,
-  timeZone: string,
-): TodayReason | null {
+function reasonFor(job: TodayJobInput, filmedIds: Set<string>): TodayReason | null {
   if (CLOSED.has(job.status ?? '')) return filmedIds.has(job.id) ? 'filmed' : null;
   if (filmedIds.has(job.id)) return 'filmed';
-  if (fallsOnDay(job.scheduledStart, day, timeZone)) return 'scheduled';
   if (job.status === 'in_progress') return 'in_progress';
-  return null;
+  if (OPEN.has(job.status ?? '')) return 'open';
+  // Completed (and any other non-open status) stays off the list unless it
+  // was filmed today — that case is handled above.
+  return filmedIds.has(job.id) ? 'filmed' : null;
 }
 
 const REASON_RANK: Record<TodayReason, number> = {
   filmed: 0,
-  scheduled: 1,
-  in_progress: 2,
-  open: 3,
+  in_progress: 1,
+  open: 2,
 };
 
 function startMs(iso: string | null): number {
@@ -68,34 +65,26 @@ function startMs(iso: string | null): number {
 }
 
 /**
- * Pick the jobs that belong on today's screen.
+ * List the jobs the crew can film.
  *
- * When nothing is scheduled, filmed, or in progress, fall back to other open
- * jobs so a crew can still start filming. Cancelled jobs stay out unless they
- * already have a film for today.
+ * Every open job is offered so more video can be added at any time. Cancelled
+ * jobs stay out unless they already have a film for today.
  */
 export function pickTodayJobs(
   jobs: TodayJobInput[],
   filmedJobIds: Iterable<string>,
-  day: string,
-  timeZone: string = DEFAULT_FIELD_TIMEZONE,
+  _day?: string,
+  _timeZone: string = DEFAULT_FIELD_TIMEZONE,
 ): PickedTodayJob[] {
   const filmed = new Set(filmedJobIds);
-  const today: PickedTodayJob[] = [];
-  const fallback: PickedTodayJob[] = [];
+  const list: PickedTodayJob[] = [];
 
   for (const job of jobs) {
-    const reason = reasonFor(job, filmed, day, timeZone);
-    if (reason) {
-      today.push({ ...job, filmed: filmed.has(job.id), reason });
-      continue;
-    }
-    if (OPEN.has(job.status ?? '')) {
-      fallback.push({ ...job, filmed: false, reason: 'open' });
-    }
+    const reason = reasonFor(job, filmed);
+    if (!reason) continue;
+    list.push({ ...job, filmed: filmed.has(job.id), reason });
   }
 
-  const list = today.length ? today : fallback;
   return list.sort((a, b) => {
     const rank = REASON_RANK[a.reason] - REASON_RANK[b.reason];
     if (rank !== 0) return rank;
@@ -111,7 +100,7 @@ export function formatTodayAt(
   timeZone: string = DEFAULT_FIELD_TIMEZONE,
 ): string {
   if (filmed) return 'Filmed';
-  if (!scheduledStart) return 'Today';
+  if (!scheduledStart) return '';
   try {
     return new Date(scheduledStart).toLocaleTimeString('en-US', {
       hour: 'numeric',
@@ -119,7 +108,7 @@ export function formatTodayAt(
       timeZone: timeZone || DEFAULT_FIELD_TIMEZONE,
     });
   } catch {
-    return 'Today';
+    return '';
   }
 }
 

@@ -127,7 +127,7 @@
     if (j.addr) bits.push(escapeHtml(j.addr));
     if (j.filmed) bits.push('<span class="filmedpin">Filmed today</span>');
     else if (j.placed === false) bits.push('<span class="warnpin">Location not placed</span>');
-    return bits.join(' · ') || 'Assigned today';
+    return bits.join(' · ') || 'Open job';
   }
 
   function renderExpect(jobs) {
@@ -279,7 +279,7 @@
     setStatus(
       state.activeJobId
         ? 'Ready — pick a job.'
-        : 'Nothing on the schedule for today. Ask the office to start a job.',
+        : 'No jobs yet. Ask the office to start a job.',
     );
     show('s-home');
   }

@@ -49,7 +49,7 @@ export interface JobFacts {
 }
 
 export interface Gap {
-  key: 'scope' | 'address' | 'coordinates' | 'schedule';
+  key: 'scope' | 'address' | 'coordinates';
   /** What is missing, in the words the office would use. */
   what: string;
   /** The concrete consequence — a named check that will not run. */
@@ -81,9 +81,10 @@ const SOURCE_WORD: Record<IntakeSource, string> = {
  * Compute the forecast.
  *
  * Ordering of the gaps is by what actually costs the most: scope first,
- * because without it nothing is verified at all; then place; then time. The
- * office reads the first line and stops, so the first line has to be the
- * expensive one.
+ * because without it nothing is verified at all; then place. A missing start
+ * date is not a gap — Field Capture lists every open job so the crew can add
+ * video without a calendar. The office reads the first line and stops, so
+ * the first line has to be the expensive one.
  */
 export function assessReadiness(facts: JobFacts): Readiness {
   const gaps: Gap[] = [];
@@ -127,19 +128,6 @@ export function assessReadiness(facts: JobFacts): Readiness {
     });
   } else {
     strengths.push('Address placed, so on-site can be checked');
-  }
-
-  if (!facts.scheduledStart) {
-    gaps.push({
-      key: 'schedule',
-      what: 'Not scheduled',
-      costs:
-        'The job will not appear in anyone\'s day, so a crew has to be told about it some other way.',
-      fix: 'Set a start date.',
-      severity: 'weakening',
-    });
-  } else {
-    strengths.push('Scheduled, so it shows up in the crew\'s day');
   }
 
   if (facts.partyCount > 0) {

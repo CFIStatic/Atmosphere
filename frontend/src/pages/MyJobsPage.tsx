@@ -53,7 +53,7 @@ export function clearFieldSession() {
 }
 
 function when(iso: string | null): string {
-  if (!iso) return 'Not scheduled';
+  if (!iso) return '';
   const date = new Date(iso);
   const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   return `${date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} · ${time}`;
@@ -190,10 +190,11 @@ function JobCard({ job, showOrg }: { job: ClaimedJob; showOrg: boolean }) {
           )}
         </div>
         {job.address && <p className="mt-0.5 text-xs text-ink-600">{job.address}</p>}
-        <p className="mt-1 text-[11px] text-ink-500">
-          {when(job.scheduledStart)}
-          {showOrg ? ` · ${job.orgName}` : ''}
-        </p>
+        {(when(job.scheduledStart) || showOrg) && (
+          <p className="mt-1 text-[11px] text-ink-500">
+            {[when(job.scheduledStart), showOrg ? job.orgName : ''].filter(Boolean).join(' · ')}
+          </p>
+        )}
       </Link>
     </li>
   );

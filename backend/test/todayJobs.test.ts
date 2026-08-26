@@ -49,13 +49,13 @@ test('the job already filmed today is on the list even after it is completed', (
   );
   assert.deepEqual(
     picked.map((j) => j.id),
-    ['done'],
+    ['done', 'other'],
   );
   assert.equal(picked[0].filmed, true);
   assert.equal(picked[0].reason, 'filmed');
 });
 
-test('a job scheduled for today is on the list before other open work', () => {
+test('open jobs stay on the list even when another job has a start time today', () => {
   const picked = pickTodayJobs(
     [
       job({
@@ -70,6 +70,12 @@ test('a job scheduled for today is on the list before other open work', () => {
         status: 'scheduled',
         scheduledStart: '2026-08-12T13:00:00Z',
       }),
+      job({
+        id: 'unscheduled',
+        title: 'No date yet',
+        status: 'draft',
+        scheduledStart: null,
+      }),
     ],
     [],
     DAY,
@@ -77,9 +83,9 @@ test('a job scheduled for today is on the list before other open work', () => {
   );
   assert.deepEqual(
     picked.map((j) => j.id),
-    ['today'],
+    ['today', 'later', 'unscheduled'],
   );
-  assert.equal(picked[0].reason, 'scheduled');
+  assert.ok(picked.every((j) => j.reason === 'open'));
 });
 
 test('an in-progress job counts as today even with no start time', () => {
@@ -112,7 +118,7 @@ test('cancelled work stays off the list unless it was filmed today', () => {
   assert.equal(filmed[0].reason, 'filmed');
 });
 
-test('when nothing is due today, other open jobs are still offered so filming can start', () => {
+test('open jobs are offered so filming can start without a start date', () => {
   const picked = pickTodayJobs(
     [
       job({ id: 'open', title: 'Unscheduled', status: 'draft' }),
@@ -129,7 +135,7 @@ test('when nothing is due today, other open jobs are still offered so filming ca
   assert.equal(picked[0].reason, 'open');
 });
 
-test('filmed today sorts ahead of a later scheduled stop', () => {
+test('filmed today sorts ahead of other open work', () => {
   const picked = pickTodayJobs(
     [
       job({
@@ -155,7 +161,7 @@ test('filmed today sorts ahead of a later scheduled stop', () => {
 
 test('formatTodayAt says Filmed once the day film is on file', () => {
   assert.equal(formatTodayAt('2026-08-12T13:00:00Z', true, TZ), 'Filmed');
-  assert.equal(formatTodayAt(null, false, TZ), 'Today');
+  assert.equal(formatTodayAt(null, false, TZ), '');
   assert.match(formatTodayAt('2026-08-12T13:00:00Z', false, TZ), /\d/);
 });
 

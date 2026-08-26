@@ -955,7 +955,7 @@ final class AtmosphereClient: ObservableObject {
                 name: job.title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "Job",
                 address: job.property_id.flatMap { addressById[$0] } ?? "Address on file",
                 at: Self.formatTodayAt(job.scheduled_start, filmed: filmed),
-                placed: job.scheduled_start != nil || filmed,
+                placed: job.property_id.flatMap { addressById[$0] } != nil || filmed,
                 status: job.status,
                 filmed: filmed
             )
@@ -1188,33 +1188,25 @@ final class AtmosphereClient: ObservableObject {
         return formatter.string(from: Date())
     }
 
-    private static func pickTodayJobs(_ jobs: [JobRow], filmedIds: Set<String>, today: String) -> [JobRow] {
-        func day(_ iso: String?) -> String? {
-            guard let iso, iso.count >= 10 else { return nil }
-            return String(iso.prefix(10))
-        }
+    private static func pickTodayJobs(_ jobs: [JobRow], filmedIds: Set<String>, today _: String) -> [JobRow] {
         let closed: Set<String> = ["cancelled"]
         let open: Set<String> = ["draft", "scheduled", "in_progress", "on_hold"]
-        var todayJobs: [JobRow] = []
-        var fallback: [JobRow] = []
+        var list: [JobRow] = []
         for job in jobs {
             let status = job.status ?? ""
-            if closed.contains(status) {
-                if filmedIds.contains(job.id) { todayJobs.append(job) }
+            if filmedIds.contains(job.id) {
+                list.append(job)
                 continue
             }
-            if filmedIds.contains(job.id) || day(job.scheduled_start) == today || status == "in_progress" {
-                todayJobs.append(job)
-            } else if open.contains(status) {
-                fallback.append(job)
-            }
+            if closed.contains(status) { continue }
+            if open.contains(status) { list.append(job) }
         }
-        return todayJobs.isEmpty ? fallback : todayJobs
+        return list
     }
 
     private static func formatTodayAt(_ iso: String?, filmed: Bool) -> String {
         if filmed { return "Filmed" }
-        guard let iso else { return "Today" }
+        guard let iso else { return "" }
         let fractional = ISO8601DateFormatter()
         fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let basic = ISO8601DateFormatter()

@@ -20,7 +20,8 @@ function isToday(iso: string | null): boolean {
 }
 
 /**
- * Field home — today's jobs and the numbers a crew glances at before they film.
+ * Field home — open jobs the crew can film, and the numbers they glance at
+ * before they start. A missing start date does not hide a job.
  */
 export function PlatformHomePage({ platform: platformId }: { platform: PlatformId }) {
   const platform = PLATFORMS[platformId];
@@ -52,32 +53,35 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
         return { value: jobs ? String(open.length) : '—', sub: hint };
       case 'crewOnJobs':
         return { value: jobs ? String(open.reduce((s, j) => s + j.crewSize, 0)) : '—', sub: hint };
-      case 'scheduledToday':
-        return { value: jobs ? String(open.filter((j) => isToday(j.scheduledStart)).length) : '—', sub: hint };
-      case 'unscheduled':
-        return { value: jobs ? String(open.filter((j) => !j.scheduledStart).length) : '—', sub: hint };
+      case 'workedToday':
+        return {
+          value: jobs
+            ? String(
+                (jobs ?? []).filter(
+                  (j) =>
+                    j.status !== 'cancelled' &&
+                    (isToday(j.lastEventAt) || j.status === 'in_progress'),
+                ).length,
+              )
+            : '—',
+          sub: hint,
+        };
     }
   };
 
   const attention = useMemo(() => {
-    const list = [...open];
-    const workedToday = (jobs ?? []).filter(
-      (j) =>
-        j.status !== 'cancelled' &&
-        (isToday(j.scheduledStart) || isToday(j.lastEventAt) || j.status === 'in_progress'),
-    );
-    const pool = workedToday.length ? workedToday : list;
-    return [...pool]
+    return [...open]
       .sort((a, b) => {
-        const aToday = isToday(a.lastEventAt) || isToday(a.scheduledStart) ? 0 : 1;
-        const bToday = isToday(b.lastEventAt) || isToday(b.scheduledStart) ? 0 : 1;
-        if (aToday !== bToday) return aToday - bToday;
-        const at = a.scheduledStart ? Date.parse(a.scheduledStart) : Number.MAX_SAFE_INTEGER;
-        const bt = b.scheduledStart ? Date.parse(b.scheduledStart) : Number.MAX_SAFE_INTEGER;
-        return at - bt;
+        const aLive = a.status === 'in_progress' || isToday(a.lastEventAt) ? 0 : 1;
+        const bLive = b.status === 'in_progress' || isToday(b.lastEventAt) ? 0 : 1;
+        if (aLive !== bLive) return aLive - bLive;
+        const at = a.lastEventAt ? Date.parse(a.lastEventAt) : 0;
+        const bt = b.lastEventAt ? Date.parse(b.lastEventAt) : 0;
+        if (at !== bt) return bt - at;
+        return a.title.localeCompare(b.title);
       })
       .slice(0, 8);
-  }, [jobs, open]);
+  }, [open]);
 
   return (
     <>
@@ -99,12 +103,12 @@ export function PlatformHomePage({ platform: platformId }: { platform: PlatformI
       <section className="mt-6 rounded-xl glass-card">
         <header className="flex items-baseline justify-between border-b border-line px-5 py-4">
           <div>
-            <h2 className="text-[15px] font-semibold text-ink-900">Today&apos;s jobs</h2>
+            <h2 className="text-[15px] font-semibold text-ink-900">Open jobs</h2>
             <p className="mt-0.5 text-xs text-ink-500">
               {jobs
                 ? attention.length
-                  ? `${attention.length} job${attention.length === 1 ? '' : 's'} for today`
-                  : 'Nothing scheduled or filmed today'
+                  ? `${attention.length} job${attention.length === 1 ? '' : 's'} ready to film`
+                  : 'No open jobs'
                 : 'Loading…'}
             </p>
           </div>
@@ -175,12 +179,7 @@ function AttentionRow({ job }: { job: JobSummary }) {
         {job.lastEvent && <p className="mt-1 truncate text-[13px] text-ink-600">{job.lastEvent}</p>}
       </div>
       <div className="shrink-0 text-right">
-        <p className="text-sm font-semibold tabular-nums text-ink-900">
-          {job.scheduledStart
-            ? new Date(job.scheduledStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-            : 'Unscheduled'}
-        </p>
-        <p className="mt-0.5 text-xs text-ink-500">{job.crewSize} on crew</p>
+        <p className="text-sm font-semibold tabular-nums text-ink-900">{job.crewSize} on crew</p>
       </div>
     </Link>
   );

@@ -1037,7 +1037,7 @@ export type ReadinessCeiling = 'filed_only' | 'work_only' | 'full';
 export type ReadinessLevel = 'blocked' | 'limited' | 'ready';
 
 export interface ReadinessGap {
-  key: 'scope' | 'address' | 'coordinates' | 'schedule';
+  key: 'scope' | 'address' | 'coordinates';
   what: string;
   costs: string;
   fix: string;

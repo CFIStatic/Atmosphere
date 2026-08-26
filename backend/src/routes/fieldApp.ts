@@ -230,10 +230,10 @@ async function orgTimezone(
 
 /**
  * GET /api/field-app/today
- * The job(s) for this calendar day. If the office has put this person on a
- * crew, only those jobs (plus anything they already filmed today) show.
- * Until then, today's org schedule still appears so the first day of filming
- * is not blocked on an assignment.
+ * Every open job this person can add video to. If the office has put them on
+ * a crew, only those jobs (plus anything they already filmed today) show.
+ * Until then, the org's open jobs still appear so the first day of filming
+ * is not blocked on an assignment — and a missing start date never hides a job.
  */
 fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -353,7 +353,7 @@ fieldAppRouter.get('/today', async (req: Request, res: Response, next: NextFunct
         address: (j.propertyId && addressById.get(j.propertyId)) || 'Address on file',
         at: formatTodayAt(j.scheduledStart, j.filmed, timeZone),
         status: j.status ?? null,
-        placed: Boolean(j.scheduledStart) || j.filmed,
+        placed: Boolean(j.propertyId && addressById.get(j.propertyId)) || j.filmed,
         filmed: j.filmed,
         reason: j.reason,
         sharePath: token ? jobSharePagePath(token, email) : null,
