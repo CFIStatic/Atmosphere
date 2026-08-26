@@ -533,16 +533,21 @@ export function groundedCollectionAnswer(question: string, clips: CollectionClip
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter((w) => w.length > 2 && !STOP.has(w));
+  const fieldsOf = (clip: CollectionClip): string[] =>
+    [clip.summary, clip.narration, clip.transcript, ...(clip.changes ?? []), ...(clip.concerns ?? [])].filter(
+      (value): value is string => Boolean(value),
+    );
+
   const hits = clips.filter((clip) => {
-    const hay = [clip.summary, clip.narration, clip.transcript, ...(clip.changes ?? []), ...(clip.concerns ?? [])]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase();
+    const hay = fieldsOf(clip).join(' ').toLowerCase();
     return words.length === 0 || words.some((w) => hay.includes(w));
   });
   const use = hits.length ? hits : clips;
   const first = use[0]!;
-  const text = first.summary || first.narration || first.transcript || 'The footage is on file.';
+  const matched = words.length
+    ? fieldsOf(first).find((field) => words.some((w) => field.toLowerCase().includes(w)))
+    : null;
+  const text = matched || first.summary || first.narration || first.transcript || 'The footage is on file.';
   return `${clipLabel(first)}: ${text}`.slice(0, 600);
 }
 

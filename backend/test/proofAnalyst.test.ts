@@ -297,7 +297,12 @@ test('formatCollectionRecord includes morning clips, transcripts, and day films'
 test('groundedCollectionAnswer finds a hit on a morning-clip transcript', () => {
   const answer = groundedCollectionAnswer('when was the subfloor mentioned', [
     { workDate: '2026-08-21', phase: 'after', summary: 'Painted the ceiling' },
-    { workDate: '2026-08-20', phase: 'before', transcript: 'The subfloor is exposed in the hall' },
+    {
+      workDate: '2026-08-20',
+      phase: 'before',
+      summary: 'Empty hall before the crew started.',
+      transcript: 'The subfloor is exposed in the hall',
+    },
   ]);
   assert.match(answer, /2026-08-20/);
   assert.match(answer, /morning clip/);
