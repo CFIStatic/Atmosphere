@@ -31,7 +31,6 @@ import { sharedJobsRouter, jobShareRouter } from './routes/sharedJobs.js';
 import { placesRouter } from './routes/places.js';
 import { purchasingRouter } from './routes/purchasing.js';
 import { episodesRouter } from './routes/episodes.js';
-import { physicalWorkRouter } from './physicalWork/index.js';
 import { evidencePortalRouter, evidenceShareRouter } from './routes/evidencePortal.js';
 import { verificationRouter } from './verification/routes.js';
 import { progressShareRouter } from './routes/progressShare.js';
@@ -250,7 +249,6 @@ export function createApp(): Express {
   app.use('/api/operations', placesRouter);
   app.use('/api/purchasing', purchasingRouter);
   app.use('/api/episodes', episodesRouter);
-  app.use('/api/physical-work', physicalWorkRouter);
   app.use('/api/evidence-portal', evidencePortalRouter);
   // Video work-verification pipeline (extends proof-of-work; async stages).
   app.use('/api/verification', verificationRouter);

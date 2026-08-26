@@ -51,55 +51,16 @@ It never throws into Field Capture upload.
 
 `job_only` is the default. The office can still see the operational record
 (what happened on this job). Training export of media locators requires
-`data_rights = licensable` and `worker_consent = granted`. Optional
-`work_episodes.rights_manifest_id` composes the existing `rights_manifests`
-row — it does not invent a second consent system. Widening rights is an
-attributed act on the episode row; this Phase 1 does not add a new consent UI.
-
-`GET /api/physical-work/episodes/:id/training-export` returns 403 when composed
-rights deny training. `GET /api/episodes/:id/training-export` still returns the
-operational view so the office can see why it is not exportable.
-
-## Security / RLS
-
-Every Phase 1 table is org-scoped. RLS uses `private.is_org_member(org_id)` for
-`authenticated`. `anon` is revoked. Ingest writes with the service role, same
-as proof attach. Org id comes from session membership, never from the client
-as authority. Unknown verification is not pass; `ai_analysis` cannot become
-ground truth (`is_ground_truth` is constrained false on immediate outcomes).
-
-## Migration risks
-
-| Risk | Mitigation |
-| --- | --- |
-| Dual migration trees | Identical files in `backend/supabase/migrations` and `supabase/migrations`. |
-| Parallel product | No replacement of `work_episodes`. New tables hang off that id. |
-| Historic backfill | Ingest is forward-only. Re-run is idempotent on `(episode_id, kind)` / proof. |
-| Crew upload | Ingest is try/catch around attach and narration. Failures return null. |
-| Actor-kind check | Existing `human \| machine \| mixed` rows stay valid; new kinds are additive. |
-
-## APIs
-
-`/api/episodes` stays the office read of the operational episode.
-
-`/api/physical-work` is the named dataset surface:
-
-- `POST/GET /jobs/:jobId/episodes`
-- `GET /episodes/:id` (record + verification status)
-- `GET /episodes/:id/actions`
-- `POST/GET /episodes/:id/world-states`
-- `POST/GET /episodes/:id/evidence`
-- `POST/GET /episodes/:id/outcome`
-- `GET /episodes/:id/annotations`
-- `GET /episodes/:id/training-export` (403 when rights deny)
-- `GET /metrics` — episodes, verified, with outcomes, training-authorized
+`data_rights = licensable` and `worker_consent = granted`. Widening rights is
+an attributed act on the episode row; this Phase 1 does not add a new consent
+UI.
 
 ## Explicitly not built yet
 
 Decision points, failure/recovery graphs, skill models, crew coordination,
-a knowledge graph, and robotics control streams. Actor kind now allows
-`human | crew | robot | autonomous | human_robot` (plus legacy `machine | mixed`).
-`episode_decisions` and `episode_failures` are schema hooks only.
+a knowledge graph, and robotics control streams. Actor kind already allows
+`human | machine | mixed`. Those layers attach to the same episode id when
+they earn a table.
 
 ## How a day becomes a record
 
