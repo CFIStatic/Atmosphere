@@ -1,6 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { api, type ProofResponse, type ProofDay, type ProofQuestion } from '../../lib/api';
+import {
+  api,
+  type PhysicalWorkRecord,
+  type ProofResponse,
+  type ProofDay,
+  type ProofQuestion,
+  type WorkEpisodeListItem,
+} from '../../lib/api';
 import { SpinnerIcon } from '../icons';
+import { PhysicalWorkPanel } from './PhysicalWorkPanel';
 
 /**
  * Proof of work.
@@ -41,6 +49,15 @@ const VERDICT_DOT: Record<string, string> = {
   unknown: 'bg-caution-600',
 };
 
+function recordForDay(
+  episodes: WorkEpisodeListItem[],
+  records: Record<string, PhysicalWorkRecord>,
+  day: ProofDay,
+): PhysicalWorkRecord | null {
+  const episode = episodes.find((item) => item.partyId === day.partyId && item.workDate === day.workDate);
+  return episode ? (records[episode.id] ?? null) : null;
+}
+
 function label(key: string): string {
   const bare = key.replace(/^(before|after)\./, '');
   const words: Record<string, string> = {
@@ -75,6 +92,8 @@ export function ProofOfWork({
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [episodes, setEpisodes] = useState<WorkEpisodeListItem[]>([]);
+  const [records, setRecords] = useState<Record<string, PhysicalWorkRecord>>({});
 
   async function load() {
     if (initialData) {
@@ -83,14 +102,16 @@ export function ProofOfWork({
     }
     if (!jobId) return;
     try {
-      const [proofs, qs] = await Promise.all([
+      const [proofs, qs, episodeList] = await Promise.all([
         api.jobProofs(jobId),
         readOnly
           ? Promise.resolve({ questions: [] as ProofQuestion[] })
           : api.proofQuestions(jobId).catch(() => ({ questions: [] as ProofQuestion[] })),
+        api.jobEpisodes(jobId).catch(() => ({ episodes: [] as WorkEpisodeListItem[] })),
       ]);
       setData(proofs);
       setQuestions(qs.questions);
+      setEpisodes(episodeList.episodes);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load the proof record.');
       setData({ days: [], counts: { days: 0, payable: 0, contradicted: 0, awaitingAfter: 0, analysing: 0 }, siteKnown: false });
@@ -100,9 +121,21 @@ export function ProofOfWork({
   useEffect(() => {
     setData(null);
     setOpenDay(null);
+    setRecords({});
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId, initialData]);
+
+  useEffect(() => {
+    if (!openDay) return;
+    const [partyId, workDate] = openDay.split('|');
+    const episode = episodes.find((item) => item.partyId === partyId && item.workDate === workDate);
+    if (!episode || records[episode.id]) return;
+    void api
+      .episodePhysicalWork(episode.id)
+      .then((res) => setRecords((prev) => ({ ...prev, [episode.id]: res.record })))
+      .catch(() => undefined);
+  }, [openDay, episodes, records]);
 
   async function decide(day: ProofDay, decision: 'accepted' | 'rejected') {
     if (!jobId) return;
@@ -193,6 +226,7 @@ export function ProofOfWork({
         <ul className="mt-3 space-y-2">
           {data.days.map((day) => {
             const on = openDay === `${day.partyId}|${day.workDate}`;
+            const workRecord = recordForDay(episodes, records, day);
             const tone = day.contradicted
               ? 'border-danger-200 bg-danger-50'
               : day.payable
@@ -456,6 +490,8 @@ export function ProofOfWork({
                         ) : null}
                       </div>
                     )}
+
+                    {workRecord ? <PhysicalWorkPanel record={workRecord} /> : null}
 
                     {/* The videos themselves, side by side. A summary is a
                         convenience; the footage is the documentation, and

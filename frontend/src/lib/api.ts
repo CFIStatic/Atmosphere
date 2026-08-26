@@ -801,6 +801,75 @@ export interface ProofQuestion {
   created_at: string;
 }
 
+/* ---- Physical-work episode (structured day record) ----------------------- */
+
+export interface WorkEpisodeListItem {
+  id: string;
+  jobId: string;
+  partyId: string | null;
+  taskKey: string | null;
+  taskName: string | null;
+  trade: string | null;
+  workDate: string;
+  status: string;
+  tier: number;
+  dataRights: string;
+  performerLabel: string | null;
+}
+
+export interface PhysicalWorkWorldState {
+  kind: 'before' | 'after';
+  summary: string | null;
+  opening: string | null;
+  visibleConditions: string[];
+  changes: string[];
+  concerns: string[];
+  uncertainties: string[];
+  objects: string[];
+}
+
+export interface PhysicalWorkRecord {
+  schema: string;
+  episodeId: string;
+  jobId: string;
+  workDate: string;
+  performerLabel: string | null;
+  goal: {
+    taskKey: string | null;
+    taskName: string | null;
+    trade: string | null;
+    intentNote: string | null;
+    expectedActions: string[];
+  };
+  before: PhysicalWorkWorldState | null;
+  after: PhysicalWorkWorldState | null;
+  actions: Array<{
+    sequence: number;
+    action: string;
+    objectLabel: string | null;
+    toolLabel: string | null;
+    purpose: string | null;
+  }>;
+  tools: Array<{ name: string }>;
+  materials: Array<{ name: string }>;
+  outcome: {
+    status: string;
+    materialChange: string | null;
+    summary: string | null;
+    isGroundTruth: boolean;
+    scopeVerdicts: Array<{ title: string; verdict: string; because: string | null }>;
+  } | null;
+  longTermOutcomes: Array<{ kind: string; daysAfterWork: number | null }>;
+  rights: {
+    dataRights: string;
+    workerConsent: string;
+    view: 'operational' | 'org_analytics' | 'training';
+    trainingEligible: boolean;
+  };
+  tier: number;
+  status: string;
+}
+
 /* ---- Evidence and chain of custody --------------------------------------- */
 
 export interface EvidenceItem {
@@ -3100,6 +3169,16 @@ export const api = {
   // ---- Proof of work ----
   jobProofs: (jobId: string) =>
     request<ProofResponse>(`/api/operations/shared/${jobId}/proof`, { method: 'GET' }),
+
+  jobEpisodes: (jobId: string) =>
+    request<{ episodes: WorkEpisodeListItem[] }>(`/api/episodes?jobId=${encodeURIComponent(jobId)}`, {
+      method: 'GET',
+    }),
+
+  episodePhysicalWork: (episodeId: string) =>
+    request<{ record: PhysicalWorkRecord }>(`/api/episodes/${encodeURIComponent(episodeId)}/physical-work`, {
+      method: 'GET',
+    }),
 
   decideProofDay: (
     jobId: string,

@@ -18,6 +18,7 @@ import {
 } from '../shared/proofAnalyst.js';
 import { RetryQueue } from '../shared/retryQueue.js';
 import { attachProofToEpisode } from '../episodes/attach.js';
+import { ingestPhysicalWorkFromProof } from '../physicalWork/ingest.js';
 import { isModelProviderConfigured } from '../lib/anthropic.js';
 import { config } from '../config.js';
 import { DailyBudget } from '../shared/liveBudget.js';
@@ -473,6 +474,7 @@ async function runDayAnalysis(admin: any, party: any, workDate: string): Promise
       ai_model: analysis.model,
     });
 
+    await ingestPhysicalWorkFromProof(admin, { orgId: party.org_id, proofId: film.id });
     return { outcome: 'done', materialChange: analysis.materialChange, summary: analysis.summary };
   }
 
@@ -502,6 +504,7 @@ async function runDayAnalysis(admin: any, party: any, workDate: string): Promise
     ai_model: analysis.model,
   });
 
+  await ingestPhysicalWorkFromProof(admin, { orgId: party.org_id, proofId: film.id });
   return { outcome: 'done', materialChange: null, summary: analysis.summary };
 }
 
