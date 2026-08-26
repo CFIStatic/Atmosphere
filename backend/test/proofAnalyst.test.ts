@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseAnalysis, parseDayFilmAnalysis, keepKnownScope } from '../src/shared/proofAnalyst.js';
+import {
+  parseAnalysis,
+  parseDayFilmAnalysis,
+  keepKnownScope,
+  formatCollectionRecord,
+  groundedCollectionAnswer,
+  collectionClipsFromRows,
+} from '../src/shared/proofAnalyst.js';
 
 /**
  * Reading the model's reply.
@@ -257,4 +264,69 @@ test('a day-film reply parses work performed without a before/after pair', () =>
 test('a day-film reply without a summary is not an analysis', () => {
   assert.equal(parseDayFilmAnalysis(JSON.stringify({ workPerformed: ['something'] })), null);
   assert.equal(parseDayFilmAnalysis('They hung some drywall today.'), null);
+});
+
+/* ---- Asking the collection ---------------------------------------------- */
+
+test('formatCollectionRecord includes morning clips, transcripts, and day films', () => {
+  const text = formatCollectionRecord([
+    {
+      workDate: '2026-08-20',
+      phase: 'before',
+      company: 'Acme',
+      summary: 'Empty hall',
+      transcript: 'We have not started the subfloor yet',
+    },
+    {
+      workDate: '2026-08-20',
+      phase: 'after',
+      company: 'Acme',
+      summary: 'Drywall hung',
+      narration: 'Board across the north wall',
+      changes: ['Hung drywall'],
+      concerns: ['Wet corner'],
+    },
+  ]);
+  assert.match(text, /morning clip/);
+  assert.match(text, /Heard on the mic: We have not started the subfloor yet/);
+  assert.match(text, /day film/);
+  assert.match(text, /Drywall hung/);
+  assert.match(text, /Wet corner/);
+});
+
+test('groundedCollectionAnswer finds a hit on a morning-clip transcript', () => {
+  const answer = groundedCollectionAnswer('when was the subfloor mentioned', [
+    { workDate: '2026-08-21', phase: 'after', summary: 'Painted the ceiling' },
+    { workDate: '2026-08-20', phase: 'before', transcript: 'The subfloor is exposed in the hall' },
+  ]);
+  assert.match(answer, /2026-08-20/);
+  assert.match(answer, /morning clip/);
+  assert.match(answer, /subfloor/);
+});
+
+test('groundedCollectionAnswer says so when nothing is filed', () => {
+  assert.match(groundedCollectionAnswer('any drywall?', []), /nothing to answer/i);
+});
+
+test('collectionClipsFromRows keeps every clip, not only after-phase', () => {
+  const clips = collectionClipsFromRows([
+    {
+      work_date: '2026-08-20',
+      phase: 'before',
+      ai_summary: 'Morning',
+      transcript_text: 'hello',
+    },
+    {
+      work_date: '2026-08-20',
+      phase: 'after',
+      narration_text: 'Day film',
+      ai_findings: { workPerformed: ['cut drywall'], concerns: ['open junction'] },
+    },
+  ]);
+  assert.equal(clips.length, 2);
+  assert.equal(clips[0]!.phase, 'before');
+  assert.equal(clips[0]!.transcript, 'hello');
+  assert.equal(clips[1]!.summary, 'Day film');
+  assert.deepEqual(clips[1]!.changes, ['cut drywall']);
+  assert.deepEqual(clips[1]!.concerns, ['open junction']);
 });

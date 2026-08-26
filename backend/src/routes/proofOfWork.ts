@@ -13,6 +13,7 @@ import {
   analyseDayFilm,
   analyseProofDay,
   answerFromProofs,
+  collectionClipsFromRows,
   type MaterialChange,
   type ProofFrame,
 } from '../shared/proofAnalyst.js';
@@ -44,6 +45,7 @@ import {
   type VisionAction,
 } from '../shared/proofActions.js';
 import { applyOpenHoldToProof, markSourceDeleted, recordUserAction, vaultFromProof } from '../legal/index.js';
+import { queueProofTranscript } from '../audio/proofTranscript.js';
 
 /**
  * Proof of work: the endpoints.
@@ -68,6 +70,7 @@ const PROOF_SELECT =
   'captured_at, received_at, lat, lon, accuracy_m, state, checks, ai_summary, ai_findings, ' +
   'ai_model, ai_material_change, analysis_status, analysis_error, analysed_at, ' +
   'narration, narration_text, narration_status, narration_error, actions, ' +
+  'transcript_status, transcript_text, transcript_error, transcribed_at, ' +
   'decided_at, decided_note, created_at';
 
 /** The row shape the verifier wants. */
@@ -302,6 +305,7 @@ export async function recordProof(party: any, admin: any, body: unknown) {
     proofPhase: input.phase,
     performerLabel: `${party.contact_name ? `${party.contact_name}, ` : ''}${party.company}`,
   });
+  await queueProofTranscript(admin, (proof as any).id);
 
   await recordAccess(admin, {
     orgId: party.org_id,
@@ -1376,10 +1380,27 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
 
   days.sort((a, b) => b.workDate.localeCompare(a.workDate));
 
+  const videos = rows.map((row) => ({
+    id: row.id,
+    partyId: row.party_id,
+    company: company.get(row.party_id) ?? 'Company',
+    workDate: row.work_date,
+    phase: row.phase,
+    durationSeconds: row.duration_seconds === null ? null : Number(row.duration_seconds),
+    analysisStatus: row.analysis_status ?? null,
+    narrationStatus: row.narration_status ?? null,
+    transcriptStatus: row.transcript_status ?? null,
+    transcriptError: row.transcript_error ?? null,
+    aiSummary: row.ai_summary ?? row.narration_text ?? null,
+    heardOnMic: typeof row.transcript_text === 'string' ? String(row.transcript_text).slice(0, 400) : null,
+  }));
+
   return {
     days,
+    videos,
     counts: {
       days: days.length,
+      videos: videos.length,
       payable: days.filter((d) => d.payable && !d.accepted).length,
       contradicted: days.filter((d) => d.contradicted).length,
       analysing: days.filter(
@@ -1457,28 +1478,32 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
     const { orgId, userId, supabase } = await requireOrgContext(req);
     const input = z.object({ question: z.string().trim().min(3).max(1000) }).parse(req.body ?? {});
 
-    const { data } = await supabase
-      .from('job_proofs')
-      .select('work_date, ai_summary, ai_findings')
-      .eq('org_id', orgId)
-      .eq('job_id', req.params.jobId)
-      .eq('phase', 'after')
-      .not('ai_summary', 'is', null)
-      .order('work_date', { ascending: false })
-      .limit(40);
+    const [{ data }, { data: partyRows }] = await Promise.all([
+      supabase
+        .from('job_proofs')
+        .select('party_id, work_date, phase, ai_summary, ai_findings, narration_text, transcript_text')
+        .eq('org_id', orgId)
+        .eq('job_id', req.params.jobId)
+        .is('deleted_at', null)
+        .order('work_date', { ascending: false })
+        .limit(80),
+      supabase.from('job_parties').select('id, company').eq('job_id', req.params.jobId),
+    ]);
 
-    const days = ((data ?? []) as any[]).map((row) => ({
-      workDate: row.work_date,
-      summary: row.ai_summary as string,
-      changes: (row.ai_findings?.changes ?? []) as string[],
-      concerns: (row.ai_findings?.concerns ?? []) as string[],
-    }));
+    const company = new Map(((partyRows ?? []) as any[]).map((p) => [p.id, p.company]));
+    const clips = collectionClipsFromRows(
+      ((data ?? []) as any[]).map((row) => ({
+        ...row,
+        company: company.get(row.party_id) ?? null,
+      })),
+    );
 
-    const result = await answerFromProofs({ question: input.question, days });
+    const result = await answerFromProofs({ question: input.question, clips });
     if (!result) {
       throw new HttpError(503, 'The assistant is not available right now.', 'model_unavailable');
     }
 
+    const groundedOn = clips.map((clip) => `${clip.workDate}:${clip.phase ?? 'clip'}`);
     const { data: stored } = await supabase
       .from('job_proof_questions')
       .insert({
@@ -1487,13 +1512,13 @@ export async function askAboutProofs(req: Request, res: Response, next: NextFunc
         question: input.question,
         answer: result.answer,
         model: result.model,
-        grounded_on: days.map((d) => d.workDate),
+        grounded_on: groundedOn,
         asked_by: userId,
       })
       .select('id, question, answer, grounded_on, created_at')
       .single();
 
-    res.status(201).json({ answer: result.answer, question: stored, groundedOn: days.length });
+    res.status(201).json({ answer: result.answer, question: stored, groundedOn: groundedOn.length });
   } catch (err) {
     next(err);
   }

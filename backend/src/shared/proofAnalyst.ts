@@ -446,44 +446,136 @@ export async function analyseProofDay(input: {
   };
 }
 
-const QA_SYSTEM = `You answer a project manager's questions about a subcontractor's daily proof-of-work videos, using only the analyses provided.
+const QA_SYSTEM = `You answer a project manager's questions about a job's filed videos, using only the analyses provided.
 
 Rules:
-1. Answer only from the analyses given. They are descriptions of video frames somebody already looked at.
-2. If the analyses do not contain the answer, say "The videos on file do not show that" and stop. Do not reason about what was probably true.
-3. Quote the work date when you cite something, so the answer can be checked.
+1. Answer only from the record given. It is what the assistant already saw in the frames and, when present, heard on the mic.
+2. If the record does not contain the answer, say "The videos on file do not show that" and stop. Do not reason about what was probably true.
+3. Quote the work date and which clip (before / after / day film) when you cite something, so the answer can be checked.
 4. Two or three sentences. This is read on a phone between site visits.
 5. Never estimate cost, hours, or whether work was worth paying for.`;
 
+export interface CollectionClip {
+  workDate: string;
+  phase?: string | null;
+  company?: string | null;
+  summary?: string | null;
+  narration?: string | null;
+  transcript?: string | null;
+  changes?: string[];
+  concerns?: string[];
+}
+
+function clipLabel(clip: CollectionClip): string {
+  const phase =
+    clip.phase === 'before' ? 'morning clip' : clip.phase === 'after' ? 'day film' : clip.phase || 'clip';
+  return `${clip.workDate} (${phase}${clip.company ? `, ${clip.company}` : ''})`;
+}
+
+export function formatCollectionRecord(clips: CollectionClip[]): string {
+  return clips
+    .map((clip) => {
+      const lines = [clipLabel(clip)];
+      if (clip.summary) lines.push(`  Seen: ${clip.summary}`);
+      if (clip.narration && clip.narration !== clip.summary) lines.push(`  Narration: ${clip.narration}`);
+      if (clip.transcript) lines.push(`  Heard on the mic: ${clip.transcript.slice(0, 1200)}`);
+      if (clip.changes?.length) lines.push(`  Changes: ${clip.changes.join('; ')}`);
+      if (clip.concerns?.length) lines.push(`  Concerns: ${clip.concerns.join('; ')}`);
+      return lines.join('\n');
+    })
+    .join('\n\n');
+}
+
+/** Every filed clip on a job — morning, day film, and leftover phases alike. */
+export function collectionClipsFromRows(
+  rows: Array<{
+    work_date?: string;
+    workDate?: string;
+    phase?: string | null;
+    company?: string | null;
+    ai_summary?: string | null;
+    narration_text?: string | null;
+    transcript_text?: string | null;
+    ai_findings?: {
+      changes?: unknown;
+      workPerformed?: unknown;
+      concerns?: unknown;
+    } | null;
+  }>,
+): CollectionClip[] {
+  const asStrings = (value: unknown): string[] =>
+    Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      : [];
+
+  return rows.map((row) => ({
+    workDate: String(row.work_date ?? row.workDate ?? ''),
+    phase: row.phase ?? null,
+    company: row.company ?? null,
+    summary: row.ai_summary ?? row.narration_text ?? null,
+    narration: row.narration_text ?? null,
+    transcript: row.transcript_text ?? null,
+    changes: asStrings(row.ai_findings?.changes ?? row.ai_findings?.workPerformed),
+    concerns: asStrings(row.ai_findings?.concerns),
+  }));
+}
+
+const STOP = new Set([
+  'the', 'a', 'an', 'in', 'on', 'of', 'to', 'and', 'or', 'did', 'does', 'do', 'is', 'was',
+  'are', 'were', 'this', 'that', 'it', 'any', 'what', 'when', 'where', 'how', 'who', 'why',
+  'video', 'videos', 'clip', 'film', 'day',
+]);
+
+/** Keyword lookup so Ask still answers when no model key is configured. */
+export function groundedCollectionAnswer(question: string, clips: CollectionClip[]): string {
+  if (!clips.length) return 'Nothing has been filed for this job yet, so there is nothing to answer from.';
+  const words = question
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length > 2 && !STOP.has(w));
+  const hits = clips.filter((clip) => {
+    const hay = [clip.summary, clip.narration, clip.transcript, ...(clip.changes ?? []), ...(clip.concerns ?? [])]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return words.length === 0 || words.some((w) => hay.includes(w));
+  });
+  const use = hits.length ? hits : clips;
+  const first = use[0]!;
+  const text = first.summary || first.narration || first.transcript || 'The footage is on file.';
+  return `${clipLabel(first)}: ${text}`.slice(0, 600);
+}
+
 /**
- * Answer a question from the analyses already on file.
- *
- * Grounded in the summaries rather than re-reading the video, which is both
- * cheaper and better: the summaries were produced under the "describe only what
- * is visible" rule, so an answer built from them inherits that discipline
- * instead of inviting a fresh round of inference.
+ * Answer a question from the analyses already on file — frames and, when
+ * present, the mic. Grounded in what was already written, not a second watch.
  */
 export async function answerFromProofs(input: {
   question: string;
-  days: Array<{ workDate: string; summary: string; changes: string[]; concerns: string[] }>;
+  days?: Array<{ workDate: string; summary: string; changes: string[]; concerns: string[] }>;
+  clips?: CollectionClip[];
 }): Promise<{ answer: string; model: string | null } | null> {
-  if (!isModelProviderConfigured()) return null;
-  if (!input.days.length) {
+  const clips: CollectionClip[] =
+    input.clips ??
+    (input.days ?? []).map((day) => ({
+      workDate: day.workDate,
+      summary: day.summary,
+      changes: day.changes,
+      concerns: day.concerns,
+    }));
+
+  if (!clips.length) {
     return {
       answer: 'Nothing has been filed for this job yet, so there is nothing to answer from.',
       model: null,
     };
   }
 
-  const record = input.days
-    .map(
-      (day) =>
-        `${day.workDate}: ${day.summary}` +
-        (day.changes.length ? `\n  Changes: ${day.changes.join('; ')}` : '') +
-        (day.concerns.length ? `\n  Concerns: ${day.concerns.join('; ')}` : ''),
-    )
-    .join('\n\n');
+  if (!isModelProviderConfigured()) {
+    return { answer: groundedCollectionAnswer(input.question, clips), model: null };
+  }
 
+  const record = formatCollectionRecord(clips);
   const response = await anthropicClient().messages.create({
     model: config.technician.assistant.model,
     max_tokens: 500,
@@ -491,7 +583,7 @@ export async function answerFromProofs(input: {
     messages: [
       {
         role: 'user',
-        content: `Proof-of-work record for this job:\n\n${record}\n\nQuestion: ${input.question}`,
+        content: `Video collection for this job:\n\n${record}\n\nQuestion: ${input.question}`,
       },
     ],
   });
