@@ -663,8 +663,8 @@
     overflow-x: hidden;
   }
   body[data-atm-rail-only] .app-frame { overflow: hidden; }
-  /* Intake / job record: keep the office links, hide video filters. */
-  body[data-atm-rail-only] #evidence-nav { display: none; }
+  /* Office rail: Videos filters stay on Overview, Start a job, My jobs, and
+     the job record — not only on Dashboard. */
   .navitem.nav-icon { justify-content: flex-start; gap: 10px; }
   .navitem.nav-icon svg { flex: none; color: var(--muted); width: 16px; height: 16px; }
   .navitem.nav-icon[aria-current="true"] svg { color: var(--accent); }
@@ -4413,6 +4413,7 @@
   }
 
   function setRailOnly(on) {
+    RAIL_ONLY = !!on;
     if (on) document.body.setAttribute('data-atm-rail-only', '1');
     else document.body.removeAttribute('data-atm-rail-only');
   }
@@ -4425,11 +4426,10 @@
       activeRailItem = 'view:' + b.dataset.view;
       syncSidebarActive();
       $('#viewtitle').textContent = b.dataset.label || (b.querySelector('.label') && b.querySelector('.label').textContent) || b.textContent.trim();
-      if (EMBEDDED && RAIL_ONLY) {
+      if (EMBEDDED) {
+        setScreen('dashboard');
         window.parent.postMessage({ atmosphere: 'navigate', to: '/verifier-library' }, '*');
-        return;
       }
-      if (EMBEDDED) setScreen('dashboard');
       render();
     });
   });
