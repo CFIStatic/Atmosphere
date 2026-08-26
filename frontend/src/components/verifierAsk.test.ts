@@ -150,7 +150,7 @@ describe('verifier clip Ask tab and live analysis', () => {
       .map((el) => el.textContent || '')
       .join('\n');
     expect(reply).not.toMatch(/after video/i);
-    expect(reply).toMatch(/has not been read yet|still being read|reading of this clip/i);
+    expect(reply).toMatch(/panel|breaker|garage|footage|reading of this clip/i);
     dom.window.close();
   });
 

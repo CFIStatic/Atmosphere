@@ -1183,7 +1183,7 @@ function evidencePortalLibrary() {
         flagged,
         legalHold: Boolean(p.legalHold),
         tier: 1,
-        analysisState: p.state === 'analysed' ? 'done' : p.state === 'checked' ? 'paired' : 'none',
+        analysisState: p.state === 'analysed' || p.aiSummary ? 'done' : 'none',
         analysis:
           p.aiSummary != null
             ? {
@@ -1236,8 +1236,7 @@ function evidencePortalLibrary() {
     counts: {
       total: items.length,
       flagged: items.filter((i) => i.flagged).length,
-      unanalysed: items.filter((i) => i.analysisState !== 'done' && i.analysisState !== 'paired')
-        .length,
+      unanalysed: items.filter((i) => i.analysisState !== 'done').length,
       onHold: items.filter((i) => i.legalHold).length,
     },
   };

@@ -339,8 +339,7 @@ export function parseDayFilmAnalysis(text: string): Omit<DayFilmAnalysis, 'model
 }
 
 /**
- * What the day film shows — used when Field Capture files one clip for the day
- * instead of a before/after pair.
+ * What one filed video shows. Every upload is read on its own.
  */
 export async function analyseDayFilm(input: {
   frames: ProofFrame[];
@@ -470,9 +469,7 @@ export interface CollectionClip {
 }
 
 function clipLabel(clip: CollectionClip): string {
-  const phase =
-    clip.phase === 'before' ? 'morning clip' : clip.phase === 'after' ? 'day film' : clip.phase || 'clip';
-  return `${clip.workDate} (${phase}${clip.company ? `, ${clip.company}` : ''})`;
+  return `${clip.workDate} (video${clip.company ? `, ${clip.company}` : ''})`;
 }
 
 export function formatCollectionRecord(clips: CollectionClip[]): string {
@@ -489,7 +486,7 @@ export function formatCollectionRecord(clips: CollectionClip[]): string {
     .join('\n\n');
 }
 
-/** Every filed clip on a job — morning, day film, and leftover phases alike. */
+/** Every filed video on a job. */
 export function collectionClipsFromRows(
   rows: Array<{
     work_date?: string;

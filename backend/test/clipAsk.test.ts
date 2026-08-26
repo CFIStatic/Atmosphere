@@ -145,12 +145,13 @@ test('what is happening cites the scene, not a missing after pair', () => {
   assert.doesNotMatch(answer, /after video/i);
 });
 
-test('a comparison question without a pair still names the missing after', () => {
+test('a comparison question without a reading does not ask for another clip', () => {
   const answer = groundedAnswerFromClip('What changed compared to the after clip?', {
     analysisState: 'skipped',
     phase: 'before',
   });
-  assert.match(answer, /after video/i);
+  assert.match(answer, /has not been read yet|still being read|nothing to answer/i);
+  assert.doesNotMatch(answer, /after video/i);
 });
 
 test('a clip still being read says so instead of inventing work', () => {

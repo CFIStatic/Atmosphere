@@ -58,32 +58,27 @@ export function labelForCheck(key: string): string {
 /**
  * What the list's Analysis column says about one clip.
  *
- * `paired` matters: a before video is never analysed on its own — it is read
- * as one half of its day — and a list that renders it "not analysed" teaches
- * reviewers to distrust rows that are working exactly as designed.
+ * Every video is its own reading. Phase labels (before / after) are leftover
+ * upload metadata — they do not decide whether this file has been described.
  */
 export type AnalysisState =
   | 'done'
   | 'queued'
   | 'failed'
   | 'skipped'
-  | 'paired' // this is a before; its day has an after and the reading lives there
-  | 'waiting_on_after'
   | 'none';
 
 export function analysisStateOf(input: {
   phase: 'before' | 'after' | string;
   analysisStatus: string | null;
   hasAiSummary: boolean;
-  /** Does the same party/day have an after clip filed? */
+  /** Unused. Kept so existing callers do not break. */
   dayHasAfter: boolean;
   /** Per-clip AI dictation status — office reads this next to the video. */
   narrationStatus?: string | null;
   /** Speech on the mic is enough for Ask even when frames were silent. */
   hasTranscript?: boolean;
 }): AnalysisState {
-  // A reading of THIS clip wins over before/after pairing. A morning upload,
-  // a walkthrough, or a lone desk video is still something Ask can describe.
   const readingDone =
     input.analysisStatus === 'done' ||
     input.narrationStatus === 'done' ||
@@ -102,20 +97,16 @@ export function analysisStateOf(input: {
     return 'failed';
   }
 
-  if (input.phase === 'before') {
-    return input.dayHasAfter ? 'paired' : 'waiting_on_after';
-  }
-  if (input.analysisStatus === 'skipped') return 'skipped';
   return 'none';
 }
 
 /**
  * Should this clip surface in the Flagged view.
  *
- * Flagged means "a person should look", and three things earn it: integrity
- * that is not a clean pass, an after whose comparison found nothing changed or
- * could not be made, and an analysis that failed outright. A before waiting on
- * its after is not flagged — that is the normal shape of a morning.
+ * Flagged means "a person should look": integrity that is not a clean pass,
+ * a reading that found nothing happened or could not tell, and an analysis
+ * that failed outright. An unread clip is not flagged — it is still being
+ * described.
  */
 export function needsAttention(input: {
   integrity: CheckVerdict;

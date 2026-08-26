@@ -11,7 +11,6 @@ import {
 } from '../shared/proofVerifier.js';
 import {
   analyseDayFilm,
-  analyseProofDay,
   answerFromProofs,
   collectionClipsFromRows,
   type MaterialChange,
@@ -276,15 +275,15 @@ export async function recordProof(party: any, admin: any, body: unknown) {
     }
   }
 
-  // Two readings queue here, not one. The narration is per-video. The day
-  // reading describes what work the film shows — a single day film is enough;
-  // a before/after pair still gets the comparison when both exist.
+  // Two readings queue here, not one. The narration is per-video. The scene
+  // reading describes what this file shows — every upload is analysed on its
+  // own, however the crew labelled it.
   //
   // Day-length recordings and the iOS app often arrive with zero device
   // frames. Those still queue: the worker sparsely extracts stills from
   // storage with FFmpeg before reading.
   await queueNarration(admin, party, (proof as any).id, input.phase, input.workDate);
-  const analysis = await queueDayAnalysis(admin, party, input.workDate);
+  const analysis = await queueDayAnalysis(admin, party, input.workDate, (proof as any).id);
 
   // The clip's own length and stills, settled off the critical path. Neither
   // needs a model, and a crew standing in a doorway must not wait on FFmpeg
@@ -389,26 +388,27 @@ type DayAnalysisResult =
   | { outcome: 'skipped'; reason: string };
 
 /**
- * Load a day's frames and run the model over them.
+ * Load one video's frames and run the model over them.
  *
  * Three ways out, and keeping them apart is the point of the refactor:
  * 'done' wrote findings; 'skipped' means there was nothing to run against and
  * says why; a throw means the model flaked and the attempt is worth retrying.
  * The old version collapsed all three into a silent return.
  */
-async function runDayAnalysis(admin: any, party: any, workDate: string): Promise<DayAnalysisResult> {
-  const { data: proofs } = await admin
+async function runDayAnalysis(
+  admin: any,
+  party: any,
+  workDate: string,
+  proofId: string,
+): Promise<DayAnalysisResult> {
+  const { data: film } = await admin
     .from('job_proofs')
     .select('id, phase, duration_seconds, byte_size, storage_path')
-    .eq('party_id', party.id)
-    .eq('work_date', workDate);
+    .eq('id', proofId)
+    .maybeSingle();
 
-  const rows = (proofs ?? []) as any[];
-  const before = rows.find((r) => r.phase === 'before');
-  const after = rows.find((r) => r.phase === 'after');
-  const film = after ?? before;
   if (!film) {
-    return { outcome: 'skipped', reason: 'No day film on file yet.' };
+    return { outcome: 'skipped', reason: 'No video on file yet.' };
   }
   if (!isModelProviderConfigured()) {
     return { outcome: 'skipped', reason: 'Model access is not configured on this server.' };
@@ -423,15 +423,11 @@ async function runDayAnalysis(admin: any, party: any, workDate: string): Promise
     return (await framesFor(admin, row.id)).slice(0, 12);
   };
 
-  const [beforeFrames, afterFrames] = await Promise.all([
-    loadFrames(before),
-    loadFrames(after),
-  ]);
-  const filmFrames = afterFrames.length ? afterFrames : beforeFrames;
+  const filmFrames = await loadFrames(film);
   if (!filmFrames.length) {
     return {
       outcome: 'skipped',
-      reason: 'Could not extract frames from the day film for analysis.',
+      reason: 'Could not extract frames from this video for analysis.',
     };
   }
 
@@ -445,43 +441,6 @@ async function runDayAnalysis(admin: any, party: any, workDate: string): Promise
     .filter((s) => !s.party_id || s.party_id === party.id)
     .map((s) => s.title);
 
-  const writeFindings = async (patch: Record<string, unknown>) => {
-    await admin.from('job_proofs').update(patch).eq('id', film.id);
-  };
-
-  if (before && after && beforeFrames.length && afterFrames.length) {
-    const analysis = await analyseProofDay({
-      beforeFrames,
-      afterFrames,
-      scopeTitles: titles,
-      workDate,
-      trade: party.trade,
-    });
-    if (!analysis) throw new Error('The model reply was not usable.');
-
-    await writeFindings({
-      state: 'analysed',
-      ai_summary: analysis.summary,
-      ai_material_change: analysis.materialChange,
-      ai_findings: {
-        kind: 'before_after',
-        scopeCrossRef: titles.length > 0,
-        materialBecause: analysis.materialBecause,
-        changes: analysis.changes,
-        workPerformed: analysis.changes,
-        cannotTell: analysis.cannotTell,
-        scopeTouched: analysis.scopeTouched,
-        scopeVerdicts: analysis.scopeVerdicts,
-        concerns: analysis.concerns,
-        opening: analysis.opening,
-      },
-      ai_model: analysis.model,
-    });
-
-    await ingestPhysicalWorkFromProof(admin, { orgId: party.org_id, proofId: film.id });
-    return { outcome: 'done', materialChange: analysis.materialChange, summary: analysis.summary };
-  }
-
   const analysis = await analyseDayFilm({
     frames: filmFrames,
     scopeTitles: titles,
@@ -490,7 +449,7 @@ async function runDayAnalysis(admin: any, party: any, workDate: string): Promise
   });
   if (!analysis) throw new Error('The model reply was not usable.');
 
-  await writeFindings({
+  await admin.from('job_proofs').update({
     state: 'analysed',
     ai_summary: analysis.summary,
     ai_material_change: null,
@@ -506,7 +465,7 @@ async function runDayAnalysis(admin: any, party: any, workDate: string): Promise
       opening: { before: 'unclear', after: analysis.opening },
     },
     ai_model: analysis.model,
-  });
+  }).eq('id', film.id);
 
   await ingestPhysicalWorkFromProof(admin, { orgId: party.org_id, proofId: film.id });
   return { outcome: 'done', materialChange: null, summary: analysis.summary };
@@ -531,7 +490,7 @@ interface AnalysisJob {
   partyId: string;
   workDate: string;
   trade: string | null;
-  afterId: string;
+  proofId: string;
 }
 
 /**
@@ -543,12 +502,13 @@ async function performAnalysis(admin: any, job: AnalysisJob, attempt: number): P
   await admin
     .from('job_proofs')
     .update({ analysis_status: 'running', analysis_attempts: attempt })
-    .eq('id', job.afterId);
+    .eq('id', job.proofId);
 
   const result = await runDayAnalysis(
     admin,
     { id: job.partyId, org_id: job.orgId, job_id: job.jobId, trade: job.trade },
     job.workDate,
+    job.proofId,
   );
 
   if (result.outcome === 'skipped') {
@@ -557,21 +517,21 @@ async function performAnalysis(admin: any, job: AnalysisJob, attempt: number): P
     await admin
       .from('job_proofs')
       .update({ analysis_status: 'skipped', analysis_error: result.reason })
-      .eq('id', job.afterId);
+      .eq('id', job.proofId);
     return result;
   }
 
   await admin
     .from('job_proofs')
     .update({ analysis_status: 'done', analysis_error: null, analysed_at: new Date().toISOString() })
-    .eq('id', job.afterId);
+    .eq('id', job.proofId);
 
   // The read goes into the chain of custody like any other access — the model
   // looked at the evidence, and that is a fact about the evidence.
   await recordAccess(admin, {
     orgId: job.orgId,
     jobId: job.jobId,
-    proofId: job.afterId,
+    proofId: job.proofId,
     action: 'analysed',
     actorLabel: 'Atmosphere',
     detail: `${job.workDate} — ${materialChangeWords(result.materialChange)}`,
@@ -598,18 +558,22 @@ const analysisQueue = new RetryQueue<AnalysisJob>({
         analysis_status: 'failed',
         analysis_error: error instanceof Error ? error.message : 'Analysis failed.',
       })
-      .eq('id', job.afterId);
+      .eq('id', job.proofId);
   },
 });
 
 /**
- * Queue a day for analysis as soon as a film exists.
+ * Queue one video — or every video on that day — for a scene reading.
  *
- * A single day film is enough. A before/after pair still gets the comparison
- * when both are on file. Returns 'queued' when the model will read, 'waiting'
- * only when nothing has been filed yet.
+ * Each file is its own job. Returns 'queued' when the model will read,
+ * 'waiting' only when nothing has been filed yet.
  */
-async function queueDayAnalysis(admin: any, party: any, workDate: string): Promise<'queued' | 'waiting'> {
+async function queueDayAnalysis(
+  admin: any,
+  party: any,
+  workDate: string,
+  proofId?: string,
+): Promise<'queued' | 'waiting'> {
   const { data } = await admin
     .from('job_proofs')
     .select('id, phase')
@@ -617,19 +581,21 @@ async function queueDayAnalysis(admin: any, party: any, workDate: string): Promi
     .eq('work_date', workDate);
 
   const rows = (data ?? []) as any[];
-  const film = rows.find((r) => r.phase === 'after') ?? rows[0];
-  if (!film) return 'waiting';
+  const films = proofId ? rows.filter((r) => r.id === proofId) : rows;
+  if (!films.length) return 'waiting';
 
-  await admin.from('job_proofs').update({ analysis_status: 'queued' }).eq('id', film.id);
-  analysisQueue.enqueue({
-    key: `${party.id}|${workDate}`,
-    orgId: party.org_id,
-    jobId: party.job_id,
-    partyId: party.id,
-    workDate,
-    trade: party.trade ?? null,
-    afterId: film.id,
-  });
+  for (const film of films) {
+    await admin.from('job_proofs').update({ analysis_status: 'queued' }).eq('id', film.id);
+    analysisQueue.enqueue({
+      key: film.id,
+      orgId: party.org_id,
+      jobId: party.job_id,
+      partyId: party.id,
+      workDate,
+      trade: party.trade ?? null,
+      proofId: film.id,
+    });
+  }
   return 'queued';
 }
 
@@ -1587,10 +1553,10 @@ export async function proofVideoUrl(req: Request, res: Response, next: NextFunct
 
 /**
  * POST /api/operations/shared/:jobId/proof/:workDate/analyse
- * Watch the day again.
+ * Read every video on that day again.
  *
- * Analysis normally runs the moment the after video lands. This exists for the
- * two cases where that is not enough: the model was unavailable at the time, or
+ * Analysis normally runs the moment a file lands. This exists for the two
+ * cases where that is not enough: the model was unavailable at the time, or
  * the scope has since changed and the old verdicts were written against a list
  * that no longer exists.
  */
@@ -1615,60 +1581,62 @@ export async function reanalyseProofDay(req: Request, res: Response, next: NextF
       .select('id, phase')
       .eq('party_id', input.partyId)
       .eq('work_date', req.params.workDate);
-    const film =
-      ((filmRows ?? []) as any[]).find((r) => r.phase === 'after') ?? ((filmRows ?? []) as any[])[0];
-    if (!film) {
-      throw new HttpError(409, 'Nothing to analyse yet — no day film has been filed.', 'no_film');
+    const films = (filmRows ?? []) as any[];
+    if (!films.length) {
+      throw new HttpError(409, 'Nothing to analyse yet — no video has been filed.', 'no_film');
     }
-
-    const job = {
-      key: `${input.partyId}|${req.params.workDate}`,
-      orgId,
-      jobId: (party as any).job_id,
-      partyId: input.partyId,
-      workDate: req.params.workDate,
-      trade: (party as any).trade ?? null,
-      afterId: film.id,
-    };
 
     // Synchronous through the same choreography the queue uses — the button is
     // somebody standing at the screen waiting, and two implementations of one
     // attempt is how a status column starts lying. One attempt, no backoff: a
     // person retries by pressing again.
-    let result;
-    try {
-      result = await performAnalysis(admin, job, 1);
-    } catch (error) {
-      await admin
-        .from('job_proofs')
-        .update({
-          analysis_status: 'failed',
-          analysis_error: error instanceof Error ? error.message : 'Analysis failed.',
-        })
-        .eq('id', job.afterId);
-      throw new HttpError(
-        502,
-        'The assistant could not read this day. It is recorded as failed — try again in a minute.',
-        'analysis_failed',
-      );
+    let result: DayAnalysisResult | null = null;
+    let lastId = films[0]!.id as string;
+    for (const film of films) {
+      const job: AnalysisJob = {
+        key: film.id,
+        orgId,
+        jobId: (party as any).job_id,
+        partyId: input.partyId,
+        workDate: req.params.workDate,
+        trade: (party as any).trade ?? null,
+        proofId: film.id,
+      };
+      try {
+        result = await performAnalysis(admin, job, 1);
+        lastId = film.id;
+      } catch (error) {
+        await admin
+          .from('job_proofs')
+          .update({
+            analysis_status: 'failed',
+            analysis_error: error instanceof Error ? error.message : 'Analysis failed.',
+          })
+          .eq('id', job.proofId);
+        throw new HttpError(
+          502,
+          'The assistant could not read this video. It is recorded as failed — try again in a minute.',
+          'analysis_failed',
+        );
+      }
     }
 
-    const { data: after } = await supabase
+    const { data: read } = await supabase
       .from('job_proofs')
       .select('ai_summary, ai_findings, ai_model, ai_material_change, analysis_status, analysis_error')
       .eq('org_id', orgId)
-      .eq('id', job.afterId)
+      .eq('id', lastId)
       .maybeSingle();
 
     res.json({
-      outcome: result.outcome,
+      outcome: result?.outcome ?? 'skipped',
       // Present when the run was skipped, so the button can say why rather
       // than appearing to do nothing.
-      skippedBecause: result.outcome === 'skipped' ? result.reason : null,
-      summary: (after as any)?.ai_summary ?? null,
-      materialChange: (after as any)?.ai_material_change ?? null,
-      findings: (after as any)?.ai_findings ?? null,
-      model: (after as any)?.ai_model ?? null,
+      skippedBecause: result?.outcome === 'skipped' ? result.reason : null,
+      summary: (read as any)?.ai_summary ?? null,
+      materialChange: (read as any)?.ai_material_change ?? null,
+      findings: (read as any)?.ai_findings ?? null,
+      model: (read as any)?.ai_model ?? null,
     });
   } catch (err) {
     next(err);

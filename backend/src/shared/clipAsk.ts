@@ -19,8 +19,6 @@ export type ClipAskAnalysisState =
   | 'queued'
   | 'failed'
   | 'skipped'
-  | 'paired'
-  | 'waiting_on_after'
   | 'none'
   | string
   | null
@@ -139,7 +137,7 @@ Rules:
 1. Answer only from the reading given. It is a description of video frames somebody already looked at, and when present, what was heard on the mic.
 2. If the reading does not contain the answer, say "The footage on file does not show that" and stop. Do not reason about what was probably true.
 3. When asked what is happening / what this video is, describe the scene: setting, people, screens, logos, news, text on screen, furniture, tools. A desk, a TV, a YouTube/news clip, or a conversation is a valid answer — not every film is construction.
-4. Never refuse because there is no after clip or no before/after pair. That pairing is optional. This question is about THIS video.
+4. Each video is standalone. Do not mention before/after pairing or ask for another clip.
 5. For yes/no questions, start with Yes or No. If yes, say what was visible or said and when, using a spoken timestamp such as "1 hour and 52 minutes into the recording" when the reading has one.
 6. Quote a timestamp when the reading has one, so the answer can be checked against the playhead.
 7. Speech on the recording is evidence. Quote what was said when that is what was asked.
@@ -304,12 +302,6 @@ function isWhatHappened(question: string): boolean {
   );
 }
 
-function isComparisonQuestion(question: string): boolean {
-  return /what changed|before and after|compared to|material change|the after (clip|video|film)|waiting on the after/.test(
-    question.toLowerCase(),
-  );
-}
-
 function isWhatWasSaid(question: string): boolean {
   return /what (did|was) (the )?(homeowner|owner|contractor|they|he|she|worker).*(say|ask|tell|agree|mention)|did (the )?(homeowner|owner|contractor|they).*(say|mention|agree)|what was said|anything said|heard on the mic|conversation|what did they agree/.test(
     question.toLowerCase(),
@@ -340,23 +332,13 @@ function yesFromRow(row: CorpusRow): string {
   return `Yes. ${text}.`;
 }
 
-function unreadAnswer(state: ClipAskAnalysisState, question?: string): string | null {
+function unreadAnswer(state: ClipAskAnalysisState, _question?: string): string | null {
   if (!state || state === 'done') return null;
   if (state === 'queued') {
     return 'This clip is still being read. Ask again once the dictation lands.';
   }
   if (state === 'failed') {
     return 'The reading of this clip failed. The footage itself is unaffected; re-run the analysis from the platform.';
-  }
-  // Pairing only matters for "what changed today". "What is happening in this
-  // clip" is about this file, even if it was tagged morning / before.
-  if (isComparisonQuestion(question || '') && (state === 'paired' || state === 'waiting_on_after' || state === 'skipped')) {
-    return state === 'paired'
-      ? 'This is the before half of the day. Open the after clip — that is where the reading of what changed lives.'
-      : 'There is no after video on file for this day, so there is nothing to compare against.';
-  }
-  if (state === 'paired' || state === 'waiting_on_after' || state === 'skipped') {
-    return 'This clip has not been read yet, so there is nothing to answer from.';
   }
   return 'This clip has not been read yet, so there is nothing to answer from.';
 }
