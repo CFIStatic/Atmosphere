@@ -162,6 +162,7 @@ export interface EpisodeForDerive {
   performer_kind?: string | null;
   data_rights?: string | null;
   worker_consent?: string | null;
+  rights_manifest_id?: string | null;
   tier?: number | null;
   status?: string | null;
 }

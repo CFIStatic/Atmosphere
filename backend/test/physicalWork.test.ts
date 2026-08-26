@@ -12,6 +12,12 @@ import {
 } from '../src/physicalWork/derive.js';
 import { ingestPhysicalWorkFromProof } from '../src/physicalWork/ingest.js';
 import { summariseEpisodes } from '../src/physicalWork/metrics.js';
+import { composeDataRights } from '../src/physicalWork/rights/compose.js';
+import {
+  applyVerificationEvent,
+  statusFromTierAndVerifications,
+  unknownIsNotPass,
+} from '../src/physicalWork/verification/status.js';
 import type { EpisodeForDerive, ProofForDerive } from '../src/physicalWork/types.js';
 
 const beforeAfterProofs: ProofForDerive[] = [
@@ -296,6 +302,56 @@ test('ingest writes world state, evidence, annotation and day outcome without th
   };
   assert.equal(outcome.is_ground_truth, false);
   assert.equal(outcome.status, 'mixed');
+});
+
+test('composed rights deny training unless licensable, consented, and unrevoked', () => {
+  const denied = composeDataRights({ workDataRights: 'job_only', workerConsent: 'not_asked' });
+  assert.equal(denied.trainingAllowed, false);
+  assert.ok(denied.reasons.includes('job_only'));
+
+  const ok = composeDataRights({
+    workDataRights: 'licensable',
+    workerConsent: 'granted',
+    manifest: { trainingAllowed: true, evaluationAllowed: true },
+  });
+  assert.equal(ok.trainingAllowed, true);
+
+  const revoked = composeDataRights({
+    workDataRights: 'licensable',
+    workerConsent: 'granted',
+    manifest: { trainingAllowed: true, revokedAt: '2026-08-01T00:00:00Z' },
+  });
+  assert.equal(revoked.trainingAllowed, false);
+  assert.ok(revoked.reasons.includes('manifest_revoked'));
+});
+
+test('verification status never treats unknown or AI as pass', () => {
+  assert.equal(unknownIsNotPass('unknown'), true);
+  assert.equal(unknownIsNotPass('verified'), false);
+  assert.equal(applyVerificationEvent({ current: 'unknown', sourceType: 'inference' }), 'inferred');
+  assert.equal(applyVerificationEvent({ current: 'inferred', sourceType: 'observation' }), 'observed');
+  assert.equal(
+    applyVerificationEvent({ current: 'observed', sourceType: 'verified', result: 'pass' }),
+    'verified',
+  );
+  assert.equal(
+    applyVerificationEvent({ current: 'observed', sourceType: 'verified', result: 'fail' }),
+    'rejected',
+  );
+  assert.equal(
+    statusFromTierAndVerifications({
+      tier: 3,
+      verifications: [{ kind: 'ai_analysis', result: 'pass' }],
+    }),
+    'inferred',
+  );
+  assert.equal(
+    statusFromTierAndVerifications({
+      tier: 3,
+      verifications: [{ kind: 'code_inspection', result: 'pass' }],
+    }),
+    'verified',
+  );
 });
 
 test('ingest returns null and does not throw when the proof is not on an episode', async () => {

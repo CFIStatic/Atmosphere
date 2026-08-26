@@ -1,3 +1,4 @@
+import { ingestPhysicalWorkFromProof } from '../physicalWork/ingest.js';
 import { assessRows } from './resolve.js';
 import { observationPhaseForProof } from './resolve.js';
 
@@ -89,6 +90,7 @@ export async function attachProofToEpisode(
     }
 
     await rescoreEpisode(admin, episodeId);
+    await ingestPhysicalWorkFromProof(admin, { orgId: input.orgId, proofId: input.proofId });
     return episodeId;
   } catch {
     return null;
