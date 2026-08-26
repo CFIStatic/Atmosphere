@@ -50,10 +50,10 @@ describe('verifier dashboard video preview screen', () => {
     expect(verifierHtml).toContain('class="liquid-glass"');
     expect(verifierHtml).toContain('class="preview-pane"');
     expect(verifierHtml).toContain('class="preview-pane-fill"');
-    expect(verifierHtml).toContain('border: 2px solid rgb(var(--glass-edge) / 0.55)');
+    expect(verifierHtml).toContain('border: 2px solid var(--line)');
     expect(verifierHtml).toMatch(/id="d-back"[\s\S]*Dashboard[\s\S]*<\/button>/);
     expect(verifierHtml).toContain('class="side"');
-    expect(verifierHtml).toContain('backdrop-filter: blur(8px) saturate(140%)');
+    expect(verifierHtml).toContain('backdrop-filter: blur(6px) saturate(120%)');
     expect(verifierHtml).toContain('animation: liquid-sheen');
     expect(verifierHtml).toContain("document.body.setAttribute('data-preview-open', '1')");
     expect(verifierHtml).not.toMatch(/if \(dash\) dash\.hidden = true;/);
@@ -68,6 +68,24 @@ describe('verifier dashboard video preview screen', () => {
     expect(preview!.querySelector('.preview-pane')).not.toBeNull();
     expect(preview!.querySelector('.preview-pane-fill')).not.toBeNull();
     expect(preview!.querySelector('.side')).not.toBeNull();
+  });
+
+  it('keeps the outer overlay frosted and the video perimeter plus chat solid', () => {
+    const pane = verifierHtml.match(/\.screen-preview \.preview-pane \{[\s\S]*?\n  \}/);
+    const fill = verifierHtml.match(/\.screen-preview \.preview-pane-fill \{[\s\S]*?\n  \}/);
+    const side = verifierHtml.match(/\.screen-preview \.side \{[\s\S]*?\n  \}/);
+    const glass = verifierHtml.match(/\.screen-preview \.liquid-glass \{[\s\S]*?\n  \}/);
+
+    expect(glass?.[0]).toContain('backdrop-filter: blur(6px) saturate(120%)');
+    expect(pane?.[0]).toContain('background: var(--panel)');
+    expect(pane?.[0]).toContain('border: 2px solid var(--line)');
+    expect(pane?.[0]).not.toContain('background: transparent');
+    expect(fill?.[0]).toContain('background: var(--panel)');
+    expect(fill?.[0]).not.toMatch(/backdrop-filter:\s*blur/);
+    expect(side?.[0]).toContain('background: var(--bg)');
+    expect(side?.[0]).toContain('border: 1px solid var(--line)');
+    expect(side?.[0]).not.toMatch(/backdrop-filter:\s*blur/);
+    expect(side?.[0]).not.toContain('--glass-panel');
   });
 
   it('paints a YouTube-style screenshot from the clip before waiting on the file', () => {
