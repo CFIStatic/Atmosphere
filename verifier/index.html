@@ -2418,11 +2418,16 @@
     return item.poster || capturedStill(item);
   }
 
+  function clipKind(phase) {
+    var raw = String(phase || '').replace(/_/g, ' ').trim();
+    if (!raw || raw === 'before' || raw === 'after') return 'Video';
+    return raw.charAt(0).toUpperCase() + raw.slice(1);
+  }
+
   function clipRow(e) {
     var job = JOBS[e.job] || { name: e.jobName || 'Job', number: null };
     var status = clipStatus(e);
-    var phase = e.phase ? String(e.phase).replace(/_/g, ' ') : 'Video';
-    phase = phase.charAt(0).toUpperCase() + phase.slice(1);
+    var phase = clipKind(e.phase);
     return '' +
       '<tr tabindex="0" data-id="' + e.id + '">' +
         '<td><span class="thumb"><img class="shot" alt="" loading="lazy" decoding="async" src="' + esc(thumbFor(e)) + '" /><span class="dur">' + dur(e.duration) + '</span></span></td>' +
@@ -3473,7 +3478,7 @@
   function fillPreviewChrome(item) {
     $('#d-title').textContent = (JOBS[item.job] || { name: item.jobName || 'Job' }).name;
     $('#d-meta').innerHTML =
-      '<span class="id">' + esc(item.id) + '</span> · ' + esc(item.phase) + ' · ' +
+      '<span class="id">' + esc(item.id) + '</span> · ' + esc(clipKind(item.phase)) + ' · ' +
       dayLabel(item.workDate) + ' · ' + esc(item.company) + ' · ' + dur(item.duration) + ' · ' + mb(item.bytes);
   }
 
@@ -4373,7 +4378,7 @@
       '<dt>Evidence ID</dt><dd class="mono">' + esc(item.id) + '</dd>' +
       '<dt>Job</dt><dd>' + esc(job.name) + '</dd>' +
       '<dt>Address</dt><dd>' + esc(job.address) + '</dd>' +
-      '<dt>Capture</dt><dd>' + esc(item.phase) + ' · ' + dayLabel(item.workDate) + '</dd>' +
+      '<dt>Capture</dt><dd>' + esc(clipKind(item.phase)) + ' · ' + dayLabel(item.workDate) + '</dd>' +
       '<dt>Filmed</dt><dd>' + (item.capturedAt ? stamp(item.capturedAt) : 'not reported by the device') + '</dd>' +
       '<dt>Received</dt><dd>' + stamp(item.uploadedAt) + '</dd>' +
       '<dt>Duration</dt><dd>' + dur(item.duration) + '</dd>' +
