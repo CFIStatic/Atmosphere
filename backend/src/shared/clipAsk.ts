@@ -337,6 +337,9 @@ function unreadAnswer(state: ClipAskAnalysisState, _question?: string): string |
   if (state === 'failed') {
     return 'The reading of this clip failed. The footage itself is unaffected; re-run the analysis from the platform.';
   }
+  if (state === 'skipped') {
+    return 'This clip could not be read. The footage itself is unaffected.';
+  }
   return 'This clip is still being read. Ask again once the dictation lands.';
 }
 

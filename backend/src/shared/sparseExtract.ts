@@ -20,19 +20,31 @@ export type CommandRunner = (
   args: string[],
 ) => Promise<{ stdout: string; stderr: string; code: number }>;
 
+const DEFAULT_COMMAND_TIMEOUT_MS = Number(process.env.SPARSE_FFMPEG_TIMEOUT_MS || 180_000);
+
 export const defaultRunner: CommandRunner = (bin, args) =>
   new Promise((resolve, reject) => {
     const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      reject(new Error(`${bin} timed out after ${DEFAULT_COMMAND_TIMEOUT_MS}ms`));
+    }, DEFAULT_COMMAND_TIMEOUT_MS);
     child.stdout.on('data', (d) => {
       stdout += String(d);
     });
     child.stderr.on('data', (d) => {
       stderr += String(d);
     });
-    child.on('error', reject);
-    child.on('close', (code) => resolve({ stdout, stderr, code: code ?? 1 }));
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({ stdout, stderr, code: code ?? 1 });
+    });
   });
 
 /**

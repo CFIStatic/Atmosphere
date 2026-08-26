@@ -75,6 +75,12 @@ export function isLongFormVideo(durationSeconds: number): boolean {
   return durationSeconds >= config.verification.longFormSeconds;
 }
 
+/** Gemini hanging used to leave narration_status=running forever. */
+export function geminiDictationTimeoutMs(): number {
+  const n = Number(process.env.GEMINI_DICTATION_TIMEOUT_MS);
+  return Number.isFinite(n) && n > 0 ? n : 60_000;
+}
+
 export function assertProcessableDuration(durationSeconds: number): void {
   const max = config.verification.maxDurationSeconds;
   if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
@@ -265,10 +271,13 @@ async function dictateWithGemini(input: {
     '',
   );
   const url = `${baseUrl}/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': input.apiKey },
-    body: JSON.stringify({
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': input.apiKey },
+      signal: AbortSignal.timeout(geminiDictationTimeoutMs()),
+      body: JSON.stringify({
       system_instruction: { parts: [{ text: input.system }] },
       contents: [
         {
@@ -288,7 +297,13 @@ async function dictateWithGemini(input: {
         maxOutputTokens: 2500,
       },
     }),
-  });
+    });
+  } catch (err) {
+    if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+      throw new Error(`Gemini vision timed out after ${geminiDictationTimeoutMs()}ms`);
+    }
+    throw err;
+  }
   if (!response.ok) {
     const errText = await response.text();
     throw new Error(`Gemini vision error ${response.status}: ${errText.slice(0, 400)}`);

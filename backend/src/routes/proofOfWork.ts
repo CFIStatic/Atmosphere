@@ -770,7 +770,12 @@ export async function ensureStillsAndDuration(
         .createSignedUrl(storagePath, 600);
       if (signed?.signedUrl) {
         // FFprobe reads over HTTP, so the multi-GB case never lands on disk.
-        const meta = await probeMetadata(signed.signedUrl);
+        const meta = await Promise.race([
+          probeMetadata(signed.signedUrl),
+          new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error('ffprobe timed out')), 20_000);
+          }),
+        ]);
         const probed = Number(meta.durationSeconds ?? 0);
         if (Number.isFinite(probed) && probed > 0) {
           durationSeconds = Math.round(probed * 100) / 100;
@@ -1192,6 +1197,8 @@ export async function queueNarration(admin: any, party: any, proofId: string, ph
  * unread until somebody Asks — that question is the moment to look at the
  * frames, not to say the clip has not been read.
  */
+const CLIP_READ_HARD_MS = Number(process.env.CLIP_READ_TIMEOUT_MS || 180_000);
+
 export async function ensureClipReading(
   admin: any,
   party: { org_id: string; job_id: string; id: string },
@@ -1200,15 +1207,23 @@ export async function ensureClipReading(
   workDate: string,
 ): Promise<'done' | 'skipped' | 'failed'> {
   try {
-    await performNarration(admin, {
-      key: `narr:${proofId}`,
-      proofId,
-      orgId: party.org_id,
-      jobId: party.job_id,
-      partyId: party.id,
-      phase,
-      workDate,
-    });
+    await Promise.race([
+      performNarration(admin, {
+        key: `narr:${proofId}`,
+        proofId,
+        orgId: party.org_id,
+        jobId: party.job_id,
+        partyId: party.id,
+        phase,
+        workDate,
+      }),
+      new Promise<never>((_, reject) => {
+        setTimeout(
+          () => reject(new Error('Reading this clip timed out.')),
+          CLIP_READ_HARD_MS,
+        );
+      }),
+    ]);
     const { data } = await admin
       .from('job_proofs')
       .select('narration_status, narration_text, ai_summary, transcript_text')

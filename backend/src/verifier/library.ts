@@ -104,6 +104,54 @@ export function analysisStateOf(input: {
   return 'none';
 }
 
+export type ClipKick = 'done' | 'queued' | 'skipped' | 'failed' | 'none';
+
+/** True when Scope of Work already has something to print beside the player. */
+export function clipHasReading(item: {
+  analysis?: {
+    dictation?: unknown;
+    summary?: unknown;
+    transcript?: unknown;
+    actions?: unknown;
+  } | null;
+} | null | undefined): boolean {
+  const analysis = item?.analysis;
+  return (
+    Boolean(analysis?.dictation || analysis?.summary || analysis?.transcript) ||
+    (Array.isArray(analysis?.actions) && analysis.actions.length > 0)
+  );
+}
+
+/**
+ * What the office should see after a kick.
+ *
+ * A skip or fail is a finished outcome. Mapping those to queued made Scope of
+ * Work sit on "This clip is being read now." after the model already gave up.
+ */
+export function presentUnreadClip<
+  T extends {
+    analysisState?: string | null;
+    analysis?: {
+      dictation?: unknown;
+      summary?: unknown;
+      transcript?: unknown;
+      actions?: unknown;
+    } | null;
+  },
+>(item: T, kick: ClipKick): T {
+  if (clipHasReading(item)) return item;
+  if (kick === 'done') return item;
+  if (kick === 'skipped') {
+    return item.analysisState === 'skipped' ? item : { ...item, analysisState: 'skipped' };
+  }
+  if (kick === 'failed') {
+    return item.analysisState === 'failed' ? item : { ...item, analysisState: 'failed' };
+  }
+  if (item.analysisState === 'failed' || item.analysisState === 'skipped') return item;
+  if (kick === 'queued') return { ...item, analysisState: 'queued' };
+  return item;
+}
+
 /**
  * Should this clip surface in the Flagged view.
  *
