@@ -745,6 +745,22 @@ export interface ProofDay {
   proofIds: string[];
 }
 
+/** One filed video, as the collection list wants it. */
+export interface ProofVideoRecord {
+  id: string;
+  partyId: string;
+  company: string;
+  workDate: string;
+  phase: 'before' | 'after' | string;
+  durationSeconds: number | null;
+  analysisStatus: string | null;
+  narrationStatus: string | null;
+  transcriptStatus: string | null;
+  transcriptError: string | null;
+  aiSummary: string | null;
+  heardOnMic: string | null;
+}
+
 export type OpeningWord = 'exterior' | 'not_exterior' | 'unclear';
 
 /* ---- Capture guide ---- */
@@ -788,7 +804,15 @@ export interface ScopeVerdict {
 
 export interface ProofResponse {
   days: ProofDay[];
-  counts: { days: number; payable: number; contradicted: number; awaitingAfter: number; analysing?: number };
+  videos?: ProofVideoRecord[];
+  counts: {
+    days: number;
+    videos?: number;
+    payable: number;
+    contradicted: number;
+    awaitingAfter: number;
+    analysing?: number;
+  };
   /** False when the job has no coordinates, so the on-site check cannot run. */
   siteKnown: boolean;
 }

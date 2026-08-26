@@ -16,6 +16,7 @@ import { ScopeDocPanel } from '../components/shared/ScopeDocPanel';
 import { JobReadinessPanel } from '../components/shared/JobReadinessPanel';
 import { JobLegalHoldPortal } from '../components/shared/JobLegalHoldPortal';
 import { EvidenceLocker } from '../components/shared/EvidenceLocker';
+import { ProofOfWork } from '../components/shared/ProofOfWork';
 import { JobFileActions } from '../components/shared/JobFileActions';
 import { JOB_PARTY_TRADE_OPTIONS } from '../components/setup/verifierSetupOptions';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
@@ -387,7 +388,8 @@ export function SharedDashboardPage() {
                 justApproved
                   ? {
                       days: [],
-                      counts: { days: 0, payable: 0, contradicted: 0, awaitingAfter: 0 },
+                      videos: [],
+                      counts: { days: 0, videos: 0, payable: 0, contradicted: 0, awaitingAfter: 0 },
                       siteKnown: Boolean(record.brief?.facts?.['Site address']),
                     }
                   : undefined
@@ -395,6 +397,7 @@ export function SharedDashboardPage() {
             />
 
             <div className="mt-4 space-y-4">
+              <ProofOfWork jobId={record.job.id} heading="Videos and analysis" />
               <JobLegalHoldPortal jobId={record.job.id} jobTitle={record.job.title} />
               <EvidenceLocker jobId={record.job.id} />
             </div>

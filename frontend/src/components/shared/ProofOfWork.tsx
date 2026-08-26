@@ -5,6 +5,7 @@ import {
   type ProofResponse,
   type ProofDay,
   type ProofQuestion,
+  type ProofVideoRecord,
   type WorkEpisodeListItem,
 } from '../../lib/api';
 import { SpinnerIcon } from '../icons';
@@ -114,7 +115,12 @@ export function ProofOfWork({
       setEpisodes(episodeList.episodes);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load the proof record.');
-      setData({ days: [], counts: { days: 0, payable: 0, contradicted: 0, awaitingAfter: 0, analysing: 0 }, siteKnown: false });
+      setData({
+        days: [],
+        videos: [],
+        counts: { days: 0, videos: 0, payable: 0, contradicted: 0, awaitingAfter: 0, analysing: 0 },
+        siteKnown: false,
+      });
     }
   }
 
@@ -192,12 +198,18 @@ export function ProofOfWork({
             {(data.counts.analysing ?? 0) > 0 && (
               <span className="text-ink-500">{data.counts.analysing} being read</span>
             )}
+            {(data.counts.videos ?? data.videos?.length ?? 0) > 0 && (
+              <span className="text-ink-500">
+                {data.counts.videos ?? data.videos?.length} video
+                {(data.counts.videos ?? data.videos?.length) === 1 ? '' : 's'} on file
+              </span>
+            )}
           </span>
         )}
       </div>
       <p className="mt-1 text-xs text-ink-500">
-        Crews film the day. The checks say whether the footage is of this job; the analysis says
-        what work the video shows.
+        Every uploaded video is kept. The assistant reads the picture and the mic; you can ask the
+        collection. The checks say whether the footage is of this job.
       </p>
 
       {/* Stated up front, not buried. Without a site location the strongest
@@ -217,12 +229,14 @@ export function ProofOfWork({
 
       {data === null ? (
         <p className="mt-3 text-sm text-ink-600">Loading…</p>
-      ) : data.days.length === 0 ? (
+      ) : data.days.length === 0 && !(data.videos?.length) ? (
         <p className="mt-3 rounded-lg border border-line px-4 py-3 text-sm text-ink-600">
           Nothing filed yet. Crews upload from Field Capture — one day film (video + mic) is
           enough. The assistant will describe what work was performed.
         </p>
       ) : (
+        <>
+        <VideoCatalog videos={data.videos ?? []} videoFetcher={videoFetcher} />
         <ul className="mt-3 space-y-2">
           {data.days.map((day) => {
             const on = openDay === `${day.partyId}|${day.workDate}`;
@@ -574,17 +588,18 @@ export function ProofOfWork({
             );
           })}
         </ul>
+        </>
       )}
 
       {/* Asking the record. Forty jobs and eighty videos a day is nobody's
           afternoon; a question against the summaries is. */}
-      {!readOnly && data && data.days.length > 0 && (
+      {!readOnly && data && (data.days.length > 0 || (data.videos?.length ?? 0) > 0) && (
         <div className="mt-4 border-t border-line pt-3">
           <form onSubmit={ask} className="flex gap-2">
             <input
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              placeholder="Ask about the videos — e.g. when was the subfloor first visible?"
+              placeholder="Ask the video collection — e.g. when was the subfloor first visible?"
               className="min-w-0 flex-1 rounded-lg glass-field px-3 py-2 text-xs text-ink-900 outline-none focus:ring-2 focus:ring-brand-200"
             />
             <button
@@ -597,8 +612,8 @@ export function ProofOfWork({
             </button>
           </form>
           <p className="mt-1.5 text-[11px] text-ink-400">
-            Answered only from what the videos were recorded as showing. If it is not in them, the
-            answer says so rather than guessing.
+            Answered from every clip on this job — what the assistant saw in the frames and, when
+            the mic has been read, what was said. If it is not in them, the answer says so.
           </p>
 
           {questions.length > 0 && (
@@ -610,8 +625,8 @@ export function ProofOfWork({
                   {/* Which days it drew on, so the answer can be checked rather
                       than trusted. */}
                   <p className="mt-1 text-[10.5px] text-ink-400">
-                    From {q.grounded_on?.length ?? 0} day
-                    {(q.grounded_on?.length ?? 0) === 1 ? '' : 's'} of footage ·{' '}
+                    From {q.grounded_on?.length ?? 0} clip
+                    {(q.grounded_on?.length ?? 0) === 1 ? '' : 's'} on file ·{' '}
                     {new Date(q.created_at).toLocaleDateString()}
                   </p>
                 </li>
@@ -621,6 +636,119 @@ export function ProofOfWork({
         </div>
       )}
     </section>
+  );
+}
+
+function statusWord(status: string | null, done: string): string {
+  if (status === 'done') return done;
+  if (status === 'queued' || status === 'running') return 'reading';
+  if (status === 'failed') return 'failed';
+  if (status === 'skipped') return 'skipped';
+  return 'waiting';
+}
+
+function VideoCatalog({
+  videos,
+  videoFetcher,
+}: {
+  videos: ProofVideoRecord[];
+  videoFetcher?: (proofId: string) => Promise<{ url: string }>;
+}) {
+  if (!videos.length) return null;
+  return (
+    <div className="mt-3 overflow-hidden rounded-lg border border-line">
+      <p className="border-b border-line bg-paper-50/60 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
+        Every video on this job
+      </p>
+      <ul>
+        {videos.map((video) => (
+          <li key={video.id} className="border-b border-line/70 px-3 py-2 last:border-b-0">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-ink-800">
+                  {new Date(`${video.workDate}T12:00:00Z`).toLocaleDateString(undefined, {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                  })}
+                  <span className="ml-1.5 font-normal text-ink-500">
+                    {video.phase === 'before' ? 'morning clip' : 'day film'} · {video.company}
+                  </span>
+                </p>
+                <p className="mt-0.5 text-[11px] text-ink-500">
+                  Picture: {statusWord(video.analysisStatus ?? video.narrationStatus, 'read')}
+                  {' · '}
+                  Mic: {statusWord(video.transcriptStatus, 'heard')}
+                </p>
+                {video.aiSummary && (
+                  <p className="mt-0.5 text-[11px] text-ink-700">{video.aiSummary}</p>
+                )}
+                {video.heardOnMic && (
+                  <p className="mt-0.5 text-[11px] text-ink-500">On the mic: {video.heardOnMic}</p>
+                )}
+              </div>
+              <PlayClip proofId={video.id} videoFetcher={videoFetcher} />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * Compact play control for the catalog. Same on-demand signed URL as ProofVideo
+ * — a job with thirty clips must not mint thirty links just to list them.
+ */
+function PlayClip({
+  proofId,
+  videoFetcher,
+}: {
+  proofId: string;
+  videoFetcher?: (proofId: string) => Promise<{ url: string }>;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  async function open() {
+    setLoading(true);
+    try {
+      const res = videoFetcher
+        ? await videoFetcher(proofId)
+        : await api.proofVideoUrl(proofId);
+      setUrl(res.url);
+    } catch {
+      setFailed(true);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (url) {
+    return (
+      <div className="basis-full sm:basis-64">
+        <video
+          src={url}
+          controls
+          playsInline
+          preload="metadata"
+          className="block max-h-40 w-full rounded-lg bg-black"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => void open()}
+      disabled={loading || failed}
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg glass-card px-2.5 py-1 text-[11px] font-medium text-ink-700 disabled:opacity-50"
+    >
+      {loading && <SpinnerIcon className="animate-spin" width={11} height={11} />}
+      {failed ? 'Could not load' : loading ? 'Loading…' : 'Play'}
+    </button>
   );
 }
 
