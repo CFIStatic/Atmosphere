@@ -226,8 +226,14 @@ async function kickUnreadClip(admin: any, orgId: string, item: any): Promise<'do
   const party = { org_id: orgId, job_id: item.jobId, id: item.partyId };
   try {
     await queueProofTranscript(admin, item.id);
+    const reading = ensureClipReading(admin, party, item.id, item.phase, item.workDate).catch(
+      (err) => {
+        console.warn('[library] clip read failed:', err instanceof Error ? err.message : err);
+        return 'failed' as const;
+      },
+    );
     const outcome = await Promise.race([
-      ensureClipReading(admin, party, item.id, item.phase, item.workDate),
+      reading,
       new Promise<'queued'>((resolve) => {
         setTimeout(() => resolve('queued'), ASK_READ_BUDGET_MS);
       }),
