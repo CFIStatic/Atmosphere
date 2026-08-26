@@ -18,7 +18,7 @@ import { createHash } from 'node:crypto';
 import { config } from '../config.js';
 import { HttpError } from '../lib/errors.js';
 import { anthropicClient } from '../lib/anthropic.js';
-import { googleVisionApiKey, isVisionConfigured } from '../lib/visionProvider.js';
+import { googleVisionApiKeys, isVisionConfigured } from '../lib/visionProvider.js';
 import { verificationConfig } from '../verification/config.js';
 import {
   extractSparseFramesFromUrl,
@@ -191,22 +191,28 @@ export async function dictatePreparedFrames(
     'Dictate what the video shows for the office verifier. JSON only.',
   ].join('\n');
 
-  const googleKey = googleVisionApiKey();
-  if (googleKey) {
+  const googleKeys = googleVisionApiKeys();
+  let lastGoogleError: unknown;
+  for (const apiKey of googleKeys) {
     try {
       return await dictateWithGemini({
-        apiKey: googleKey,
+        apiKey,
         system,
         userText,
         frames,
       });
     } catch (err) {
-      if (!config.anthropic.apiKey) throw err;
+      lastGoogleError = err;
       console.warn(
-        '[dictation] Gemini failed, trying Anthropic:',
+        '[dictation] Gemini key failed, trying next provider:',
         err instanceof Error ? err.message : err,
       );
     }
+  }
+  if (!config.anthropic.apiKey) {
+    throw lastGoogleError instanceof Error
+      ? lastGoogleError
+      : new Error('Gemini vision is not configured.');
   }
 
   const response = await anthropicClient().messages.create({
@@ -306,6 +312,11 @@ async function dictateWithGemini(input: {
   }
   if (!response.ok) {
     const errText = await response.text();
+    if (response.status === 403 && /API_KEY_SERVICE_BLOCKED|are blocked/i.test(errText)) {
+      throw new Error(
+        'Gemini vision error 403: API_KEY_SERVICE_BLOCKED — this key cannot call generativelanguage.googleapis.com',
+      );
+    }
     throw new Error(`Gemini vision error ${response.status}: ${errText.slice(0, 400)}`);
   }
   const payload = (await response.json()) as {

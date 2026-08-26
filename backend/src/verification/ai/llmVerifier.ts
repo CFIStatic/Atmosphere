@@ -8,6 +8,7 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { googleVisionApiKey } from '../../lib/visionProvider.js';
 import { verificationConfig } from '../config.js';
 import { parseModelJson } from '../schemas.js';
 import { estimateCostUsd, recordAiCost, wouldExceedBudget } from '../cost/tracker.js';
@@ -367,7 +368,7 @@ export function createDefaultVerifier(): VerificationProvider {
       apiKey: process.env.ANTHROPIC_API_KEY,
     });
   }
-  const googleKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || '';
+  const googleKey = googleVisionApiKey();
   if (googleKey) {
     return new HttpLlmVerificationProvider({
       provider: 'google',
