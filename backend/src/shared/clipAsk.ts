@@ -1,7 +1,7 @@
 /**
  * Answer a question about one clip from the reading already on file.
  *
- * The office product is video + dictation. Re-reading the bytes for every
+ * The office product is one video + one reading. Re-reading the bytes for every
  * "did anything happen?" is slow and invites a second, looser inference pass.
  * The dictation, actions, timeline and scope verdicts were produced under
  * "describe only what is visible", so an answer built from them inherits that
