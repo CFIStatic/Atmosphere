@@ -28,7 +28,9 @@ export function needsNarration(
   // Skipped (no model, no after pair, no frames) and failed rows still need a
   // reading of this file. Queued is the in-memory queue — a restart loses it
   // and the row sits queued forever unless we put it back on.
-  if (status === 'skipped' || status === 'failed' || status === 'queued') return true;
+  if (status === 'skipped' || status === 'failed' || status === 'queued' || status === 'running') {
+    return true;
+  }
   return false;
 }
 
@@ -61,6 +63,7 @@ export async function sweepUnanalyzedProofs(
         'narration_status.eq.skipped',
         'narration_status.eq.failed',
         'narration_status.eq.queued',
+        'narration_status.eq.running',
         'transcript_status.is.null',
         'transcript_status.eq.idle',
         'transcript_status.eq.failed',

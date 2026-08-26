@@ -18,12 +18,15 @@ import {
   clipRecordFromEvidenceItem,
 } from '../shared/clipAsk.js';
 import {
+  clipHasReading,
   downloadDecision,
   matchesLibraryQuery,
   pickPosterFrame,
+  presentUnreadClip,
   serializeEvidence,
   shareRecipientAllowed,
   shareState,
+  type ClipKick,
 } from '../verifier/library.js';
 import { displayJobFileName } from '../shared/jobFileCopy.js';
 import { shareEmail } from '../verifier/shareEmail.js';
@@ -199,29 +202,36 @@ async function propertyAddresses(
   return addrByProperty;
 }
 
-function clipHasReading(item: any): boolean {
-  const analysis = item?.analysis;
-  return (
-    Boolean(analysis?.dictation || analysis?.summary || analysis?.transcript) ||
-    (Array.isArray(analysis?.actions) && analysis.actions.length > 0)
-  );
-}
+/** One kick per clip per process so open + 4s polls do not restart the model. */
+const kickedThisProcess = new Set<string>();
 
-const OPEN_READ_BUDGET_MS = 25_000;
-
-/** Open Scope of Work: read the file now, then return the dictation if it lands in time. */
-async function readClipForOpen(admin: any, orgId: string, item: any): Promise<any> {
-  if (clipHasReading(item) || !admin || !item?.id) return item;
+function startUnreadClipRead(admin: any, orgId: string, item: any): boolean {
+  if (clipHasReading(item) || !admin || !item?.id) return false;
+  if (kickedThisProcess.has(item.id)) return false;
+  kickedThisProcess.add(item.id);
   const party = { org_id: orgId, job_id: item.jobId, id: item.partyId };
   void queueProofTranscript(admin, item.id).catch(() => undefined);
-  const outcome = await Promise.race([
-    ensureClipReadingOnce(admin, party, item.id, item.phase, item.workDate).catch(() => 'failed' as const),
-    new Promise<'queued'>((resolve) => {
-      setTimeout(() => resolve('queued'), OPEN_READ_BUDGET_MS);
-    }),
-  ]);
+  void ensureClipReadingOnce(admin, party, item.id, item.phase, item.workDate).catch((err) => {
+    console.warn('[library] clip read failed:', err instanceof Error ? err.message : err);
+  });
+  return true;
+}
+
+/**
+ * Open Scope of Work: start the read in the background and return immediately.
+ *
+ * Waiting here used to hold every poll for 25s, then stamp skipped/failed
+ * rows as queued so the office never saw the real error.
+ */
+async function readClipForOpen(admin: any, orgId: string, item: any): Promise<any> {
+  if (clipHasReading(item) || !admin || !item?.id) return item;
+  const alreadyKicked = kickedThisProcess.has(item.id);
+  const started = startUnreadClipRead(admin, orgId, item);
+  if (!alreadyKicked && started) {
+    return { ...item, analysisState: 'queued' };
+  }
   const fresh = (await reloadEvidenceItem(admin, orgId, item.id)) ?? item;
-  return itemForAsk(fresh, outcome === 'done' ? 'done' : 'queued');
+  return presentUnreadClip(fresh, 'none');
 }
 
 const ASK_READ_BUDGET_MS = 90_000;
@@ -230,9 +240,10 @@ const ASK_READ_BUDGET_MS = 90_000;
  * A clip with no reading yet is read now — vision + speech — so Ask can
  * describe what is on screen instead of saying the file was never looked at.
  */
-async function kickUnreadClip(admin: any, orgId: string, item: any): Promise<'done' | 'queued' | 'none'> {
+async function kickUnreadClip(admin: any, orgId: string, item: any): Promise<ClipKick> {
   if (clipHasReading(item) || !admin || !item?.id) return clipHasReading(item) ? 'done' : 'none';
   const party = { org_id: orgId, job_id: item.jobId, id: item.partyId };
+  kickedThisProcess.add(item.id);
   try {
     await queueProofTranscript(admin, item.id);
     const reading = ensureClipReadingOnce(admin, party, item.id, item.phase, item.workDate).catch(
@@ -248,10 +259,9 @@ async function kickUnreadClip(admin: any, orgId: string, item: any): Promise<'do
       }),
     ]);
     if (outcome === 'queued') return 'queued';
-    if (outcome !== 'done') {
-      await queueNarration(admin, party, item.id, item.phase, item.workDate);
-    }
-    return outcome === 'done' ? 'done' : 'queued';
+    if (outcome === 'done') return 'done';
+    if (outcome === 'skipped') return 'skipped';
+    return 'failed';
   } catch {
     try {
       await queueNarration(admin, party, item.id, item.phase, item.workDate);
@@ -274,10 +284,8 @@ async function reloadEvidenceItem(client: any, orgId: string, proofId: string): 
   return items[0] ?? null;
 }
 
-function itemForAsk(item: any, kick: 'done' | 'queued' | 'none'): any {
-  if (clipHasReading(item)) return item;
-  if (item?.analysisState === 'failed' && kick !== 'queued') return item;
-  return { ...item, analysisState: 'queued' };
+function itemForAsk(item: any, kick: ClipKick): any {
+  return presentUnreadClip(item, kick);
 }
 
 /**

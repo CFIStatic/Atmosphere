@@ -7,6 +7,7 @@ import { config } from '../src/config.js';
 import {
   assertProcessableDuration,
   dictatePreparedFrames,
+  geminiDictationTimeoutMs,
   framesContentFingerprint,
   isLongFormVideo,
   parseDictationPayload,
@@ -159,5 +160,45 @@ test('dictatePreparedFrames uses Gemini when a Google key is set', async () => {
     else process.env.GEMINI_API_KEY = prevGemini;
     if (prevAnthropic === undefined) delete process.env.ANTHROPIC_API_KEY;
     else process.env.ANTHROPIC_API_KEY = prevAnthropic;
+  }
+});
+
+test('dictatePreparedFrames times out a hung Gemini call', async () => {
+  const prevGoogle = process.env.GOOGLE_API_KEY;
+  const prevGemini = process.env.GEMINI_API_KEY;
+  const prevAnthropic = process.env.ANTHROPIC_API_KEY;
+  const prevTimeout = process.env.GEMINI_DICTATION_TIMEOUT_MS;
+  process.env.GOOGLE_API_KEY = 'test-google';
+  process.env.GEMINI_DICTATION_TIMEOUT_MS = '40';
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  assert.equal(geminiDictationTimeoutMs(), 40);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    assert.ok(init?.signal, 'Gemini fetch must carry an abort signal');
+    throw Object.assign(new Error('The operation was aborted'), { name: 'TimeoutError' });
+  }) as typeof fetch;
+  try {
+    await assert.rejects(
+      () =>
+        dictatePreparedFrames({
+          id: 'clip-hang',
+          source: 'proof_of_work',
+          durationSeconds: 64,
+          longForm: false,
+          frames: [{ atSeconds: 8, jpeg: Buffer.from('jpeg') }],
+        }),
+      /timed out/i,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (prevGoogle === undefined) delete process.env.GOOGLE_API_KEY;
+    else process.env.GOOGLE_API_KEY = prevGoogle;
+    if (prevGemini === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = prevGemini;
+    if (prevAnthropic === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = prevAnthropic;
+    if (prevTimeout === undefined) delete process.env.GEMINI_DICTATION_TIMEOUT_MS;
+    else process.env.GEMINI_DICTATION_TIMEOUT_MS = prevTimeout;
   }
 });

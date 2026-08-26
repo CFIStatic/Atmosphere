@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   analysisStateOf,
+  clipHasReading,
   dateSearchPhrases,
+  presentUnreadClip,
   downloadDecision,
   labelsForProof,
   matchesLibraryQuery,
@@ -477,6 +479,23 @@ test('serialization: a wrong-house clip arrives flagged with no analysis body', 
   assert.equal(item.gps, null);
   assert.equal(item.tier, 1, 'no episode yet reads as Tier 1, not as nothing');
   assert.equal(item.legalHold, true);
+});
+
+test('presentUnreadClip never hides a skip or fail behind queued', () => {
+  const skipped = { analysisState: 'skipped', analysis: null, analysisError: 'Could not extract frames.' };
+  const failed = { analysisState: 'failed', analysis: null, analysisError: 'Gemini vision timed out.' };
+  const none = { analysisState: 'none', analysis: null };
+  const done = { analysisState: 'done', analysis: { dictation: 'A desk and a monitor.' } };
+
+  assert.equal(presentUnreadClip(skipped, 'queued').analysisState, 'skipped');
+  assert.equal(presentUnreadClip(failed, 'queued').analysisState, 'failed');
+  assert.equal(presentUnreadClip(none, 'queued').analysisState, 'queued');
+  assert.equal(presentUnreadClip(none, 'skipped').analysisState, 'skipped');
+  assert.equal(presentUnreadClip(none, 'failed').analysisState, 'failed');
+  assert.equal(presentUnreadClip(none, 'none').analysisState, 'none');
+  assert.equal(presentUnreadClip(done, 'queued').analysisState, 'done');
+  assert.equal(clipHasReading(done), true);
+  assert.equal(clipHasReading(skipped), false);
 });
 
 

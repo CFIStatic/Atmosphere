@@ -62,6 +62,8 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(verifierHtml).toContain('function durSpoken');
     expect(verifierHtml).toContain('This clip is still being read');
     expect(verifierHtml).not.toContain('This clip has not been read yet');
+    expect(verifierHtml).toContain('This clip could not be read');
+    expect(verifierHtml).toContain('function applyRemoteReading');
   });
 
   it('opens a demo clip, shows the reading immediately, and answers from it', async () => {
@@ -154,6 +156,21 @@ describe('verifier clip Ask tab and live analysis', () => {
       .join('\n');
     expect(reply).not.toMatch(/after video/i);
     expect(reply).toMatch(/panel|breaker|garage|footage|reading of this clip/i);
+    dom.window.close();
+  });
+
+  it('shows Writing only while a clip is actually queued, not after a skip', async () => {
+    const dom = bootVerifier();
+
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+    const { document } = dom.window;
+    const row = document.querySelector('tr[data-id="EV-1044-0730-A"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    expect(document.getElementById('alog-pill')?.textContent).toMatch(/Writing/i);
+    expect(document.querySelector('.alog-wait')?.textContent).toMatch(/Queued for analysis/i);
+    expect(document.getElementById('d-saw')).toBeNull();
     dom.window.close();
   });
 

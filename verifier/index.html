@@ -4995,9 +4995,31 @@
     return Boolean(a && (a.dictation || a.summary || a.transcript || (a.actions && a.actions.length)));
   }
 
+  function applyRemoteReading(item, mapped) {
+    var prev = item.analysis && item.analysis.state;
+    item.analysis = mapped.analysis;
+    item.analysisError = mapped.analysisError;
+    if (mapped.duration != null) item.duration = mapped.duration;
+    var next = item.analysis && item.analysis.state;
+    var settled = clipHasLocalReading(item) || next === 'failed' || next === 'skipped';
+    if (settled && item._watchReading) {
+      clearInterval(item._watchReading);
+      item._watchReading = null;
+    }
+    if (state.open && state.open.id === item.id && (settled || next !== prev)) {
+      fillPreviewChrome(item);
+      var time = document.getElementById('d-time');
+      if (time && item._videoUrl) time.textContent = 'full clip · ' + dur(item.duration);
+      if (state.tab === 'integrity') setTab('integrity');
+    }
+    return settled;
+  }
+
   /** Scope of Work reads the video. Keep asking the server until that reading lands. */
   function watchRemoteReading(item) {
     if (!item || !item._remote || clipHasLocalReading(item) || item._watchReading) return;
+    var next = item.analysis && item.analysis.state;
+    if (next === 'failed' || next === 'skipped') return;
     var tries = 0;
     item._watchReading = setInterval(function () {
       tries += 1;
@@ -5013,12 +5035,7 @@
         return r.ok ? r.json() : null;
       }).then(function (payload) {
         if (!payload || !payload.item) return;
-        var mapped = mapRemoteItem(payload.item, item.job);
-        item.analysis = mapped.analysis;
-        if (!clipHasLocalReading(item)) return;
-        clearInterval(item._watchReading);
-        item._watchReading = null;
-        if (state.open && state.open.id === item.id && state.tab === 'integrity') setTab('integrity');
+        applyRemoteReading(item, mapRemoteItem(payload.item, item.job));
       }).catch(function () {});
     }, 4000);
   }
@@ -5048,6 +5065,8 @@
           item.analysis = mapped.analysis;
           item.checks = mapped.checks;
           item.hold = mapped.hold;
+          item.analysisError = mapped.analysisError;
+          if (mapped.duration != null) item.duration = mapped.duration;
         }
         item.custody = (payload.custody || []).map(function (c) {
           return {
