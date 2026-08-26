@@ -127,6 +127,7 @@ export function JobProgressDashboard({
   readOnly = false,
   initialProof,
   videoFetcher,
+  showProofOfWork = true,
   metrics: metricsOverride,
 }: {
   jobId: string;
@@ -134,6 +135,8 @@ export function JobProgressDashboard({
   readOnly?: boolean;
   initialProof?: ProofResponse;
   videoFetcher?: (proofId: string) => Promise<{ url: string }>;
+  /** When false, the parent already mounts the video catalog (office job file). */
+  showProofOfWork?: boolean;
   /** Guest shares supply pre-computed metrics instead of scope rows. */
   metrics?: {
     scopePct: number;
@@ -330,7 +333,7 @@ export function JobProgressDashboard({
             items={story.happened}
             empty="Nothing completed yet. Each day, crews film before they start and again when they finish — those days will show up here."
             footer={
-              (proof?.days.length ?? 0) > 5 ? (
+              showProofOfWork && (proof?.days.length ?? 0) > 5 ? (
                 <button
                   type="button"
                   onClick={() => setHistoryOpen((v) => !v)}
@@ -360,7 +363,7 @@ export function JobProgressDashboard({
         </>
       )}
 
-      {historyOpen && proof && (
+      {showProofOfWork && historyOpen && proof && (
         <ProofOfWork
           jobId={readOnly ? undefined : jobId}
           heading="Full work history"

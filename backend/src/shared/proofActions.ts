@@ -11,6 +11,7 @@
 
 import { normaliseAction, type WorkAction } from '../episodes/actions.js';
 import { rescoreEpisode } from '../episodes/attach.js';
+import { ingestPhysicalWorkFromProof } from '../physicalWork/ingest.js';
 
 export const MAX_PROOF_ACTIONS = 48;
 
@@ -308,5 +309,11 @@ export async function persistProofActions(
     await rescoreEpisode(admin, episodeId);
   } catch {
     /* episode write is derived; the proof.actions column is the source of truth */
+  }
+
+  try {
+    await ingestPhysicalWorkFromProof(admin, { orgId: input.orgId, proofId: input.proofId });
+  } catch {
+    /* physical-work rows enrich the episode; they must never fail the narration */
   }
 }

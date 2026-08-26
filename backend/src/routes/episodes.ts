@@ -6,6 +6,9 @@ import { HttpError } from '../lib/errors.js';
 import { assessRows, factsFromRows } from '../episodes/resolve.js';
 import { ONTOLOGY_VERSION, capturePlan, ontologyTree, taskByKey } from '../episodes/ontology.js';
 import { ACTION_DEFINITIONS, WORK_ACTIONS } from '../episodes/actions.js';
+import { loadPhysicalWorkRecord } from '../physicalWork/ingest.js';
+import { summariseEpisodes } from '../physicalWork/metrics.js';
+import type { EpisodeForDerive } from '../physicalWork/types.js';
 
 /**
  * Work episodes over HTTP.
@@ -139,6 +142,7 @@ episodesRouter.get('/', async (req: Request, res: Response, next: NextFunction) 
       episodes: (data ?? []).map((row: any) => ({
         id: row.id,
         jobId: row.job_id,
+        partyId: row.party_id,
         taskKey: row.task_key,
         taskName: row.task_key ? (taskByKey(row.task_key)?.name ?? row.task_key) : null,
         trade: row.trade,
@@ -155,12 +159,70 @@ episodesRouter.get('/', async (req: Request, res: Response, next: NextFunction) 
   }
 });
 
+/**
+ * GET /api/episodes/dataset/summary
+ *
+ * What the org has, by tier and by rights. Counts verified physical-work
+ * episodes — not hours of video — because that is the number a licensing
+ * conversation can actually use.
+ *
+ * Registered before `/:id` so `dataset` is not treated as an episode id.
+ */
+episodesRouter.get('/dataset/summary', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase, orgId } = await requireOrgContext(req);
+    const { data, error } = await supabase
+      .from('work_episodes')
+      .select('id, tier, data_rights, worker_consent, trade, task_key')
+      .eq('org_id', orgId);
+    if (error) throw new HttpError(500, error.message, 'summary_failed');
+
+    const ids = ((data ?? []) as Array<{ id: string }>).map((row) => row.id);
+    let worldStateEpisodeIds = new Set<string>();
+    let immediateOutcomeIds = new Set<string>();
+    if (ids.length > 0) {
+      const [worlds, outcomes] = await Promise.all([
+        supabase.from('episode_world_states').select('episode_id, kind').in('episode_id', ids),
+        supabase.from('episode_immediate_outcomes').select('episode_id').in('episode_id', ids),
+      ]);
+      const both = new Map<string, Set<string>>();
+      for (const row of worlds.data ?? []) {
+        const set = both.get(row.episode_id) ?? new Set<string>();
+        set.add(row.kind);
+        both.set(row.episode_id, set);
+      }
+      worldStateEpisodeIds = new Set(
+        [...both.entries()].filter(([, kinds]) => kinds.has('before') && kinds.has('after')).map(([id]) => id),
+      );
+      immediateOutcomeIds = new Set((outcomes.data ?? []).map((row: { episode_id: string }) => row.episode_id));
+    }
+
+    res.json(
+      summariseEpisodes((data ?? []) as Array<{
+        tier?: number | null;
+        data_rights?: string | null;
+        worker_consent?: string | null;
+        trade?: string | null;
+      }>, { worldStateEpisodeIds, immediateOutcomeIds }),
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
 /** GET /api/episodes/:id — the whole episode, freshly assessed. */
 episodesRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { supabase } = await requireOrgContext(req);
     const { rows, assessment } = await restore(supabase, req.params.id);
     const task = rows.episode.task_key ? taskByKey(rows.episode.task_key) : null;
+
+    let physicalWork = null;
+    try {
+      physicalWork = await loadPhysicalWorkRecord(supabase, rows.episode as EpisodeForDerive);
+    } catch {
+      physicalWork = null;
+    }
 
     res.json({
       episode: rows.episode,
@@ -174,6 +236,57 @@ episodesRouter.get('/:id', async (req: Request, res: Response, next: NextFunctio
       outcomes: rows.outcomes,
       economics: rows.economics,
       assessment,
+      physicalWork,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+async function requireEpisodeRecord(supabase: any, id: string): Promise<EpisodeForDerive> {
+  const { data, error } = await supabase
+    .from('work_episodes')
+    .select(EPISODE_SELECT)
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw new HttpError(500, error.message, 'episode_load_failed');
+  if (!data) throw new HttpError(404, 'No such work episode.', 'episode_not_found');
+  return data as EpisodeForDerive;
+}
+
+/**
+ * GET /api/episodes/:id/physical-work
+ *
+ * The structured day record the office reads: before/after, actions, tools,
+ * the AI day outcome (labelled as not ground truth), and later callbacks.
+ */
+episodesRouter.get('/:id/physical-work', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase } = await requireOrgContext(req);
+    const episode = await requireEpisodeRecord(supabase, req.params.id);
+    const record = await loadPhysicalWorkRecord(supabase, episode);
+    res.json({ record });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/episodes/:id/training-export
+ *
+ * Same assembler as physical-work, with media locators only when the episode
+ * is licensable and the people in it consented. job_only still returns the
+ * operational view so the office can see why it is not exportable.
+ */
+episodesRouter.get('/:id/training-export', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { supabase } = await requireOrgContext(req);
+    const episode = await requireEpisodeRecord(supabase, req.params.id);
+    const record = await loadPhysicalWorkRecord(supabase, episode);
+    res.json({
+      record,
+      trainingEligible: record.rights.trainingEligible,
+      view: record.rights.view,
     });
   } catch (err) {
     next(err);
@@ -301,49 +414,6 @@ episodesRouter.post('/:id/outcomes', async (req: Request, res: Response, next: N
 
     const { assessment } = await restore(supabase, req.params.id);
     res.status(201).json({ assessment, daysAfterWork: daysAfter });
-  } catch (err) {
-    next(err);
-  }
-});
-
-/**
- * GET /api/episodes/dataset/summary
- *
- * What the org has, by tier and by rights. The shape a licensing conversation
- * actually needs — and it counts only what the org is permitted to offer,
- * because a total that includes episodes nobody consented to is a number that
- * cannot be sold.
- */
-episodesRouter.get('/dataset/summary', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { supabase, orgId } = await requireOrgContext(req);
-    const { data, error } = await supabase
-      .from('work_episodes')
-      .select('tier, data_rights, worker_consent, trade, task_key')
-      .eq('org_id', orgId);
-    if (error) throw new HttpError(500, error.message, 'summary_failed');
-
-    const byTier: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-    const byTrade: Record<string, number> = {};
-    let licensable = 0;
-    let consentPending = 0;
-
-    for (const row of (data ?? []) as any[]) {
-      byTier[row.tier] = (byTier[row.tier] ?? 0) + 1;
-      if (row.trade) byTrade[row.trade] = (byTrade[row.trade] ?? 0) + 1;
-      if (row.data_rights === 'licensable') licensable += 1;
-      else if (row.worker_consent === 'not_asked') consentPending += 1;
-    }
-
-    res.json({
-      total: data?.length ?? 0,
-      byTier,
-      byTrade,
-      licensable,
-      // Named as a gap rather than a figure: these are episodes that could be
-      // offered if somebody asked the people in them, and have not been asked.
-      consentPending,
-    });
   } catch (err) {
     next(err);
   }

@@ -21,7 +21,11 @@ vi.mock('../components/shared/JobLegalHoldPortal', () => ({
 }));
 
 vi.mock('../components/shared/EvidenceLocker', () => ({
-  EvidenceLocker: () => null,
+  EvidenceLocker: () => <div>Evidence locker</div>,
+}));
+
+vi.mock('../components/shared/ProofOfWork', () => ({
+  ProofOfWork: ({ heading }: { heading?: string }) => <section>{heading ?? 'Proof of work'}</section>,
 }));
 
 vi.mock('../components/shared/JobReadinessPanel', () => ({
@@ -106,6 +110,8 @@ describe('SharedDashboardPage job file identity', () => {
     );
 
     expect(await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' })).toBeInTheDocument();
+    expect(screen.getByText('Videos and analysis')).toBeInTheDocument();
+    expect(screen.getByText('Evidence locker')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Rename' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Duplicate' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument();

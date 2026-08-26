@@ -745,6 +745,22 @@ export interface ProofDay {
   proofIds: string[];
 }
 
+/** One filed video, as the collection list wants it. */
+export interface ProofVideoRecord {
+  id: string;
+  partyId: string;
+  company: string;
+  workDate: string;
+  phase: 'before' | 'after' | string;
+  durationSeconds: number | null;
+  analysisStatus: string | null;
+  narrationStatus: string | null;
+  transcriptStatus: string | null;
+  transcriptError: string | null;
+  aiSummary: string | null;
+  heardOnMic: string | null;
+}
+
 export type OpeningWord = 'exterior' | 'not_exterior' | 'unclear';
 
 /* ---- Capture guide ---- */
@@ -788,7 +804,15 @@ export interface ScopeVerdict {
 
 export interface ProofResponse {
   days: ProofDay[];
-  counts: { days: number; payable: number; contradicted: number; awaitingAfter: number; analysing?: number };
+  videos?: ProofVideoRecord[];
+  counts: {
+    days: number;
+    videos?: number;
+    payable: number;
+    contradicted: number;
+    awaitingAfter: number;
+    analysing?: number;
+  };
   /** False when the job has no coordinates, so the on-site check cannot run. */
   siteKnown: boolean;
 }
@@ -799,6 +823,75 @@ export interface ProofQuestion {
   answer: string | null;
   grounded_on: string[];
   created_at: string;
+}
+
+/* ---- Physical-work episode (structured day record) ----------------------- */
+
+export interface WorkEpisodeListItem {
+  id: string;
+  jobId: string;
+  partyId: string | null;
+  taskKey: string | null;
+  taskName: string | null;
+  trade: string | null;
+  workDate: string;
+  status: string;
+  tier: number;
+  dataRights: string;
+  performerLabel: string | null;
+}
+
+export interface PhysicalWorkWorldState {
+  kind: 'before' | 'after';
+  summary: string | null;
+  opening: string | null;
+  visibleConditions: string[];
+  changes: string[];
+  concerns: string[];
+  uncertainties: string[];
+  objects: string[];
+}
+
+export interface PhysicalWorkRecord {
+  schema: string;
+  episodeId: string;
+  jobId: string;
+  workDate: string;
+  performerLabel: string | null;
+  goal: {
+    taskKey: string | null;
+    taskName: string | null;
+    trade: string | null;
+    intentNote: string | null;
+    expectedActions: string[];
+  };
+  before: PhysicalWorkWorldState | null;
+  after: PhysicalWorkWorldState | null;
+  actions: Array<{
+    sequence: number;
+    action: string;
+    objectLabel: string | null;
+    toolLabel: string | null;
+    purpose: string | null;
+  }>;
+  tools: Array<{ name: string }>;
+  materials: Array<{ name: string }>;
+  outcome: {
+    status: string;
+    materialChange: string | null;
+    summary: string | null;
+    isGroundTruth: boolean;
+    scopeVerdicts: Array<{ title: string; verdict: string; because: string | null }>;
+  } | null;
+  longTermOutcomes: Array<{ kind: string; daysAfterWork: number | null }>;
+  rights: {
+    dataRights: string;
+    workerConsent: string;
+    view: 'operational' | 'org_analytics' | 'training';
+    trainingEligible: boolean;
+  };
+  tier: number;
+  status: string;
 }
 
 /* ---- Evidence and chain of custody --------------------------------------- */
@@ -3100,6 +3193,16 @@ export const api = {
   // ---- Proof of work ----
   jobProofs: (jobId: string) =>
     request<ProofResponse>(`/api/operations/shared/${jobId}/proof`, { method: 'GET' }),
+
+  jobEpisodes: (jobId: string) =>
+    request<{ episodes: WorkEpisodeListItem[] }>(`/api/episodes?jobId=${encodeURIComponent(jobId)}`, {
+      method: 'GET',
+    }),
+
+  episodePhysicalWork: (episodeId: string) =>
+    request<{ record: PhysicalWorkRecord }>(`/api/episodes/${encodeURIComponent(episodeId)}/physical-work`, {
+      method: 'GET',
+    }),
 
   decideProofDay: (
     jobId: string,
