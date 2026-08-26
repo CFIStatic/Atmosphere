@@ -43,20 +43,24 @@ test('check keys render as sentences, and unknown keys survive rather than vanis
   assert.equal(labelForCheck('some_new_check'), 'some new check');
 });
 
-test('a before is paired or waiting — never "not analysed"', () => {
+test('every clip is Askable from its own reading — phase does not matter', () => {
   assert.equal(
     analysisStateOf({ phase: 'before', analysisStatus: null, hasAiSummary: false, dayHasAfter: true }),
-    'paired',
+    'none',
   );
   assert.equal(
     analysisStateOf({ phase: 'before', analysisStatus: null, hasAiSummary: false, dayHasAfter: false }),
-    'waiting_on_after',
+    'none',
   );
-  // Even a before that somehow carries a summary is reported by its pairing:
-  // the day's reading lives on the after.
   assert.equal(
-    analysisStateOf({ phase: 'before', analysisStatus: 'done', hasAiSummary: true, dayHasAfter: true }),
-    'paired',
+    analysisStateOf({
+      phase: 'before',
+      analysisStatus: null,
+      hasAiSummary: true,
+      dayHasAfter: false,
+    }),
+    'done',
+    'a video with a reading is Askable on its own',
   );
 });
 
@@ -67,7 +71,18 @@ test('an after follows the pipeline status, with the summary as the legacy fallb
   assert.equal(after('queued'), 'queued');
   assert.equal(after('running'), 'queued');
   assert.equal(after('failed'), 'failed');
-  assert.equal(after('skipped'), 'skipped');
+  assert.equal(after('skipped'), 'none');
+  assert.equal(
+    analysisStateOf({
+      phase: 'after',
+      analysisStatus: 'skipped',
+      hasAiSummary: false,
+      dayHasAfter: false,
+      narrationStatus: 'done',
+    }),
+    'done',
+    'a lone after whose day-compare was skipped is still Askable once dictated',
+  );
   assert.equal(after(null, true), 'done');
   assert.equal(after(null, false), 'none');
   assert.equal(
@@ -90,8 +105,8 @@ test('flagging: anything short of a clean pass needs a person', () => {
   assert.equal(needsAttention({ integrity: 'pass', analysis: 'failed', materialChange: null }), true);
   assert.equal(needsAttention({ integrity: 'pass', analysis: 'done', materialChange: 'none' }), true);
   assert.equal(needsAttention({ integrity: 'pass', analysis: 'done', materialChange: 'unclear' }), true);
-  // The normal shape of a morning is not a flag.
-  assert.equal(needsAttention({ integrity: 'pass', analysis: 'waiting_on_after', materialChange: null }), false);
+  // An unread clip is not a flag — it is still being described.
+  assert.equal(needsAttention({ integrity: 'pass', analysis: 'none', materialChange: null }), false);
   assert.equal(needsAttention({ integrity: 'pass', analysis: 'queued', materialChange: null }), false);
 });
 
@@ -418,7 +433,7 @@ test('serialization: a wrong-house clip arrives flagged with no analysis body', 
 
   assert.equal(item.integrity, 'fail');
   assert.equal(item.flagged, true);
-  assert.equal(item.analysisState, 'waiting_on_after');
+  assert.equal(item.analysisState, 'none');
   assert.equal(item.analysis, null);
   assert.equal(item.gps, null);
   assert.equal(item.tier, 1, 'no episode yet reads as Tier 1, not as nothing');
