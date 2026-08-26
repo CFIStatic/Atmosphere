@@ -267,18 +267,20 @@ export interface DayFilmAnalysis {
   model: string | null;
 }
 
-const DAY_FILM_SYSTEM = `You are looking at frames from one video of a work day on a construction or restoration job (the crew films the day — there is not always a separate before clip).
+const DAY_FILM_SYSTEM = `You are looking at frames from one filed video. It may be a work day, a walkthrough, a conversation, or someone filming a room, a desk, or a screen. There is not always a before/after pair.
 
-The office dashboard will show your answer as "what work was performed." Accuracy matters more than usefulness. Follow these rules exactly:
+The office dashboard will show your summary as what this video is. Accuracy matters more than usefulness. Follow these rules exactly:
 
-1. Describe only what is visible in the frames. Never infer what was probably done off-camera, what a trade normally does next, or what the scope implies should have happened. Name the room or area when you can see it.
-2. Under workPerformed, list concrete activities you can see (materials, tools, rooms, trades). An empty list is fine if the frames do not show work.
-3. If lighting, angle, or framing make the work unclear, say that in cannotTell rather than guessing.
-4. Only list a scope line under scopeTouched if the frames actually show work on it.
-5. Give a verdict for every scope line you are shown, using its exact title. Use "appears_complete" only when the frames show the finished state of that line. Use "in_progress" when work on it is visible but unfinished. Use "not_visible" when the frames simply do not cover it. Never invent scope lines.
-6. Under concerns, note anything visible that looks like damage, a hazard, or work outside the listed scope. Nothing else.
-7. Never mention money, hours, or whether the work seems worth paying for.
-8. Judge only the FIRST frame: does it open at the exterior of the property? Use "exterior", "not_exterior", or "unclear". Prefer "unclear".
+1. Describe only what is visible in the frames. Never infer off-camera work. Name the room or area when you can see it.
+2. The summary must answer "what is happening in this video" — setting, people, screens, logos, news, on-screen text, furniture, tools. A desk and an MSNBC/YouTube clip about a senate race is a valid summary.
+3. Under workPerformed, list concrete activities you can see. Sitting, watching a broadcast, and talking count. An empty list is fine if nothing is being done.
+4. If lighting, angle, or framing make the scene unclear, say that in cannotTell rather than guessing.
+5. Only list a scope line under scopeTouched if the frames actually show work on it.
+6. Give a verdict for every scope line you are shown, using its exact title. Use "appears_complete" only when the frames show the finished state of that line. Use "in_progress" when work on it is visible but unfinished. Use "not_visible" when the frames simply do not cover it. Never invent scope lines.
+7. Under concerns, note anything visible that looks like damage, a hazard, or work outside the listed scope. Nothing else.
+8. Never mention money, hours, or whether the work seems worth paying for.
+9. Judge only the FIRST frame: does it open at the exterior of the property? Use "exterior", "not_exterior", or "unclear". Prefer "unclear".
+10. Never refuse to describe the clip because there is no after video.
 
 Reply with JSON only, no prose around it:
 {"summary": string, "workPerformed": string[], "cannotTell": string[], "scopeTouched": string[], "scopeVerdicts": [{"title": string, "verdict": "appears_complete" | "in_progress" | "not_visible", "because": string}], "concerns": string[], "opening": "exterior" | "not_exterior" | "unclear"}`;
@@ -451,9 +453,10 @@ const QA_SYSTEM = `You answer a project manager's questions about a job's filed 
 Rules:
 1. Answer only from the record given. It is what the assistant already saw in the frames and, when present, heard on the mic.
 2. If the record does not contain the answer, say "The videos on file do not show that" and stop. Do not reason about what was probably true.
-3. Quote the work date and which clip (before / after / day film) when you cite something, so the answer can be checked.
-4. Two or three sentences. This is read on a phone between site visits.
-5. Never estimate cost, hours, or whether work was worth paying for.`;
+3. When asked what is happening in a video, describe the scene from that clip's reading — desk, news, people, screens, work. Do not ask for an after clip.
+4. Quote the work date and which clip when you cite something, so the answer can be checked.
+5. Two or three sentences. This is read on a phone between site visits.
+6. Never estimate cost, hours, or whether work was worth paying for.`;
 
 export interface CollectionClip {
   workDate: string;

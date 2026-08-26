@@ -43,7 +43,7 @@ test('check keys render as sentences, and unknown keys survive rather than vanis
   assert.equal(labelForCheck('some_new_check'), 'some new check');
 });
 
-test('a before is paired or waiting — never "not analysed"', () => {
+test('a before is paired or waiting only when it has no reading of its own', () => {
   assert.equal(
     analysisStateOf({ phase: 'before', analysisStatus: null, hasAiSummary: false, dayHasAfter: true }),
     'paired',
@@ -52,11 +52,15 @@ test('a before is paired or waiting — never "not analysed"', () => {
     analysisStateOf({ phase: 'before', analysisStatus: null, hasAiSummary: false, dayHasAfter: false }),
     'waiting_on_after',
   );
-  // Even a before that somehow carries a summary is reported by its pairing:
-  // the day's reading lives on the after.
   assert.equal(
-    analysisStateOf({ phase: 'before', analysisStatus: 'done', hasAiSummary: true, dayHasAfter: true }),
-    'paired',
+    analysisStateOf({
+      phase: 'before',
+      analysisStatus: null,
+      hasAiSummary: true,
+      dayHasAfter: false,
+    }),
+    'done',
+    'a morning clip with a reading is Askable without an after',
   );
 });
 
@@ -68,6 +72,17 @@ test('an after follows the pipeline status, with the summary as the legacy fallb
   assert.equal(after('running'), 'queued');
   assert.equal(after('failed'), 'failed');
   assert.equal(after('skipped'), 'skipped');
+  assert.equal(
+    analysisStateOf({
+      phase: 'after',
+      analysisStatus: 'skipped',
+      hasAiSummary: false,
+      dayHasAfter: false,
+      narrationStatus: 'done',
+    }),
+    'done',
+    'a lone after whose day-compare was skipped is still Askable once dictated',
+  );
   assert.equal(after(null, true), 'done');
   assert.equal(after(null, false), 'none');
   assert.equal(

@@ -20,8 +20,17 @@ const INTERVAL_MS = 5 * 60_000;
 let timer: ReturnType<typeof setTimeout> | ReturnType<typeof setInterval> | null = null;
 let running = false;
 
-export function needsNarration(status: string | null | undefined): boolean {
-  return !status || status === 'idle';
+export function needsNarration(
+  status: string | null | undefined,
+  error?: string | null,
+): boolean {
+  if (!status || status === 'idle') return true;
+  // Skipped because no model, or because a before sat waiting on an after —
+  // both still need a reading of this file.
+  if (status === 'skipped') {
+    return !error || /no model|not configured|no after|nothing to compare/i.test(error);
+  }
+  return false;
 }
 
 export function needsTranscript(status: string | null | undefined): boolean {
@@ -41,13 +50,16 @@ export async function sweepUnanalyzedProofs(
   const enqueueTranscript = opts?.queueTranscriptFn ?? queueProofTranscript;
   const { data, error } = await admin
     .from('job_proofs')
-    .select('id, org_id, job_id, party_id, phase, work_date, narration_status, transcript_status, storage_path')
+    .select(
+      'id, org_id, job_id, party_id, phase, work_date, narration_status, narration_error, transcript_status, storage_path',
+    )
     .is('deleted_at', null)
     .not('storage_path', 'is', null)
     .or(
       [
         'narration_status.is.null',
         'narration_status.eq.idle',
+        'narration_status.eq.skipped',
         'transcript_status.is.null',
         'transcript_status.eq.idle',
       ].join(','),
@@ -62,7 +74,7 @@ export async function sweepUnanalyzedProofs(
   let transcript = 0;
   for (const row of rows) {
     const party = { org_id: row.org_id, job_id: row.job_id, id: row.party_id };
-    if (needsNarration(row.narration_status)) {
+    if (needsNarration(row.narration_status, row.narration_error)) {
       await enqueueNarration(admin, party, row.id, row.phase, row.work_date);
       narration += 1;
     }

@@ -82,31 +82,31 @@ export function analysisStateOf(input: {
   /** Speech on the mic is enough for Ask even when frames were silent. */
   hasTranscript?: boolean;
 }): AnalysisState {
+  // A reading of THIS clip wins over before/after pairing. A morning upload,
+  // a walkthrough, or a lone desk video is still something Ask can describe.
+  const readingDone =
+    input.analysisStatus === 'done' ||
+    input.narrationStatus === 'done' ||
+    input.hasAiSummary ||
+    Boolean(input.hasTranscript);
+  if (readingDone) return 'done';
+
+  const readingQueued =
+    input.analysisStatus === 'queued' ||
+    input.analysisStatus === 'running' ||
+    input.narrationStatus === 'queued' ||
+    input.narrationStatus === 'running';
+  if (readingQueued) return 'queued';
+
+  if (input.narrationStatus === 'failed' || input.analysisStatus === 'failed') {
+    return 'failed';
+  }
+
   if (input.phase === 'before') {
-    // The before's own row never carries the reading. Where the day stands is
-    // the after's business; this row only says whether one exists yet.
     return input.dayHasAfter ? 'paired' : 'waiting_on_after';
   }
-  switch (input.analysisStatus) {
-    case 'done':
-      return 'done';
-    case 'queued':
-    case 'running':
-      return 'queued';
-    case 'failed':
-      return 'failed';
-    case 'skipped':
-      return 'skipped';
-    default:
-      // A finished dictation is enough for the office view even when the
-      // day-comparison pipeline has not written analysis_status yet.
-      if (input.narrationStatus === 'done' || input.hasAiSummary || input.hasTranscript) return 'done';
-      if (input.narrationStatus === 'queued' || input.narrationStatus === 'running') {
-        return 'queued';
-      }
-      if (input.narrationStatus === 'failed') return 'failed';
-      return 'none';
-  }
+  if (input.analysisStatus === 'skipped') return 'skipped';
+  return 'none';
 }
 
 /**
