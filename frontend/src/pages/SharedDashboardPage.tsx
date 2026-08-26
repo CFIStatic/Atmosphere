@@ -384,6 +384,7 @@ export function SharedDashboardPage() {
             <JobProgressDashboard
               jobId={record.job.id}
               record={record}
+              showProofOfWork={false}
               initialProof={
                 justApproved
                   ? {
