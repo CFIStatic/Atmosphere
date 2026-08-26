@@ -37,6 +37,10 @@ test('Atmosphere sends the invite; the org is named, not the From party', () => 
   assert.equal(subject, 'Ortiz Restoration invited you to capture: 1842 Meridian Ave — water loss');
   assert.ok(html.includes('Open job on phone'));
   assert.ok(html.includes('Ortiz Restoration'));
+  assert.ok(html.includes('#A8A29E'));
+  assert.ok(html.includes('#F2670C'));
+  assert.ok(html.includes('Atmosphere'));
+  assert.ok(!html.includes('text-transform:uppercase;color:#b45309'));
   assert.ok(
     html.includes(
       'href="https://app.atmosphere.example/shared/tok123?email=alex%40riogrande.example"',

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Logo } from '../Logo';
+import { ThemeToggle } from '../ThemeToggle';
 import { CheckIcon } from '../icons';
 import {
   setupWizardCopy,
@@ -25,7 +26,10 @@ export function SetupWizardShell({
     <div className="relative flex min-h-screen flex-col bg-paper-100">
       <header className="flex items-center justify-between gap-4 px-6 py-8 sm:px-10 sm:py-10">
         <Logo size="lg" />
-        {headerAction}
+        <div className="flex items-center gap-3">
+          {headerAction}
+          <ThemeToggle />
+        </div>
       </header>
 
       <main className="flex flex-1 items-start justify-center px-4 pb-16 pt-2 sm:items-center">

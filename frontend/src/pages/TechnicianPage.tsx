@@ -213,7 +213,7 @@ export function TechnicianPage() {
         <header className="flex shrink-0 items-center justify-between gap-4 border-b border-line bg-paper-50 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <span className="lg:hidden">
-              <Logo compact />
+              <Logo />
             </span>
             <div className="min-w-0">
               <h1 className="truncate text-sm font-semibold text-ink-900">

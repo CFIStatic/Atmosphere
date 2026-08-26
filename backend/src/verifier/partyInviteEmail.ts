@@ -1,3 +1,5 @@
+import { atmosphereWordmarkHtml } from '../lib/brandMark.js';
+
 /**
  * Field Capture / subcontractor job invitation.
  *
@@ -109,8 +111,8 @@ export function partyInviteEmail(input: {
     <tr><td align="center">
       <table role="presentation" width="100%" style="max-width:560px;background:#fffdf8;border:1px solid #e7e0d4;border-radius:16px;padding:28px 28px 24px;">
         <tr><td>
-          <p style="margin:0;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#b45309;">Atmosphere</p>
-          <h1 style="margin:10px 0 0;font-size:22px;line-height:1.3;color:#1c1917;">
+          ${atmosphereWordmarkHtml()}
+          <h1 style="margin:16px 0 0;font-size:22px;line-height:1.3;color:#1c1917;">
             ${escapeHtml(org)} invited you to capture a job
           </h1>
           <p style="margin:12px 0 0;font-size:15px;line-height:1.5;color:#3f3a34;">

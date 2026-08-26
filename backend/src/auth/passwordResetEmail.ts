@@ -1,3 +1,5 @@
+import { atmosphereWordmarkHtml } from '../lib/brandMark.js';
+
 /**
  * Atmosphere password-reset email.
  *
@@ -15,9 +17,6 @@ const CARD = '#FFFFFF';
 const LINE = '#E3DED4';
 const ACCENT = '#D2500A';
 const ACCENT_INK = '#FFFFFF';
-
-/** Four ink bars + terracotta base — the only Atmosphere mark. */
-const MARK_BARS = ['#A8A29E', '#78716C', '#57534E', '#292524', '#F2670C'] as const;
 
 export function passwordResetEmail(input: { url: string }): {
   subject: string;
@@ -64,7 +63,7 @@ export function passwordResetEmail(input: { url: string }): {
     <tr><td align="center">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;">
         <tr><td style="padding:0 4px 18px;">
-          ${wordmark()}
+          ${atmosphereWordmarkHtml()}
         </td></tr>
         <tr><td>
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:${CARD};border:1px solid ${LINE};border-radius:16px;">
@@ -108,29 +107,6 @@ export function passwordResetEmail(input: { url: string }): {
 </html>`;
 
   return { subject, text, html };
-}
-
-function wordmark(): string {
-  const bars = MARK_BARS.map((color, i) => {
-    const gap =
-      i === 0
-        ? ''
-        : `<tr><td height="2" style="height:2px;line-height:2px;font-size:2px;">&nbsp;</td></tr>`;
-    const bar = `<tr><td height="4" style="height:4px;line-height:4px;font-size:4px;background:${color};">&nbsp;</td></tr>`;
-    return `${gap}${bar}`;
-  }).join('');
-  return `<table role="presentation" cellspacing="0" cellpadding="0">
-    <tr>
-      <td valign="middle" width="22" style="width:22px;">
-        <table role="presentation" width="22" cellspacing="0" cellpadding="0" style="width:22px;">
-          ${bars}
-        </table>
-      </td>
-      <td valign="middle" style="padding-left:10px;font-size:18px;font-weight:700;letter-spacing:-0.02em;color:${INK};line-height:1;">
-        Atmosphere
-      </td>
-    </tr>
-  </table>`;
 }
 
 function signInUrl(resetUrl: string): string | null {

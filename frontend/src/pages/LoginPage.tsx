@@ -8,6 +8,7 @@ import { usePendingAuthRedirect } from '../hooks/usePendingAuthRedirect';
 import { postAuthDestination } from '../lib/postAuth';
 import { getPlatform } from '../lib/usePlatform';
 import { Logo } from '../components/Logo';
+import { ThemeToggle } from '../components/ThemeToggle';
 import { PinPad } from '../components/PinPad';
 import { EyeIcon, EyeOffIcon, SpinnerIcon } from '../components/icons';
 
@@ -154,8 +155,9 @@ export function LoginPage() {
 
   return (
     <div className="relative flex min-h-screen flex-col bg-paper-100">
-      <header className="px-6 py-8 sm:px-10 sm:py-10">
+      <header className="flex items-center justify-between gap-4 px-6 py-8 sm:px-10 sm:py-10">
         <Logo size="lg" />
+        <ThemeToggle />
       </header>
 
       <main className="flex flex-1 items-center justify-center px-4 pb-16">

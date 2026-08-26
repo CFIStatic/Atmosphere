@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { Logo } from '../components/Logo';
+import { ThemeToggle } from '../components/ThemeToggle';
 import { SpinnerIcon, CheckIcon } from '../components/icons';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -37,8 +38,9 @@ export function ForgotPasswordPage() {
 
   return (
     <div className="cx-aurora relative flex min-h-screen flex-col bg-paper-100">
-      <header className="px-6 py-8 sm:px-10 sm:py-10">
+      <header className="flex items-center justify-between gap-4 px-6 py-8 sm:px-10 sm:py-10">
         <Logo size="lg" />
+        <ThemeToggle />
       </header>
 
       <main className="flex flex-1 items-center justify-center px-4 pb-16">

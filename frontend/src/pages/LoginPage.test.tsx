@@ -84,6 +84,8 @@ describe('LoginPage', () => {
     expect(svg?.getAttribute('height')).toBe('40');
     expect(screen.getByText('Atmosphere').className).toContain('text-[26px]');
     expect(container.querySelector('header')?.className).toContain('py-8');
+    expect(container.querySelector('[data-atmosphere-lockup]')?.className).toContain('text-ink-900');
+    expect(screen.getByRole('button', { name: /Switch to (light|dark) mode/ })).toBeInTheDocument();
   });
 
   it('offers a single create-account link instead of org vs office cards', () => {
