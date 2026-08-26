@@ -5,7 +5,13 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { requireOrgContext } from '../lib/orgContext.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { HttpError } from '../lib/errors.js';
-import { ensureStillsAndDuration, proofVideoUrl, queueNarration, recordAccess } from './proofOfWork.js';
+import {
+  ensureClipReading,
+  ensureStillsAndDuration,
+  proofVideoUrl,
+  queueNarration,
+  recordAccess,
+} from './proofOfWork.js';
 import { queueProofTranscript } from '../audio/proofTranscript.js';
 import {
   answerFromClip,
@@ -193,25 +199,76 @@ async function propertyAddresses(
   return addrByProperty;
 }
 
-/** A clip with no reading yet still gets vision + speech when someone Asks. */
-async function kickUnreadClip(admin: any, orgId: string, item: any): Promise<void> {
+function clipHasReading(item: any): boolean {
   const analysis = item?.analysis;
-  const has =
+  return (
     Boolean(analysis?.dictation || analysis?.summary || analysis?.transcript) ||
-    (Array.isArray(analysis?.actions) && analysis.actions.length > 0);
-  if (has || !admin || !item?.id) return;
+    (Array.isArray(analysis?.actions) && analysis.actions.length > 0)
+  );
+}
+
+/** Start vision + speech in the background when someone opens an unread clip. */
+function startUnreadClip(admin: any, orgId: string, item: any): void {
+  if (clipHasReading(item) || !admin || !item?.id) return;
+  const party = { org_id: orgId, job_id: item.jobId, id: item.partyId };
+  void queueProofTranscript(admin, item.id).catch(() => undefined);
+  void queueNarration(admin, party, item.id, item.phase, item.workDate).catch(() => undefined);
+}
+
+const ASK_READ_BUDGET_MS = 90_000;
+
+/**
+ * A clip with no reading yet is read now — vision + speech — so Ask can
+ * describe what is on screen instead of saying the file was never looked at.
+ */
+async function kickUnreadClip(admin: any, orgId: string, item: any): Promise<'done' | 'queued' | 'none'> {
+  if (clipHasReading(item) || !admin || !item?.id) return clipHasReading(item) ? 'done' : 'none';
+  const party = { org_id: orgId, job_id: item.jobId, id: item.partyId };
   try {
-    await queueNarration(
-      admin,
-      { org_id: orgId, job_id: item.jobId, id: item.partyId },
-      item.id,
-      item.phase,
-      item.workDate,
-    );
     await queueProofTranscript(admin, item.id);
+    const reading = ensureClipReading(admin, party, item.id, item.phase, item.workDate).catch(
+      (err) => {
+        console.warn('[library] clip read failed:', err instanceof Error ? err.message : err);
+        return 'failed' as const;
+      },
+    );
+    const outcome = await Promise.race([
+      reading,
+      new Promise<'queued'>((resolve) => {
+        setTimeout(() => resolve('queued'), ASK_READ_BUDGET_MS);
+      }),
+    ]);
+    if (outcome === 'queued') return 'queued';
+    if (outcome !== 'done') {
+      await queueNarration(admin, party, item.id, item.phase, item.workDate);
+    }
+    return outcome === 'done' ? 'done' : 'queued';
   } catch {
-    /* Ask still answers; the sweep will retry */
+    try {
+      await queueNarration(admin, party, item.id, item.phase, item.workDate);
+    } catch {
+      /* Ask still answers; the sweep will retry */
+    }
+    return 'queued';
   }
+}
+
+/** Reload the clip after a read so Ask answers from the new dictation. */
+async function reloadEvidenceItem(client: any, orgId: string, proofId: string): Promise<any | null> {
+  const { data: proof } = await client
+    .from('job_proofs')
+    .select(PORTAL_PROOF_SELECT)
+    .eq('id', proofId)
+    .maybeSingle();
+  if (!proof) return null;
+  const items = await assembleLibrary(client, orgId, [proof]);
+  return items[0] ?? null;
+}
+
+function itemForAsk(item: any, kick: 'done' | 'queued' | 'none'): any {
+  if (clipHasReading(item)) return item;
+  if (item?.analysisState === 'failed' && kick !== 'queued') return item;
+  return { ...item, analysisState: 'queued' };
 }
 
 /**
@@ -611,6 +668,7 @@ evidencePortalRouter.get(
 
       const items = await assembleLibrary(supabase, orgId, [proof]);
       const item = items[0];
+      startUnreadClip(createAdminClient() ?? supabase, orgId, item);
 
       const [custody, frames] = await Promise.all([
         custodyFor(supabase, req.params.proofId),
@@ -629,8 +687,9 @@ evidencePortalRouter.get('/evidence/:proofId/video', proofVideoUrl);
 
 /**
  * POST /api/evidence-portal/evidence/:proofId/ask
- * Ask whether anything happened in this clip. Answers from the reading
- * already on file — dictation, actions, timeline — not a fresh inference.
+ * Questions about this clip. Scope of Work is what reads the video;
+ * this route answers from that reading. If the reading is not on file
+ * yet, it is produced now, then the question is answered from it.
  */
 evidencePortalRouter.post(
   '/evidence/:proofId/ask',
@@ -651,14 +710,15 @@ evidencePortalRouter.post(
       const items = await assembleLibrary(supabase, orgId, [proof]);
       const item = items[0];
       const admin = createAdminClient() ?? supabase;
-      await kickUnreadClip(admin, orgId, item);
+      const kick = await kickUnreadClip(admin, orgId, item);
+      const fresh = (await reloadEvidenceItem(admin, orgId, req.params.proofId)) ?? item;
 
       const result = await settleClipQuestion({
         client: supabase,
         orgId,
         jobId: (proof as any).job_id,
         proofId: req.params.proofId,
-        item,
+        item: itemForAsk(fresh, kick),
         question: input.question,
         history: input.history,
         askedBy: userId,
@@ -1106,6 +1166,7 @@ evidenceShareRouter.get(
 
       const items = await assembleLibrary(admin, share.org_id, [proof]);
       const item = items[0];
+      startUnreadClip(admin, share.org_id, item);
 
       // Opening the detail is seeing the frames and the analysis — that is a
       // view, under the name the link was issued to.
@@ -1191,14 +1252,15 @@ evidenceShareRouter.post(
 
       const items = await assembleLibrary(admin, share.org_id, [proof]);
       const item = items[0];
-      await kickUnreadClip(admin, share.org_id, item);
+      const kick = await kickUnreadClip(admin, share.org_id, item);
+      const fresh = (await reloadEvidenceItem(admin, share.org_id, req.params.proofId)) ?? item;
 
       const result = await settleClipQuestion({
         client: admin,
         orgId: share.org_id,
         jobId: share.job_id,
         proofId: req.params.proofId,
-        item,
+        item: itemForAsk(fresh, kick),
         question: input.question,
         history: input.history,
         askedBy: viewer.userId,

@@ -8,6 +8,7 @@ import {
   groundedAnswerFromClip,
   type ClipAskRecord,
 } from '../src/shared/clipAsk.js';
+import { serializeEvidence } from '../src/verifier/library.js';
 
 const cedarAfter: ClipAskRecord = {
   workDate: '2026-08-05',
@@ -130,8 +131,9 @@ test('a before clip without a reading is still asked about this video', () => {
     analysisState: 'skipped',
     phase: 'before',
   });
-  assert.match(answer, /has not been read yet|still being read/i);
+  assert.match(answer, /still being read/i);
   assert.doesNotMatch(answer, /after video/i);
+  assert.doesNotMatch(answer, /has not been read yet/i);
 });
 
 test('what is happening cites the scene, not a missing after pair', () => {
@@ -150,8 +152,16 @@ test('a comparison question without a reading does not ask for another clip', ()
     analysisState: 'skipped',
     phase: 'before',
   });
-  assert.match(answer, /has not been read yet|still being read|nothing to answer/i);
+  assert.match(answer, /still being read/i);
   assert.doesNotMatch(answer, /after video/i);
+});
+
+test('an unread clip is being read, not abandoned', () => {
+  const answer = groundedAnswerFromClip('What is happening in this video?', {
+    analysisState: 'none',
+  });
+  assert.match(answer, /still being read/i);
+  assert.doesNotMatch(answer, /has not been read yet/i);
 });
 
 test('a clip still being read says so instead of inventing work', () => {
@@ -210,4 +220,66 @@ test('answerFromClip falls back to the grounded reading when no model is configu
   const result = await answerFromClip({ question: 'Did anything happen?', record: cedarAfter });
   assert.equal(result.model, null);
   assert.match(result.answer, /Tarp removed/);
+});
+
+test('Ask describes the scene after a late reading lands on an existing clip', () => {
+  const unreadProof = {
+    id: 'existing-1',
+    job_id: 'j1',
+    party_id: 'pt1',
+    phase: 'before',
+    work_date: '2026-08-26',
+    captured_at: '2026-08-26T16:00:00Z',
+    received_at: '2026-08-26T16:01:00Z',
+    duration_seconds: '64',
+    byte_size: '1200000',
+    lat: null,
+    lon: null,
+    accuracy_m: null,
+    content_hash: 'desk',
+    state: 'checked',
+    checks: [],
+    ai_summary: null,
+    ai_findings: {},
+    ai_material_change: null,
+    ai_model: null,
+    analysis_status: null,
+    narration_status: 'idle',
+    narration_text: null,
+    legal_hold: false,
+    retention_until: null,
+  };
+  const named = {
+    jobName: 'Desk clip',
+    jobNumber: 2001,
+    company: 'Field Capture',
+    contactName: 'Marcus',
+    tier: 1,
+    dayHasAfter: false,
+  };
+  const stale = serializeEvidence({ proof: unreadProof, ...named });
+  const staleAnswer = groundedAnswerFromClip(
+    'What is happening in this video?',
+    clipRecordFromEvidenceItem(stale),
+  );
+  assert.match(staleAnswer, /still being read/i);
+  assert.doesNotMatch(staleAnswer, /has not been read yet/i);
+
+  const fresh = serializeEvidence({
+    proof: {
+      ...unreadProof,
+      narration_status: 'done',
+      narration_text:
+        'A person sits at a desk. On the screen is an MSNBC YouTube clip about an Oklahoma state senate race.',
+      ai_summary: 'Desk, MSNBC, Oklahoma senate race.',
+      analysis_status: 'done',
+    },
+    ...named,
+  });
+  const answer = groundedAnswerFromClip(
+    'What is happening in this video?',
+    clipRecordFromEvidenceItem(fresh),
+  );
+  assert.match(answer, /MSNBC|desk|senate/i);
+  assert.doesNotMatch(answer, /has not been read yet|still being read/i);
 });

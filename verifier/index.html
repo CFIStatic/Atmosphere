@@ -3683,9 +3683,11 @@
     if (item._remote && !item._loaded) {
       fetchRemoteDetail(item).then(function () {
         if (state.open && state.open.id === item.id) openLoaded(item, tab);
+        watchRemoteReading(item);
       });
       return;
     }
+    watchRemoteReading(item);
     openLoaded(item, tab);
   }
 
@@ -4174,10 +4176,10 @@
   function answerClipLocally(item, question) {
     var a = item.analysis || {};
     var q = String(question || '').trim();
-    if (a.state === 'queued' && !clipAskCorpus(item).length) return 'This clip is still being read. Ask again once the dictation lands.';
-    if (a.state === 'failed' && !clipAskCorpus(item).length) return 'The reading of this clip failed. The footage itself is unaffected.';
+    var state = a.state || item.analysisState;
+    if (state === 'failed' && !clipAskCorpus(item).length) return 'The reading of this clip failed. The footage itself is unaffected.';
     var rows = clipAskCorpus(item);
-    if (!rows.length) return 'This clip has not been read yet, so there is nothing to answer from.';
+    if (!rows.length) return 'This clip is still being read. Ask again once the dictation lands.';
     if (/what (did|was) (the )?(homeowner|owner|contractor|they|he|she|worker).*(say|ask|tell|agree|mention)|did (the )?(homeowner|owner|contractor|they).*(say|mention|agree)|what was said|anything said|heard on the mic|conversation|what did they agree/i.test(q)) {
       var spoken = (a.conversationDetails || []).concat(a.conversationAgreements || []).concat(a.conversationConcerns || []).filter(Boolean);
       if (spoken.length) return 'Yes — this is what was said on the recording: ' + spoken.slice(0, 3).join(' ');
@@ -4253,7 +4255,9 @@
         if (!r.ok) throw new Error((body && (body.error || body.message)) || 'Could not answer.');
         cb(null, body.answer || local);
       });
-    }).catch(function () { cb(null, local); });
+    }).catch(function () {
+      cb(null, clipAskCorpus(item).length ? local : 'This clip is still being read. Ask again once the dictation lands.');
+    });
   }
 
   function renderAsk(item) {
@@ -4262,7 +4266,7 @@
       '<div class="alog-head"><h4>Ask this clip</h4></div>' +
       '<div class="ask-thread" id="ask-thread">';
     if (!thread.length) {
-      html += '<p class="ask-empty">This clip has already been read. Ask what happened or what was said — you do not have to watch it. Answers come from the frames and, when the mic was on, the conversation.</p>' +
+      html += '<p class="ask-empty">Ask about this clip. Answers come from the Scope of Work reading — what the AI saw on screen and, when the mic was on, what was said.</p>' +
         '<div class="ask-suggest">' +
         '<button type="button" data-ask="What is happening in this video?">What is happening?</button>' +
         '<button type="button" data-ask="Did anything happen in this clip?">Did anything happen?</button>' +
@@ -4921,6 +4925,10 @@
   var ORG_MODE = false;
 
   function mapRemoteItem(raw, jobKey) {
+    var reading = raw.analysis || {};
+    var hasReading = raw.analysisState === 'done' ||
+      Boolean(reading.dictation || reading.summary || reading.transcript) ||
+      (Array.isArray(reading.actions) && reading.actions.length > 0);
     return {
       _remote: true,
       id: raw.id,
@@ -4945,36 +4953,69 @@
       tier: raw.tier || 1,
       hold: raw.legalHold ? { on: true, reason: 'This clip is under legal hold. Retention cannot delete it while the hold stands.', by: '', at: '' } : null,
       checks: raw.checks || [],
-      analysis: raw.analysisState === 'done'
+      analysis: hasReading
         ? {
             state: 'done',
-            materialChange: raw.analysis && raw.analysis.materialChange,
-            materialBecause: raw.analysis && raw.analysis.materialBecause,
-            summary: (raw.analysis && raw.analysis.summary) || '',
-            dictation: (raw.analysis && (raw.analysis.dictation || raw.analysis.summary)) || '',
-            dictationEntries: (raw.analysis && raw.analysis.dictationEntries) || [],
-            actions: (raw.analysis && raw.analysis.actions) || [],
-            changes: (raw.analysis && raw.analysis.changes) || [],
-            scope: (raw.analysis && raw.analysis.scope) || [],
-            couldNotTell: (raw.analysis && raw.analysis.couldNotTell) || [],
-            longForm: Boolean(raw.analysis && raw.analysis.longForm),
-            timeline: (raw.analysis && raw.analysis.timeline) || null,
-            windowsTotal: raw.analysis ? raw.analysis.windowsTotal : null,
-            windowsRead: raw.analysis ? raw.analysis.windowsRead : null,
-            transcript: (raw.analysis && raw.analysis.transcript) || '',
-            conversationDetails: (raw.analysis && raw.analysis.conversationDetails) || [],
-            conversationAgreements: (raw.analysis && raw.analysis.conversationAgreements) || [],
-            conversationConcerns: (raw.analysis && raw.analysis.conversationConcerns) || [],
-            conversationRooms: (raw.analysis && raw.analysis.conversationRooms) || []
+            materialChange: reading.materialChange,
+            materialBecause: reading.materialBecause,
+            summary: reading.summary || '',
+            dictation: reading.dictation || reading.summary || '',
+            dictationEntries: reading.dictationEntries || [],
+            actions: reading.actions || [],
+            changes: reading.changes || [],
+            scope: reading.scope || [],
+            couldNotTell: reading.couldNotTell || [],
+            longForm: Boolean(reading.longForm),
+            timeline: reading.timeline || null,
+            windowsTotal: reading.windowsTotal,
+            windowsRead: reading.windowsRead,
+            transcript: reading.transcript || '',
+            conversationDetails: reading.conversationDetails || [],
+            conversationAgreements: reading.conversationAgreements || [],
+            conversationConcerns: reading.conversationConcerns || [],
+            conversationRooms: reading.conversationRooms || []
           }
         : raw.analysisState === 'queued'
-          ? { state: 'queued', reason: 'Queued for analysis. The model has not read this video yet.' }
+          ? { state: 'queued', reason: 'This clip is being read now.' }
           : raw.analysisState === 'failed'
             ? { state: 'failed' }
             : { state: 'none' },
       custody: [],
       _loaded: false
     };
+  }
+
+  function clipHasLocalReading(item) {
+    var a = item && item.analysis;
+    return Boolean(a && (a.dictation || a.summary || a.transcript || (a.actions && a.actions.length)));
+  }
+
+  /** Scope of Work reads the video. Keep asking the server until that reading lands. */
+  function watchRemoteReading(item) {
+    if (!item || !item._remote || clipHasLocalReading(item) || item._watchReading) return;
+    var tries = 0;
+    item._watchReading = setInterval(function () {
+      tries += 1;
+      if (tries > 45 || (state.open && state.open.id !== item.id)) {
+        clearInterval(item._watchReading);
+        item._watchReading = null;
+        return;
+      }
+      var detailUrl = ORG_MODE
+        ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id)
+        : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id);
+      fetch(detailUrl, { credentials: 'include' }).then(function (r) {
+        return r.ok ? r.json() : null;
+      }).then(function (payload) {
+        if (!payload || !payload.item) return;
+        var mapped = mapRemoteItem(payload.item, item.job);
+        item.analysis = mapped.analysis;
+        if (!clipHasLocalReading(item)) return;
+        clearInterval(item._watchReading);
+        item._watchReading = null;
+        if (state.open && state.open.id === item.id && state.tab === 'integrity') setTab('integrity');
+      }).catch(function () {});
+    }, 4000);
   }
 
   function fetchRemoteDetail(item) {

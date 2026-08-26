@@ -334,13 +334,10 @@ function yesFromRow(row: CorpusRow): string {
 
 function unreadAnswer(state: ClipAskAnalysisState, _question?: string): string | null {
   if (!state || state === 'done') return null;
-  if (state === 'queued') {
-    return 'This clip is still being read. Ask again once the dictation lands.';
-  }
   if (state === 'failed') {
     return 'The reading of this clip failed. The footage itself is unaffected; re-run the analysis from the platform.';
   }
-  return 'This clip has not been read yet, so there is nothing to answer from.';
+  return 'This clip is still being read. Ask again once the dictation lands.';
 }
 
 /**
@@ -353,7 +350,7 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
 
   const rows = clipCorpus(record);
   if (!rows.length) {
-    return unread ?? 'Nothing has been read from this clip yet, so there is nothing to answer from.';
+    return unread ?? 'This clip is still being read. Ask again once the dictation lands.';
   }
 
   const q = question.trim();
