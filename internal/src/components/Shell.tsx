@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { canManageAccess, canSeeAccounts } from '../lib/access';
+import { Logo } from './Logo';
 import { ThemeToggle } from './ThemeToggle';
 
 const NAV = [
@@ -26,16 +27,8 @@ export function Shell() {
       <header className="sticky top-0 z-20 border-b border-line bg-paper-50/90 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center gap-6 px-6 py-3">
           <div className="flex items-center gap-3">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-500/15 text-brand-600">
-              <svg width="16" height="16" viewBox="0 0 32 32" fill="none" aria-hidden>
-                <path d="M7 22.5 16 8.5 25 22.5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M11.5 22.5h9" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-              </svg>
-            </span>
-            <div>
-              <p className="text-sm font-semibold tracking-tight">Atmosphere</p>
-              <p className="text-[11px] uppercase tracking-[0.16em] text-ink-500">Internal</p>
-            </div>
+            <Logo />
+            <p className="text-[11px] uppercase tracking-[0.16em] text-ink-500">Internal</p>
           </div>
           <nav className="flex flex-1 flex-wrap items-center gap-1">
             {links.map((item) => (

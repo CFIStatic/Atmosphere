@@ -32,6 +32,9 @@ describe('LoginPage', () => {
       </MemoryRouter>,
     );
     expect(screen.getByRole('heading', { name: 'Internal' })).toBeInTheDocument();
+    expect(screen.getByText('Atmosphere')).toBeInTheDocument();
+    expect(document.querySelector('[data-atmosphere-lockup]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-atmosphere-lockup] rect')).toHaveLength(5);
     expect(screen.getByLabelText('First name')).toBeInTheDocument();
     expect(screen.getByLabelText('Last name')).toBeInTheDocument();
     expect(screen.getByLabelText('Email')).toBeInTheDocument();

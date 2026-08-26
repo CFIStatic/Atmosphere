@@ -18,13 +18,17 @@ interface Props {
 }
 
 /**
- * The ONLY Atmosphere brand mark: five bars (four ink, one orange base).
+ * The ONLY Atmosphere brand lockup: five bars (four ink, one orange base)
+ * plus the word "Atmosphere".
  *
  * Permanently retired — do not restore:
  * - Saturn / planet circle + ring ellipse
  * - Orange rounded square tile behind a white glyph
  * - Split "Atmo" + orange "sphere" wordmark
  *
+ * Ink follows the live theme via `text-ink-900` + `currentColor`:
+ * dark bars and word on light paper, light (near-white) bars and word on a
+ * dark ground. The terracotta base stays brand-colored in both palettes.
  * Match the marketing site wordmark in website/assets/site.css (.lb1–.lb4, .lb-a).
  */
 export function Logo({
@@ -35,16 +39,15 @@ export function Logo({
 }: Props) {
   const { svg, text, gap } = SIZES[size];
   const mark = (
-    <div className={`flex items-center ${gap} text-ink-900 ${className}`}>
-      <svg width={svg} height={svg} viewBox="0 0 22 22" aria-hidden="true" className="shrink-0">
-        <rect className="fill-current opacity-30" width="22" height="2.8" />
-        <rect className="fill-current opacity-50" y="4.8" width="22" height="2.8" />
-        <rect className="fill-current opacity-[0.68]" y="9.6" width="22" height="2.8" />
-        <rect className="fill-current opacity-[0.88]" y="14.4" width="22" height="2.8" />
-        <rect className="fill-brand-500" y="19.2" width="22" height="2.8" />
-      </svg>
+    <div
+      data-atmosphere-lockup=""
+      className={`flex items-center ${gap} text-ink-900 ${className}`}
+    >
+      <AtmosphereBars size={svg} />
       {!compact && (
-        <span className={`whitespace-nowrap ${text} font-bold tracking-tight`}>Atmosphere</span>
+        <span className={`whitespace-nowrap ${text} font-bold tracking-tight text-current`}>
+          Atmosphere
+        </span>
       )}
     </div>
   );
@@ -59,5 +62,24 @@ export function Logo({
     >
       {mark}
     </NavLink>
+  );
+}
+
+/** Five-bar mark. Ink bars inherit `currentColor`; the base stays terracotta. */
+export function AtmosphereBars({ size }: { size: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 22 22"
+      aria-hidden="true"
+      className="shrink-0 text-current"
+    >
+      <rect className="fill-current opacity-30" width="22" height="2.8" />
+      <rect className="fill-current opacity-50" y="4.8" width="22" height="2.8" />
+      <rect className="fill-current opacity-[0.68]" y="9.6" width="22" height="2.8" />
+      <rect className="fill-current opacity-[0.88]" y="14.4" width="22" height="2.8" />
+      <rect className="fill-brand-500" y="19.2" width="22" height="2.8" />
+    </svg>
   );
 }

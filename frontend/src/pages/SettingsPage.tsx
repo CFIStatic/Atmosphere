@@ -18,6 +18,7 @@ import {
   type OrgMember,
 } from '../lib/api';
 import { Logo } from '../components/Logo';
+import { ThemeToggle } from '../components/ThemeToggle';
 import { BillingSection } from '../components/settings/BillingSection';
 import { InvitePanel } from '../components/team/InvitePanel';
 import { displayName, nameFromMetadata } from '../lib/display';
@@ -86,8 +87,9 @@ export function SettingsPage() {
   return (
     <div className="min-h-screen bg-paper-100">
       <header className="border-b border-line bg-paper-0/80">
-        <div className="mx-auto flex max-w-5xl items-center px-4 py-4 sm:px-6">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
           <Logo />
+          <ThemeToggle />
         </div>
       </header>
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:py-10">
