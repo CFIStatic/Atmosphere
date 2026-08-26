@@ -6,7 +6,7 @@ import { requireOrgContext } from '../lib/orgContext.js';
 import { createAdminClient } from '../lib/supabase.js';
 import { HttpError } from '../lib/errors.js';
 import {
-  ensureClipReading,
+  ensureClipReadingOnce,
   ensureStillsAndDuration,
   proofVideoUrl,
   queueNarration,
@@ -207,12 +207,21 @@ function clipHasReading(item: any): boolean {
   );
 }
 
-/** Start vision + speech in the background when someone opens an unread clip. */
-function startUnreadClip(admin: any, orgId: string, item: any): void {
-  if (clipHasReading(item) || !admin || !item?.id) return;
+const OPEN_READ_BUDGET_MS = 25_000;
+
+/** Open Scope of Work: read the file now, then return the dictation if it lands in time. */
+async function readClipForOpen(admin: any, orgId: string, item: any): Promise<any> {
+  if (clipHasReading(item) || !admin || !item?.id) return item;
   const party = { org_id: orgId, job_id: item.jobId, id: item.partyId };
   void queueProofTranscript(admin, item.id).catch(() => undefined);
-  void queueNarration(admin, party, item.id, item.phase, item.workDate).catch(() => undefined);
+  const outcome = await Promise.race([
+    ensureClipReadingOnce(admin, party, item.id, item.phase, item.workDate).catch(() => 'failed' as const),
+    new Promise<'queued'>((resolve) => {
+      setTimeout(() => resolve('queued'), OPEN_READ_BUDGET_MS);
+    }),
+  ]);
+  const fresh = (await reloadEvidenceItem(admin, orgId, item.id)) ?? item;
+  return itemForAsk(fresh, outcome === 'done' ? 'done' : 'queued');
 }
 
 const ASK_READ_BUDGET_MS = 90_000;
@@ -226,7 +235,7 @@ async function kickUnreadClip(admin: any, orgId: string, item: any): Promise<'do
   const party = { org_id: orgId, job_id: item.jobId, id: item.partyId };
   try {
     await queueProofTranscript(admin, item.id);
-    const reading = ensureClipReading(admin, party, item.id, item.phase, item.workDate).catch(
+    const reading = ensureClipReadingOnce(admin, party, item.id, item.phase, item.workDate).catch(
       (err) => {
         console.warn('[library] clip read failed:', err instanceof Error ? err.message : err);
         return 'failed' as const;
@@ -667,8 +676,8 @@ evidencePortalRouter.get(
       if (!proof) throw new HttpError(404, 'No such clip.', 'not_found');
 
       const items = await assembleLibrary(supabase, orgId, [proof]);
-      const item = items[0];
-      startUnreadClip(createAdminClient() ?? supabase, orgId, item);
+      const admin = createAdminClient() ?? supabase;
+      const item = await readClipForOpen(admin, orgId, items[0]);
 
       const [custody, frames] = await Promise.all([
         custodyFor(supabase, req.params.proofId),
@@ -1165,8 +1174,7 @@ evidenceShareRouter.get(
       if (!proof) throw new HttpError(404, 'No such clip on this job.', 'not_found');
 
       const items = await assembleLibrary(admin, share.org_id, [proof]);
-      const item = items[0];
-      startUnreadClip(admin, share.org_id, item);
+      const item = await readClipForOpen(admin, share.org_id, items[0]);
 
       // Opening the detail is seeing the frames and the analysis — that is a
       // view, under the name the link was issued to.

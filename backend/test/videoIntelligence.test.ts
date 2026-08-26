@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { config } from '../src/config.js';
 import {
   assertProcessableDuration,
+  dictatePreparedFrames,
   framesContentFingerprint,
   isLongFormVideo,
   parseDictationPayload,
@@ -109,4 +110,54 @@ test('parseDictationPayload extracts narration and a grounded action log', () =>
   assert.equal(parsed.actions[0]!.action, 'remove');
   assert.equal(parsed.actions[0]!.atSeconds, 12);
   assert.equal(parsed.actions[0]!.model, 'claude-test');
+});
+
+test('dictatePreparedFrames uses Gemini when a Google key is set', async () => {
+  const prevGoogle = process.env.GOOGLE_API_KEY;
+  const prevGemini = process.env.GEMINI_API_KEY;
+  const prevAnthropic = process.env.ANTHROPIC_API_KEY;
+  process.env.GOOGLE_API_KEY = 'test-google';
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: JSON.stringify({
+                    narration: 'A person sits at a desk watching a news clip on the monitor.',
+                    summary: 'Desk and a news broadcast.',
+                    actions: [],
+                  }),
+                },
+              ],
+            },
+          },
+        ],
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    )) as typeof fetch;
+  try {
+    const result = await dictatePreparedFrames({
+      id: 'clip-1',
+      source: 'proof_of_work',
+      durationSeconds: 64,
+      longForm: false,
+      frames: [{ atSeconds: 8, jpeg: Buffer.from('jpeg') }],
+    });
+    assert.match(result.narrationText, /desk/i);
+    assert.match(result.model, /gemini/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (prevGoogle === undefined) delete process.env.GOOGLE_API_KEY;
+    else process.env.GOOGLE_API_KEY = prevGoogle;
+    if (prevGemini === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = prevGemini;
+    if (prevAnthropic === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = prevAnthropic;
+  }
 });

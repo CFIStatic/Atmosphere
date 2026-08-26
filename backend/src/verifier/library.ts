@@ -97,6 +97,10 @@ export function analysisStateOf(input: {
     return 'failed';
   }
 
+  if (input.narrationStatus === 'skipped' || input.analysisStatus === 'skipped') {
+    return 'skipped';
+  }
+
   return 'none';
 }
 
@@ -231,6 +235,10 @@ export function serializeEvidence(input: {
     // Labels attached here so every consumer prints the same sentence.
     checks: checks.map((c) => ({ verdict: c.verdict, what: labelForCheck(c.key), detail: c.detail })),
     analysisState: analysis,
+    analysisError:
+      typeof proof.narration_error === 'string' && proof.narration_error.trim()
+        ? proof.narration_error.trim()
+        : null,
     materialChange,
     flagged: needsAttention({ integrity, analysis, materialChange }),
     legalHold: Boolean(proof.legal_hold),

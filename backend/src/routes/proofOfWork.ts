@@ -20,6 +20,7 @@ import { RetryQueue } from '../shared/retryQueue.js';
 import { attachProofToEpisode } from '../episodes/attach.js';
 import { ingestPhysicalWorkFromProof } from '../physicalWork/ingest.js';
 import { isModelProviderConfigured } from '../lib/anthropic.js';
+import { isVisionConfigured } from '../lib/visionProvider.js';
 import { config } from '../config.js';
 import { DailyBudget } from '../shared/liveBudget.js';
 import { labelsForProof } from '../verifier/library.js';
@@ -410,7 +411,7 @@ async function runDayAnalysis(
   if (!film) {
     return { outcome: 'skipped', reason: 'No video on file yet.' };
   }
-  if (!isModelProviderConfigured()) {
+  if (!isVisionConfigured()) {
     return { outcome: 'skipped', reason: 'Model access is not configured on this server.' };
   }
 
@@ -842,7 +843,7 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
   // with no model key should still leave a clip looking like itself.
   let settled = await ensureStillsAndDuration(admin, job.proofId);
 
-  if (!isModelProviderConfigured()) {
+  if (!isVisionConfigured()) {
     await write({ narration_status: 'skipped', narration_error: 'No model is configured.' });
     return;
   }
@@ -936,7 +937,43 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
     phase: job.phase,
     workDate: job.workDate,
   });
-  if (!narration) throw new Error('The model reply was not usable.');
+  if (!narration) {
+    const dictation = await describeRecordingWithoutScope({
+      proofId: job.proofId,
+      durationSeconds: durationSeconds || ready[ready.length - 1]?.atSeconds || 60,
+      frames: ready,
+      longForm: false,
+      trade,
+    });
+    await write({
+      ai_summary: (dictation.narrationSummary || dictation.narrationText).slice(0, 500),
+      ai_findings: descriptionFindings(dictation),
+      ai_model: dictation.model,
+      analysis_status: 'done',
+      narration: { entries: [], coverage: [], model: dictation.model },
+      narration_text: dictation.narrationText,
+      narration_status: 'done',
+      narration_error: null,
+      narrated_at: new Date().toISOString(),
+      labels: labelsForProof({
+        phase: job.phase,
+        trade,
+        narration: { coverage: [] },
+        stageKinds: [],
+        actions: dictation.actions,
+      }),
+    });
+    await finishProofActions(admin, job, dictation.actions, dictation.model);
+    await recordAccess(admin, {
+      orgId: job.orgId,
+      jobId: job.jobId,
+      proofId: job.proofId,
+      action: 'analysed',
+      actorLabel: 'Atmosphere',
+      detail: `described · scope attached, vision fallback · ${job.phase} · ${job.workDate}`,
+    });
+    return;
+  }
 
   // The historical index rides the same write: phase, trade, and the stages
   // the narration actually saw, flattened for the GIN index so "every
@@ -1202,6 +1239,25 @@ export async function ensureClipReading(
       .eq('id', proofId);
     return 'failed';
   }
+}
+
+const readingNow = new Map<string, Promise<'done' | 'skipped' | 'failed'>>();
+
+/** One in-flight read per clip so open + poll + Ask do not start three models. */
+export function ensureClipReadingOnce(
+  admin: any,
+  party: { org_id: string; job_id: string; id: string },
+  proofId: string,
+  phase: string,
+  workDate: string,
+): Promise<'done' | 'skipped' | 'failed'> {
+  const existing = readingNow.get(proofId);
+  if (existing) return existing;
+  const pending = ensureClipReading(admin, party, proofId, phase, workDate).finally(() => {
+    readingNow.delete(proofId);
+  });
+  readingNow.set(proofId, pending);
+  return pending;
 }
 
 /**

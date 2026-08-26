@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { config } from '../config.js';
+import { visionProviderLabel } from '../lib/visionProvider.js';
 import { createAnonClient, createAdminClient } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { smtpConfigured } from '../lib/careersMail.js';
@@ -63,6 +64,11 @@ healthRouter.get('/ready', async (_req: Request, res: Response) => {
       : process.env.RESEND_API_KEY?.trim()
         ? 'resend'
         : 'unconfigured',
+  };
+  const vision = visionProviderLabel();
+  checks.vision = {
+    ok: vision !== 'unconfigured',
+    detail: vision,
   };
 
   const required = ['supabaseAuth', 'config'] as const;

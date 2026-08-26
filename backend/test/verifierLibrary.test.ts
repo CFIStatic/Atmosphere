@@ -71,7 +71,7 @@ test('an after follows the pipeline status, with the summary as the legacy fallb
   assert.equal(after('queued'), 'queued');
   assert.equal(after('running'), 'queued');
   assert.equal(after('failed'), 'failed');
-  assert.equal(after('skipped'), 'none');
+  assert.equal(after('skipped'), 'skipped');
   assert.equal(
     analysisStateOf({
       phase: 'after',

@@ -4058,16 +4058,18 @@
     var saw = String(a.dictation || a.summary || '').trim();
     var heard = String(a.transcript || '').trim();
     var pill = a.state === 'failed' ? 'Failed'
+      : a.state === 'skipped' ? 'Could not read'
       : (a.state === 'queued' || a.state === 'none' || !a.state) && !rows.length && !saw && !heard ? 'Writing…'
-      : a.state === 'skipped' ? 'Not yet'
       : 'Ready';
     var html = '<div class="alog-head"><h4>AI analysis</h4><span class="livepill" id="alog-pill">' + pill + '</span></div>';
     if (!rows.length && !saw && !heard) {
-      html += '<p class="footnote alog-wait">' +
-        esc(a.reason || (a.state === 'failed'
+      var wait = a.reason || item.analysisError ||
+        (a.state === 'failed'
           ? 'The dictation failed after retries. The footage itself is unaffected.'
-          : 'The assistant is reading this clip. What it sees will land here when the reading finishes.')) +
-        '</p>';
+          : a.state === 'skipped'
+            ? 'This clip could not be read. Open it again to retry, or check that a vision model key is on the server.'
+            : 'The assistant is reading this clip. What it sees will land here when the reading finishes.');
+      html += '<p class="footnote alog-wait">' + esc(wait) + '</p>';
       return html;
     }
     if (saw) {
@@ -4950,6 +4952,7 @@
       gps: raw.gps ? { lat: raw.gps.lat, lon: raw.gps.lon, accuracy: raw.gps.accuracyM, distanceFt: null } : null,
       hash: raw.hash,
       labels: Array.isArray(raw.labels) ? raw.labels : [],
+      analysisError: raw.analysisError || null,
       tier: raw.tier || 1,
       hold: raw.legalHold ? { on: true, reason: 'This clip is under legal hold. Retention cannot delete it while the hold stands.', by: '', at: '' } : null,
       checks: raw.checks || [],
@@ -4978,8 +4981,10 @@
         : raw.analysisState === 'queued'
           ? { state: 'queued', reason: 'This clip is being read now.' }
           : raw.analysisState === 'failed'
-            ? { state: 'failed' }
-            : { state: 'none' },
+            ? { state: 'failed', reason: raw.analysisError || 'The reading of this clip failed.' }
+            : raw.analysisState === 'skipped'
+              ? { state: 'skipped', reason: raw.analysisError || 'This clip could not be read.' }
+              : { state: 'none' },
       custody: [],
       _loaded: false
     };
