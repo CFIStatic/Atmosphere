@@ -687,8 +687,9 @@ evidencePortalRouter.get('/evidence/:proofId/video', proofVideoUrl);
 
 /**
  * POST /api/evidence-portal/evidence/:proofId/ask
- * Ask whether anything happened in this clip. Answers from the reading
- * already on file — dictation, actions, timeline — not a fresh inference.
+ * Questions about this clip. Scope of Work is what reads the video;
+ * this route answers from that reading. If the reading is not on file
+ * yet, it is produced now, then the question is answered from it.
  */
 evidencePortalRouter.post(
   '/evidence/:proofId/ask',

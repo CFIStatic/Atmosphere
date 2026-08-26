@@ -3683,9 +3683,11 @@
     if (item._remote && !item._loaded) {
       fetchRemoteDetail(item).then(function () {
         if (state.open && state.open.id === item.id) openLoaded(item, tab);
+        watchRemoteReading(item);
       });
       return;
     }
+    watchRemoteReading(item);
     openLoaded(item, tab);
   }
 
@@ -4264,7 +4266,7 @@
       '<div class="alog-head"><h4>Ask this clip</h4></div>' +
       '<div class="ask-thread" id="ask-thread">';
     if (!thread.length) {
-      html += '<p class="ask-empty">This clip has already been read. Ask what happened or what was said — you do not have to watch it. Answers come from the frames and, when the mic was on, the conversation.</p>' +
+      html += '<p class="ask-empty">Ask about this clip. Answers come from the Scope of Work reading — what the AI saw on screen and, when the mic was on, what was said.</p>' +
         '<div class="ask-suggest">' +
         '<button type="button" data-ask="What is happening in this video?">What is happening?</button>' +
         '<button type="button" data-ask="Did anything happen in this clip?">Did anything happen?</button>' +
@@ -4981,6 +4983,39 @@
       custody: [],
       _loaded: false
     };
+  }
+
+  function clipHasLocalReading(item) {
+    var a = item && item.analysis;
+    return Boolean(a && (a.dictation || a.summary || a.transcript || (a.actions && a.actions.length)));
+  }
+
+  /** Scope of Work reads the video. Keep asking the server until that reading lands. */
+  function watchRemoteReading(item) {
+    if (!item || !item._remote || clipHasLocalReading(item) || item._watchReading) return;
+    var tries = 0;
+    item._watchReading = setInterval(function () {
+      tries += 1;
+      if (tries > 45 || (state.open && state.open.id !== item.id)) {
+        clearInterval(item._watchReading);
+        item._watchReading = null;
+        return;
+      }
+      var detailUrl = ORG_MODE
+        ? '/api/evidence-portal/evidence/' + encodeURIComponent(item.id)
+        : '/api/verifier-share/' + encodeURIComponent(SHARE_TOKEN) + '/evidence/' + encodeURIComponent(item.id);
+      fetch(detailUrl, { credentials: 'include' }).then(function (r) {
+        return r.ok ? r.json() : null;
+      }).then(function (payload) {
+        if (!payload || !payload.item) return;
+        var mapped = mapRemoteItem(payload.item, item.job);
+        item.analysis = mapped.analysis;
+        if (!clipHasLocalReading(item)) return;
+        clearInterval(item._watchReading);
+        item._watchReading = null;
+        if (state.open && state.open.id === item.id && state.tab === 'integrity') setTab('integrity');
+      }).catch(function () {});
+    }, 4000);
   }
 
   function fetchRemoteDetail(item) {

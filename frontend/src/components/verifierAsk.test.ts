@@ -49,6 +49,7 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(verifierHtml).toContain('function startLivePlayback');
     expect(verifierHtml).toContain('What the AI saw, in order');
     expect(verifierHtml).toContain('You do not have to watch the clip');
+    expect(verifierHtml).toContain('function watchRemoteReading');
     expect(verifierHtml).toContain('data-full=');
   });
 
