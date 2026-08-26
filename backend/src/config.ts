@@ -293,6 +293,15 @@ export const config = {
     maxAudioUploadBytes: Number(process.env.MAX_AUDIO_UPLOAD_BYTES ?? 25 * 1024 * 1024),
   },
 
+  // Day-film soundtrack reading. Uses the same TRANSCRIPTION_* endpoint as
+  // technician clips, but chunks a stored video instead of posting the file
+  // through Express. Off when TRANSCRIPTION_FROM_PROOF=false.
+  audioTranscript: {
+    chunkSeconds: Number(process.env.TRANSCRIPTION_CHUNK_SECONDS ?? 600),
+    maxChunks: Number(process.env.TRANSCRIPTION_MAX_CHUNKS ?? 150),
+    fromProof: process.env.TRANSCRIPTION_FROM_PROOF !== 'false',
+  },
+
   anthropic: {
     // Upstream model provider key. Server-only: the browser never calls the
     // provider directly, because token counts have to come back through us to

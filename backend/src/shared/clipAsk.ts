@@ -13,6 +13,7 @@
  */
 import { anthropicClient, isModelProviderConfigured } from '../lib/anthropic.js';
 import { config } from '../config.js';
+import { isSpeechQuestion } from '../audio/transcript.js';
 
 export type ClipAskAnalysisState =
   | 'done'
@@ -41,6 +42,7 @@ export type ClipAskRecord = {
   couldNotTell?: string[];
   actions?: Array<{ atSeconds?: number | null; action?: string | null; description?: string | null }>;
   dictationEntries?: Array<{ atSeconds?: number | null; text?: string | null; note?: string | null; summary?: string | null }>;
+  speech?: Array<{ atSeconds?: number | null; endSeconds?: number | null; text?: string | null }>;
   timeline?: Array<{ startSeconds?: number | null; summary?: string | null }> | null;
   scope?: Array<{ title?: string | null; verdict?: string | null; because?: string | null }>;
 };
@@ -99,11 +101,12 @@ const STOP = new Set([
 const CLIP_QA_SYSTEM = `You answer questions about one proof-of-work video, using only the reading of that clip.
 
 Rules:
-1. Answer only from the reading given. It is a description of video frames somebody already looked at.
+1. Answer only from the reading given. Vision dictation describes frames. Speech lines are what the microphone heard.
 2. If the reading does not contain the answer, say "The footage on file does not show that" and stop. Do not reason about what was probably true.
 3. Quote a timestamp when the reading has one, so the answer can be checked against the playhead.
 4. Two or three sentences. This is read next to the player.
-5. Never estimate cost, hours, or whether work was worth paying for.`;
+5. Never estimate cost, hours, or whether work was worth paying for.
+6. Speech is not proof of completed work. If they ask whether work was done, prefer what the camera showed. If they ask what was said, answer from Speech lines.`;
 
 type CorpusRow = { at: number | null; text: string; kind: string };
 
@@ -114,6 +117,7 @@ export function clipRecordFromEvidenceItem(item: {
   durationSeconds?: number | null;
   analysisState?: ClipAskAnalysisState;
   analysis?: ClipAskRecord | null;
+  speech?: ClipAskRecord['speech'];
 }): ClipAskRecord {
   const analysis = item.analysis ?? null;
   return {
@@ -131,6 +135,11 @@ export function clipRecordFromEvidenceItem(item: {
     couldNotTell: Array.isArray(analysis?.couldNotTell) ? analysis.couldNotTell : [],
     actions: Array.isArray(analysis?.actions) ? analysis.actions : [],
     dictationEntries: Array.isArray(analysis?.dictationEntries) ? analysis.dictationEntries : [],
+    speech: Array.isArray(item.speech)
+      ? item.speech
+      : Array.isArray(analysis?.speech)
+        ? analysis.speech
+        : [],
     timeline: Array.isArray(analysis?.timeline) ? analysis.timeline : null,
     scope: Array.isArray(analysis?.scope) ? analysis.scope : [],
   };
@@ -168,6 +177,9 @@ function clipCorpus(record: ClipAskRecord): CorpusRow[] {
 
   for (const entry of record.dictationEntries ?? []) {
     push(entry.atSeconds, entry.text || entry.note || entry.summary, 'beat');
+  }
+  for (const spoken of record.speech ?? []) {
+    push(spoken.atSeconds, spoken.text, 'speech');
   }
   for (const action of record.actions ?? []) {
     const verb = String(action.action || '').replace(/_/g, ' ').trim();
@@ -229,6 +241,33 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
   }
 
   const q = question.trim();
+  if (isSpeechQuestion(q)) {
+    const spoken = (record.speech ?? []).map((s) => String(s.text || '').trim()).filter(Boolean);
+    if (!spoken.length) return 'The microphone reading on file does not include that.';
+    const qTokens = tokens(q);
+    const spokenRows = rows.filter((row) => row.kind === 'speech');
+    if (qTokens.length) {
+      const need = Math.min(2, qTokens.length);
+      const scored = spokenRows
+        .map((row) => {
+          const hay = tokens(row.text);
+          const hits = qTokens.filter((token) => hay.some((h) => h.includes(token) || token.includes(h)));
+          return { row, score: hits.length };
+        })
+        .filter((entry) => entry.score >= Math.min(1, need))
+        .sort((a, b) => b.score - a.score || (a.row.at ?? 0) - (b.row.at ?? 0));
+      if (scored.length) {
+        const best = scored[0]!.row;
+        const when = formatClipTime(best.at);
+        return when
+          ? `On the mic at ${when}: ${best.text}`
+          : `On the mic: ${best.text}`;
+      }
+    }
+    const first = spokenRows[0];
+    const when = formatClipTime(first?.at);
+    return when ? `On the mic at ${when}: ${first!.text}` : `On the mic: ${spoken[0]}`;
+  }
   if (isWhatHappened(q)) {
     const changes = (record.changes ?? []).map((c) => c.trim()).filter(Boolean);
     const actions = (record.actions ?? [])
@@ -295,6 +334,11 @@ export function formatClipRecordForModel(record: ClipAskRecord): string {
     if (!text) continue;
     const when = formatClipTime(entry.atSeconds);
     lines.push(`Beat${when ? ` @ ${when}` : ''}: ${text}`);
+  }
+  for (const spoken of record.speech ?? []) {
+    if (!spoken.text) continue;
+    const when = formatClipTime(spoken.atSeconds);
+    lines.push(`Speech${when ? ` @ ${when}` : ''} (proposal only): ${spoken.text}`);
   }
   for (const action of record.actions ?? []) {
     const verb = String(action.action || '').replace(/_/g, ' ');

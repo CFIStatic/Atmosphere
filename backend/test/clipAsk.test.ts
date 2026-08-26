@@ -31,6 +31,10 @@ const cedarAfter: ClipAskRecord = {
     { atSeconds: 48, text: 'Underlayment rows visible mid-slope; debris staged below.' },
     { atSeconds: 110, text: 'Driveway bags and ladder; no close pass on the ridge.' },
   ],
+  speech: [
+    { atSeconds: 14, text: 'North slope is stripped. Tarp is gone.' },
+    { atSeconds: 50, text: 'We are rolling underlayment from the eave up.' },
+  ],
   scope: [
     { title: 'Remove temporary tarp', verdict: 'appears_complete' },
     { title: 'DO NOT touch the skylights', verdict: 'not_visible', because: 'Passed in four windows, worked in none.' },
@@ -81,6 +85,18 @@ test('a before clip without a reading points at the after', () => {
 test('a clip still being read says so instead of inventing work', () => {
   const answer = groundedAnswerFromClip('Did anything happen?', { analysisState: 'queued' });
   assert.match(answer, /still being read/);
+});
+
+test('what did they say answers from the microphone, not the vision dictation', () => {
+  const answer = groundedAnswerFromClip('What did they say about the tarp?', cedarAfter);
+  assert.match(answer, /On the mic/);
+  assert.match(answer, /Tarp is gone/);
+  assert.match(answer, /0:14/);
+});
+
+test('speech claiming work does not invent a visual answer when asked if they did it', () => {
+  const answer = groundedAnswerFromClip('Did they replace the water heater?', cedarAfter);
+  assert.equal(answer, 'The footage on file does not show that.');
 });
 
 test('clipRecordFromEvidenceItem copies the office reading, not the list chrome', () => {

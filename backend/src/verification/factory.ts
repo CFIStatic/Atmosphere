@@ -44,6 +44,7 @@ import {
   createEvaluateDatasetEligibilityHandler,
   createDatasetExamplesHandler,
 } from './dataset/handlers.js';
+import { createExtractAudioHandler, createTranscribeAudioHandler } from './audio/handlers.js';
 import { verificationConfig } from './config.js';
 import type { PipelineContext } from './pipeline/orchestrator.js';
 
@@ -104,6 +105,8 @@ export function createVerificationOrchestrator(opts?: {
         output: { skipped: true, reason: 'original_preserved_transcode_optional' },
         skip: true,
       }),
+      extract_audio: createExtractAudioHandler(),
+      transcribe_audio: createTranscribeAudioHandler(),
       extract_frames: createExtractFramesHandler(),
       score_frame_quality: createScoreFrameQualityHandler({ loadFrameBytes }),
       deduplicate_frames: createDeduplicateFramesHandler(),

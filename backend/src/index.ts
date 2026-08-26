@@ -9,6 +9,7 @@ import {
   stopCaptureAgent,
 } from './estimator/mitigation/capture/scheduler.js';
 import { startCyberScheduler, stopCyberScheduler } from './cyber/index.js';
+import { startTranscriptWorker, stopTranscriptWorker } from './audio/queue.js';
 import { agentHub } from './computer/agentHub.js';
 import { assertProductionReady } from './lib/productionGuards.js';
 import { logger } from './lib/logger.js';
@@ -54,6 +55,9 @@ const server = app.listen(config.port, host, () => {
   // Rotates honeypot credentials and re-audits hardening on a timer. Safe to
   // start without the service role — the agent keeps state in-process.
   startCyberScheduler();
+
+  // Re-kick day-film transcription that was queued when this process died.
+  startTranscriptWorker();
 });
 
 // Computer-use agents connect over WebSocket on the same port, so they inherit
@@ -72,6 +76,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     stopCaptureAgent();
     stopBackupScheduler();
     stopCyberScheduler();
+    stopTranscriptWorker();
     agentHub.close();
     void connections
       .closeAll()

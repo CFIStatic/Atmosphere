@@ -21,6 +21,7 @@ import {
 } from '../rules/engine.js';
 import { scoreConfidence } from '../confidence/score.js';
 import { createReviewTask } from '../review/queue.js';
+import { speechProposalsForVideo } from '../audio/handlers.js';
 import {
   DEFAULT_VERIFIER_SYSTEM,
   VERIFIER_PROMPT_KEY,
@@ -75,6 +76,8 @@ export interface WorkEventVerificationInput {
   duringFrameIds?: string[];
   afterFrameIds: string[];
   observations: string[];
+  /** Microphone text. Proposal only — never proof of completion. */
+  speechProposals?: string[];
   contradictoryObservations: string[];
   ruleChecklist: RulesResult | null;
   rule: VerificationRule | null;
@@ -121,6 +124,7 @@ function buildUserPayload(input: WorkEventVerificationInput): string {
       during_frame_ids: input.duringFrameIds ?? [],
       after_frame_ids: input.afterFrameIds,
       structured_observations: input.observations,
+      speech_proposals: input.speechProposals ?? [],
       contradictory_observations: input.contradictoryObservations,
       rule_checklist: input.ruleChecklist,
       rule: input.rule
@@ -477,6 +481,8 @@ export function createLlmVerifyEvidenceHandler(opts: {
       .filter(Boolean)
       .slice(0, 40);
 
+    const speechProposals = await speechProposalsForVideo(ctx).catch(() => [] as string[]);
+
     const { data: events, error } = await ctx.supabase
       .from('temporal_change_events')
       .select('*')
@@ -549,6 +555,7 @@ export function createLlmVerifyEvidenceHandler(opts: {
             duringFrameIds: event.during_frame_ids ?? [],
             afterFrameIds: event.after_frame_ids ?? [],
             observations: [...(event.evidence ?? [])],
+            speechProposals,
             contradictoryObservations: event.conflicting_evidence ?? [],
             ruleChecklist,
             rule,
@@ -627,6 +634,7 @@ export function createLlmVerifyEvidenceHandler(opts: {
           beforeFrameIds: event.before_frame_ids ?? [],
           afterFrameIds: event.after_frame_ids ?? [],
           observations: [...(event.evidence ?? [])],
+          speechProposals,
           contradictoryObservations: event.conflicting_evidence ?? [],
           ruleChecklist,
           rule,

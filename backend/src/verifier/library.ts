@@ -174,6 +174,8 @@ export function serializeEvidence(input: {
   /** Site address, so a search for the street finds the clip even when the job is named for a person. */
   address?: string | null;
   claimNumber?: string | null;
+  /** Microphone reading. Independent of vision dictation. */
+  speech?: Array<{ atSeconds: number; endSeconds?: number; text: string; confidence?: number | null }>;
 }) {
   const proof = input.proof;
   const checks: StoredCheck[] = Array.isArray(proof.checks) ? proof.checks : [];
@@ -237,6 +239,8 @@ export function serializeEvidence(input: {
     legalHold: Boolean(proof.legal_hold),
     retentionUntil: proof.retention_until ?? null,
     labels: Array.isArray(proof.labels) ? proof.labels : [],
+    speechStatus: proof.transcript_status ?? null,
+    speech: Array.isArray(input.speech) ? input.speech : [],
     analysis:
       analysis === 'done'
         ? {
@@ -245,6 +249,8 @@ export function serializeEvidence(input: {
             dictation: dictation ?? proof.ai_summary ?? findings.summary ?? null,
             dictationStatus: proof.narration_status ?? (dictation ? 'done' : null),
             dictationEntries: Array.isArray(proof.narration?.entries) ? proof.narration.entries : [],
+            speech: Array.isArray(input.speech) ? input.speech : [],
+            speechStatus: proof.transcript_status ?? null,
             actions,
             materialChange,
             materialBecause: findings.materialBecause ?? null,
