@@ -82,6 +82,18 @@ test('a room question does not match a different room that only shares the word 
   assert.equal(answer, 'No. The footage on file does not show that.');
 });
 
+test('a work question in a room that was only walked through answers no', () => {
+  const answer = groundedAnswerFromClip('Did they work in the kitchen?', {
+    analysisState: 'done',
+    dictationEntries: [
+      { atSeconds: 9000, text: 'Kitchen walked through; no work visible on the cabinets or floor.' },
+    ],
+  });
+  assert.match(answer, /^No\./);
+  assert.match(answer, /no work visible/i);
+  assert.match(answer, /2 hours and 30 minutes into the recording/);
+});
+
 test('a bathroom question answers yes with what was seen and when', () => {
   const workday: ClipAskRecord = {
     analysisState: 'done',

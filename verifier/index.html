@@ -4130,6 +4130,8 @@
       var hit = scored.filter(function (e) { return e.row.at != null; })[0] || scored[0];
       var spoken = hit.row.at != null ? durSpoken(hit.row.at) : '';
       var body = hit.row.text.replace(/\.$/, '');
+      var denies = /\b(no work|not visible|not worked|untouched|never |none of|did not|does not show)\b/i.test(body);
+      if (denies) return spoken ? 'No. ' + body + '. That was ' + spoken + '.' : 'No. ' + body + '.';
       return spoken ? 'Yes. ' + body + '. That happened at ' + spoken + '.' : 'Yes. ' + body + '.';
     }
     var best = scored[0];

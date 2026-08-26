@@ -263,9 +263,18 @@ function isYesNoQuestion(question: string): boolean {
   );
 }
 
+function rowDeniesWork(row: CorpusRow): boolean {
+  return /\b(no work|not visible|not worked|untouched|never |none of|did not|does not show)\b/i.test(
+    row.text,
+  );
+}
+
 function yesFromRow(row: CorpusRow): string {
   const text = row.text.replace(/\.$/, '');
   const spoken = formatClipTimeSpoken(row.at);
+  if (rowDeniesWork(row)) {
+    return spoken ? `No. ${text}. That was ${spoken}.` : `No. ${text}.`;
+  }
   if (spoken) return `Yes. ${text}. That happened at ${spoken}.`;
   return `Yes. ${text}.`;
 }
