@@ -7,6 +7,7 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { googleVisionApiKey } from '../../lib/visionProvider.js';
 import { getProvider, type ProviderId } from '../../ai/providers/index.js';
 import { verificationConfig } from '../config.js';
 import {
@@ -134,7 +135,7 @@ export class GeminiVisionAnalyzer implements VisionAnalyzer {
   ) {}
 
   private get apiKey(): string {
-    return this.opts?.apiKey || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || '';
+    return this.opts?.apiKey || googleVisionApiKey();
   }
 
   private get baseUrl(): string {

@@ -20,7 +20,7 @@ import { RetryQueue } from '../shared/retryQueue.js';
 import { attachProofToEpisode } from '../episodes/attach.js';
 import { ingestPhysicalWorkFromProof } from '../physicalWork/ingest.js';
 import { isModelProviderConfigured } from '../lib/anthropic.js';
-import { isVisionConfigured } from '../lib/visionProvider.js';
+import { formatVisionFailure, isVisionConfigured } from '../lib/visionProvider.js';
 import { config } from '../config.js';
 import { DailyBudget } from '../shared/liveBudget.js';
 import { labelsForProof } from '../verifier/library.js';
@@ -1171,7 +1171,7 @@ const narrationQueue = new RetryQueue<NarrationJob>({
       .from('job_proofs')
       .update({
         narration_status: 'failed',
-        narration_error: error instanceof Error ? error.message : 'Narration failed.',
+        narration_error: formatVisionFailure(error),
       })
       .eq('id', job.proofId);
   },
@@ -1249,7 +1249,7 @@ export async function ensureClipReading(
       .from('job_proofs')
       .update({
         narration_status: 'failed',
-        narration_error: error instanceof Error ? error.message : 'Analysis failed.',
+        narration_error: formatVisionFailure(error),
       })
       .eq('id', proofId);
     return 'failed';
