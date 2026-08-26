@@ -3965,6 +3965,13 @@
       }
       return html;
     }
+    var spoken = item.speech || a.speech || [];
+    if (spoken.length) {
+      html += '<p class="k" style="margin:0 0 6px">Heard on the mic</p><ul class="entries">' + spoken.map(function (s) {
+        var t = s.atSeconds != null ? dur(s.atSeconds) : '';
+        return '<li><span class="t">' + esc(String(t)) + '</span><span>' + esc(s.text || '') + '</span></li>';
+      }).join('') + '</ul>';
+    }
     html += '<p class="footnote alog-wait" id="alog-empty">Play the clip. Notes land here as the footage plays.</p>';
     html += '<ul class="alog" id="alog">' + rows.map(function (r) {
       return '<li data-at="' + r.at + '" class="soon">' +
