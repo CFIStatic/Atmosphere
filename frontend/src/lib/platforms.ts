@@ -25,7 +25,7 @@ export interface NavGroup {
 }
 
 /** One metric on a platform's home screen, resolved against loaded data. */
-export type MetricKey = 'openJobs' | 'crewOnJobs' | 'scheduledToday' | 'unscheduled';
+export type MetricKey = 'openJobs' | 'crewOnJobs' | 'workedToday';
 
 export interface Platform {
   id: PlatformId;
@@ -70,7 +70,7 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
     homeBlurb:
       'Every day of work filmed against the scope, checked at the door, read by the assistant, and held in a chain of custody — job files that create themselves from your CRM.',
     Icon: DecisionIcon,
-    metrics: ['openJobs', 'crewOnJobs', 'scheduledToday', 'unscheduled'],
+    metrics: ['openJobs', 'crewOnJobs', 'workedToday'],
     groups: [WORK, SYSTEM],
   },
 
@@ -82,7 +82,7 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
     homeBlurb:
       'Recording, a spoken assistant, and a camera that names what it sees — built for gloved hands and a phone in the rain.',
     Icon: MicIcon,
-    metrics: ['scheduledToday', 'crewOnJobs', 'openJobs', 'unscheduled'],
+    metrics: ['workedToday', 'crewOnJobs', 'openJobs'],
     groups: [WORK, SYSTEM],
   },
 };
@@ -121,6 +121,5 @@ export function platformOfPath(path: string): PlatformId | null {
 export const METRIC_LABELS: Record<MetricKey, { label: string; hint: string }> = {
   openJobs: { label: 'Active jobs', hint: 'Open across the organization' },
   crewOnJobs: { label: 'Crew assigned', hint: 'People on open jobs' },
-  scheduledToday: { label: 'Scheduled today', hint: 'Jobs with a start time today' },
-  unscheduled: { label: 'Unscheduled', hint: 'Open jobs with no start date' },
+  workedToday: { label: 'Worked today', hint: 'Jobs filmed or in progress today' },
 };

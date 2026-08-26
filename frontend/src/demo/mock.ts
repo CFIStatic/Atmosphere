@@ -1374,18 +1374,6 @@ function readinessFor(jobId: string) {
     strengths.push('Address placed, so on-site can be checked');
   }
 
-  if (!base.scheduledStart) {
-    gaps.push({
-      key: 'schedule',
-      what: 'Not scheduled',
-      costs: "The job will not appear in anyone's day, so a crew has to be told about it some other way.",
-      fix: 'Set a start date.',
-      severity: 'weakening',
-    });
-  } else {
-    strengths.push("Scheduled, so it shows up in the crew's day");
-  }
-
   const blocked = gaps.some((g) => g.severity === 'blocking');
   const placeKnown = base.hasAddress && base.hasCoordinates;
   const ceiling = blocked ? 'filed_only' : placeKnown ? 'full' : 'work_only';

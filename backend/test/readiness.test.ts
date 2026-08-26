@@ -79,7 +79,7 @@ describe('assessReadiness', () => {
     const r = assessReadiness(
       facts({ scopeLineCount: 0, hasAddress: false, hasCoordinates: false, scheduledStart: null }),
     );
-    assert.deepEqual(r.gaps.map((g) => g.key), ['scope', 'address', 'schedule']);
+    assert.deepEqual(r.gaps.map((g) => g.key), ['scope', 'address']);
   });
 
   it('keeps the ceiling at filed-only when scope is missing even if place and time are perfect', () => {
@@ -87,11 +87,11 @@ describe('assessReadiness', () => {
     assert.equal(r.ceiling, 'filed_only');
   });
 
-  it('treats a missing schedule as weakening, never as blocking', () => {
+  it('does not treat a missing start date as a gap', () => {
     const r = assessReadiness(facts({ scheduledStart: null }));
-    assert.equal(r.level, 'limited');
+    assert.equal(r.level, 'ready');
     assert.equal(r.ceiling, 'full', 'time on the clip comes from the capture, not the calendar');
-    assert.equal(r.gaps.find((g) => g.key === 'schedule')!.severity, 'weakening');
+    assert.equal(r.gaps.find((g) => g.key === 'schedule'), undefined);
   });
 
   it('lists what the job already has, so a mostly-fine job does not read as broken', () => {

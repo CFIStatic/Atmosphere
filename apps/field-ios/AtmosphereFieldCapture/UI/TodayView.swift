@@ -20,18 +20,18 @@ struct TodayView: View {
                         .foregroundStyle(FieldTheme.ink)
 
                     Text(
-                        "One button, once a day. Tap when you get to your first job and hold for 5 seconds when you are done. The film is video + audio — filed to \(auth.orgName ?? "your organization") so the office can open it in the evidence library."
+                        "One button. Tap when you get to a job and hold for 5 seconds when you are done. You can add more video any time. The film is video + audio — filed to \(auth.orgName ?? "your organization") so the office can open it in the evidence library."
                     )
                     .font(.system(size: 15))
                     .foregroundStyle(FieldTheme.muted)
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Today's jobs")
+                        Text("Jobs")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(FieldTheme.faint)
                             .textCase(.uppercase)
                         if session.loadingJobs {
-                            Text("Loading today's jobs from your account…")
+                            Text("Loading jobs from your account…")
                                 .font(.system(size: 13))
                                 .foregroundStyle(FieldTheme.muted)
                         } else if session.jobs.isEmpty {
