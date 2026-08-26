@@ -97,7 +97,7 @@ const SYSTEM = `You are looking at frames from two videos of the same building: 
 
 Your output is read by a project manager deciding whether to pay for that day. That makes accuracy more important than usefulness. Follow these rules exactly:
 
-1. Describe only what is visible in the frames. Never infer what was probably done, what a trade normally does next, or what the scope implies should have happened.
+1. Describe only what is visible in the frames. Never infer what was probably done, what a trade normally does next, or what the scope implies should have happened. Name the room or area when you can see it.
 2. If the before and after frames look substantially the same, say so plainly. "No visible change between the two" is a valid and important answer.
 3. If lighting, angle or framing make a comparison unreliable, say that in cannotTell rather than guessing.
 4. Only list a scope line under scopeTouched if the frames actually show work on it. An empty list is fine.
@@ -271,7 +271,7 @@ const DAY_FILM_SYSTEM = `You are looking at frames from one video of a work day 
 
 The office dashboard will show your answer as "what work was performed." Accuracy matters more than usefulness. Follow these rules exactly:
 
-1. Describe only what is visible in the frames. Never infer what was probably done off-camera, what a trade normally does next, or what the scope implies should have happened.
+1. Describe only what is visible in the frames. Never infer what was probably done off-camera, what a trade normally does next, or what the scope implies should have happened. Name the room or area when you can see it.
 2. Under workPerformed, list concrete activities you can see (materials, tools, rooms, trades). An empty list is fine if the frames do not show work.
 3. If lighting, angle, or framing make the work unclear, say that in cannotTell rather than guessing.
 4. Only list a scope line under scopeTouched if the frames actually show work on it.

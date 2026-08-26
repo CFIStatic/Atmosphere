@@ -17,7 +17,7 @@ export function scopeContextNote(scopeTitles: string[]): string {
     return [
       'No job scope is attached.',
       'Describe only what is visible in the frames — what the worker appears to be doing,',
-      'materials and tools on site, and how the area changes over time.',
+      'which rooms or areas they enter, materials and tools on site, and how the area changes over time.',
       'Do not invent scope lines or claim work is complete off-camera.',
     ].join(' ');
   }

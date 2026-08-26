@@ -4,6 +4,7 @@ import {
   answerFromClip,
   clipRecordFromEvidenceItem,
   formatClipTime,
+  formatClipTimeSpoken,
   groundedAnswerFromClip,
   type ClipAskRecord,
 } from '../src/shared/clipAsk.js';
@@ -45,6 +46,12 @@ test('formatClipTime: minutes for short clips, hours for a workday', () => {
   assert.equal(formatClipTime(null), null);
 });
 
+test('formatClipTimeSpoken says the clock the way a person would', () => {
+  assert.equal(formatClipTimeSpoken(12), '12 seconds into the recording');
+  assert.equal(formatClipTimeSpoken(6720), '1 hour and 52 minutes into the recording');
+  assert.equal(formatClipTimeSpoken(null), null);
+});
+
 test('did anything happen cites the changes on the clip, with the work date', () => {
   const answer = groundedAnswerFromClip('Did anything happen?', cedarAfter);
   assert.match(answer, /Yes/);
@@ -55,13 +62,49 @@ test('did anything happen cites the changes on the clip, with the work date', ()
 
 test('a specific question cites the timestamped beat it was drawn from', () => {
   const answer = groundedAnswerFromClip('Was the tarp removed?', cedarAfter);
+  assert.match(answer, /^Yes\./);
   assert.match(answer, /tarp/i);
-  assert.match(answer, /0:12/);
+  assert.match(answer, /12 seconds into the recording/);
 });
 
 test('something the camera never showed is refused rather than inferred', () => {
   const answer = groundedAnswerFromClip('Did they replace the water heater?', cedarAfter);
-  assert.equal(answer, 'The footage on file does not show that.');
+  assert.equal(answer, 'No. The footage on file does not show that.');
+});
+
+test('a room question does not match a different room that only shares the word room', () => {
+  const answer = groundedAnswerFromClip('At any point did the worker go in the bathroom?', {
+    analysisState: 'done',
+    dictationEntries: [
+      { atSeconds: 180, text: 'Living room extraction; air movers on the wet carpet.' },
+    ],
+  });
+  assert.equal(answer, 'No. The footage on file does not show that.');
+});
+
+test('a bathroom question answers yes with what was seen and when', () => {
+  const workday: ClipAskRecord = {
+    analysisState: 'done',
+    durationSeconds: 10800,
+    dictation: 'The crew works the living room all morning, then enters the bathroom to remount the mirror.',
+    actions: [
+      {
+        atSeconds: 6720,
+        action: 'position',
+        room: 'bathroom',
+        description: 'They went in the bathroom to remount the mirror.',
+        object: 'mirror',
+      },
+    ],
+    dictationEntries: [
+      { atSeconds: 6720, text: 'They went in the bathroom to remount the mirror.' },
+    ],
+  };
+  const answer = groundedAnswerFromClip('At any point did the worker go in the bathroom?', workday);
+  assert.match(answer, /^Yes\./);
+  assert.match(answer, /bathroom/i);
+  assert.match(answer, /mirror/i);
+  assert.match(answer, /1 hour and 52 minutes into the recording/);
 });
 
 test('a question about skylights cites the scope reading rather than inventing contact', () => {

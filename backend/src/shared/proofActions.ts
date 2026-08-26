@@ -20,6 +20,8 @@ export interface VisionAction {
   endSeconds?: number;
   action: WorkAction;
   description: string;
+  /** Room or area named in the frames, when the model could see it. */
+  room: string | null;
   objectLabel: string | null;
   toolLabel: string | null;
   materialLabel: string | null;
@@ -135,6 +137,7 @@ function asVisionAction(
       ? undefined
       : Math.max(atSeconds, nearestTimestamp(endRaw, opts.frames));
 
+  const room = cleanLabel(raw.room ?? raw.area ?? raw.location, 80);
   const objectLabel = cleanLabel(raw.objectLabel ?? raw.object ?? raw.object_label);
   const toolLabel = cleanLabel(raw.toolLabel ?? raw.tool ?? raw.tool_label);
   const materialLabel = cleanLabel(raw.materialLabel ?? raw.material ?? raw.material_label);
@@ -142,12 +145,17 @@ function asVisionAction(
   if (objectLabel && !objects.includes(objectLabel.toLowerCase())) {
     objects.unshift(objectLabel.toLowerCase());
   }
+  let note = description;
+  if (room && !note.toLowerCase().includes(room.toLowerCase())) {
+    note = `${room}: ${note}`;
+  }
 
   return {
     atSeconds,
     endSeconds,
     action,
-    description,
+    description: note,
+    room,
     objectLabel,
     toolLabel,
     materialLabel,

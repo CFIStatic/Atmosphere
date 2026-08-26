@@ -51,6 +51,22 @@ test('parseVisionActions keeps grounded rows and drops empties', () => {
   assert.equal(parsed[1]!.confidence, 1);
 });
 
+test('parseVisionActions keeps the room the model named', () => {
+  const parsed = parseVisionActions([
+    {
+      atSeconds: 6720,
+      action: 'position',
+      room: 'bathroom',
+      description: 'They went in the bathroom to remount the mirror.',
+      object: 'mirror',
+      confidence: 0.9,
+    },
+  ]);
+  assert.equal(parsed[0]!.room, 'bathroom');
+  assert.match(parsed[0]!.description, /bathroom/i);
+  assert.equal(parsed[0]!.objectLabel, 'mirror');
+});
+
 test('actionsFromNarrationEntries and long windows produce a chronological log', () => {
   const fromNotes = actionsFromNarrationEntries(
     [
@@ -90,6 +106,7 @@ test('storedProofActions stamps source and model', () => {
         atSeconds: 0,
         action: 'inspect',
         description: 'Walkthrough of the kitchen.',
+        room: 'kitchen',
         objectLabel: null,
         toolLabel: null,
         materialLabel: null,

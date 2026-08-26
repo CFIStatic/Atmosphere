@@ -26,6 +26,16 @@ export type ClipAskAnalysisState =
   | null
   | undefined;
 
+export type ClipAskAction = {
+  atSeconds?: number | null;
+  action?: string | null;
+  description?: string | null;
+  room?: string | null;
+  object?: string | null;
+  objectLabel?: string | null;
+  objects?: string[];
+};
+
 export type ClipAskRecord = {
   workDate?: string | null;
   phase?: string | null;
@@ -39,7 +49,7 @@ export type ClipAskRecord = {
   changes?: string[];
   concerns?: string[];
   couldNotTell?: string[];
-  actions?: Array<{ atSeconds?: number | null; action?: string | null; description?: string | null }>;
+  actions?: ClipAskAction[];
   dictationEntries?: Array<{ atSeconds?: number | null; text?: string | null; note?: string | null; summary?: string | null }>;
   timeline?: Array<{ startSeconds?: number | null; summary?: string | null }> | null;
   scope?: Array<{ title?: string | null; verdict?: string | null; because?: string | null }>;
@@ -94,6 +104,27 @@ const STOP = new Set([
   'shows',
   'seen',
   'visible',
+  'worker',
+  'workers',
+  'crew',
+  'person',
+  'people',
+  'someone',
+  'somebody',
+  'anyone',
+  'anybody',
+  'went',
+  'going',
+  'gone',
+  'enter',
+  'entered',
+  'entering',
+  'point',
+  'anytime',
+  'anypoint',
+  'ever',
+  'into',
+  'inside',
 ]);
 
 const CLIP_QA_SYSTEM = `You answer questions about one proof-of-work video, using only the reading of that clip.
@@ -101,9 +132,10 @@ const CLIP_QA_SYSTEM = `You answer questions about one proof-of-work video, usin
 Rules:
 1. Answer only from the reading given. It is a description of video frames somebody already looked at.
 2. If the reading does not contain the answer, say "The footage on file does not show that" and stop. Do not reason about what was probably true.
-3. Quote a timestamp when the reading has one, so the answer can be checked against the playhead.
-4. Two or three sentences. This is read next to the player.
-5. Never estimate cost, hours, or whether work was worth paying for.`;
+3. For yes/no questions, start with Yes or No. If yes, say what was visible and when, using a spoken timestamp such as "1 hour and 52 minutes into the recording" when the reading has one.
+4. Quote a timestamp when the reading has one, so the answer can be checked against the playhead.
+5. Two or three sentences. This is read next to the player.
+6. Never estimate cost, hours, or whether work was worth paying for.`;
 
 type CorpusRow = { at: number | null; text: string; kind: string };
 
@@ -146,12 +178,34 @@ export function formatClipTime(seconds: number | null | undefined): string | nul
   return `${m}:${String(r).padStart(2, '0')}`;
 }
 
+/** Spoken clock for Ask answers: "1 hour and 52 minutes into the recording". */
+export function formatClipTimeSpoken(seconds: number | null | undefined): string | null {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return null;
+  const s = Math.round(seconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const r = s % 60;
+  const parts: string[] = [];
+  if (h) parts.push(h === 1 ? '1 hour' : `${h} hours`);
+  if (m) parts.push(m === 1 ? '1 minute' : `${m} minutes`);
+  if (!h && !m) parts.push(r === 1 ? '1 second' : `${r} seconds`);
+  else if (!h && r) parts.push(r === 1 ? '1 second' : `${r} seconds`);
+  return `${parts.join(' and ')} into the recording`;
+}
+
 function tokens(value: string): string[] {
   return value
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .split(/\s+/)
     .filter((token) => token.length > 2 && !STOP.has(token));
+}
+
+function tokensOverlap(query: string, hay: string): boolean {
+  if (query === hay) return true;
+  // Short words like "room" must not match "bathroom".
+  if (query.length < 5 || hay.length < 5) return false;
+  return hay.includes(query) || query.includes(hay);
 }
 
 function clipCorpus(record: ClipAskRecord): CorpusRow[] {
@@ -171,7 +225,10 @@ function clipCorpus(record: ClipAskRecord): CorpusRow[] {
   }
   for (const action of record.actions ?? []) {
     const verb = String(action.action || '').replace(/_/g, ' ').trim();
-    const body = [verb, action.description].filter(Boolean).join(' — ');
+    const room = String(action.room || '').trim();
+    const object = String(action.objectLabel || action.object || '').trim();
+    const extras = (action.objects ?? []).filter(Boolean).join(' ');
+    const body = [room, verb, action.description, object, extras].filter(Boolean).join(' — ');
     push(action.atSeconds, body, 'action');
   }
   for (const window of record.timeline ?? []) {
@@ -196,6 +253,21 @@ function isWhatHappened(question: string): boolean {
   return /what (happened|did|work)|did anything|anything happen|what('s| is) (visible|going on)|any work/.test(
     question.toLowerCase(),
   );
+}
+
+function isYesNoQuestion(question: string): boolean {
+  const q = question.toLowerCase().trim();
+  return (
+    /^(did|does|do|was|were|is|are|has|have|had|at any|anytime)\b/.test(q) ||
+    /\b(go in|went in|go into|went into|enter|entered|ever go|at any point)\b/.test(q)
+  );
+}
+
+function yesFromRow(row: CorpusRow): string {
+  const text = row.text.replace(/\.$/, '');
+  const spoken = formatClipTimeSpoken(row.at);
+  if (spoken) return `Yes. ${text}. That happened at ${spoken}.`;
+  return `Yes. ${text}.`;
 }
 
 function unreadAnswer(state: ClipAskAnalysisState): string | null {
@@ -251,17 +323,27 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
     return (record.dictation || record.summary || 'The footage on file does not show that.').trim();
   }
 
-  const need = Math.min(2, qTokens.length);
+  const yesNo = isYesNoQuestion(q);
+  const need = Math.min(qTokens.length >= 2 ? 2 : 1, qTokens.length);
   const scored = rows
     .map((row) => {
       const hay = tokens(row.text);
-      const hits = qTokens.filter((token) => hay.some((h) => h.includes(token) || token.includes(h)));
+      const hits = qTokens.filter((token) => hay.some((h) => tokensOverlap(token, h)));
       return { row, score: hits.length };
     })
     .filter((entry) => entry.score >= need)
     .sort((a, b) => b.score - a.score || (a.row.at ?? 0) - (b.row.at ?? 0));
 
-  if (!scored.length) return 'The footage on file does not show that.';
+  if (!scored.length) {
+    return yesNo
+      ? 'No. The footage on file does not show that.'
+      : 'The footage on file does not show that.';
+  }
+
+  if (yesNo) {
+    const timed = scored.find((entry) => entry.row.at != null) ?? scored[0];
+    return yesFromRow(timed.row);
+  }
 
   const best = scored[0];
   const timed = scored.find((entry) => entry.row.at != null);
@@ -269,9 +351,11 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
   return (
     top
       .map(({ row }) => {
-        const when = formatClipTime(row.at);
+        const spoken = formatClipTimeSpoken(row.at);
+        const clock = formatClipTime(row.at);
         const text = row.text.replace(/\.$/, '');
-        return when ? `At ${when}, ${text[0].toLowerCase()}${text.slice(1)}` : text;
+        if (spoken) return `At ${clock}, ${text[0].toLowerCase()}${text.slice(1)}. That was ${spoken}`;
+        return text;
       })
       .join('. ') + '.'
   );
@@ -298,7 +382,8 @@ export function formatClipRecordForModel(record: ClipAskRecord): string {
   }
   for (const action of record.actions ?? []) {
     const verb = String(action.action || '').replace(/_/g, ' ');
-    const body = [verb, action.description].filter(Boolean).join(' — ');
+    const room = String(action.room || '').trim();
+    const body = [room, verb, action.description].filter(Boolean).join(' — ');
     if (!body) continue;
     const when = formatClipTime(action.atSeconds);
     lines.push(`Action${when ? ` @ ${when}` : ''}: ${body}`);
