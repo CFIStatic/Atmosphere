@@ -40,30 +40,40 @@ function run(bin: string, args: string[]): Promise<{ code: number; stderr: strin
   });
 }
 
-export async function extractWavFromVideo(video: Buffer, maxSeconds = MAX_SECONDS): Promise<Buffer> {
+export function wavExtractArgs(input: string, output: string, maxSeconds = MAX_SECONDS): string[] {
+  return ['-y', '-hide_banner', '-loglevel', 'error', '-i', input, '-vn', '-ac', '1', '-ar', '16000', '-t', String(maxSeconds), output];
+}
+
+/** ffmpeg reads a signed URL or local path. Node never holds the day film. */
+export async function extractWavFromInput(input: string, maxSeconds = MAX_SECONDS): Promise<Buffer> {
   const dir = await mkdtemp(join(tmpdir(), 'proof-audio-'));
-  const input = join(dir, 'clip.bin');
   const output = join(dir, 'speech.wav');
   try {
-    await writeFile(input, video);
-    const { code, stderr } = await run(FFMPEG, [
-      '-y',
-      '-i',
-      input,
-      '-vn',
-      '-ac',
-      '1',
-      '-ar',
-      '16000',
-      '-t',
-      String(maxSeconds),
-      output,
-    ]);
+    const { code, stderr } = await run(FFMPEG, wavExtractArgs(input, output, maxSeconds));
     if (code !== 0) throw new Error(stderr.slice(0, 400) || 'ffmpeg could not pull audio.');
     return await readFile(output);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+export async function extractWavFromVideo(video: Buffer, maxSeconds = MAX_SECONDS): Promise<Buffer> {
+  const dir = await mkdtemp(join(tmpdir(), 'proof-audio-'));
+  const input = join(dir, 'clip.bin');
+  try {
+    await writeFile(input, video);
+    return await extractWavFromInput(input, maxSeconds);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+export async function signedProofVideoUrl(admin: any, storagePath: string): Promise<string> {
+  const { data: signed, error } = await admin.storage.from(PROOF_BUCKET).createSignedUrl(storagePath, 60 * 60);
+  if (error || !signed?.signedUrl) {
+    throw new Error(error?.message ?? 'Could not mint a signed URL for the filed video.');
+  }
+  return signed.signedUrl as string;
 }
 
 export async function transcribeProofVideo(admin: any, proofId: string): Promise<void> {
@@ -87,11 +97,8 @@ export async function transcribeProofVideo(admin: any, proofId: string): Promise
     .maybeSingle();
   if (error || !proof?.storage_path) throw new Error('The video file is not on record.');
 
-  const { data: blob, error: downloadError } = await admin.storage.from(PROOF_BUCKET).download(proof.storage_path);
-  if (downloadError || !blob) throw new Error('Could not open the filed video.');
-
-  const bytes = Buffer.from(await blob.arrayBuffer());
-  const wav = await extractWavFromVideo(bytes);
+  const url = await signedProofVideoUrl(admin, proof.storage_path);
+  const wav = await extractWavFromInput(url);
   if (wav.length < 1000) {
     await admin
       .from('job_proofs')
