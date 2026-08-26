@@ -1900,6 +1900,61 @@
       ],
       before: { wet: 0.05, cut: 0.7, gear: 0, seconds: 39 },
       after: { wet: 0.05, cut: 0.55, gear: 0, seconds: 39 }
+    }),
+    ev({
+      // Talk, not tear-out. The contractor is walking the house with the
+      // homeowner. The valuable record is what was said, not a flood cut.
+      id: 'EV-1041-0804-T', job: 'meridian', company: 'Coastal Drying LLC', person: 'Andre Boone',
+      phase: 'walkthrough', workDate: '2026-08-04', capturedAt: '2026-08-04T10:18:00', uploadedAt: '2026-08-04T10:26:00',
+      duration: 412, bytes: 84_200_000, device: 'iPhone 14 · Atmosphere 2.4',
+      gps: { lat: 30.2984, lon: -97.7431, accuracy: 6, distanceFt: 21 },
+      hash: HASHES[10], tier: 1, integrity: 'pass',
+      checks: [
+        { verdict: 'pass', what: 'Filmed on site', detail: '21 ft from the recorded property centre.' },
+        { verdict: 'pass', what: 'Filmed on the day claimed', detail: 'Device clock 10:18, received 10:26.' },
+        { verdict: 'pass', what: 'Not filed before', detail: 'This file has not appeared on any other day or job.' },
+        { verdict: 'pass', what: 'Long enough to show the work', detail: '6 min 52 s of walkthrough and talk.' }
+      ],
+      analysis: {
+        state: 'done',
+        materialChange: null,
+        summary: 'Walkthrough with the homeowner. No demolition in frame. The conversation covers the bathroom leak, the vanity mirror, and what insurance will and will not pay.',
+        dictation: 'The contractor walks the hallway with the homeowner. They stop in the bathroom doorway. No tools come out. The talk is the record: the leak, the mirror, and the claim.',
+        dictationEntries: [
+          { atSeconds: 18, text: 'Hallway: contractor and homeowner standing at the bathroom door.' },
+          { atSeconds: 96, text: 'Bathroom in frame; they are talking, not working.' }
+        ],
+        transcript:
+          '[0:18] Homeowner: The leak started behind the vanity. I do not want you to replace the cabinets unless insurance approves it.\n' +
+          '[1:36] Contractor: Understood. We will remount the mirror today and leave the cabinets until the adjuster says go ahead.\n' +
+          '[4:10] Homeowner: Please do not cut the hallway any higher than two feet. That was the agreement.',
+        conversationDetails: [
+          'Homeowner: The leak started behind the vanity. I do not want you to replace the cabinets unless insurance approves it.',
+          'Contractor: Understood. We will remount the mirror today and leave the cabinets until the adjuster says go ahead.',
+          'Homeowner: Please do not cut the hallway any higher than two feet. That was the agreement.'
+        ],
+        conversationAgreements: [
+          'We will remount the mirror today and leave the cabinets until the adjuster says go ahead.',
+          'Please do not cut the hallway any higher than two feet. That was the agreement.'
+        ],
+        conversationConcerns: [
+          'I do not want you to replace the cabinets unless insurance approves it.'
+        ],
+        conversationRooms: ['bathroom', 'hallway'],
+        actions: [],
+        changes: [],
+        scope: [
+          { title: 'Remount vanity mirror, bathroom', verdict: 'in_progress', because: 'Agreed on the mic; not performed in this clip.' },
+          { title: 'Reset kitchen cabinets', verdict: 'not_visible', because: 'Homeowner asked to wait on insurance approval.' }
+        ],
+        couldNotTell: ['Whether the leak is still active — the camera stays on the people, not the vanity back.']
+      },
+      custody: [
+        { action: 'uploaded', by: 'Andre Boone, Coastal Drying LLC', role: 'subcontractor', at: '2026-08-04T10:26', detail: 'walkthrough · 2026-08-04' },
+        { action: 'analysed', by: 'Atmosphere', role: 'ai', at: '2026-08-04T10:31', detail: 'Frames + mic · homeowner conversation extracted' }
+      ],
+      before: { wet: 0.2, cut: 0.15, gear: 1, seconds: 412 },
+      after: { wet: 0.2, cut: 0.15, gear: 1, seconds: 412 }
     })
   ];
 
@@ -3878,6 +3933,13 @@
     (a.timeline || []).forEach(function (t) {
       add(t.startSeconds, t.summary, 'window');
     });
+    String(a.transcript || '').split(/\n+/).forEach(function (line) {
+      var m = String(line || '').trim().match(/^\[((?:\d+:)+\d+)\]\s*(.+)$/);
+      if (!m) return;
+      var parts = m[1].split(':').map(Number);
+      var at = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
+      add(at, m[2], 'heard');
+    });
     if (rows.length < 6 && a.changes && a.changes.length) {
       var d = item.duration || 120;
       a.changes.forEach(function (c, i) {
@@ -3991,12 +4053,13 @@
     var a = item.analysis || {};
     var rows = analysisLog(item);
     var saw = String(a.dictation || a.summary || '').trim();
+    var heard = String(a.transcript || '').trim();
     var pill = a.state === 'failed' ? 'Failed'
-      : (a.state === 'queued' || a.state === 'none' || !a.state) && !rows.length && !saw ? 'Writing…'
+      : (a.state === 'queued' || a.state === 'none' || !a.state) && !rows.length && !saw && !heard ? 'Writing…'
       : a.state === 'paired' || a.state === 'skipped' ? 'Not yet'
       : 'Ready';
     var html = '<div class="alog-head"><h4>AI analysis</h4><span class="livepill" id="alog-pill">' + pill + '</span></div>';
-    if (!rows.length && !saw) {
+    if (!rows.length && !saw && !heard) {
       html += '<p class="footnote alog-wait">' +
         esc(a.reason || (a.state === 'paired'
           ? 'This is the before half of a day. Open the after clip for the dictation of what changed.'
@@ -4030,13 +4093,22 @@
           '<span class="t">' + dur(r.at) + '</span><span data-full="' + esc(r.text) + '">' + esc(r.text) + '</span></li>';
       }).join('') + '</ul>';
     }
+    if (heard || (a.conversationDetails && a.conversationDetails.length)) {
+      html += '<p class="saw-k">Heard on the mic</p>';
+      if (a.conversationDetails && a.conversationDetails.length) {
+        html += '<ul style="margin:0 0 10px;padding-left:17px;font-size:13px;color:var(--ink-2);line-height:1.55">' +
+          a.conversationDetails.slice(0, 8).map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>';
+      } else {
+        html += '<div class="saw-block" style="background:var(--line-soft)"><p>' + esc(heard.slice(0, 1200)) + '</p></div>';
+      }
+    }
     if (a.couldNotTell && a.couldNotTell.length) {
       html += '<p class="saw-k">What it could not tell</p>';
       html += '<ul style="margin:0;padding-left:17px;font-size:12.5px;color:var(--muted);line-height:1.6">' +
         a.couldNotTell.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>';
     }
     html += '<p class="footnote" style="margin-top:14px;padding-top:11px;border-top:1px solid var(--line-soft)">' +
-      'This is what the model could see in the frames — rooms entered, work in view, times on the recording. ' +
+      'This is what the model could see in the frames and, when the mic was on, what was said — rooms, agreements, concerns. ' +
       'It does not infer off-camera work, and it is never an acceptance.</p>';
     return html;
   }
@@ -4086,6 +4158,20 @@
       push(null, [s.title, s.verdict, s.because].filter(Boolean).join(' — '));
     });
     (a.couldNotTell || []).forEach(function (c) { push(null, c); });
+    String(a.transcript || '').split(/\n+/).forEach(function (line) {
+      var m = String(line || '').trim().match(/^\[((?:\d+:)+\d+)\]\s*(.+)$/);
+      if (m) {
+        var parts = m[1].split(':').map(Number);
+        var at = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
+        push(at, m[2]);
+        return;
+      }
+      if (line.trim()) push(null, line.trim());
+    });
+    (a.conversationDetails || []).forEach(function (c) { push(null, c); });
+    (a.conversationAgreements || []).forEach(function (c) { push(null, c); });
+    (a.conversationConcerns || []).forEach(function (c) { push(null, c); });
+    (a.conversationRooms || []).forEach(function (c) { push(null, 'Talked about the ' + c); });
     return rows;
   }
 
@@ -4100,6 +4186,16 @@
     if (a.state === 'skipped') return 'There is no after video on file for this day, so there is nothing to compare against.';
     var rows = clipAskCorpus(item);
     if (!rows.length) return 'This clip has not been read yet, so there is nothing to answer from.';
+    if (/what (did|was) (the )?(homeowner|owner|contractor|they|he|she|worker).*(say|ask|tell|agree|mention)|did (the )?(homeowner|owner|contractor|they).*(say|mention|agree)|what was said|anything said|heard on the mic|conversation|what did they agree/i.test(q)) {
+      var spoken = (a.conversationDetails || []).concat(a.conversationAgreements || []).concat(a.conversationConcerns || []).filter(Boolean);
+      if (spoken.length) return 'Yes — this is what was said on the recording: ' + spoken.slice(0, 3).join(' ');
+      var heardLines = String(a.transcript || '').split(/\n+/).map(function (line) {
+        var m = line.trim().match(/^\[(?:\d+:)+\d+\]\s*(.+)$/);
+        return (m ? m[1] : line).trim();
+      }).filter(Boolean);
+      if (heardLines.length) return 'Yes — this is what was said on the recording: ' + heardLines.slice(0, 2).join(' ');
+      return 'The footage on file does not include usable speech.';
+    }
     if (/what (happened|did|work)|did anything|anything happen|what('s| is) (visible|going on)|any work/i.test(q)) {
       var changes = (a.changes || []).filter(Boolean);
       var actions = (a.actions || []).map(function (act) { return act.description; }).filter(Boolean);
@@ -4174,11 +4270,12 @@
       '<div class="alog-head"><h4>Ask this clip</h4></div>' +
       '<div class="ask-thread" id="ask-thread">';
     if (!thread.length) {
-      html += '<p class="ask-empty">This clip has already been read. Ask what happened — you do not have to watch it. Answers come only from what the AI could see in the frames.</p>' +
+      html += '<p class="ask-empty">This clip has already been read. Ask what happened or what was said — you do not have to watch it. Answers come from the frames and, when the mic was on, the conversation.</p>' +
         '<div class="ask-suggest">' +
         '<button type="button" data-ask="Did anything happen in this clip?">Did anything happen?</button>' +
         '<button type="button" data-ask="What work is visible?">What work is visible?</button>' +
         '<button type="button" data-ask="At any point did the worker go in the bathroom?">Did they go in the bathroom?</button>' +
+        '<button type="button" data-ask="What did the homeowner say?">What did the homeowner say?</button>' +
         '<button type="button" data-ask="Is anything in this footage unfinished?">Anything unfinished?</button>' +
         '</div>';
     } else {
@@ -4870,7 +4967,12 @@
             longForm: Boolean(raw.analysis && raw.analysis.longForm),
             timeline: (raw.analysis && raw.analysis.timeline) || null,
             windowsTotal: raw.analysis ? raw.analysis.windowsTotal : null,
-            windowsRead: raw.analysis ? raw.analysis.windowsRead : null
+            windowsRead: raw.analysis ? raw.analysis.windowsRead : null,
+            transcript: (raw.analysis && raw.analysis.transcript) || '',
+            conversationDetails: (raw.analysis && raw.analysis.conversationDetails) || [],
+            conversationAgreements: (raw.analysis && raw.analysis.conversationAgreements) || [],
+            conversationConcerns: (raw.analysis && raw.analysis.conversationConcerns) || [],
+            conversationRooms: (raw.analysis && raw.analysis.conversationRooms) || []
           }
         : raw.analysisState === 'paired'
           ? { state: 'paired' }

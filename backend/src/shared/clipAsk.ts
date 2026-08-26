@@ -53,6 +53,12 @@ export type ClipAskRecord = {
   dictationEntries?: Array<{ atSeconds?: number | null; text?: string | null; note?: string | null; summary?: string | null }>;
   timeline?: Array<{ startSeconds?: number | null; summary?: string | null }> | null;
   scope?: Array<{ title?: string | null; verdict?: string | null; because?: string | null }>;
+  /** What was heard on the mic — contractor / homeowner talk included. */
+  transcript?: string | null;
+  conversationDetails?: string[];
+  conversationAgreements?: string[];
+  conversationConcerns?: string[];
+  conversationRooms?: string[];
 };
 
 export type ClipAskTurn = { role: 'user' | 'assistant'; text: string };
@@ -130,12 +136,13 @@ const STOP = new Set([
 const CLIP_QA_SYSTEM = `You answer questions about one proof-of-work video, using only the reading of that clip.
 
 Rules:
-1. Answer only from the reading given. It is a description of video frames somebody already looked at.
+1. Answer only from the reading given. It is a description of video frames somebody already looked at, and when present, what was heard on the mic.
 2. If the reading does not contain the answer, say "The footage on file does not show that" and stop. Do not reason about what was probably true.
-3. For yes/no questions, start with Yes or No. If yes, say what was visible and when, using a spoken timestamp such as "1 hour and 52 minutes into the recording" when the reading has one.
+3. For yes/no questions, start with Yes or No. If yes, say what was visible or said and when, using a spoken timestamp such as "1 hour and 52 minutes into the recording" when the reading has one.
 4. Quote a timestamp when the reading has one, so the answer can be checked against the playhead.
-5. Two or three sentences. This is read next to the player.
-6. Never estimate cost, hours, or whether work was worth paying for.`;
+5. Speech on the recording is evidence. Quote what the contractor or homeowner said when that is what was asked — agreements, concerns, rooms, insurance, instructions.
+6. Two or three sentences. This is read next to the player.
+7. Never estimate cost, hours, or whether work was worth paying for.`;
 
 type CorpusRow = { at: number | null; text: string; kind: string };
 
@@ -165,6 +172,13 @@ export function clipRecordFromEvidenceItem(item: {
     dictationEntries: Array.isArray(analysis?.dictationEntries) ? analysis.dictationEntries : [],
     timeline: Array.isArray(analysis?.timeline) ? analysis.timeline : null,
     scope: Array.isArray(analysis?.scope) ? analysis.scope : [],
+    transcript: analysis?.transcript ?? null,
+    conversationDetails: Array.isArray(analysis?.conversationDetails) ? analysis.conversationDetails : [],
+    conversationAgreements: Array.isArray(analysis?.conversationAgreements)
+      ? analysis.conversationAgreements
+      : [],
+    conversationConcerns: Array.isArray(analysis?.conversationConcerns) ? analysis.conversationConcerns : [],
+    conversationRooms: Array.isArray(analysis?.conversationRooms) ? analysis.conversationRooms : [],
   };
 }
 
@@ -201,6 +215,31 @@ function tokens(value: string): string[] {
     .filter((token) => token.length > 2 && !STOP.has(token));
 }
 
+function parseClock(stamp: string): number | null {
+  const parts = stamp.split(':').map((p) => Number(p));
+  if (parts.some((n) => !Number.isFinite(n))) return null;
+  if (parts.length === 3) return parts[0]! * 3600 + parts[1]! * 60 + parts[2]!;
+  if (parts.length === 2) return parts[0]! * 60 + parts[1]!;
+  return null;
+}
+
+function splitTranscript(transcript: string | null | undefined): Array<{ at: number | null; text: string }> {
+  const raw = String(transcript || '').trim();
+  if (!raw) return [];
+  const rows: Array<{ at: number | null; text: string }> = [];
+  for (const chunk of raw.split(/\n+/)) {
+    const match = chunk.match(/^\[((?:\d+:)+\d+)\]\s*(.+)$/);
+    if (match) {
+      const text = match[2]!.trim();
+      if (text) rows.push({ at: parseClock(match[1]!), text });
+      continue;
+    }
+    const text = chunk.trim();
+    if (text) rows.push({ at: null, text });
+  }
+  return rows;
+}
+
 function tokensOverlap(query: string, hay: string): boolean {
   if (query === hay) return true;
   // Short words like "room" must not match "bathroom".
@@ -219,6 +258,13 @@ function clipCorpus(record: ClipAskRecord): CorpusRow[] {
   push(null, record.dictation, 'dictation');
   if (record.summary && record.summary !== record.dictation) push(null, record.summary, 'summary');
   if (record.materialBecause) push(null, record.materialBecause, 'material');
+  for (const line of splitTranscript(record.transcript)) {
+    push(line.at, line.text, 'heard');
+  }
+  for (const detail of record.conversationDetails ?? []) push(null, detail, 'heard');
+  for (const line of record.conversationAgreements ?? []) push(null, line, 'heard');
+  for (const line of record.conversationConcerns ?? []) push(null, line, 'heard');
+  for (const room of record.conversationRooms ?? []) push(null, `Talked about the ${room}`, 'heard');
 
   for (const entry of record.dictationEntries ?? []) {
     push(entry.atSeconds, entry.text || entry.note || entry.summary, 'beat');
@@ -251,6 +297,12 @@ function hasReading(record: ClipAskRecord): boolean {
 
 function isWhatHappened(question: string): boolean {
   return /what (happened|did|work)|did anything|anything happen|what('s| is) (visible|going on)|any work/.test(
+    question.toLowerCase(),
+  );
+}
+
+function isWhatWasSaid(question: string): boolean {
+  return /what (did|was) (the )?(homeowner|owner|contractor|they|he|she|worker).*(say|ask|tell|agree|mention)|did (the )?(homeowner|owner|contractor|they).*(say|mention|agree)|what was said|anything said|heard on the mic|conversation|what did they agree/.test(
     question.toLowerCase(),
   );
 }
@@ -310,6 +362,26 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
   }
 
   const q = question.trim();
+  if (isWhatWasSaid(q)) {
+    const spoken = [
+      ...(record.conversationDetails ?? []),
+      ...(record.conversationAgreements ?? []),
+      ...(record.conversationConcerns ?? []),
+    ]
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (spoken.length) {
+      return `Yes — this is what was said on the recording: ${spoken.slice(0, 3).join(' ')}`;
+    }
+    const heard = splitTranscript(record.transcript)
+      .map((row) => row.text)
+      .filter(Boolean);
+    if (heard.length) {
+      return `Yes — this is what was said on the recording: ${heard.slice(0, 2).join(' ')}`;
+    }
+    return 'The footage on file does not include usable speech.';
+  }
+
   if (isWhatHappened(q)) {
     const changes = (record.changes ?? []).map((c) => c.trim()).filter(Boolean);
     const actions = (record.actions ?? [])
@@ -411,6 +483,13 @@ export function formatClipRecordForModel(record: ClipAskRecord): string {
   }
   if ((record.couldNotTell ?? []).length) lines.push(`Could not tell: ${record.couldNotTell!.join('; ')}`);
   if ((record.concerns ?? []).length) lines.push(`Concerns: ${record.concerns!.join('; ')}`);
+  if (record.transcript) lines.push(`Heard on the mic:\n${record.transcript.slice(0, 6000)}`);
+  for (const line of record.conversationDetails ?? []) lines.push(`Said: ${line}`);
+  for (const line of record.conversationAgreements ?? []) lines.push(`Agreement: ${line}`);
+  for (const line of record.conversationConcerns ?? []) lines.push(`Spoken concern: ${line}`);
+  if ((record.conversationRooms ?? []).length) {
+    lines.push(`Rooms mentioned on the mic: ${record.conversationRooms!.join(', ')}`);
+  }
   return lines.join('\n');
 }
 

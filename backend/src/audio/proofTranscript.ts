@@ -20,8 +20,13 @@ const PROOF_BUCKET = 'job-proofs';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const MAX_SECONDS = 600;
+/** One Whisper-sized slice. 10 min of 16 kHz mono WAV stays under typical 25 MB caps. */
+export const TRANSCRIPT_CHUNK_SECONDS = 600;
+/** Same ceiling as proof uploads — a workday, not a first-ten-minutes sample. */
+export const MAX_TRANSCRIPT_SECONDS = 24 * 60 * 60;
+const MAX_TRANSCRIPT_CHARS = 100_000;
 const FFMPEG = process.env.FFMPEG_PATH ?? 'ffmpeg';
+const FFPROBE = process.env.FFPROBE_PATH ?? 'ffprobe';
 
 export interface TranscriptJob {
   key: string;
@@ -40,16 +45,86 @@ function run(bin: string, args: string[]): Promise<{ code: number; stderr: strin
   });
 }
 
-export function wavExtractArgs(input: string, output: string, maxSeconds = MAX_SECONDS): string[] {
-  return ['-y', '-hide_banner', '-loglevel', 'error', '-i', input, '-vn', '-ac', '1', '-ar', '16000', '-t', String(maxSeconds), output];
+function runCapture(bin: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => {
+      stdout += String(chunk);
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on('error', reject);
+    child.on('close', (code) => resolve({ code: code ?? 1, stdout, stderr }));
+  });
+}
+
+/** How long the filed film is, when the row was uploaded without a clock. */
+export async function probeDurationSeconds(input: string): Promise<number | null> {
+  try {
+    const { code, stdout } = await runCapture(FFPROBE, [
+      '-v',
+      'error',
+      '-show_entries',
+      'format=duration',
+      '-of',
+      'default=noprint_wrappers=1:nokey=1',
+      input,
+    ]);
+    if (code !== 0) return null;
+    const n = Number(String(stdout).trim());
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+export function wavExtractArgs(
+  input: string,
+  output: string,
+  maxSeconds = TRANSCRIPT_CHUNK_SECONDS,
+  startSeconds = 0,
+): string[] {
+  const args = ['-y', '-hide_banner', '-loglevel', 'error'];
+  if (startSeconds > 0) args.push('-ss', String(Math.floor(startSeconds)));
+  args.push('-i', input, '-vn', '-ac', '1', '-ar', '16000', '-t', String(maxSeconds), output);
+  return args;
+}
+
+/** Starts of 10-minute slices covering the whole recording, however long it is. */
+export function planAudioChunks(
+  durationSeconds: number | null | undefined,
+  chunkSeconds = TRANSCRIPT_CHUNK_SECONDS,
+): number[] {
+  const duration = Number(durationSeconds);
+  if (!Number.isFinite(duration) || duration <= 0) return [];
+  const capped = Math.min(duration, MAX_TRANSCRIPT_SECONDS);
+  const starts: number[] = [];
+  for (let at = 0; at < capped; at += chunkSeconds) starts.push(at);
+  return starts;
+}
+
+function stampChunk(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const r = s % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+  return `${m}:${String(r).padStart(2, '0')}`;
 }
 
 /** ffmpeg reads a signed URL or local path. Node never holds the day film. */
-export async function extractWavFromInput(input: string, maxSeconds = MAX_SECONDS): Promise<Buffer> {
+export async function extractWavFromInput(
+  input: string,
+  maxSeconds = TRANSCRIPT_CHUNK_SECONDS,
+  startSeconds = 0,
+): Promise<Buffer> {
   const dir = await mkdtemp(join(tmpdir(), 'proof-audio-'));
   const output = join(dir, 'speech.wav');
   try {
-    const { code, stderr } = await run(FFMPEG, wavExtractArgs(input, output, maxSeconds));
+    const { code, stderr } = await run(FFMPEG, wavExtractArgs(input, output, maxSeconds, startSeconds));
     if (code !== 0) throw new Error(stderr.slice(0, 400) || 'ffmpeg could not pull audio.');
     return await readFile(output);
   } finally {
@@ -57,7 +132,10 @@ export async function extractWavFromInput(input: string, maxSeconds = MAX_SECOND
   }
 }
 
-export async function extractWavFromVideo(video: Buffer, maxSeconds = MAX_SECONDS): Promise<Buffer> {
+export async function extractWavFromVideo(
+  video: Buffer,
+  maxSeconds = TRANSCRIPT_CHUNK_SECONDS,
+): Promise<Buffer> {
   const dir = await mkdtemp(join(tmpdir(), 'proof-audio-'));
   const input = join(dir, 'clip.bin');
   try {
@@ -92,14 +170,52 @@ export async function transcribeProofVideo(admin: any, proofId: string): Promise
 
   const { data: proof, error } = await admin
     .from('job_proofs')
-    .select('id, storage_path')
+    .select('id, storage_path, duration_seconds')
     .eq('id', proofId)
     .maybeSingle();
   if (error || !proof?.storage_path) throw new Error('The video file is not on record.');
 
   const url = await signedProofVideoUrl(admin, proof.storage_path);
-  const wav = await extractWavFromInput(url);
-  if (wav.length < 1000) {
+  let duration = Number(proof.duration_seconds);
+  if (!Number.isFinite(duration) || duration <= 0) {
+    const probed = await probeDurationSeconds(url);
+    if (probed) {
+      duration = probed;
+      await admin
+        .from('job_proofs')
+        .update({ duration_seconds: Math.round(probed * 100) / 100 })
+        .eq('id', proofId);
+    }
+  }
+
+  const knownStarts = planAudioChunks(duration);
+  const parts: string[] = [];
+  const stamp = (start: number, many: boolean, body: string) =>
+    many ? `[${stampChunk(start)}] ${body}` : body;
+
+  if (knownStarts.length) {
+    for (const start of knownStarts) {
+      const wav = await extractWavFromInput(url, TRANSCRIPT_CHUNK_SECONDS, start);
+      if (wav.length < 1000) continue;
+      const slice = await transcribeAudio(wav, 'audio/wav');
+      const body = slice.trim();
+      if (!body) continue;
+      parts.push(stamp(start, knownStarts.length > 1, body));
+    }
+  } else {
+    // No clock on the row and ffprobe could not read one. Walk 10-minute
+    // slices until the extract is empty so a long silent-header film is
+    // still heard in full, not sampled at the opening.
+    for (let start = 0; start < MAX_TRANSCRIPT_SECONDS; start += TRANSCRIPT_CHUNK_SECONDS) {
+      const wav = await extractWavFromInput(url, TRANSCRIPT_CHUNK_SECONDS, start);
+      if (wav.length < 1000) break;
+      const slice = await transcribeAudio(wav, 'audio/wav');
+      const body = slice.trim();
+      if (body) parts.push(`[${stampChunk(start)}] ${body}`);
+    }
+  }
+
+  if (!parts.length) {
     await admin
       .from('job_proofs')
       .update({
@@ -111,12 +227,11 @@ export async function transcribeProofVideo(admin: any, proofId: string): Promise
     return;
   }
 
-  const text = await transcribeAudio(wav, 'audio/wav');
   await admin
     .from('job_proofs')
     .update({
       transcript_status: 'done',
-      transcript_text: text.slice(0, 20_000),
+      transcript_text: parts.join('\n').slice(0, MAX_TRANSCRIPT_CHARS),
       transcript_error: null,
       transcribed_at: new Date().toISOString(),
     })

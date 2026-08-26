@@ -25,6 +25,14 @@ Proof narration / day analysis / long-form reading follow one rule:
 
 The deep `/api/verification` frame + LLM stages load the same scope lines into vision/verify prompts when present.
 
+### Every filed video is read, however long it is
+
+New uploads already enqueue vision (dictation / long-form windows) and speech (Whisper-compatible STT in 10-minute slices). A workday is not sampled at the first ten minutes — `planAudioChunks` covers the whole clock, up to 24 hours. When the upload arrives without a duration, FFprobe measures it before the mic pass; if that also fails, the transcriber walks 10-minute slices until the extract is empty.
+
+Older rows that sat at `idle` (filed before those queues existed, or lost on a restart) are picked up by `proofAnalysisSweep` on boot and every five minutes. Ask is then the same mini-chat as a new clip: grounded in the existing reading and transcript, not a second watch.
+
+Some day films are the contractor talking to the homeowner. `extractConversationDetails` pulls agreements, concerns, rooms, insurance, and "please don't" from the mic so those facts are Askable even when no demolition is in frame.
+
 ## What this adds
 
 A durable, multi-stage **work verification** pipeline under `backend/src/verification/`:

@@ -3,6 +3,7 @@ import { listenHost } from './bootFlags.js';
 import { config } from './config.js';
 import { connections } from './estimator/mitigation/xactimate/index.js';
 import { startScheduler, stopScheduler } from './pm/scheduler.js';
+import { startProofAnalysisSweep, stopProofAnalysisSweep } from './shared/proofAnalysisSweep.js';
 import { startBackupScheduler, stopBackupScheduler } from './lib/backup/scheduler.js';
 import {
   startCaptureAgent,
@@ -44,6 +45,10 @@ const server = app.listen(config.port, host, () => {
   // it takes two decisions rather than one.
   startScheduler();
 
+  // Filed videos that never got a reading — including clips uploaded before
+  // the analysis queues existed — get vision + speech so Ask has a record.
+  startProofAnalysisSweep();
+
   // Mitigation capture agent — on by default. Pulls MICA Dash / Outlook and
   // rewrites open estimates without a human sync click.
   startCaptureAgent();
@@ -69,6 +74,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     logger.info('shutdown', { signal });
     // Subsystems that hold resources the process should not simply drop.
     stopScheduler();
+    stopProofAnalysisSweep();
     stopCaptureAgent();
     stopBackupScheduler();
     stopCyberScheduler();

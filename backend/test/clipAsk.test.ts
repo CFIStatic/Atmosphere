@@ -157,6 +157,34 @@ test('clipRecordFromEvidenceItem copies the office reading, not the list chrome'
   assert.equal(record.dictationEntries?.[0]?.text, 'Tarp gone.');
 });
 
+test('a homeowner conversation is answered from the mic, not the frames', () => {
+  const talk = {
+    analysisState: 'done' as const,
+    transcript:
+      '[0:18] Homeowner: The leak started behind the vanity. I do not want you to replace the cabinets unless insurance approves it.\n' +
+      '[1:36] Contractor: We will remount the mirror today and leave the cabinets until the adjuster says go ahead.',
+    conversationDetails: [
+      'Homeowner: The leak started behind the vanity. I do not want you to replace the cabinets unless insurance approves it.',
+      'Contractor: We will remount the mirror today and leave the cabinets until the adjuster says go ahead.',
+    ],
+    conversationAgreements: [
+      'We will remount the mirror today and leave the cabinets until the adjuster says go ahead.',
+    ],
+    conversationRooms: ['bathroom'],
+  };
+  const answer = groundedAnswerFromClip('What did the homeowner say?', talk);
+  assert.match(answer, /^Yes/);
+  assert.match(answer, /vanity/i);
+  assert.match(answer, /insurance/i);
+
+  const insurance = groundedAnswerFromClip('Did the homeowner mention insurance?', talk);
+  assert.match(insurance, /^Yes/);
+  assert.match(insurance, /insurance/i);
+
+  const agreed = groundedAnswerFromClip('What did they agree to?', talk);
+  assert.match(agreed, /mirror|cabinets|adjuster/i);
+});
+
 test('answerFromClip falls back to the grounded reading when no model is configured', async () => {
   const result = await answerFromClip({ question: 'Did anything happen?', record: cedarAfter });
   assert.equal(result.model, null);

@@ -1162,7 +1162,7 @@ const narrationQueue = new RetryQueue<NarrationJob>({
   },
 });
 
-async function queueNarration(admin: any, party: any, proofId: string, phase: string, workDate: string) {
+export async function queueNarration(admin: any, party: any, proofId: string, phase: string, workDate: string) {
   await admin.from('job_proofs').update({ narration_status: 'queued' }).eq('id', proofId);
   narrationQueue.enqueue({
     key: `narr:${proofId}`,

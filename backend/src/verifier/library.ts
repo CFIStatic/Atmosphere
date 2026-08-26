@@ -13,6 +13,8 @@
  * unverified, not clean, and nothing in this file is allowed to blur that.
  */
 
+import { extractConversationDetails } from '../audio/conversationDetails.js';
+
 export type CheckVerdict = 'pass' | 'fail' | 'unknown';
 
 export interface StoredCheck {
@@ -77,6 +79,8 @@ export function analysisStateOf(input: {
   dayHasAfter: boolean;
   /** Per-clip AI dictation status — office reads this next to the video. */
   narrationStatus?: string | null;
+  /** Speech on the mic is enough for Ask even when frames were silent. */
+  hasTranscript?: boolean;
 }): AnalysisState {
   if (input.phase === 'before') {
     // The before's own row never carries the reading. Where the day stands is
@@ -96,7 +100,7 @@ export function analysisStateOf(input: {
     default:
       // A finished dictation is enough for the office view even when the
       // day-comparison pipeline has not written analysis_status yet.
-      if (input.narrationStatus === 'done' || input.hasAiSummary) return 'done';
+      if (input.narrationStatus === 'done' || input.hasAiSummary || input.hasTranscript) return 'done';
       if (input.narrationStatus === 'queued' || input.narrationStatus === 'running') {
         return 'queued';
       }
@@ -184,6 +188,7 @@ export function serializeEvidence(input: {
     hasAiSummary: Boolean(proof.ai_summary),
     dayHasAfter: input.dayHasAfter,
     narrationStatus: proof.narration_status ?? null,
+    hasTranscript: Boolean(typeof proof.transcript_text === 'string' && proof.transcript_text.trim()),
   });
   const integrity = integrityOf(checks);
   const materialChange = proof.ai_material_change ?? findings.materialChange ?? null;
@@ -268,8 +273,31 @@ export function serializeEvidence(input: {
             windowsTotal: findings.windowsTotal ?? null,
             windowsRead: findings.windowsRead ?? null,
             model: proof.ai_model ?? proof.narration?.model ?? null,
+            transcript: typeof proof.transcript_text === 'string' ? proof.transcript_text : null,
+            ...conversationFields(proof.transcript_text, findings.conversation),
           }
         : null,
+  };
+}
+
+function conversationFields(
+  transcript: unknown,
+  stored:
+    | { details?: unknown; agreements?: unknown; concerns?: unknown; rooms?: unknown }
+    | null
+    | undefined,
+) {
+  const text = typeof transcript === 'string' ? transcript : '';
+  const derived = extractConversationDetails(text);
+  const asList = (value: unknown, fallback: string[]) =>
+    Array.isArray(value) && value.length
+      ? value.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+      : fallback;
+  return {
+    conversationDetails: asList(stored?.details, derived.details),
+    conversationAgreements: asList(stored?.agreements, derived.agreements),
+    conversationConcerns: asList(stored?.concerns, derived.concerns),
+    conversationRooms: asList(stored?.rooms, derived.roomsMentioned),
   };
 }
 

@@ -126,4 +126,35 @@ describe('verifier clip Ask tab and live analysis', () => {
     expect(reply).toMatch(/1 hour and 52 minutes into the recording/);
     dom.window.close();
   });
+
+  it('extracts homeowner talk from a walkthrough and answers from the mic', async () => {
+    const dom = bootVerifier();
+
+    await new Promise((resolveWait) => setTimeout(resolveWait, 80));
+    const { document } = dom.window;
+    const row = document.querySelector('tr[data-id="EV-1041-0804-T"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    row!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    expect(document.body.textContent).toMatch(/Heard on the mic/);
+    expect(document.body.textContent).toMatch(/insurance/i);
+    expect(document.body.textContent).toMatch(/vanity/i);
+
+    const askTab = document.querySelector('[data-tab="ask"]') as HTMLElement | null;
+    askTab!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    const suggest = document.querySelector(
+      '[data-ask="What did the homeowner say?"]',
+    ) as HTMLElement | null;
+    expect(suggest).not.toBeNull();
+    suggest!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    await new Promise((resolveWait) => setTimeout(resolveWait, 40));
+    const reply = Array.from(document.querySelectorAll('.ask-bubble.assistant'))
+      .map((el) => el.textContent || '')
+      .join('\n');
+    expect(reply).toMatch(/^Yes/);
+    expect(reply).toMatch(/vanity|insurance|cabinets/i);
+    dom.window.close();
+  });
 });

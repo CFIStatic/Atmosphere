@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  planAudioChunks,
   queueProofTranscript,
   signedProofVideoUrl,
   wavExtractArgs,
@@ -55,4 +56,18 @@ test('wavExtractArgs points ffmpeg at the signed URL, not a local dump', () => {
   assert.equal(args[args.indexOf('-i') + 1], 'https://storage.example/day-film.mp4');
   assert.ok(args.includes('-t'));
   assert.ok(!args.some((arg) => arg.includes('clip.bin')));
+});
+
+test('wavExtractArgs seeks into a long film before opening the input', () => {
+  const args = wavExtractArgs('https://storage.example/day-film.mp4', '/tmp/speech.wav', 600, 3600);
+  assert.ok(args.indexOf('-ss') < args.indexOf('-i'));
+  assert.equal(args[args.indexOf('-ss') + 1], '3600');
+});
+
+test('planAudioChunks covers a workday in 10-minute slices', () => {
+  assert.deepEqual(planAudioChunks(null), []);
+  assert.deepEqual(planAudioChunks(500), [0]);
+  assert.deepEqual(planAudioChunks(1800), [0, 600, 1200]);
+  assert.equal(planAudioChunks(24 * 60 * 60).length, 144);
+  assert.equal(planAudioChunks(24 * 60 * 60 + 1).length, 144, 'a film longer than a day still stops at 24h');
 });

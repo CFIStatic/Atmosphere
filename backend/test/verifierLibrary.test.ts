@@ -70,6 +70,17 @@ test('an after follows the pipeline status, with the summary as the legacy fallb
   assert.equal(after('skipped'), 'skipped');
   assert.equal(after(null, true), 'done');
   assert.equal(after(null, false), 'none');
+  assert.equal(
+    analysisStateOf({
+      phase: 'walkthrough',
+      analysisStatus: null,
+      hasAiSummary: false,
+      dayHasAfter: false,
+      hasTranscript: true,
+    }),
+    'done',
+    'speech alone is enough for Ask on a talk clip',
+  );
 });
 
 test('flagging: anything short of a clean pass needs a person', () => {
@@ -268,6 +279,52 @@ test('serialization: office dictation prefers narration_text over the day summar
   );
   assert.equal(item.analysis?.dictationStatus, 'done');
   assert.equal(item.analysis?.summary, 'Short headline.');
+});
+
+test('serialization: a talk clip with only a transcript is Askable', () => {
+  const item = serializeEvidence({
+    proof: {
+      id: 'p-talk',
+      job_id: 'j1',
+      party_id: 'pt1',
+      phase: 'walkthrough',
+      work_date: '2026-08-04',
+      captured_at: '2026-08-04T10:18:00Z',
+      received_at: '2026-08-04T10:26:00Z',
+      duration_seconds: '412',
+      byte_size: '84200000',
+      lat: null,
+      lon: null,
+      accuracy_m: null,
+      content_hash: 'talk',
+      state: 'checked',
+      checks: [{ key: 'on_site', verdict: 'pass', detail: 'on site' }],
+      ai_summary: null,
+      ai_findings: {},
+      ai_material_change: null,
+      ai_model: null,
+      analysis_status: null,
+      narration_status: 'idle',
+      narration_text: null,
+      transcript_text:
+        'Homeowner: The leak started behind the vanity in the bathroom. I do not want you to replace the cabinets unless insurance approves it. Please do not cut the hallway any higher than two feet.',
+      legal_hold: false,
+      retention_until: null,
+    },
+    jobName: 'Meridian Ave',
+    jobNumber: 1041,
+    company: 'Coastal Drying LLC',
+    contactName: 'Andre Boone',
+    tier: 1,
+    dayHasAfter: false,
+  });
+
+  assert.equal(item.analysisState, 'done');
+  assert.match(String(item.analysis?.transcript), /vanity/);
+  assert.ok((item.analysis as { conversationDetails?: string[] } | null)?.conversationDetails?.some((line) => /insurance/i.test(line)));
+  const rooms = (item.analysis as { conversationRooms?: string[] } | null)?.conversationRooms ?? [];
+  assert.ok(rooms.includes('bathroom'));
+  assert.ok(rooms.includes('hallway'));
 });
 
 test('serialization: structured actions from the vision log ride with dictation', () => {

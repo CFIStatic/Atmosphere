@@ -53,7 +53,8 @@ const PORTAL_PROOF_SELECT =
   'id, org_id, job_id, party_id, work_date, phase, storage_path, byte_size, duration_seconds, ' +
   'content_hash, captured_at, received_at, lat, lon, accuracy_m, state, checks, ai_summary, ' +
   'ai_findings, ai_model, ai_material_change, analysis_status, legal_hold, retention_until, labels, ' +
-  'narration, narration_text, narration_status, narration_error, actions';
+  'narration, narration_text, narration_status, narration_error, actions, ' +
+  'transcript_status, transcript_text';
 
 export const evidencePortalRouter = Router();
 
