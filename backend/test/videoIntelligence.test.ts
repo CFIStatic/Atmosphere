@@ -174,15 +174,10 @@ test('dictatePreparedFrames times out a hung Gemini call', async () => {
   delete process.env.ANTHROPIC_API_KEY;
   assert.equal(geminiDictationTimeoutMs(), 40);
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
-    new Promise((_, reject) => {
-      const signal = init?.signal;
-      if (signal) {
-        const fail = () => reject(Object.assign(new Error('The operation was aborted'), { name: 'TimeoutError' }));
-        if (signal.aborted) fail();
-        else signal.addEventListener('abort', fail, { once: true });
-      }
-    })) as typeof fetch;
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    assert.ok(init?.signal, 'Gemini fetch must carry an abort signal');
+    throw Object.assign(new Error('The operation was aborted'), { name: 'TimeoutError' });
+  }) as typeof fetch;
   try {
     await assert.rejects(
       () =>
