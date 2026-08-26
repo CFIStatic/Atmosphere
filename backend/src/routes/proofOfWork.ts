@@ -43,6 +43,7 @@ import {
   type VisionAction,
 } from '../shared/proofActions.js';
 import { applyOpenHoldToProof, markSourceDeleted, recordUserAction, vaultFromProof } from '../legal/index.js';
+import { queueTranscript } from '../audio/queue.js';
 
 /**
  * Proof of work: the endpoints.
@@ -67,6 +68,7 @@ const PROOF_SELECT =
   'captured_at, received_at, lat, lon, accuracy_m, state, checks, ai_summary, ai_findings, ' +
   'ai_model, ai_material_change, analysis_status, analysis_error, analysed_at, ' +
   'narration, narration_text, narration_status, narration_error, actions, ' +
+  'transcript_status, transcript_error, transcript_model, transcribed_at, ' +
   'decided_at, decided_note, created_at';
 
 /** The row shape the verifier wants. */
@@ -281,6 +283,13 @@ export async function recordProof(party: any, admin: any, body: unknown) {
   // storage with FFmpeg before reading.
   await queueNarration(admin, party, (proof as any).id, input.phase, input.workDate);
   const analysis = await queueDayAnalysis(admin, party, input.workDate);
+  void queueTranscript(admin, {
+    proofId: (proof as any).id,
+    orgId: party.org_id,
+    jobId: party.job_id,
+  }).catch((err) => {
+    console.warn('[transcript.queue]', err instanceof Error ? err.message : err);
+  });
 
   // The clip's own length and stills, settled off the critical path. Neither
   // needs a model, and a crew standing in a doorway must not wait on FFmpeg

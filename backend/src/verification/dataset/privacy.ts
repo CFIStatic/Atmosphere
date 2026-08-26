@@ -42,7 +42,15 @@ export function createPrivacyScanHandler(): (
       .select('id, frame_id, visible_text, parsed')
       .eq('video_id', ctx.videoId);
 
+    const { data: speechRows } = await ctx.supabase
+      .from('audio_transcript_segments')
+      .select('text')
+      .eq('video_id', ctx.videoId);
+
     const texts: string[] = [];
+    for (const spoken of speechRows ?? []) {
+      if (typeof spoken.text === 'string') texts.push(spoken.text);
+    }
     for (const obs of observations ?? []) {
       if (Array.isArray(obs.visible_text)) texts.push(...obs.visible_text);
       if (obs.parsed?.visible_text) texts.push(...(obs.parsed.visible_text as string[]));

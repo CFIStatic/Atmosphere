@@ -22,6 +22,8 @@ export const PROCESSING_STAGES = [
   'validate_video',
   'extract_metadata',
   'transcode_video',
+  'extract_audio',
+  'transcribe_audio',
   'extract_frames',
   'score_frame_quality',
   'deduplicate_frames',

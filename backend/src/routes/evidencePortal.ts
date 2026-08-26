@@ -19,6 +19,7 @@ import {
   shareState,
 } from '../verifier/library.js';
 import { displayJobFileName } from '../shared/jobFileCopy.js';
+import { loadTranscriptSegments, rowsToSpeech } from '../audio/persist.js';
 import { shareEmail } from '../verifier/shareEmail.js';
 import { progressShareEmail } from '../verifier/progressShareEmail.js';
 import { buildMailSender } from '../campaigns/mail/index.js';
@@ -53,7 +54,8 @@ const PORTAL_PROOF_SELECT =
   'id, org_id, job_id, party_id, work_date, phase, storage_path, byte_size, duration_seconds, ' +
   'content_hash, captured_at, received_at, lat, lon, accuracy_m, state, checks, ai_summary, ' +
   'ai_findings, ai_model, ai_material_change, analysis_status, legal_hold, retention_until, labels, ' +
-  'narration, narration_text, narration_status, narration_error, actions';
+  'narration, narration_text, narration_status, narration_error, actions, ' +
+  'transcript_status, transcript_error, transcript_model, transcribed_at';
 
 export const evidencePortalRouter = Router();
 
@@ -111,7 +113,7 @@ async function assembleLibrary(client: any, orgId: string, proofs: any[]) {
   const jobIds = [...new Set(proofs.map((p) => p.job_id))];
   const partyIds = [...new Set(proofs.map((p) => p.party_id).filter(Boolean))];
 
-  const [jobs, parties, episodes, posters] = await Promise.all([
+  const [jobs, parties, episodes, posters, transcriptRows] = await Promise.all([
     jobIds.length
       ? client
           .from('crm_jobs')
@@ -129,6 +131,7 @@ async function assembleLibrary(client: any, orgId: string, proofs: any[]) {
           .in('job_id', jobIds)
       : Promise.resolve({ data: [] }),
     posterUrls(proofs),
+    loadTranscriptSegments(client, { proofIds: proofs.map((p) => p.id) }).catch(() => []),
   ]);
 
   const jobById = new Map<string, any>((jobs.data ?? []).map((j: any) => [j.id, j]));
@@ -145,6 +148,13 @@ async function assembleLibrary(client: any, orgId: string, proofs: any[]) {
       .filter((p) => p.phase === 'after')
       .map((p) => `${p.job_id}|${p.party_id}|${p.work_date}`),
   );
+  const speechByProof = new Map<string, ReturnType<typeof rowsToSpeech>>();
+  for (const row of transcriptRows) {
+    if (!row.proof_id) continue;
+    const list = speechByProof.get(row.proof_id) ?? [];
+    list.push(...rowsToSpeech([row]));
+    speechByProof.set(row.proof_id, list);
+  }
 
   return proofs.map((proof) => {
     const job = jobById.get(proof.job_id);
@@ -162,6 +172,7 @@ async function assembleLibrary(client: any, orgId: string, proofs: any[]) {
       posterUrl: posters.get(proof.id) ?? null,
       address,
       claimNumber: job?.claim_number ?? null,
+      speech: speechByProof.get(proof.id) ?? [],
     });
   });
 }
@@ -370,7 +381,10 @@ async function settleClipQuestion(opts: {
   actorLabel: string;
   actorRole: string;
 }): Promise<{ answer: string; model: string | null }> {
-  const record = clipRecordFromEvidenceItem(opts.item);
+  const record = clipRecordFromEvidenceItem({
+    ...opts.item,
+    speech: opts.item.speech ?? opts.item.analysis?.speech,
+  });
   const result = await answerFromClip({
     question: opts.question,
     record,

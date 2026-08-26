@@ -1538,8 +1538,18 @@
           { title: 'Replace damaged decking', verdict: 'not_visible' },
           { title: 'DO NOT touch the skylights', verdict: 'not_visible' }
         ],
-        couldNotTell: ['Whether any decking was replaced — no close footage of the sheathing.', 'Ridge and valley detail; the clip does not go above the mid-slope.']
+        couldNotTell: ['Whether any decking was replaced — no close footage of the sheathing.', 'Ridge and valley detail; the clip does not go above the mid-slope.'],
+        speech: [
+          { atSeconds: 14, endSeconds: 22, text: 'North slope is stripped. Tarp is gone.' },
+          { atSeconds: 50, endSeconds: 58, text: 'We are rolling underlayment from the eave up.' }
+        ],
+        speechStatus: 'done'
       },
+      speech: [
+        { atSeconds: 14, endSeconds: 22, text: 'North slope is stripped. Tarp is gone.' },
+        { atSeconds: 50, endSeconds: 58, text: 'We are rolling underlayment from the eave up.' }
+      ],
+      speechStatus: 'done',
       custody: [
         { action: 'uploaded', by: 'Hector Delgado, Delgado Roofing', role: 'subcontractor', at: '2026-08-05T20:51', detail: 'after · 2026-08-05' },
         { action: 'analysed', by: 'Atmosphere', role: 'ai', at: '2026-08-05T20:55', detail: 'Frames read against 5 scope lines' },
@@ -3715,7 +3725,14 @@
             : ['unknown', 'Could not compare the two clips'];
     }
 
+    var spoken = item.speech || a.speech || [];
     var html = '<div class="verdictline ' + vl[0] + '">' + esc(vl[1]) + '</div>';
+    if (spoken.length) {
+      html += '<p class="k" style="margin:14px 0 6px">Heard on the mic</p><ul class="entries">' + spoken.map(function (s) {
+        var t = s.atSeconds != null ? dur(s.atSeconds) : '';
+        return '<li><span class="t">' + esc(String(t)) + '</span><span>' + esc(s.text || '') + '</span></li>';
+      }).join('') + '</ul>';
+    }
     if (a.materialBecause) {
       html += '<p style="font-size:12.5px;color:var(--muted)"><strong style="color:var(--ink-2)">Why:</strong> ' +
         esc(a.materialBecause) + '</p>';
@@ -3777,6 +3794,10 @@
     }
     (a.dictationEntries || []).forEach(function (e) {
       add(e.atSeconds, e.text || e.note || e.summary, 'read');
+    });
+    var spoken = item.speech || a.speech || [];
+    spoken.forEach(function (s) {
+      add(s.atSeconds, 'On the mic: ' + (s.text || ''), 'speech');
     });
     (a.actions || []).forEach(function (act) {
       var verb = String(act.action || '').replace(/_/g, ' ');
@@ -3976,6 +3997,7 @@
     push(null, a.dictation);
     if (a.summary && a.summary !== a.dictation) push(null, a.summary);
     (a.dictationEntries || []).forEach(function (e) { push(e.atSeconds, e.text || e.note || e.summary); });
+    (item.speech || a.speech || []).forEach(function (s) { push(s.atSeconds, s.text); });
     (a.actions || []).forEach(function (act) {
       var verb = String(act.action || '').replace(/_/g, ' ');
       push(act.atSeconds, (verb ? verb + ' — ' : '') + (act.description || ''));
@@ -3994,6 +4016,22 @@
     var q = String(question || '').trim();
     if (a.state === 'paired' || a.state === 'waiting_on_after') {
       return 'This is the before half of the day. Open the after clip — that is where the reading of what changed lives.';
+    }
+    if (/what did (they|he|she|the crew|anyone) say|said about|on the mic|hear|heard|speech|transcript/i.test(q)) {
+      var heard = (item.speech || a.speech || []).filter(function (s) { return s && s.text; });
+      if (!heard.length) return 'The microphone reading on file does not include that.';
+      var qTok = askTokens(q);
+      var best = heard[0];
+      var bestScore = 0;
+      heard.forEach(function (s) {
+        var hay = askTokens(s.text);
+        var hits = qTok.filter(function (t) {
+          return hay.some(function (h) { return h.indexOf(t) !== -1 || t.indexOf(h) !== -1; });
+        });
+        if (hits.length > bestScore) { bestScore = hits.length; best = s; }
+      });
+      var when = best.atSeconds != null ? dur(best.atSeconds) : '';
+      return when ? ('On the mic at ' + when + ': ' + best.text) : ('On the mic: ' + best.text);
     }
     if (a.state === 'queued') return 'This clip is still being read. Ask again once the dictation lands.';
     if (a.state === 'failed') return 'The reading of this clip failed. The footage itself is unaffected.';
@@ -4727,6 +4765,8 @@
       tier: raw.tier || 1,
       hold: raw.legalHold ? { on: true, reason: 'This clip is under legal hold. Retention cannot delete it while the hold stands.', by: '', at: '' } : null,
       checks: raw.checks || [],
+      speech: raw.speech || (raw.analysis && raw.analysis.speech) || [],
+      speechStatus: raw.speechStatus || (raw.analysis && raw.analysis.speechStatus) || null,
       analysis: raw.analysisState === 'done'
         ? {
             state: 'done',
@@ -4735,6 +4775,8 @@
             summary: (raw.analysis && raw.analysis.summary) || '',
             dictation: (raw.analysis && (raw.analysis.dictation || raw.analysis.summary)) || '',
             dictationEntries: (raw.analysis && raw.analysis.dictationEntries) || [],
+            speech: (raw.speech && raw.speech.length ? raw.speech : (raw.analysis && raw.analysis.speech)) || [],
+            speechStatus: raw.speechStatus || (raw.analysis && raw.analysis.speechStatus) || null,
             actions: (raw.analysis && raw.analysis.actions) || [],
             changes: (raw.analysis && raw.analysis.changes) || [],
             scope: (raw.analysis && raw.analysis.scope) || [],
@@ -4783,6 +4825,8 @@
           item.analysis = mapped.analysis;
           item.checks = mapped.checks;
           item.hold = mapped.hold;
+          item.speech = mapped.speech;
+          item.speechStatus = mapped.speechStatus;
         }
         item.custody = (payload.custody || []).map(function (c) {
           return {

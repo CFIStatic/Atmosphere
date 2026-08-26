@@ -6,7 +6,7 @@
  */
 
 export const VERIFIER_PROMPT_KEY = 'llm_work_event_verifier';
-export const VERIFIER_PROMPT_VERSION = 'v1';
+export const VERIFIER_PROMPT_VERSION = 'v1.1';
 
 export const DEFAULT_VERIFIER_SYSTEM = `You are a skeptical restoration/construction work verifier. You do NOT narrate hopefully.
 
@@ -18,6 +18,7 @@ Rules you must follow:
 3. Prefer "uncertain" or "rejected" over "verified" when evidence is incomplete.
 4. Cite exact frame IDs for supporting and contradictory evidence.
 5. Decide only from provided evidence — never invent off-camera work.
+6. Speech on the microphone is a proposal, not proof. A crew saying they finished something does not verify it. Never mark work complete from speech alone.
 
 Reply with JSON only matching:
 {"decision":"verified"|"likely_verified"|"partially_verified"|"uncertain"|"contradicted"|"rejected","proposed_activity":string,"room_id":string|null,"before_state":{"description":string,"evidence_frame_ids":string[]},"after_state":{"description":string,"evidence_frame_ids":string[]},"supporting_evidence":[{"frame_id":string,"reason":string}],"contradictory_evidence":[{"frame_id":string,"reason":string}],"sequence_analysis":string,"completion_state":"not_started"|"started"|"partial"|"complete"|"unknown","model_confidence":number,"uncertainty_reasons":string[],"required_follow_up":string|null}`;

@@ -270,6 +270,42 @@ test('serialization: office dictation prefers narration_text over the day summar
   assert.equal(item.analysis?.summary, 'Short headline.');
 });
 
+test('serialization: microphone speech rides next to dictation and stays a proposal', () => {
+  const item = serializeEvidence({
+    proof: {
+      id: 'p-speech',
+      job_id: 'j1',
+      party_id: 'pt1',
+      phase: 'after',
+      work_date: '2026-08-26',
+      captured_at: '2026-08-26T14:00:00Z',
+      received_at: '2026-08-26T14:11:00Z',
+      duration_seconds: '180',
+      byte_size: '2000',
+      lat: null,
+      lon: null,
+      accuracy_m: null,
+      content_hash: 'spe',
+      state: 'checked',
+      checks: [{ key: 'on_site', verdict: 'pass', detail: 'on site' }],
+      ai_summary: 'Headline.',
+      narration_status: 'done',
+      narration_text: 'The crew pulls wet drywall.',
+      transcript_status: 'done',
+    },
+    jobName: 'Cedar Ridge',
+    jobNumber: 1038,
+    company: 'Delgado Roofing',
+    contactName: 'Hector Delgado',
+    tier: 1,
+    dayHasAfter: true,
+    speech: [{ atSeconds: 14, endSeconds: 22, text: 'North slope is stripped.', confidence: 0.9 }],
+  });
+  assert.equal(item.speechStatus, 'done');
+  assert.equal(item.speech?.[0]?.text, 'North slope is stripped.');
+  assert.equal(item.analysis?.speech?.[0]?.text, 'North slope is stripped.');
+});
+
 test('serialization: structured actions from the vision log ride with dictation', () => {
   const item = serializeEvidence({
     proof: {

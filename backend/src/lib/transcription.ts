@@ -80,3 +80,62 @@ export async function transcribeAudio(audio: Buffer, mimeType: string): Promise<
   }
   return text;
 }
+
+export type TimedTranscription = {
+  text: string;
+  segments: Array<{
+    start?: number;
+    end?: number;
+    text?: string;
+    avg_logprob?: number;
+    no_speech_prob?: number;
+  }>;
+};
+
+/**
+ * Day-film path. Empty speech is a valid result (a silent ten minutes is
+ * normal on a job site). Verbose JSON is requested so timestamps survive;
+ * providers that only return `{ text }` still work.
+ */
+export async function transcribeAudioTimed(
+  audio: Buffer,
+  mimeType: string,
+): Promise<TimedTranscription> {
+  const { url, apiKey, model } = config.technician.transcription;
+  if (!url) {
+    throw new HttpError(
+      501,
+      'Speech-to-text is not configured on this server.',
+      'transcription_unavailable',
+    );
+  }
+
+  const form = new FormData();
+  form.append('file', new Blob([new Uint8Array(audio)], { type: mimeType }), filenameFor(mimeType));
+  form.append('model', model);
+  form.append('response_format', 'verbose_json');
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
+      body: form,
+    });
+  } catch {
+    throw new HttpError(502, 'Could not reach the transcription service.', 'transcription_failed');
+  }
+
+  if (!res.ok) {
+    throw new HttpError(
+      502,
+      `The transcription service rejected the clip (${res.status}).`,
+      'transcription_failed',
+    );
+  }
+
+  const body = (await res.json()) as TimedTranscription & { text?: string };
+  const text = String(body.text ?? '').trim();
+  const segments = Array.isArray(body.segments) ? body.segments : [];
+  return { text, segments };
+}
