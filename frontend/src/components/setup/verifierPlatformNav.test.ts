@@ -26,4 +26,13 @@ describe('verifier office rail', () => {
     expect(verifierHtml).toContain("goShell('/intake')");
     expect(verifierHtml).toContain("atmosphere: 'navigate'");
   });
+
+  it('keeps the Videos filters on every office page, not only Dashboard', () => {
+    expect(verifierHtml).toContain('id="evidence-nav"');
+    expect(verifierHtml).toMatch(/<h3>Videos<\/h3>/);
+    expect(verifierHtml).not.toMatch(/body\[data-atm-rail-only\]\s+#evidence-nav\s*\{[^}]*display:\s*none/);
+    expect(verifierHtml).toContain(
+      "window.parent.postMessage({ atmosphere: 'navigate', to: '/verifier-library' }, '*');",
+    );
+  });
 });
