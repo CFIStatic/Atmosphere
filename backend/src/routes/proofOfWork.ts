@@ -681,6 +681,10 @@ async function ensureSparseFramesFromStorage(
   // phone thumbnails.
   const minWanted = 1;
   if (have >= config.verification.sparseMaxFrames) return have;
+  // A short clip with enough stills is already dense enough. Do not replace
+  // those with the 24h candidate cadence. Thin short clips (<8) fall through
+  // and re-extract at shortClipFrameIntervalSeconds.
+  if (durationSeconds < config.verification.longFormSeconds && have >= 8) return have;
 
   const { data: proof } = await admin
     .from('job_proofs')
@@ -1000,7 +1004,12 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
   // the narration actually saw, flattened for the GIN index so "every
   // flood-cut video ever" stays a millisecond query.
   await write({
-    narration: { entries: narration.entries, coverage: narration.coverage, model: narration.model },
+    narration: {
+      entries: entriesFromDictation({ entries: narration.entries }),
+      coverage: narration.coverage,
+      model: narration.model,
+      detailLevel: DENSE_READING_LEVEL,
+    },
     narration_text: narration.report,
     narration_status: 'done',
     narration_error: null,

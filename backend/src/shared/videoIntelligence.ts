@@ -195,7 +195,7 @@ export async function dictatePreparedFrames(
     throw new HttpError(422, 'No frames available for dictation', 'no_frames');
   }
 
-  const maxModel = Math.max(4, Math.min(opts?.maxModelFrames ?? 36, 48));
+  const maxModel = Math.max(4, Math.min(opts?.maxModelFrames ?? 48, 48));
   const frames = pickEvenlySpaced(prepared.frames, maxModel);
   const hours = (prepared.durationSeconds / 3600).toFixed(2);
   const context = (opts?.contextText ?? '').trim().slice(0, 4000);
@@ -458,11 +458,24 @@ export function entriesFromActions(actions: VisionAction[]): DictationEntry[] {
 }
 
 export function entriesFromDictation(dictation: {
-  entries?: DictationEntry[];
+  entries?: Array<{ atSeconds: number; text?: string; note?: string }>;
   actions?: VisionAction[];
 }): DictationEntry[] {
-  if (dictation.entries?.length) return dictation.entries;
+  if (dictation.entries?.length) return verifierDictationEntries(dictation.entries);
   return entriesFromActions(dictation.actions ?? []);
+}
+
+/** Side timestamps in verifier/index.html read `e.text || e.note`. Always persist `text`. */
+export function verifierDictationEntries(
+  entries: Array<{ atSeconds: number; text?: string | null; note?: string | null }>,
+): DictationEntry[] {
+  return entries
+    .map((entry) => ({
+      atSeconds: entry.atSeconds,
+      text: String(entry.text || entry.note || '').trim(),
+    }))
+    .filter((entry) => entry.text)
+    .slice(0, MAX_ENTRIES);
 }
 
 function toDictationResult(

@@ -233,7 +233,7 @@ export async function narrateProofVideo(input: {
 
   const response = await anthropicClient().messages.create({
     model: config.technician.assistant.model,
-    max_tokens: 4096,
+    max_tokens: 8192,
     system: NARRATE_SYSTEM,
     messages: [
       {
