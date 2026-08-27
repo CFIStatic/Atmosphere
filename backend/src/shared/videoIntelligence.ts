@@ -270,8 +270,9 @@ async function dictateWithGemini(input: {
   system: string;
   userText: string;
   frames: PreparedVideoFrame[];
+  model?: string;
 }): Promise<VideoDictationResult> {
-  const model = verificationConfig.primaryModel;
+  const model = input.model || verificationConfig.primaryModel;
   const baseUrl = (process.env.GOOGLE_BASE_URL || 'https://generativelanguage.googleapis.com').replace(
     /\/+$/,
     '',
@@ -316,6 +317,11 @@ async function dictateWithGemini(input: {
       throw new Error(
         'Gemini vision error 403: API_KEY_SERVICE_BLOCKED — this key cannot call generativelanguage.googleapis.com',
       );
+    }
+    const suggested = errText.match(/use models\/([a-z0-9._-]+)/i)?.[1];
+    if (response.status === 404 && suggested && suggested !== model && !input.model) {
+      console.warn(`[dictation] ${model} is retired, retrying ${suggested}`);
+      return dictateWithGemini({ ...input, model: suggested });
     }
     throw new Error(`Gemini vision error ${response.status}: ${errText.slice(0, 400)}`);
   }

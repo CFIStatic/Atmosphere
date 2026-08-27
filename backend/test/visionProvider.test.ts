@@ -46,6 +46,14 @@ test('isVisionConfigured is true when Google or Anthropic is set', () => {
   }
 });
 
+test('formatVisionFailure names a retired Gemini model', () => {
+  const retired = new Error(
+    'Gemini vision error 404: This model models/gemini-2.5-flash is no longer available to new users. Please update your code to use models/gemini-3.6-flash for the latest features and improvements.',
+  );
+  assert.match(formatVisionFailure(retired), /gemini-3\.6-flash/);
+  assert.doesNotMatch(formatVisionFailure(retired), /NOT_FOUND/);
+});
+
 test('formatVisionFailure hides the Google 403 blob', () => {
   const blocked = new Error(
     'Gemini vision error 403: API_KEY_SERVICE_BLOCKED — this key cannot call generativelanguage.googleapis.com',
