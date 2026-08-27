@@ -80,9 +80,9 @@ describe('LoginPage', () => {
     const { container } = renderLogin();
     const home = screen.getByRole('link', { name: 'Atmosphere home' });
     const svg = home.querySelector('svg');
-    expect(svg?.getAttribute('width')).toBe('40');
-    expect(svg?.getAttribute('height')).toBe('40');
-    expect(screen.getByText('Atmosphere').className).toContain('text-[26px]');
+    expect(svg?.getAttribute('width')).toBe('34');
+    expect(svg?.getAttribute('height')).toBe('34');
+    expect(screen.getByText('Atmosphere').className).toContain('text-[23px]');
     expect(container.querySelector('header')?.className).toContain('py-8');
     expect(container.querySelector('[data-atmosphere-lockup]')?.className).toContain('text-ink-900');
     expect(screen.getByRole('button', { name: /Switch to (light|dark) mode/ })).toBeInTheDocument();

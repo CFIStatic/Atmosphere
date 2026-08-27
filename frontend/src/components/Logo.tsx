@@ -4,7 +4,7 @@ import { DASHBOARD_HOME } from '../lib/platforms';
 const SIZES = {
   md: { svg: 28, text: 'text-[21px]', gap: 'gap-3' },
   /** Full-width auth headers — login, signup, password reset. */
-  lg: { svg: 40, text: 'text-[26px]', gap: 'gap-3.5' },
+  lg: { svg: 34, text: 'text-[23px]', gap: 'gap-3' },
 } as const;
 
 interface Props {
