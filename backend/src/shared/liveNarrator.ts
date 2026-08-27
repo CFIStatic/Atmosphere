@@ -152,8 +152,8 @@ export interface VideoNarration {
 const NARRATE_SYSTEM = `You are reading frames, in order, from one video filmed on a job site against a numbered shot list.
 
 Your output becomes the written report attached to this video. Rules:
-1. For each frame, say which shot-list stage it most plausibly shows (-1 if you cannot tell), and one sentence of what is visible in it.
-2. The report is 2-4 sentences narrating the video start to finish: where it opens, what work state it shows, where it ends. Only what the frames show.
+1. For each frame, say which shot-list stage it most plausibly shows (-1 if you cannot tell), and a dense 2–6 sentence note of everything relevant that is visible: people, clothing/PPE, setting, tools, materials, brands when readable, condition, screens/text, and what changed from the previous still.
+2. The report is a chronological reading of the video start to finish: where it opens, what work state it shows, where it ends. Several paragraphs if needed. Only what the frames show.
 3. Never state or imply that work was completed unless a frame shows the completed state.
 4. Prefer -1 and plain uncertainty over a guess. An honest "the middle of the clip never shows the work area" is more valuable than an invented tour.
 5. Also list distinct work actions visible in the frames. action MUST be one of: locate, measure, mark, pick_up, carry, position, align, cut, drill, fasten, apply, connect, test, inspect, remove, clean, protect, correct, wait, other. atSeconds must match a provided frame timestamp.
@@ -192,9 +192,9 @@ export function parseNarration(
           atSeconds: frames[e.frame].atSeconds,
           stageIndex:
             Number.isInteger(e.stage) && e.stage >= 0 && e.stage < steps.length ? e.stage : -1,
-          note: String(e.note).trim().slice(0, 300),
+          note: String(e.note).trim().slice(0, 1200),
         }))
-        .slice(0, 24)
+        .slice(0, 48)
     : [];
 
   // An empty entries list with a confident report is the shape of a made-up
@@ -213,7 +213,7 @@ export function parseNarration(
   const actions =
     parsedActions.length > 0 ? parsedActions : actionsFromNarrationEntries(entries);
 
-  return { entries, coverage, report: parsed.report.trim().slice(0, 2000), actions };
+  return { entries, coverage, report: parsed.report.trim().slice(0, 8000), actions };
 }
 
 export async function narrateProofVideo(input: {
@@ -233,7 +233,7 @@ export async function narrateProofVideo(input: {
 
   const response = await anthropicClient().messages.create({
     model: config.technician.assistant.model,
-    max_tokens: 900,
+    max_tokens: 4096,
     system: NARRATE_SYSTEM,
     messages: [
       {

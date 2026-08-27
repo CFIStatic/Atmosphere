@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   analysisStateOf,
   clipHasReading,
+  clipNeedsDenseReading,
   dateSearchPhrases,
   presentUnreadClip,
   downloadDecision,
@@ -277,7 +278,7 @@ test('serialization: office dictation prefers narration_text over the day summar
       narration_status: 'done',
       narration_text:
         'The crew strips the north slope through the morning, then lays underlayment after lunch.',
-      narration: { entries: [{ atSeconds: 0, text: 'Tear-off begins.' }], model: 'claude' },
+      narration: { entries: [{ atSeconds: 0, text: 'Tear-off begins.' }], model: 'claude', detailLevel: 'dense' },
       legal_hold: false,
       retention_until: null,
     },
@@ -296,6 +297,7 @@ test('serialization: office dictation prefers narration_text over the day summar
   );
   assert.equal(item.analysis?.dictationStatus, 'done');
   assert.equal(item.analysis?.summary, 'Short headline.');
+  assert.equal(item.analysis?.detailLevel, 'dense');
 });
 
 test('serialization: leftover dictation is still Askable even if status never flipped to done', () => {
@@ -496,6 +498,14 @@ test('presentUnreadClip never hides a skip or fail behind queued', () => {
   assert.equal(presentUnreadClip(done, 'queued').analysisState, 'done');
   assert.equal(clipHasReading(done), true);
   assert.equal(clipHasReading(skipped), false);
+  assert.equal(clipNeedsDenseReading(done), true);
+  assert.equal(
+    clipNeedsDenseReading({
+      analysis: { dictation: 'A desk and a monitor.', detailLevel: 'dense' },
+    }),
+    false,
+  );
+  assert.equal(clipNeedsDenseReading(skipped), false);
 });
 
 

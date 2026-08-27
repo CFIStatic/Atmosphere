@@ -122,6 +122,24 @@ export function clipHasReading(item: {
   );
 }
 
+export const DENSE_READING_LEVEL = 'dense';
+
+/** Older readings were a short summary. Those get one rewrite with dense notes. */
+export function clipNeedsDenseReading(item: {
+  analysis?: {
+    detailLevel?: string | null;
+    dictation?: unknown;
+    summary?: unknown;
+    transcript?: unknown;
+    actions?: unknown;
+    dictationEntries?: unknown;
+  } | null;
+} | null | undefined): boolean {
+  const analysis = item?.analysis;
+  if (!analysis || !clipHasReading(item)) return false;
+  return analysis.detailLevel !== DENSE_READING_LEVEL;
+}
+
 /**
  * What the office should see after a kick.
  *
@@ -300,6 +318,7 @@ export function serializeEvidence(input: {
             dictation: dictation ?? proof.ai_summary ?? findings.summary ?? null,
             dictationStatus: proof.narration_status ?? (dictation ? 'done' : null),
             dictationEntries: Array.isArray(proof.narration?.entries) ? proof.narration.entries : [],
+            detailLevel: typeof proof.narration?.detailLevel === 'string' ? proof.narration.detailLevel : null,
             actions,
             materialChange,
             materialBecause: findings.materialBecause ?? null,

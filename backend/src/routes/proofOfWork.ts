@@ -27,7 +27,12 @@ import { labelsForProof } from '../verifier/library.js';
 import { buildCaptureGuide } from '../shared/captureGuide.js';
 import { scopeForParty } from '../shared/jobRecord.js';
 import { analyseLongRecording } from '../shared/longAnalyst.js';
-import { prepareVideoFrames } from '../shared/videoIntelligence.js';
+import {
+  DENSE_READING_LEVEL,
+  entriesFromDictation,
+  prepareVideoFrames,
+  type VideoDictationResult,
+} from '../shared/videoIntelligence.js';
 import { probeMetadata } from '../verification/frames/extract.js';
 import {
   narrateProofVideo,
@@ -800,9 +805,11 @@ export async function ensureStillsAndDuration(
   const have = count ?? 0;
 
   // A workday always gets the server's spread — a handful of device stills
-  // does not cover eight hours. Anything else only needs filling when the
-  // device sent nothing.
-  const wanted = longForm || have === 0 || Boolean(opts?.force);
+  // does not cover eight hours. A short clip with only a couple of thumbnails
+  // cannot support a dense timestamped reading either.
+  const minShortStills = 8;
+  const wanted =
+    longForm || have === 0 || (!longForm && have < minShortStills) || Boolean(opts?.force);
   if (wanted && storagePath && (opts?.force || !stillsAttempted.has(proofId))) {
     if (!opts?.force) stillsAttempted.add(proofId);
     try {
@@ -820,6 +827,15 @@ export async function ensureStillsAndDuration(
   }
 
   return { durationSeconds, longForm, error };
+}
+
+function denseNarration(dictation: VideoDictationResult) {
+  return {
+    entries: entriesFromDictation(dictation),
+    coverage: [],
+    model: dictation.model,
+    detailLevel: DENSE_READING_LEVEL,
+  };
 }
 
 async function finishProofActions(
@@ -910,7 +926,7 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
       ai_findings: descriptionFindings(dictation),
       ai_model: dictation.model,
       analysis_status: 'done',
-      narration: { entries: [], coverage: [], model: dictation.model },
+      narration: denseNarration(dictation),
       narration_text: dictation.narrationText,
       narration_status: 'done',
       narration_error: null,
@@ -955,7 +971,7 @@ async function performNarration(admin: any, job: NarrationJob): Promise<void> {
       ai_findings: descriptionFindings(dictation),
       ai_model: dictation.model,
       analysis_status: 'done',
-      narration: { entries: [], coverage: [], model: dictation.model },
+      narration: denseNarration(dictation),
       narration_text: dictation.narrationText,
       narration_status: 'done',
       narration_error: null,
@@ -1060,7 +1076,7 @@ async function performLongFormAnalysis(
       ai_findings: descriptionFindings(dictation),
       ai_model: dictation.model,
       analysis_status: 'done',
-      narration: { entries: [], coverage: [], model: dictation.model },
+      narration: denseNarration(dictation),
       narration_text: dictation.narrationText,
       narration_status: 'done',
       narration_error: null,

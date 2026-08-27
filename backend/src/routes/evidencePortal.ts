@@ -19,6 +19,7 @@ import {
 } from '../shared/clipAsk.js';
 import {
   clipHasReading,
+  clipNeedsDenseReading,
   downloadDecision,
   matchesLibraryQuery,
   pickPosterFrame,
@@ -206,7 +207,10 @@ async function propertyAddresses(
 const kickedThisProcess = new Set<string>();
 
 function startUnreadClipRead(admin: any, orgId: string, item: any): boolean {
-  if (clipHasReading(item) || !admin || !item?.id) return false;
+  if (!admin || !item?.id) return false;
+  const unread = !clipHasReading(item);
+  const thin = clipNeedsDenseReading(item);
+  if (!unread && !thin) return false;
   if (kickedThisProcess.has(item.id)) return false;
   kickedThisProcess.add(item.id);
   const party = { org_id: orgId, job_id: item.jobId, id: item.partyId };
@@ -224,9 +228,11 @@ function startUnreadClipRead(admin: any, orgId: string, item: any): boolean {
  * rows as queued so the office never saw the real error.
  */
 async function readClipForOpen(admin: any, orgId: string, item: any): Promise<any> {
-  if (clipHasReading(item) || !admin || !item?.id) return item;
+  if (!admin || !item?.id) return item;
+  if (clipHasReading(item) && !clipNeedsDenseReading(item)) return item;
   const alreadyKicked = kickedThisProcess.has(item.id);
   const started = startUnreadClipRead(admin, orgId, item);
+  if (clipHasReading(item)) return item;
   if (!alreadyKicked && started) {
     return { ...item, analysisState: 'queued' };
   }
@@ -241,7 +247,12 @@ const ASK_READ_BUDGET_MS = 90_000;
  * describe what is on screen instead of saying the file was never looked at.
  */
 async function kickUnreadClip(admin: any, orgId: string, item: any): Promise<ClipKick> {
-  if (clipHasReading(item) || !admin || !item?.id) return clipHasReading(item) ? 'done' : 'none';
+  if (!admin || !item?.id) return clipHasReading(item) ? 'done' : 'none';
+  if (clipHasReading(item) && clipNeedsDenseReading(item)) {
+    startUnreadClipRead(admin, orgId, item);
+    return 'done';
+  }
+  if (clipHasReading(item)) return 'done';
   const party = { org_id: orgId, job_id: item.jobId, id: item.partyId };
   kickedThisProcess.add(item.id);
   try {
