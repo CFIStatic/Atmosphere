@@ -131,18 +131,26 @@ const STOP = new Set([
   'inside',
 ]);
 
-const CLIP_QA_SYSTEM = `You answer questions about one filed video, using only the reading of that clip.
+const CLIP_QA_SYSTEM = `You answer questions about one video clip. Someone already watched the frames, and when present, listened to the microphone. You only use that reading.
 
-Rules:
-1. Answer only from the reading given. It is a description of video frames somebody already looked at, and when present, what was heard on the mic.
-2. If the reading does not contain the answer, say "The footage on file does not show that" and stop. Do not reason about what was probably true.
-3. When asked what is happening / what this video is, describe the scene: setting, people, screens, logos, news, text on screen, furniture, tools. A desk, a TV, a YouTube/news clip, or a conversation is a valid answer — not every film is construction.
-4. Each video is standalone. Do not mention before/after pairing or ask for another clip.
-5. For yes/no questions, start with Yes or No. If yes, say what was visible or said and when, using a spoken timestamp such as "1 hour and 52 minutes into the recording" when the reading has one.
-6. Quote a timestamp when the reading has one, so the answer can be checked against the playhead.
-7. Speech on the recording is evidence. Quote what was said when that is what was asked.
-8. Two or three sentences. This is read next to the player.
-9. Never estimate cost, hours, or whether work was worth paying for.`;
+Voice:
+- Sound like a calm colleague who watched the clip and is briefing someone. Complete sentences. Direct, professional, easy to read aloud.
+- Do not dump labels, field names, room prefixes, or raw lists ("office:", "Action @ 0:12", "Changes:", semicolon-separated fragments). Fold the facts into ordinary prose.
+- Do not start with "Yes —" or "the footage shows:" on open questions such as "what happened" or "what is this." Lead with what you saw.
+- For yes/no questions, start with Yes or No, then one or two sentences of what was visible or said.
+- Two or three sentences. This is read next to the player.
+- When the reading has a timestamp, say it the way a person would: "about 1 hour and 52 minutes in."
+- Quote speech when that is what was asked.
+
+Grounding:
+- Answer only from the reading given. If it does not contain the answer, say "I don't see that in this clip" and stop. Do not guess or reason about what was probably true.
+- A desk, a TV, a news clip, or a conversation is a valid answer. Not every film is construction.
+- Each video is standalone. Do not mention before/after pairing or ask for another clip.
+- Never estimate cost, hours, or whether work was worth paying for.`;
+
+const NOT_IN_CLIP = "I don't see that in this clip.";
+const NOT_IN_CLIP_NO = "No. I don't see that in this clip.";
+const NO_SPEECH = "I don't hear usable speech on this clip.";
 
 type CorpusRow = { at: number | null; text: string; kind: string };
 
@@ -205,6 +213,99 @@ export function formatClipTimeSpoken(seconds: number | null | undefined): string
   if (!h && !m) parts.push(r === 1 ? '1 second' : `${r} seconds`);
   else if (!h && r) parts.push(r === 1 ? '1 second' : `${r} seconds`);
   return `${parts.join(' and ')} into the recording`;
+}
+
+const MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+/** "August 25, 2026" — dates people say, not ISO stamps. */
+export function formatWorkDateSpoken(iso: string | null | undefined): string | null {
+  const match = String(iso || '')
+    .trim()
+    .match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return iso ? String(iso).trim() : null;
+  const month = MONTHS[Number(match[2]) - 1];
+  if (!month) return String(iso).trim();
+  return `${month} ${Number(match[3])}, ${match[1]}`;
+}
+
+function ensureSentence(text: string): string {
+  const trimmed = text.trim().replace(/[.]+$/g, '');
+  if (!trimmed) return '';
+  return `${trimmed}.`;
+}
+
+function uncapitalize(text: string): string {
+  if (!text) return text;
+  return text.charAt(0).toLowerCase() + text.slice(1);
+}
+
+function stripSceneLabel(text: string): string {
+  return text.replace(/^[A-Za-z][A-Za-z0-9 /&-]{0,28}:\s+/, '').trim();
+}
+
+function uniqueObservations(items: string[]): string[] {
+  const cleaned = items
+    .map((item) => stripSceneLabel(item).replace(/[.;]+$/g, '').replace(/\s+/g, ' ').trim())
+    .filter((item) => item.length > 2);
+  const out: string[] = [];
+  for (const item of cleaned) {
+    const lower = item.toLowerCase();
+    const idx = out.findIndex((existing) => {
+      const hay = existing.toLowerCase();
+      return hay === lower || hay.includes(lower) || lower.includes(hay);
+    });
+    if (idx >= 0) {
+      if (item.length > out[idx]!.length) out[idx] = item;
+      continue;
+    }
+    out.push(item);
+  }
+  return out;
+}
+
+function startsWithGerund(text: string): boolean {
+  return /^[A-Za-z]+ing\b/.test(text);
+}
+
+function asSceneClause(items: string[]): string {
+  const parts = uniqueObservations(items).slice(0, 4);
+  if (!parts.length) return '';
+  const [first, ...rest] = parts;
+  let head = first!;
+  head = startsWithGerund(head) ? `someone ${uncapitalize(head)}` : uncapitalize(head);
+  if (!rest.length) return head;
+  if (rest.length === 1) return `${head}, then ${uncapitalize(rest[0]!)}`;
+  const last = rest[rest.length - 1]!;
+  const mid = rest.slice(0, -1).map(uncapitalize);
+  return `${head}, ${mid.join(', ')}, and ${uncapitalize(last)}`;
+}
+
+function sceneFromFragments(fragments: string[], dateSpoken: string | null): string {
+  const clause = asSceneClause(fragments);
+  if (!clause) return '';
+  const prefix = dateSpoken ? `On ${dateSpoken}, this clip shows ` : 'This clip shows ';
+  return ensureSentence(prefix + clause);
+}
+
+function withYes(yesNo: boolean, text: string): string {
+  const body = text.trim();
+  if (!body) return yesNo ? NOT_IN_CLIP_NO : NOT_IN_CLIP;
+  if (!yesNo) return body;
+  if (/^(yes|no)\b/i.test(body)) return body;
+  return `Yes. ${body}`;
 }
 
 function tokens(value: string): string[] {
@@ -323,24 +424,25 @@ function rowDeniesWork(row: CorpusRow): boolean {
 }
 
 function yesFromRow(row: CorpusRow): string {
-  const text = row.text.replace(/\.$/, '');
+  const text = ensureSentence(row.text);
   const spoken = formatClipTimeSpoken(row.at);
   if (rowDeniesWork(row)) {
-    return spoken ? `No. ${text}. That was ${spoken}.` : `No. ${text}.`;
+    if (!spoken) return `No. ${text}`;
+    return `No. At ${spoken}, ${uncapitalize(text)}`;
   }
-  if (spoken) return `Yes. ${text}. That happened at ${spoken}.`;
-  return `Yes. ${text}.`;
+  if (spoken) return `Yes. At ${spoken}, ${uncapitalize(text)}`;
+  return `Yes. ${text}`;
 }
 
 function unreadAnswer(state: ClipAskAnalysisState, _question?: string): string | null {
   if (!state || state === 'done') return null;
   if (state === 'failed') {
-    return 'The reading of this clip failed. The footage itself is unaffected; re-run the analysis from the platform.';
+    return 'This clip could not be read. The video itself is unaffected; re-run the analysis from the platform.';
   }
   if (state === 'skipped') {
-    return 'This clip could not be read. The footage itself is unaffected.';
+    return 'This clip could not be read. The video itself is unaffected.';
   }
-  return 'This clip is still being read. Ask again once the dictation lands.';
+  return 'This clip is still being read. Ask again in a moment.';
 }
 
 /**
@@ -353,10 +455,11 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
 
   const rows = clipCorpus(record);
   if (!rows.length) {
-    return unread ?? 'This clip is still being read. Ask again once the dictation lands.';
+    return unread ?? 'This clip is still being read. Ask again in a moment.';
   }
 
   const q = question.trim();
+  const yesNo = isYesNoQuestion(q);
   if (isWhatWasSaid(q)) {
     const spoken = [
       ...(record.conversationDetails ?? []),
@@ -365,41 +468,44 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
     ]
       .map((line) => line.trim())
       .filter(Boolean);
-    if (spoken.length) {
-      return `Yes — this is what was said on the recording: ${spoken.slice(0, 3).join(' ')}`;
-    }
     const heard = splitTranscript(record.transcript)
       .map((row) => row.text)
       .filter(Boolean);
-    if (heard.length) {
-      return `Yes — this is what was said on the recording: ${heard.slice(0, 2).join(' ')}`;
-    }
-    return 'The footage on file does not include usable speech.';
+    const lines = spoken.length ? spoken : heard;
+    if (!lines.length) return NO_SPEECH;
+    const qTokens = tokens(q);
+    const picked =
+      yesNo && qTokens.length
+        ? lines.find((line) => {
+            const hay = tokens(line);
+            return qTokens.some((token) => hay.some((h) => tokensOverlap(token, h)));
+          }) || lines[0]
+        : null;
+    const body = (picked ? [picked] : lines.slice(0, 3)).map(ensureSentence).join('\n\n');
+    return withYes(yesNo, body);
   }
 
   if (isWhatHappened(q)) {
+    const dictation = (record.dictation || '').trim();
+    const summary = (record.summary || '').trim();
     const changes = (record.changes ?? []).map((c) => c.trim()).filter(Boolean);
     const actions = (record.actions ?? [])
       .map((a) => String(a.description || '').trim())
       .filter(Boolean);
-    const date = record.workDate ? ` on ${record.workDate}` : '';
-    if (changes.length) {
-      return `Yes — the footage${date} shows: ${changes.slice(0, 4).join('; ')}.`;
-    }
-    if (actions.length) {
-      return `Yes — the footage${date} shows: ${actions.slice(0, 4).join('; ')}.`;
-    }
-    const summary = (record.dictation || record.summary || '').trim();
-    if (summary) return `The reading of this clip${date}: ${summary}`;
-    return 'The footage on file does not show that.';
+    const dateSpoken = formatWorkDateSpoken(record.workDate);
+    if (dictation) return withYes(yesNo, ensureSentence(dictation));
+    if (summary) return withYes(yesNo, ensureSentence(summary));
+    if (changes.length) return withYes(yesNo, sceneFromFragments(changes, dateSpoken));
+    if (actions.length) return withYes(yesNo, sceneFromFragments(actions, dateSpoken));
+    return yesNo ? NOT_IN_CLIP_NO : NOT_IN_CLIP;
   }
 
   const qTokens = tokens(q);
   if (!qTokens.length) {
-    return (record.dictation || record.summary || 'The footage on file does not show that.').trim();
+    const fallback = (record.dictation || record.summary || '').trim();
+    return fallback ? ensureSentence(fallback) : NOT_IN_CLIP;
   }
 
-  const yesNo = isYesNoQuestion(q);
   const need = Math.min(qTokens.length >= 2 ? 2 : 1, qTokens.length);
   const scored = rows
     .map((row) => {
@@ -411,30 +517,25 @@ export function groundedAnswerFromClip(question: string, record: ClipAskRecord):
     .sort((a, b) => b.score - a.score || (a.row.at ?? 0) - (b.row.at ?? 0));
 
   if (!scored.length) {
-    return yesNo
-      ? 'No. The footage on file does not show that.'
-      : 'The footage on file does not show that.';
+    return yesNo ? NOT_IN_CLIP_NO : NOT_IN_CLIP;
   }
 
   if (yesNo) {
     const timed = scored.find((entry) => entry.row.at != null) ?? scored[0];
-    return yesFromRow(timed.row);
+    return yesFromRow(timed!.row);
   }
 
-  const best = scored[0];
+  const best = scored[0]!;
   const timed = scored.find((entry) => entry.row.at != null);
   const top = timed && timed !== best ? [best, timed] : scored.slice(0, 2);
-  return (
-    top
-      .map(({ row }) => {
-        const spoken = formatClipTimeSpoken(row.at);
-        const clock = formatClipTime(row.at);
-        const text = row.text.replace(/\.$/, '');
-        if (spoken) return `At ${clock}, ${text[0].toLowerCase()}${text.slice(1)}. That was ${spoken}`;
-        return text;
-      })
-      .join('. ') + '.'
-  );
+  return top
+    .map(({ row }) => {
+      const spoken = formatClipTimeSpoken(row.at);
+      const text = ensureSentence(row.text);
+      if (spoken) return `At ${spoken}, ${uncapitalize(text)}`;
+      return text;
+    })
+    .join(' ');
 }
 
 export function formatClipRecordForModel(record: ClipAskRecord): string {
@@ -517,9 +618,10 @@ export async function answerFromClip(input: {
         {
           role: 'user',
           content:
-            `Reading of this clip:\n\n${reading}` +
+            `Notes from watching this clip:\n\n${reading}` +
             (history ? `\n\nEarlier questions on this clip:\n${history}` : '') +
-            `\n\nQuestion: ${input.question}`,
+            `\n\nQuestion: ${input.question}` +
+            `\n\nAnswer in natural spoken prose a colleague would say out loud. Do not paste field labels or semicolon lists.`,
         },
       ],
     });

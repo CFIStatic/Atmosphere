@@ -1062,18 +1062,18 @@
 
   .ask-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
   .ask-thread { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 120px; overflow-y: auto; padding-bottom: 4px; }
-  .ask-empty { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0 0 10px; }
+  .ask-empty { color: var(--muted); font-size: 13.5px; line-height: 1.55; margin: 0 0 12px; max-width: 36em; }
   .ask-bubble {
-    max-width: 92%; padding: 9px 12px; border-radius: 12px;
-    font-size: 13.5px; line-height: 1.5; white-space: pre-wrap;
+    max-width: 88%; padding: 10px 14px; border-radius: 16px;
+    font-size: 14px; line-height: 1.55; white-space: pre-wrap;
   }
   .ask-bubble.user {
     align-self: flex-end; background: var(--accent); color: #fff;
-    border-bottom-right-radius: 4px;
+    border-bottom-right-radius: 5px;
   }
   .ask-bubble.assistant {
     align-self: flex-start; background: var(--line-soft); color: var(--ink);
-    border-bottom-left-radius: 4px;
+    border-bottom-left-radius: 5px;
   }
   .ask-bubble.pending { color: var(--muted); font-style: italic; }
   .ask-suggest { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -2032,6 +2032,67 @@
     if (!h && !m) parts.push(r === 1 ? '1 second' : r + ' seconds');
     else if (!h && r) parts.push(r === 1 ? '1 second' : r + ' seconds');
     return parts.join(' and ') + ' into the recording';
+  }
+  function dayLabelSpoken(iso) {
+    var m = String(iso || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return iso ? String(iso).trim() : '';
+    var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    var month = months[Number(m[2]) - 1];
+    if (!month) return String(iso).trim();
+    return month + ' ' + Number(m[3]) + ', ' + m[1];
+  }
+  function askSentence(text) {
+    var t = String(text || '').trim().replace(/[.]+$/g, '');
+    return t ? t + '.' : '';
+  }
+  function askUncap(text) {
+    var t = String(text || '');
+    return t ? t.charAt(0).toLowerCase() + t.slice(1) : t;
+  }
+  function stripSceneLabel(text) {
+    return String(text || '').replace(/^[A-Za-z][A-Za-z0-9 /&-]{0,28}:\s+/, '').trim();
+  }
+  function uniqueObservations(items) {
+    var cleaned = items.map(function (item) {
+      return stripSceneLabel(item).replace(/[.;]+$/g, '').replace(/\s+/g, ' ').trim();
+    }).filter(function (item) { return item.length > 2; });
+    var out = [];
+    cleaned.forEach(function (item) {
+      var lower = item.toLowerCase();
+      var idx = -1;
+      for (var i = 0; i < out.length; i++) {
+        var hay = out[i].toLowerCase();
+        if (hay === lower || hay.indexOf(lower) !== -1 || lower.indexOf(hay) !== -1) { idx = i; break; }
+      }
+      if (idx >= 0) {
+        if (item.length > out[idx].length) out[idx] = item;
+        return;
+      }
+      out.push(item);
+    });
+    return out;
+  }
+  function asSceneClause(items) {
+    var parts = uniqueObservations(items).slice(0, 4);
+    if (!parts.length) return '';
+    var head = parts[0];
+    head = /^[A-Za-z]+ing\b/.test(head) ? 'someone ' + askUncap(head) : askUncap(head);
+    if (parts.length === 1) return head;
+    if (parts.length === 2) return head + ', then ' + askUncap(parts[1]);
+    return head + ', ' + parts.slice(1, -1).map(askUncap).join(', ') + ', and ' + askUncap(parts[parts.length - 1]);
+  }
+  function sceneFromFragments(fragments, dateSpoken) {
+    var clause = asSceneClause(fragments);
+    if (!clause) return '';
+    var prefix = dateSpoken ? 'On ' + dateSpoken + ', this clip shows ' : 'This clip shows ';
+    return askSentence(prefix + clause);
+  }
+  function withYes(yesNo, text) {
+    var body = String(text || '').trim();
+    if (!body) return yesNo ? 'No. I don\'t see that in this clip.' : 'I don\'t see that in this clip.';
+    if (!yesNo) return body;
+    if (/^(yes|no)\b/i.test(body)) return body;
+    return 'Yes. ' + body;
   }
   function dayLabel(iso) {
     var d = new Date(iso + 'T12:00:00');
@@ -4179,32 +4240,46 @@
     var a = item.analysis || {};
     var q = String(question || '').trim();
     var state = a.state || item.analysisState;
-    if (state === 'failed' && !clipAskCorpus(item).length) return 'The reading of this clip failed. The footage itself is unaffected.';
+    var notInClip = 'I don\'t see that in this clip.';
+    var notInClipNo = 'No. I don\'t see that in this clip.';
+    if (state === 'failed' && !clipAskCorpus(item).length) return 'This clip could not be read. The video itself is unaffected.';
     var rows = clipAskCorpus(item);
-    if (!rows.length) return 'This clip is still being read. Ask again once the dictation lands.';
+    if (!rows.length) return 'This clip is still being read. Ask again in a moment.';
+    var yesNo = /^(did|does|do|was|were|is|are|has|have|had|at any|anytime)\b/i.test(q) ||
+      /\b(go in|went in|go into|went into|enter|entered|ever go|at any point)\b/i.test(q);
     if (/what (did|was) (the )?(homeowner|owner|contractor|they|he|she|worker).*(say|ask|tell|agree|mention)|did (the )?(homeowner|owner|contractor|they).*(say|mention|agree)|what was said|anything said|heard on the mic|conversation|what did they agree/i.test(q)) {
       var spoken = (a.conversationDetails || []).concat(a.conversationAgreements || []).concat(a.conversationConcerns || []).filter(Boolean);
-      if (spoken.length) return 'Yes — this is what was said on the recording: ' + spoken.slice(0, 3).join(' ');
       var heardLines = String(a.transcript || '').split(/\n+/).map(function (line) {
         var m = line.trim().match(/^\[(?:\d+:)+\d+\]\s*(.+)$/);
         return (m ? m[1] : line).trim();
       }).filter(Boolean);
-      if (heardLines.length) return 'Yes — this is what was said on the recording: ' + heardLines.slice(0, 2).join(' ');
-      return 'The footage on file does not include usable speech.';
+      var lines = spoken.length ? spoken : heardLines;
+      if (!lines.length) return 'I don\'t hear usable speech on this clip.';
+      var qTokens = askTokens(q);
+      var picked = null;
+      if (yesNo && qTokens.length) {
+        picked = lines.filter(function (line) {
+          var hay = askTokens(line);
+          return qTokens.some(function (t) {
+            return hay.some(function (h) { return askTokensOverlap(t, h); });
+          });
+        })[0] || lines[0];
+      }
+      var body = (picked ? [picked] : lines.slice(0, 3)).map(askSentence).join('\n\n');
+      return withYes(yesNo, body);
     }
     if (/what('?s| is| was)? (happening|happing|happeniong|happened|going on)|what (did|work)|did anything|anything happen|what('s| is) (visible|going on|in this|on (the |this )?(clip|video|film|screen))|what do you see|describe (this |the )?(clip|video|film|footage)|any work/i.test(q)) {
       var changes = (a.changes || []).filter(Boolean);
       var actions = (a.actions || []).map(function (act) { return act.description; }).filter(Boolean);
-      var date = item.workDate ? ' on ' + item.workDate : '';
-      if (changes.length) return 'Yes — the footage' + date + ' shows: ' + changes.slice(0, 4).join('; ') + '.';
-      if (actions.length) return 'Yes — the footage' + date + ' shows: ' + actions.slice(0, 4).join('; ') + '.';
-      if (a.dictation || a.summary) return 'The reading of this clip' + date + ': ' + (a.dictation || a.summary);
-      return 'The footage on file does not show that.';
+      var dateSpoken = dayLabelSpoken(item.workDate);
+      if (a.dictation) return withYes(yesNo, askSentence(a.dictation));
+      if (a.summary) return withYes(yesNo, askSentence(a.summary));
+      if (changes.length) return withYes(yesNo, sceneFromFragments(changes, dateSpoken));
+      if (actions.length) return withYes(yesNo, sceneFromFragments(actions, dateSpoken));
+      return yesNo ? notInClipNo : notInClip;
     }
     var qTokens = askTokens(q);
-    if (!qTokens.length) return (a.dictation || a.summary || 'The footage on file does not show that.');
-    var yesNo = /^(did|does|do|was|were|is|are|has|have|had|at any|anytime)\b/i.test(q) ||
-      /\b(go in|went in|go into|went into|enter|entered|ever go|at any point)\b/i.test(q);
+    if (!qTokens.length) return a.dictation || a.summary ? askSentence(a.dictation || a.summary) : notInClip;
     var need = Math.min(qTokens.length >= 2 ? 2 : 1, qTokens.length);
     var scored = rows.map(function (row) {
       var hay = askTokens(row.text);
@@ -4216,26 +4291,25 @@
       return y.score - x.score || (x.row.at || 0) - (y.row.at || 0);
     });
     if (!scored.length) {
-      return yesNo ? 'No. The footage on file does not show that.' : 'The footage on file does not show that.';
+      return yesNo ? notInClipNo : notInClip;
     }
     if (yesNo) {
       var hit = scored.filter(function (e) { return e.row.at != null; })[0] || scored[0];
-      var spoken = hit.row.at != null ? durSpoken(hit.row.at) : '';
-      var body = hit.row.text.replace(/\.$/, '');
-      var denies = /\b(no work|not visible|not worked|untouched|never |none of|did not|does not show)\b/i.test(body);
-      if (denies) return spoken ? 'No. ' + body + '. That was ' + spoken + '.' : 'No. ' + body + '.';
-      return spoken ? 'Yes. ' + body + '. That happened at ' + spoken + '.' : 'Yes. ' + body + '.';
+      var spokenAt = hit.row.at != null ? durSpoken(hit.row.at) : '';
+      var hitBody = askSentence(hit.row.text);
+      var denies = /\b(no work|not visible|not worked|untouched|never |none of|did not|does not show)\b/i.test(hitBody);
+      if (denies) return spokenAt ? 'No. At ' + spokenAt + ', ' + askUncap(hitBody) : 'No. ' + hitBody;
+      return spokenAt ? 'Yes. At ' + spokenAt + ', ' + askUncap(hitBody) : 'Yes. ' + hitBody;
     }
     var best = scored[0];
     var timed = scored.filter(function (e) { return e.row.at != null; })[0];
     var top = timed && timed !== best ? [best, timed] : scored.slice(0, 2);
     return top.map(function (e) {
-      var when = e.row.at != null ? dur(e.row.at) : '';
-      var spoken = e.row.at != null ? durSpoken(e.row.at) : '';
-      var text = e.row.text.replace(/\.$/, '');
-      if (when && spoken) return 'At ' + when + ', ' + text.charAt(0).toLowerCase() + text.slice(1) + '. That was ' + spoken;
+      var spokenAt = e.row.at != null ? durSpoken(e.row.at) : '';
+      var text = askSentence(e.row.text);
+      if (spokenAt) return 'At ' + spokenAt + ', ' + askUncap(text);
       return text;
-    }).join('. ') + '.';
+    }).join(' ');
   }
 
   function askClip(item, question, history, cb) {
@@ -4258,24 +4332,24 @@
         cb(null, body.answer || local);
       });
     }).catch(function () {
-      cb(null, clipAskCorpus(item).length ? local : 'This clip is still being read. Ask again once the dictation lands.');
+      cb(null, clipAskCorpus(item).length ? local : 'This clip is still being read. Ask again in a moment.');
     });
   }
 
   function renderAsk(item) {
     var thread = ASK_THREADS[item.id] || [];
     var html = '<div class="ask-pane">' +
-      '<div class="alog-head"><h4>Ask this clip</h4></div>' +
+      '<div class="alog-head"><h4>Ask about this clip</h4></div>' +
       '<div class="ask-thread" id="ask-thread">';
     if (!thread.length) {
-      html += '<p class="ask-empty">Ask about this clip. Answers come from the Scope of Work reading — what the AI saw on screen and, when the mic was on, what was said.</p>' +
+      html += '<p class="ask-empty">Ask about this clip the way you would ask a colleague who already watched it — what happened, who was there, or what was said.</p>' +
         '<div class="ask-suggest">' +
+        '<button type="button" data-ask="What happened here?">What happened here?</button>' +
         '<button type="button" data-ask="What is happening in this video?">What is happening?</button>' +
         '<button type="button" data-ask="Did anything happen in this clip?">Did anything happen?</button>' +
         '<button type="button" data-ask="What work is visible?">What work is visible?</button>' +
         '<button type="button" data-ask="At any point did the worker go in the bathroom?">Did they go in the bathroom?</button>' +
         '<button type="button" data-ask="What did the homeowner say?">What did the homeowner say?</button>' +
-        '<button type="button" data-ask="Is anything in this footage unfinished?">Anything unfinished?</button>' +
         '</div>';
     } else {
       thread.forEach(function (m) {
@@ -4284,7 +4358,7 @@
     }
     html += '</div>' +
       '<form id="ask-form" class="ask-form">' +
-      '<textarea id="ask-input" maxlength="1000" rows="1" autocomplete="off" placeholder="Ask about this clip…"></textarea>' +
+      '<textarea id="ask-input" maxlength="1000" rows="1" autocomplete="off" placeholder="What happened here?"></textarea>' +
       '<button type="submit">Ask</button>' +
       '</form></div>';
     return html;
@@ -4307,7 +4381,7 @@
       if (host) {
         var pending = document.createElement('div');
         pending.className = 'ask-bubble assistant pending';
-        pending.textContent = 'Reading the clip…';
+        pending.textContent = 'Looking at the clip…';
         host.appendChild(pending);
       }
       askClip(item, q, history, function (_err, answer) {
