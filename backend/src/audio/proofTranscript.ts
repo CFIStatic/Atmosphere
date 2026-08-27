@@ -13,8 +13,10 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createAdminClient } from '../lib/supabase.js';
-import { transcriptionEnabled, transcribeAudio } from '../lib/transcription.js';
+import { transcriptionEnabled, transcribeAudioDetailed } from '../lib/transcription.js';
 import { RetryQueue } from '../shared/retryQueue.js';
+import { extractConversationDetails, mergeConversationFindings } from './conversationDetails.js';
+import { formatTimestampedTranscript } from './transcriptFormat.js';
 
 const PROOF_BUCKET = 'job-proofs';
 
@@ -106,13 +108,26 @@ export function planAudioChunks(
   return starts;
 }
 
-function stampChunk(seconds: number): string {
-  const s = Math.max(0, Math.round(seconds));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const r = s % 60;
-  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
-  return `${m}:${String(r).padStart(2, '0')}`;
+/** Write speech + extracted talk facts without touching the visual reading. */
+export function transcriptPersistPatch(
+  text: string,
+  existingFindings: unknown,
+): {
+  transcript_status: 'done';
+  transcript_text: string;
+  transcript_error: null;
+  transcribed_at: string;
+  ai_findings: Record<string, unknown>;
+} {
+  const stamped = formatTimestampedTranscript(text);
+  const details = extractConversationDetails(stamped);
+  return {
+    transcript_status: 'done',
+    transcript_text: stamped.slice(0, MAX_TRANSCRIPT_CHARS),
+    transcript_error: null,
+    transcribed_at: new Date().toISOString(),
+    ai_findings: mergeConversationFindings(existingFindings, details),
+  };
 }
 
 /** ffmpeg reads a signed URL or local path. Node never holds the day film. */
@@ -190,17 +205,21 @@ export async function transcribeProofVideo(admin: any, proofId: string): Promise
 
   const knownStarts = planAudioChunks(duration);
   const parts: string[] = [];
-  const stamp = (start: number, many: boolean, body: string) =>
-    many ? `[${stampChunk(start)}] ${body}` : body;
+
+  const hearSlice = async (start: number): Promise<string> => {
+    const wav = await extractWavFromInput(url, TRANSCRIPT_CHUNK_SECONDS, start);
+    if (wav.length < 1000) return '';
+    const slice = await transcribeAudioDetailed(wav, 'audio/wav');
+    return formatTimestampedTranscript(slice.text, {
+      offsetSeconds: start,
+      segments: slice.segments,
+    });
+  };
 
   if (knownStarts.length) {
     for (const start of knownStarts) {
-      const wav = await extractWavFromInput(url, TRANSCRIPT_CHUNK_SECONDS, start);
-      if (wav.length < 1000) continue;
-      const slice = await transcribeAudio(wav, 'audio/wav');
-      const body = slice.trim();
-      if (!body) continue;
-      parts.push(stamp(start, knownStarts.length > 1, body));
+      const body = await hearSlice(start);
+      if (body) parts.push(body);
     }
   } else {
     // No clock on the row and ffprobe could not read one. Walk 10-minute
@@ -209,9 +228,12 @@ export async function transcribeProofVideo(admin: any, proofId: string): Promise
     for (let start = 0; start < MAX_TRANSCRIPT_SECONDS; start += TRANSCRIPT_CHUNK_SECONDS) {
       const wav = await extractWavFromInput(url, TRANSCRIPT_CHUNK_SECONDS, start);
       if (wav.length < 1000) break;
-      const slice = await transcribeAudio(wav, 'audio/wav');
-      const body = slice.trim();
-      if (body) parts.push(`[${stampChunk(start)}] ${body}`);
+      const slice = await transcribeAudioDetailed(wav, 'audio/wav');
+      const body = formatTimestampedTranscript(slice.text, {
+        offsetSeconds: start,
+        segments: slice.segments,
+      });
+      if (body) parts.push(body);
     }
   }
 
@@ -227,14 +249,15 @@ export async function transcribeProofVideo(admin: any, proofId: string): Promise
     return;
   }
 
+  const { data: current } = await admin
+    .from('job_proofs')
+    .select('ai_findings')
+    .eq('id', proofId)
+    .maybeSingle();
+
   await admin
     .from('job_proofs')
-    .update({
-      transcript_status: 'done',
-      transcript_text: parts.join('\n').slice(0, MAX_TRANSCRIPT_CHARS),
-      transcript_error: null,
-      transcribed_at: new Date().toISOString(),
-    })
+    .update(transcriptPersistPatch(parts.join('\n'), current?.ai_findings ?? null))
     .eq('id', proofId);
 }
 

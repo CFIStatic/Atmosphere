@@ -216,6 +216,26 @@ test('a homeowner conversation is answered from the mic, not the frames', () => 
 
   const agreed = groundedAnswerFromClip('What did they agree to?', talk);
   assert.match(agreed, /mirror|cabinets|adjuster/i);
+
+  const asked = groundedAnswerFromClip('What did they ask?', talk);
+  assert.match(asked, /vanity|cabinets|insurance/i);
+});
+
+test('Ask does not treat spoken agreements as completed work', () => {
+  const talk = {
+    analysisState: 'done' as const,
+    transcript:
+      '[1:36] Contractor: We will remount the mirror today and leave the cabinets until the adjuster says go ahead.',
+    conversationAgreements: [
+      'We will remount the mirror today and leave the cabinets until the adjuster says go ahead.',
+    ],
+    dictationEntries: [
+      { atSeconds: 96, text: 'Bathroom in frame; they are talking, not working.' },
+    ],
+  };
+  const answer = groundedAnswerFromClip('Did they remount the mirror?', talk);
+  assert.match(answer, /talked about that|frames on file do not show it was done/i);
+  assert.doesNotMatch(answer, /^Yes\./);
 });
 
 test('answerFromClip falls back to the grounded reading when no model is configured', async () => {

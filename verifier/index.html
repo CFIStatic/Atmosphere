@@ -1042,6 +1042,19 @@
   }
   .alog .t { font-family: var(--mono); font-size: 11px; color: var(--faint); padding-top: 2px; }
   .alog li.on .t { color: var(--accent); font-weight: 700; }
+  .alog li.heard .t { color: var(--accent); }
+  .alog .alog-kind {
+    display: inline-block; margin-right: 6px; font-size: 10px; font-weight: 750;
+    letter-spacing: .04em; text-transform: uppercase; color: var(--accent);
+  }
+  .heard-list { list-style: none; margin: 0 0 10px; padding: 0; }
+  .heard-list li {
+    display: grid; grid-template-columns: 52px 1fr; gap: 10px;
+    padding: 7px 0; border-bottom: 1px solid var(--line-soft);
+    font-size: 13px; line-height: 1.5; color: var(--ink-2); cursor: pointer;
+  }
+  .heard-list li:last-child { border-bottom: 0; }
+  .heard-list .t { font-family: var(--mono); font-size: 11px; color: var(--faint); padding-top: 2px; }
   .alog li.writing [data-full]::after {
     content: ''; display: inline-block; width: 6px; height: 12px; margin-left: 3px;
     background: var(--accent); vertical-align: text-bottom;
@@ -3937,11 +3950,16 @@
       add(t.startSeconds, t.summary, 'window');
     });
     String(a.transcript || '').split(/\n+/).forEach(function (line) {
-      var m = String(line || '').trim().match(/^\[((?:\d+:)+\d+)\]\s*(.+)$/);
-      if (!m) return;
-      var parts = m[1].split(':').map(Number);
-      var at = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
-      add(at, m[2], 'heard');
+      var raw = String(line || '').trim();
+      if (!raw) return;
+      var m = raw.match(/^\[((?:\d+:)+\d+)\]\s*(.+)$/);
+      if (m) {
+        var parts = m[1].split(':').map(Number);
+        var at = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
+        add(at, m[2], 'heard');
+        return;
+      }
+      add(0, raw, 'heard');
     });
     if (rows.length < 6 && a.changes && a.changes.length) {
       var d = item.duration || 120;
@@ -4057,12 +4075,15 @@
     var rows = analysisLog(item);
     var saw = String(a.dictation || a.summary || '').trim();
     var heard = String(a.transcript || '').trim();
+    var micStatus = a.transcriptStatus || item.transcriptStatus || '';
+    var listening = (micStatus === 'queued' || micStatus === 'running') && !heard;
     var pill = a.state === 'failed' ? 'Failed'
       : a.state === 'skipped' ? 'Could not read'
+      : listening ? 'Listening…'
       : (a.state === 'queued' || a.state === 'none' || !a.state) && !rows.length && !saw && !heard ? 'Writing…'
       : 'Ready';
     var html = '<div class="alog-head"><h4>AI analysis</h4><span class="livepill" id="alog-pill">' + pill + '</span></div>';
-    if (!rows.length && !saw && !heard) {
+    if (!rows.length && !saw && !heard && !listening) {
       var wait = a.reason || item.analysisError ||
         (a.state === 'failed'
           ? 'The dictation failed after retries. The footage itself is unaffected.'
@@ -4086,20 +4107,57 @@
       html += '</ul>';
     }
     if (rows.length) {
-      html += '<p class="saw-k">What the AI saw, in order</p>';
-      html += '<p class="footnote alog-wait" id="alog-empty">You do not have to watch the clip. Times jump the playhead.</p>';
+      html += '<p class="saw-k">What the AI saw and heard, in order</p>';
+      html += '<p class="footnote alog-wait" id="alog-empty">You do not have to watch the clip. Times jump the playhead. “Said” lines are speech.</p>';
       html += '<ul class="alog" id="alog">' + rows.map(function (r) {
-        return '<li data-at="' + r.at + '" class="soon">' +
-          '<span class="t">' + dur(r.at) + '</span><span data-full="' + esc(r.text) + '">' + esc(r.text) + '</span></li>';
+        return '<li data-at="' + r.at + '" class="soon' + (r.kind === 'heard' ? ' heard' : '') + '">' +
+          '<span class="t">' + dur(r.at) + '</span><span>' +
+          (r.kind === 'heard' ? '<span class="alog-kind">said</span>' : '') +
+          '<span data-full="' + esc(r.text) + '">' + esc(r.text) + '</span></span></li>';
       }).join('') + '</ul>';
     }
-    if (heard || (a.conversationDetails && a.conversationDetails.length)) {
+    if (heard || listening || (a.conversationDetails && a.conversationDetails.length) ||
+        (a.conversationAgreements && a.conversationAgreements.length)) {
       html += '<p class="saw-k">Heard on the mic</p>';
-      if (a.conversationDetails && a.conversationDetails.length) {
+      if (listening) {
+        html += '<p class="footnote alog-wait">Listening to the recording. Spoken lines land here and on the timestamps.</p>';
+      }
+      if (a.conversationRooms && a.conversationRooms.length) {
+        html += '<p class="footnote" style="margin:0 0 8px">Rooms mentioned: ' +
+          esc(a.conversationRooms.join(', ')) + '</p>';
+      }
+      if (a.conversationAgreements && a.conversationAgreements.length) {
+        html += '<p class="saw-k" style="margin-top:8px">Agreed on the mic</p><ul style="margin:0 0 10px;padding-left:17px;font-size:13px;color:var(--ink-2);line-height:1.55">' +
+          a.conversationAgreements.slice(0, 6).map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>';
+      }
+      if (a.conversationConcerns && a.conversationConcerns.length) {
+        html += '<p class="saw-k" style="margin-top:8px">Spoken concerns</p><ul style="margin:0 0 10px;padding-left:17px;font-size:13px;color:var(--ink-2);line-height:1.55">' +
+          a.conversationConcerns.slice(0, 6).map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>';
+      }
+      var spokenLines = [];
+      String(heard).split(/\n+/).forEach(function (line) {
+        var raw = String(line || '').trim();
+        if (!raw) return;
+        var m = raw.match(/^\[((?:\d+:)+\d+)\]\s*(.+)$/);
+        if (m) {
+          var parts = m[1].split(':').map(Number);
+          var at = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
+          spokenLines.push({ at: at, text: m[2] });
+          return;
+        }
+        spokenLines.push({ at: 0, text: raw });
+      });
+      if (spokenLines.length) {
+        var shown = spokenLines.slice(0, 40);
+        html += '<ul class="heard-list">' + shown.map(function (r) {
+          return '<li data-at="' + r.at + '"><span class="t">' + dur(r.at) + '</span><span>' + esc(r.text) + '</span></li>';
+        }).join('') + '</ul>';
+        if (spokenLines.length > 40) {
+          html += '<p class="footnote">And ' + (spokenLines.length - 40) + ' more spoken lines on the timestamps.</p>';
+        }
+      } else if (a.conversationDetails && a.conversationDetails.length) {
         html += '<ul style="margin:0 0 10px;padding-left:17px;font-size:13px;color:var(--ink-2);line-height:1.55">' +
           a.conversationDetails.slice(0, 8).map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>';
-      } else {
-        html += '<div class="saw-block" style="background:var(--line-soft)"><p>' + esc(heard.slice(0, 1200)) + '</p></div>';
       }
     }
     if (a.couldNotTell && a.couldNotTell.length) {
@@ -4139,39 +4197,39 @@
   function clipAskCorpus(item) {
     var a = item.analysis || {};
     var rows = [];
-    function push(at, text) {
+    function push(at, text, kind) {
       var t = String(text || '').trim();
-      if (t) rows.push({ at: at == null ? null : Number(at), text: t });
+      if (t) rows.push({ at: at == null ? null : Number(at), text: t, kind: kind || 'note' });
     }
-    push(null, a.dictation);
-    if (a.summary && a.summary !== a.dictation) push(null, a.summary);
-    (a.dictationEntries || []).forEach(function (e) { push(e.atSeconds, e.text || e.note || e.summary); });
+    push(null, a.dictation, 'dictation');
+    if (a.summary && a.summary !== a.dictation) push(null, a.summary, 'summary');
+    (a.dictationEntries || []).forEach(function (e) { push(e.atSeconds, e.text || e.note || e.summary, 'beat'); });
     (a.actions || []).forEach(function (act) {
       var verb = String(act.action || '').replace(/_/g, ' ');
       var room = String(act.room || '').trim();
       var object = String(act.object || act.objectLabel || '').trim();
-      push(act.atSeconds, [room, verb, act.description, object].filter(Boolean).join(' — '));
+      push(act.atSeconds, [room, verb, act.description, object].filter(Boolean).join(' — '), 'action');
     });
-    (a.timeline || []).forEach(function (t) { push(t.startSeconds, t.summary); });
-    (a.changes || []).forEach(function (c) { push(null, c); });
+    (a.timeline || []).forEach(function (t) { push(t.startSeconds, t.summary, 'window'); });
+    (a.changes || []).forEach(function (c) { push(null, c, 'change'); });
     (a.scope || []).forEach(function (s) {
-      push(null, [s.title, s.verdict, s.because].filter(Boolean).join(' — '));
+      push(null, [s.title, s.verdict, s.because].filter(Boolean).join(' — '), 'scope');
     });
-    (a.couldNotTell || []).forEach(function (c) { push(null, c); });
+    (a.couldNotTell || []).forEach(function (c) { push(null, c, 'gap'); });
     String(a.transcript || '').split(/\n+/).forEach(function (line) {
       var m = String(line || '').trim().match(/^\[((?:\d+:)+\d+)\]\s*(.+)$/);
       if (m) {
         var parts = m[1].split(':').map(Number);
         var at = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
-        push(at, m[2]);
+        push(at, m[2], 'heard');
         return;
       }
-      if (line.trim()) push(null, line.trim());
+      if (line.trim()) push(null, line.trim(), 'heard');
     });
-    (a.conversationDetails || []).forEach(function (c) { push(null, c); });
-    (a.conversationAgreements || []).forEach(function (c) { push(null, c); });
-    (a.conversationConcerns || []).forEach(function (c) { push(null, c); });
-    (a.conversationRooms || []).forEach(function (c) { push(null, 'Talked about the ' + c); });
+    (a.conversationDetails || []).forEach(function (c) { push(null, c, 'heard'); });
+    (a.conversationAgreements || []).forEach(function (c) { push(null, c, 'heard'); });
+    (a.conversationConcerns || []).forEach(function (c) { push(null, c, 'heard'); });
+    (a.conversationRooms || []).forEach(function (c) { push(null, 'Talked about the ' + c, 'heard'); });
     return rows;
   }
 
@@ -4182,7 +4240,7 @@
     if (state === 'failed' && !clipAskCorpus(item).length) return 'The reading of this clip failed. The footage itself is unaffected.';
     var rows = clipAskCorpus(item);
     if (!rows.length) return 'This clip is still being read. Ask again once the dictation lands.';
-    if (/what (did|was) (the )?(homeowner|owner|contractor|they|he|she|worker).*(say|ask|tell|agree|mention)|did (the )?(homeowner|owner|contractor|they).*(say|mention|agree)|what was said|anything said|heard on the mic|conversation|what did they agree/i.test(q)) {
+    if (/what (did|was) (the )?(homeowner|owner|contractor|they|he|she|worker|people).*(say|ask|tell|agree|mention)|did (the )?(homeowner|owner|contractor|they|anyone).*(say|mention|agree|ask)|what was said|anything said|heard on the mic|conversation|what did they (agree|ask|say)|what did (he|she) (say|ask)|what was agreed/i.test(q)) {
       var spoken = (a.conversationDetails || []).concat(a.conversationAgreements || []).concat(a.conversationConcerns || []).filter(Boolean);
       if (spoken.length) return 'Yes — this is what was said on the recording: ' + spoken.slice(0, 3).join(' ');
       var heardLines = String(a.transcript || '').split(/\n+/).map(function (line) {
@@ -4219,7 +4277,22 @@
       return yesNo ? 'No. The footage on file does not show that.' : 'The footage on file does not show that.';
     }
     if (yesNo) {
-      var hit = scored.filter(function (e) { return e.row.at != null; })[0] || scored[0];
+      var speechQ = /\b(say|said|ask|asked|tell|told|mention|mentioned|agree|agreed|talk|talked|conversation|heard)\b/i.test(q);
+      var workQ = /\b(replace|remount|cut|install|remove|paint|fix|repair|did they (do|work)|work in|pull|demo|mount)\b/i.test(q) && !speechQ;
+      var hit;
+      if (workQ) {
+        var visible = scored.filter(function (e) { return e.row.kind !== 'heard'; })[0];
+        if (!visible) {
+          var talk = scored[0].row;
+          var talkWhen = talk.at != null ? durSpoken(talk.at) : '';
+          return 'They talked about that on the recording: ' + talk.text.replace(/\.$/, '') + '.' +
+            (talkWhen ? ' That was ' + talkWhen + '.' : '') +
+            ' The frames on file do not show it was done.';
+        }
+        hit = visible;
+      } else {
+        hit = scored.filter(function (e) { return e.row.at != null; })[0] || scored[0];
+      }
       var spoken = hit.row.at != null ? durSpoken(hit.row.at) : '';
       var body = hit.row.text.replace(/\.$/, '');
       var denies = /\b(no work|not visible|not worked|untouched|never |none of|did not|does not show)\b/i.test(body);
@@ -4351,7 +4424,7 @@
 
     if (tab === 'integrity') {
       el.innerHTML = renderScopeLog(item);
-      Array.prototype.forEach.call(el.querySelectorAll('#alog [data-at]'), function (li) {
+      Array.prototype.forEach.call(el.querySelectorAll('#alog [data-at], .heard-list [data-at]'), function (li) {
         li.addEventListener('click', function () { seekTo(Number(li.getAttribute('data-at'))); });
       });
       var goto = el.querySelector('[data-goto]');
@@ -4934,6 +5007,7 @@
     return {
       _remote: true,
       id: raw.id,
+      transcriptStatus: raw.transcriptStatus || reading.transcriptStatus || null,
       job: jobKey || 'shared',
       jobName: raw.jobName,
       address: raw.address || '',
@@ -4973,6 +5047,7 @@
             windowsTotal: reading.windowsTotal,
             windowsRead: reading.windowsRead,
             transcript: reading.transcript || '',
+            transcriptStatus: reading.transcriptStatus || raw.transcriptStatus || null,
             conversationDetails: reading.conversationDetails || [],
             conversationAgreements: reading.conversationAgreements || [],
             conversationConcerns: reading.conversationConcerns || [],
@@ -4995,13 +5070,22 @@
     return Boolean(a && (a.dictation || a.summary || a.transcript || (a.actions && a.actions.length)));
   }
 
+  function waitingOnMic(item) {
+    var heard = item && item.analysis && String(item.analysis.transcript || '').trim();
+    if (heard) return false;
+    var st = (item && item.transcriptStatus) || (item && item.analysis && item.analysis.transcriptStatus) || '';
+    if (st === 'done') return false;
+    return true;
+  }
+
   function applyRemoteReading(item, mapped) {
     var prev = item.analysis && item.analysis.state;
     item.analysis = mapped.analysis;
     item.analysisError = mapped.analysisError;
+    if (mapped.transcriptStatus) item.transcriptStatus = mapped.transcriptStatus;
     if (mapped.duration != null) item.duration = mapped.duration;
     var next = item.analysis && item.analysis.state;
-    var settled = clipHasLocalReading(item) || next === 'failed' || next === 'skipped';
+    var settled = (clipHasLocalReading(item) || next === 'failed' || next === 'skipped') && !waitingOnMic(item);
     if (settled && item._watchReading) {
       clearInterval(item._watchReading);
       item._watchReading = null;
@@ -5017,9 +5101,10 @@
 
   /** Scope of Work reads the video. Keep asking the server until that reading lands. */
   function watchRemoteReading(item) {
-    if (!item || !item._remote || clipHasLocalReading(item) || item._watchReading) return;
+    if (!item || !item._remote || item._watchReading) return;
+    if (clipHasLocalReading(item) && !waitingOnMic(item)) return;
     var next = item.analysis && item.analysis.state;
-    if (next === 'failed' || next === 'skipped') return;
+    if ((next === 'failed' || next === 'skipped') && !waitingOnMic(item)) return;
     var tries = 0;
     item._watchReading = setInterval(function () {
       tries += 1;
@@ -5066,6 +5151,7 @@
           item.checks = mapped.checks;
           item.hold = mapped.hold;
           item.analysisError = mapped.analysisError;
+          if (mapped.transcriptStatus) item.transcriptStatus = mapped.transcriptStatus;
           if (mapped.duration != null) item.duration = mapped.duration;
         }
         item.custody = (payload.custody || []).map(function (c) {

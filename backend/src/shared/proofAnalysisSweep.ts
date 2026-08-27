@@ -35,7 +35,16 @@ export function needsNarration(
 }
 
 export function needsTranscript(status: string | null | undefined): boolean {
-  return !status || status === 'idle' || status === 'failed' || status === 'skipped';
+  // Queued/running are in-memory. A restart loses them and the row sits
+  // "queued" forever unless we put it back on, the same as narration.
+  return (
+    !status ||
+    status === 'idle' ||
+    status === 'failed' ||
+    status === 'skipped' ||
+    status === 'queued' ||
+    status === 'running'
+  );
 }
 
 export async function sweepUnanalyzedProofs(
@@ -68,6 +77,8 @@ export async function sweepUnanalyzedProofs(
         'transcript_status.eq.idle',
         'transcript_status.eq.failed',
         'transcript_status.eq.skipped',
+        'transcript_status.eq.queued',
+        'transcript_status.eq.running',
       ].join(','),
     )
     .order('received_at', { ascending: true })

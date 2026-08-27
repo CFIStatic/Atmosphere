@@ -1,5 +1,13 @@
 import { config } from '../config.js';
 import { HttpError } from './errors.js';
+import type { TranscriptSegment } from '../audio/transcriptFormat.js';
+
+export type { TranscriptSegment };
+
+export type TranscriptResult = {
+  text: string;
+  segments: TranscriptSegment[];
+};
 
 /**
  * Server-side speech-to-text.
@@ -39,7 +47,48 @@ function filenameFor(mimeType: string): string {
   }
 }
 
-export async function transcribeAudio(audio: Buffer, mimeType: string): Promise<string> {
+/** Pull text + optional Whisper segment clocks out of a provider JSON body. */
+export function transcriptFromProviderBody(body: unknown): TranscriptResult {
+  const rec = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
+  const text = typeof rec.text === 'string' ? rec.text.trim() : '';
+  const raw = Array.isArray(rec.segments) ? rec.segments : [];
+  const segments: TranscriptSegment[] = [];
+  for (const row of raw) {
+    if (!row || typeof row !== 'object') continue;
+    const seg = row as Record<string, unknown>;
+    const spoken = typeof seg.text === 'string' ? seg.text.trim() : '';
+    if (!spoken) continue;
+    const start = Number(seg.start);
+    const end = Number(seg.end);
+    segments.push({
+      start: Number.isFinite(start) ? start : 0,
+      end: Number.isFinite(end) ? end : undefined,
+      text: spoken,
+    });
+  }
+  return {
+    text: text || segments.map((seg) => seg.text).join(' ').trim(),
+    segments,
+  };
+}
+
+function transcriptionForm(audio: Buffer, mimeType: string, model: string, verbose: boolean): FormData {
+  const form = new FormData();
+  form.append('file', new Blob([new Uint8Array(audio)], { type: mimeType }), filenameFor(mimeType));
+  form.append('model', model);
+  if (verbose) form.append('response_format', 'verbose_json');
+  return form;
+}
+
+async function postTranscription(url: string, apiKey: string, form: FormData): Promise<Response> {
+  return fetch(url, {
+    method: 'POST',
+    headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
+    body: form,
+  });
+}
+
+export async function transcribeAudioDetailed(audio: Buffer, mimeType: string): Promise<TranscriptResult> {
   const { url, apiKey, model } = config.technician.transcription;
   if (!url) {
     throw new HttpError(
@@ -49,17 +98,12 @@ export async function transcribeAudio(audio: Buffer, mimeType: string): Promise<
     );
   }
 
-  const form = new FormData();
-  form.append('file', new Blob([new Uint8Array(audio)], { type: mimeType }), filenameFor(mimeType));
-  form.append('model', model);
-
   let res: Response;
   try {
-    res = await fetch(url, {
-      method: 'POST',
-      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
-      body: form,
-    });
+    res = await postTranscription(url, apiKey, transcriptionForm(audio, mimeType, model, true));
+    if (!res.ok && (res.status === 400 || res.status === 415 || res.status === 422)) {
+      res = await postTranscription(url, apiKey, transcriptionForm(audio, mimeType, model, false));
+    }
   } catch {
     throw new HttpError(502, 'Could not reach the transcription service.', 'transcription_failed');
   }
@@ -73,10 +117,18 @@ export async function transcribeAudio(audio: Buffer, mimeType: string): Promise<
     );
   }
 
-  const body = (await res.json()) as { text?: string };
-  const text = body.text?.trim();
-  if (!text) {
+  let parsed: TranscriptResult = { text: '', segments: [] };
+  try {
+    parsed = transcriptFromProviderBody(await res.json());
+  } catch {
+    parsed = { text: '', segments: [] };
+  }
+  if (!parsed.text) {
     throw new HttpError(422, "That clip came back empty — I couldn't make out any speech.", 'transcription_empty');
   }
-  return text;
+  return parsed;
+}
+
+export async function transcribeAudio(audio: Buffer, mimeType: string): Promise<string> {
+  return (await transcribeAudioDetailed(audio, mimeType)).text;
 }

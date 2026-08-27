@@ -4,6 +4,7 @@ import {
   analysisStateOf,
   clipHasReading,
   clipNeedsDenseReading,
+  clipNeedsTranscript,
   dateSearchPhrases,
   presentUnreadClip,
   downloadDecision,
@@ -378,7 +379,8 @@ test('serialization: a talk clip with only a transcript is Askable', () => {
   });
 
   assert.equal(item.analysisState, 'done');
-  assert.match(String(item.analysis?.transcript), /vanity/);
+  assert.match(String(item.analysis?.transcript), /\[0:00\].*vanity/s);
+  assert.match(String(item.analysis?.transcript), /^\[(?:\d+:)+\d+\]\s+/m);
   assert.ok((item.analysis as { conversationDetails?: string[] } | null)?.conversationDetails?.some((line) => /insurance/i.test(line)));
   const rooms = (item.analysis as { conversationRooms?: string[] } | null)?.conversationRooms ?? [];
   assert.ok(rooms.includes('bathroom'));
@@ -506,6 +508,35 @@ test('presentUnreadClip never hides a skip or fail behind queued', () => {
     false,
   );
   assert.equal(clipNeedsDenseReading(skipped), false);
+});
+
+test('a dense visual reading with no mic still needs a transcript kick', () => {
+  const seen = {
+    transcriptStatus: 'idle',
+    analysis: {
+      dictation: 'Hallway talk. No tools come out.',
+      detailLevel: 'dense',
+      transcript: null,
+    },
+  };
+  const heard = {
+    transcriptStatus: 'done',
+    analysis: {
+      dictation: 'Hallway talk.',
+      detailLevel: 'dense',
+      transcript: '[0:18] Homeowner: Leave the cabinets.',
+    },
+  };
+  const silentDone = {
+    transcriptStatus: 'done',
+    analysis: { dictation: 'Empty driveway.', detailLevel: 'dense', transcript: '' },
+  };
+  assert.equal(clipHasReading(seen), true);
+  assert.equal(clipNeedsDenseReading(seen), false);
+  assert.equal(clipNeedsTranscript(seen), true);
+  assert.equal(clipNeedsTranscript(heard), false);
+  assert.equal(clipNeedsTranscript(silentDone), false);
+  assert.equal(clipNeedsTranscript({ transcriptStatus: 'skipped', analysis: { dictation: 'Desk.' } }), true);
 });
 
 

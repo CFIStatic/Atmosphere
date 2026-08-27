@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractConversationDetails, roomsMentionedIn } from '../src/audio/conversationDetails.js';
+import {
+  conversationForFindings,
+  extractConversationDetails,
+  mergeConversationFindings,
+  roomsMentionedIn,
+} from '../src/audio/conversationDetails.js';
 
 const talk =
   'Homeowner: The leak started behind the vanity. I do not want you to replace the cabinets unless insurance approves it. ' +
@@ -26,4 +31,19 @@ test('extractConversationDetails is empty when nobody spoke', () => {
   const details = extractConversationDetails('   ');
   assert.equal(details.summary, null);
   assert.deepEqual(details.details, []);
+});
+
+test('conversation facts persist onto ai_findings without wiping vision', () => {
+  const details = extractConversationDetails(talk);
+  const stored = conversationForFindings(details);
+  assert.ok(stored.agreements.length);
+  assert.ok(stored.rooms.includes('hallway'));
+  const merged = mergeConversationFindings(
+    { kind: 'day_film', summary: 'Talking in the hall.', actions: [1] },
+    details,
+  );
+  assert.equal(merged.kind, 'day_film');
+  assert.equal(merged.summary, 'Talking in the hall.');
+  assert.deepEqual(merged.actions, [1]);
+  assert.deepEqual(merged.conversation, stored);
 });
