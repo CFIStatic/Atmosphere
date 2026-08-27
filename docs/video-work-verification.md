@@ -162,7 +162,7 @@ See `backend/.env.example` section **Video work verification**. Important:
 | Variable | Purpose |
 |----------|---------|
 | `GOOGLE_API_KEY` / `GEMINI_API_KEY` | Primary vision model |
-| `VERIFICATION_PRIMARY_MODEL` | Default `gemini-2.0-flash` |
+| `VERIFICATION_PRIMARY_MODEL` | Default `gemini-3.6-flash` |
 | `ANTHROPIC_API_KEY` | Escalation model |
 | `VERIFICATION_ESCALATION_MODEL` | Frontier vision model |
 | `FFMPEG_PATH` / `FFPROBE_PATH` | Binary locations |

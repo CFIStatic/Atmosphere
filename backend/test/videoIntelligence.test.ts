@@ -256,3 +256,72 @@ test('dictatePreparedFrames sends GEMINI_API_KEY, not a Maps GOOGLE_API_KEY', as
     else process.env.ANTHROPIC_API_KEY = prevAnthropic;
   }
 });
+
+test('dictatePreparedFrames retries a retired Gemini model with the suggested id', async () => {
+  const prevGoogle = process.env.GOOGLE_API_KEY;
+  const prevGemini = process.env.GEMINI_API_KEY;
+  const prevAnthropic = process.env.ANTHROPIC_API_KEY;
+  process.env.GEMINI_API_KEY = 'real-gemini';
+  delete process.env.GOOGLE_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  const urls: string[] = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    urls.push(url);
+    if (!url.includes('gemini-3.6-flash-retry')) {
+      return new Response(
+        JSON.stringify({
+          error: {
+            code: 404,
+            message:
+              'This model models/gemini-2.5-flash is no longer available to new users. Please update your code to use models/gemini-3.6-flash-retry for the latest features and improvements.',
+            status: 'NOT_FOUND',
+          },
+        }),
+        { status: 404 },
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: JSON.stringify({
+                    narration: 'A person sits at a desk watching a news clip on the monitor.',
+                    summary: 'Desk and a news broadcast.',
+                    actions: [],
+                  }),
+                },
+              ],
+            },
+          },
+        ],
+      }),
+      { status: 200 },
+    );
+  }) as typeof fetch;
+  try {
+    const result = await dictatePreparedFrames({
+      id: 'clip-retired-model',
+      source: 'proof_of_work',
+      durationSeconds: 64,
+      longForm: false,
+      frames: [{ atSeconds: 8, jpeg: Buffer.from('jpeg') }],
+    });
+    assert.equal(urls.length, 2);
+    assert.match(urls[1]!, /gemini-3\.6-flash-retry/);
+    assert.match(result.narrationText, /desk/i);
+    assert.equal(result.model, 'gemini-3.6-flash-retry');
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (prevGoogle === undefined) delete process.env.GOOGLE_API_KEY;
+    else process.env.GOOGLE_API_KEY = prevGoogle;
+    if (prevGemini === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = prevGemini;
+    if (prevAnthropic === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = prevAnthropic;
+  }
+});

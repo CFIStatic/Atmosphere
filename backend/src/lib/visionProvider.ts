@@ -48,5 +48,11 @@ export function formatVisionFailure(err: unknown): string {
   if (isGeminiKeyBlocked(err)) {
     return 'Gemini refused this key (API_KEY_SERVICE_BLOCKED). Put a Generative Language key in GEMINI_API_KEY — not a Maps-restricted GOOGLE_API_KEY.';
   }
+  if (/no longer available to new users|models\/gemini-[\d.]+-flash is no longer/i.test(text)) {
+    const suggested = text.match(/use models\/([a-z0-9._-]+)/i)?.[1];
+    return suggested
+      ? `Gemini retired this model. Use ${suggested}.`
+      : 'Gemini retired this model. Update VERIFICATION_PRIMARY_MODEL.';
+  }
   return text.replace(/\s+/g, ' ').slice(0, 280);
 }

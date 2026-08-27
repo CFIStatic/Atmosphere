@@ -53,7 +53,7 @@ const DEFAULT_CATALOG: CatalogEntry[] = [
 
   // ── Google ────────────────────────────────────────────────────────────────
   { key: 'google:flagship', provider: 'google', model: process.env.GOOGLE_MODEL_FLAGSHIP ?? 'gemini-2.5-pro', inputPricePerMTok: 1.25, outputPricePerMTok: 10, tier: 'frontier', contextWindow: 1_000_000 },
-  { key: 'google:fast', provider: 'google', model: process.env.GOOGLE_MODEL_FAST ?? 'gemini-2.5-flash', inputPricePerMTok: 0.3, outputPricePerMTok: 2.5, tier: 'fast', contextWindow: 1_000_000 },
+  { key: 'google:fast', provider: 'google', model: process.env.GOOGLE_MODEL_FAST ?? 'gemini-3.6-flash', inputPricePerMTok: 0.3, outputPricePerMTok: 2.5, tier: 'fast', contextWindow: 1_000_000 },
 
   // ── xAI (Grok) ────────────────────────────────────────────────────────────
   { key: 'xai:flagship', provider: 'xai', model: process.env.XAI_MODEL_FLAGSHIP ?? 'grok-4', inputPricePerMTok: 3, outputPricePerMTok: 15, tier: 'frontier', contextWindow: 256_000 },
