@@ -33,9 +33,9 @@ describe('Logo brand mark', () => {
   it('renders the larger lockup used on login', () => {
     const { container, getByText } = render(<Logo to={null} size="lg" />);
     const svg = container.querySelector('svg');
-    expect(svg?.getAttribute('width')).toBe('40');
-    expect(svg?.getAttribute('height')).toBe('40');
-    expect(getByText('Atmosphere').className).toContain('text-[26px]');
+    expect(svg?.getAttribute('width')).toBe('34');
+    expect(svg?.getAttribute('height')).toBe('34');
+    expect(getByText('Atmosphere').className).toContain('text-[23px]');
   });
 
   it('paints ink from the theme token so dark mode is light and light mode is dark', () => {
