@@ -253,7 +253,10 @@ export function JobIntakePage() {
   if (result) {
     return (
       <>
-        <PageHeader title="Start a job" description="This job is on the dashboard." />
+        <PageHeader
+          title="Start a job"
+          description="The file is on My jobs. Footage lands on the Dashboard as they film."
+        />
         <div className="mx-auto max-w-3xl space-y-4 animate-fade-in-up">
           <div className="rounded-xl border border-success-200/80 bg-success-50/40 glass-card p-5">
             <h2 className="text-base font-semibold text-ink-900">Job created — capture invited</h2>
@@ -265,7 +268,7 @@ export function JobIntakePage() {
               {invites.some((i) => i.emailed)
                 ? ` · ${invites.filter((i) => i.emailed).length} emailed`
                 : ''}
-              . It is on your job progress dashboard now.
+              . Open the file on My jobs to ask what was filmed. Clips show on the Dashboard.
             </p>
           </div>
 
@@ -351,7 +354,7 @@ export function JobIntakePage() {
     <>
       <PageHeader
         title="Start a job"
-        description="Name the job, then the site. A short note and invites are optional."
+        description="Name the job, then the site. A short note and invites are optional. The file appears on My jobs; clips land on the Dashboard."
       />
 
       {error && (
@@ -363,7 +366,7 @@ export function JobIntakePage() {
       <form onSubmit={onApprove} className="mx-auto max-w-3xl space-y-4 animate-fade-in-up">
         <div className="rounded-xl glass-card p-5">
           <h2 className="text-base font-semibold text-ink-900">Name</h2>
-          <p className="mt-1 text-sm text-ink-600">What this job is called on the dashboard.</p>
+          <p className="mt-1 text-sm text-ink-600">What this job is called on My jobs.</p>
           <label className="mt-4 block text-xs font-medium text-ink-600">
             Name
             <input

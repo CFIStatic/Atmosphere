@@ -5,7 +5,6 @@ import {
   api,
   JOB_STATUS_LABELS,
   WORK_TYPE_LABELS,
-  usd,
   type JobSummary,
   type ProofPulse,
 } from '../lib/api';
@@ -20,8 +19,10 @@ import { jobFilePath } from '../lib/jobFileAsk';
 import { AlertIcon } from '../components/icons';
 
 /**
- * Corporate overview — what is happening across the business, not a field
- * dispatch board and not a restoration dashboard of one job.
+ * Office pulse — film, readings, and jobs that need a look.
+ *
+ * Not a field dispatch board and not one job's dashboard. Money tiles belong
+ * to a later product; this page points at My jobs, Start a job, and Dashboard.
  */
 export function PlatformHomePage({ platform: _platform }: { platform: string }) {
   const { user, profile } = useAuth();
@@ -63,10 +64,6 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
     [jobs],
   );
   const crew = open.reduce((s, j) => s + j.crewSize, 0);
-  const contracted = (jobs ?? []).reduce((s, j) => s + (j.contractAmount ?? 0), 0);
-  const invoiced = (jobs ?? []).reduce((s, j) => s + (j.invoicedAmount ?? 0), 0);
-  const paid = (jobs ?? []).reduce((s, j) => s + (j.paidAmount ?? 0), 0);
-  const outstanding = Math.max(0, invoiced - paid);
 
   const mix = useMemo(() => {
     const counts = { mitigation: 0, construction: 0 };
@@ -91,23 +88,33 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
   return (
     <div data-testid="company-overview">
       <div>
-        <p className="text-sm font-medium text-brand-600">Company overview</p>
+        <p className="text-sm font-medium text-brand-600">Overview</p>
         <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-ink-900">
           Good to see you, {firstName}
         </h1>
         <p className="mt-1 max-w-2xl text-sm text-ink-600">
-          What is happening across the business — every open job, crew, and dollar. Open a job file
-          when you need the detail.
+          Film, readings, and jobs that need a look. Start a job to open a file, find it on My
+          jobs, and watch clips on the Dashboard.
+        </p>
+        <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs font-medium">
+          <Link to="/intake" className="text-brand-600 hover:text-brand-700">
+            Start a job
+          </Link>
+          <Link to="/jobs" className="text-brand-600 hover:text-brand-700">
+            My jobs
+          </Link>
+          <Link to="/verifier-library" className="text-brand-600 hover:text-brand-700">
+            Dashboard
+          </Link>
         </p>
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Kpi label="Active jobs" value={jobs ? String(open.length) : '—'} sub="Open across the company" />
         <Kpi label="Crew assigned" value={jobs ? String(crew) : '—'} sub="People on open jobs" />
         <Kpi label="Worked today" value={jobs ? String(workedToday) : '—'} sub="Filmed or in progress today" />
-        <Kpi label="Contracted" value={jobs ? usd(contracted) : '—'} sub="On the books" />
-        <Kpi label="Invoiced" value={jobs ? usd(invoiced) : '—'} sub="Billed to date" />
-        <Kpi label="Outstanding" value={jobs ? usd(outstanding) : '—'} sub="Invoiced less collected" />
+        <Kpi label="Waiting to be read" value={pulse ? String(pulse.unread) : '—'} sub="Uploaded, not read yet" />
+        <Kpi label="Filmed today" value={pulse ? String(pulse.filmedToday) : '—'} sub="New clips from the field" />
       </div>
 
       <section className="mt-4 rounded-xl glass-card px-5 py-4" aria-label="Video analysis">
@@ -151,7 +158,7 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
               </p>
             </div>
             <Link to="/jobs" className="text-xs font-medium text-brand-600 hover:text-brand-700">
-              Job files
+              My jobs
             </Link>
           </header>
           <div>
@@ -166,8 +173,8 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
 
         <section className="rounded-xl glass-card">
           <header className="border-b border-line px-5 py-4">
-            <h2 className="text-[15px] font-semibold text-ink-900">Across the business</h2>
-            <p className="mt-0.5 text-xs text-ink-500">Every open job in the company</p>
+            <h2 className="text-[15px] font-semibold text-ink-900">Open jobs</h2>
+            <p className="mt-0.5 text-xs text-ink-500">Recent files — open one to ask what was filmed</p>
           </header>
           <div>
             {recent.map((job) => (

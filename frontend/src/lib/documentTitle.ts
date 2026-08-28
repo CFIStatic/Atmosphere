@@ -21,6 +21,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/technician': 'Field capture',
   '/settings': 'Settings',
   '/field': 'Overview',
+  // Crew claimed list — same words as the office tab, different app (no org seat).
   '/my-jobs': 'My jobs',
   '/shared': 'Shared job',
   '/report': 'Report',

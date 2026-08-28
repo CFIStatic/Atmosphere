@@ -8,7 +8,8 @@ const RAIL_W = 248;
 /**
  * Operations routes share one persistent Verifier iframe. The library fills
  * the screen; Overview, Start a job, Dashboard, and My jobs render beside
- * the same anchored rail. A theme toggle stays on these React pages because
+ * the same anchored rail. Overview is the pulse, My jobs is the file list,
+ * Dashboard is the clips. A theme toggle stays on these React pages because
  * the verifier top bar (and its moon/sun control) is hidden in rail-only mode.
  */
 export function OperationsShell() {

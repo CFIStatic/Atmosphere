@@ -112,7 +112,7 @@ export function MyJobsPage() {
   if (error || !list) {
     return (
       <main className="mx-auto max-w-2xl px-4 py-10">
-        <h1 className="text-lg font-semibold text-ink-900">Your jobs</h1>
+        <h1 className="text-lg font-semibold text-ink-900">My jobs</h1>
         <p className="mt-2 text-sm text-ink-600">{error}</p>
       </main>
     );
@@ -124,9 +124,10 @@ export function MyJobsPage() {
     <main className="mx-auto max-w-2xl px-4 py-8" data-testid="my-jobs">
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <h1 className="text-lg font-semibold text-ink-900">Your jobs</h1>
+          <h1 className="text-lg font-semibold text-ink-900">My jobs</h1>
           <p className="mt-0.5 text-xs text-ink-500">
-            {total} {total === 1 ? 'job' : 'jobs'} from {list.generalContractors.length}{' '}
+            Every job you claimed, across every general contractor · {total}{' '}
+            {total === 1 ? 'job' : 'jobs'} from {list.generalContractors.length}{' '}
             {list.generalContractors.length === 1 ? 'general contractor' : 'general contractors'} ·{' '}
             {list.identity.contact}
           </p>

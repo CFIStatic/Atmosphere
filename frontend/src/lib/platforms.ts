@@ -68,7 +68,7 @@ export const PLATFORMS: Record<PlatformId, Platform> = {
     short: 'Verification',
     tagline: 'Prove the work',
     homeBlurb:
-      'Every day of work filmed against the scope, checked at the door, read by the assistant, and held in a chain of custody — job files that create themselves from your CRM.',
+      'Every day of work filmed against the scope, checked at the door, read by the assistant, and held in a chain of custody. Overview is the pulse; My jobs is the file list; the Dashboard holds the clips.',
     Icon: DecisionIcon,
     metrics: ['openJobs', 'crewOnJobs', 'workedToday'],
     groups: [WORK, SYSTEM],

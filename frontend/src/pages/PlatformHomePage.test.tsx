@@ -82,7 +82,7 @@ vi.mock('../lib/api', async () => {
 import { PlatformHomePage } from './PlatformHomePage';
 
 describe('PlatformHomePage', () => {
-  it('is a company overview of the business, not a field dispatch board', async () => {
+  it('is a verification pulse, not a field dispatch board or a finance rollup', async () => {
     render(
       <MemoryRouter>
         <PlatformHomePage platform="field" />
@@ -90,15 +90,20 @@ describe('PlatformHomePage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Company overview')).toBeInTheDocument();
+      expect(screen.getByText('Overview')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('What is happening across the business', { exact: false })).toBeInTheDocument();
+    expect(screen.getByText('Film, readings, and jobs that need a look', { exact: false })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Start a job' })).toHaveAttribute('href', '/intake');
+    expect(screen.getAllByRole('link', { name: 'My jobs' })[0]).toHaveAttribute('href', '/jobs');
+    expect(screen.getAllByRole('link', { name: 'Dashboard' })[0]).toHaveAttribute('href', '/verifier-library');
     expect(screen.getByText('Active jobs')).toBeInTheDocument();
     expect(screen.getByText('Crew assigned')).toBeInTheDocument();
     expect(screen.getByText('Worked today')).toBeInTheDocument();
-    expect(screen.getByText('Contracted')).toBeInTheDocument();
-    expect(screen.getByText('Outstanding')).toBeInTheDocument();
+    expect(screen.getByText('Waiting to be read')).toBeInTheDocument();
+    expect(screen.getByText('Filmed today')).toBeInTheDocument();
+    expect(screen.queryByText('Contracted')).not.toBeInTheDocument();
+    expect(screen.queryByText('Outstanding')).not.toBeInTheDocument();
     expect(screen.queryByText('Scheduled today')).not.toBeInTheDocument();
     expect(screen.queryByText('Unscheduled')).not.toBeInTheDocument();
     expect(screen.queryByText(/ready to film/i)).not.toBeInTheDocument();
