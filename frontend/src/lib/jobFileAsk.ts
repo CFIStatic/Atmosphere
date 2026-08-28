@@ -6,9 +6,22 @@ import type {
   SharedJobRecord,
 } from './api';
 
-/** Office path for a job profile you can ask. */
-export function jobFilePath(jobId: string, _extra?: { title?: string; number?: string | number | null }): string {
-  return `/jobs/${encodeURIComponent(jobId)}`;
+/** Office path for the job file — briefs, proofs, invites, readiness. */
+export function jobFilePath(
+  jobId: string,
+  extra?: { title?: string; number?: string | number | null },
+): string {
+  const params = new URLSearchParams();
+  params.set('job', jobId);
+  if (extra?.title) params.set('title', extra.title);
+  if (extra?.number != null && extra.number !== '') params.set('number', String(extra.number));
+  return `/job-progress?${params.toString()}`;
+}
+
+/** Legacy `/shared?job=` bookmarks open the same job file, not the My jobs list. */
+export function sharedJobsRedirectTo(query: string): string {
+  const params = new URLSearchParams(query.startsWith('?') ? query.slice(1) : query);
+  return params.get('job') ? `/job-progress?${params.toString()}` : '/verifier-library';
 }
 
 export interface JobFileBeat {

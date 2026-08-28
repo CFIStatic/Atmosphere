@@ -112,6 +112,6 @@ describe('PlatformHomePage', () => {
     expect(screen.getByText('East 6th — kitchen, water')).toBeInTheDocument();
 
     const meridian = screen.getByText('Meridian Ave — water loss').closest('a');
-    expect(meridian).toHaveAttribute('href', expect.stringContaining('/jobs/job-dated'));
+    expect(meridian).toHaveAttribute('href', expect.stringContaining('/job-progress?job=job-dated'));
   });
 });

@@ -6,6 +6,7 @@ import {
   jobFileMatches,
   jobFilePath,
   jobFileSuggestions,
+  sharedJobsRedirectTo,
   turnsFromQuestions,
 } from './jobFileAsk';
 import type { JobSummary, ProofResponse, SharedJobRecord } from './api';
@@ -51,8 +52,19 @@ const proofs: ProofResponse = {
 };
 
 describe('jobFilePath', () => {
-  it('opens My jobs as the job file', () => {
-    expect(jobFilePath('job-1038', { title: 'Cedar Ridge' })).toBe('/jobs/job-1038');
+  it('opens the job file (briefs, proofs, invites), not the PM profile', () => {
+    expect(jobFilePath('job-1038', { title: 'Cedar Ridge' })).toBe(
+      '/job-progress?job=job-1038&title=Cedar+Ridge',
+    );
+  });
+});
+
+describe('sharedJobsRedirectTo', () => {
+  it('sends /shared?job= to the job file and bare /shared to the library', () => {
+    expect(sharedJobsRedirectTo('job=job-1038&title=Cedar+Ridge')).toBe(
+      '/job-progress?job=job-1038&title=Cedar+Ridge',
+    );
+    expect(sharedJobsRedirectTo('')).toBe('/verifier-library');
   });
 });
 

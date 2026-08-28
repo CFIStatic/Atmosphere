@@ -28,6 +28,7 @@ import { JobSharePage } from './pages/JobSharePage';
 import { PlatformHomePage } from './pages/PlatformHomePage';
 import { MyJobsPage } from './pages/MyJobsPage';
 import { getPlatform } from './lib/usePlatform';
+import { sharedJobsRedirectTo } from './lib/jobFileAsk';
 
 // Auth and onboarding stay eager so /login is fast. Everything else loads on demand —
 // dev mode otherwise pulls in every page on the first visit.
@@ -181,15 +182,13 @@ function DemoRouteBridge() {
   return null;
 }
 
-/** Preserve ?job= (and intake handoff state) when moving /shared → the job record. */
+/** Preserve ?job= (and intake handoff state) when moving /shared → the job file. */
 function SharedJobsRedirect() {
   const location = useLocation();
   const [params] = useSearchParams();
-  const q = params.toString();
-  const job = params.get('job');
   return (
     <Navigate
-      to={job ? `/jobs?${q}` : '/verifier-library'}
+      to={sharedJobsRedirectTo(params.toString())}
       replace
       state={location.state}
     />

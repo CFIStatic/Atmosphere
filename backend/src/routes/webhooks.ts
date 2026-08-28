@@ -15,6 +15,12 @@ import {
 } from '../lib/stripe.js';
 import { ingestMention, verifyMentionSignature } from '../pm/orchestration/messaging.js';
 import { mentionWebhookSchema } from '../pm/validation.js';
+import {
+  claimStripeEvent,
+  releaseStripeEventClaim,
+  requireAttributedOrg,
+  requireCreditPurchaseId,
+} from '../lib/stripeWebhook.js';
 
 export const webhookRouter = Router();
 
@@ -58,25 +64,24 @@ webhookRouter.post('/stripe', async (req: Request, res: Response) => {
     return;
   }
 
+  const admin = adminClient();
+  let claimed = false;
   try {
-    const admin = adminClient();
-
     // Claim the event id. A replay returns false and we stop here.
-    const { data: isFirst, error: seenError } = await admin.rpc('stripe_event_seen', {
-      p_event_id: event.id,
-      p_type: event.type,
-    });
-    if (seenError) throw new Error(`event dedupe failed: ${seenError.message}`);
+    const isFirst = await claimStripeEvent(admin, event);
 
     if (!isFirst) {
       res.json({ received: true, duplicate: true });
       return;
     }
+    claimed = true;
 
     await handleEvent(event, admin);
     res.json({ received: true });
   } catch (err) {
+    // Release the claim so Stripe's retry is not treated as a duplicate.
     // 500 so Stripe retries — better a duplicate delivery than a lost payment.
+    if (claimed) await releaseStripeEventClaim(admin, event.id);
     console.error(`[stripe] handler failed for ${event.type} (${event.id}):`, err);
     res.status(500).json({ error: 'Webhook handler failed', code: 'webhook_failed' });
   }
@@ -115,15 +120,14 @@ async function handleEvent(event: Stripe.Event, admin: any): Promise<void> {
 
 /** A completed checkout: credits are granted here, against the purchase we opened. */
 async function onCheckoutCompleted(session: Stripe.Checkout.Session, admin: any): Promise<void> {
-  const orgId = await resolveOrgId(admin, session.metadata, session.customer as string | null);
-  if (!orgId) {
-    console.warn(`[stripe] checkout ${session.id} could not be attributed to an org`);
-    return;
-  }
+  const orgId = requireAttributedOrg(
+    await resolveOrgId(admin, session.metadata, session.customer as string | null),
+    `checkout ${session.id}`,
+  );
 
   if (session.mode !== 'payment') return; // subscriptions settle via invoice.paid
 
-  const purchaseId = session.metadata?.purchase_id;
+  const purchaseId = requireCreditPurchaseId(session.mode, session.metadata?.purchase_id);
   const paymentIntentId =
     typeof session.payment_intent === 'string'
       ? session.payment_intent
@@ -169,8 +173,10 @@ async function onCheckoutCompleted(session: Stripe.Checkout.Session, admin: any)
 
 /** Subscription invoices: the receipt trail and the period roll-forward. */
 async function onInvoice(invoice: Stripe.Invoice, admin: any, paid: boolean): Promise<void> {
-  const orgId = await resolveOrgId(admin, invoice.metadata, invoice.customer as string | null);
-  if (!orgId) return;
+  const orgId = requireAttributedOrg(
+    await resolveOrgId(admin, invoice.metadata, invoice.customer as string | null),
+    `invoice ${invoice.id}`,
+  );
 
   const line = invoice.lines?.data?.[0] as any;
   const chargeId = (invoice as any).charge as string | null;
@@ -211,8 +217,10 @@ async function onInvoice(invoice: Stripe.Invoice, admin: any, paid: boolean): Pr
 
 /** Stripe is the source of truth for what a customer is paying for. */
 async function onSubscriptionChanged(sub: Stripe.Subscription, admin: any): Promise<void> {
-  const orgId = await resolveOrgId(admin, sub.metadata, sub.customer as string | null);
-  if (!orgId) return;
+  const orgId = requireAttributedOrg(
+    await resolveOrgId(admin, sub.metadata, sub.customer as string | null),
+    `subscription ${sub.id}`,
+  );
 
   const item = sub.items?.data?.[0] as any;
   const priceId = item?.price?.id as string | undefined;
@@ -258,8 +266,10 @@ async function onSubscriptionChanged(sub: Stripe.Subscription, admin: any): Prom
 }
 
 async function onSubscriptionDeleted(sub: Stripe.Subscription, admin: any): Promise<void> {
-  const orgId = await resolveOrgId(admin, sub.metadata, sub.customer as string | null);
-  if (!orgId) return;
+  const orgId = requireAttributedOrg(
+    await resolveOrgId(admin, sub.metadata, sub.customer as string | null),
+    `subscription ${sub.id}`,
+  );
 
   const { error } = await admin.rpc('stripe_cancel_subscription', { p_org: orgId });
   if (error) throw new Error(`subscription cancel failed: ${error.message}`);
@@ -271,8 +281,10 @@ async function onSubscriptionDeleted(sub: Stripe.Subscription, admin: any): Prom
  * Credits already spent are deliberately not clawed back automatically.
  */
 async function onChargeRefunded(charge: Stripe.Charge, admin: any): Promise<void> {
-  const orgId = await resolveOrgId(admin, charge.metadata, charge.customer as string | null);
-  if (!orgId) return;
+  const orgId = requireAttributedOrg(
+    await resolveOrgId(admin, charge.metadata, charge.customer as string | null),
+    `charge ${charge.id}`,
+  );
 
   const card = cardDetails(charge);
   const { error } = await admin.rpc('record_payment', {

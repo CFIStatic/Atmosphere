@@ -2507,7 +2507,7 @@
     if (!canOpenJobRecord(jobKey)) return;
     var job = JOBS[jobKey] || {};
     var id = recordJobId(jobKey);
-    var to = '/jobs/' + encodeURIComponent(id);
+    var to = '/job-progress?job=' + encodeURIComponent(id);
     if (job.name) to += '&title=' + encodeURIComponent(job.name);
     if (job.number != null) to += '&number=' + encodeURIComponent(String(job.number));
     if (EMBEDDED) window.parent.postMessage({ atmosphere: 'navigate', to: to }, '*');
