@@ -3761,6 +3761,9 @@ export const api = {
   openBillingPortal: () =>
     request<{ portalUrl: string }>('/api/billing/portal', { method: 'POST' }),
 
+  getBillingWorkspace: () =>
+    request<WorkspaceBilling>('/api/billing/workspace', { method: 'GET' }),
+
   getBillingOnboarding: () =>
     request<BillingOnboardingStatus>('/api/billing/onboarding', { method: 'GET' }),
 
@@ -5283,6 +5286,27 @@ export interface BillingOnboardingStatus {
     includedJobs: number;
     additionalJobPriceCents: number;
   };
+}
+
+/** Customer-facing Work Verification bill — not the leftover seat/credit catalog. */
+export interface WorkspaceBilling {
+  paymentProvider: 'stripe' | 'dev' | 'manual';
+  canManage: boolean;
+  required: boolean;
+  complete: boolean;
+  isCreator: boolean;
+  subscription: {
+    name: string;
+    baseMonthlyFeeCents: number;
+    includedJobs: number;
+    additionalJobPriceCents: number;
+    status: string;
+    periodStart: string | null;
+    periodEnd: string | null;
+    cancelAtPeriodEnd: boolean;
+    hasStripeSubscription: boolean;
+  };
+  usage: CustomerMeteringSummary | null;
 }
 
 export interface SetPlanResult {

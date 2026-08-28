@@ -195,6 +195,10 @@ describe('every front door proxies /api over the private mesh', () => {
     expect(office).toContain('node scripts/applyStripeEventForget.mjs');
   });
 
+  it('applies stripe_sync_subscription cancel-at-period-end so seat-plan webhooks match', () => {
+    expect(office).toContain('node scripts/applyStripeCancelAtPeriodEnd.mjs');
+  });
+
   it('deploys the staff site from this repo to the public BFF', () => {
     expect(office).toContain("service=\"${RAILWAY_INTERNAL_SERVICE:-Internal Growth Metrics}\"");
     expect(office).toContain('upstream="https://atmosphere-production.up.railway.app"');

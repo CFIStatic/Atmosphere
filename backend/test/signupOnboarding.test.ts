@@ -187,6 +187,7 @@ test('signup, org, and billing routes reject unauthenticated or invalid requests
 
     for (const [method, path, body] of [
       ['GET', '/api/billing/onboarding', undefined],
+      ['GET', '/api/billing/workspace', undefined],
       ['POST', '/api/billing/checkout/onboarding', {}],
       ['POST', '/api/org', { name: 'Meridian Services' }],
       ['POST', '/api/org/join', { joinCode: '8F3A9C2B' }],
