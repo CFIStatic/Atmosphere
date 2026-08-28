@@ -187,8 +187,9 @@
     -webkit-overflow-scrolling: touch;
   }
 
-  /* Field Capture | Platform — app-only switch. Hidden while filming so the
-     hold-to-finish button stays the only control. The office has no bar. */
+  /* Field Capture | Platform — shown after sign-in (Today / office link).
+     Hidden on the login form and while filming so Sign in / hold-to-finish
+     stay the only control. The office console has no bar. */
   .switchbar {
     display: grid; grid-template-columns: 1fr 1fr;
     border-top: 1px solid var(--line);
@@ -581,7 +582,7 @@
 </style>
 </head>
 <body>
-<div class="app" id="app" data-switch="on">
+<div class="app" id="app" data-switch="off">
 
   <!-- ================= header ================= -->
   <div class="top">
@@ -769,7 +770,7 @@
   </div>
 </div>
 
-<script src="js/capture-core.js?v=email-login"></script>
-<script src="js/app.js?v=email-login"></script>
+<script src="js/capture-core.js?v=switch-after-login"></script>
+<script src="js/app.js?v=switch-after-login"></script>
 </body>
 </html>

@@ -44,7 +44,7 @@
     });
     document.body.setAttribute('data-screen', id);
     var app = document.getElementById('app');
-    if (app) app.setAttribute('data-switch', id === 's-rec' || id === 's-door' ? 'off' : 'on');
+    if (app) app.setAttribute('data-switch', id === 's-home' || id === 's-office' ? 'on' : 'off');
     window.scrollTo(0, 0);
   }
 
