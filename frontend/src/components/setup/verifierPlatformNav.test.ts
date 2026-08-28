@@ -27,6 +27,11 @@ describe('verifier office rail', () => {
     expect(verifierHtml).toContain("atmosphere: 'navigate'");
   });
 
+  it('opens a Dashboard job name as the My jobs file you can ask', () => {
+    expect(verifierHtml).toContain("var to = '/jobs?job=' + encodeURIComponent(id);");
+    expect(verifierHtml).not.toContain("var to = '/job-progress?job=' + encodeURIComponent(id);");
+  });
+
   it('keeps the Videos filters on every office page, not only Dashboard', () => {
     expect(verifierHtml).toContain('id="evidence-nav"');
     expect(verifierHtml).toMatch(/<h3>Videos<\/h3>/);

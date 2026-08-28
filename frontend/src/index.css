@@ -454,9 +454,43 @@ body::before {
 }
 
 .gpt-header {
-  background: rgba(255, 255, 255, 0.78);
-  border-bottom: 1px solid rgba(227, 222, 212, 0.9);
+  background: rgb(var(--paper-0) / 0.94);
+  border-bottom: 1px solid rgb(var(--line) / 0.9);
   backdrop-filter: blur(10px);
+}
+
+.job-file-search {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  min-height: 2.7rem;
+  padding: 0.4rem 1.15rem;
+  border: 1px solid rgb(var(--line) / 0.85);
+  border-radius: 9999px;
+  background: rgb(var(--paper-50));
+  color: rgb(var(--ink-400));
+}
+
+.job-file-search:focus-within {
+  border-color: rgb(var(--line-strong));
+  background: rgb(var(--paper-0));
+  color: rgb(var(--ink-600));
+}
+
+.job-file-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: rgb(var(--ink-900));
+  outline: none;
+}
+
+.job-file-search input::placeholder {
+  color: rgb(var(--ink-400));
 }
 
 .gpt-scroll {

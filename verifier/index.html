@@ -2491,8 +2491,8 @@
   }
 
   /**
-   * Any Dashboard folder can open the job record. Demo keys (cedar / …) map
-   * onto the Job Progress fixtures; org folders use the real job id.
+   * Any Dashboard folder can open the job file on My jobs. Demo keys
+   * (cedar / …) map onto fixtures; org folders use the real job id.
    */
   function recordJobId(key) {
     if (key === 'cedar') return 'job-1038';
@@ -2509,7 +2509,7 @@
     if (!canOpenJobRecord(jobKey)) return;
     var job = JOBS[jobKey] || {};
     var id = recordJobId(jobKey);
-    var to = '/job-progress?job=' + encodeURIComponent(id);
+    var to = '/jobs?job=' + encodeURIComponent(id);
     if (job.name) to += '&title=' + encodeURIComponent(job.name);
     if (job.number != null) to += '&number=' + encodeURIComponent(String(job.number));
     if (EMBEDDED) window.parent.postMessage({ atmosphere: 'navigate', to: to }, '*');

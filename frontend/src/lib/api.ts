@@ -825,6 +825,17 @@ export interface ProofQuestion {
   created_at: string;
 }
 
+/** Org-wide video analysis pipeline, for the office Overview. */
+export interface ProofPulse {
+  clips: number;
+  read: number;
+  analysing: number;
+  failed: number;
+  unread: number;
+  heard: number;
+  filmedToday: number;
+}
+
 /* ---- Physical-work episode (structured day record) ----------------------- */
 
 export interface WorkEpisodeListItem {
@@ -3191,6 +3202,8 @@ export const api = {
     }>('/api/crm/accounts/merge', { method: 'POST', body: JSON.stringify(input) }),
 
   // ---- Proof of work ----
+  proofPulse: () => request<ProofPulse>('/api/operations/proofs/pulse', { method: 'GET' }),
+
   jobProofs: (jobId: string) =>
     request<ProofResponse>(`/api/operations/shared/${jobId}/proof`, { method: 'GET' }),
 
