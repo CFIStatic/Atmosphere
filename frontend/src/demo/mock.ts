@@ -1975,10 +1975,48 @@ const routes: Array<[string, RegExp, Handler]> = [
   ['GET', /^\/api\/audit\/runs$/, () => ({ body: { runs: AUDIT_RUNS, nextCursor: null } })],
 
   ['GET', /^\/api\/jobs\/([\w-]+)\/memory$/, (m) => ({ body: { events: EVENTS.filter((e) => e.jobId === m[1]) } })],
-  ['GET', /^\/api\/jobs\/([\w-]+)$/, (m) =>
-    m[1] === 'job-1041'
-      ? { body: JOB_DETAIL }
-      : { status: 404, body: { error: 'Only job #1041 carries full detail in the demo — open Meridian Ave.', code: 'not_found' } }],
+  ['GET', /^\/api\/jobs\/([\w-]+)$/, (m) => {
+    if (m[1] === 'job-1041') return { body: JOB_DETAIL };
+    const summary = JOBS.find((j) => j.jobId === m[1]);
+    if (!summary) {
+      return { status: 404, body: { error: 'Job not found', code: 'not_found' } };
+    }
+    return {
+      body: {
+        job: {
+          id: summary.jobId,
+          jobNumber: summary.jobNumber,
+          title: summary.title,
+          description: null,
+          workType: summary.workType,
+          lossType: null,
+          status: summary.status,
+          priority: summary.priority,
+          claimNumber: summary.claimNumber,
+          policyNumber: null,
+          ownerId: summary.ownerId,
+          contactId: null,
+          accountId: null,
+          propertyId: null,
+          lossDate: null,
+          scheduledStart: summary.scheduledStart,
+          scheduledEnd: null,
+          actualStart: null,
+          actualEnd: null,
+          contractAmount: summary.contractAmount,
+          invoicedAmount: summary.invoicedAmount,
+          paidAmount: summary.paidAmount,
+          createdBy: summary.ownerId,
+          createdAt: summary.createdAt,
+          updatedAt: summary.updatedAt,
+        },
+        tasks: [],
+        crew: [],
+        workLogs: [],
+        memory: EVENTS.filter((e) => e.jobId === m[1]),
+      } satisfies JobDetail,
+    };
+  }],
   ['GET', /^\/api\/jobs$/, () => {
     let jobs = JOBS;
     if (LAST_QUERY.mine === '1') {
