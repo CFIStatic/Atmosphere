@@ -369,7 +369,12 @@
         } catch (e) {
           body = {};
         }
-        if (!r.ok) throw new Error(apiErrorMessage(r.status, body, text));
+        if (!r.ok) {
+          var err = new Error(apiErrorMessage(r.status, body, text));
+          err.status = r.status;
+          if (body && typeof body.code === 'string') err.code = body.code;
+          throw err;
+        }
         return body;
       });
     });
@@ -449,6 +454,20 @@
 
   function loadFieldMe(apiBase, accessToken) {
     return apiJson(origin(apiBase) + '/api/field-app/me', { accessToken: accessToken });
+  }
+
+  /** Signed-in Field Capture user — join an office or start one. */
+  function linkOffice(opts) {
+    opts = opts || {};
+    var body = {};
+    if (opts.joinCode) body.joinCode = opts.joinCode;
+    if (opts.orgName) body.orgName = opts.orgName;
+    if (opts.fullName) body.fullName = opts.fullName;
+    return apiJson(origin(opts.apiBase) + '/api/field-app/office', {
+      method: 'POST',
+      accessToken: opts.accessToken,
+      body: body,
+    });
   }
 
   function loadTodayJobs(apiBase, accessToken) {
@@ -581,6 +600,7 @@
     uploadDayFilm: uploadDayFilm,
     joinCrew: joinCrew,
     loginWithPassword: loginWithPassword,
+    linkOffice: linkOffice,
     resolveApiBase: resolveApiBase,
     resolveOfficePlatformHref: resolveOfficePlatformHref,
     isStandaloneFieldCaptureHost: isStandaloneFieldCaptureHost,

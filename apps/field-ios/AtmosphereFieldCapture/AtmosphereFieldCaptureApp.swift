@@ -102,6 +102,10 @@ struct RootView: View {
         }
         .onOpenURL { url in
             auth.handleOpenURL(url)
+            if !auth.isLinked, let code = auth.pendingJoinCode, !code.isEmpty {
+                showSignUp = false
+                showJoinCrew = true
+            }
         }
     }
 

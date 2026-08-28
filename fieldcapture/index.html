@@ -661,6 +661,38 @@
     </div>
   </div>
 
+  <!-- ================= OFFICE LINK: signed in, not yet in an office ================= -->
+  <div class="screen" id="s-office" data-on="0">
+    <div class="pad" style="padding-top:36px">
+      <h1 class="h1">Link to office account</h1>
+      <p class="lede" id="office-msg">
+        You&apos;re signed in. Enter the office join code so this login files day films to that company.
+      </p>
+      <form class="auth-form" id="office-form" data-mode="join" novalidate>
+        <div id="office-join-fields">
+          <label for="office-code">Office join code
+            <input id="office-code" name="joinCode" type="text" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="12" placeholder="8F3A9C2B" />
+          </label>
+        </div>
+        <div id="office-create-fields" hidden>
+          <label for="office-name">Office name
+            <input id="office-name" name="orgName" type="text" autocomplete="organization" maxlength="80" placeholder="Your company" />
+          </label>
+        </div>
+        <p class="auth-err" id="office-err" hidden></p>
+        <button class="daybtn" type="submit" id="office-btn">
+          <span class="lbl">Link to office account</span>
+        </button>
+        <p class="auth-foot">
+          <a href="#office-create" id="office-mode-toggle">Start a new office</a>
+        </p>
+        <p class="auth-foot">
+          <a href="#signin" id="office-switch-account">Use a different account</a>
+        </p>
+      </form>
+    </div>
+  </div>
+
   <!-- ================= THE DAY, RUNNING ================= -->
   <div class="screen" id="s-rec">
     <div class="finder">

@@ -36,7 +36,7 @@
     if (node) fn(node);
   }
 
-  var SCREENS = ['s-home', 's-rec', 's-door', 's-blocked'];
+  var SCREENS = ['s-home', 's-rec', 's-door', 's-blocked', 's-office'];
   function show(id) {
     SCREENS.forEach(function (s) {
       var el = document.getElementById(s);
@@ -266,6 +266,41 @@
     el.textContent = message;
   }
 
+  function showOfficeError(message) {
+    var el = $('#office-err');
+    if (!el) return;
+    if (!message) {
+      el.hidden = true;
+      el.textContent = '';
+      return;
+    }
+    el.hidden = false;
+    el.textContent = message;
+  }
+
+  function isNoOrganization(err) {
+    if (!err) return false;
+    if (err.code === 'no_organization') return true;
+    var msg = String(err.message || '').toLowerCase();
+    return (
+      err.status === 403 &&
+      (msg.indexOf('organization') !== -1 ||
+        msg.indexOf('office') !== -1 ||
+        msg.indexOf('onboard') !== -1)
+    );
+  }
+
+  function showOfficeLink() {
+    show('s-office');
+    showOfficeError('');
+  }
+
+  function finishAccountConnect() {
+    return bootAccountSession().then(function () {
+      return playElevate();
+    });
+  }
+
   function enterAccountHome(me, jobs) {
     state.account = true;
     state.jobs = (jobs || []).map(function (j) {
@@ -345,9 +380,13 @@
               throw new Error('Signed in, but no session came back. Confirm your email if Atmosphere asked you to.');
             }
             writeStoredSession(session.accessToken, session.refreshToken);
-            return Promise.all([bootAccountSession(), playElevate()]);
+            return finishAccountConnect();
           })
           .catch(function (err) {
+            if (isNoOrganization(err)) {
+              showOfficeLink();
+              return;
+            }
             writeStoredSession(null, null);
             showLoginError(err.message || 'Could not sign in. Use the same email and password as the office Platform.');
           })
@@ -356,8 +395,78 @@
           });
       });
     }
+    var officeForm = $('#office-form');
+    if (officeForm) {
+      officeForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var mode = officeForm.getAttribute('data-mode') || 'join';
+        var code = (($('#office-code') && $('#office-code').value) || '').trim().toUpperCase();
+        var name = (($('#office-name') && $('#office-name').value) || '').trim();
+        var officeBtn = $('#office-btn');
+        showOfficeError('');
+        if (mode === 'join') {
+          if (code.length < 6 || code.length > 12) {
+            showOfficeError('Enter a valid 6–12 character office join code.');
+            return;
+          }
+        } else if (name.length < 2) {
+          showOfficeError('Enter an office name.');
+          return;
+        }
+        if (!state.accessToken) {
+          showOfficeError('Sign in first, then link this login to an office.');
+          return;
+        }
+        officeBtn.disabled = true;
+        Core.linkOffice({
+          apiBase: API_BASE,
+          accessToken: state.accessToken,
+          joinCode: mode === 'join' ? code : undefined,
+          orgName: mode === 'create' ? name : undefined,
+        })
+          .then(function () {
+            return finishAccountConnect();
+          })
+          .catch(function (err) {
+            showOfficeError(err.message || 'Could not link this login to an office.');
+          })
+          .then(function () {
+            officeBtn.disabled = false;
+          });
+      });
+    }
+    when('#office-mode-toggle', function (link) {
+      link.addEventListener('click', function (event) {
+        event.preventDefault();
+        var mode = officeForm && officeForm.getAttribute('data-mode') === 'create' ? 'join' : 'create';
+        if (officeForm) officeForm.setAttribute('data-mode', mode);
+        var joinFields = $('#office-join-fields');
+        var createFields = $('#office-create-fields');
+        var btnLbl = $('#office-btn') && $('#office-btn').querySelector('.lbl');
+        if (joinFields) joinFields.hidden = mode !== 'join';
+        if (createFields) createFields.hidden = mode !== 'create';
+        if (btnLbl) {
+          btnLbl.textContent = mode === 'join' ? 'Link to office account' : 'Start office & connect';
+        }
+        link.textContent = mode === 'join' ? 'Start a new office' : 'Join an office with a code';
+        showOfficeError('');
+      });
+    });
+    when('#office-switch-account', function (link) {
+      link.addEventListener('click', function (event) {
+        event.preventDefault();
+        writeStoredSession(null, null);
+        showOfficeError('');
+        bootBlocked();
+        showLoginError('');
+      });
+    });
     if (state.accessToken) {
-      bootAccountSession().catch(function () {
+      bootAccountSession().catch(function (err) {
+        if (isNoOrganization(err)) {
+          showOfficeLink();
+          return;
+        }
         writeStoredSession(null, null);
         bootBlocked();
       });
@@ -703,6 +812,8 @@
         event.preventDefault();
         var blocked = document.getElementById('s-blocked');
         if (blocked && blocked.getAttribute('data-on') === '1') return;
+        var office = document.getElementById('s-office');
+        if (office && office.getAttribute('data-on') === '1') return;
         show('s-home');
       });
     }
