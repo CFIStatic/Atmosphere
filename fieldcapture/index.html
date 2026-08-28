@@ -187,8 +187,9 @@
     -webkit-overflow-scrolling: touch;
   }
 
-  /* Field Capture | Platform — app-only switch. Hidden while filming so the
-     hold-to-finish button stays the only control. The office has no bar. */
+  /* Field Capture | Platform — shown after sign-in (Today / office link).
+     Hidden on the login form and while filming so Sign in / hold-to-finish
+     stay the only control. The office console has no bar. */
   .switchbar {
     display: grid; grid-template-columns: 1fr 1fr;
     border-top: 1px solid var(--line);
@@ -421,7 +422,19 @@
     background: var(--panel); color: var(--ink); font: inherit;
   }
   .auth-form input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .auth-form .field-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  }
+  .auth-form .field-head a { font-size: 12px; font-weight: 650; color: var(--accent); text-decoration: none; }
+  .auth-pass { position: relative; }
+  .auth-pass input { padding-right: 48px; }
+  .auth-pass button {
+    position: absolute; right: 0; top: 6px; bottom: 0; width: 44px;
+    border: 0; background: transparent; color: var(--muted); font-size: 12px; font-weight: 650;
+  }
   .auth-err { color: var(--fail); font-size: 13px; min-height: 1.2em; }
+  .auth-foot { text-align: center; font-size: 13.5px; color: var(--ink-2); }
+  .auth-foot a { font-weight: 700; color: var(--accent); text-decoration: none; }
 
   /* Elevate: bars slam up from the orange ground, then sit on paper or
      night — whichever the phone is already using — and ease into Today. */
@@ -569,7 +582,7 @@
 </style>
 </head>
 <body>
-<div class="app" id="app" data-switch="on">
+<div class="app" id="app" data-switch="off">
 
   <!-- ================= header ================= -->
   <div class="top">
@@ -616,24 +629,67 @@
     </div>
   </div>
 
-  <!-- ================= SIGN IN: name + office invite code ================= -->
+  <!-- ================= SIGN IN: same email + password as the office Platform ================= -->
   <div class="screen" id="s-blocked" data-on="1">
     <div class="pad" style="padding-top:36px">
-      <h1 class="h1">Connect Field Capture</h1>
+      <h1 class="h1">Welcome back</h1>
       <p class="lede" id="blocked-msg">
-        Type your name and the office invite code from Atmosphere Settings. Job share links still work without signing in.
+        Sign in with the same email and password as the office Platform.
       </p>
       <form class="auth-form" id="login-form" novalidate>
-        <label for="login-name">First and last name
-          <input id="login-name" name="fullName" type="text" autocomplete="name" autocapitalize="words" required />
+        <label for="login-email">Email
+          <input id="login-email" name="email" type="email" inputmode="email" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" required placeholder="you@company.com" />
         </label>
-        <label for="login-code">Office invite code
-          <input id="login-code" name="joinCode" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" required minlength="6" maxlength="12" />
-        </label>
+        <div>
+          <div class="field-head">
+            <label for="login-password">Password</label>
+            <a id="forgot-link" href="/forgot-password">Forgot password?</a>
+          </div>
+          <div class="auth-pass">
+            <input id="login-password" name="password" type="password" autocomplete="current-password" required minlength="8" placeholder="••••••••" />
+            <button type="button" id="password-toggle" aria-label="Show password">Show</button>
+          </div>
+        </div>
         <p class="auth-err" id="login-err" hidden></p>
         <button class="daybtn" type="submit" id="login-btn">
-          <span class="lbl">Connect this phone</span>
+          <span class="lbl">Sign in</span>
         </button>
+        <p class="auth-foot">
+          Don&apos;t have an account?
+          <a id="signup-link" href="/signup">Create an account</a>
+        </p>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================= OFFICE LINK: signed in, not yet in an office ================= -->
+  <div class="screen" id="s-office" data-on="0">
+    <div class="pad" style="padding-top:36px">
+      <h1 class="h1">Link to office account</h1>
+      <p class="lede" id="office-msg">
+        You&apos;re signed in. Enter the office join code so this login files day films to that company.
+      </p>
+      <form class="auth-form" id="office-form" data-mode="join" novalidate>
+        <div id="office-join-fields">
+          <label for="office-code">Office join code
+            <input id="office-code" name="joinCode" type="text" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="12" placeholder="8F3A9C2B" />
+          </label>
+        </div>
+        <div id="office-create-fields" hidden>
+          <label for="office-name">Office name
+            <input id="office-name" name="orgName" type="text" autocomplete="organization" maxlength="80" placeholder="Your company" />
+          </label>
+        </div>
+        <p class="auth-err" id="office-err" hidden></p>
+        <button class="daybtn" type="submit" id="office-btn">
+          <span class="lbl">Link to office account</span>
+        </button>
+        <p class="auth-foot">
+          <a href="#office-create" id="office-mode-toggle">Start a new office</a>
+        </p>
+        <p class="auth-foot">
+          <a href="#signin" id="office-switch-account">Use a different account</a>
+        </p>
       </form>
     </div>
   </div>
@@ -714,7 +770,7 @@
   </div>
 </div>
 
-<script src="js/capture-core.js?v=jobs-always"></script>
-<script src="js/app.js?v=jobs-always"></script>
+<script src="js/capture-core.js?v=switch-after-login"></script>
+<script src="js/app.js?v=switch-after-login"></script>
 </body>
 </html>

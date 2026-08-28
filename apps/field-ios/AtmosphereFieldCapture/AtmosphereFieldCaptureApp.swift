@@ -4,9 +4,9 @@ import SwiftUI
 /**
  * Atmosphere Field Capture — App Store entry.
  *
- * Connect the crew once on first install with their name and the office
- * invite code. Later launches open straight to Today; day films land in
- * that org’s evidence library.
+ * Connect the crew once on first install with the same email and password
+ * as the office Platform. Later launches open straight to Today; day films
+ * land in that org’s evidence library.
  */
 @main
 struct AtmosphereFieldCaptureApp: App {
@@ -44,17 +44,23 @@ struct RootView: View {
     @EnvironmentObject private var session: FieldDaySession
     @EnvironmentObject private var auth: AuthSession
     @EnvironmentObject private var api: AtmosphereClient
-    @State private var showDashboardLogin = false
+    @State private var showSignUp = false
+    @State private var showJoinCrew = false
     @State private var showElevate = false
     @State private var cameFromConnect = false
 
     var body: some View {
         Group {
             if !auth.isLinked {
-                if showDashboardLogin {
-                    SignInView(onCreateAccount: { showDashboardLogin = false })
+                if showSignUp {
+                    SignUpView(onSignIn: { showSignUp = false })
+                } else if showJoinCrew {
+                    JoinCrewView(onDashboardLogin: { showJoinCrew = false })
                 } else {
-                    JoinCrewView(onDashboardLogin: { showDashboardLogin = true })
+                    SignInView(
+                        onCreateAccount: { showSignUp = true },
+                        onJoinWithCode: { showJoinCrew = true }
+                    )
                 }
             } else if auth.needsOfficeLink || auth.showOfficeLink {
                 OfficeLinkView()
@@ -96,6 +102,10 @@ struct RootView: View {
         }
         .onOpenURL { url in
             auth.handleOpenURL(url)
+            if !auth.isLinked, let code = auth.pendingJoinCode, !code.isEmpty {
+                showSignUp = false
+                showJoinCrew = true
+            }
         }
     }
 

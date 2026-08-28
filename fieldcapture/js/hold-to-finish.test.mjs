@@ -86,17 +86,33 @@ assert.match(html, /Start the day/);
 assert.match(html, /id="s-home"[^>]*data-on="0"/, 'home stays hidden until a phone is linked');
 assert.match(html, /id="s-blocked"[^>]*data-on="1"/, 'connect form is the default first screen');
 assert.match(html, /id="product-switch"/, 'home keeps the Field Capture / Platform bar');
+assert.match(html, /id="app"[^>]*data-switch="off"/, 'login hides the Field Capture / Platform bar');
 assert.match(html, /Field Capture<small>/);
 assert.match(html, /Platform<small>/);
+assert.match(
+  appSrc,
+  /id === 's-home' \|\| id === 's-office'/,
+  'the Field Capture / Platform bar returns after sign-in',
+);
 assert.equal(typeof Core.resolveOfficePlatformHref, 'function');
 assert.match(appSrc, /resolveOfficePlatformHref/, 'Platform tab must point at the office Overview');
-assert.match(html, /Connect Field Capture/);
-assert.match(html, /Office invite code/);
-assert.match(html, /id="login-name"/);
-assert.match(html, /id="login-code"/);
+assert.match(html, /Welcome back/);
+assert.match(html, /same email and password as the office Platform/);
+assert.match(html, /id="login-email"/);
+assert.match(html, /id="login-password"/);
+assert.match(html, /id="forgot-link"/);
+assert.match(html, /id="signup-link"/);
 assert.match(html, /<button class="daybtn" type="submit" id="login-btn">/);
-assert.match(html, /js\/capture-core\.js\?v=jobs-always/);
-assert.match(html, /js\/app\.js\?v=jobs-always/);
+assert.match(html, />Sign in</);
+assert.doesNotMatch(html, /Office invite code/);
+assert.doesNotMatch(html, /id="login-name"/);
+assert.doesNotMatch(html, /id="login-code"/);
+assert.match(html, /js\/capture-core\.js\?v=switch-after-login/);
+assert.match(html, /js\/app\.js\?v=switch-after-login/);
+assert.match(appSrc, /Core\.loginWithPassword/, 'Field Capture signs in with the Platform password');
+assert.doesNotMatch(appSrc, /Core\.joinCrew/, 'name + invite code is no longer the Field Capture login');
+assert.match(appSrc, /resolveOfficePlatformHref\('\/forgot-password'\)/);
+assert.match(appSrc, /resolveOfficePlatformHref\('\/signup'\)/);
 assert.doesNotMatch(html, /This week/);
 assert.doesNotMatch(html, /week-wrap/);
 assert.doesNotMatch(appSrc, /week-wrap/);

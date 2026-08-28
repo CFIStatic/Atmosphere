@@ -144,6 +144,7 @@ describe('Settings Field Capture', () => {
       'https://field-capture-production.up.railway.app/',
     );
     expect(screen.getAllByText('ABC123').length).toBeGreaterThan(0);
+    expect(screen.getByText(/same Atmosphere email and password as the office Platform/i)).toBeInTheDocument();
     await waitFor(() => expect(apiMocks.orgInvites).toHaveBeenCalled());
   });
 });

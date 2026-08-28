@@ -5,9 +5,9 @@ Production crew app: **one button**, **video + microphone**, filed with the
 
 ## Sign in
 
-Open Field Capture and type your **first and last name** plus the **office
-invite code** from Atmosphere Settings. Today’s jobs load from that office
-account; the day film files into that org’s evidence library.
+Open Field Capture and sign in with the **same email and password** as the
+office Platform. Today’s jobs load from that office account; the day film
+files into that org’s evidence library.
 
 Live web host: `https://field-capture-production.up.railway.app/`
 (office fallback: `/fieldcapture/` on the dashboard).
@@ -32,14 +32,14 @@ Serve this folder next to the API (same origin or pass `?api=`):
 /fieldcapture/index.html?token=<job-share-token>&api=http://localhost:4000
 ```
 
-Sign in with your name and the office invite code, or open a job share link.
+Sign in with your Platform email and password, or open a job share link.
 
 The API returns an absolute `uploadUrl` for Storage, so you do **not** need
 `?storage=` for uploads on localhost. Optional:
 
 | Query | Meaning |
 |---|---|
-| *(none)* | Name + office invite code |
+| *(none)* | Same email + password as the office Platform |
 | `token` | Job share access token (no office login) |
 | `api` | API origin if not same-host (e.g. `http://localhost:4000`) |
 | `storage` | Legacy fallback Storage origin if `uploadUrl` is absent |
