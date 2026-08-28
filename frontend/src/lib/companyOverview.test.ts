@@ -6,6 +6,7 @@ import {
   todayLine,
 } from './companyOverview';
 import type { JobSummary, ProofPulse, SharedJobSummary } from './api';
+import { jobFilePath } from './jobFileAsk';
 
 function job(partial: Partial<JobSummary> & Pick<JobSummary, 'jobId' | 'title'>): JobSummary {
   return {
@@ -181,8 +182,12 @@ describe('buildOverview', () => {
     expect(model.actions[0].title).toBe('Cedar Ridge — storm damage');
     expect(model.actions[0].headline).toBe('2 clips failed');
     expect(model.actions[0].notes).toEqual(['1 question unanswered', '2 parties on an old brief', 'Marked urgent']);
-    expect(model.actions[0].href).toBe('/jobs/cedar');
-    expect(model.actions[1].href).toBe('/jobs/meridian');
+    expect(model.actions[0].href).toBe(
+      jobFilePath('cedar', { title: 'Cedar Ridge — storm damage', number: 1038 }),
+    );
+    expect(model.actions[1].href).toBe(
+      jobFilePath('meridian', { title: 'Meridian Ave — water loss', number: 1041 }),
+    );
     expect(model.actions[2].href).toBe('/job-progress?job=east');
     expect(model.actions.map((a) => a.title)).not.toContain('Paid rebuild');
 
