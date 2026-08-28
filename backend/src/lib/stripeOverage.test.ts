@@ -1,6 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { overageInvoiceLines } from './stripeOverage.js';
+import {
+  isOverageInvoiceForPeriod,
+  overageInvoiceAlreadyIssued,
+  overageInvoiceLines,
+} from './stripeOverage.js';
 import type { MeteringPeriodCalculation } from '../metering/types.js';
 
 function summary(partial: Partial<MeteringPeriodCalculation>): MeteringPeriodCalculation {
@@ -71,5 +75,45 @@ describe('overageInvoiceLines', () => {
       lines.reduce((sum, line) => sum + line.amountCents, 0),
       5500,
     );
+  });
+});
+
+describe('overage invoice reuse', () => {
+  it('matches an invoice already issued for that org and period', () => {
+    assert.equal(
+      isOverageInvoiceForPeriod(
+        {
+          metadata: {
+            org_id: 'org-1',
+            kind: 'metering_overage',
+            period_start: '2026-08-01',
+          },
+        },
+        'org-1',
+        '2026-08-01',
+      ),
+      true,
+    );
+    assert.equal(
+      isOverageInvoiceForPeriod(
+        {
+          metadata: {
+            org_id: 'org-1',
+            kind: 'metering_overage',
+            period_start: '2026-07-01',
+          },
+        },
+        'org-1',
+        '2026-08-01',
+      ),
+      false,
+    );
+  });
+
+  it('treats open or paid invoices as already charged', () => {
+    assert.equal(overageInvoiceAlreadyIssued('draft'), false);
+    assert.equal(overageInvoiceAlreadyIssued('open'), true);
+    assert.equal(overageInvoiceAlreadyIssued('paid'), true);
+    assert.equal(overageInvoiceAlreadyIssued('void'), true);
   });
 });

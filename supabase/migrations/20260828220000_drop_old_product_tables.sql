@@ -7,6 +7,8 @@
 --   job_*, field_*, verification_*, work_episodes / episode_*, media_*, geometry_*
 --   legal_*, homeowner_portal_*, org_*, profiles, device_credentials
 --   pm_projects / tasks / drying / equipment / documents / updates / automation
+--   pm_communications / pm_approvals / pm_threads
+--   estimator_jobs, zip_centroids
 --   org_billing, billing_plans, credit_*, payments, stripe_*, metering_*, usage_*
 --   network_erasures, experiments_*, analytics_*, memory_*, crew_locations
 --
@@ -38,7 +40,6 @@ drop table if exists public.crm_territories cascade;
 drop table if exists public.crm_prospects cascade;
 drop table if exists public.crm_suppressions cascade;
 drop table if exists public.feature_prices cascade;
-drop table if exists public.zip_centroids cascade;
 
 -- CRM product (not the job file)
 drop table if exists public.crm_account_merges cascade;
@@ -77,7 +78,6 @@ drop table if exists public.supplier_connections cascade;
 drop table if exists public.estimator_runs cascade;
 drop table if exists public.estimator_credentials cascade;
 drop table if exists public.estimator_estimates cascade;
-drop table if exists public.estimator_jobs cascade;
 drop table if exists public.estimator_settings cascade;
 drop table if exists public.xactimate_audit cascade;
 drop table if exists public.xactimate_price_lists cascade;
@@ -103,20 +103,18 @@ drop table if exists public.web_credentials cascade;
 drop table if exists public.web_connections cascade;
 drop table if exists public.app_connectors cascade;
 
--- PM network / orchestration (HomeOwner Report keeps pm_projects and drying)
+-- PM network / orchestration (HomeOwner Report keeps pm_projects and drying;
+-- mention intake and network APIs still write communications / approvals / threads)
 drop table if exists public.pm_procurement_bids cascade;
 drop table if exists public.pm_procurement_requests cascade;
 drop table if exists public.pm_vendor_referrals cascade;
 drop table if exists public.pm_equipment_plan_items cascade;
 drop table if exists public.pm_equipment_plans cascade;
-drop table if exists public.pm_approvals cascade;
-drop table if exists public.pm_communications cascade;
 drop table if exists public.pm_platform_events cascade;
 drop table if exists public.pm_platform_links cascade;
 drop table if exists public.pm_platform_connections cascade;
 drop table if exists public.pm_thread_messages cascade;
 drop table if exists public.pm_thread_participants cascade;
-drop table if exists public.pm_threads cascade;
 drop table if exists public.pm_partnerships cascade;
 drop table if exists public.pm_partner_invites cascade;
 drop table if exists public.pm_partner_profiles cascade;

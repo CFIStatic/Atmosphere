@@ -34,6 +34,11 @@ const keep = [
   'work_episodes',
   'pm_projects',
   'pm_automation_settings',
+  'pm_communications',
+  'pm_approvals',
+  'pm_threads',
+  'estimator_jobs',
+  'zip_centroids',
   'homeowner_portal_shares',
   'network_erasures',
   'orgs',
@@ -47,7 +52,7 @@ describe('drop old product tables migration', () => {
     assert.ok(dropped.includes('crm_accounts'));
     assert.ok(dropped.includes('sales_campaigns'));
     assert.ok(dropped.includes('finance_accounts'));
-    assert.ok(dropped.includes('estimator_jobs'));
+    assert.ok(dropped.includes('estimator_runs'));
     assert.ok(dropped.includes('web_connections'));
     assert.ok(dropped.includes('em_storms'));
   });
