@@ -23,8 +23,13 @@ describe('verifier dashboard theme toggle', () => {
     expect(topbar![0]).toMatch(/aria-label="Switch to (dark|light) mode"/);
   });
 
-  it('puts a light/dark button in the office rail for pages that hide the top bar', () => {
-    expect(verifierHtml).toContain('id="theme-toggle-rail"');
+  it('keeps the only light/dark button in the top bar, not above Settings in the rail', () => {
+    const railFooter = verifierHtml.match(/<div class="rail-footer" id="rail-footer"[^>]*>[\s\S]*?<\/div>/);
+    expect(railFooter).not.toBeNull();
+    expect(railFooter![0]).toContain('id="nav-settings"');
+    expect(railFooter![0]).not.toContain('theme-toggle');
+    expect(verifierHtml).not.toContain('id="theme-toggle-rail"');
+    expect((verifierHtml.match(/id="theme-toggle"/g) || []).length).toBe(1);
   });
 
   it('shows the destination icon for the current theme', () => {
