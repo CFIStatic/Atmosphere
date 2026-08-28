@@ -1330,24 +1330,6 @@ export const CONNECTIONS: Connection[] = [
     brandColor: '#5B4A9E',
     popular: true,
   },
-  {
-    id: 'mica',
-    name: 'MICA',
-    vendor: 'Cotality (CoreLogic) · Next Gear',
-    category: 'estimating',
-    status: 'not_connected',
-    authMethod: 'credentials',
-    summary: 'Mobile inspection and claims capture that feeds the DASH job record.',
-    dataFlows: [{ direction: 'in', label: 'Field inspection data' }],
-    powers: ['estimating', 'documentation'],
-    lastSyncAt: null,
-    recordsSynced: null,
-    issue: null,
-    accountLabel: null,
-    brandColor: '#0E7490',
-    popular: false,
-  },
-
   // ── Claims & carrier networks ──────────────────────────────────────────────
   {
     id: 'xactanalysis',
