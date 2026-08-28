@@ -44,7 +44,6 @@ function renderConsole(path: string) {
       <Routes>
         <Route element={<ConsoleShell />}>
           <Route path="/field" element={<h1>Field overview</h1>} />
-          <Route path="/my-work" element={<h1>My work</h1>} />
           <Route path="/jobs" element={<h1>Jobs</h1>} />
         </Route>
       </Routes>
@@ -73,7 +72,7 @@ describe('ConsoleShell', () => {
     // Same DOM node — a remounted shell would be a new <nav>.
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBe(rail);
     expect(rail).toHaveTextContent('Overview');
-    expect(rail).toHaveTextContent('My work');
+    expect(rail).not.toHaveTextContent('My work');
     expect(rail).toHaveTextContent('Start a job');
     expect(rail).toHaveTextContent('Dashboard');
     expect(rail).toHaveTextContent('Job Files');

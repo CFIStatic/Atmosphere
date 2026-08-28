@@ -60,7 +60,7 @@ function cardFromSummary(
 /**
  * Prefer the Field Capture today list (assigned jobs, or every open job until
  * someone is put on a crew). Fall back to the office job list when that call
- * is missing, so My work still opens in demo or on a stale API.
+ * is missing, so Field Capture still opens in demo or on a stale API.
  */
 export function mergeWorkerJobs(
   today: FieldTodayJob[] | null,

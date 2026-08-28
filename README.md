@@ -53,7 +53,6 @@ are prompted to create one with that exact address.
 
 - **Home:** Verifier library — one job, one file of clips and readings
 - **Overview** (`/field`) — company proof chain: what is stuck, what filmed today
-- **My work** (`/my-work`) — jobs this person is on (office rail, same chrome as Overview)
 - **Start a job** (`/intake`) — paste → review → approve → invite
 - **Job files** (`/jobs`) — briefs, parties, proof days, readiness, evidence
 - **Verifier** (`/verifier/`) — standalone evidence portal (also embeddable)

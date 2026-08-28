@@ -1789,7 +1789,7 @@ export interface JobSummary {
   crew?: Array<{ userId: string; name: string }>;
 }
 
-/** A job Field Capture (and My work) can film today. */
+/** A job Field Capture can film today. */
 export interface FieldTodayJob {
   id: string;
   number: string;

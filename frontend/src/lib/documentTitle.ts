@@ -21,7 +21,6 @@ const PAGE_TITLES: Record<string, string> = {
   '/technician': 'Field capture',
   '/settings': 'Settings',
   '/field': 'Overview',
-  '/my-work': 'Field Capture',
   '/my-jobs': 'My jobs',
   '/shared': 'Shared job',
   '/report': 'Report',

@@ -17,7 +17,7 @@ import {
 } from '../lib/companyOverview';
 import { jobFilePath } from '../lib/jobFileAsk';
 import { buildCrewBoard, type CrewBoardRow } from '../lib/workerBoard';
-import { AlertIcon, BoltIcon, ChevronRightIcon, DecisionIcon, UsersIcon, VideoIcon } from '../components/icons';
+import { AlertIcon, BoltIcon, ChevronRightIcon, DecisionIcon, VideoIcon } from '../components/icons';
 
 /**
  * Overview is a decision queue, not a company dashboard.
@@ -76,17 +76,9 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
           <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-ink-900">What needs you</h1>
           <p className="mt-1 max-w-2xl text-sm text-ink-600">
             Jobs where proof is stuck — film unread, briefs behind, questions unanswered. Open the
-            file when you are ready to move it. Field Capture is the jobs a worker is on.
+            file when you are ready to move it.
           </p>
         </div>
-        <Link
-          to="/my-work"
-          aria-label="Open Field Capture"
-          className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-900/20 hover:bg-brand-500"
-        >
-          <UsersIcon width={16} height={16} />
-          Field Capture
-        </Link>
       </div>
 
       <PipelineStrip model={model} loaded={loaded} selected={stage} onSelect={setStage} />
@@ -395,9 +387,6 @@ function OnJobsCard({ crew, loaded }: { crew: CrewBoardRow[]; loaded: boolean })
               : 'Checking the crew…'}
           </p>
         </div>
-        <Link to="/my-work" className="text-xs font-medium text-brand-600 hover:text-brand-700">
-          Field Capture
-        </Link>
       </header>
       {!loaded ? (
         <div className="space-y-2 px-5 py-4">

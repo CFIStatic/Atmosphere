@@ -5,7 +5,6 @@ import {
   GaugeIcon,
   MicIcon,
   SettingsIcon,
-  UsersIcon,
 } from '../components/icons';
 
 /**
@@ -49,12 +48,11 @@ const SYSTEM: NavGroup = {
   items: [{ to: '/settings', label: 'Settings', Icon: SettingsIcon }],
 };
 
-/** Office rail — these five labels only, in this order. */
+/** Office rail — these four labels only, in this order. */
 const WORK: NavGroup = {
   label: 'Work',
   items: [
     { to: '/field', label: 'Overview', Icon: GaugeIcon },
-    { to: '/my-work', label: 'My work', Icon: UsersIcon },
     { to: '/intake', label: 'Start a job', Icon: BoltIcon },
     { to: '/verifier-library', label: 'Dashboard', Icon: DecisionIcon },
     { to: '/jobs', label: 'Job Files', Icon: BriefcaseIcon },
@@ -104,9 +102,6 @@ export const PLATFORM_HOME: Record<PlatformId, string> = {
   operations: '/verifier-library',
   field: '/field',
 };
-
-/** Field technicians land on the worker dashboard, not the office library. */
-export const WORKER_HOME = '/my-work';
 
 /** The Work Verification dashboard — logo clicks always return here. */
 export const DASHBOARD_HOME = PLATFORM_HOME.operations;

@@ -67,10 +67,10 @@ console.log('command bar     :', await page.locator('text=Ask Atmosphere or jump
 
 // Mobile viewport: bottom bar should appear.
 await page.setViewportSize({ width: 390, height: 844 });
-await page.goto('http://localhost:4173/my-work', { waitUntil: 'networkidle' });
+await page.goto('http://localhost:4173/field', { waitUntil: 'networkidle' });
 await page.waitForTimeout(900);
-await page.screenshot({ path: `${SCRATCH}/mobile-my-work.png` });
-shots.push(`${SCRATCH}/mobile-my-work.png`);
+await page.screenshot({ path: `${SCRATCH}/mobile-overview.png` });
+shots.push(`${SCRATCH}/mobile-overview.png`);
 console.log('mobile bottombar:', await page.locator('nav[aria-label="Primary"]').isVisible().catch(() => false));
 
 const real = errors.filter((e) => !/401|Failed to load resource|net::ERR/.test(e));
