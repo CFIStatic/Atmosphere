@@ -30,32 +30,24 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .getJobs({ status: 'all' })
-      .then(({ jobs: next }) => {
-        if (!cancelled) setJobs(next);
-      })
-      .catch(() => {
-        if (!cancelled) setJobs([]);
-      });
-    api
-      .proofPulse()
-      .then((next) => {
-        if (!cancelled) setPulse(next);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setPulse({
-            clips: 0,
-            read: 0,
-            analysing: 0,
-            failed: 0,
-            unread: 0,
-            heard: 0,
-            filmedToday: 0,
-          });
-        }
-      });
+    Promise.all([
+      api.getJobs({ status: 'all' }).then(({ jobs: next }) => next).catch(() => [] as JobSummary[]),
+      api.proofPulse().catch(
+        (): ProofPulse => ({
+          clips: 0,
+          read: 0,
+          analysing: 0,
+          failed: 0,
+          unread: 0,
+          heard: 0,
+          filmedToday: 0,
+        }),
+      ),
+    ]).then(([nextJobs, nextPulse]) => {
+      if (cancelled) return;
+      setJobs(nextJobs);
+      setPulse(nextPulse);
+    });
     return () => {
       cancelled = true;
     };

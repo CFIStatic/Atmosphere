@@ -179,5 +179,21 @@ describe('JobsPage job file', () => {
     renderJobs('/jobs?job=job-1038');
     expect(await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' })).toBeInTheDocument();
     expect(screen.getAllByText(/1408 Meridian Ave/).length).toBeGreaterThan(0);
+    expect(screen.getByRole('link', { name: 'Scope & proofs' })).toHaveAttribute(
+      'href',
+      '/job-progress?job=job-1038',
+    );
+  });
+
+  it('finds a job file from the chat box', async () => {
+    const user = userEvent.setup();
+    renderJobs();
+
+    expect(await screen.findByText('Cedar Ridge — storm damage')).toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText('Find a job file, then ask…'), 'Cedar');
+    await user.click(screen.getByRole('button', { name: 'Find a job file' }));
+
+    expect(await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'What did the homeowner say?' })).toBeInTheDocument();
   });
 });

@@ -19,6 +19,7 @@ import { EvidenceLocker } from '../components/shared/EvidenceLocker';
 import { ProofOfWork } from '../components/shared/ProofOfWork';
 import { JobFileActions } from '../components/shared/JobFileActions';
 import { JOB_PARTY_TRADE_OPTIONS } from '../components/setup/verifierSetupOptions';
+import { jobFilePath } from '../lib/jobFileAsk';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 
 type HandoffState = {
@@ -308,7 +309,7 @@ export function SharedDashboardPage() {
               }}
               onDuplicated={({ jobId, title: nextTitle, summary }) => {
                 ensureListed(summary);
-                navigate(`/job-progress?job=${encodeURIComponent(jobId)}&title=${encodeURIComponent(nextTitle)}`, {
+                navigate(jobFilePath(jobId, { title: nextTitle }), {
                   state: { freshJob: summary },
                 });
               }}

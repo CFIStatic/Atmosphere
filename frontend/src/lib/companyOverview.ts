@@ -1,5 +1,4 @@
-import type { JobSummary } from './api';
-import type { ProofPulse } from './api';
+import type { JobSummary, ProofPulse } from './api';
 
 const OPEN_STATUSES = new Set(['draft', 'scheduled', 'in_progress', 'on_hold']);
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   api,
   ApiError,
@@ -156,9 +156,22 @@ export function JobsPage() {
   }
 
   async function ask(textRaw: string) {
-    const jobId = requestedJob;
     const text = textRaw.trim();
-    if (!jobId || !text || asking) return;
+    if (!text || asking) return;
+
+    if (!requestedJob) {
+      setDraft('');
+      const matches = (jobs ?? []).filter((job) => jobFileMatches(job, text));
+      if (matches.length === 1) {
+        openFile(matches[0]);
+        return;
+      }
+      setQuery(text);
+      setSidebarOpen(true);
+      return;
+    }
+
+    const jobId = requestedJob;
     setAsking(true);
     setDraft('');
     setError(null);
@@ -299,6 +312,14 @@ export function JobsPage() {
                 <p className="text-sm text-ink-600">Open a job file to ask about it</p>
               )}
             </div>
+            {requestedJob && (
+              <Link
+                to={`/job-progress?job=${encodeURIComponent(requestedJob)}`}
+                className="shrink-0 text-xs font-medium text-ink-500 hover:text-ink-800"
+              >
+                Scope & proofs
+              </Link>
+            )}
           </div>
         </header>
 
@@ -402,15 +423,15 @@ export function JobsPage() {
                 onKeyDown={onKeyDown}
                 rows={1}
                 placeholder={
-                  requestedJob ? 'I forgot something — ask the file…' : 'Open a job file first…'
+                  requestedJob ? 'I forgot something — ask the file…' : 'Find a job file, then ask…'
                 }
-                disabled={asking || !requestedJob}
+                disabled={asking}
                 className="gpt-textarea"
               />
               <button
                 type="submit"
-                disabled={asking || !draft.trim() || !requestedJob}
-                aria-label="Ask the job file"
+                disabled={asking || !draft.trim()}
+                aria-label={requestedJob ? 'Ask the job file' : 'Find a job file'}
                 className="gpt-send"
               >
                 <SendIcon />
