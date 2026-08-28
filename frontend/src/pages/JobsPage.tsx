@@ -329,7 +329,26 @@ export function JobsPage() {
                 onSuggest={(s) => void ask(s)}
               />
             ) : (
-              <ul className="space-y-5">
+              <>
+                {dossier.length > 0 && (
+                  <details className="mb-6 rounded-2xl border border-line bg-paper-0 text-left">
+                    <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-ink-800 marker:content-none [&::-webkit-details-marker]:hidden">
+                      Already in this file
+                      <span className="ml-2 text-xs font-normal text-ink-500">
+                        {dossier.length} note{dossier.length === 1 ? '' : 's'} from clips and the record
+                      </span>
+                    </summary>
+                    <ol className="divide-y divide-line border-t border-line">
+                      {dossier.map((beat) => (
+                        <li key={beat.id} className="px-4 py-3">
+                          <p className="text-xs font-medium text-ink-500">{beat.title}</p>
+                          <p className="mt-0.5 text-sm text-ink-800">{beat.detail}</p>
+                        </li>
+                      ))}
+                    </ol>
+                  </details>
+                )}
+                <ul className="space-y-5">
                 {turns.map((turn) => (
                   <li
                     key={turn.id}
@@ -361,7 +380,8 @@ export function JobsPage() {
                     <TypingDots />
                   </li>
                 )}
-              </ul>
+                </ul>
+              </>
             )}
           </div>
         </div>

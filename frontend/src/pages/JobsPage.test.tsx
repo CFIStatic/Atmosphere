@@ -178,6 +178,6 @@ describe('JobsPage job file', () => {
   it('deep-links a job file from ?job=', async () => {
     renderJobs('/jobs?job=job-1038');
     expect(await screen.findByRole('heading', { name: 'Cedar Ridge — storm damage' })).toBeInTheDocument();
-    expect(screen.getByText(/1408 Meridian Ave/)).toBeInTheDocument();
+    expect(screen.getAllByText(/1408 Meridian Ave/).length).toBeGreaterThan(0);
   });
 });

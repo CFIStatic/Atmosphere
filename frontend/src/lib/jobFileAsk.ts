@@ -125,7 +125,7 @@ export function latestFilmedDate(proofs: ProofResponse | null): string | null {
     ...(proofs?.days ?? []).map((day) => day.workDate),
   ].filter(Boolean);
   if (dates.length === 0) return null;
-  return dates.sort().at(-1) ?? null;
+  return dates.sort()[dates.length - 1] ?? null;
 }
 
 export function hasMicOnFile(proofs: ProofResponse | null): boolean {

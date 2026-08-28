@@ -843,6 +843,7 @@ const SHARED_RECORDS: Record<string, any> = {
     ],
     money: { approved: 0, pending: 1240, unpricedApprovals: 1 },
     messages: [
+      { id: 'msg-0', party_id: null, author_label: 'Homeowner', body: 'Please do not touch the skylights — we have a separate guy for those.', scope_item_id: 'sc-2', is_decision: false, created_at: '2026-08-03T09:12:00Z' },
       { id: 'msg-1', party_id: 'pty-2', author_label: 'Hector Delgado, Delgado Roofing', body: 'Tear-off is done on the north slope. Found rot under the valley — six sheets. Photos attached in the request. Not touching it until somebody says yes.', scope_item_id: 'sc-3', is_decision: false, created_at: '2026-08-03T11:22:00Z' },
       { id: 'msg-2', party_id: null, author_label: 'Priya Shah', body: 'Seen. Getting the carrier to look at it today — do not proceed yet.', scope_item_id: 'sc-3', is_decision: false, created_at: '2026-08-03T13:05:00Z' },
       { id: 'msg-3', party_id: null, author_label: 'Priya Shah', body: 'Revision 4 published — carrier approved the deck replacement and pulled the skylights out of scope. Everyone please re-accept.', scope_item_id: null, is_decision: true, created_at: '2026-08-04T08:02:00Z' },
@@ -894,6 +895,36 @@ const SHARED_RECORDS: Record<string, any> = {
 const PROOF_DAYS: Record<string, any> = {
   'job-1038': {
     siteKnown: true,
+    videos: [
+      {
+        id: 'pf-2',
+        partyId: 'pty-2',
+        company: 'Delgado Roofing',
+        workDate: '2026-08-05',
+        phase: 'after',
+        durationSeconds: 94,
+        analysisStatus: 'done',
+        narrationStatus: 'done',
+        transcriptStatus: 'done',
+        transcriptError: null,
+        aiSummary: 'The north slope is stripped to decking with underlayment and new shingles across two thirds of it.',
+        heardOnMic: 'Homeowner asked us not to touch the skylights.',
+      },
+      {
+        id: 'pf-1',
+        partyId: 'pty-2',
+        company: 'Delgado Roofing',
+        workDate: '2026-08-05',
+        phase: 'before',
+        durationSeconds: 68,
+        analysisStatus: 'done',
+        narrationStatus: 'done',
+        transcriptStatus: 'done',
+        transcriptError: null,
+        aiSummary: 'Tarp still on the north slope; skylights intact and passed without contact.',
+        heardOnMic: null,
+      },
+    ],
     days: [
       {
         partyId: 'pty-2', company: 'Delgado Roofing', workDate: '2026-08-05',
@@ -3195,13 +3226,16 @@ const routes: Array<[string, RegExp, Handler]> = [
   }],
 
   ['GET', /^\/api\/operations\/shared\/([\w-]+)\/proof$/, (m) => {
-    const record = PROOF_DAYS[m[1]] ?? { siteKnown: false, days: [] };
-    const days = record.days;
+    const record = PROOF_DAYS[m[1]] ?? { siteKnown: false, days: [], videos: [] };
+    const days = record.days ?? [];
+    const videos = record.videos ?? [];
     return {
       body: {
         days,
+        videos,
         counts: {
           days: days.length,
+          videos: videos.length,
           payable: days.filter((d: any) => d.payable && !d.accepted).length,
           contradicted: days.filter((d: any) => d.contradicted).length,
           awaitingAfter: days.filter((d: any) => d.hasBefore && !d.hasAfter).length,
@@ -3214,10 +3248,17 @@ const routes: Array<[string, RegExp, Handler]> = [
     body: { questions: PROOF_QUESTIONS[m[1]] ?? [] },
   })],
   ['POST', /^\/api\/operations\/shared\/([\w-]+)\/proof\/ask$/, (m, b) => {
-    const answer = 'The videos on file do not show that. The record covers 2026-08-01, 08-04 and 08-05 for Delgado Roofing and one part-day for Brightline Electric.';
-    const entry = { id: `q-${Date.now()}`, question: String(b.question ?? ''), answer, grounded_on: ['2026-08-05', '2026-08-04', '2026-08-01'], created_at: new Date().toISOString() };
+    const asked = String(b.question ?? '');
+    const aboutHomeowner = /homeowner|said|skylight|owner/i.test(asked);
+    const aboutWork = /happen|tarp|slope|crew|unfinished|deck/i.test(asked);
+    const answer = aboutHomeowner
+      ? 'Yes. On the August 5 after clip, the mic picks up the homeowner asking the crew not to touch the skylights. That matches what they wrote on the file: “Please do not touch the skylights — we have a separate guy for those.”'
+      : aboutWork
+        ? 'On August 5 Delgado Roofing stripped the north slope to decking and laid underlayment and new shingles across about two thirds of it. Six new decking sheets are visible in the valley. The south slope is not in the footage.'
+        : 'The videos on file do not show that. The record covers 2026-08-01, 08-04 and 08-05 for Delgado Roofing and one part-day for Brightline Electric.';
+    const entry = { id: `q-${Date.now()}`, question: asked, answer, grounded_on: ['2026-08-05:after', '2026-08-04:after'], created_at: new Date().toISOString() };
     (PROOF_QUESTIONS[m[1]] ??= []).unshift(entry);
-    return { status: 201, body: { answer, question: entry, groundedOn: 3 } };
+    return { status: 201, body: { answer, question: entry, groundedOn: 2 } };
   }],
   ['POST', /^\/api\/operations\/shared\/([\w-]+)\/proof\/([\d-]+)\/decide$/, (m, b) => {
     const record = PROOF_DAYS[m[1]];
