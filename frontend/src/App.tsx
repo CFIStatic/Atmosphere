@@ -267,6 +267,7 @@ export default function App() {
             {/* Job profile (tasks, crew, and ask). Scope & proofs is /job-progress. */}
             <Route path="/job-progress" element={<SharedDashboardPage />} />
             <Route path="/shared" element={<SharedJobsRedirect />} />
+            <Route path="/settings" element={<SettingsPage />} />
           </Route>
           {/* The technician app. Open to every onboarded member — a project
               manager reviewing a job needs the same capture tools a field
@@ -277,17 +278,6 @@ export default function App() {
               <ProtectedRoute>
                 <RequireOnboarded>
                   <TechnicianPage />
-                </RequireOnboarded>
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="/settings"
-            element={
-              <ProtectedRoute>
-                <RequireOnboarded>
-                  <SettingsPage />
                 </RequireOnboarded>
               </ProtectedRoute>
             }

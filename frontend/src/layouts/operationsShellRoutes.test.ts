@@ -15,6 +15,7 @@ describe('office rail routes', () => {
     expect(shell).toContain('path="/intake"');
     expect(shell).toContain('path="/verifier-library"');
     expect(shell).toContain('path="/jobs"');
+    expect(shell).toContain('path="/settings"');
   });
 });
 

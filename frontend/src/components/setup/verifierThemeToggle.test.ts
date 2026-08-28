@@ -30,6 +30,9 @@ describe('verifier dashboard theme toggle', () => {
     expect(railFooter![0]).not.toContain('theme-toggle');
     expect(verifierHtml).not.toContain('id="theme-toggle-rail"');
     expect((verifierHtml.match(/id="theme-toggle"/g) || []).length).toBe(1);
+    expect(verifierHtml).toContain('body[data-atm-rail-only] .theme-toggle');
+    expect(verifierHtml).toContain('.rail .theme-toggle');
+    expect(verifierHtml).toContain('.rail-footer .theme-toggle');
   });
 
   it('shows the destination icon for the current theme', () => {
@@ -41,6 +44,11 @@ describe('verifier dashboard theme toggle', () => {
     expect(verifierHtml).toContain("localStorage.setItem(THEME_KEY, pref)");
     expect(verifierHtml).toContain("atmosphere: 'theme'");
     expect(verifierHtml).toContain("id=\"theme-toggle\"");
+  });
+
+  it('hides the dashboard moon/sun control when the rail is the only chrome', () => {
+    expect(verifierHtml).toContain('if (toggle) toggle.hidden = !!on');
+    expect(verifierHtml).toContain('if (RAIL_ONLY && bootThemeToggle) bootThemeToggle.hidden = true');
   });
 
   it('toggles data-theme and atmosphere.theme on click', () => {

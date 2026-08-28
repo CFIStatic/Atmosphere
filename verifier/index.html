@@ -627,9 +627,14 @@
     border-top: 1px solid var(--line-soft);
   }
   .app-frame.has-sidebar .topbar .brand-fallback { display: none; }
-  /* Rail-only embed: sidebar beside a React page — hide top bar and main pane. */
+  /* Rail-only embed: sidebar beside a React page — hide top bar and main pane.
+     The moon/sun control lives in the React top-right bar on those pages, so
+     hide every .theme-toggle here. Never let one sit in the rail above Settings. */
   body[data-atm-rail-only] .topbar,
-  body[data-atm-rail-only] .shell { display: none !important; }
+  body[data-atm-rail-only] .shell,
+  body[data-atm-rail-only] .theme-toggle,
+  .rail .theme-toggle,
+  .rail-footer .theme-toggle { display: none !important; }
   body[data-atm-rail-only] .app-body,
   body[data-atm-rail-only] .app-frame { height: 100%; min-height: 0; }
   body[data-atm-rail-only] .app-frame.has-sidebar .app-body {
@@ -4460,6 +4465,8 @@
   var RAIL_ONLY = document.body.hasAttribute('data-atm-rail-only') ||
     new URLSearchParams(location.search).get('rail') === '1';
   if (RAIL_ONLY) document.body.setAttribute('data-atm-rail-only', '1');
+  var bootThemeToggle = document.getElementById('theme-toggle');
+  if (RAIL_ONLY && bootThemeToggle) bootThemeToggle.hidden = true;
 
   /* Light ↔ dark. Same keys as the React console and the marketing site so a
      tap here is visible everywhere on this origin. */
@@ -4636,6 +4643,8 @@
     RAIL_ONLY = !!on;
     if (on) document.body.setAttribute('data-atm-rail-only', '1');
     else document.body.removeAttribute('data-atm-rail-only');
+    var toggle = document.getElementById('theme-toggle');
+    if (toggle) toggle.hidden = !!on;
   }
 
   document.querySelectorAll('.navitem[data-view]').forEach(function (b) {
