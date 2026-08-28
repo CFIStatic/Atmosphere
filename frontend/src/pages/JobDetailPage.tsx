@@ -1,500 +1,293 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   api,
   ApiError,
-  ASSIGNMENT_ROLE_LABELS,
   JOB_STATUS_LABELS,
   JOB_STATUS_STYLES,
-  LOSS_TYPE_LABELS,
-  JOB_PRIORITY_LABELS,
-  TASK_STATUS_LABELS,
-  WORK_LOG_KIND_LABELS,
   WORK_TYPE_LABELS,
-  displayName,
-  formatMinutes,
-  timeAgo,
-  type JobDetail,
+  type Job,
+  type JobParty,
   type JobStatus,
-  type JobTask,
-  type OrgMember,
-  type TaskStatus,
-  type WorkLogKind,
+  type ProofResponse,
+  type SharedJobRecord,
 } from '../lib/api';
-import { PanelSpinner, ErrorNote, EmptyState } from '../components/AppShell';
+import { PanelSpinner, ErrorNote } from '../components/AppShell';
 import { JobAskPanel } from '../components/JobAskPanel';
-import { MemoryFeed } from '../components/MemoryFeed';
-import { SpinnerIcon, PlusIcon, ChevronLeftIcon, CheckIcon } from '../components/icons';
+import { ChevronLeftIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
+import {
+  buildJobFileDossier,
+  filePulse,
+  filmedDateLabel,
+  siteLine,
+  type JobFileBeat,
+} from '../lib/jobFileAsk';
 
-const inputClass =
-  'w-full rounded-lg border border-line glass-field px-3 py-2 text-sm text-ink-900 placeholder:text-ink-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400';
-
-const TABS = ['Ask', 'Work', 'Crew', 'History'] as const;
-type Tab = (typeof TABS)[number];
-
-function Card({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <section className="rounded-xl glass-card p-5">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-ink-900">{title}</h2>
-        {action}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* Tasks                                                                       */
-/* -------------------------------------------------------------------------- */
-
-function TaskRow({
-  task,
-  members,
-  onChange,
-}: {
-  task: JobTask;
-  members: OrgMember[];
-  onChange: (patch: { status?: TaskStatus; assignedTo?: string | null }) => Promise<void>;
-}) {
-  const [busy, setBusy] = useState(false);
-  const done = task.status === 'done';
-
-  async function run(patch: { status?: TaskStatus; assignedTo?: string | null }) {
-    setBusy(true);
-    try {
-      await onChange(patch);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <li className="flex flex-wrap items-center gap-3 px-4 py-3">
-      <button
-        onClick={() => run({ status: done ? 'todo' : 'done' })}
-        disabled={busy}
-        aria-label={done ? `Reopen ${task.title}` : `Complete ${task.title}`}
-        className={`grid h-5 w-5 shrink-0 place-items-center rounded border transition disabled:opacity-50 ${
-          done
-            ? 'border-success-200 bg-success-50 text-success-600'
-            : 'border-line-strong text-transparent hover:border-brand-400'
-        }`}
-      >
-        <CheckIcon width={13} height={13} />
-      </button>
-
-      <div className="min-w-0 flex-1">
-        <p className={`text-sm ${done ? 'text-ink-500 line-through' : 'text-ink-800'}`}>
-          {task.title}
-        </p>
-        <p className="mt-0.5 text-xs text-ink-500">
-          {TASK_STATUS_LABELS[task.status]}
-          {task.dueAt && ` · due ${new Date(task.dueAt).toLocaleDateString()}`}
-          {task.completedAt && ` · completed ${timeAgo(task.completedAt)}`}
-        </p>
-      </div>
-
-      <select
-        value={task.assignedTo ?? ''}
-        onChange={(e) => run({ assignedTo: e.target.value || null })}
-        disabled={busy}
-        aria-label={`Assign ${task.title}`}
-        className="rounded-lg border border-line bg-paper-50 px-2 py-1.5 text-xs text-ink-700 focus:border-brand-400 focus:outline-none disabled:opacity-50"
-      >
-        <option value="">Unassigned</option>
-        {members.map((m) => (
-          <option key={m.userId} value={m.userId}>
-            {m.fullName || m.email}
-          </option>
-        ))}
-      </select>
-    </li>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* Page                                                                        */
-/* -------------------------------------------------------------------------- */
+/**
+ * The job file.
+ *
+ * One page, no tabs. What you need first is already on the file — film, what
+ * not to do, who is behind — then Ask. Work / crew / history were a later
+ * product sitting in front of that.
+ */
 
 export function JobDetailPage() {
   useFeatureTimer('job_detail');
   const { id = '' } = useParams();
-  const [detail, setDetail] = useState<JobDetail | null>(null);
-  const [members, setMembers] = useState<OrgMember[]>([]);
-  const [tab, setTab] = useState<Tab>('Ask');
+  const [job, setJob] = useState<Job | null>(null);
+  const [record, setRecord] = useState<SharedJobRecord | null>(null);
+  const [proofs, setProofs] = useState<ProofResponse | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [newTask, setNewTask] = useState('');
-  const [addingTask, setAddingTask] = useState(false);
-  const [logBody, setLogBody] = useState('');
-  const [logKind, setLogKind] = useState<WorkLogKind>('work');
-  const [logMinutes, setLogMinutes] = useState('');
-  const [savingLog, setSavingLog] = useState(false);
-  const [crewId, setCrewId] = useState('');
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      setDetail(await api.getJob(id));
+      const [detail, nextRecord, nextProofs] = await Promise.all([
+        api.getJob(id),
+        api.sharedJob(id).catch(() => null),
+        api.jobProofs(id).catch(() => null),
+      ]);
+      setJob(detail.job);
+      setRecord(nextRecord);
+      setProofs(nextProofs);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not load that job.');
+    } finally {
+      setLoaded(true);
     }
   }, [id]);
 
   useEffect(() => {
+    setLoaded(false);
     void load();
-    api
-      .getMembers()
-      .then(({ members }) => setMembers(members))
-      .catch(() => setMembers([]));
   }, [load]);
 
-  /** Every mutation reloads: the memory panel has to reflect what just happened. */
-  async function mutate(action: () => Promise<unknown>) {
+  const file = useMemo(() => ({ record, proofs }), [record, proofs]);
+  const pulse = useMemo(() => filePulse(proofs), [proofs]);
+  const beats = useMemo(
+    () => buildJobFileDossier({ proofs, messages: record?.messages ?? [] }),
+    [proofs, record],
+  );
+  const exclusions = useMemo(
+    () => (record?.scope ?? []).filter((item) => item.state === 'excluded'),
+    [record],
+  );
+  const blockers = useMemo(
+    () => (record?.risks ?? []).filter((risk) => risk.level === 'blocker').slice(0, 3),
+    [record],
+  );
+  const address = siteLine(record);
+
+  async function changeStatus(status: JobStatus) {
+    if (!job) return;
     setError(null);
     try {
-      await action();
-      await load();
+      await api.updateJob(job.id, { status });
+      setJob((current) => (current ? { ...current, status } : current));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'That did not go through.');
+      setError(err instanceof ApiError ? err.message : 'Could not update that status.');
     }
   }
 
-  if (error && !detail) {
+  if (!loaded && !job) {
+    return <PanelSpinner label="Loading job file" />;
+  }
+
+  if (error && !job) {
     return (
       <div className="mx-auto max-w-lg pt-10">
         <ErrorNote message={error} />
-        <Link to="/jobs" className="mt-4 inline-block text-sm text-brand-300 hover:text-brand-200">
-          ← Back to jobs
+        <Link to="/jobs" className="mt-4 inline-block text-sm text-brand-600 hover:text-brand-700">
+          ← Back to My jobs
         </Link>
       </div>
     );
   }
 
-  if (!detail) {
-    return <PanelSpinner label="Loading job" />;
+  if (!job) {
+    return <PanelSpinner label="Loading job file" />;
   }
 
-  const { job, tasks, crew, workLogs, memory } = detail;
-  const activeCrew = crew.filter((c) => c.active);
-  const totalMinutes = workLogs.reduce((sum, w) => sum + (w.minutes ?? 0), 0);
-  const unassigned = members.filter((m) => !activeCrew.some((c) => c.userId === m.userId));
+  const lastFilmed = filmedDateLabel(pulse.lastDate);
 
   return (
-    <>
-      <Link
-        to="/jobs"
-        className="mb-4 inline-flex items-center gap-1 text-sm text-ink-600 transition hover:text-ink-800"
-      >
-        <ChevronLeftIcon width={16} height={16} />
-        All jobs
-      </Link>
+    <div
+      className="flex min-h-0 flex-1 flex-col lg:h-full lg:flex-row lg:overflow-hidden"
+      data-testid="job-file"
+    >
+      <div className="min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6">
+        <Link
+          to="/jobs"
+          className="mb-4 inline-flex items-center gap-1 text-sm text-ink-600 transition hover:text-ink-800"
+        >
+          <ChevronLeftIcon width={16} height={16} />
+          My jobs
+        </Link>
 
-      {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="font-mono text-sm tracking-wider text-brand-300">Job #{job.jobNumber}</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">{job.title}</h1>
-          <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-sm text-ink-600">
-            <span>{WORK_TYPE_LABELS[job.workType]}</span>
-            {job.lossType && <span>· {LOSS_TYPE_LABELS[job.lossType]}</span>}
-            <span>· {JOB_PRIORITY_LABELS[job.priority]} priority</span>
-            {job.claimNumber && <span>· Claim {job.claimNumber}</span>}
-            {job.policyNumber && <span>· Policy {job.policyNumber}</span>}
-          </p>
-        </div>
-
-        <div className="flex flex-col items-end gap-2">
-          <span
-            className={`rounded-full border px-3 py-1 text-xs font-medium ${JOB_STATUS_STYLES[job.status]}`}
-          >
-            {JOB_STATUS_LABELS[job.status]}
-          </span>
-          <select
-            value={job.status}
-            onChange={(e) => mutate(() => api.updateJob(job.id, { status: e.target.value as JobStatus }))}
-            aria-label="Change job status"
-            className="rounded-lg border border-line bg-paper-50 px-3 py-1.5 text-xs text-ink-700 focus:border-brand-400 focus:outline-none"
-          >
-            {(Object.keys(JOB_STATUS_LABELS) as JobStatus[]).map((s) => (
-              <option key={s} value={s}>
-                {JOB_STATUS_LABELS[s]}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Numbers */}
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[
-          { label: 'Tasks', value: `${tasks.filter((t) => t.status === 'done').length}/${tasks.length}` },
-          { label: 'Crew', value: String(activeCrew.length) },
-          { label: 'Logged', value: formatMinutes(totalMinutes) },
-          { label: 'Recorded', value: String(memory.length) },
-        ].map((stat) => (
-          <div key={stat.label} className="rounded-xl glass-card px-4 py-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-ink-500">{stat.label}</p>
-            <p className="mt-1 text-xl font-semibold text-ink-900">{stat.value}</p>
+        <header className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="font-mono text-sm tracking-wider text-brand-600">Job #{job.jobNumber}</p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">{job.title}</h1>
+            <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-600">
+              {address && <span>{address}</span>}
+              {address && <span aria-hidden="true">·</span>}
+              <span>{WORK_TYPE_LABELS[job.workType]}</span>
+              {job.claimNumber && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span>Claim {job.claimNumber}</span>
+                </>
+              )}
+            </p>
           </div>
-        ))}
-      </div>
+          <div className="flex flex-col items-end gap-2">
+            <span
+              className={`rounded-full border px-3 py-1 text-xs font-medium ${JOB_STATUS_STYLES[job.status]}`}
+            >
+              {JOB_STATUS_LABELS[job.status]}
+            </span>
+            <select
+              value={job.status}
+              onChange={(e) => void changeStatus(e.target.value as JobStatus)}
+              aria-label="Change job status"
+              className="rounded-lg border border-line bg-paper-50 px-3 py-1.5 text-xs text-ink-700 focus:border-brand-400 focus:outline-none"
+            >
+              {(Object.keys(JOB_STATUS_LABELS) as JobStatus[]).map((status) => (
+                <option key={status} value={status}>
+                  {JOB_STATUS_LABELS[status]}
+                </option>
+              ))}
+            </select>
+          </div>
+        </header>
 
-      {error && (
-        <div className="mt-4">
-          <ErrorNote message={error} />
-        </div>
-      )}
+        <dl className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <PulseTile label="Clips on file" value={String(pulse.clips)} />
+          <PulseTile label="Read" value={String(pulse.read)} />
+          <PulseTile label="Heard on mic" value={String(pulse.heard)} />
+          <PulseTile label="Last filmed" value={lastFilmed ?? '—'} />
+        </dl>
 
-      {/* Tabs */}
-      <div className="mt-6 flex gap-1 border-b border-line" role="tablist">
-        {TABS.map((t) => (
-          <button
-            key={t}
-            role="tab"
-            aria-selected={tab === t}
-            onClick={() => setTab(t)}
-            className={`border-b-2 px-4 py-2.5 text-sm font-medium transition ${
-              tab === t
-                ? 'border-brand-400 text-ink-900'
-                : 'border-transparent text-ink-600 hover:text-ink-800'
-            }`}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-
-      <div className="mt-6 space-y-6">
-        {tab === 'Ask' && <JobAskPanel jobId={job.id} />}
-
-        {tab === 'Work' && (
-          <>
-            <Card title="Tasks">
-              <form
-                className="mb-4 flex gap-2"
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (newTask.trim().length < 2) return;
-                  setAddingTask(true);
-                  await mutate(() => api.createTask(job.id, { title: newTask.trim() }));
-                  setNewTask('');
-                  setAddingTask(false);
-                }}
-              >
-                <input
-                  value={newTask}
-                  onChange={(e) => setNewTask(e.target.value)}
-                  placeholder="Add a task…"
-                  aria-label="New task"
-                  className={inputClass}
-                />
-                <button
-                  type="submit"
-                  disabled={addingTask || newTask.trim().length < 2}
-                  className="flex shrink-0 items-center gap-1.5 rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-brand-500 disabled:opacity-50"
-                >
-                  {addingTask ? (
-                    <SpinnerIcon className="animate-spin" width={16} height={16} />
-                  ) : (
-                    <PlusIcon width={16} height={16} />
-                  )}
-                  Add
-                </button>
-              </form>
-
-              {tasks.length === 0 ? (
-                <EmptyState title="No tasks yet." />
-              ) : (
-                <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line">
-                  {tasks.map((task) => (
-                    <TaskRow
-                      key={task.id}
-                      task={task}
-                      members={members}
-                      onChange={(patch) => mutate(() => api.updateTask(job.id, task.id, patch))}
-                    />
-                  ))}
-                </ul>
-              )}
-            </Card>
-
-            <Card title="Work log">
-              <form
-                className="mb-4 space-y-3"
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!logBody.trim()) return;
-                  setSavingLog(true);
-                  await mutate(() =>
-                    api.addWorkLog(job.id, {
-                      kind: logKind,
-                      body: logBody.trim(),
-                      minutes: logMinutes ? Number(logMinutes) : null,
-                    }),
-                  );
-                  setLogBody('');
-                  setLogMinutes('');
-                  setSavingLog(false);
-                }}
-              >
-                <textarea
-                  value={logBody}
-                  onChange={(e) => setLogBody(e.target.value)}
-                  rows={3}
-                  placeholder="What was done on site?"
-                  aria-label="Work log entry"
-                  className={inputClass}
-                />
-                <div className="flex flex-wrap gap-2">
-                  <select
-                    value={logKind}
-                    onChange={(e) => setLogKind(e.target.value as WorkLogKind)}
-                    aria-label="Entry type"
-                    className={`sm:w-40 ${inputClass}`}
-                  >
-                    {(Object.keys(WORK_LOG_KIND_LABELS) as WorkLogKind[]).map((k) => (
-                      <option key={k} value={k}>
-                        {WORK_LOG_KIND_LABELS[k]}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    min={0}
-                    max={1440}
-                    value={logMinutes}
-                    onChange={(e) => setLogMinutes(e.target.value)}
-                    placeholder="Minutes"
-                    aria-label="Minutes spent"
-                    className={`sm:w-32 ${inputClass}`}
-                  />
-                  <button
-                    type="submit"
-                    disabled={savingLog || !logBody.trim()}
-                    className="ml-auto flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-500 disabled:opacity-50"
-                  >
-                    {savingLog && <SpinnerIcon className="animate-spin" width={16} height={16} />}
-                    Log it
-                  </button>
-                </div>
-              </form>
-
-              {workLogs.length === 0 ? (
-                <EmptyState title="Nothing logged yet." />
-              ) : (
-                <ul className="space-y-3">
-                  {workLogs.map((log) => (
-                    <li key={log.id} className="rounded-lg border border-line bg-paper-100/50 p-4">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-500">
-                        <span className="font-medium text-ink-700">{displayName(log.author)}</span>
-                        <span>· {WORK_LOG_KIND_LABELS[log.kind]}</span>
-                        {log.minutes != null && <span>· {formatMinutes(log.minutes)}</span>}
-                        <span title={new Date(log.occurredAt).toLocaleString()}>
-                          · {timeAgo(log.occurredAt)}
-                        </span>
-                        {log.edited && <span className="text-caution-600">· edited</span>}
-                      </div>
-                      <p className="mt-2 whitespace-pre-wrap text-sm text-ink-800">{log.body}</p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Card>
-          </>
+        {error && (
+          <div className="mt-4">
+            <ErrorNote message={error} />
+          </div>
         )}
 
-        {tab === 'Crew' && (
-          <Card title="Crew on this job">
-            <form
-              className="mb-4 flex flex-wrap gap-2"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (!crewId) return;
-                await mutate(() => api.assignAgent(job.id, crewId));
-                setCrewId('');
-              }}
-            >
-              <select
-                value={crewId}
-                onChange={(e) => setCrewId(e.target.value)}
-                aria-label="Add someone to the crew"
-                className={`sm:max-w-xs ${inputClass}`}
-              >
-                <option value="">Choose a team member…</option>
-                {unassigned.map((m) => (
-                  <option key={m.userId} value={m.userId}>
-                    {m.fullName || m.email}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="submit"
-                disabled={!crewId}
-                className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-500 disabled:opacity-50"
-              >
-                Add to crew
-              </button>
-            </form>
+        {blockers.length > 0 && (
+          <section className="mt-5 rounded-xl border border-caution-200 bg-caution-50/50 px-5 py-4" aria-label="Needs a look">
+            <h2 className="text-sm font-semibold text-ink-900">Needs a look</h2>
+            <ul className="mt-2 space-y-2">
+              {blockers.map((risk) => (
+                <li key={risk.key}>
+                  <p className="text-sm font-medium text-ink-800">{risk.title}</p>
+                  <p className="mt-0.5 text-xs text-ink-600">{risk.action}</p>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
-            {crew.length === 0 ? (
-              <EmptyState title="Nobody assigned yet." />
-            ) : (
-              <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line">
-                {crew.map((c) => (
-                  <li key={c.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-600/30 text-xs font-semibold uppercase text-brand-200">
-                      {displayName(c.agent, '?').slice(0, 2)}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className={`text-sm ${c.active ? 'text-ink-900' : 'text-ink-500'}`}>
-                        {displayName(c.agent)}
-                      </p>
-                      <p className="text-xs text-ink-500">
-                        {ASSIGNMENT_ROLE_LABELS[c.roleOnJob]} · joined {timeAgo(c.assignedAt)}
-                        {c.releasedAt && ` · released ${timeAgo(c.releasedAt)}`}
-                      </p>
-                    </div>
-                    {c.active ? (
-                      <button
-                        onClick={() => mutate(() => api.releaseAgent(job.id, c.id))}
-                        className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink-700 transition hover:bg-paper-200"
-                      >
-                        Release
-                      </button>
-                    ) : (
-                      <span className="rounded-full border border-line px-2.5 py-1 text-xs text-ink-500">
-                        Released
-                      </span>
-                    )}
+        <section className="mt-6 rounded-xl glass-card p-5" data-testid="job-file-knows">
+          <h2 className="text-base font-semibold text-ink-900">On this file</h2>
+          <p className="mt-0.5 text-xs text-ink-500">
+            What the clips and the record already know — read this first, then ask.
+          </p>
+
+          {exclusions.length > 0 && (
+            <div className="mt-4">
+              <h3 className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-danger-600">
+                Do not
+              </h3>
+              <ul className="mt-2 space-y-2">
+                {exclusions.map((item) => (
+                  <li key={item.id} className="rounded-lg border border-danger-200/70 bg-danger-50/40 px-3 py-2">
+                    <p className="text-sm font-medium text-ink-900">{item.title}</p>
+                    {item.reason && <p className="mt-0.5 text-xs text-ink-600">{item.reason}</p>}
                   </li>
                 ))}
               </ul>
-            )}
-            <p className="mt-3 text-xs text-ink-500">
-              Released crew stay on this list. Who was on the job during any past week is part of
-              the record.
-            </p>
-          </Card>
-        )}
+            </div>
+          )}
 
-        {tab === 'History' && (
-          <Card title="Everything that has happened to this job">
-            <MemoryFeed
-              events={memory}
-              showJob={false}
-              emptyLabel="Nothing recorded for this job yet."
-            />
-            {memory.length >= 100 && (
-              <p className="mt-3 text-xs text-ink-500">
-                Showing the 100 most recent entries. The full history is in the memory export.
-              </p>
-            )}
-          </Card>
+          {beats.length > 0 ? (
+            <ol className="mt-4 space-y-3">
+              {beats.map((beat) => (
+                <BeatRow key={beat.id} beat={beat} />
+              ))}
+            </ol>
+          ) : (
+            <p className="mt-4 text-sm text-ink-600">
+              Nothing filmed yet. The brief is still on this file — ask what you forgot, or wait
+              for Field Capture.
+            </p>
+          )}
+        </section>
+
+        {(record?.parties.length ?? 0) > 0 && (
+          <section className="mt-5 rounded-xl glass-card p-5" data-testid="job-file-people">
+            <h2 className="text-base font-semibold text-ink-900">Invited</h2>
+            <p className="mt-0.5 text-xs text-ink-500">
+              Who has the job link, and whether they are on the current brief.
+            </p>
+            <ul className="mt-3 divide-y divide-line overflow-hidden rounded-lg border border-line">
+              {record!.parties.map((party) => (
+                <PartyRow key={party.id} party={party} />
+              ))}
+            </ul>
+          </section>
         )}
       </div>
-    </>
+
+      <aside
+        className="flex min-h-[28rem] w-full shrink-0 flex-col border-t border-line lg:h-full lg:min-h-0 lg:w-[min(32rem,42%)] lg:border-l lg:border-t-0"
+        aria-label="Ask this job"
+        data-testid="job-file-ask"
+      >
+        <JobAskPanel jobId={job.id} file={file} fill />
+      </aside>
+    </div>
   );
+}
+
+function PulseTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl glass-card px-4 py-3">
+      <dt className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-ink-500">{label}</dt>
+      <dd className="mt-1 text-xl font-semibold tabular-nums text-ink-900">{value}</dd>
+    </div>
+  );
+}
+
+function BeatRow({ beat }: { beat: JobFileBeat }) {
+  return (
+    <li>
+      <p className="text-[11px] font-medium text-ink-500">{beat.title}</p>
+      <p className="mt-0.5 text-sm leading-relaxed text-ink-800">{beat.detail}</p>
+    </li>
+  );
+}
+
+function PartyRow({ party }: { party: JobParty }) {
+  return (
+    <li className="flex flex-wrap items-baseline justify-between gap-2 px-4 py-3">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium text-ink-900">{party.company}</p>
+        <p className="mt-0.5 truncate text-xs text-ink-500">
+          {[party.trade, party.contactName ?? party.contact_name].filter(Boolean).join(' · ')}
+        </p>
+      </div>
+      <span className="shrink-0 text-xs font-medium text-ink-600">{partyLine(party)}</span>
+    </li>
+  );
+}
+
+function partyLine(party: JobParty): string {
+  if (party.revoked_at) return 'Revoked';
+  if (party.clear) return 'Accepted';
+  if (party.acknowledgedRevision != null) return 'On an older brief';
+  if (!party.last_seen_at) return 'Never opened';
+  return 'Has not accepted';
 }

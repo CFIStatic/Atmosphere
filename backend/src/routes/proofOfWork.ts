@@ -1517,14 +1517,16 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
 
 /**
  * GET /api/operations/proofs/pulse
- * Company-wide film: how many clips are on file, and how many the assistant has read.
+ * Company-wide film: how many clips are on file, how many the assistant has
+ * read, and which jobs that film belongs to — so Overview can name the file
+ * instead of showing a vanity total.
  */
 export async function proofsPulse(req: Request, res: Response, next: NextFunction) {
   try {
     const { orgId, supabase } = await requireOrgContext(req);
     const { data, error } = await supabase
       .from('job_proofs')
-      .select('analysis_status, transcript_status, received_at, work_date')
+      .select('job_id, analysis_status, transcript_status, received_at, work_date')
       .eq('org_id', orgId)
       .is('deleted_at', null)
       .limit(2000);
@@ -1533,6 +1535,7 @@ export async function proofsPulse(req: Request, res: Response, next: NextFunctio
     res.json(
       summarizeProofPulse(
         ((data ?? []) as any[]).map((row) => ({
+          jobId: row.job_id ?? null,
           analysisStatus: row.analysis_status ?? null,
           transcriptStatus: row.transcript_status ?? null,
           receivedAt: row.received_at ?? null,

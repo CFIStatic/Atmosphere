@@ -3,6 +3,7 @@ import {
   buildJobFileDossier,
   buildJobFileSearchHaystack,
   fileKnowsCopy,
+  filePulse,
   jobFileMatches,
   jobFilePath,
   jobFileSuggestions,
@@ -86,6 +87,18 @@ describe('buildJobFileDossier', () => {
     expect(beats.some((beat) => /skylights/.test(beat.detail))).toBe(true);
     expect(beats.some((beat) => /underlayment/.test(beat.detail))).toBe(true);
     expect(beats.every((beat) => !/payable|crew size|kpi/i.test(beat.title))).toBe(true);
+  });
+});
+
+describe('filePulse', () => {
+  it('counts clips, readings, and mic — not tasks', () => {
+    expect(filePulse(proofs)).toEqual({
+      clips: 1,
+      read: 1,
+      heard: 1,
+      lastDate: '2026-08-05',
+    });
+    expect(filePulse(null)).toEqual({ clips: 0, read: 0, heard: 0, lastDate: null });
   });
 });
 

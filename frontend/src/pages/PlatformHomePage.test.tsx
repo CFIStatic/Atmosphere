@@ -1,7 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
-import type { JobSummary } from '../lib/api';
+import type { JobSummary, SharedJobSummary } from '../lib/api';
 
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({
@@ -57,6 +58,65 @@ const jobs: JobSummary[] = [
     createdAt: '2026-08-02T00:00:00Z',
     updatedAt: '2026-08-02T00:00:00Z',
   },
+  {
+    jobId: 'job-failed',
+    jobNumber: 1038,
+    title: 'Cedar Ridge — storm damage',
+    status: 'in_progress',
+    priority: 1,
+    workType: 'construction',
+    ownerId: 'u1',
+    claimNumber: 'CLM-2',
+    taskCount: 2,
+    tasksDone: 0,
+    crewSize: 2,
+    minutesLogged: 10,
+    eventCount: 4,
+    lastEvent: 'Clip failed',
+    lastEventAt: new Date().toISOString(),
+    contractAmount: 0,
+    invoicedAmount: 0,
+    paidAmount: 0,
+    scheduledStart: null,
+    createdAt: '2026-08-01T00:00:00Z',
+    updatedAt: '2026-08-01T00:00:00Z',
+  },
+];
+
+const shared: SharedJobSummary[] = [
+  {
+    jobId: 'job-dated',
+    jobNumber: 1041,
+    title: 'Meridian Ave — water loss',
+    status: 'in_progress',
+    parties: 1,
+    currentRevision: 2,
+    behind: 0,
+    awaiting: 0,
+    exclusions: 1,
+  },
+  {
+    jobId: 'job-open',
+    jobNumber: 1044,
+    title: 'East 6th — kitchen, water',
+    status: 'draft',
+    parties: 0,
+    currentRevision: null,
+    behind: 0,
+    awaiting: 0,
+    exclusions: 0,
+  },
+  {
+    jobId: 'job-failed',
+    jobNumber: 1038,
+    title: 'Cedar Ridge — storm damage',
+    status: 'in_progress',
+    parties: 3,
+    currentRevision: 4,
+    behind: 2,
+    awaiting: 1,
+    exclusions: 2,
+  },
 ];
 
 vi.mock('../lib/api', async () => {
@@ -65,15 +125,38 @@ vi.mock('../lib/api', async () => {
     ...actual,
     api: {
       getJobs: () => Promise.resolve({ jobs }),
+      sharedJobs: () => Promise.resolve({ jobs: shared, counts: { jobs: 3, parties: 4, blockers: 2, awaiting: 1 } }),
       proofPulse: () =>
         Promise.resolve({
           clips: 8,
           read: 5,
           analysing: 1,
-          failed: 0,
-          unread: 2,
+          failed: 2,
+          unread: 1,
           heard: 3,
           filmedToday: 2,
+          byJob: [
+            {
+              jobId: 'job-failed',
+              clips: 4,
+              read: 2,
+              analysing: 0,
+              failed: 2,
+              unread: 0,
+              heard: 2,
+              filmedToday: 0,
+            },
+            {
+              jobId: 'job-dated',
+              clips: 4,
+              read: 3,
+              analysing: 1,
+              failed: 0,
+              unread: 1,
+              heard: 1,
+              filmedToday: 2,
+            },
+          ],
         }),
     },
   };
@@ -82,7 +165,7 @@ vi.mock('../lib/api', async () => {
 import { PlatformHomePage } from './PlatformHomePage';
 
 describe('PlatformHomePage', () => {
-  it('is a company overview of the business, not a field dispatch board', async () => {
+  it('is a proof-chain decision queue, not a company inventory dashboard', async () => {
     render(
       <MemoryRouter>
         <PlatformHomePage platform="field" />
@@ -90,28 +173,65 @@ describe('PlatformHomePage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Company overview')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'What needs you' })).toBeInTheDocument();
     });
 
-    expect(screen.getByText('What is happening across the business', { exact: false })).toBeInTheDocument();
-    expect(screen.getByText('Active jobs')).toBeInTheDocument();
-    expect(screen.getByText('Crew assigned')).toBeInTheDocument();
-    expect(screen.getByText('Worked today')).toBeInTheDocument();
-    expect(screen.getByText('Contracted')).toBeInTheDocument();
-    expect(screen.getByText('Outstanding')).toBeInTheDocument();
-    expect(screen.queryByText('Scheduled today')).not.toBeInTheDocument();
-    expect(screen.queryByText('Unscheduled')).not.toBeInTheDocument();
-    expect(screen.queryByText(/ready to film/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Jobs where proof is stuck', { exact: false })).toBeInTheDocument();
+    expect(screen.getByText('Proof chain')).toBeInTheDocument();
+    expect(screen.getByText('Do this next')).toBeInTheDocument();
+    expect(screen.getByText("Today's film")).toBeInTheDocument();
+
+    expect(screen.queryByText('Company overview')).not.toBeInTheDocument();
+    expect(screen.queryByText('Active jobs')).not.toBeInTheDocument();
+    expect(screen.queryByText('Crew assigned')).not.toBeInTheDocument();
+    expect(screen.queryByText('Contracted')).not.toBeInTheDocument();
+    expect(screen.queryByText('Outstanding')).not.toBeInTheDocument();
+    expect(screen.queryByText('Across the business')).not.toBeInTheDocument();
+    expect(screen.queryByText('Good to see you', { exact: false })).not.toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getByText('Video analysis')).toBeInTheDocument();
-      expect(screen.getByText('8 clips · 5 read · 1 being read · 2 waiting · 3 with mic')).toBeInTheDocument();
+      expect(screen.getByText('Cedar Ridge — storm damage')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('Meridian Ave — water loss')).toBeInTheDocument();
-    expect(screen.getByText('East 6th — kitchen, water')).toBeInTheDocument();
+    expect(screen.getByText('2 clips failed')).toBeInTheDocument();
+    expect(screen.getByText('The assistant could not read the film. A person has to look.')).toBeInTheDocument();
+    expect(screen.getByText('1 question unanswered · 2 parties on an old brief · Marked urgent')).toBeInTheDocument();
 
+    expect(screen.getByText('Meridian Ave — water loss')).toBeInTheDocument();
+    expect(screen.getByText('1 clip waiting')).toBeInTheDocument();
+    expect(screen.getByText('East 6th — kitchen, water')).toBeInTheDocument();
+    expect(screen.getByText('No brief published')).toBeInTheDocument();
+
+    const cedar = screen.getByText('Cedar Ridge — storm damage').closest('a');
+    expect(cedar).toHaveAttribute('href', expect.stringContaining('/job-progress?job=job-failed'));
+    const east = screen.getByText('East 6th — kitchen, water').closest('a');
+    expect(east).toHaveAttribute('href', expect.stringContaining('/job-progress?job=job-open'));
     const meridian = screen.getByText('Meridian Ave — water loss').closest('a');
     expect(meridian).toHaveAttribute('href', expect.stringContaining('/job-progress?job=job-dated'));
+
+    expect(screen.getByText('Waiting to be read')).toBeInTheDocument();
+    expect(screen.queryByText('Scheduled today')).not.toBeInTheDocument();
+  });
+
+  it('lets the office filter the queue by proof-chain stage', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <PlatformHomePage platform="field" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Cedar Ridge — storm damage')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /needs a brief/i }));
+    expect(screen.getByText('East 6th — kitchen, water')).toBeInTheDocument();
+    expect(screen.queryByText('Cedar Ridge — storm damage')).not.toBeInTheDocument();
+    expect(screen.queryByText('Meridian Ave — water loss')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /needs a look/i }));
+    expect(screen.getByText('Cedar Ridge — storm damage')).toBeInTheDocument();
+    expect(screen.queryByText('East 6th — kitchen, water')).not.toBeInTheDocument();
   });
 });

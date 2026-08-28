@@ -44,10 +44,22 @@ function TypingDots() {
 
 /**
  * Ask the clips from inside a job profile — not a full-page chat shell.
+ *
+ * The parent can pass the file it already loaded so the page and this panel
+ * do not fetch the record twice.
  */
-export function JobAskPanel({ jobId }: { jobId: string }) {
-  const [record, setRecord] = useState<SharedJobRecord | null>(null);
-  const [proofs, setProofs] = useState<ProofResponse | null>(null);
+export function JobAskPanel({
+  jobId,
+  file,
+  fill = false,
+}: {
+  jobId: string;
+  file?: { record: SharedJobRecord | null; proofs: ProofResponse | null };
+  /** Fill a docked column instead of sitting as a card with a capped thread. */
+  fill?: boolean;
+}) {
+  const [ownRecord, setOwnRecord] = useState<SharedJobRecord | null>(null);
+  const [ownProofs, setOwnProofs] = useState<ProofResponse | null>(null);
   const [turns, setTurns] = useState<JobFileTurn[]>([]);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState('');
@@ -56,26 +68,34 @@ export function JobAskPanel({ jobId }: { jobId: string }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const seq = useRef(0);
+  const record = file ? file.record : ownRecord;
+  const proofs = file ? file.proofs : ownProofs;
+  const preloaded = file !== undefined;
 
   useEffect(() => {
     const n = ++seq.current;
     setLoading(true);
     setError(null);
     Promise.all([
-      api.sharedJob(jobId).catch(() => null),
-      api.jobProofs(jobId).catch(() => null),
+      preloaded ? Promise.resolve(record) : api.sharedJob(jobId).catch(() => null),
+      preloaded ? Promise.resolve(proofs) : api.jobProofs(jobId).catch(() => null),
       api.proofQuestions(jobId).catch(() => ({ questions: [] as ProofQuestion[] })),
     ])
       .then(([nextRecord, nextProofs, nextQuestions]) => {
         if (n !== seq.current) return;
-        setRecord(nextRecord);
-        setProofs(nextProofs);
+        if (!preloaded) {
+          setOwnRecord(nextRecord);
+          setOwnProofs(nextProofs);
+        }
         setTurns(turnsFromQuestions(nextQuestions.questions));
       })
       .finally(() => {
         if (n === seq.current) setLoading(false);
       });
-  }, [jobId]);
+    // Reload when the job changes — not when the parent passes a new file object
+    // for the same clips, or a typed answer disappears.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- record/proofs are the preloaded snapshot
+  }, [jobId, preloaded]);
 
   useEffect(() => {
     const el = scrollerRef.current;
@@ -148,13 +168,27 @@ export function JobAskPanel({ jobId }: { jobId: string }) {
   }
 
   return (
-    <section className="flex min-h-[28rem] flex-col rounded-xl glass-card" data-testid="job-ask-panel">
-      <div className="border-b border-line px-5 py-4">
+    <section
+      className={
+        fill
+          ? 'flex h-full min-h-0 flex-col bg-paper-50'
+          : 'flex min-h-[28rem] flex-col rounded-xl glass-card'
+      }
+      data-testid="job-ask-panel"
+    >
+      <div className="shrink-0 border-b border-line px-5 py-4">
         <h2 className="text-base font-semibold text-ink-900">Ask this job</h2>
         <p className="mt-0.5 text-xs text-ink-500">{knows}</p>
       </div>
 
-      <div ref={scrollerRef} className="max-h-[28rem] flex-1 overflow-y-auto px-5 py-4">
+      <div
+        ref={scrollerRef}
+        className={
+          fill
+            ? 'min-h-0 flex-1 overflow-y-auto px-5 py-4'
+            : 'max-h-[28rem] flex-1 overflow-y-auto px-5 py-4'
+        }
+      >
         {loading && turns.length === 0 ? (
           <p className="flex items-center gap-2 py-10 text-sm text-ink-500">
             <SpinnerIcon className="animate-spin" width={14} height={14} />
@@ -210,7 +244,7 @@ export function JobAskPanel({ jobId }: { jobId: string }) {
         )}
       </div>
 
-      <div className="border-t border-line px-5 py-3">
+      <div className="shrink-0 border-t border-line px-5 py-3">
         {error && <p className="mb-2 text-xs text-danger-700">{error}</p>}
         <form onSubmit={onSubmit} className="flex items-end gap-2">
           <textarea
