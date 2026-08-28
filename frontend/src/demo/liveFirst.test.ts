@@ -15,6 +15,7 @@ describe('isLiveFirstPath', () => {
     expect(isLiveFirstPath('/api/evidence-portal/library')).toBe(true);
     expect(isLiveFirstPath('/api/evidence-portal/evidence/abc-123/ask')).toBe(true);
     expect(isLiveFirstPath('/api/operations/shared')).toBe(true);
+    expect(isLiveFirstPath('/api/operations/proofs/pulse')).toBe(true);
     expect(isLiveFirstPath('/api/operations/shared/abc-123')).toBe(true);
     expect(isLiveFirstPath('/api/operations/shared/abc-123/proof')).toBe(true);
     expect(isLiveFirstPath('/api/operations/shared/abc-123/duplicate')).toBe(true);

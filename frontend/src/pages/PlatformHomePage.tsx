@@ -1,30 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { api, JOB_STATUS_LABELS, WORK_TYPE_LABELS, usd, type JobSummary } from '../lib/api';
+import {
+  api,
+  JOB_STATUS_LABELS,
+  WORK_TYPE_LABELS,
+  usd,
+  type JobSummary,
+  type ProofPulse,
+} from '../lib/api';
+import {
+  isOpenJob,
+  isToday,
+  jobsNeedingAttention,
+  pipelineLine,
+} from '../lib/companyOverview';
 import { displayName } from '../lib/display';
 import { jobFilePath } from '../lib/jobFileAsk';
 import { AlertIcon } from '../components/icons';
-
-const OPEN_STATUSES = new Set(['draft', 'scheduled', 'in_progress', 'on_hold']);
-
-function isToday(iso: string | null): boolean {
-  if (!iso) return false;
-  const d = new Date(iso);
-  const now = new Date();
-  return (
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate()
-  );
-}
-
-function daysStale(iso: string | null): number | null {
-  if (!iso) return null;
-  const ms = Date.now() - Date.parse(iso);
-  if (!Number.isFinite(ms) || ms < 0) return null;
-  return Math.floor(ms / 86_400_000);
-}
 
 /**
  * Corporate overview — what is happening across the business, not a field
@@ -33,6 +26,7 @@ function daysStale(iso: string | null): number | null {
 export function PlatformHomePage({ platform: _platform }: { platform: string }) {
   const { user, profile } = useAuth();
   const [jobs, setJobs] = useState<JobSummary[] | null>(null);
+  const [pulse, setPulse] = useState<ProofPulse | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,13 +38,31 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
       .catch(() => {
         if (!cancelled) setJobs([]);
       });
+    api
+      .proofPulse()
+      .then((next) => {
+        if (!cancelled) setPulse(next);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPulse({
+            clips: 0,
+            read: 0,
+            analysing: 0,
+            failed: 0,
+            unread: 0,
+            heard: 0,
+            filmedToday: 0,
+          });
+        }
+      });
     return () => {
       cancelled = true;
     };
   }, []);
 
   const firstName = displayName(profile?.fullName, user?.email).split(/[\s@]/)[0];
-  const open = useMemo(() => (jobs ?? []).filter((j) => OPEN_STATUSES.has(j.status)), [jobs]);
+  const open = useMemo(() => (jobs ?? []).filter(isOpenJob), [jobs]);
   const workedToday = useMemo(
     () =>
       (jobs ?? []).filter(
@@ -73,20 +85,7 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
     return counts;
   }, [open]);
 
-  const attention = useMemo(() => {
-    return [...open]
-      .map((job) => {
-        const stale = daysStale(job.lastEventAt);
-        const score =
-          (job.status === 'on_hold' ? 4 : 0) +
-          (job.priority === 1 ? 3 : 0) +
-          (stale != null && stale >= 3 ? 2 : 0);
-        return { job, score, stale };
-      })
-      .filter((row) => row.score > 0)
-      .sort((a, b) => b.score - a.score || (b.job.lastEventAt ?? '').localeCompare(a.job.lastEventAt ?? ''))
-      .slice(0, 8);
-  }, [open]);
+  const attention = useMemo(() => jobsNeedingAttention(jobs ?? []), [jobs]);
 
   const recent = useMemo(() => {
     return [...open]
@@ -118,6 +117,24 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
         <Kpi label="Invoiced" value={jobs ? usd(invoiced) : '—'} sub="Billed to date" />
         <Kpi label="Outstanding" value={jobs ? usd(outstanding) : '—'} sub="Invoiced less collected" />
       </div>
+
+      <section className="mt-4 rounded-xl glass-card px-5 py-4" aria-label="Video analysis">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <div>
+            <h2 className="text-[15px] font-semibold text-ink-900">Video analysis</h2>
+            <p className="mt-0.5 text-xs text-ink-500">{pipelineLine(pulse)}</p>
+          </div>
+          <Link to="/verifier-library" className="text-xs font-medium text-brand-600 hover:text-brand-700">
+            Dashboard
+          </Link>
+        </div>
+        <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <PulseStat label="Clips on file" value={pulse ? String(pulse.clips) : '—'} />
+          <PulseStat label="Read" value={pulse ? String(pulse.read) : '—'} />
+          <PulseStat label="Being read" value={pulse ? String(pulse.analysing) : '—'} />
+          <PulseStat label="Heard on mic" value={pulse ? String(pulse.heard) : '—'} />
+        </dl>
+      </section>
 
       <div className="mt-4 flex flex-wrap gap-2 text-xs text-ink-600">
         <span className="rounded-full border border-line bg-paper-0 px-3 py-1">
@@ -182,6 +199,15 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
           </div>
         </section>
       </div>
+    </div>
+  );
+}
+
+function PulseStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-ink-500">{label}</dt>
+      <dd className="mt-1 text-xl font-bold tabular-nums tracking-tight text-ink-900">{value}</dd>
     </div>
   );
 }

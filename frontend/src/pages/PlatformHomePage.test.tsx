@@ -65,6 +65,16 @@ vi.mock('../lib/api', async () => {
     ...actual,
     api: {
       getJobs: () => Promise.resolve({ jobs }),
+      proofPulse: () =>
+        Promise.resolve({
+          clips: 8,
+          read: 5,
+          analysing: 1,
+          failed: 0,
+          unread: 2,
+          heard: 3,
+          filmedToday: 2,
+        }),
     },
   };
 });
@@ -91,7 +101,8 @@ describe('PlatformHomePage', () => {
     expect(screen.getByText('Outstanding')).toBeInTheDocument();
     expect(screen.queryByText('Scheduled today')).not.toBeInTheDocument();
     expect(screen.queryByText('Unscheduled')).not.toBeInTheDocument();
-    expect(screen.queryByText(/ready to film/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Video analysis')).toBeInTheDocument();
+    expect(screen.getByText('8 clips · 5 read · 1 being read · 2 waiting · 3 with mic')).toBeInTheDocument();
 
     expect(screen.getByText('Meridian Ave — water loss')).toBeInTheDocument();
     expect(screen.getByText('East 6th — kitchen, water')).toBeInTheDocument();

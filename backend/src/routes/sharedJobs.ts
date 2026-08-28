@@ -20,6 +20,7 @@ import {
   recordProof,
   listPartyProofs,
   jobProofs,
+  proofsPulse,
   decideProofDay,
   askAboutProofs,
   proofQuestions,
@@ -1056,6 +1057,7 @@ sharedJobsRouter.get(
   },
 );
 
+sharedJobsRouter.get('/proofs/pulse', proofsPulse);
 sharedJobsRouter.post('/shared/:jobId/live-observe', liveObserve);
 sharedJobsRouter.get('/shared/:jobId/proof', jobProofs);
 sharedJobsRouter.get('/shared/:jobId/proof/questions', proofQuestions);

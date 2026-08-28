@@ -46,6 +46,7 @@ import {
 } from '../shared/proofActions.js';
 import { applyOpenHoldToProof, markSourceDeleted, recordUserAction, vaultFromProof } from '../legal/index.js';
 import { queueProofTranscript } from '../audio/proofTranscript.js';
+import { summarizeProofPulse } from '../shared/proofPulse.js';
 
 /**
  * Proof of work: the endpoints.
@@ -1510,6 +1511,36 @@ export async function buildJobProofPayload(supabase: any, orgId: string, jobId: 
     },
     siteKnown: Boolean(site),
   };
+}
+
+/**
+ * GET /api/operations/proofs/pulse
+ * Company-wide film: how many clips are on file, and how many the assistant has read.
+ */
+export async function proofsPulse(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { orgId, supabase } = await requireOrgContext(req);
+    const { data, error } = await supabase
+      .from('job_proofs')
+      .select('analysis_status, transcript_status, received_at, work_date')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .limit(2000);
+    if (error) throw new HttpError(500, error.message, 'pulse_failed');
+
+    res.json(
+      summarizeProofPulse(
+        ((data ?? []) as any[]).map((row) => ({
+          analysisStatus: row.analysis_status ?? null,
+          transcriptStatus: row.transcript_status ?? null,
+          receivedAt: row.received_at ?? null,
+          workDate: String(row.work_date ?? ''),
+        })),
+      ),
+    );
+  } catch (err) {
+    next(err);
+  }
 }
 
 /** GET /api/operations/shared/:jobId/proof */

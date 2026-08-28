@@ -3225,6 +3225,9 @@ const routes: Array<[string, RegExp, Handler]> = [
     return { status: 201, body: { message } };
   }],
 
+  ['GET', /^\/api\/operations\/proofs\/pulse$/, () => ({
+    body: { clips: 8, read: 5, analysing: 1, failed: 1, unread: 1, heard: 2, filmedToday: 2 },
+  })],
   ['GET', /^\/api\/operations\/shared\/([\w-]+)\/proof$/, (m) => {
     const record = PROOF_DAYS[m[1]] ?? { siteKnown: false, days: [], videos: [] };
     const days = record.days ?? [];
