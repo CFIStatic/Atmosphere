@@ -826,6 +826,17 @@ export interface ProofQuestion {
 }
 
 /** Org-wide video analysis pipeline, for the office Overview. */
+export interface ProofPulseJob {
+  jobId: string;
+  clips: number;
+  read: number;
+  analysing: number;
+  failed: number;
+  unread: number;
+  heard: number;
+  filmedToday: number;
+}
+
 export interface ProofPulse {
   clips: number;
   read: number;
@@ -834,6 +845,8 @@ export interface ProofPulse {
   unread: number;
   heard: number;
   filmedToday: number;
+  /** Per-job roll-up. Older payloads omit this; treat as empty. */
+  byJob?: ProofPulseJob[];
 }
 
 /* ---- Physical-work episode (structured day record) ----------------------- */
