@@ -1785,6 +1785,27 @@ export interface JobSummary {
   scheduledStart: string | null;
   createdAt: string;
   updatedAt: string;
+  /** People currently assigned to the job. Empty when nobody has been put on crew. */
+  crew?: Array<{ userId: string; name: string }>;
+}
+
+/** A job Field Capture (and My work) can film today. */
+export interface FieldTodayJob {
+  id: string;
+  number: string;
+  name: string;
+  address: string;
+  at: string;
+  status: string | null;
+  placed: boolean;
+  filmed: boolean;
+  reason: 'filmed' | 'in_progress' | 'open';
+  sharePath: string | null;
+}
+
+export interface FieldToday {
+  jobs: FieldTodayJob[];
+  today: string;
 }
 
 export interface JobTask {
@@ -2600,6 +2621,9 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ joinCode }),
     }),
+
+  /** Jobs this person can film today — assigned crew first, else open jobs. */
+  fieldToday: () => request<FieldToday>('/api/field-app/today', { method: 'GET' }),
 
   login: (email: string, password: string) =>
     request<AuthResponse>('/api/auth/login', {

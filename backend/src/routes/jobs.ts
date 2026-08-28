@@ -124,12 +124,34 @@ jobsRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
     // they are merged in from crm_jobs rather than widening the view.
     const rows = data ?? [];
     const financials = new Map<string, any>();
+    const crewByJob = new Map<string, { userId: string; name: string }[]>();
     if (rows.length) {
-      const { data: jobRows } = await supabase
-        .from('crm_jobs')
-        .select('id, contract_amount, invoiced_amount, paid_amount, scheduled_start')
-        .in('id', rows.map((r: any) => r.job_id));
+      const jobIds = rows.map((r: any) => r.job_id);
+      const [{ data: jobRows }, { data: assigns }] = await Promise.all([
+        supabase
+          .from('crm_jobs')
+          .select('id, contract_amount, invoiced_amount, paid_amount, scheduled_start')
+          .in('id', jobIds),
+        supabase
+          .from('job_assignments')
+          .select('job_id, user_id')
+          .in('job_id', jobIds)
+          .is('released_at', null),
+      ]);
       for (const j of jobRows ?? []) financials.set(j.id, j);
+
+      const people = await loadPeople(
+        supabase,
+        ((assigns ?? []) as { user_id?: string }[]).map((row) => row.user_id),
+      );
+      for (const row of (assigns ?? []) as { job_id?: string; user_id?: string }[]) {
+        if (!row.job_id || !row.user_id) continue;
+        const who = people.get(row.user_id);
+        const name = who?.fullName || who?.email || 'Crew';
+        const list = crewByJob.get(row.job_id) ?? [];
+        list.push({ userId: row.user_id, name });
+        crewByJob.set(row.job_id, list);
+      }
     }
 
     res.json({
@@ -141,6 +163,7 @@ jobsRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
           invoicedAmount: f?.invoiced_amount ?? null,
           paidAmount: f?.paid_amount ?? null,
           scheduledStart: f?.scheduled_start ?? null,
+          crew: crewByJob.get(r.job_id) ?? [],
         };
       }),
     });

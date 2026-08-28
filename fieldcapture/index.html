@@ -187,6 +187,24 @@
     -webkit-overflow-scrolling: touch;
   }
 
+  /* Field Capture | Platform — app-only switch. Hidden while filming so the
+     hold-to-finish button stays the only control. The office has no bar. */
+  .switchbar {
+    display: grid; grid-template-columns: 1fr 1fr;
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .switchbar a {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 10px 8px 12px; text-decoration: none; color: var(--muted);
+    font-size: 13px; font-weight: 700;
+  }
+  .switchbar a small { font-size: 10.5px; font-weight: 600; color: var(--faint); }
+  .switchbar a[aria-current="page"] { color: var(--accent); background: var(--accent-soft); }
+  .switchbar a[aria-current="page"] small { color: var(--accent); }
+  .app[data-switch="off"] .switchbar { display: none; }
+
   /* ---------- today's jobs: tap to select, no raw links ---------- */
   .expect { margin-top: 18px; }
   .expect h3 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); font-weight: 750; }
@@ -551,7 +569,7 @@
 </style>
 </head>
 <body>
-<div class="app" id="app">
+<div class="app" id="app" data-switch="on">
 
   <!-- ================= header ================= -->
   <div class="top">
@@ -669,6 +687,11 @@
       <button class="donebtn" id="donebtn">Back to today</button>
     </div>
   </div>
+
+  <nav class="switchbar" id="product-switch" aria-label="Product">
+    <a href="#today" aria-current="page">Field Capture<small>Your jobs</small></a>
+    <a id="platform-link" href="/field">Platform<small>The office</small></a>
+  </nav>
 
   <!-- Connect → Today: slam the mark, sit four seconds, dissolve into the day. -->
   <div class="elevate" id="s-elevate" data-on="0" role="status" aria-live="polite" aria-hidden="true">

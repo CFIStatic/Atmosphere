@@ -115,10 +115,10 @@ const MEMBERS: OrgMember[] = [
 /* ------------------------------------------------------------------- jobs */
 
 const JOBS: JobSummary[] = [
-  { jobId: 'job-1041', jobNumber: 1041, title: 'Meridian Ave — water loss, Class 3', status: 'in_progress', priority: 2, workType: 'mitigation', ownerId: 'demo-user-1', claimNumber: 'CLM-88412', taskCount: 14, tasksDone: 9, crewSize: 3, minutesLogged: 2140, eventCount: 87, lastEvent: 'Moisture reading logged — master bedroom subfloor 14.2%', lastEventAt: '2026-08-01T12:20:00Z', contractAmount: 18420, invoicedAmount: 6200, paidAmount: 0, scheduledStart: '2026-08-01T13:00:00Z', createdAt: '2026-07-24T15:02:00Z', updatedAt: '2026-08-01T12:20:00Z' },
-  { jobId: 'job-1038', jobNumber: 1038, title: 'Cedar Ridge — storm damage, roof tarp + rebuild', status: 'in_progress', priority: 1, workType: 'construction', ownerId: 'u-priya', claimNumber: 'CLM-88396', taskCount: 11, tasksDone: 4, crewSize: 2, minutesLogged: 1310, eventCount: 52, lastEvent: 'Supplement approved by carrier — $4,180', lastEventAt: '2026-08-01T10:05:00Z', contractAmount: 13980, invoicedAmount: 13980, paidAmount: 9800, scheduledStart: '2026-08-01T15:30:00Z', createdAt: '2026-07-19T08:30:00Z', updatedAt: '2026-08-01T10:05:00Z' },
-  { jobId: 'job-1042', jobNumber: 1042, title: 'Harbor Point Condos — mold remediation, unit 4B', status: 'scheduled', priority: 3, workType: 'mitigation', ownerId: 'demo-user-1', claimNumber: null, taskCount: 6, tasksDone: 1, crewSize: 1, minutesLogged: 95, eventCount: 12, lastEvent: 'Containment plan drafted', lastEventAt: '2026-07-31T16:44:00Z', contractAmount: 9200, invoicedAmount: 0, paidAmount: 0, scheduledStart: '2026-08-02T14:00:00Z', createdAt: '2026-07-30T11:15:00Z', updatedAt: '2026-07-31T16:44:00Z' },
-  { jobId: 'job-1035', jobNumber: 1035, title: 'Lakeview Dental — contents pack-out', status: 'completed', priority: 4, workType: 'mitigation', ownerId: 'u-tom', claimNumber: 'CLM-88371', taskCount: 8, tasksDone: 8, crewSize: 2, minutesLogged: 960, eventCount: 41, lastEvent: 'Final walkthrough signed off', lastEventAt: '2026-07-29T17:30:00Z', contractAmount: 7600, invoicedAmount: 7600, paidAmount: 7600, scheduledStart: null, createdAt: '2026-07-12T09:00:00Z', updatedAt: '2026-07-29T17:30:00Z' },
+  { jobId: 'job-1041', jobNumber: 1041, title: 'Meridian Ave — water loss, Class 3', status: 'in_progress', priority: 2, workType: 'mitigation', ownerId: 'demo-user-1', claimNumber: 'CLM-88412', taskCount: 14, tasksDone: 9, crewSize: 3, minutesLogged: 2140, eventCount: 87, lastEvent: 'Moisture reading logged — master bedroom subfloor 14.2%', lastEventAt: '2026-08-01T12:20:00Z', contractAmount: 18420, invoicedAmount: 6200, paidAmount: 0, scheduledStart: '2026-08-01T13:00:00Z', createdAt: '2026-07-24T15:02:00Z', updatedAt: '2026-08-01T12:20:00Z', crew: [{ userId: 'u-marcus', name: 'Marcus Webb' }, { userId: 'u-jess', name: 'Jess Ortega' }] },
+  { jobId: 'job-1038', jobNumber: 1038, title: 'Cedar Ridge — storm damage, roof tarp + rebuild', status: 'in_progress', priority: 1, workType: 'construction', ownerId: 'u-priya', claimNumber: 'CLM-88396', taskCount: 11, tasksDone: 4, crewSize: 2, minutesLogged: 1310, eventCount: 52, lastEvent: 'Supplement approved by carrier — $4,180', lastEventAt: '2026-08-01T10:05:00Z', contractAmount: 13980, invoicedAmount: 13980, paidAmount: 9800, scheduledStart: '2026-08-01T15:30:00Z', createdAt: '2026-07-19T08:30:00Z', updatedAt: '2026-08-01T10:05:00Z', crew: [{ userId: 'u-devon', name: 'Devon Hale' }] },
+  { jobId: 'job-1042', jobNumber: 1042, title: 'Harbor Point Condos — mold remediation, unit 4B', status: 'scheduled', priority: 3, workType: 'mitigation', ownerId: 'demo-user-1', claimNumber: null, taskCount: 6, tasksDone: 1, crewSize: 1, minutesLogged: 95, eventCount: 12, lastEvent: 'Containment plan drafted', lastEventAt: '2026-07-31T16:44:00Z', contractAmount: 9200, invoicedAmount: 0, paidAmount: 0, scheduledStart: '2026-08-02T14:00:00Z', createdAt: '2026-07-30T11:15:00Z', updatedAt: '2026-07-31T16:44:00Z', crew: [{ userId: 'u-marcus', name: 'Marcus Webb' }] },
+  { jobId: 'job-1035', jobNumber: 1035, title: 'Lakeview Dental — contents pack-out', status: 'completed', priority: 4, workType: 'mitigation', ownerId: 'u-tom', claimNumber: 'CLM-88371', taskCount: 8, tasksDone: 8, crewSize: 2, minutesLogged: 960, eventCount: 41, lastEvent: 'Final walkthrough signed off', lastEventAt: '2026-07-29T17:30:00Z', contractAmount: 7600, invoicedAmount: 7600, paidAmount: 7600, scheduledStart: null, createdAt: '2026-07-12T09:00:00Z', updatedAt: '2026-07-29T17:30:00Z', crew: [] },
 ];
 
 /**
@@ -2884,6 +2884,28 @@ const routes: Array<[string, RegExp, Handler]> = [
     }
     FIELD_CLAIM.session = 'demo-field-session';
     return { body: { session: FIELD_CLAIM.session, ...fieldJobList() } };
+  }],
+  ['GET', /^\/api\/field-app\/today$/, () => {
+    const open = JOBS.filter((job) => job.status !== 'completed' && job.status !== 'cancelled');
+    const mine = open.filter((job) => (job.crew ?? []).some((person) => person.userId === user().id));
+    const list = mine.length ? mine : open;
+    return {
+      body: {
+        today: '2026-08-01',
+        jobs: list.map((job) => ({
+          id: job.jobId,
+          number: `#${job.jobNumber}`,
+          name: job.title,
+          address: job.jobId === 'job-1041' ? '412 Meridian Ave' : 'Address on file',
+          at: job.status === 'in_progress' ? 'On site' : '',
+          status: job.status,
+          placed: true,
+          filmed: job.jobId === 'job-1041',
+          reason: job.jobId === 'job-1041' ? 'filmed' : job.status === 'in_progress' ? 'in_progress' : 'open',
+          sharePath: jobSharePagePath(`demo-${job.jobId}`),
+        })),
+      },
+    };
   }],
   ['GET', /^\/api\/field\/jobs$/, () => ({ body: fieldJobList() })],
   ['POST', /^\/api\/field\/signout$/, () => {

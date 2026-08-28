@@ -26,6 +26,7 @@ import { JobIntakePage } from './pages/JobIntakePage';
 import { OperationsShell } from './layouts/OperationsShell';
 import { JobSharePage } from './pages/JobSharePage';
 import { PlatformHomePage } from './pages/PlatformHomePage';
+import { WorkerDashboardPage } from './pages/WorkerDashboardPage';
 import { MyJobsPage } from './pages/MyJobsPage';
 import { getPlatform } from './lib/usePlatform';
 import { sharedJobsRedirectTo } from './lib/jobFileAsk';
@@ -289,6 +290,7 @@ export default function App() {
           >
             <Route path="/verifier-library" element={null} />
             <Route path="/field" element={<PlatformHomePage platform="field" />} />
+            <Route path="/my-work" element={<WorkerDashboardPage />} />
             <Route path="/intake" element={<JobIntakePage />} />
             <Route path="/jobs" element={<JobsPage />} />
             <Route path="/jobs/:id" element={<JobDetailPage />} />

@@ -177,6 +177,10 @@ describe('PlatformHomePage', () => {
     });
 
     expect(screen.getByText('Jobs where proof is stuck', { exact: false })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open Field Capture' })).toHaveAttribute(
+      'href',
+      '/my-work',
+    );
     expect(screen.getByText('Proof chain')).toBeInTheDocument();
     expect(screen.getByText('Do this next')).toBeInTheDocument();
     expect(screen.getByText("Today's film")).toBeInTheDocument();

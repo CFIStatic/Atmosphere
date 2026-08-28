@@ -13,7 +13,7 @@ import { AudioRecorderPanel } from '../components/technician/AudioRecorderPanel'
 import { VoiceAssistantPanel } from '../components/technician/VoiceAssistantPanel';
 import { VideoCapturePanel } from '../components/technician/VideoCapturePanel';
 import { RecordingsPanel } from '../components/technician/RecordingsPanel';
-import { GaugeIcon, ScanIcon, SparkIcon, VideoIcon } from '../components/icons';
+import { GaugeIcon, ScanIcon, SparkIcon, UsersIcon, VideoIcon } from '../components/icons';
 import { useFeatureTimer } from '../hooks/useFeatureTimer';
 import { CaptureGuidePanel } from '../components/field/CaptureGuidePanel';
 
@@ -178,6 +178,13 @@ export function TechnicianPage() {
           <p className="px-2 pb-1.5 pt-5 text-[11px] font-semibold uppercase tracking-wider text-ink-400">
             Operate
           </p>
+          <Link
+            to="/my-work"
+            className="mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink-600 transition hover:bg-paper-300/60 hover:text-ink-900"
+          >
+            <UsersIcon width={17} height={17} />
+            My work
+          </Link>
           <Link
             to="/field"
             className="mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink-600 transition hover:bg-paper-300/60 hover:text-ink-900"
