@@ -3264,7 +3264,37 @@ const routes: Array<[string, RegExp, Handler]> = [
   }],
 
   ['GET', /^\/api\/operations\/proofs\/pulse$/, () => ({
-    body: { clips: 8, read: 5, analysing: 1, failed: 1, unread: 1, heard: 2, filmedToday: 2 },
+    body: {
+      clips: 8,
+      read: 5,
+      analysing: 1,
+      failed: 1,
+      unread: 1,
+      heard: 2,
+      filmedToday: 2,
+      byJob: [
+        {
+          jobId: 'job-1038',
+          clips: 4,
+          read: 2,
+          analysing: 0,
+          failed: 1,
+          unread: 1,
+          heard: 1,
+          filmedToday: 0,
+        },
+        {
+          jobId: 'job-1041',
+          clips: 4,
+          read: 3,
+          analysing: 1,
+          failed: 0,
+          unread: 0,
+          heard: 1,
+          filmedToday: 2,
+        },
+      ],
+    },
   })],
   ['GET', /^\/api\/operations\/shared\/([\w-]+)\/proof$/, (m) => {
     const record = PROOF_DAYS[m[1]] ?? { siteKnown: false, days: [], videos: [] };

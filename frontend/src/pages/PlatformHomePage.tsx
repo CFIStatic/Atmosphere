@@ -1,256 +1,367 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 import {
   api,
-  JOB_STATUS_LABELS,
-  WORK_TYPE_LABELS,
-  usd,
   type JobSummary,
-  type ProofPulse,
+  type SharedJobSummary,
 } from '../lib/api';
 import {
-  isOpenJob,
-  isToday,
-  jobsNeedingAttention,
-  pipelineLine,
+  ACTION_META,
+  PIPELINE_META,
+  buildOverview,
+  emptyPulse,
+  todayLine,
+  type OverviewAction,
+  type OverviewModel,
+  type PipelineStage,
 } from '../lib/companyOverview';
-import { displayName } from '../lib/display';
 import { jobFilePath } from '../lib/jobFileAsk';
-import { AlertIcon } from '../components/icons';
+import { AlertIcon, BoltIcon, ChevronRightIcon, DecisionIcon, VideoIcon } from '../components/icons';
 
 /**
- * Corporate overview — what is happening across the business, not a field
- * dispatch board and not a restoration dashboard of one job.
+ * Overview is a decision queue, not a company dashboard.
+ *
+ * The office opens this tab to answer one question: what is stuck in the
+ * proof chain, and what should I do next? Inventory (crew, contracted,
+ * invoiced) belongs nowhere here — Atmosphere does not run the money loop.
+ * A second job list belongs on My jobs. Clip counts without a job name are
+ * vanity. This page names the file and the break.
  */
+
+const TONE: Record<(typeof ACTION_META)[keyof typeof ACTION_META]['tone'], string> = {
+  danger: 'bg-danger-50 text-danger-600',
+  caution: 'bg-caution-50 text-caution-600',
+  brand: 'bg-brand-50 text-brand-700',
+  idle: 'bg-paper-200 text-ink-600',
+};
+
 export function PlatformHomePage({ platform: _platform }: { platform: string }) {
-  const { user, profile } = useAuth();
   const [jobs, setJobs] = useState<JobSummary[] | null>(null);
-  const [pulse, setPulse] = useState<ProofPulse | null>(null);
+  const [shared, setShared] = useState<SharedJobSummary[] | null>(null);
+  const [pulse, setPulse] = useState(emptyPulse());
+  const [pulseReady, setPulseReady] = useState(false);
+  const [stage, setStage] = useState<PipelineStage | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     Promise.all([
       api.getJobs({ status: 'all' }).then(({ jobs: next }) => next).catch(() => [] as JobSummary[]),
-      api.proofPulse().catch(
-        (): ProofPulse => ({
-          clips: 0,
-          read: 0,
-          analysing: 0,
-          failed: 0,
-          unread: 0,
-          heard: 0,
-          filmedToday: 0,
-        }),
-      ),
-    ]).then(([nextJobs, nextPulse]) => {
+      api.sharedJobs().then(({ jobs: next }) => next).catch(() => [] as SharedJobSummary[]),
+      api.proofPulse().catch(() => emptyPulse()),
+    ]).then(([nextJobs, nextShared, nextPulse]) => {
       if (cancelled) return;
       setJobs(nextJobs);
-      setPulse(nextPulse);
+      setShared(nextShared);
+      setPulse({ ...emptyPulse(), ...nextPulse, byJob: nextPulse.byJob ?? [] });
+      setPulseReady(true);
     });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const firstName = displayName(profile?.fullName, user?.email).split(/[\s@]/)[0];
-  const open = useMemo(() => (jobs ?? []).filter(isOpenJob), [jobs]);
-  const workedToday = useMemo(
-    () =>
-      (jobs ?? []).filter(
-        (j) => j.status !== 'cancelled' && (isToday(j.lastEventAt) || j.status === 'in_progress'),
-      ).length,
-    [jobs],
+  const model = useMemo(
+    () => buildOverview(jobs ?? [], shared ?? [], pulseReady ? pulse : null),
+    [jobs, shared, pulse, pulseReady],
   );
-  const crew = open.reduce((s, j) => s + j.crewSize, 0);
-  const contracted = (jobs ?? []).reduce((s, j) => s + (j.contractAmount ?? 0), 0);
-  const invoiced = (jobs ?? []).reduce((s, j) => s + (j.invoicedAmount ?? 0), 0);
-  const paid = (jobs ?? []).reduce((s, j) => s + (j.paidAmount ?? 0), 0);
-  const outstanding = Math.max(0, invoiced - paid);
-
-  const mix = useMemo(() => {
-    const counts = { mitigation: 0, construction: 0 };
-    for (const job of open) {
-      if (job.workType === 'construction') counts.construction += 1;
-      else counts.mitigation += 1;
-    }
-    return counts;
-  }, [open]);
-
-  const attention = useMemo(() => jobsNeedingAttention(jobs ?? []), [jobs]);
-
-  const recent = useMemo(() => {
-    return [...open]
-      .sort(
-        (a, b) =>
-          Date.parse(b.lastEventAt ?? b.updatedAt) - Date.parse(a.lastEventAt ?? a.updatedAt),
-      )
-      .slice(0, 10);
-  }, [open]);
+  const loaded = jobs != null && shared != null && pulseReady;
 
   return (
     <div data-testid="company-overview">
       <div>
-        <p className="text-sm font-medium text-brand-600">Company overview</p>
-        <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-ink-900">
-          Good to see you, {firstName}
-        </h1>
+        <p className="text-sm font-medium text-brand-600">Overview</p>
+        <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-ink-900">What needs you</h1>
         <p className="mt-1 max-w-2xl text-sm text-ink-600">
-          What is happening across the business — every open job, crew, and dollar. Open a job file
-          when you need the detail.
+          Jobs where proof is stuck — film unread, briefs behind, questions unanswered. Open the
+          file when you are ready to move it.
         </p>
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-        <Kpi label="Active jobs" value={jobs ? String(open.length) : '—'} sub="Open across the company" />
-        <Kpi label="Crew assigned" value={jobs ? String(crew) : '—'} sub="People on open jobs" />
-        <Kpi label="Worked today" value={jobs ? String(workedToday) : '—'} sub="Filmed or in progress today" />
-        <Kpi label="Contracted" value={jobs ? usd(contracted) : '—'} sub="On the books" />
-        <Kpi label="Invoiced" value={jobs ? usd(invoiced) : '—'} sub="Billed to date" />
-        <Kpi label="Outstanding" value={jobs ? usd(outstanding) : '—'} sub="Invoiced less collected" />
-      </div>
+      <PipelineStrip model={model} loaded={loaded} selected={stage} onSelect={setStage} />
 
-      <section className="mt-4 rounded-xl glass-card px-5 py-4" aria-label="Video analysis">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <div>
-            <h2 className="text-[15px] font-semibold text-ink-900">Video analysis</h2>
-            <p className="mt-0.5 text-xs text-ink-500">{pipelineLine(pulse)}</p>
-          </div>
-          <Link to="/verifier-library" className="text-xs font-medium text-brand-600 hover:text-brand-700">
-            Dashboard
-          </Link>
-        </div>
-        <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <PulseStat label="Clips on file" value={pulse ? String(pulse.clips) : '—'} />
-          <PulseStat label="Read" value={pulse ? String(pulse.read) : '—'} />
-          <PulseStat label="Being read" value={pulse ? String(pulse.analysing) : '—'} />
-          <PulseStat label="Heard on mic" value={pulse ? String(pulse.heard) : '—'} />
-        </dl>
-      </section>
-
-      <div className="mt-4 flex flex-wrap gap-2 text-xs text-ink-600">
-        <span className="rounded-full border border-line bg-paper-0 px-3 py-1">
-          {WORK_TYPE_LABELS.mitigation}: {jobs ? mix.mitigation : '—'}
-        </span>
-        <span className="rounded-full border border-line bg-paper-0 px-3 py-1">
-          {WORK_TYPE_LABELS.construction}: {jobs ? mix.construction : '—'}
-        </span>
-      </div>
-
-      <div className="mt-6 grid gap-4 lg:grid-cols-2">
-        <section className="rounded-xl glass-card">
-          <header className="flex items-baseline justify-between border-b border-line px-5 py-4">
+      <div className="mt-6 grid gap-4 lg:grid-cols-3">
+        <section className="rounded-xl glass-card lg:col-span-2" aria-label="Do this next">
+          <header className="flex items-baseline justify-between gap-3 border-b border-line px-5 py-4">
             <div>
-              <h2 className="text-[15px] font-semibold text-ink-900">Needs attention</h2>
+              <h2 className="text-[15px] font-semibold text-ink-900">Do this next</h2>
               <p className="mt-0.5 text-xs text-ink-500">
-                {jobs
-                  ? attention.length
-                    ? `${attention.length} job${attention.length === 1 ? '' : 's'} off the happy path`
-                    : 'Nothing needs a decision right now'
-                  : 'Loading…'}
+                {!loaded
+                  ? 'Loading the proof chain…'
+                  : stage
+                    ? `${PIPELINE_META[stage].label} — ${PIPELINE_META[stage].hint}`
+                    : model.actions.length
+                      ? `${model.actions.length} job${model.actions.length === 1 ? '' : 's'} off the proof path`
+                      : 'Nothing waiting on you'}
               </p>
             </div>
-            <Link to="/jobs" className="text-xs font-medium text-brand-600 hover:text-brand-700">
-              Job files
+            <Link to="/intake" className="text-xs font-medium text-brand-600 hover:text-brand-700">
+              Start a job
             </Link>
           </header>
-          <div>
-            {attention.map(({ job, stale }) => (
-              <AttentionRow key={job.jobId} job={job} stale={stale} />
-            ))}
-            {jobs && attention.length === 0 && (
-              <p className="px-5 py-8 text-sm text-ink-500">Every open job is moving.</p>
-            )}
-          </div>
+          <ActionList model={model} loaded={loaded} stage={stage} />
         </section>
 
-        <section className="rounded-xl glass-card">
-          <header className="border-b border-line px-5 py-4">
-            <h2 className="text-[15px] font-semibold text-ink-900">Across the business</h2>
-            <p className="mt-0.5 text-xs text-ink-500">Every open job in the company</p>
-          </header>
-          <div>
-            {recent.map((job) => (
-              <Link
-                key={job.jobId}
-                to={jobFilePath(job.jobId, { title: job.title, number: job.jobNumber })}
-                className="flex items-start justify-between gap-3 border-b border-line px-5 py-3.5 last:border-b-0 hover:bg-paper-200"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-ink-900">{job.title}</p>
-                  <p className="mt-0.5 truncate text-[13px] text-ink-600">
-                    {job.lastEvent || 'Opened — nothing filmed yet'}
-                  </p>
-                </div>
-                <span className="shrink-0 text-[11px] text-ink-400">#{job.jobNumber}</span>
-              </Link>
-            ))}
-            {jobs && recent.length === 0 && (
-              <p className="px-5 py-8 text-sm text-ink-500">Nothing recorded yet.</p>
-            )}
-          </div>
-        </section>
+        <TodayCard model={model} loaded={loaded} />
       </div>
     </div>
   );
 }
 
-function PulseStat({ label, value }: { label: string; value: string }) {
+function PipelineStrip({
+  model,
+  loaded,
+  selected,
+  onSelect,
+}: {
+  model: OverviewModel;
+  loaded: boolean;
+  selected: PipelineStage | null;
+  onSelect: (stage: PipelineStage | null) => void;
+}) {
   return (
-    <div>
-      <dt className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-ink-500">{label}</dt>
-      <dd className="mt-1 text-xl font-bold tabular-nums tracking-tight text-ink-900">{value}</dd>
-    </div>
-  );
-}
-
-function Kpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="rounded-xl glass-card px-4 py-3.5 shadow-card">
-      <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-ink-500">{label}</p>
-      <p className="mt-1.5 text-2xl font-bold tabular-nums tracking-tight text-ink-900">{value}</p>
-      {sub && <p className="mt-1 truncate text-xs text-ink-500">{sub}</p>}
-    </div>
-  );
-}
-
-function AttentionRow({ job, stale }: { job: JobSummary; stale: number | null }) {
-  const blocked = job.status === 'on_hold';
-  const urgent = job.priority === 1;
-
-  return (
-    <Link
-      to={jobFilePath(job.jobId, { title: job.title, number: job.jobNumber })}
-      className="flex items-start gap-3 border-b border-line px-5 py-3.5 transition last:border-b-0 hover:bg-paper-200"
-    >
-      <AlertIcon
-        width={15}
-        height={15}
-        className={`mt-0.5 shrink-0 ${blocked || urgent ? 'text-danger-600' : 'text-ink-500'}`}
-      />
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-xs text-ink-500">#{job.jobNumber}</span>
-          <span className="truncate text-sm font-semibold text-ink-900">{job.title}</span>
-          {blocked && (
-            <span className="rounded-full bg-danger-50 px-2 py-0.5 text-[11px] font-semibold text-danger-600">
-              On hold
-            </span>
-          )}
-          {urgent && (
-            <span className="rounded-full bg-caution-50 px-2 py-0.5 text-[11px] font-semibold text-caution-600">
-              Urgent
-            </span>
-          )}
-          <span className="rounded-full bg-paper-200 px-2 py-0.5 text-[11px] font-medium text-ink-600">
-            {JOB_STATUS_LABELS[job.status] ?? job.status}
-          </span>
-        </div>
-        <p className="mt-1 truncate text-[13px] text-ink-600">
-          {job.lastEvent || 'No movement yet'}
-          {stale != null && stale >= 3 ? ` · ${stale}d quiet` : ''}
+    <section className="mt-6 rounded-xl glass-card px-3 py-3 sm:px-4" aria-label="Proof chain">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 px-2 pb-2">
+        <h2 className="text-[15px] font-semibold text-ink-900">Proof chain</h2>
+        <p className="text-xs text-ink-500">
+          {loaded
+            ? `${model.openCount} open job${model.openCount === 1 ? '' : 's'} · click a stage to see those files`
+            : 'Counting open jobs…'}
         </p>
       </div>
-    </Link>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        {model.pipeline.map((bucket) => {
+          const active = selected === bucket.stage;
+          return (
+            <button
+              key={bucket.stage}
+              type="button"
+              onClick={() => onSelect(active ? null : bucket.stage)}
+              aria-pressed={active}
+              title={bucket.hint}
+              className={`rounded-lg px-3 py-2.5 text-left transition ${
+                active
+                  ? 'bg-brand-600 text-white shadow-lg shadow-brand-900/20'
+                  : 'bg-paper-200/70 text-ink-900 hover:bg-paper-200'
+              }`}
+            >
+              <p
+                className={`text-[10.5px] font-semibold uppercase tracking-[0.08em] ${
+                  active ? 'text-white/80' : 'text-ink-500'
+                }`}
+              >
+                {bucket.label}
+              </p>
+              <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight">
+                {loaded ? bucket.count : '—'}
+              </p>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function ActionList({
+  model,
+  loaded,
+  stage,
+}: {
+  model: OverviewModel;
+  loaded: boolean;
+  stage: PipelineStage | null;
+}) {
+  if (!loaded) {
+    return (
+      <div className="space-y-2 px-5 py-4">
+        <div className="h-14 animate-pulse rounded-lg bg-paper-200" />
+        <div className="h-14 animate-pulse rounded-lg bg-paper-200" />
+        <div className="h-14 animate-pulse rounded-lg bg-paper-200" />
+      </div>
+    );
+  }
+
+  if (model.openCount === 0) {
+    return (
+      <div className="px-5 py-10 text-center">
+        <p className="text-sm font-medium text-ink-800">No job files yet</p>
+        <p className="mx-auto mt-1 max-w-sm text-sm text-ink-500">
+          Start a job — publish a brief, invite the crew, and this page will fill with what needs a
+          decision.
+        </p>
+        <Link
+          to="/intake"
+          className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-500"
+        >
+          <BoltIcon width={14} height={14} />
+          Start a job
+        </Link>
+      </div>
+    );
+  }
+
+  const rows = stage ? model.jobs.filter((job) => job.stage === stage) : model.jobs.filter((job) => job.action);
+  const showingActions = !stage;
+
+  if (rows.length === 0) {
+    return (
+      <p className="px-5 py-8 text-sm text-ink-500">
+        {showingActions
+          ? 'Every open job is moving through the proof chain.'
+          : `No open jobs in ${PIPELINE_META[stage!].label.toLowerCase()}.`}
+      </p>
+    );
+  }
+
+  return (
+    <ul>
+      {rows.map((row) =>
+        row.action ? (
+          <ActionRow key={row.jobId} action={row.action} />
+        ) : (
+          <QuietRow key={row.jobId} title={row.title} jobId={row.jobId} jobNumber={row.jobNumber} />
+        ),
+      )}
+    </ul>
+  );
+}
+
+function ActionRow({ action }: { action: OverviewAction }) {
+  const meta = ACTION_META[action.kind];
+  return (
+    <li>
+      <Link
+        to={action.href}
+        className="flex items-start gap-3 border-b border-line px-5 py-3.5 transition last:border-b-0 hover:bg-paper-200"
+      >
+        <AlertIcon
+          width={15}
+          height={15}
+          className={`mt-0.5 shrink-0 ${
+            meta.tone === 'danger'
+              ? 'text-danger-600'
+              : meta.tone === 'caution'
+                ? 'text-caution-600'
+                : 'text-ink-500'
+          }`}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            {action.jobNumber != null && (
+              <span className="font-mono text-xs text-ink-500">#{action.jobNumber}</span>
+            )}
+            <span className="truncate text-sm font-semibold text-ink-900">{action.title}</span>
+            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${TONE[meta.tone]}`}>
+              {meta.label}
+            </span>
+          </div>
+          <p className="mt-1 text-[13px] text-ink-700">{action.headline}</p>
+          <p className="mt-0.5 text-[13px] text-ink-500">{action.detail}</p>
+          {action.notes.length > 0 && (
+            <p className="mt-1 truncate text-xs text-ink-400">{action.notes.join(' · ')}</p>
+          )}
+        </div>
+        <span className="mt-0.5 inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-brand-600">
+          {meta.verb}
+          <ChevronRightIcon width={14} height={14} />
+        </span>
+      </Link>
+    </li>
+  );
+}
+
+function QuietRow({
+  title,
+  jobId,
+  jobNumber,
+}: {
+  title: string;
+  jobId: string;
+  jobNumber: number | null;
+}) {
+  return (
+    <li>
+      <Link
+        to={jobFilePath(jobId, { title, number: jobNumber })}
+        className="flex items-start justify-between gap-3 border-b border-line px-5 py-3.5 last:border-b-0 hover:bg-paper-200"
+      >
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-ink-900">{title}</p>
+          <p className="mt-0.5 text-[13px] text-ink-500">Moving — nothing waiting on you</p>
+        </div>
+        {jobNumber != null && <span className="shrink-0 font-mono text-[11px] text-ink-400">#{jobNumber}</span>}
+      </Link>
+    </li>
+  );
+}
+
+function TodayCard({ model, loaded }: { model: OverviewModel; loaded: boolean }) {
+  return (
+    <section className="rounded-xl glass-card" aria-label="Today's film">
+      <header className="flex items-baseline justify-between gap-3 border-b border-line px-5 py-4">
+        <div>
+          <h2 className="text-[15px] font-semibold text-ink-900">Today&apos;s film</h2>
+          <p className="mt-0.5 text-xs text-ink-500">{loaded ? todayLine(model) : 'Checking the pipeline…'}</p>
+        </div>
+        <Link to="/verifier-library" className="text-xs font-medium text-brand-600 hover:text-brand-700">
+          Dashboard
+        </Link>
+      </header>
+      <dl className="grid grid-cols-2 gap-px bg-line">
+        <TodayStat
+          icon={<VideoIcon width={14} height={14} />}
+          label="Filmed today"
+          value={loaded ? String(model.today.filmed) : '—'}
+        />
+        <TodayStat
+          icon={<DecisionIcon width={14} height={14} />}
+          label="Waiting to be read"
+          value={loaded ? String(model.today.unread) : '—'}
+        />
+        <TodayStat label="Being read" value={loaded ? String(model.today.analysing) : '—'} />
+        <TodayStat
+          label="Failed"
+          value={loaded ? String(model.today.failed) : '—'}
+          danger={loaded && model.today.failed > 0}
+        />
+      </dl>
+      <div className="px-5 py-3">
+        <Link
+          to="/verifier-library"
+          className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700"
+        >
+          Open the library
+          <ChevronRightIcon width={14} height={14} />
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+function TodayStat({
+  label,
+  value,
+  icon,
+  danger,
+}: {
+  label: string;
+  value: string;
+  icon?: ReactNode;
+  danger?: boolean;
+}) {
+  return (
+    <div className="bg-paper-0 px-5 py-3.5">
+      <dt className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+        {icon}
+        {label}
+      </dt>
+      <dd
+        className={`mt-1 text-xl font-bold tabular-nums tracking-tight ${
+          danger ? 'text-danger-600' : 'text-ink-900'
+        }`}
+      >
+        {value}
+      </dd>
+    </div>
   );
 }
