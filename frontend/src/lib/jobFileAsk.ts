@@ -183,6 +183,27 @@ export function latestFilmedDate(proofs: ProofResponse | null): string | null {
   return dates.sort()[dates.length - 1] ?? null;
 }
 
+export function filmedDateLabel(isoDate: string | null): string | null {
+  if (!isoDate) return null;
+  return formatWorkDate(isoDate);
+}
+
+export interface FilePulse {
+  clips: number;
+  read: number;
+  heard: number;
+  lastDate: string | null;
+}
+
+/** Headline counts for a job file — film, not tasks or hours. */
+export function filePulse(proofs: ProofResponse | null): FilePulse {
+  const videos = proofs?.videos ?? [];
+  const clips = videos.length || proofs?.counts.videos || 0;
+  const read = videos.filter((video) => video.analysisStatus === 'done').length;
+  const heard = videos.filter((video) => Boolean(video.heardOnMic?.trim())).length;
+  return { clips, read, heard, lastDate: latestFilmedDate(proofs) };
+}
+
 export function hasMicOnFile(proofs: ProofResponse | null): boolean {
   return Boolean(
     proofs?.videos?.some((video) => Boolean(video.heardOnMic?.trim())) ||

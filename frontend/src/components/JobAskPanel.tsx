@@ -44,10 +44,19 @@ function TypingDots() {
 
 /**
  * Ask the clips from inside a job profile — not a full-page chat shell.
+ *
+ * The parent can pass the file it already loaded so the page and this panel
+ * do not fetch the record twice.
  */
-export function JobAskPanel({ jobId }: { jobId: string }) {
-  const [record, setRecord] = useState<SharedJobRecord | null>(null);
-  const [proofs, setProofs] = useState<ProofResponse | null>(null);
+export function JobAskPanel({
+  jobId,
+  file,
+}: {
+  jobId: string;
+  file?: { record: SharedJobRecord | null; proofs: ProofResponse | null };
+}) {
+  const [ownRecord, setOwnRecord] = useState<SharedJobRecord | null>(null);
+  const [ownProofs, setOwnProofs] = useState<ProofResponse | null>(null);
   const [turns, setTurns] = useState<JobFileTurn[]>([]);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState('');
@@ -56,26 +65,30 @@ export function JobAskPanel({ jobId }: { jobId: string }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const seq = useRef(0);
+  const record = file ? file.record : ownRecord;
+  const proofs = file ? file.proofs : ownProofs;
 
   useEffect(() => {
     const n = ++seq.current;
     setLoading(true);
     setError(null);
     Promise.all([
-      api.sharedJob(jobId).catch(() => null),
-      api.jobProofs(jobId).catch(() => null),
+      file ? Promise.resolve(file.record) : api.sharedJob(jobId).catch(() => null),
+      file ? Promise.resolve(file.proofs) : api.jobProofs(jobId).catch(() => null),
       api.proofQuestions(jobId).catch(() => ({ questions: [] as ProofQuestion[] })),
     ])
       .then(([nextRecord, nextProofs, nextQuestions]) => {
         if (n !== seq.current) return;
-        setRecord(nextRecord);
-        setProofs(nextProofs);
+        if (!file) {
+          setOwnRecord(nextRecord);
+          setOwnProofs(nextProofs);
+        }
         setTurns(turnsFromQuestions(nextQuestions.questions));
       })
       .finally(() => {
         if (n === seq.current) setLoading(false);
       });
-  }, [jobId]);
+  }, [jobId, file]);
 
   useEffect(() => {
     const el = scrollerRef.current;
