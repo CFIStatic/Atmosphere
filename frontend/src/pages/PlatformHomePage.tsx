@@ -109,11 +109,10 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
         </p>
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Kpi label="Active jobs" value={jobs ? String(open.length) : '—'} sub="Open across the company" />
         <Kpi label="Crew assigned" value={jobs ? String(crew) : '—'} sub="People on open jobs" />
         <Kpi label="Worked today" value={jobs ? String(workedToday) : '—'} sub="Filmed or in progress today" />
-        <Kpi label="Clips on file" value={pulse ? String(pulse.clips) : '—'} sub="Every job, on the Dashboard" />
         <Kpi label="Waiting to be read" value={pulse ? String(pulse.unread) : '—'} sub="Uploaded, not read yet" />
         <Kpi label="Filmed today" value={pulse ? String(pulse.filmedToday) : '—'} sub="New clips from the field" />
       </div>

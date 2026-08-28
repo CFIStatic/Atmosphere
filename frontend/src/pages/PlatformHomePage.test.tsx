@@ -100,7 +100,6 @@ describe('PlatformHomePage', () => {
     expect(screen.getByText('Active jobs')).toBeInTheDocument();
     expect(screen.getByText('Crew assigned')).toBeInTheDocument();
     expect(screen.getByText('Worked today')).toBeInTheDocument();
-    expect(screen.getByText('Clips on file')).toBeInTheDocument();
     expect(screen.getByText('Waiting to be read')).toBeInTheDocument();
     expect(screen.getByText('Filmed today')).toBeInTheDocument();
     expect(screen.queryByText('Contracted')).not.toBeInTheDocument();
