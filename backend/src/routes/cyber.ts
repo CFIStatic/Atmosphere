@@ -2,6 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/requireAuth.js';
+import { requireAnalytics } from '../middleware/requireAnalytics.js';
 import {
   cyberSnapshot,
   cyberStore,
@@ -15,7 +16,8 @@ import { config } from '../config.js';
  *
  * These routes never weaken defense: status and history are read-mostly, unblock
  * is deliberate and rate-limited, and "patch now" only runs the same hardening
- * cycle the scheduler already runs.
+ * cycle the scheduler already runs. All of them are staff-only — the same bar
+ * as /api/legal — so a field or office login cannot lift a ban.
  */
 
 export const cyberRouter = Router();
@@ -38,6 +40,7 @@ const patchLimiter = rateLimit({
 
 cyberRouter.use(limiter);
 cyberRouter.use(requireAuth);
+cyberRouter.use(requireAnalytics('internal'));
 
 /** GET /api/cyber/status — posture snapshot. */
 cyberRouter.get('/status', (_req: Request, res: Response) => {
