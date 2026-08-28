@@ -534,6 +534,12 @@ The two directories are a **byte-identical mirror** (CI enforces this):
 
 Apply **one** of them, once, in filename order. Never apply both.
 
+Production deploy also runs `backend/scripts/applyOldProductTables.mjs`, which
+applies `20260828220000_drop_old_product_tables.sql`. That removes leftover
+CRM/sales/finance/estimator/web-access tables. It does **not** drop `crm_jobs`,
+`crm_properties`, Stripe/metering, Field Capture, verification, or HomeOwner
+Report tables.
+
 ```bash
 npm run check:migrations --prefix backend
 ```
