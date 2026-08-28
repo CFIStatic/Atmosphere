@@ -11,7 +11,7 @@ const RAIL_W = 248;
 
 /**
  * Operations routes share one persistent Verifier iframe. The library fills
- * the screen; Overview, Start a job, Dashboard, and Job Files render beside
+ * the screen; Overview, My work, Start a job, Dashboard, and Job Files render beside
  * the same anchored rail. The one light/dark control lives in the top-right
  * of these React pages because the verifier top bar is hidden in rail-only
  * mode. The rail itself only has Settings — no second moon/sun button.

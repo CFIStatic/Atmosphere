@@ -52,8 +52,10 @@ are prompted to create one with that exact address.
 ### Work Verification (office)
 
 - **Home:** Verifier library — one job, one file of clips and readings
+- **Overview** (`/field`) — company proof chain: what is stuck, what filmed today
+- **My work** (`/my-work`) — phone-style dashboard of the jobs this person is on
 - **Start a job** (`/intake`) — paste → review → approve → invite
-- **Job files** (`/shared`) — briefs, parties, proof days, readiness, evidence
+- **Job files** (`/jobs`) — briefs, parties, proof days, readiness, evidence
 - **Verifier** (`/verifier/`) — standalone evidence portal (also embeddable)
 
 ### Field Capture (crew)

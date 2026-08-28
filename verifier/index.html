@@ -1162,6 +1162,10 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17 16 12"/></svg>
         <span class="label">Overview</span>
       </button>
+      <button type="button" class="navitem nav-icon" id="nav-my-work" data-route="/my-work">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M2.8 19a6.2 6.2 0 0 1 12.4 0"/><path d="M16 5.2a3.2 3.2 0 0 1 0 5.6M17.5 13.5a5.6 5.6 0 0 1 3.7 5.5"/></svg>
+        <span class="label">My work</span>
+      </button>
       <button type="button" class="navitem nav-icon" id="nav-start-job" data-tour="nav-start-job">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
         <span class="label">Start a job</span>
@@ -4580,6 +4584,11 @@
       if (fieldBtn) fieldBtn.setAttribute('aria-current', 'true');
       return;
     }
+    if (activeRoute === '/my-work' || activeRoute.indexOf('/my-work/') === 0) {
+      var myWorkBtn = document.getElementById('nav-my-work');
+      if (myWorkBtn) myWorkBtn.setAttribute('aria-current', 'true');
+      return;
+    }
     if (activeRoute === '/jobs' || activeRoute.indexOf('/jobs/') === 0) {
       var jobsBtn = document.getElementById('nav-jobs');
       if (jobsBtn) jobsBtn.setAttribute('aria-current', 'true');
@@ -4838,6 +4847,8 @@
     }
     var navField = document.getElementById('nav-field');
     if (navField) navField.addEventListener('click', function () { goShell('/field'); });
+    var navMyWork = document.getElementById('nav-my-work');
+    if (navMyWork) navMyWork.addEventListener('click', function () { goShell('/my-work'); });
     var navStartJob = document.getElementById('nav-start-job');
     if (navStartJob) {
       navStartJob.addEventListener('click', function () { goShell('/intake'); });

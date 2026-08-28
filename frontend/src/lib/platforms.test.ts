@@ -7,11 +7,12 @@ describe('operations rail destinations', () => {
     expect(DASHBOARD_HOME).toBe('/verifier-library');
   });
 
-  it('puts Overview, Start a job, Dashboard, and Job Files on the office rail', () => {
+  it('puts Overview, My work, Start a job, Dashboard, and Job Files on the office rail', () => {
     const work = PLATFORMS.operations.groups.find((group) => group.label === 'Work');
     expect(work).toBeDefined();
     expect(work!.items.map((item) => [item.to, item.label])).toEqual([
       ['/field', 'Overview'],
+      ['/my-work', 'My work'],
       ['/intake', 'Start a job'],
       ['/verifier-library', 'Dashboard'],
       ['/jobs', 'Job Files'],

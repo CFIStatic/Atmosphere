@@ -16,7 +16,8 @@ import {
   type PipelineStage,
 } from '../lib/companyOverview';
 import { jobFilePath } from '../lib/jobFileAsk';
-import { AlertIcon, BoltIcon, ChevronRightIcon, DecisionIcon, VideoIcon } from '../components/icons';
+import { buildCrewBoard, type CrewBoardRow } from '../lib/workerBoard';
+import { AlertIcon, BoltIcon, ChevronRightIcon, DecisionIcon, UsersIcon, VideoIcon } from '../components/icons';
 
 /**
  * Overview is a decision queue, not a company dashboard.
@@ -65,16 +66,27 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
     [jobs, shared, pulse, pulseReady],
   );
   const loaded = jobs != null && shared != null && pulseReady;
+  const crew = useMemo(() => buildCrewBoard(jobs ?? []), [jobs]);
 
   return (
     <div data-testid="company-overview">
-      <div>
-        <p className="text-sm font-medium text-brand-600">Overview</p>
-        <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-ink-900">What needs you</h1>
-        <p className="mt-1 max-w-2xl text-sm text-ink-600">
-          Jobs where proof is stuck — film unread, briefs behind, questions unanswered. Open the
-          file when you are ready to move it.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-brand-600">Overview</p>
+          <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-ink-900">What needs you</h1>
+          <p className="mt-1 max-w-2xl text-sm text-ink-600">
+            Jobs where proof is stuck — film unread, briefs behind, questions unanswered. Open the
+            file when you are ready to move it. Workers open My work for the jobs they are on.
+          </p>
+        </div>
+        <Link
+          to="/my-work"
+          aria-label="Open My work"
+          className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-900/20 hover:bg-brand-500"
+        >
+          <UsersIcon width={16} height={16} />
+          My work
+        </Link>
       </div>
 
       <PipelineStrip model={model} loaded={loaded} selected={stage} onSelect={setStage} />
@@ -101,7 +113,10 @@ export function PlatformHomePage({ platform: _platform }: { platform: string }) 
           <ActionList model={model} loaded={loaded} stage={stage} />
         </section>
 
-        <TodayCard model={model} loaded={loaded} />
+        <div className="space-y-4">
+          <TodayCard model={model} loaded={loaded} />
+          <OnJobsCard crew={crew} loaded={loaded} />
+        </div>
       </div>
     </div>
   );
@@ -363,5 +378,50 @@ function TodayStat({
         {value}
       </dd>
     </div>
+  );
+}
+
+function OnJobsCard({ crew, loaded }: { crew: CrewBoardRow[]; loaded: boolean }) {
+  return (
+    <section className="rounded-xl glass-card" aria-label="Who is on jobs">
+      <header className="flex items-baseline justify-between gap-3 border-b border-line px-5 py-4">
+        <div>
+          <h2 className="text-[15px] font-semibold text-ink-900">Who is on jobs</h2>
+          <p className="mt-0.5 text-xs text-ink-500">
+            {loaded
+              ? crew.length
+                ? `${crew.length} ${crew.length === 1 ? 'person' : 'people'} on open work`
+                : 'Nobody assigned yet'
+              : 'Checking the crew…'}
+          </p>
+        </div>
+        <Link to="/my-work" className="text-xs font-medium text-brand-600 hover:text-brand-700">
+          My work
+        </Link>
+      </header>
+      {!loaded ? (
+        <div className="space-y-2 px-5 py-4">
+          <div className="h-10 animate-pulse rounded-lg bg-paper-200" />
+          <div className="h-10 animate-pulse rounded-lg bg-paper-200" />
+        </div>
+      ) : crew.length === 0 ? (
+        <p className="px-5 py-6 text-sm text-ink-500">
+          Put people on a job from the file. They will see it on My work.
+        </p>
+      ) : (
+        <ul>
+          {crew.slice(0, 8).map((row) => (
+            <li key={row.userId} className="border-b border-line px-5 py-3 last:border-b-0">
+              <p className="text-sm font-semibold text-ink-900">{row.name}</p>
+              <p className="mt-0.5 truncate text-xs text-ink-500">
+                {row.jobs
+                  .map((job) => (job.jobNumber != null ? `#${job.jobNumber} ${job.title}` : job.title))
+                  .join(' · ')}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

@@ -13,6 +13,7 @@ describe('documentTitleFor', () => {
     expect(documentTitleFor('/intake')).toBe('Start a job · Atmosphere');
     expect(documentTitleFor('/jobs/abc')).toBe('Job Files · Atmosphere');
     expect(documentTitleFor('/field')).toBe('Overview · Atmosphere');
+    expect(documentTitleFor('/my-work')).toBe('My work · Atmosphere');
     expect(documentTitleFor('/settings')).toBe('Settings · Atmosphere');
   });
 
