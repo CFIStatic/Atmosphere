@@ -4025,9 +4025,10 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
         }
         return live;
       }
-      // A live 401/403 on the avatar means this browser is not the signed-in
-      // tenant. Fall through so the demo Settings page can still store a photo.
-      if (!(path === '/api/profile/avatar' && (live.status === 401 || live.status === 403))) {
+      // No live session: a 401/403 is not "the signed-in tenant". Fall through
+      // to the Dana Ortiz fixture so a demo build still opens, including when
+      // a real API is running next door without cookies.
+      if (live.status !== 401 && live.status !== 403) {
         return live;
       }
     } catch {
